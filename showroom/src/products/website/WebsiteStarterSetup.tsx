@@ -66,6 +66,10 @@ export function WebsiteStarterSetup({
   const [attempted, setAttempted] = useState(false)
   const [businessStage, setBusinessStage] = useState<'new' | 'existing'>('new')
   const [offeringRows, setOfferingRows] = useState<{ name: string; details: string }[]>([])
+  const [importPreview, setImportPreview] = useState<{ name: string; details: string }[] | null>(null)
+  const [importMessage, setImportMessage] = useState('')
+  const [importBusy, setImportBusy] = useState(false)
+  const importAttempt = useRef(0)
   const [tradeId, setTradeId] = useState(opening.tradeId)
   // The wording currently on offer from us rather than from the owner. Starts as whatever we
   // opened with, so that opening draft counts as "not yet edited" and picking a trade
@@ -87,6 +91,26 @@ export function WebsiteStarterSetup({
   function updateOfferings(rows: { name: string; details: string }[]) {
     setOfferingRows(rows)
     setBrief((current) => ({ ...current, offerings: rows.map((row) => `${row.name} | ${row.details.replace(/\s+/gu, ' ')}`).join('\n') }))
+  }
+
+  async function previewOfferingFile(file: File | undefined) {
+    const attempt = ++importAttempt.current
+    setImportPreview(null)
+    setImportMessage('')
+    if (!file) { setImportBusy(false); return }
+    setImportBusy(true)
+    try {
+      if (!file.name.toLowerCase().endsWith('.csv') || file.size > 64 * 1024) throw new Error('Choose a .csv file smaller than 64 KB.')
+      const { previewWebsiteOfferingCsv } = await import('./website-offering-import')
+      const rows = previewWebsiteOfferingCsv(await file.text())
+      if (attempt !== importAttempt.current) return
+      setImportPreview(rows)
+      setImportMessage('Preview only. Check every entry against your current menu or service list before adding it. Nothing was uploaded.')
+    } catch (error) {
+      if (attempt === importAttempt.current) setImportMessage(error instanceof Error ? error.message : 'Could not read this file. Your existing entries are unchanged.')
+    } finally {
+      if (attempt === importAttempt.current) setImportBusy(false)
+    }
   }
 
   function updateBrief<Field extends keyof WebsiteStarterBrief>(field: Field, value: WebsiteStarterBrief[Field]) {
@@ -260,6 +284,12 @@ export function WebsiteStarterSetup({
         <details open={offeringsIssue ? true : undefined}>
           <summary>Menu, services or featured products — optional</summary>
           <p id="website-offerings-help">Add up to four featured entries using approved public details. They appear on your Services, Catalog or About page. Displaying a price does not collect payment.</p>
+          {businessStage === 'existing' ? <div>
+            <label><span>Preview an existing CSV — optional</span><input type="file" accept=".csv,text/csv" disabled={importBusy} onChange={(event) => { void previewOfferingFile(event.target.files?.[0]); event.target.value = '' }} aria-describedby="website-import-help website-import-status" /></label>
+            <p id="website-import-help">Columns: name, description. Up to four featured entries; include approved prices or durations in description. The file stays on this device. Existing entries are never replaced by import.</p>
+            <p role="status" id="website-import-status">{importBusy ? 'Reading local file…' : importMessage}</p>
+            {importPreview ? <div><ul>{importPreview.map(row => <li key={row.name}><strong>{row.name}</strong> — {row.details}</li>)}</ul><button type="button" className="website-button is-secondary" disabled={offeringRows.length > 0} onClick={() => { if (offeringRows.length) return; updateOfferings(importPreview); setImportPreview(null); setImportMessage('Reviewed entries added to this draft. Nothing is published.') }}>Use reviewed entries</button>{offeringRows.length > 0 ? <p>Keep your existing entries, or remove them explicitly before using this preview.</p> : null}<button type="button" className="website-button is-secondary" onClick={() => setImportPreview(null)}>Discard preview</button></div> : null}
+          </div> : null}
           {offeringRows.map((row, index) => (
             <fieldset key={index}>
               <legend>Featured entry {index + 1}</legend>

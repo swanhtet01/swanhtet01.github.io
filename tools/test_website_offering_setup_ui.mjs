@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 import * as starter from '../showroom/src/products/website/website-starter.ts'
 import * as trade from '../showroom/src/products/website/website-trade-brief.ts'
+import * as offeringImport from '../showroom/src/products/website/website-offering-import.ts'
 
 // Exercise actual component handlers with deterministic hook state. This is not
 // a browser/layout test or evidence of customer usability.
@@ -20,11 +21,12 @@ function harness() {
   runInNewContext(compiled, { exports, requestAnimationFrame: callback => callback(), require(name) {
     if (name === 'react') return {
       useState(initial) { const index = cursor++; if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial; return [state[index], value => { state[index] = typeof value === 'function' ? value(state[index]) : value }] },
-      useRef() { return { current: null } },
+      useRef(initial) { const index = cursor++; if (!(index in state)) state[index] = { current: initial }; return state[index] },
     }
     if (name === 'react/jsx-runtime') return require(name)
     if (name === './website-starter') return starter
     if (name === './website-trade-brief') return trade
+    if (name === './website-offering-import') return offeringImport
     throw new Error('Unexpected component dependency: ' + name)
   } })
   function render() { cursor = 0; tree = exports.WebsiteStarterSetup({ onCreate: value => created.push(value), onViewSample() {} }); return tree }
@@ -92,4 +94,21 @@ test('new/existing business guidance never rewrites entered offerings', () => {
   assert.match(ui.find(node => node.props.id === 'website-business-stage-help').props.children, /does not scrape websites/)
   ui.submit()
   assert.equal(ui.created[0].offerings, 'Owner service | Confirmed description')
+})
+
+test('CSV selection is preview-only until explicitly accepted and cannot replace entered rows', async () => {
+  const ui = harness()
+  ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.onChange({ target: { value: 'existing' } }); ui.render()
+  const selectFile = async () => {
+    ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [{ name: 'menu.csv', size: 40, text: async () => 'name,description\nTea,2000 MMK' }], value: 'menu.csv' } })
+    await new Promise(resolve => setImmediate(resolve)); ui.render()
+  }
+  await selectFile()
+  assert.equal(ui.nodes().filter(node => node.type === 'fieldset').length, 0)
+  ui.click('Use reviewed entries'); ui.submit()
+  assert.equal(ui.created[0].offerings, 'Tea | 2000 MMK')
+  await selectFile()
+  assert.equal(ui.find(node => node.type === 'button' && node.props.children === 'Use reviewed entries').props.disabled, true)
+  ui.click('Discard preview'); ui.submit()
+  assert.equal(ui.created[1].offerings, 'Tea | 2000 MMK')
 })
