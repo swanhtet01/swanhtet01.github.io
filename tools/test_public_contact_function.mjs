@@ -639,6 +639,28 @@ try {
   assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
   assert.equal(unexpectedDeliveryCalls, 0)
 
+  // Independent cold handlers share only the simulated atomic database, not maps.
+  const independentOne = loadHandler({ fresh: true })
+  const independentTwo = loadHandler({ fresh: true })
+  const beforeConcurrentRows = persistedLeads.size
+  const independentResults = await Promise.all([
+    invoke({ activeHandler: independentOne, body: validSubmission, headers: withKey(260) }),
+    invoke({ activeHandler: independentTwo, body: validSubmission, headers: withKey(260) }),
+  ])
+  assert.deepEqual(independentResults.map(result => result.status), [202, 202])
+  assert.equal(independentResults[0].body.request_id, independentResults[1].body.request_id)
+  assert.equal(independentResults.filter(result => result.headers['x-idempotent-replay'] === 'true').length, 1)
+  assert.equal(persistedLeads.size, beforeConcurrentRows + 1)
+  assert.equal(unexpectedDeliveryCalls, 1, 'only the insert winner notifies the webhook')
+
+  const conflictResults = await Promise.all([
+    invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(261) }),
+    invoke({ activeHandler: loadHandler({ fresh: true }), body: { ...validSubmission, goal: 'Conflicting concurrent brief' }, headers: withKey(261) }),
+  ])
+  assert.deepEqual(conflictResults.map(result => result.status).sort(), [202, 409])
+  assert.equal(conflictResults.find(result => result.status === 409).body.reason, 'idempotency_conflict')
+  assert.equal(unexpectedDeliveryCalls, 2, 'conflicting cold handler cannot notify')
+
   // Exercise the actual generated API event through the actual staff preparation
   // consumer. Delivery is intercepted: no network, messages or customer records.
   clearChannels()
@@ -686,7 +708,7 @@ try {
     await rm(integrationRoot, { recursive: true, force: true })
   }
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 145, serviceHandoffJourneys: 3 }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', assertions: 'all_passed', serviceHandoffJourneys: 3, independentInstanceRaceScenarios: 2, evidence: 'local_mocked_not_hosted' }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {
