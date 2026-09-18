@@ -79,3 +79,12 @@ test('View receipt focuses the retained receipt before falling back to checkout 
     assert.equal(scrolled, available === 'none' ? 0 : 1)
   }
 })
+
+test('retained receipts use a wrapping single column and readable evidence text', async () => {
+  const css = await readFile(new URL('../showroom/src/products/ecommerce/ecommerce-product.css', import.meta.url), 'utf8')
+  const block = css.slice(css.indexOf('/* A retained receipt is evidence'), css.indexOf('/* A retained receipt is evidence') + 760)
+  assert.match(block, /grid-template-columns: minmax\(0, 1fr\)/)
+  assert.match(block, /font-size: \.875rem/)
+  assert.match(block, /white-space: normal/)
+  assert.match(block, /overflow-wrap: anywhere/)
+})

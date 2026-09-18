@@ -1360,6 +1360,32 @@
   line-height: 1.4;
 }
 
+/* A retained receipt is evidence the customer needs to read, not fine print. */
+.ecommerce-quote-receipt[data-current="false"] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: .5rem;
+  padding: 1rem;
+}
+
+.ecommerce-quote-receipt[data-current="false"] > * {
+  grid-column: 1;
+  grid-row: auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: .875rem;
+  line-height: 1.5;
+}
+
+.ecommerce-quote-receipt[data-current="false"] > strong {
+  font-size: 1rem;
+}
+
+.ecommerce-quote-receipt[data-current="false"] > b {
+  font-size: 1.125rem;
+}
+
 .ecommerce-buying-notice {
   grid-column: 1 / -1;
   margin: 0;
