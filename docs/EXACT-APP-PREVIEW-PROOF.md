@@ -23,7 +23,7 @@ fixtures and are technical review evidence, not approved marketing imagery.
 - Supply the exact target preview commit as `--expected-commit`. It must equal
   the commit bound by the operations receipt and may differ from the verifier
   commit.
-- First collect a passing `supermega.post-deploy-operations-receipt.v2` for
+- First collect a passing `supermega.post-deploy-operations-receipt.v3` for
   the paired Public and app previews. That receipt must bind release identity,
   isolated-demo health, all four app-route security headers, camera access,
   app and Public Web Analytics/Speed Insights delivery readiness, a zero-error

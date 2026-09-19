@@ -10,6 +10,7 @@ const releaseWorkflow = read('.github/workflows/supermega-public-release.yml')
 const ciWorkflow = read('.github/workflows/showroom-ci.yml')
 const healthWorkflow = read('.github/workflows/supermega-public-live-health.yml')
 const previewVerifier = read('tools/verify_public_preview_live.mjs')
+const previewProfile = read('tools/public_preview_profile.mjs')
 const liveVerifier = read('tools/verify_public_release_live.mjs')
 const rollbackResolver = read('tools/resolve_vercel_rollback_target.mjs')
 const firewallVerifier = read('tools/verify_public_firewall_state.mjs')
@@ -44,13 +45,28 @@ for (const path of retiredReleasePaths) {
 if (!allPullRequests) failures.push('local_control_server_not_watched')
 if (localControlServer.includes('/api/cloud/deployments/production') || localControlServer.includes('_run_production_deploy') || localControlServer.includes('command.append("--prod")') || localControlServer.includes('vercel deploy --prebuilt --prod')) failures.push('local_production_deploy_endpoint_present')
 if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_deployments_not_disabled')
-if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')
+if (!previewVerifier.includes('validatePreviewContact(contact, policy)')
+  || !previewVerifier.includes("from './public_preview_profile.mjs'")) failures.push('preview_contact_readiness_not_verified')
+for (const token of ["policy.profile === 'production-contract'", 'contact.accepting !== accepting',
+  "contact.status !== (accepting ? 'ready' : 'attention')", 'public_preview_contact_posture_wrong',
+  "contact.controls?.idempotency !== 'required'", "contact.controls?.edge_rate_limit !== 'required'"]) {
+  requireToken(previewProfile, token, 'preview_contact_policy_missing')
+}
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
 if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
-for (const [label, verifier] of Object.entries({ previewVerifier, liveVerifier })) {
-  if (!verifier.includes('guided_product_route_missing') || !verifier.includes('direct_product_route_remains_primary')) {
-    failures.push(`guided_product_route_contract_missing:${label}`)
-  }
+for (const token of ['validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)',
+  'validatePreviewLinks(html, policy, manifest.customerProducts,']) {
+  requireToken(previewVerifier, token, 'preview_navigation_consumer_missing')
+}
+for (const token of ['public_preview_action_missing', 'public_preview_app_route_invalid',
+  'public_preview_production_escape', 'public_preview_retired_entry',
+  "product.id === 'shop' ? '/shop/?tab=today' : `/settings/?product=${product.id}`"]) {
+  requireToken(previewProfile, token, 'preview_navigation_policy_missing')
+}
+for (const token of ['guided_product_route_missing', 'guided_product_label_wrong',
+  'homepage_shop_action_missing', 'landing_shop_action_missing', 'landing_contact_route_missing',
+  'retired_product_marketed', 'retired_product_boundary_missing']) {
+  requireToken(liveVerifier, token, 'live_navigation_contract_missing')
 }
 // The retired ops endpoints (for example /api/pipeline-control/status) must stay
 // pinned to 404 {"status":"not_found"} in the live health contract — never the
@@ -72,7 +88,7 @@ for (const [name, expected] of Object.entries({
   'vercel:deploy': 'node tools/deny_stale_public_deploy.mjs',
   'vercel:deploy:prod': 'node tools/deny_stale_public_deploy.mjs',
   'public:build': 'node tools/create_public_vercel_output.mjs',
-  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify',
+  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node --test --test-concurrency=1 tools/verify_public_release_live.test.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify',
   'public:prebuilt': 'npm run public:build && npm run public:verify',
   'public:verify:live': 'node tools/verify_public_release_live.mjs',
   'deploy:public:prod': 'node tools/deny_stale_public_deploy.mjs',
