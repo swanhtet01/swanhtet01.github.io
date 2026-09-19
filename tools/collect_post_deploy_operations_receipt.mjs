@@ -6,7 +6,18 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { capturePreviewAccessEnvironment } from './preview_scoped_access.mjs'
 
-export const POST_DEPLOY_OPERATIONS_CONTRACT = 'supermega.post-deploy-operations-receipt.v2'
+export const POST_DEPLOY_OPERATIONS_CONTRACT = 'supermega.post-deploy-operations-receipt.v3'
+// Collection provenance stays private; callers cannot relabel credential-bearing
+// probes by supplying a transport flag to the receipt builder.
+const collectedProbeTransports = new WeakMap()
+
+function normalizeProbeTransport(value, stage) {
+  exactKeys(value, ['mode', 'ambientCredentialsSent'], 'post_deploy_transport_invalid')
+  if (!['uncredentialed', 'scoped_preview_bypass'].includes(value.mode)
+    || value.ambientCredentialsSent !== false) fail('post_deploy_transport_invalid')
+  if (value.mode === 'scoped_preview_bypass' && stage !== 'preview') fail('post_deploy_protected_access_preview_only')
+  return { mode: value.mode, ambientCredentialsSent: false }
+}
 export const RUNTIME_LOG_EVIDENCE_CONTRACT = 'supermega.vercel-runtime-log-scan.v1'
 export const ROLLBACK_EVIDENCE_CONTRACT = 'supermega.paired-rollback-target.v1'
 export const PUBLIC_OBSERVABILITY_VISIBILITY_CONTRACT = 'supermega.public-observability-provider-visibility.v1'
@@ -690,6 +701,10 @@ export async function collectPostDeployProbes({ stage, publicOrigin, appOrigin, 
     : { expected: false, webAnalytics: null, speedInsights: null }
   const probes = { release, health, publicHome, routes, observability: { loader, publicLoader, providerRuntime, publicProviderRuntime } }
   scopedAccess?.assertNoCredential(probes)
+  collectedProbeTransports.set(probes, {
+    stage, publicOrigin, appOrigin,
+    transport: { mode: scopedAccess ? 'scoped_preview_bypass' : 'uncredentialed', ambientCredentialsSent: false },
+  })
   return probes
 }
 
@@ -1045,6 +1060,12 @@ export function buildPostDeployOperationsReceipt({
 }) {
   const context = normalizeContext({ generatedAt, stage, expectedCommit, publicOrigin, appOrigin })
   const normalizedProbes = normalizeProbes(probes, context.stage)
+  const collected = collectedProbeTransports.get(probes)
+  if (!collected || collected.stage !== context.stage
+    || collected.publicOrigin !== context.publicOrigin || collected.appOrigin !== context.appOrigin) {
+    fail('post_deploy_probe_collection_binding_missing')
+  }
+  const transport = normalizeProbeTransport(collected.transport, context.stage)
   const runtimeLogs = evidenceEnvelope(runtimeLogEvidence, runtimeLogSourceDigest, normalizeRuntimeLogEvidence, context, 'post_deploy_runtime_logs')
   const rollback = evidenceEnvelope(rollbackEvidence, rollbackSourceDigest, normalizeRollbackEvidence, context, 'post_deploy_rollback')
   const publicObservability = evidenceEnvelope(
@@ -1076,6 +1097,7 @@ export function buildPostDeployOperationsReceipt({
     stage: context.stage,
     expectedCommit: context.expectedCommit,
     deploymentOrigins: { public: context.publicOrigin, app: context.appOrigin },
+    transport,
     probes: normalizedProbes,
     evidence: { runtimeLogs, rollback, publicObservability, publicObservabilityAttestation },
     operations,
@@ -1083,7 +1105,7 @@ export function buildPostDeployOperationsReceipt({
     releaseAuthorized: false,
     controls: {
       requestMethods: ['GET'],
-      credentialsSent: false,
+      credentialsSent: transport.mode === 'scoped_preview_bypass',
       redirectsFollowed: false,
       providerWritesPerformed: false,
       hostedWritesPerformed: false,
@@ -1113,7 +1135,7 @@ function withoutDigest(packet) {
 export function validatePostDeployOperationsReceipt(packet) {
   exactKeys(packet, [
     'contract', 'digestScope', 'generatedAt', 'mode', 'stage', 'expectedCommit', 'deploymentOrigins',
-    'probes', 'evidence', 'operations', 'externalReleaseGates', 'releaseAuthorized', 'controls',
+    'transport', 'probes', 'evidence', 'operations', 'externalReleaseGates', 'releaseAuthorized', 'controls',
     'doesNotAuthorize', 'digest',
   ], 'post_deploy_receipt_shape_invalid')
   if (packet.contract !== POST_DEPLOY_OPERATIONS_CONTRACT
@@ -1127,6 +1149,7 @@ export function validatePostDeployOperationsReceipt(packet) {
     appOrigin: packet.deploymentOrigins?.app,
   })
   exactKeys(packet.deploymentOrigins, ['public', 'app'], 'post_deploy_receipt_origins_shape_invalid')
+  const transport = normalizeProbeTransport(packet.transport, context.stage)
   const probes = normalizeProbes(packet.probes, context.stage)
   exactKeys(packet.evidence, [
     'runtimeLogs', 'rollback', 'publicObservability', 'publicObservabilityAttestation',
@@ -1174,7 +1197,7 @@ export function validatePostDeployOperationsReceipt(packet) {
   const external = externalReleaseGates()
   if (JSON.stringify(packet.externalReleaseGates) !== JSON.stringify(external)) fail('post_deploy_external_gates_mismatch')
   const expectedControls = {
-    requestMethods: ['GET'], credentialsSent: false, redirectsFollowed: false,
+    requestMethods: ['GET'], credentialsSent: transport.mode === 'scoped_preview_bypass', redirectsFollowed: false,
     providerWritesPerformed: false, hostedWritesPerformed: false, databaseConnectionsPerformed: false,
     credentialChangesPerformed: false, customerContactPerformed: false, paymentsPerformed: false,
     stockMovementPerformed: false, managedActivationPerformed: false,

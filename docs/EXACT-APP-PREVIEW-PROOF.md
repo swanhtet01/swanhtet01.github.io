@@ -58,6 +58,15 @@ fixtures and are technical review evidence, not approved marketing imagery.
   journey test. Synthetic transport tests are not proof of authenticated
   provider access or hosted acceptance. Independent review is required before
   first credential-bearing execution.
+- Operations receipt v3 records `transport.mode` as `uncredentialed` or
+  `scoped_preview_bypass`, derived from the actual in-process probe collector.
+  Protected preview receipts report `controls.credentialsSent: true`; both modes
+  report `transport.ambientCredentialsSent: false`. No token value or token hash
+  is retained. Production cannot use the protected-preview mode. Builders reject
+  copied/unbound probes; stored validators check mode/control consistency and the
+  packet digest. This is provenance within the trusted collector, not a signature
+  or independent proof against an actor rewriting the whole artifact. Legacy v2
+  receipts lack this distinction and must be recollected, not relabelled.
 - Use a new empty evidence directory. The report and screenshots are written
   exclusively and never overwrite prior evidence.
 

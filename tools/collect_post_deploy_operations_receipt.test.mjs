@@ -34,6 +34,38 @@ test('protected operations probes use exact paired access without widening produ
   }
   assert.ok(!JSON.stringify(probes).includes(publicToken))
   assert.ok(!JSON.stringify(probes).includes(appToken))
+  const receiptInput = { generatedAt, stage: 'preview', expectedCommit,
+    publicOrigin: origins.public, appOrigin: origins.app, probes }
+  const packet = buildPostDeployOperationsReceipt(receiptInput)
+  assert.deepEqual(packet.transport, { mode: 'scoped_preview_bypass', ambientCredentialsSent: false })
+  assert.equal(packet.controls.credentialsSent, true)
+  assert.equal(validatePostDeployOperationsReceipt(JSON.parse(JSON.stringify(packet))).digest, packet.digest)
+  assert.ok(!JSON.stringify(packet).includes(publicToken))
+  assert.ok(!JSON.stringify(packet).includes(appToken))
+  assert.throws(() => buildPostDeployOperationsReceipt({ ...receiptInput, probes: structuredClone(probes),
+    transport: { mode: 'uncredentialed', ambientCredentialsSent: false } }), /collection_binding_missing/)
+  const rehash = value => {
+    delete value.digest
+    value.digest = compactDigest(JSON.stringify(value))
+    return value
+  }
+  const falseControls = structuredClone(packet)
+  falseControls.controls.credentialsSent = false
+  assert.throws(() => validatePostDeployOperationsReceipt(rehash(falseControls)), /controls_invalid/)
+  const falseMode = structuredClone(packet)
+  falseMode.transport.mode = 'uncredentialed'
+  assert.throws(() => validatePostDeployOperationsReceipt(rehash(falseMode)), /controls_invalid/)
+  const production = structuredClone(packet)
+  production.stage = 'production'
+  production.deploymentOrigins = productionOrigins
+  assert.throws(() => validatePostDeployOperationsReceipt(rehash(production)), /preview_only/)
+  const ambient = structuredClone(packet)
+  ambient.transport.ambientCredentialsSent = true
+  assert.throws(() => validatePostDeployOperationsReceipt(rehash(ambient)), /transport_invalid/)
+  const legacy = structuredClone(packet)
+  legacy.contract = 'supermega.post-deploy-operations-receipt.v2'
+  delete legacy.transport
+  assert.throws(() => validatePostDeployOperationsReceipt(rehash(legacy)), /shape_invalid/)
   const count = fixture.calls.length
   await assert.rejects(() => collectPostDeployProbes({ ...args, stage: 'production' }), /preview_only/)
   await assert.rejects(() => collectPostDeployProbes({ ...args, appOrigin: 'https://megaos-987654321-swanhtet01s-projects.vercel.app' }), /request_denied/)
@@ -367,6 +399,9 @@ test('builds a passing preview operations receipt using GET only while release a
   assert.equal(packet.operations.blockingCount, 0)
   assert.equal(packet.externalReleaseGates.status, 'blocked')
   assert.equal(packet.releaseAuthorized, false)
+  assert.deepEqual(packet.transport, { mode: 'uncredentialed', ambientCredentialsSent: false })
+  assert.equal(packet.controls.credentialsSent, false)
+  assert.equal(validatePostDeployOperationsReceipt(JSON.parse(JSON.stringify(packet))).digest, packet.digest)
   assert.equal(calls.length, 11)
   assert.equal(calls.every(({ request }) => request.method === 'GET'
     && request.redirect === 'manual'
