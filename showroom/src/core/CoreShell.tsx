@@ -613,13 +613,11 @@ const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
 const STEP_SUGGESTIONS: ReadonlyArray<[SetupProductId, string, string]> = [
   ['commerce', 'Shop', 'make the first sale'],
   ['ecommerce', 'Ecommerce', 'take Shop-backed orders'],
-  ['production', 'Plant', 'connect production to stock'],
   ['website', 'Website', 'publish a simple site'],
 ]
 
 const customerProducts = [
   ['Shop', 'Sales, orders, stock, close.', 'Complete a sample sale', '/shop/'],
-  ['Plant', 'Jobs, materials, quality.', 'Run a sample production job', '/plant/'],
   ['Website', 'Pages, leads, preview.', 'Preview a business website', '/website/'],
   ['Ecommerce', 'Storefront to Shop handoff.', 'Save a sample request on this device', '/ecommerce/'],
 ] as const
@@ -711,7 +709,7 @@ export function ProductHomePage() {
           <Link to="/login">Switch company</Link>
         </div>
       </section> : null}
-      {managedPortal && portalAccess.products.length === 0
+      {managedPortal && !customerProducts.some(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
         ? <PortalAccessPanel copy="No active product. Ask the owner to assign one." title="No products" />
         : null}
       {!managedPortal && productSetups && !anyStarted ? (
