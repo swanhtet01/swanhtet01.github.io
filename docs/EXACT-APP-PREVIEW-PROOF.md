@@ -1,16 +1,16 @@
-# Exact app preview proof v1
+# Exact app preview proof v2
 
-`supermega.exact-app-preview-rendered.v1` is the technical browser proof for
+`supermega.exact-app-preview-rendered.v2` is the technical browser proof for
 one exact Vercel preview commit. It joins the existing GET-only post-deploy
 operations receipt to a fresh, ephemeral browser run across Public, Shop,
-Plant, Website, and Ecommerce at desktop and 390 x 844 mobile sizes. The
+Website, Ecommerce, and retired Plant entry rejection at desktop and 390 x 844 mobile sizes. The
 target preview commit and the clean verifier commit are bound separately, so
 an accepted proof tool can inspect a sealed candidate without changing it.
 
 It does not deploy, promote, roll back, create a pull request, write provider
 state, contact a customer, capture payment, move stock, or activate managed
 persistence. It deliberately reports `exactPreviewAccepted:false` and
-`releaseAuthorized:false`; an independent person must still inspect all twelve
+`releaseAuthorized:false`; an independent person must still inspect all twenty-four
 screenshots and record the separate release decision.
 
 Keep these screenshots internal. They contain synthetic product/customer
@@ -48,12 +48,19 @@ fixtures and are technical review evidence, not approved marketing imagery.
 The order is fixed and duplicates, omissions, extra cases, changed viewports,
 changed routes, or renamed screenshots fail closed.
 
+Version 1 reports are historical only and are rejected by this consumer. No
+relabelled or upgraded report substitutes for a fresh version 2 capture.
+The 24-case matrix contains ten active-surface cases and fourteen retirement
+cases. Retirement uses isolated synthetic storage sentinels, not customer data;
+only the preservation result is retained, never raw local records. This proves
+the narrow sentinel boundary, not recovery of every possible historical dataset.
+
 | Surface | Desktop | Mobile | Required technical boundary |
 | --- | --- | --- | --- |
 | Public | 1280 x 900 | 390 x 844 | Product entry is visible |
 | Shop Counter | 1280 x 900 | 390 x 844 | Exact `/shop/?template=mini-mart` checkout, payment, total, open-order choice, and review action are above fold |
 | Shop Profit Control | 1280 x 900 | 390 x 844 | Exact `/shop/?tab=today` renders the untouched source-owned fresh Shop seed as `attention` / `3 open`, led by `payment_pending` (`Reconcile pending payments`) with its exact payment-review action and target, objective closure, and read-only boundary |
-| Plant | 1280 x 900 | 390 x 844 | Working-sample timeline is explicitly not today's production |
+| Retired Plant entries (seven routes) | 1280 x 900 | 390 x 844 | Direct, legacy, demo and settings aliases redirect to the exact active chooser; no Plant tool/action is visible; four retained storage keys remain unchanged before and after capture |
 | Website | 1280 x 900 | 390 x 844 | Local working sample visibly says nothing was deployed |
 | Ecommerce | 1280 x 900 | 390 x 844 | Completed sample request remains visibly browser-local, with no managed Shop receipt claim |
 
@@ -88,7 +95,7 @@ npm.cmd run app:preview:rendered:verify -- `
 The operations receipt supplies both preview origins. There is intentionally
 no free-form origin flag, so the rendered proof cannot silently diverge from
 the already validated release/health/header/rollback evidence. Immediately
-before and after the twelve browser cases, the tool performs fresh GET-only,
+before and after the twenty-four browser cases, the tool performs fresh GET-only,
 manual-redirect `/__release.json` probes on both origins and requires the
 exact target commit and expected service identity. A redirect or alias commit
 change fails closed.
@@ -117,7 +124,7 @@ both tool files to recompute their byte counts and SHA-256 digests.
 
 The report proves a bounded technical browser run; its digests are integrity
 metadata, not identity or proof that a person inspected the images. A reviewer
-must visually inspect all twelve PNG files, including both Shop Counter and
+must visually inspect all twenty-four PNG files, including both Shop Counter and
 Shop Profit Control at desktop and mobile sizes, for clipping, hierarchy, truthful
 claims, and the intended product job. Only a separately reviewed acceptance
 artifact may advance the exact-preview gate. Production release still requires

@@ -22,8 +22,9 @@ import {
   verifyCase,
 } from './verify_app_entry_rendered.mjs'
 
-export const EXACT_APP_PREVIEW_CONTRACT = 'supermega.exact-app-preview-rendered.v1'
-export const EXACT_APP_PREVIEW_VALIDATION_CONTRACT = 'supermega.exact-app-preview-validation.v1'
+import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS } from './retired_product_preview_policy.mjs'
+export const EXACT_APP_PREVIEW_CONTRACT = 'supermega.exact-app-preview-rendered.v2'
+export const EXACT_APP_PREVIEW_VALIDATION_CONTRACT = 'supermega.exact-app-preview-validation.v2'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const verifierPath = fileURLToPath(import.meta.url)
@@ -64,8 +65,7 @@ export const EXACT_APP_PREVIEW_CASE_MATRIX = Object.freeze([
   { id: 'shop_mobile', surface: 'shop', route: '/shop/?template=mini-mart', width: 390, height: 844, mobile: true, screenshot: 'shop-counter-mini-mart-mobile-390x844.png' },
   { id: 'shop_profit_control_desktop', surface: 'shop_profit_control', route: '/shop/?tab=today', width: 1280, height: 900, mobile: false, screenshot: 'shop-profit-control-desktop-1280x900.png' },
   { id: 'shop_profit_control_mobile', surface: 'shop_profit_control', route: '/shop/?tab=today', width: 390, height: 844, mobile: true, screenshot: 'shop-profit-control-mobile-390x844.png' },
-  { id: 'plant_desktop', surface: 'plant', route: '/plant/', width: 1280, height: 900, mobile: false, screenshot: 'plant-working-sample-desktop-1280x900.png' },
-  { id: 'plant_mobile', surface: 'plant', route: '/plant/', width: 390, height: 844, mobile: true, screenshot: 'plant-working-sample-mobile-390x844.png' },
+  ...RETIRED_PRODUCT_CASES.map(spec => Object.freeze({ ...spec, surface: 'retired_plant', screenshot: `${spec.id}.png` })),
   { id: 'website_desktop', surface: 'website', route: '/website/', width: 1280, height: 900, mobile: false, screenshot: 'website-working-sample-desktop-1280x900.png' },
   { id: 'website_mobile', surface: 'website', route: '/website/', width: 390, height: 844, mobile: true, screenshot: 'website-working-sample-mobile-390x844.png' },
   { id: 'ecommerce_desktop', surface: 'ecommerce', route: '/ecommerce/', width: 1280, height: 900, mobile: false, screenshot: 'ecommerce-local-request-desktop-1280x900.png' },
@@ -483,6 +483,7 @@ function exactShopProfitControlResolvedPath(value) {
 }
 
 function expectedResolvedPath(spec, value) {
+  if (spec.surface === 'retired_plant') return value === spec.expectedPath
   if (spec.surface === 'shop') return exactShopResolvedPath(value)
   if (spec.surface === 'shop_profit_control') return exactShopProfitControlResolvedPath(value)
   return value === spec.route
@@ -595,14 +596,23 @@ function normalizeBrowserCase(value, spec, expectedOrigin) {
     fail(`exact_app_preview_ecommerce_claim_invalid:${spec.id}`)
   }
   const profitControl = normalizeShopProfitControl(value.profitControl, spec)
+  let retirement = null
+  if (spec.surface === 'retired_plant') {
+    const proof = value.rendered?.retirement
+    exactKeys(proof, ['policy', 'caseId', 'redirectVerified', 'activeChooserVerified', 'retiredUiAbsent', 'retainedDataUnchanged'], `exact_app_preview_retirement_invalid:${spec.id}`)
+    if (proof.policy !== RETIRED_PRODUCT_PREVIEW_POLICY || proof.caseId !== spec.id
+      || proof.redirectVerified !== true || proof.activeChooserVerified !== true
+      || proof.retiredUiAbsent !== true || proof.retainedDataUnchanged !== true) fail(`exact_app_preview_retirement_invalid:${spec.id}`)
+    retirement = { ...proof }
+  } else if (value.rendered?.retirement != null) fail(`exact_app_preview_retirement_unexpected:${spec.id}`)
   const primaryFlow = spec.surface === 'shop'
     ? 'counter_checkout_ready_above_fold'
     : spec.surface === 'shop_profit_control'
       ? 'profit_control_priority_action_and_closure_visible'
     : spec.surface === 'ecommerce'
       ? 'browser_local_request_boundary_visible'
-      : spec.surface === 'plant'
-        ? 'sample_timeline_boundary_visible'
+      : spec.surface === 'retired_plant'
+        ? 'retired_entry_redirect_and_retained_data_verified'
         : spec.surface === 'website'
           ? 'local_not_deployed_boundary_visible'
           : 'product_entry_visible'
@@ -617,6 +627,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin) {
     bodyLength: value.bodyLength,
     primaryFlow,
     profitControl,
+    retirement,
     screenshot,
     browserContextIsolated: true,
     noHorizontalOverflow: true,
@@ -630,7 +641,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin) {
 function normalizeStoredCase(value, spec, expectedOrigin) {
   exactKeys(value, [
     'id', 'surface', 'route', 'renderedOrigin', 'renderedHash', 'resolvedPath', 'viewport', 'bodyLength', 'primaryFlow',
-    'profitControl', 'screenshot', 'browserContextIsolated', 'noHorizontalOverflow', 'runtimeClean', 'runtimeWarningCount',
+    'profitControl', 'retirement', 'screenshot', 'browserContextIsolated', 'noHorizontalOverflow', 'runtimeClean', 'runtimeWarningCount',
     'mutatingRequestCount', 'passed',
   ], `exact_app_preview_stored_case_shape_invalid:${spec.id}`)
   exactKeys(value.viewport, ['width', 'height', 'mobile'], `exact_app_preview_stored_viewport_shape_invalid:${spec.id}`)
@@ -644,6 +655,7 @@ function normalizeStoredCase(value, spec, expectedOrigin) {
     bodyLength: value.bodyLength,
     layout: spec.surface === 'shop' ? { ok: true, aboveFold: true, accessibility: { ok: true } } : null,
     profitControl: value.profitControl,
+    rendered: { retirement: value.retirement },
     claimBoundary: spec.surface === 'ecommerce' ? { ok: true } : null,
     screenshot: value.screenshot,
     browserContextIsolated: value.browserContextIsolated,
@@ -689,7 +701,7 @@ function expectedGates() {
     releaseIdentityBound: true,
     publicDesktopMobileRendered: true,
     shopCounterDesktopMobilePassed: true,
-    plantDesktopMobileRendered: true,
+    retiredPlantEntriesDesktopMobileVerified: true,
     websiteDesktopMobileRendered: true,
     ecommerceClaimDesktopMobilePassed: true,
     cameraPolicyPassed: true,
@@ -977,6 +989,7 @@ async function readScreenshotPayloads(report, reportPath) {
 }
 
 function expectedPath(spec) {
+  if (spec.surface === 'retired_plant') return spec.expectedPath
   if (spec.surface === 'shop') return exactShopResolvedPath
   if (spec.surface === 'shop_profit_control') return exactShopProfitControlResolvedPath
   return spec.route
@@ -1001,7 +1014,7 @@ function expectedText(spec, publicHomepageExpectedText) {
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.priority.metric,
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.boundary,
   ]
-  if (spec.surface === 'plant') return ['Plant', 'working sample', "These dates belong to this browser-local sample, not today's production."]
+  if (spec.surface === 'retired_plant') return ['Shop', 'Website', 'Ecommerce']
   if (spec.surface === 'website') return ['Website', 'Make this website yours', 'Nothing has been deployed.']
   return ['Ecommerce', 'Let SuperMega prepare your catalog', 'Request catalog setup', 'Try sample request']
 }
@@ -1015,7 +1028,7 @@ function browserCase(spec, origin, publicHomepageExpectedText) {
     mobile: spec.mobile,
     expectedOrigin: origin,
     expectedPath: expectedPath(spec),
-    expectedPathLabel: spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.route,
+    expectedPathLabel: spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.expectedPath || spec.route,
     expectedText: expectedText(spec, publicHomepageExpectedText),
     exerciseShopCounter: spec.surface === 'shop',
     exerciseShopProfitControl: spec.surface === 'shop_profit_control',
@@ -1026,6 +1039,9 @@ function browserCase(spec, origin, publicHomepageExpectedText) {
     screenshotName: spec.screenshot.replace(/\.png$/i, ''),
     timeoutMs: 60_000,
     ...(spec.surface === 'shop_profit_control' ? {} : { seed: {} }),
+    ...(spec.surface === 'retired_plant' ? { retirementCaseId: spec.id, requireLauncherProducts: true,
+      seed: { retained: Object.fromEntries(RETIRED_STORAGE_KEYS.map(key => [key,
+        key === 'supermega.product_setups.v1' ? '{}' : JSON.stringify({ syntheticRetirementSentinel: key })])) } } : {}),
   }
 }
 

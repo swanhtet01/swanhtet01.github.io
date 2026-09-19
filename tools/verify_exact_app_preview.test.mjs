@@ -268,7 +268,11 @@ function rawCase(spec, index) {
     origin: spec.surface === 'public' ? previewOrigins.public : previewOrigins.app,
     hash: '',
     viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
-    path: spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.route,
+    path: spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.expectedPath || spec.route,
+    rendered: { retirement: spec.surface === 'retired_plant' ? {
+      policy: 'supermega.retired-product-preview.v1', caseId: spec.id, redirectVerified: true,
+      activeChooserVerified: true, retiredUiAbsent: true, retainedDataUnchanged: true,
+    } : null },
     bodyLength: 2048 + index,
     layout: spec.surface === 'shop' ? { ok: true, aboveFold: true, accessibility: { ok: true } } : null,
     profitControl,
@@ -410,7 +414,7 @@ test('requires one exact generation or validation argument set', () => {
   )
 })
 
-test('builds and validates the exact twelve-case technical preview proof', async () => {
+test('builds and validates the exact twenty-four-case technical preview proof', async () => {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'site-manifest.json'), 'utf8'))
   const generatorSource = await readFile(join(repoRoot, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
   const proofGuide = await readFile(join(repoRoot, 'docs', 'EXACT-APP-PREVIEW-PROOF.md'), 'utf8')
@@ -422,9 +426,9 @@ test('builds and validates the exact twelve-case technical preview proof', async
   assert.equal(proofGuide.split(profitControlGuideRow).length - 1, 1)
   assert.match(proofGuide, /The Shop Profit Control cases do not edit browser storage\./)
   assert.match(proofGuide, /`Review payments` links to\s+`\/shop\/\?tab=orders#shop-order-queue`/)
-  assert.match(proofGuide, /all twelve\s+screenshots/)
-  assert.match(proofGuide, /before and after the twelve browser cases/)
-  assert.match(proofGuide, /all twelve PNG files, including both Shop Counter and\s+Shop Profit Control/)
+  assert.match(proofGuide, /all twenty-four\s+screenshots/)
+  assert.match(proofGuide, /before and after the twenty-four browser cases/)
+  assert.match(proofGuide, /all twenty-four PNG files, including both Shop Counter and\s+Shop Profit Control/)
   assert.doesNotMatch(proofGuide, /all ten|ten browser cases/)
   assert.match(renderedHarnessSource, /event\.type === 'warning' \|\| event\.type === 'warn'/)
   assert.match(renderedHarnessSource, /event\.entry\?\.level === 'warning'/)
@@ -508,7 +512,7 @@ test('builds and validates the exact twelve-case technical preview proof', async
     screenshotPayloads: screenshotPayloads(),
   })
   assert.equal(report.contract, EXACT_APP_PREVIEW_CONTRACT)
-  assert.equal(report.cases.length, 12)
+  assert.equal(report.cases.length, 24)
   assert.deepEqual(report.cases.map((entry) => entry.id), EXACT_APP_PREVIEW_CASE_MATRIX.map((entry) => entry.id))
   assert.equal(report.cases.every((entry) => entry.mutatingRequestCount === 0), true)
   assert.equal(report.cases.every((entry) => entry.browserContextIsolated === true), true)
@@ -524,7 +528,7 @@ test('builds and validates the exact twelve-case technical preview proof', async
   assert.equal(Object.hasOwn(report.controls, 'providerWritesPerformed'), false)
   assert.equal(Object.hasOwn(report.controls, 'databaseConnectionsPerformed'), false)
   assert.equal(validation.technicalRenderedPreviewPassed, true)
-  assert.equal(validation.screenshots.length, 12)
+  assert.equal(validation.screenshots.length, 24)
   assert.equal(validation.exactPreviewAccepted, false)
 })
 
@@ -598,8 +602,8 @@ test('rejects the twenty-three Shop Today route, semantic, evidence, and accessi
 
 test('rejects browser writes and missing Shop or Ecommerce flow proof', async () => {
   const mutating = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
-  mutating[caseIndex('plant_desktop')].network = { mutatingRequestCount: 1, mutatingRequests: [{ method: 'POST', path: '/api/write' }] }
-  await assert.rejects(() => reportFixture({ cases: mutating }), /exact_app_preview_browser_write_observed:plant_desktop/)
+  mutating[caseIndex('retired_plant_0_desktop')].network = { mutatingRequestCount: 1, mutatingRequests: [{ method: 'POST', path: '/api/write' }] }
+  await assert.rejects(() => reportFixture({ cases: mutating }), /exact_app_preview_browser_write_observed:retired_plant_0_desktop/)
   const shop = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
   shop[2].layout.aboveFold = false
   await assert.rejects(() => reportFixture({ cases: shop }), /exact_app_preview_shop_flow_invalid:shop_desktop/)
@@ -730,6 +734,19 @@ test('rejects initial-correct cases that navigate across origins before screensh
   assert.match(duringCaptureNavigation.failures.join(' | '), /changed during screenshot capture/)
 })
 
+test('retirement cases require explicit policy, preservation and chooser proof', async () => {
+  for (const mutate of [row => { row.path = '/plant/?tab=production' },
+    row => { row.rendered.retirement = null },
+    row => { row.rendered.retirement.policy = 'old' },
+    row => { row.rendered.retirement.caseId = 'plant_desktop' },
+    row => { row.rendered.retirement.retainedDataUnchanged = false },
+    row => { row.rendered.retirement.retiredUiAbsent = false }]) {
+    const cases = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
+    mutate(cases[caseIndex('retired_plant_0_desktop')])
+    await assert.rejects(() => reportFixture({ cases }), /exact_app_preview_(case_invalid|retirement_invalid)/)
+  }
+})
+
 test('fails closed on report, digest, gate, commit, and operations binding tampering', async () => {
   const { report, operationsPacket } = await reportFixture()
   const validate = (
@@ -747,6 +764,12 @@ test('fails closed on report, digest, gate, commit, and operations binding tampe
     screenshotPayloads: screenshotPayloads(),
   })
   const widened = clone(report)
+  const historical = clone(report)
+  historical.contract = 'supermega.exact-app-preview-rendered.v1'
+  assert.throws(() => validate(historical), /exact_app_preview_report_contract_invalid/)
+  const badRetirement = clone(report)
+  badRetirement.cases[caseIndex('retired_plant_0_desktop')].retirement.retainedDataUnchanged = false
+  assert.throws(() => validate(badRetirement), /exact_app_preview_retirement_invalid/)
   widened.gates.exactPreviewAccepted = true
   assert.throws(() => validate(widened), /exact_app_preview_gates_invalid/)
   const released = clone(report)
