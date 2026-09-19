@@ -42,14 +42,17 @@ fixtures and are technical review evidence, not approved marketing imagery.
   state cannot leak from one viewport or product proof into another.
 - Protected immutable pairs can use separately authorized process-local
   `SUPERMEGA_PUBLIC_PREVIEW_BYPASS` and `SUPERMEGA_APP_PREVIEW_BYPASS` inputs.
-  Both are required together and removed from the environment before Chrome
-  is spawned. No credential file loading or provider-token creation occurs.
+  Both are required together and removed from the environment as the first
+  CLI action, before Git preflight or browser discovery can spawn children.
+  No credential file loading or provider-token creation occurs.
   Release GETs reject redirects; browser HTTP requests are intercepted per
   request, admit only GET/HEAD/OPTIONS at the exact pair, and replace access
   headers on each hop. Cookies/authorization/referrers are not forwarded.
   Child targets are paused and closed; service-worker handling and caches
   are bypassed. A denied request fails the case; interception is kept until
-  target closure. This is not a general browser sandbox or managed-write
+  confirmed target closure. Close rejection, timeout, negative acknowledgement
+  or a late policy failure prevents a successful case; outer cleanup still
+  disposes the context/browser. This is not a general browser sandbox or managed-write
   journey test. Synthetic transport tests are not proof of authenticated
   provider access or hosted acceptance. Independent review is required before
   first credential-bearing execution.

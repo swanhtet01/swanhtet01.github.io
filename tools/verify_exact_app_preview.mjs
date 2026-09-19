@@ -24,7 +24,7 @@ import {
 
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS } from './retired_product_preview_policy.mjs'
 import { PAIRED_TRANSITION_CONTRACT } from './paired_preview_transition.mjs'
-import { consumePreviewAccessEnvironment } from './preview_scoped_access.mjs'
+import { capturePreviewAccessEnvironment } from './preview_scoped_access.mjs'
 export const EXACT_APP_PREVIEW_CONTRACT = 'supermega.exact-app-preview-rendered.v2'
 export const EXACT_APP_PREVIEW_VALIDATION_CONTRACT = 'supermega.exact-app-preview-validation.v2'
 
@@ -1071,6 +1071,11 @@ function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {
 }
 
 async function main() {
+  // First executable action: even Git/browser discovery children must not
+  // inherit these inputs. Bind only after the operations receipt is validated.
+  const accessInputs = capturePreviewAccessEnvironment()
+  let scopedAccess = null
+  try {
   const options = parseExactAppPreviewArgs(process.argv.slice(2))
   const operations = await readBoundedJson(options.operationsReceiptPath, 'exact_app_preview_operations_receipt')
   if (options.verifyPath) {
@@ -1104,9 +1109,9 @@ async function main() {
   const userDataDir = await mkdtemp(resolve(tmpdir(), 'supermega-exact-preview-'))
   let browserProcess = null
   let cdp = null
-  let scopedAccess = null
   try {
-    scopedAccess = consumePreviewAccessEnvironment(operationsBinding.binding)
+    scopedAccess = accessInputs.bind(operationsBinding.binding)
+    accessInputs.dispose()
     const launched = await launchBrowser(browserBin, userDataDir)
     browserProcess = launched.browser
     cdp = await Cdp.connect(launched.wsUrl)
@@ -1168,8 +1173,11 @@ async function main() {
       await cdp.close().catch(() => {})
     }
     browserProcess?.kill()
-    scopedAccess?.dispose()
     await rm(userDataDir, { recursive: true, force: true }).catch(() => {})
+  }
+  } finally {
+    scopedAccess?.dispose()
+    accessInputs.dispose()
   }
 }
 

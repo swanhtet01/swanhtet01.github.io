@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createPreviewScopedAccess, consumePreviewAccessEnvironment, installPreviewBrowserAccess } from './preview_scoped_access.mjs'
+import { createPreviewScopedAccess, capturePreviewAccessEnvironment, consumePreviewAccessEnvironment, installPreviewBrowserAccess } from './preview_scoped_access.mjs'
 import { readFile } from 'node:fs/promises'
 const publicOrigin = 'https://supermega-public-123456789-swanhtet01s-projects.vercel.app'
 const appOrigin = 'https://megaos-123456789-swanhtet01s-projects.vercel.app'
@@ -51,7 +51,7 @@ function fakeCdp(failMethod = '') {
     async send(method, params, sessionId) {
       calls.push({ method, params, sessionId })
       if (method === failMethod) throw new Error(input().appToken)
-      return {}
+      return method === 'Target.closeTarget' ? { success: true } : {}
     },
     on(sessionId, method, callback) {
       const key = `${sessionId}:${method}`
@@ -94,7 +94,7 @@ test('outside origins, write methods, reflected credentials and redirect destina
     await assert.rejects(() => guard.assertClean(), /preview_browser_access_request_failed/)
     assert.equal(cdp.calls.some(call => call.method === 'Fetch.continueRequest'), false)
     assert.equal(cdp.calls.at(-1).method, 'Fetch.failRequest')
-    await guard.dispose()
+    await assert.rejects(() => guard.dispose(), /preview_browser_access_request_failed/)
     access.dispose()
   }
 })
@@ -110,7 +110,7 @@ test('browser authentication challenges and child targets cannot escape the scop
     cdp.emit(method, event)
     await assert.rejects(() => guard.assertClean(), /preview_browser_access_request_failed/)
     assert.equal(cdp.calls.at(-1).method, expectedMethod)
-    await guard.dispose()
+    await assert.rejects(() => guard.dispose(), /preview_browser_access_request_failed/)
     access.dispose()
   }
 })
@@ -127,14 +127,17 @@ test('interception setup and continuation failures close the target without leak
   cdp.emit('Fetch.requestPaused', paused(appOrigin))
   await assert.rejects(() => guard.assertClean(), error => error.message === 'preview_browser_access_request_failed')
   assert.equal(cdp.calls.at(-1).method, 'Target.closeTarget')
-  await guard.dispose()
+  await assert.rejects(() => guard.dispose(), /preview_browser_access_request_failed/)
   access.dispose()
 })
 
 test('CLI and harness keep protected transport inside isolated cases and before capture', async () => {
   const verifier = await readFile(new URL('./verify_exact_app_preview.mjs', import.meta.url), 'utf8')
   const harness = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
-  assert.ok(verifier.indexOf('scopedAccess = consumePreviewAccessEnvironment(') < verifier.indexOf('const launched = await launchBrowser('))
+  const main = verifier.slice(verifier.indexOf('async function main()'))
+  for (const operation of ['parseExactAppPreviewArgs(', 'collectCurrentVerifierBinding()', 'findBrowser()', 'launchBrowser(']) {
+    assert.ok(main.indexOf('capturePreviewAccessEnvironment()') < main.indexOf(operation), operation)
+  }
   assert.match(verifier, /releaseBefore = await probeExactPairedReleaseIdentity\(\{\s*scopedAccess,/)
   assert.match(verifier, /releaseAfter = await probeExactPairedReleaseIdentity\(\{\s*scopedAccess,/)
   assert.match(verifier, /browserCase\([^\n]+\), scopedAccess\)/)
@@ -142,4 +145,49 @@ test('CLI and harness keep protected transport inside isolated cases and before 
   assert.ok(harness.indexOf('accessGuard = await installPreviewBrowserAccess') < harness.indexOf("await cdp.send('Page.navigate'"))
   assert.ok(harness.indexOf('await accessGuard.assertClean()') < harness.indexOf("await cdp.send('Page.captureScreenshot'"))
   assert.match(harness, /if \(accessGuard\) await accessGuard.dispose\(\)/)
+})
+
+test('captured inputs cannot reach mocked Git preflight or command-name browser discovery', () => {
+  const environment = { SUPERMEGA_PUBLIC_PREVIEW_BYPASS: input().publicToken, SUPERMEGA_APP_PREVIEW_BYPASS: input().appToken }
+  const captured = capturePreviewAccessEnvironment(environment)
+  const subprocess = (name) => {
+    assert.equal(environment.SUPERMEGA_PUBLIC_PREVIEW_BYPASS, undefined, name)
+    assert.equal(environment.SUPERMEGA_APP_PREVIEW_BYPASS, undefined, name)
+  }
+  subprocess('git status')
+  subprocess('chromium --version')
+  const access = captured.bind({ publicOrigin, appOrigin })
+  captured.dispose()
+  assert.throws(() => captured.bind({ publicOrigin, appOrigin }), /inputs_disposed/)
+  access.dispose()
+})
+
+test('closure rejection, timeout or negative acknowledgement cannot remove interception or pass', async () => {
+  for (const mode of ['reject', 'timeout', 'negative']) {
+    const access = createPreviewScopedAccess(input())
+    const cdp = fakeCdp()
+    const send = cdp.send.bind(cdp)
+    cdp.send = (method, params, sessionId) => method !== 'Target.closeTarget' ? send(method, params, sessionId)
+      : mode === 'reject' ? Promise.reject(new Error('synthetic close error'))
+        : mode === 'timeout' ? new Promise(() => {}) : Promise.resolve({ success: false })
+    const guard = await installPreviewBrowserAccess({ cdp, sessionId: 'session', targetId: 'target', access, commandTimeoutMs: 10 })
+    await assert.rejects(() => guard.dispose(), error => error.message === 'preview_browser_access_close_failed')
+    assert.equal(cdp.listeners.size, 3)
+    access.dispose()
+  }
+})
+
+test('a denial arriving during confirmed closure prevents a successful case', async () => {
+  const access = createPreviewScopedAccess(input())
+  const cdp = fakeCdp()
+  const send = cdp.send.bind(cdp)
+  cdp.send = async (method, params, sessionId) => {
+    if (method === 'Target.closeTarget') cdp.emit('Fetch.requestPaused', paused(appOrigin, 'POST'))
+    return send(method, params, sessionId)
+  }
+  const guard = await installPreviewBrowserAccess({ cdp, sessionId: 'session', targetId: 'target', access })
+  await guard.assertClean()
+  await assert.rejects(() => guard.dispose(), /preview_browser_access_request_failed/)
+  assert.equal(cdp.listeners.size, 0)
+  access.dispose()
 })

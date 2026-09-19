@@ -888,11 +888,14 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       failures,
     }
   } finally {
-    if (accessGuard) await accessGuard.dispose()
-    for (const dispose of disposers) dispose()
-    await cdp.send('Target.closeTarget', { targetId }).catch(() => {})
-    if (browserContextId) {
-      await cdp.send('Target.disposeBrowserContext', { browserContextId }).catch(() => {})
+    try {
+      if (accessGuard) await accessGuard.dispose()
+    } finally {
+      for (const dispose of disposers) dispose()
+      await cdp.send('Target.closeTarget', { targetId }).catch(() => {})
+      if (browserContextId) {
+        await cdp.send('Target.disposeBrowserContext', { browserContextId }).catch(() => {})
+      }
     }
   }
 }

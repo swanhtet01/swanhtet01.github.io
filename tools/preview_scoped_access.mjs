@@ -42,30 +42,55 @@ export function createPreviewScopedAccess({ publicOrigin, appOrigin, publicToken
 // Consume only these process-local inputs before a browser child is launched.
 // This does not create credentials, load files, or grant provider authority.
 export function consumePreviewAccessEnvironment(binding, environment = process.env) {
-  const publicToken = environment.SUPERMEGA_PUBLIC_PREVIEW_BYPASS
-  const appToken = environment.SUPERMEGA_APP_PREVIEW_BYPASS
-  delete environment.SUPERMEGA_PUBLIC_PREVIEW_BYPASS
-  delete environment.SUPERMEGA_APP_PREVIEW_BYPASS
-  if (publicToken === undefined && appToken === undefined) return null
-  return createPreviewScopedAccess({ ...binding, publicToken, appToken })
+  const captured = capturePreviewAccessEnvironment(environment)
+  try { return captured.bind(binding) } finally { captured.dispose() }
 }
 
-export async function installPreviewBrowserAccess({ cdp, sessionId, targetId, access }) {
+export function capturePreviewAccessEnvironment(environment = process.env) {
+  let publicToken = environment.SUPERMEGA_PUBLIC_PREVIEW_BYPASS
+  let appToken = environment.SUPERMEGA_APP_PREVIEW_BYPASS
+  delete environment.SUPERMEGA_PUBLIC_PREVIEW_BYPASS
+  delete environment.SUPERMEGA_APP_PREVIEW_BYPASS
+  let disposed = false
+  return Object.freeze({
+    bind(binding) {
+      if (disposed) throw new Error('preview_access_inputs_disposed')
+      if (publicToken === undefined && appToken === undefined) return null
+      return createPreviewScopedAccess({ ...binding, publicToken, appToken })
+    },
+    dispose() { publicToken = undefined; appToken = undefined; disposed = true },
+    toJSON() { return { credentialValuesExported: false } },
+  })
+}
+
+export async function installPreviewBrowserAccess({ cdp, sessionId, targetId, access, commandTimeoutMs = 5000 }) {
   if (!sessionId || !targetId || !access?.headersFor) throw new Error('preview_browser_access_input_invalid')
+  if (!Number.isInteger(commandTimeoutMs) || commandTimeoutMs < 1 || commandTimeoutMs > 5000) throw new Error('preview_browser_access_timeout_invalid')
   let failed = false
+  let closed = false
+  let closure = null
   const pending = new Set()
   const removers = []
   const send = async (method, params, session = sessionId) => {
     let timer
     try {
       return await Promise.race([cdp.send(method, params, session), new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('preview_browser_access_timeout')), 5000)
+        timer = setTimeout(() => reject(new Error('preview_browser_access_timeout')), commandTimeoutMs)
       })])
     } finally { clearTimeout(timer) }
   }
-  const close = () => send('Target.closeTarget', { targetId }, '').catch(() => {})
+  const close = () => {
+    if (!closure) closure = (async () => {
+      try {
+        const result = await send('Target.closeTarget', { targetId }, '')
+        if (result?.success !== true) throw new Error('close_not_confirmed')
+        closed = true
+      } catch { failed = true; throw new Error('preview_browser_access_close_failed') }
+    })()
+    return closure
+  }
   const track = (work) => {
-    const promise = work().catch(async () => { failed = true; await close() })
+    const promise = work().catch(async () => { failed = true; await close().catch(() => {}) })
     pending.add(promise)
     void promise.finally(() => pending.delete(promise))
   }
@@ -92,7 +117,8 @@ export async function installPreviewBrowserAccess({ cdp, sessionId, targetId, ac
   // inheriting a broader transport policy. These are static preview journeys.
   removers.push(cdp.on(sessionId, 'Target.attachedToTarget', event => track(async () => {
     failed = true
-    await send('Target.closeTarget', { targetId: event.targetInfo.targetId }, '')
+    const result = await send('Target.closeTarget', { targetId: event.targetInfo.targetId }, '')
+    if (result?.success !== true) throw new Error('child_close_not_confirmed')
   })))
   try {
     await send('Network.setBypassServiceWorker', { bypass: true })
@@ -101,8 +127,8 @@ export async function installPreviewBrowserAccess({ cdp, sessionId, targetId, ac
     await send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }], handleAuthRequests: true })
   } catch {
     failed = true
-    await close()
-    for (const remove of removers) remove()
+    await close().catch(() => {})
+    if (closed) for (const remove of removers) remove()
     throw new Error('preview_browser_access_setup_failed')
   }
   return {
@@ -114,8 +140,9 @@ export async function installPreviewBrowserAccess({ cdp, sessionId, targetId, ac
     // while the page can still issue requests.
     async dispose() {
       await close()
-      await Promise.all([...pending])
+      while (pending.size) await Promise.all([...pending])
       for (const remove of removers) remove()
+      if (failed) throw new Error('preview_browser_access_request_failed')
     },
   }
 }
