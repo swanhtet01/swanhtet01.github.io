@@ -55,6 +55,8 @@ function SettingsEntry() {
   const location = useLocation()
   const product = setupProductFromQuery(new URLSearchParams(location.search).get('product'))
 
+  if (product === 'production') return <Navigate replace to="/?choose=1" />
+
   if (product) {
     return <Suspense fallback={<ProductLoading name="setup" />}><ProductOnboardingPage product={product} /></Suspense>
   }
@@ -74,12 +76,12 @@ export default function App() {
         <Route element={<CoreLayout />}>
           <Route element={<ProductHomeEntry productDemoPath={productDemoPath} />} index />
           <Route element={<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage product="commerce" /></Suspense>} path="shop/*" />
-          <Route element={<Suspense fallback={<ProductLoading name="Plant" />}><OperationsPage product="production" /></Suspense>} path="plant/*" />
+          <Route element={<Navigate replace to="/?choose=1" />} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceProduct /></Suspense>} path="ecommerce/*" />
           {visionPreviewEnabled && VisionProduct ? <Route element={<Suspense fallback={<ProductLoading name="Vision" />}><VisionProduct /></Suspense>} path="vision/*" /> : null}
           <Route element={<Navigate replace to="/shop/" />} path="operations/commerce/*" />
-          <Route element={<Navigate replace to="/plant/" />} path="operations/production/*" />
+          <Route element={<Navigate replace to="/?choose=1" />} path="operations/production/*" />
           <Route element={<Navigate replace to="/" />} path="operations/*" />
           <Route element={<Navigate replace to="/" />} path="work/*" />
           <Route element={<Navigate replace to="/website/" />} path="products/website/*" />
