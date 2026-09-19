@@ -297,7 +297,7 @@ requireContract('app build contract',
   && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
   && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && ciWorkflow.includes('run: npm run app:build:checked'))
-requireContract('CI verifies exact-source desktop and 390px journeys for all four products',
+requireContract('CI verifies exact-source desktop and 390px journeys for three active products and retired Plant safety',
   ciWorkflow.includes('timeout-minutes: 15')
   && ciWorkflow.includes("SUPERMEGA_CI_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
   && ciWorkflow.includes("ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
@@ -312,7 +312,13 @@ requireContract('CI verifies exact-source desktop and 390px journeys for all fou
   && ciWorkflow.includes('--expected-head "$SUPERMEGA_CI_SOURCE_SHA"')
   && !ciWorkflow.includes('--expected-head "$GITHUB_SHA"')
   && ciWorkflow.indexOf('Build and verify canonical app') < ciWorkflow.indexOf('Verify desktop and 390px product journeys')
-  && ['shop', 'plant', 'website', 'ecommerce'].every((product) => renderedJourneyVerifier.includes(`route: '/${product}/`))
+  && ['shop', 'website', 'ecommerce'].every((product) => renderedJourneyVerifier.includes(`route: '/${product}/`))
+  && renderedJourneyVerifier.includes('...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,')
+  && renderedJourneyVerifier.includes('retirementCaseId: spec.id, requireLauncherProducts: true,')
+  && renderedJourneyVerifier.includes('isolatedBrowserContext: true, noHorizontalOverflow: true,')
+  && renderedJourneyVerifier.includes('seed: { retained: Object.fromEntries(RETIRED_STORAGE_KEYS.map(key => [key,')
+  && renderedJourneyVerifier.includes('retirement = validateRetiredProductObservation({ policy: RETIRED_PRODUCT_PREVIEW_POLICY,')
+  && renderedJourneyVerifier.includes('...(retirementFailure ? [retirementFailure] : []),')
   && renderedJourneyVerifier.includes('width: 390')
   && renderedJourneyVerifier.includes('height: 844')
   && renderedJourneyVerifier.includes('noHorizontalOverflow: true')
