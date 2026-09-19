@@ -9,6 +9,7 @@ test('credentials remain bound to exact immutable origin and readonly methods', 
   const access = createPreviewScopedAccess(input())
   assert.equal(access.headersFor(publicOrigin)['x-vercel-protection-bypass'], input().publicToken)
   assert.equal(access.headersFor(appOrigin)['x-vercel-protection-bypass'], input().appToken)
+  assert.equal(access.headersFor(new URL(`${appOrigin}/__release.json`))['x-vercel-protection-bypass'], input().appToken)
   for (const url of ['https://app.supermega.dev/', `${appOrigin}.evil.example/`, 'https://evil.example/',
     `${appOrigin}/?token=value`, appOrigin.replace('https://', 'https://user@')]) assert.throws(() => access.headersFor(url), /denied/)
   assert.throws(() => access.headersFor(appOrigin, 'POST'), /denied/)

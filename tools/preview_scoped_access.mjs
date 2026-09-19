@@ -13,7 +13,7 @@ export function createPreviewScopedAccess({ publicOrigin, appOrigin, publicToken
     let url
     try { url = new URL(rawUrl) } catch { throw new Error('preview_access_url_invalid') }
     if (url.username || url.password || url.hash || !credentials.has(url.origin)
-      || [...credentials.values()].some(token => rawUrl.includes(token))
+      || [...credentials.values()].some(token => url.href.includes(token))
       || !['GET', 'HEAD', 'OPTIONS'].includes(method)
       || [...url.searchParams.keys()].some(key => /token|secret|bypass|password/i.test(key))) throw new Error('preview_access_request_denied')
     return { 'x-vercel-protection-bypass': credentials.get(url.origin) }
