@@ -55,6 +55,8 @@ function SettingsEntry() {
   const location = useLocation()
   const product = setupProductFromQuery(new URLSearchParams(location.search).get('product'))
 
+  if (product === 'production') return <Navigate replace to="/?choose=1" />
+
   if (product) {
     return <Suspense fallback={<ProductLoading name="setup" />}><ProductOnboardingPage product={product} /></Suspense>
   }

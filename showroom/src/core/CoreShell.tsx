@@ -747,7 +747,7 @@ export function ProductHomePage() {
             </Link>
         })}
       </nav>
-      {managedPortal ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products} /></Suspense> : null}
+      {managedPortal ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
       {!managedPortal && anyStarted ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
       <p className="product-home-note">{managedPortal ? 'Separate workspaces, roles, and access per product.' : 'Samples stay separate.'}</p>
     </div>
