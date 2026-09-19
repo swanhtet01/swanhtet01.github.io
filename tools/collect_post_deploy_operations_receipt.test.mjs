@@ -28,6 +28,9 @@ test('protected operations probes use exact paired access without widening produ
     assert.equal(call.request.headers['x-vercel-protection-bypass'], new URL(call.url).origin === origins.public ? publicToken : appToken)
     assert.equal(call.request.method, 'GET')
     assert.equal(call.request.redirect, 'manual')
+    const path = new URL(call.url).pathname
+    assert.equal(call.request.headers.accept, ['/__release.json', '/api/health'].includes(path)
+      ? 'application/json' : path.endsWith('.js') ? 'text/javascript, application/javascript' : 'text/html')
   }
   assert.ok(!JSON.stringify(probes).includes(publicToken))
   assert.ok(!JSON.stringify(probes).includes(appToken))

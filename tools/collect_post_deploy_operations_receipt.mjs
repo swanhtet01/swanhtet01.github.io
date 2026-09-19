@@ -659,7 +659,7 @@ export async function collectPostDeployProbes({ stage, publicOrigin, appOrigin, 
     scopedAccess.headersFor(publicOrigin)
     scopedAccess.headersFor(appOrigin)
     const underlyingFetch = fetchImpl
-    fetchImpl = url => scopedAccess.fetchReadOnly(url, underlyingFetch)
+    fetchImpl = (url, options) => scopedAccess.fetchReadOnly(url, underlyingFetch, options?.headers?.accept)
   }
   const release = {
     public: await probeRelease(fetchImpl, publicOrigin, 'public'),

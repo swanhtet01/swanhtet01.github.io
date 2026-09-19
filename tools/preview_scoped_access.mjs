@@ -24,12 +24,13 @@ export function createPreviewScopedAccess({ publicOrigin, appOrigin, publicToken
       const text = typeof value === 'string' ? value : JSON.stringify(value)
       if ([...credentials.values()].some(token => text?.includes(token))) throw new Error('preview_access_credential_reflected')
     },
-    async fetchReadOnly(url, fetchImpl = fetch) {
+    async fetchReadOnly(url, fetchImpl = fetch, accept = 'application/json') {
+      if (!['application/json', 'text/html', 'text/javascript, application/javascript'].includes(accept)) throw new Error('preview_access_accept_invalid')
       const headers = headersFor(url)
       // Redirects cannot carry credentials onwards; callers must validate the
       // exact nonredirecting response and release body independently.
       let response
-      try { response = await fetchImpl(url, { method: 'GET', headers: { accept: 'application/json', 'cache-control': 'no-cache, no-store', ...headers }, cache: 'no-store', redirect: 'manual', credentials: 'omit', signal: AbortSignal.timeout(15000) }) }
+      try { response = await fetchImpl(url, { method: 'GET', headers: { accept, 'cache-control': 'no-cache, no-store', ...headers }, cache: 'no-store', redirect: 'manual', credentials: 'omit', signal: AbortSignal.timeout(15000) }) }
       catch { throw new Error('preview_access_fetch_failed') }
       if (response.status >= 300 && response.status < 400) throw new Error('preview_access_redirect_denied')
       return response

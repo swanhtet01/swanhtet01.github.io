@@ -18,6 +18,7 @@ test('credentials remain bound to exact immutable origin and readonly methods', 
 })
 test('transport refuses redirect and sanitizes upstream exceptions', async () => {
   const access = createPreviewScopedAccess(input())
+  await assert.rejects(() => access.fetchReadOnly(appOrigin, async () => { throw new Error('must not fetch') }, '*/*'), /accept_invalid/)
   await assert.rejects(() => access.fetchReadOnly(appOrigin, async (_, options) => {
     assert.equal(options.redirect, 'manual'); assert.equal(options.credentials, 'omit')
     return { status: 302 }
