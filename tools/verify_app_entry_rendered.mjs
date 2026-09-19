@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
+import { pairedClickScript, validatePairedTransition } from './paired_preview_transition.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -643,6 +644,11 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
 }
 
 export async function verifyCase(cdp, origin, testCase) {
+  if (testCase.pairedAppOrigin && (testCase.isolatedBrowserContext !== true
+    || testCase.expectedOrigin !== testCase.pairedAppOrigin || testCase.route !== '/'
+    || !Array.isArray(testCase.pairedPublicExpectedText) || testCase.pairedPublicExpectedText.length < 1)) {
+    throw new Error('paired_transition_case_invalid')
+  }
   const hasSeed = Object.prototype.hasOwnProperty.call(testCase, 'seed')
   if (testCase.sourceControlledFixture && hasSeed) {
     throw new Error('source-controlled rendered proof cannot install a browser-storage seed')
@@ -719,6 +725,11 @@ export async function verifyCase(cdp, origin, testCase) {
     })
     await cdp.send('Page.navigate', { url: origin + testCase.route }, sessionId)
     await load
+    let pairedClick = null
+    if (testCase.pairedAppOrigin) {
+      await waitForRenderedState(cdp, sessionId, '/', testCase.pairedPublicExpectedText, testCase.timeoutMs)
+      pairedClick = await evalInPage(cdp, sessionId, pairedClickScript(origin, testCase.pairedAppOrigin))
+    }
     await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
     const shopCounter = testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
@@ -739,6 +750,15 @@ export async function verifyCase(cdp, origin, testCase) {
       await writeFile(screenshotPath, screenshotPayload, { flag: 'wx' })
     }
     const afterCapture = await readRenderedState(cdp, sessionId, Boolean(testCase.retirementCaseId))
+    let pairedTransition = null
+    let pairedFailure = ''
+    if (testCase.pairedAppOrigin) {
+      try {
+        pairedTransition = validatePairedTransition({ publicOrigin: origin, appOrigin: testCase.pairedAppOrigin,
+          click: pairedClick, beforeCapture, afterCapture,
+          requests: networkRequests.filter(request => /^https?:/i.test(request.url)) })
+      } catch (error) { pairedFailure = error.message }
+    }
     let retirement = null
     let retirementFailure = ''
     if (testCase.retirementCaseId) {
@@ -793,6 +813,7 @@ export async function verifyCase(cdp, origin, testCase) {
       network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
     } : null
     const failures = [
+      ...(pairedFailure ? [pairedFailure] : []),
       ...(retirementFailure ? [retirementFailure] : []),
       ...(launcherFailure ? [launcherFailure] : []),
       ...finalLocation.failures,
@@ -833,6 +854,7 @@ export async function verifyCase(cdp, origin, testCase) {
       ...(testCase.expectedOrigin ? { origin: finalLocation.final.origin, hash: finalLocation.final.hash } : {}),
       bodyLength: finalRendered?.bodyLength || 0,
       rendered: {
+        ...(testCase.pairedAppOrigin ? { pairedTransition } : {}),
         ...(testCase.retirementCaseId ? { retirement } : {}),
         ...(testCase.requireLauncherProducts ? { launcherLinks: finalRendered.launcherLinks } : {}),
         viewportWidth: finalRendered?.viewportWidth || 0,
