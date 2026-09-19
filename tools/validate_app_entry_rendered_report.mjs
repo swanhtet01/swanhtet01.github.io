@@ -2,6 +2,7 @@
 import { lstat, readFile } from 'node:fs/promises'
 import { dirname, extname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -53,9 +54,10 @@ const FULL_CASE_MATRIX = Object.freeze([
     screenshot: 'shop-counter-mini-mart-mobile-390x844.png',
     semantics: 'shop-counter',
   },
-  { name: 'demo plant opens explicit plant route', route: '/?demo=plant', viewport: '1280x900', width: 1280, height: 900, path: '/plant/?tab=production', screenshot: null },
-  { name: 'desktop Plant shows the browser-local working sample', route: '/plant/', viewport: '1280x900', width: 1280, height: 900, path: '/plant/?tab=production', screenshot: 'plant-working-sample-desktop-1280x900.png' },
-  { name: 'mobile Plant shows the browser-local working sample', route: '/plant/', viewport: '390x844 mobile', width: 390, height: 844, path: '/plant/?tab=production', screenshot: 'plant-working-sample-mobile-390x844.png' },
+  ...RETIRED_PRODUCT_CASES.map(spec => ({ name: spec.id, route: spec.route,
+    viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
+    width: spec.width, height: spec.height, path: spec.expectedPath,
+    screenshot: `${spec.id}.png`, semantics: 'retired-product' })),
   { name: 'demo website opens explicit website route', route: '/?demo=website', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/website/', screenshot: null },
   { name: 'desktop Website shows the local preview boundary', route: '/website/', viewport: '1280x900', width: 1280, height: 900, path: '/website/', screenshot: 'website-working-sample-desktop-1280x900.png' },
   { name: 'mobile Website shows the local preview boundary', route: '/website/', viewport: '390x844 mobile', width: 390, height: 844, path: '/website/', screenshot: 'website-working-sample-mobile-390x844.png' },
@@ -212,6 +214,14 @@ export function assertCaseSemantics(testCase, expected) {
     || expected.name === 'desktop choose query shows launcher'
     || expected.name === 'mobile root shows launcher') assertLauncherProductLinks(rendered.launcherLinks)
 
+  if (expected.semantics === 'retired-product') {
+    assertLauncherProductLinks(rendered.launcherLinks)
+    const proof = rendered.retirement
+    if (!isObject(proof) || proof.policy !== RETIRED_PRODUCT_PREVIEW_POLICY || proof.caseId !== expected.name
+      || proof.redirectVerified !== true || proof.activeChooserVerified !== true
+      || proof.retiredUiAbsent !== true || proof.retainedDataUnchanged !== true
+      || Object.keys(proof).length !== 6) fail('app_entry_rendered_retirement_invalid')
+  }
   if (expected.semantics === 'shop-counter') {
     const layout = testCase.layout
     if (!isObject(layout) || layout.ok !== true || layout.aboveFold !== true) fail('app_entry_rendered_shop_layout_failed')

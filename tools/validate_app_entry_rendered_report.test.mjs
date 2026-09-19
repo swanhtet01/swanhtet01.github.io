@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import { counterCaptureReady } from './verify_app_entry_rendered.mjs'
+import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
 
 const renderedVerifierSource = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
 
@@ -246,27 +247,9 @@ function fullCaseMatrixFixture() {
       path: '/shop/?tab=counter&template=mini-mart',
       screenshot: { file: 'shop-counter-mini-mart-mobile-390x844.png' },
     },
-    {
-      name: 'demo plant opens explicit plant route',
-      route: '/?demo=plant',
-      viewport: '1280x900',
-      path: '/plant/?tab=production',
-      screenshot: null,
-    },
-    {
-      name: 'desktop Plant shows the browser-local working sample',
-      route: '/plant/',
-      viewport: '1280x900',
-      path: '/plant/?tab=production',
-      screenshot: { file: 'plant-working-sample-desktop-1280x900.png' },
-    },
-    {
-      name: 'mobile Plant shows the browser-local working sample',
-      route: '/plant/',
-      viewport: '390x844 mobile',
-      path: '/plant/?tab=production',
-      screenshot: { file: 'plant-working-sample-mobile-390x844.png' },
-    },
+    ...RETIRED_PRODUCT_CASES.map(spec => ({ name: spec.id, route: spec.route,
+      viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
+      path: spec.expectedPath, screenshot: { file: `${spec.id}.png` } })),
     {
       name: 'demo website opens explicit website route',
       route: '/?demo=website',
@@ -331,22 +314,21 @@ test('CLI requires an exact report, commit, and scope', () => {
 
 test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const full = fullCaseMatrixFixture()
-  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 15)
+  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 26)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(4, 6), 'shop-counter').length, 2)
-  assert.equal(assertRenderedProofCaseMatrix(full.slice(13), 'ecommerce-claim').length, 2)
+  assert.equal(assertRenderedProofCaseMatrix(full.slice(-2), 'ecommerce-claim').length, 2)
   assert.deepEqual(full.filter((entry) => entry.screenshot).map((entry) => entry.screenshot.file), [
     'app-launcher-desktop-1280x900.png',
     'app-launcher-mobile-390x844.png',
     'shop-counter-mini-mart-desktop-1280x900.png',
     'shop-counter-mini-mart-mobile-390x844.png',
-    'plant-working-sample-desktop-1280x900.png',
-    'plant-working-sample-mobile-390x844.png',
+    ...RETIRED_PRODUCT_CASES.map(spec => `${spec.id}.png`),
     'website-working-sample-desktop-1280x900.png',
     'website-working-sample-mobile-390x844.png',
     'ecommerce-local-request-desktop-1280x900.png',
     'ecommerce-local-request-mobile-390x844.png',
   ])
-  assert.equal(full.filter((entry) => entry.screenshot === null).length, 5)
+  assert.equal(full.filter((entry) => entry.screenshot === null).length, 4)
 
   assert.throws(() => assertRenderedProofCaseMatrix(full.slice(0, -1), 'full'), /case_matrix_mismatch/)
   assert.throws(() => assertRenderedProofCaseMatrix([...full, structuredClone(full[0])], 'full'), /case_matrix_mismatch/)
@@ -363,7 +345,7 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
   extraScreenshot[1].screenshot = { file: 'unexpected.png' }
   assert.throws(() => assertRenderedProofCaseMatrix(extraScreenshot, 'full'), /case_matrix_mismatch/)
 
-  const ecommerce = full.slice(13)
+  const ecommerce = full.slice(-2)
   const duplicateDesktop = [
     structuredClone(ecommerce[0]),
     {
@@ -387,8 +369,6 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
     readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8'),
   ])
   const sourceBoundText = [
-    [coreApp, 'Record first shift output'],
-    [coreApp, "These dates belong to this browser-local sample, not today's production."],
     [websiteProduct, 'Let SuperMega prepare your website'],
     [websiteProduct, 'Request Website setup'],
     [websiteProduct, 'Saved on this device'],
@@ -401,7 +381,8 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
     assert.ok(source.includes(text), `missing current product authority: ${text}`)
     assert.ok(renderer.includes(text), `renderer does not require current product truth: ${text}`)
   }
-  assert.equal((renderer.match(/expectedPath: '\/plant\/\?tab=production'/g) || []).length, 3)
+  assert.equal((renderer.match(/expectedPath: '\/plant\/\?tab=production'/g) || []).length, 0)
+  assert.match(renderer, /validateRetiredProductObservation/)
   const unfinishedRedirect = fullCaseMatrixFixture()
   unfinishedRedirect[6].path = '/plant/'
   assert.throws(() => assertRenderedProofCaseMatrix(unfinishedRedirect, 'full'), /case_matrix_mismatch/)
@@ -409,6 +390,24 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
   for (const retired of ['Make this website yours', 'Nothing has been deployed.', 'Try one customer order', 'Start sample order', 'The working sample stays unchanged until you choose Customize demo.']) {
     assert.equal(expectedTextBodies.some((body) => body.includes(retired)), false, `retired rendered expectation remains: ${retired}`)
   }
+})
+
+test('disk consumer rejects absent, old and false retirement evidence', () => {
+  const spec = RETIRED_PRODUCT_CASES[0]
+  const expected = { name: spec.id, width: spec.width, height: spec.height, semantics: 'retired-product' }
+  const retirement = { policy: RETIRED_PRODUCT_PREVIEW_POLICY, caseId: spec.id,
+    redirectVerified: true, activeChooserVerified: true, retiredUiAbsent: true, retainedDataUnchanged: true }
+  const entry = { ok: true, failures: [], runtime: { clean: true, errors: [] }, bodyLength: 100,
+    path: '/?choose=1', viewport: '1280x900', network: { mutatingRequestCount: 0, mutatingRequests: [] },
+    rendered: { viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280, noHorizontalOverflow: true,
+      launcherLinks: [{ name: 'Shop', href: '/shop/' }, { name: 'Ecommerce', href: '/ecommerce/' }, { name: 'Website', href: '/website/' }], retirement } }
+  assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
+  for (const wrong of [undefined, { ...retirement, policy: 'old' }, { ...retirement, caseId: 'plant_desktop' },
+    ...['redirectVerified', 'activeChooserVerified', 'retiredUiAbsent', 'retainedDataUnchanged'].map(key => ({ ...retirement, [key]: false }))]) {
+    assert.throws(() => assertCaseSemantics({ ...entry, rendered: { ...entry.rendered, retirement: wrong } }, expected), /retirement_invalid/)
+  }
+  const oldMatrix = fullCaseMatrixFixture().filter(row => !row.name.startsWith('retired_plant_'))
+  assert.throws(() => assertRenderedProofCaseMatrix(oldMatrix, 'full'), /case_matrix_mismatch/)
 })
 
 test('validates a clean exact on-disk Ecommerce rendered proof', async (context) => {

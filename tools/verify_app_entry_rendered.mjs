@@ -7,6 +7,7 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
+import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -258,6 +259,7 @@ try {
     localStorage.clear();
     ${seed.lastProduct ? `localStorage.setItem('supermega.last-product.v1', ${JSON.stringify(seed.lastProduct)});` : ''}
     ${seed.productSetups ? `localStorage.setItem('supermega.product_setups.v1', ${JSON.stringify(JSON.stringify(seed.productSetups))});` : ''}
+    ${seed.retained ? Object.entries(seed.retained).map(([key, value]) => `localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(value)});`).join('\n') : ''}
     sessionStorage.setItem('supermega.entry-rendered.seeded.v1', 'true');
   }
 } catch (error) {
@@ -265,7 +267,7 @@ try {
 }`
 }
 
-async function readRenderedState(cdp, sessionId) {
+async function readRenderedState(cdp, sessionId, retirement = false) {
   return evalInPage(cdp, sessionId, `(() => ({
       origin: location.origin,
       path: location.pathname + location.search,
@@ -277,6 +279,9 @@ async function readRenderedState(cdp, sessionId) {
       documentScrollWidth: document.documentElement ? document.documentElement.scrollWidth : 0,
       overlay: Boolean(document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay')),
       seedError: window.__supermegaSeedError || '',
+      ${retirement ? `retained: Object.fromEntries(${JSON.stringify(RETIRED_STORAGE_KEYS)}.map(key => [key, localStorage.getItem(key)])),
+      retiredToolVisible: [...document.querySelectorAll('h1,h2,h3,[role="heading"]')].some(el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && /^(Plant|Production|Record first shift output)$/i.test(el.textContent.trim())),
+      retiredActionVisible: [...document.querySelectorAll('a,button')].some(el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && (/\\b(plant|production|first shift)\\b/i.test(el.textContent) || /(?:\\/plant(?:\\/|\\?|$)|\\/operations\\/production|[?&](?:product|demo)=(?:plant|production|factory)(?:&|$))/i.test(el.getAttribute('href') || ''))),` : ''}
       launcherLinks: [...document.querySelectorAll('nav[aria-label="Choose product"] a')]
         .filter(link => link.getClientRects().length && getComputedStyle(link).visibility !== 'hidden')
         .map(link => ({ name: link.querySelector('h2')?.textContent.trim() || '', href: link.getAttribute('href') })),
@@ -720,7 +725,7 @@ export async function verifyCase(cdp, origin, testCase) {
     const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
       : null
-    const beforeCapture = await readRenderedState(cdp, sessionId)
+    const beforeCapture = await readRenderedState(cdp, sessionId, Boolean(testCase.retirementCaseId))
     let screenshot = null
     if (screenshotDir && testCase.screenshotName) {
       const capture = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId)
@@ -729,7 +734,16 @@ export async function verifyCase(cdp, origin, testCase) {
       screenshot = buildScreenshotEvidence({ payload: screenshotPayload, path: screenshotPath, evidenceDir: screenshotDir })
       await writeFile(screenshotPath, screenshotPayload, { flag: 'wx' })
     }
-    const afterCapture = await readRenderedState(cdp, sessionId)
+    const afterCapture = await readRenderedState(cdp, sessionId, Boolean(testCase.retirementCaseId))
+    let retirement = null
+    let retirementFailure = ''
+    if (testCase.retirementCaseId) {
+      try {
+        retirement = validateRetiredProductObservation({ policy: RETIRED_PRODUCT_PREVIEW_POLICY,
+          caseId: testCase.retirementCaseId, origin, before: beforeCapture, after: afterCapture,
+          retainedBefore: testCase.seed?.retained })
+      } catch (error) { retirementFailure = error.message }
+    }
     const finalLocation = evaluateFinalRenderedLocation({
       beforeCapture,
       afterCapture,
@@ -775,6 +789,7 @@ export async function verifyCase(cdp, origin, testCase) {
       network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
     } : null
     const failures = [
+      ...(retirementFailure ? [retirementFailure] : []),
       ...(launcherFailure ? [launcherFailure] : []),
       ...finalLocation.failures,
       ...(finalRendered?.bodyLength > 0 ? [] : ['blank page']),
@@ -814,6 +829,7 @@ export async function verifyCase(cdp, origin, testCase) {
       ...(testCase.expectedOrigin ? { origin: finalLocation.final.origin, hash: finalLocation.final.hash } : {}),
       bodyLength: finalRendered?.bodyLength || 0,
       rendered: {
+        ...(testCase.retirementCaseId ? { retirement } : {}),
         ...(testCase.requireLauncherProducts ? { launcherLinks: finalRendered.launcherLinks } : {}),
         viewportWidth: finalRendered?.viewportWidth || 0,
         viewportHeight: finalRendered?.viewportHeight || 0,
@@ -946,36 +962,13 @@ const tests = [
     timeoutMs: 60_000,
     seed: {},
   },
-  {
-    name: 'demo plant opens explicit plant route',
-    route: '/?demo=plant',
-    width: 1280,
-    height: 900,
-    expectedPath: '/plant/?tab=production',
-    expectedText: ['Plant'],
-    seed: {},
-  },
-  {
-    name: 'desktop Plant shows the browser-local working sample',
-    route: '/plant/',
-    width: 1280,
-    height: 900,
-    expectedPath: '/plant/?tab=production',
-    expectedText: ['Plant', 'Record first shift output', "These dates belong to this browser-local sample, not today's production."],
-    screenshotName: 'plant-working-sample-desktop-1280x900',
-    seed: {},
-  },
-  {
-    name: 'mobile Plant shows the browser-local working sample',
-    route: '/plant/',
-    width: 390,
-    height: 844,
-    mobile: true,
-    expectedPath: '/plant/?tab=production',
-    expectedText: ['Plant', 'Record first shift output', "These dates belong to this browser-local sample, not today's production."],
-    screenshotName: 'plant-working-sample-mobile-390x844',
-    seed: {},
-  },
+  ...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,
+    retirementCaseId: spec.id, requireLauncherProducts: true,
+    isolatedBrowserContext: true, noHorizontalOverflow: true,
+    expectedText: launcherText, screenshotName: spec.id,
+    seed: { retained: Object.fromEntries(RETIRED_STORAGE_KEYS.map(key => [key,
+      key === 'supermega.product_setups.v1' ? '{}' : JSON.stringify({ syntheticRetirementSentinel: key })])) },
+  })),
   {
     name: 'demo website opens explicit website route',
     route: '/?demo=website',
