@@ -20,6 +20,7 @@ import {
   buildExactAppPreviewReport,
   collectCurrentVerifierBinding,
   derivePublicHomepageExpectedText,
+  expectedText,
   loadPublicHomepageExpectedText,
   parseExactAppPreviewArgs,
   probeExactPairedReleaseIdentity,
@@ -28,6 +29,14 @@ import {
 import { evaluateFinalRenderedLocation } from './verify_app_entry_rendered.mjs'
 
 const operationsGeneratedAt = '2026-08-28T12:00:00.000Z'
+test('Website preview expects the assisted delivery boundary rather than the retired builder', async () => {
+  const needles = expectedText({ surface: 'website' })
+  const source = await readFile(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
+  for (const needle of needles) assert.ok(source.includes(needle), `Website source missing ${needle}`)
+  assert.ok(needles.includes('Requesting setup does not publish this preview, connect a domain or approve a release.'))
+  assert.ok(!needles.includes('Make this website yours'))
+  assert.ok(!needles.includes('Nothing has been deployed.'))
+})
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const reportGeneratedAt = '2026-08-28T12:05:00.000Z'
 const expectedCommit = 'a'.repeat(40)

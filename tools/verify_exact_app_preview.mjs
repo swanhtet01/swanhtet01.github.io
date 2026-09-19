@@ -1014,7 +1014,7 @@ function expectedPath(spec) {
   return spec.route
 }
 
-function expectedText(spec, publicHomepageExpectedText) {
+export function expectedText(spec, publicHomepageExpectedText) {
   if (spec.surface === 'transition') return ['Profit control', 'Current leak → accountable owner → objective closure']
   if (spec.surface === 'public') {
     if (!Array.isArray(publicHomepageExpectedText) || publicHomepageExpectedText.length !== 3) {
@@ -1035,7 +1035,7 @@ function expectedText(spec, publicHomepageExpectedText) {
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.boundary,
   ]
   if (spec.surface === 'retired_plant') return ['Shop', 'Website', 'Ecommerce']
-  if (spec.surface === 'website') return ['Website', 'Make this website yours', 'Nothing has been deployed.']
+  if (spec.surface === 'website') return ['Website', 'Let SuperMega prepare your website', 'Request Website setup', 'Saved on this device', 'Requesting setup does not publish this preview, connect a domain or approve a release.']
   return ['Ecommerce', 'Let SuperMega prepare your catalog', 'Request catalog setup', 'Try sample request']
 }
 
