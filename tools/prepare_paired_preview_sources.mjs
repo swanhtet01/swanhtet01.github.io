@@ -17,21 +17,21 @@ const within = (parent, child) => {
 
 // Local preparation only. No build, credentials, environment pulls, provider
 // reads/writes, or source-supplied hooks/scripts are permitted in this phase.
-export function preparePairedPreviewSources({ repository, commit, output }) {
+export function preparePairedPreviewSources({ repository, commit, output }, runGit = git) {
   if (!/^[a-f0-9]{40}$/.test(commit || '')) throw new Error('preview_source_commit_invalid')
   const repo = realpathSync(repository)
-  if (git(repo, ['rev-parse', '--show-toplevel']).replaceAll('\\', '/') !== repo.replaceAll('\\', '/')) {
+  if (runGit(repo, ['rev-parse', '--show-toplevel']).replaceAll('\\', '/') !== repo.replaceAll('\\', '/')) {
     throw new Error('preview_source_repository_root_required')
   }
   // Checkout filters can invoke programs/network. Reject configured filters
   // rather than silently executing them under a local-only preparation claim.
   let filters = ''
-  try { filters = git(repo, ['config', '--get-regexp', '^filter\\..*\\.(process|smudge|clean)$']) }
+  try { filters = runGit(repo, ['config', '--get-regexp', '^filter\\..*\\.(process|smudge|clean)$']) }
   catch (error) { if (error.status !== 1) throw new Error('preview_source_filter_inspection_failed') }
   if (filters) throw new Error('preview_source_checkout_filters_require_review')
-  if (git(repo, ['status', '--porcelain', '--untracked-files=all'])) throw new Error('preview_source_checkout_dirty')
-  if (git(repo, ['rev-parse', 'HEAD']) !== commit) throw new Error('preview_source_head_mismatch')
-  const tree = git(repo, ['rev-parse', `${commit}^{tree}`])
+  if (runGit(repo, ['status', '--porcelain', '--untracked-files=all'])) throw new Error('preview_source_checkout_dirty')
+  if (runGit(repo, ['rev-parse', 'HEAD']) !== commit) throw new Error('preview_source_head_mismatch')
+  const tree = runGit(repo, ['rev-parse', `${commit}^{tree}`])
   const out = resolve(output)
   if (existsSync(out)) throw new Error('preview_source_output_exists')
   // Resolve the real parent before creating anything, including junction paths.
@@ -44,8 +44,8 @@ export function preparePairedPreviewSources({ repository, commit, output }) {
   const receipt = {
     contract: 'supermega.paired-preview-source-preparation.v1',
     state: 'preparing', commit, tree, generatedAt: new Date().toISOString(),
-    sources: [],
-    controls: { localWorktreesCreated: 0, buildPerformed: false, credentialsRead: false,
+    sources: [], attempts: [], localMutationOutcome: 'not_attempted',
+    controls: { localWorktreesConfirmed: 0, buildPerformed: false, credentialsRead: false,
       providerReadPerformed: false, providerWritePerformed: false, deploymentPerformed: false,
       productionMutated: false, hostedAcceptanceProven: false },
   }
@@ -57,19 +57,29 @@ export function preparePairedPreviewSources({ repository, commit, output }) {
   try {
     for (const kind of ['app', 'public']) {
       const path = resolve(destination, kind)
+      const attempt = { kind, path, stage: 'worktree_add', outcome: 'unresolved' }
+      receipt.attempts.push(attempt)
+      receipt.localMutationOutcome = 'unresolved'
+      persist() // Durable intent before the local mutating subprocess starts.
       // -c applies only to this call. Never execute an owner or repository hook.
-      git(repo, ['-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--detach', path, commit])
-      receipt.controls.localWorktreesCreated += 1
-      const source = { kind, path, commit: git(path, ['rev-parse', 'HEAD']),
-        tree: git(path, ['rev-parse', 'HEAD^{tree}']), clean: !git(path, ['status', '--porcelain', '--untracked-files=all']) }
+      runGit(repo, ['-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--detach', path, commit])
+      attempt.stage = 'source_readback'
+      persist()
+      const source = { kind, path, commit: runGit(path, ['rev-parse', 'HEAD']),
+        tree: runGit(path, ['rev-parse', 'HEAD^{tree}']), clean: !runGit(path, ['status', '--porcelain', '--untracked-files=all']) }
       receipt.sources.push(source)
       persist()
       if (source.commit !== commit || source.tree !== tree || !source.clean) throw new Error('source_identity_mismatch')
+      attempt.stage = 'source_verified'
+      attempt.outcome = 'confirmed_complete'
+      receipt.controls.localWorktreesConfirmed += 1
+      persist()
     }
-    if (git(repo, ['rev-parse', 'HEAD']) !== commit || git(repo, ['status', '--porcelain', '--untracked-files=all'])) {
+    if (runGit(repo, ['rev-parse', 'HEAD']) !== commit || runGit(repo, ['status', '--porcelain', '--untracked-files=all'])) {
       throw new Error('source_changed_during_preparation')
     }
     receipt.state = 'local_sources_prepared'
+    receipt.localMutationOutcome = 'confirmed_complete'
     persist()
     return { ...receipt, receiptPath }
   } catch {
