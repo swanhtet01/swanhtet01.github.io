@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { RELEASE_HANDOFF_CONTRACT, verifyCurrentReleaseHandoff } from './prepare_release_handoff.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-export const SUPABASE_REHEARSAL_CONTRACT = 'supermega.supabase-rehearsal-packet.v2'
+export const SUPABASE_REHEARSAL_CONTRACT = 'supermega.supabase-rehearsal-packet.v3'
 const projectRefPattern = /^[a-z0-9]{20}$/
 const commitPattern = /^[0-9a-f]{40}$/
 const digestPattern = /^sha256:[0-9a-f]{64}$/
@@ -17,8 +17,33 @@ const branchPattern = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
 // pinned in verify_private_trial_migrations.mjs. The packet describes the full
 // reviewed chain; applying it to production remains a separate founder decision.
 const expectedSchemaVersion = 13
-const expectedMigrationCount = 14
-const expectedFinalMigration = '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql'
+const expectedMigrationNames = [
+  '20260711081300_public_legacy_baseline.sql',
+  '20260722004500_private_trial_backend_role_preflight.sql',
+  '20260722005134_private_trial_backend_foundation.sql',
+  '20260722142801_private_trial_backend_v2.sql',
+  '20260723094500_private_trial_backend_v3_website.sql',
+  '20260723144500_private_trial_backend_v4_hardening.sql',
+  '20260724204920_private_trial_backend_v5_read_capabilities.sql',
+  '20260730113000_private_trial_backend_v6_managed_activation.sql',
+  '20260730123000_private_trial_backend_v7_workspace_discovery.sql',
+  '20260802161500_private_trial_backend_v8_rls_initplan.sql',
+  '20260803063822_private_trial_backend_v9_metadata_rls.sql',
+  '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+  '20260816120000_private_trial_backend_v11_self_serve_grants.sql',
+  '20260817090000_private_trial_backend_v12_billing_rail.sql',
+  '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql',
+  '20260907024457_self_serve_durable_attempt_budget.sql',
+  '20260915184728_website_customer_review_storage.sql',
+  '20260915191528_website_review_entitlement_proof.sql',
+  '20260918011500_website_customer_acceptance.sql',
+]
+
+export function validateRehearsalMigrationNames(names) {
+  if (JSON.stringify(names) !== JSON.stringify(expectedMigrationNames)) {
+    fail('supabase_rehearsal_full_migration_inventory_mismatch')
+  }
+}
 const browserQuarantinePath = 'supabase/rehearsal/20260804_public_browser_quarantine.sql'
 const securityAuditPath = 'hq/readiness/supabase-security-advisor-audit.json'
 
@@ -36,11 +61,11 @@ async function readManifest(repositoryRoot) {
 
 async function migrationInventory(repositoryRoot) {
   const directory = resolve(repositoryRoot, 'supabase', 'migrations')
-  const names = (await readdir(directory))
-    .filter((name) => /^\d{14}_private_trial_backend.*\.sql$/.test(name))
-    .sort()
-  if (names.length !== expectedMigrationCount) fail('supabase_rehearsal_migration_count_mismatch')
-  if (names.at(-1) !== expectedFinalMigration) fail('supabase_rehearsal_final_migration_mismatch')
+  const entries = await readdir(directory, { withFileTypes: true })
+  const sqlEntries = entries.filter((entry) => /\.sql$/i.test(entry.name))
+  if (sqlEntries.some((entry) => !entry.isFile())) fail('supabase_rehearsal_migration_not_regular_file')
+  const names = sqlEntries.map((entry) => entry.name).sort()
+  validateRehearsalMigrationNames(names)
   return Promise.all(names.map(async (name) => ({
     name,
     sha256: sha256(await readFile(resolve(directory, name))),
@@ -252,6 +277,7 @@ export async function buildSupabaseRehearsalPacket({
       commit: releaseCommit,
       review: reviewedRelease,
       schemaVersion: expectedSchemaVersion,
+      schemaVersionScope: 'private-core-v13-plus-explicit-post-v13-extensions',
       migrationCount: migrations.length,
       migrations,
       browserQuarantine,
@@ -274,14 +300,40 @@ export async function buildSupabaseRehearsalPacket({
     preflight: {
       command: `npm run database:supabase:preflight -- -DatabaseUrlFile .tmp\\supermega-rehearsal-admin-url.txt -ExpectedProjectRef ${targetProjectRef} -SslRootCertFile .tmp\\supermega-rehearsal-ca.crt`,
       readOnly: true,
-      expectedStartingState: 'clean-target',
+      expectedStartingState: 'metadata-reviewed-public-baseline-and-clean-private-target',
+      baselinePrerequisite: {
+        migration: migrations[0],
+        applyAutomatically: false,
+        freshTargetOnly: true,
+        requiredEvidence: [
+          'exact-preview-identity-and-database-readiness',
+          'metadata-only-public-and-private-catalog-and-migration-history',
+          'empty-public-catalog-before-separately-approved-baseline',
+          'no-production-or-customer-data-copy',
+          'exact-27-public-tables-and-2-sequences-before-quarantine',
+        ],
+        existingOrPartialCatalogAction: 'stop-for-separate-reviewed-reconciliation-never-replay-baseline',
+        baselinePurpose: 'reproduce-reviewed-legacy-schema-without-business-data-not-acceptance-proof',
+      },
+      executionOrder: [
+        'read-only-identity-health-tls-and-catalog-preflight',
+        'separately-approved-baseline-only-if-proven-empty-and-applicable',
+        'verify-exact-public-inventory-then-reviewed-browser-quarantine',
+        'apply-remaining-ordered-migrations-stop-on-first-error',
+        'validate-core-v13-and-every-post-v13-extension',
+        'prove-hosted-product-journeys-isolation-and-recovery-separately',
+      ],
+      blindRetryAllowed: false,
     },
     requiredEvidence: [
       'provider-backup-inventory-before-migration',
       'independent-restore-to-isolated-target',
       'hostname-verified-postgresql-17-preflight',
-      'ordered-migration-application-through-v13',
+      'ordered-migration-application-through-website-customer-acceptance',
       'read-only-v13-runtime-validator',
+      'durable-self-serve-attempt-budget-validation',
+      'website-review-storage-and-entitlement-validation',
+      'immutable-website-customer-acceptance-validation',
       'supabase-security-advisor-without-applicable-errors',
       'private-storage-isolation-proof',
       'named-user-auth-and-cross-tenant-denial',

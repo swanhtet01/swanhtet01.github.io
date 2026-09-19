@@ -8,6 +8,7 @@ import {
   candidateReleaseReviewFromReceipt,
   originMainReleaseReview,
   validateSupabaseRehearsalPacket,
+  validateRehearsalMigrationNames,
 } from './prepare_supabase_rehearsal_packet.mjs'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
@@ -16,7 +17,7 @@ const releaseCommit = 'a'.repeat(40)
 const generatedAt = '2026-08-03T00:00:00.000Z'
 const releaseReview = originMainReleaseReview(releaseCommit)
 
-test('builds an exact non-mutating v13 rehearsal packet', async () => {
+test('binds the complete candidate chain without granting baseline or migration authority', async () => {
   const manifest = JSON.parse(await readFile(resolve(repositoryRoot, 'package.json'), 'utf8'))
   const ignoreRules = await readFile(resolve(repositoryRoot, '.gitignore'), 'utf8')
   const runbook = await readFile(resolve(repositoryRoot, 'docs', 'supermega-enterprise-activation.md'), 'utf8')
@@ -29,12 +30,19 @@ test('builds an exact non-mutating v13 rehearsal packet', async () => {
   })
   await validateSupabaseRehearsalPacket(packet, { repositoryRoot, expectedReleaseCommit: releaseCommit })
 
-  assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v2')
+  assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v3')
   assert.equal(packet.state, 'prepared-not-executed')
   assert.equal(packet.release.schemaVersion, 13)
-  assert.equal(packet.release.migrationCount, 14)
+  assert.equal(packet.release.migrationCount, 19)
   assert.deepEqual(packet.release.review, releaseReview)
-  assert.equal(packet.release.migrations.at(-1).name, '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql')
+  assert.equal(packet.release.migrations[0].name, '20260711081300_public_legacy_baseline.sql')
+  assert.equal(packet.release.migrations.at(-1).name, '20260918011500_website_customer_acceptance.sql')
+  assert.equal(packet.release.schemaVersionScope, 'private-core-v13-plus-explicit-post-v13-extensions')
+  assert.equal(packet.preflight.baselinePrerequisite.applyAutomatically, false)
+  assert.equal(packet.preflight.baselinePrerequisite.freshTargetOnly, true)
+  assert.deepEqual(packet.preflight.baselinePrerequisite.migration, packet.release.migrations[0])
+  assert.match(packet.preflight.baselinePrerequisite.existingOrPartialCatalogAction, /stop.*never-replay-baseline/)
+  assert.equal(packet.preflight.blindRetryAllowed, false)
   assert.equal(packet.release.browserQuarantine.contract, 'supermega.public-browser-quarantine.v1')
   assert.equal(packet.release.browserQuarantine.scope, 'isolated-rehearsal-only')
   assert.equal(packet.release.browserQuarantine.sourceAudit.publicTableCount, 27)
@@ -55,6 +63,25 @@ test('builds an exact non-mutating v13 rehearsal packet', async () => {
   assert.match(runbook, /Runtime readiness requires schema version 10/)
   assert.match(runbook, /database:supabase:packet:verify/)
   assert.match(runbook, /public browser quarantine/i)
+})
+
+test('rejects every omitted migration, unknown SQL, duplicate and reordered inventories', async () => {
+  const packet = await buildSupabaseRehearsalPacket({ repositoryRoot, targetProjectRef, releaseCommit, releaseReview, generatedAt })
+  const names = packet.release.migrations.map(({ name }) => name)
+  validateRehearsalMigrationNames(names)
+  for (let i = 0; i < names.length; i++) {
+    assert.throws(() => validateRehearsalMigrationNames(names.filter((_, j) => i !== j)), /full_migration_inventory_mismatch/)
+    const altered = structuredClone(packet)
+    altered.release.migrations.splice(i, 1)
+    altered.release.migrationCount--
+    await assert.rejects(validateSupabaseRehearsalPacket(altered, { repositoryRoot }), /packet_evidence_stale/)
+  }
+  for (const invalid of [[...names, '20260920000000_new_feature.sql'], [...names, names[0]], [...names].reverse()]) {
+    assert.throws(() => validateRehearsalMigrationNames(invalid), /full_migration_inventory_mismatch/)
+  }
+  const unsafe = structuredClone(packet)
+  unsafe.preflight.baselinePrerequisite.applyAutomatically = true
+  await assert.rejects(validateSupabaseRehearsalPacket(unsafe, { repositoryRoot }), /packet_evidence_stale/)
 })
 
 test('rejects the protected production project', async () => {
