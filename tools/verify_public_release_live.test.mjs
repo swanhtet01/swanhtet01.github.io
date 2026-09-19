@@ -40,8 +40,10 @@ globalThis.fetch=async input=>{
 `
 
 before(() => {
-  const result = spawnSync(process.execPath, ['tools/create_public_vercel_output.mjs'], { cwd: root, encoding: 'utf8', timeout: 30000 })
+  const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', timeout: 10000 })
   assert.equal(result.status, 0, result.stderr)
+  const release = JSON.parse(readFileSync(resolve(root, '.vercel/output/static/__release.json'), 'utf8'))
+  assert.equal(release.commit, result.stdout.trim(), 'Run public:build for the current candidate before public verification; tests never replace deployment artifacts.')
 })
 
 function run(mutation = '') {
