@@ -719,6 +719,18 @@ def _policy_expression_matches(expression: Any, expected_sha256: str | None) -> 
     return _catalog_expression_fingerprint(expression) == expected_sha256
 
 
+def _index_predicate_matches(row: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
+    """Partial indexes require an explicit, literal-preserving catalog predicate."""
+    predicate = expected.get("predicate_expression")
+    observed = row.get("predicate_expression")
+    if predicate is None:
+        return row.get("no_predicate") is True and observed is None
+    return (isinstance(predicate, str) and bool(predicate.strip())
+            and row.get("no_predicate") is False
+            and isinstance(observed, str)
+            and observed.replace("\r\n", "\n") == predicate.replace("\r\n", "\n"))
+
+
 def _safe_runtime_membership_options(row: Mapping[str, Any]) -> bool:
     return (
         row.get("admin_option") is False
@@ -1166,7 +1178,25 @@ def _execute_rows(cursor: Any, query: str, params: tuple[Any, ...] = ()) -> list
     return [_mapping(row) for row in cursor.fetchall()]
 
 
-def collect_snapshot(connection: Any) -> dict[str, Any]:
+def schema_contract(profile: str) -> dict[str, Any]:
+    """Fresh per-call contracts; never alter legacy globals or trust target version."""
+    from copy import deepcopy
+    values = deepcopy({name: value for name, value in globals().items()
+                       if name.startswith("EXPECTED_") or name in {
+                           "CONTRACT", "SCHEMA_VERSION", "TENANT_TABLES"}})
+    if profile == "legacy-v11":
+        return values
+    if profile != "v13-self-serve":
+        raise AuditConfigurationError("schema_profile_invalid")
+    if __package__:
+        from .private_trial_v13_contract import extend_contract
+    else:
+        from private_trial_v13_contract import extend_contract
+    return extend_contract(values)
+
+
+def collect_snapshot(connection: Any, *, schema_profile: str = "legacy-v11") -> dict[str, Any]:
+    profile = schema_contract(schema_profile)
     """Collect only catalog evidence inside a transaction forced read-only."""
 
     with connection.cursor() as cursor:
@@ -1404,7 +1434,7 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
               and constraint_record.conname = any(%s)
             order by constraint_record.conname
             """,
-            (list(EXPECTED_SECURITY_CONSTRAINTS),),
+            (list(profile["EXPECTED_SECURITY_CONSTRAINTS"]),),
         )
         triggers = _execute_rows(
             cursor,
@@ -1473,6 +1503,7 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
                    index_catalog.indnatts = index_catalog.indnkeyatts as no_included_columns,
                    not index_catalog.indnullsnotdistinct as nulls_distinct,
                    index_catalog.indpred is null as no_predicate,
+                   pg_get_expr(index_catalog.indpred, index_catalog.indrelid, false) as predicate_expression,
                    index_catalog.indexprs is null as no_expressions,
                    array(
                      select pg_get_indexdef(
@@ -1492,6 +1523,8 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             join pg_am access_method on access_method.oid = index_record.relam
             left join pg_constraint constraint_record
               on constraint_record.conindid = index_catalog.indexrelid
+             and constraint_record.conrelid = index_catalog.indrelid
+             and constraint_record.contype in ('p', 'u', 'x')
             where schema_record.nspname = 'app_private'
             order by table_record.relname, index_record.relname
             """,
@@ -1627,6 +1660,10 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
             """,
         )
 
+        extension_snapshot = {}
+        if schema_profile == "v13-self-serve":
+            extension_snapshot = profile["collect_extensions"](cursor, _execute_rows)
+
     return {
         "engine": engine,
         "extensions": extensions,
@@ -1647,6 +1684,7 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
         "runtime_parent_memberships": runtime_parent_memberships,
         "backend_members": backend_members,
         "role_settings": role_settings,
+        **extension_snapshot,
     }
 
 
@@ -1730,7 +1768,8 @@ def collect_storage_snapshot(connection: Any) -> dict[str, Any]:
     }
 
 
-def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+def evaluate_snapshot(snapshot: Mapping[str, Any], *, schema_profile: str = "legacy-v11") -> dict[str, Any]:
+    profile = schema_contract(schema_profile)
     engine = _mapping(snapshot.get("engine", {}))
     identity = _mapping(snapshot.get("identity", {}))
     backend = _mapping(snapshot.get("backend_role", {}))
@@ -1804,13 +1843,13 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
 
     tables = {str(row.get("table_name")): row for row in table_rows}
     exact_tables = (
-        len(table_rows) == len(EXPECTED_TABLES)
-        and frozenset(tables) == EXPECTED_TABLES
-        and all(str(tables[name].get("relation_kind")) == "r" for name in EXPECTED_TABLES)
+        len(table_rows) == len(profile["EXPECTED_TABLES"])
+        and frozenset(tables) == profile["EXPECTED_TABLES"]
+        and all(str(tables[name].get("relation_kind")) == "r" for name in profile["EXPECTED_TABLES"])
     )
     tenant_rls = exact_tables and all(
         _bool(tables[name].get("rls_enabled")) and _bool(tables[name].get("rls_forced"))
-        for name in TENANT_TABLES
+        for name in profile["TENANT_TABLES"]
     )
     metadata_rls = (
         exact_tables
@@ -1848,14 +1887,14 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     )
     functions = {str(row.get("function_name")): row for row in function_rows}
     exact_functions = (
-        len(function_rows) == len(EXPECTED_FUNCTIONS)
-        and frozenset(functions) == frozenset(EXPECTED_FUNCTIONS)
+        len(function_rows) == len(profile["EXPECTED_FUNCTIONS"])
+        and frozenset(functions) == frozenset(profile["EXPECTED_FUNCTIONS"])
         and all(
             str(functions[name].get("owner_name")) == TRUSTED_OWNER
             and str(functions[name].get("function_kind")) == "f"
             and str(functions[name].get("identity_arguments", "")) == expected[0]
             and str(functions[name].get("result_type", "")).lower() == expected[1]
-            for name, expected in EXPECTED_FUNCTIONS.items()
+            for name, expected in profile["EXPECTED_FUNCTIONS"].items()
         )
         and str(functions["workspace_is_active"].get("function_language")) == "sql"
         and functions["workspace_is_active"].get("security_definer") is False
@@ -1892,13 +1931,13 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
 
     policies = {str(row.get("policy_name")): row for row in policy_rows}
     policy_contract = (
-        len(policy_rows) == len(EXPECTED_POLICIES)
-        and frozenset(policies) == frozenset(EXPECTED_POLICIES)
+        len(policy_rows) == len(profile["EXPECTED_POLICIES"])
+        and frozenset(policies) == frozenset(profile["EXPECTED_POLICIES"])
     )
     if policy_contract:
-        for name, expected in EXPECTED_POLICIES.items():
+        for name, expected in profile["EXPECTED_POLICIES"].items():
             row = policies[name]
-            fingerprints = EXPECTED_POLICY_FINGERPRINTS[name]
+            fingerprints = profile["EXPECTED_POLICY_FINGERPRINTS"][name]
             policy_contract = policy_contract and (
                 str(row.get("table_name")) == expected["table"]
                 and str(row.get("command", "")).upper() == expected["command"]
@@ -1915,11 +1954,11 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         str(row.get("constraint_name")): row for row in hardening_constraint_rows
     }
     security_constraints_exact = (
-        len(hardening_constraint_rows) == len(EXPECTED_SECURITY_CONSTRAINTS)
-        and frozenset(constraints) == frozenset(EXPECTED_SECURITY_CONSTRAINTS)
+        len(hardening_constraint_rows) == len(profile["EXPECTED_SECURITY_CONSTRAINTS"])
+        and frozenset(constraints) == frozenset(profile["EXPECTED_SECURITY_CONSTRAINTS"])
     )
     if security_constraints_exact:
-        for name, expected in EXPECTED_SECURITY_CONSTRAINTS.items():
+        for name, expected in profile["EXPECTED_SECURITY_CONSTRAINTS"].items():
             row = constraints[name]
             security_constraints_exact = security_constraints_exact and (
                 str(row.get("table_name")) == expected["table"]
@@ -1932,9 +1971,10 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
                 break
 
     triggers = {str(row.get("trigger_name")): row for row in trigger_rows}
-    trigger_contract = frozenset(triggers) == frozenset(EXPECTED_TRIGGERS)
+    trigger_contract = (len(trigger_rows) == len(profile["EXPECTED_TRIGGERS"])
+                        and frozenset(triggers) == frozenset(profile["EXPECTED_TRIGGERS"]))
     if trigger_contract:
-        for name, expected in EXPECTED_TRIGGERS.items():
+        for name, expected in profile["EXPECTED_TRIGGERS"].items():
             row = triggers[name]
             trigger_contract = trigger_contract and (
                 str(row.get("table_name")) == expected["table"]
@@ -1961,11 +2001,11 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
 
     indexes = {str(row.get("index_name")): row for row in index_rows}
     index_contract = (
-        len(index_rows) == len(EXPECTED_INDEX_CONTRACT)
-        and frozenset(indexes) == EXPECTED_INDEXES
+        len(index_rows) == len(profile["EXPECTED_INDEX_CONTRACT"])
+        and frozenset(indexes) == profile["EXPECTED_INDEXES"]
     )
     if index_contract:
-        for name, expected in EXPECTED_INDEX_CONTRACT.items():
+        for name, expected in profile["EXPECTED_INDEX_CONTRACT"].items():
             row = indexes[name]
             observed_constraint = row.get("constraint_type")
             if observed_constraint in ("", None):
@@ -1982,7 +2022,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
                 and _bool(row.get("not_exclusion"))
                 and _bool(row.get("no_included_columns"))
                 and _bool(row.get("nulls_distinct"))
-                and _bool(row.get("no_predicate"))
+                and _index_predicate_matches(row, expected)
                 and _bool(row.get("no_expressions"))
                 and _normalized_index_keys(row.get("key_columns")) == expected["keys"]
                 and _ordered_ints(row.get("key_options")) == expected["options"]
@@ -2002,8 +2042,8 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         for row in acl_rows
     ]
     acl_contract = (
-        len(observed_acl) == len(EXPECTED_NON_OWNER_ACL)
-        and frozenset(observed_acl) == EXPECTED_NON_OWNER_ACL
+        len(observed_acl) == len(profile["EXPECTED_NON_OWNER_ACL"])
+        and frozenset(observed_acl) == profile["EXPECTED_NON_OWNER_ACL"]
     )
     observed_backend_acl_dependencies = [
         (
@@ -2014,9 +2054,9 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         for row in backend_acl_dependency_rows
     ]
     backend_acl_scope_exact = (
-        len(observed_backend_acl_dependencies) == len(EXPECTED_BACKEND_ACL_DEPENDENCIES)
+        len(observed_backend_acl_dependencies) == len(profile["EXPECTED_BACKEND_ACL_DEPENDENCIES"])
         and frozenset(observed_backend_acl_dependencies)
-        == EXPECTED_BACKEND_ACL_DEPENDENCIES
+        == profile["EXPECTED_BACKEND_ACL_DEPENDENCIES"]
     )
 
     runtime_membership_exact = (
@@ -2041,7 +2081,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     )
 
     checks = {
-        "postgres_major_supported": postgres_major == EXPECTED_POSTGRES_MAJOR,
+        "postgres_major_supported": postgres_major == profile["EXPECTED_POSTGRES_MAJOR"],
         "supabase_postgres17_unsupported_extensions_absent": not unsupported_extensions,
         "read_only_encrypted_connection": all(
             _bool(identity.get(key)) for key in ("transaction_read_only", "tls_active")
@@ -2049,7 +2089,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "dedicated_runtime_role": all(_bool(identity.get(key)) for key in connection_keys[2:]),
         "backend_group_role_safe": all(_bool(backend.get(key)) for key in backend_keys),
         "private_schema_present": _bool(schema.get("schema_exists")),
-        "schema_version_current": snapshot.get("schema_version") == SCHEMA_VERSION,
+        "schema_version_current": snapshot.get("schema_version") == profile["SCHEMA_VERSION"],
         "expected_private_tables_only": exact_tables,
         "metadata_table_rls": metadata_rls,
         "tenant_tables_force_rls": tenant_rls,
@@ -2074,12 +2114,14 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "storage_public_buckets_absent": storage_public_buckets_absent,
         "storage_policy_surface_empty_until_allowlisted": storage_policy_surface_empty,
     }
+    if schema_profile == "v13-self-serve":
+        checks.update(profile["extension_checks"](snapshot))
     failed = [name for name, passed in checks.items() if not passed]
     return {
         "ok": not failed,
         "ready": not failed,
         "status": "ready" if not failed else "attention",
-        "contract": CONTRACT,
+        "contract": profile["CONTRACT"],
         "checks": checks,
         "failed_checks": failed,
         "evidence": {
@@ -2102,7 +2144,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
                 "dedicated_login_verified": checks["dedicated_runtime_role"],
                 "settings_entries": role_setting_count,
             },
-            "tables": sorted(EXPECTED_TABLES),
+            "tables": sorted(profile["EXPECTED_TABLES"]),
             "rls": {
                 "metadata_table": {
                     "enabled": _bool(
@@ -2114,22 +2156,22 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
                 },
                 "forced_tables": sorted(
                     name
-                    for name in TENANT_TABLES
+                    for name in profile["TENANT_TABLES"]
                     if name in tables
                     and _bool(tables[name].get("rls_enabled"))
                     and _bool(tables[name].get("rls_forced"))
                 ),
-                "required_tables": sorted(TENANT_TABLES),
+                "required_tables": sorted(profile["TENANT_TABLES"]),
             },
             "grant": {
                 "runtime_acl_entries": len(observed_acl),
-                "expected_runtime_acl_entries": len(EXPECTED_NON_OWNER_ACL),
+                "expected_runtime_acl_entries": len(profile["EXPECTED_NON_OWNER_ACL"]),
                 "default_acl_entries": len(default_acl_rows),
             },
-            "policies": sorted(EXPECTED_POLICIES),
-            "hardening_constraints": sorted(EXPECTED_SECURITY_CONSTRAINTS),
-            "triggers": sorted(EXPECTED_TRIGGERS),
-            "indexes": sorted(EXPECTED_INDEXES),
+            "policies": sorted(profile["EXPECTED_POLICIES"]),
+            "hardening_constraints": sorted(profile["EXPECTED_SECURITY_CONSTRAINTS"]),
+            "triggers": sorted(profile["EXPECTED_TRIGGERS"]),
+            "indexes": sorted(profile["EXPECTED_INDEXES"]),
             "storage": {
                 "baseline": STORAGE_BASELINE,
                 "tables": sorted(STORAGE_TABLES),
@@ -2200,7 +2242,9 @@ def audit_database(
     storage_audit_database_url: str,
     connect_factory: Any = None,
     storage_connect_factory: Any = None,
+    schema_profile: str = "legacy-v11",
 ) -> dict[str, Any]:
+    schema_contract(schema_profile)  # Reject unknown contracts before connecting.
     validate_database_url(database_url)
     try:
         validate_database_url(storage_audit_database_url)
@@ -2208,7 +2252,7 @@ def audit_database(
         raise AuditConfigurationError("storage_audit_database_url_invalid") from exc
     connection = (connect_factory or _open_connection)(database_url)
     try:
-        snapshot = collect_snapshot(connection)
+        snapshot = collect_snapshot(connection, schema_profile=schema_profile)
     finally:
         try:
             connection.rollback()
@@ -2224,7 +2268,7 @@ def audit_database(
             storage_connection.rollback()
         finally:
             storage_connection.close()
-    return evaluate_snapshot(snapshot)
+    return evaluate_snapshot(snapshot, schema_profile=schema_profile)
 
 
 def audit_supabase_activation_target(
@@ -2234,6 +2278,7 @@ def audit_supabase_activation_target(
     expected_project_ref: str,
     connect_factory: Any = None,
     storage_connect_factory: Any = None,
+    schema_profile: str = "legacy-v11",
 ) -> dict[str, Any]:
     database_connection_mode = validate_supabase_activation_target(
         database_url,
@@ -2248,6 +2293,7 @@ def audit_supabase_activation_target(
         storage_audit_database_url=storage_audit_database_url,
         connect_factory=connect_factory,
         storage_connect_factory=storage_connect_factory,
+        schema_profile=schema_profile,
     )
     report.update(
         {
@@ -2295,9 +2341,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v11 schema contract; this flag never applies migrations.",
+        help="Require the complete selected schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
+    parser.add_argument("--schema-profile", choices=("legacy-v11", "v13-self-serve"),
+                        default="legacy-v11",
+                        help="Exact catalog contract; v13 includes the durable-admission capability.")
     parser.add_argument(
         "--self-test",
         action="store_true",
@@ -2332,6 +2381,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if args.schema_profile == "v13-self-serve" and (args.self_test or args.rehearsal_preflight):
+        print(json.dumps(_safe_failure("schema_profile_mode_conflict"), sort_keys=True))
+        return 2
+
     if args.self_test:
         report = _run_policy_self_test()
         print(json.dumps(report, sort_keys=True))
@@ -2342,7 +2395,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.rehearsal_preflight
         else ACTIVATION_TARGET_CONTRACT
         if args.activation_target
-        else CONTRACT
+        else (CONTRACT if args.schema_profile == "legacy-v11"
+              else "supermega_private_trial_database_v13_self_serve_v1")
     )
 
     environment_keys = [args.env_key]
@@ -2439,11 +2493,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 expected_project_ref=str(
                     os.getenv(args.expected_project_ref_env_key, "")
                 ),
+                schema_profile=args.schema_profile,
             )
         else:
             report = audit_database(
                 database_url,
                 storage_audit_database_url=storage_audit_database_url,
+                schema_profile=args.schema_profile,
             )
     except AuditConfigurationError as exc:
         report = _safe_failure(exc.code, contract=mode_contract)

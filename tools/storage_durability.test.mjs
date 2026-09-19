@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import './local_workspace_backup_roundtrip.test.mjs'
 
 // The module memoises its persist() request at module scope, which is the behaviour
 // under test in "asks once". Each case therefore imports a fresh instance through a
@@ -1127,10 +1128,41 @@ test('the settings page renders the warning beside the backup control it is abou
 // It must NOT reach the till. A device-wide limit rendered in Shop puts a second storage
 // reading in front of an owner counting sales, in the one product whose meter is already
 // measuring something else.
+test('eviction warning leads directly to the existing backup panel', async () => {
+  const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
+  const notice = core.slice(core.indexOf('const storageDurabilityNotice ='), core.indexOf('// Stuck-till escape hatch.'))
+  assert.ok(notice.includes('<Link to="/settings/#workspace-recovery">Back up records</Link>'))
+  assert.ok(!notice.includes('to="/settings/#controls"'))
+  assert.ok(page.includes('id="workspace-recovery"'))
+  assert.ok(page.includes("window.location.hash === '#workspace-recovery'"))
+  assert.ok(page.includes("scrollIntoView({ block: 'start' })"))
+})
+
 test('the device warning stays out of the product workspaces', async () => {
   const coreApp = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
   assert.ok(
     !/measureLocalWorkspaceBackupHeadroom|localWorkspaceBackupHeadroomMessage/.test(coreApp),
     'the device-wide backup warning has been rendered inside a product workspace -- the Shop meter already occupies that screen, and two storage warnings in one place is the failure this was shaped to avoid',
   )
+})
+
+test('restore requires explicit review of the exact selected snapshot', async () => {
+  const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
+  assert.ok(page.includes('reviewedRestorePoint !== restorePoint || localWorkspaceOperation.current'))
+  assert.ok(page.includes("localWorkspaceOperation.current = 'restore'"))
+  assert.ok(page.includes('onClick={() => setReviewedRestorePoint(restorePoint)}'))
+  assert.ok(page.includes('Cancel restore'))
+  assert.ok(page.includes('Confirm restore of this snapshot'))
+  assert.ok(page.includes('Work saved after the snapshot may be lost.'))
+  assert.ok(page.includes('saved {restorePoint.createdAt}'))
+  assert.ok(page.includes("this device's closed days, one row per sale"))
+  assert.ok(page.includes('Shop cannot restore it. For recovery, use Download workspace backup above.'))
+  for (const action of ['function saveRestorePoint()', 'async function loadBackupFile', 'async function restoreWorkspace()']) {
+    const start = page.indexOf(action)
+    const nextFunction = page.indexOf('\n  function ', start + action.length)
+    const nextAsyncFunction = page.indexOf('\n  async function ', start + action.length)
+    const end = Math.min(...[nextFunction, nextAsyncFunction, page.length].filter(index => index >= 0))
+    assert.ok(start >= 0 && page.slice(start, end).includes('setReviewedRestorePoint(null)'), `${action} invalidates prior review`)
+  }
 })

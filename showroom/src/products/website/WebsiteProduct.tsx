@@ -8,12 +8,15 @@ import {
   readLocalShopBusinessTemplateId,
 } from '../../core/product-onboarding-runtime'
 import { ContentWorkspace } from './ContentWorkspace'
+import { AssistedDeliveryScope } from '../AssistedDeliveryScope'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
+import { WebsiteReviewInbox } from './WebsiteReviewInbox'
 import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
+import { websiteDraftDifference } from './website-draft-difference'
 import {
   captureWebsiteLead,
   emptyWebsiteLeadLedger,
@@ -159,6 +162,7 @@ export function WebsiteProduct() {
     storageMode,
     storageIssue,
     managedActorId,
+    managedWorkspaceId,
     canWrite,
   } = useWebsiteWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -168,6 +172,7 @@ export function WebsiteProduct() {
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
   const [starterDismissed, setStarterDismissed] = useState(true)
   const [editSessionState, setEditSessionState] = useState<WebsiteEditSessionState | null>(null)
+  const [restoredDraftState, setRestoredDraftState] = useState<WebsiteEditSessionState | null>(null)
   const [savingDraft, setSavingDraft] = useState(false)
   const [repairConfirmationRevision, setRepairConfirmationRevision] = useState<number | null>(null)
   const [repairing, setRepairing] = useState(false)
@@ -181,6 +186,7 @@ export function WebsiteProduct() {
   const headingRef = useRef<HTMLHeadingElement>(null)
   const recoveryPrimaryActionRef = useRef<HTMLButtonElement>(null)
   const editSessionRef = useRef<WebsiteEditSessionState | null>(null)
+  const restoredDraftHeadingRef = useRef<HTMLHeadingElement>(null)
   const [device, setDevice] = useState<PreviewDevice>(() => (
     typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop'
   ))
@@ -200,6 +206,7 @@ export function WebsiteProduct() {
     ? managedActorId ? `managed:${managedActorId}` : ''
     : storageMode
   const activeEditSession = editSessionState?.scope === editSessionScope ? editSessionState.session : null
+  const pendingRestoredDraft = restoredDraftState?.scope === editSessionScope ? restoredDraftState : null
   const editorWorkspace = activeEditSession?.workspace ?? workspace
   const selectedPage = editorWorkspace.pages.find((page) => page.id === selectedPageId)
     ?? editorWorkspace.pages.find((page) => page.id === editorWorkspace.selectedPageId)
@@ -275,6 +282,12 @@ export function WebsiteProduct() {
   const websiteSurfaceActionLabel = surface === 'preview'
     ? starterAvailable ? 'Edit sample' : 'Edit page'
     : 'Preview'
+  const canRequestWebsiteSetup = storageMode !== 'managed'
+    && view === 'content'
+    && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft
+    && !hasUnsavedChanges && !starterSetupActive
+  const showAssistedWebsitePreview = canRequestWebsiteSetup && surface === 'preview'
+  const showWebsiteEditorAction = !(showAssistedWebsitePreview && starterAvailable)
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
     ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
@@ -307,11 +320,13 @@ export function WebsiteProduct() {
         const restored = raw ? restoreWebsiteEditSession(raw) : null
         const next = restored ? { scope: editSessionScope, session: restored } : null
         if (raw && !restored) window.sessionStorage.removeItem(storageKey)
-        editSessionRef.current = next
-        setEditSessionState(next)
+        editSessionRef.current = null
+        setEditSessionState(null)
+        setRestoredDraftState(next)
       } catch {
         editSessionRef.current = null
         setEditSessionState(null)
+        setRestoredDraftState(null)
       }
     }, 0)
     return () => window.clearTimeout(restoreTimer)
@@ -437,9 +452,49 @@ export function WebsiteProduct() {
     replaceEditSession(null)
   }
 
+  function focusRestoredDraftChoice() {
+    requestAnimationFrame(() => restoredDraftHeadingRef.current?.focus())
+  }
+
+  function continueRestoredDraft() {
+    if (!pendingRestoredDraft) return
+    replaceEditSession(pendingRestoredDraft)
+    setRestoredDraftState(null)
+    setSelectedPageId(pendingRestoredDraft.session.workspace.selectedPageId)
+    setStarterDismissed(true)
+    setSurface('work')
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
+    setNotice(`Continuing the unsaved ${pendingRestoredDraft.session.workspace.siteName} tab draft. The saved ${workspace.siteName} Website has not been overwritten or deployed.`)
+  }
+
+  function startFromCurrentWebsite() {
+    if (!pendingRestoredDraft) return
+    try {
+      window.sessionStorage.removeItem(websiteEditSessionStorageKey(pendingRestoredDraft.scope))
+    } catch {
+      setNotice('The older tab draft could not be discarded safely. It remains held aside; retry before editing the current Website.')
+      focusRestoredDraftChoice()
+      return
+    }
+    setRestoredDraftState(null)
+    replaceEditSession(null)
+    setSelectedPageId(workspace.selectedPageId)
+    setStarterDismissed(!isUntouchedWebsiteStarter(workspace))
+    setSurface('work')
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
+    setNotice(`Started from the current ${workspace.siteName} ${isUntouchedWebsiteStarter(workspace) ? 'sample' : 'saved Website'}. The older tab draft was discarded; nothing was deployed.`)
+  }
+
   function stageWorkspace(update: WebsiteWorkspaceUpdate) {
     if (savingDraft) {
       setNotice('Website Save is still being confirmed. Wait for it to finish before making another change.')
+      return null
+    }
+    if (pendingRestoredDraft) {
+      setNotice('Choose the saved tab draft or the current Website before editing. Nothing has been overwritten.')
+      focusRestoredDraftChoice()
       return null
     }
     if (!editSessionScope) {
@@ -794,13 +849,17 @@ export function WebsiteProduct() {
       link.click()
       link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 5_000)
-      recordBehaviorSignal(window.localStorage, {
-        event: 'first_value_completed',
-        product: 'website',
-        route: location.pathname + location.search,
-        detail: 'Produced a reviewable Website preview file from saved content.',
-      })
-      emitMetric({ product: 'website', capability: 'website-builder', action: 'file.downloaded', ts: Date.now() })
+      try {
+        recordBehaviorSignal(window.localStorage, {
+          event: 'first_value_completed',
+          product: 'website',
+          route: location.pathname + location.search,
+          detail: 'Produced a reviewable Website preview file from saved content.',
+        })
+        emitMetric({ product: 'website', capability: 'website-builder', action: 'file.downloaded', ts: Date.now() })
+      } catch {
+        // Optional telemetry cannot turn a requested download into a failure.
+      }
       setNotice(`${download.filename} downloaded. It is a standalone preview; no site or domain was deployed.`)
     } catch (error) {
       setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
@@ -820,6 +879,8 @@ export function WebsiteProduct() {
   const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges
   const websiteTodayStep = storageIssue || canRepairLocalStorage
     ? 'recover'
+    : pendingRestoredDraft
+      ? 'edit'
     : starterSetupActive || starterAvailable
       ? 'setup'
       : hasUnsavedChanges
@@ -837,6 +898,8 @@ export function WebsiteProduct() {
                 : 'ready'
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
+    : pendingRestoredDraft
+      ? 'Choose which Website to customize'
     : starterSetupActive
       ? 'Answer 5 questions'
     : starterAvailable
@@ -858,6 +921,8 @@ export function WebsiteProduct() {
                     : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
     ? 'Saving or recovery needs attention before Website work can be trusted.'
+    : pendingRestoredDraft
+      ? `This tab has an unsaved ${pendingRestoredDraft.session.workspace.siteName} draft, while the current Website is ${workspace.siteName}. Choose one before editing.`
     : starterSetupActive
       ? 'Answer a short brief to replace the example with client-specific pages.'
       : starterAvailable
@@ -879,6 +944,8 @@ export function WebsiteProduct() {
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
   const websiteReviewNote = storageIssue || canRepairLocalStorage
     ? 'Export a backup or confirm repair before continuing.'
+    : pendingRestoredDraft
+      ? 'Neither choice overwrites the saved Website until you review and save edits.'
     : starterSetupActive
       ? 'Review the generated pages before saving.'
       : starterAvailable
@@ -900,6 +967,8 @@ export function WebsiteProduct() {
                     : 'You decide where it goes live.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
+    : pendingRestoredDraft
+      ? 'Choose Website'
     : starterSetupActive || starterAvailable
       ? 'Customize demo'
       : hasUnsavedChanges
@@ -919,6 +988,8 @@ export function WebsiteProduct() {
                 : 'Download website'
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'
+    : pendingRestoredDraft
+      ? 'attention'
     : starterAvailable || starterSetupActive
       ? 'setup'
       : hasUnsavedChanges || failingContentChecks.length || leadCounts.new
@@ -966,6 +1037,10 @@ export function WebsiteProduct() {
     })
     if (storageIssue || canRepairLocalStorage) {
       requestRecoveryFocus()
+      return
+    }
+    if (pendingRestoredDraft) {
+      focusRestoredDraftChoice()
       return
     }
     if (starterAvailable || starterSetupActive) {
@@ -1101,26 +1176,75 @@ export function WebsiteProduct() {
           <header className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
-              <p>{activeViewCopy.copy}</p>
+              <p>{showAssistedWebsitePreview ? 'Review this local preview. SuperMega can prepare the finished website for you; nothing here is published.' : activeViewCopy.copy}</p>
             </div>
+            {canRequestWebsiteSetup && surface === 'work' ? <a className="website-button is-secondary" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
             {view === 'publish' ? (
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
           </header>
 
+          {pendingRestoredDraft ? (
+            <section aria-labelledby="website-restored-draft-title" className="website-restored-draft-choice">
+              <div>
+                <span className="core-eyebrow">Unsaved tab draft found</span>
+                <h2 id="website-restored-draft-title" ref={restoredDraftHeadingRef} tabIndex={-1}>Choose what to customize</h2>
+                <p>
+                  Current {isUntouchedWebsiteStarter(workspace) ? 'sample' : 'saved Website'}: <strong>{workspace.siteName}</strong>.
+                  {' '}Unsaved tab draft: <strong>{pendingRestoredDraft.session.workspace.siteName}</strong>.
+                </p>
+                <p>{websiteDraftDifference(workspace, pendingRestoredDraft.session.workspace)}</p>
+                <small>SuperMega held the older draft aside. Nothing was overwritten, deployed, published, or sent.</small>
+              </div>
+              <div className="website-restored-draft-actions">
+                <button className="website-button is-secondary" onClick={continueRestoredDraft} type="button">Continue saved draft</button>
+                <button className="website-button is-primary" onClick={startFromCurrentWebsite} type="button">
+                  Start from this {isUntouchedWebsiteStarter(workspace) ? 'sample' : 'Website'}
+                </button>
+              </div>
+            </section>
+          ) : null}
+
           {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
               <span className="core-eyebrow">Start here</span>
-              <h2 id="website-today-title">{websiteAgentJob}</h2>
-              <p>{websiteAgentReason}</p>
-              <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
+              <h2 id="website-today-title">{showAssistedWebsitePreview ? 'Let SuperMega prepare your website' : websiteAgentJob}</h2>
+              <p>{showAssistedWebsitePreview ? 'Use this preview as a reference. Tell us about your business; we confirm the scope, prepare the pages and send a preview for your approval. You do not need to edit the site yourself.' : websiteAgentReason}</p>
+              {showAssistedWebsitePreview ? (
+                <>
+                  <details className="website-today-checks website-assisted-intake">
+                    <summary>What to send · about 2 minutes</summary>
+                    <div className="website-check-guidance">
+                      <p><strong>Tell us your business name, best contact, and where public material can be reviewed.</strong> A Facebook page, public menu, or short description is enough to start. Keep passwords and private customer data out.</p>
+                      <p>SuperMega prepares the page plan, starter copy, responsive layout, and first reviewable preview. You review one preview; domain connection and publishing stay separate.</p>
+                    </div>
+                  </details>
+                  <AssistedDeliveryScope product="website" />
+                </>
+              ) : (
+                <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
+              )}
             </div>
-            <div aria-label="Website today status" className="website-today-metrics" role="group">
-              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
+            <details className="website-today-checks">
+              <summary>Site checks · {websiteTodayMetrics[1][1]}</summary>
+              <div aria-label="Website today status" className="website-today-metrics" role="group">
+                {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+              </div>
+              {hasUnsavedChanges ? (
+                <p className="website-check-guidance">Save or discard your draft before checking the saved website. These checks do not approve or publish it.</p>
+              ) : failingContentChecks.length > 0 ? (
+                <div className="website-check-guidance">
+                  <h3>Needs attention</h3>
+                  <ul>
+                    {failingContentChecks.map((check) => <li key={check.id}><strong>{check.label}</strong><p>{check.detail}</p></li>)}
+                  </ul>
+                  {showAssistedWebsitePreview ? <p>You do not need to fix these yourself. Request Website setup above so SuperMega can review the work with you. Nothing is published automatically.</p> : null}
+                </div>
+              ) : null}
+            </details>
             <div className="website-today-source" role="status">
               <span>{websiteTodayContext}</span>
-              <small>{websiteReviewNote}</small>
+              <small>{showAssistedWebsitePreview ? 'Requesting setup does not publish this preview, connect a domain or approve a release.' : websiteReviewNote}</small>
             </div>
           </section> : null}
 
@@ -1230,17 +1354,21 @@ export function WebsiteProduct() {
                     </div>
                   </details>
                 ) : null}
-                <button
+                {showWebsiteEditorAction ? <button
                   className={`website-button ${surface === 'preview' && !starterAvailable ? 'is-primary' : 'is-secondary'}`}
                   disabled={portalViewOnly && surface === 'preview'}
                   onClick={() => {
+                    if (pendingRestoredDraft) {
+                      focusRestoredDraftChoice()
+                      return
+                    }
                     if (surface === 'preview') openContentSurface('work')
                     else previewPage()
                   }}
                   type="button"
                 >
                   {websiteSurfaceActionLabel}
-                </button>
+                </button> : null}
                 {hasUnsavedChanges ? (
                   <>
                     <button
@@ -1275,6 +1403,8 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
+          {storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
+            ? <WebsiteReviewInbox key={`${managedWorkspaceId}:${managedActorId}`} workspaceId={managedWorkspaceId} actorId={managedActorId} /> : null}
           {!starterSetupActive ? <details className="website-start-tools website-business-controls">
             <summary><span><strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small></span><b>{leadCounts.new} new</b></summary>
             <div className="website-business-controls-content">

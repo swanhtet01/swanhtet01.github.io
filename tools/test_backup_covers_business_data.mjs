@@ -140,10 +140,13 @@ check(
   `keys listed as deliberately not portable survived the restore, so the list is not what drives behaviour: ${survivingExclusions.join(', ')}`,
 )
 
-// The appointment book and the lead ledger are named explicitly. They are the two records whose
-// loss is unrecoverable and whose absence started this, so they get an assertion of their own
-// rather than relying on the general rule to keep covering them.
-for (const key of ['supermega.shop.service-schedule.v1', 'supermega.website.leads.v1']) {
+// Irrecoverable operating records are named explicitly rather than relying only on the general
+// rule: appointments, contact requests, and the owner's reviewed Batch Profit Control lineage.
+for (const key of [
+  'supermega.shop.service-schedule.v1',
+  'supermega.website.leads.v1',
+  'supermega.shop.batch-profit-control.local-workspace.v1',
+]) {
   check(isPortableCompanyStorageKey(key), `${key}: must survive a backup and restore`)
   check(storage.getItem(key) !== null, `${key}: survived an end-to-end backup and restore`)
 }
@@ -317,3 +320,8 @@ check(
 }
 
 console.log(`backup covers business data contract: ${checks} checks passed`)
+
+// Keep customer and internal recovery race regressions in the existing release
+// gate, rather than leaving them as manually invoked tests only.
+await import('./local_restore_confirmation.test.mjs')
+await import('./workspace_recovery_races.test.mjs')

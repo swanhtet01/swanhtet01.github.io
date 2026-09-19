@@ -504,6 +504,38 @@ class FakeCursor:
 
 
 class ManagedActivationPlanTests(unittest.TestCase):
+    def test_current_plan_binds_v13_catalog_profile_not_only_version(self) -> None:
+        from tools.private_trial_v13_contract import CONTRACT, PROFILE
+
+        plan = activation_plan()
+        self.assertEqual(plan["target"]["schemaVersion"], 13)
+        self.assertEqual(plan["target"].get("schemaProfile"), PROFILE)
+        self.assertEqual(plan["target"].get("databaseContract"), CONTRACT)
+        self.assertEqual(plan["operations"][0], "verify_postgres17_schema_v13_self_serve")
+
+    def test_recomputed_old_or_forged_profile_plan_is_denied_before_connection(self) -> None:
+        for key, value in (
+            ("schemaVersion", 11), ("schemaVersion", 12), ("schemaVersion", "13"),
+            ("schemaVersion", 13.0), ("schemaProfile", "legacy-v11"),
+            ("schemaProfile", None), ("databaseContract", "unreviewed"),
+            ("databaseContract", None),
+        ):
+            with self.subTest(key=key, value=value):
+                plan = activation_plan()
+                if value is None:
+                    plan["target"].pop(key, None)
+                else:
+                    plan["target"][key] = value
+                body = {key: value for key, value in plan.items() if key != "planDigest"}
+                plan["planDigest"] = "sha256:" + sha256(
+                    json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest()
+                connect = mock.Mock(side_effect=AssertionError("must_not_connect"))
+                provisioner = ManagedWorkspaceProvisioner("postgresql://ignored", connection_factory=connect)
+                with self.assertRaises(ManagedActivationError):
+                    provisioner.inspect(plan)
+                connect.assert_not_called()
+
     def test_managed_trial_request_validator_returns_only_redacted_binding(self) -> None:
         validated = validate_managed_trial_request(managed_trial_request_for("ecommerce"))
         self.assertEqual(validated["contract"], "supermega.managed_trial_request.v1")
@@ -673,6 +705,22 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         with self.assertRaisesRegex(ManagedActivationError, "session is no longer active"):
             self.authorize()
         self.assertEqual(self.database.approvals, [])
+
+    def test_old_digest_authorization_cannot_activate_new_profile(self) -> None:
+        self.authorize()
+        old = deepcopy(self.plan)
+        old.pop("planDigest")
+        old["target"]["schemaVersion"] = 11
+        old["target"].pop("schemaProfile")
+        old["target"].pop("databaseContract")
+        old_digest = "sha256:" + sha256(json.dumps(old, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        # An existing approval for an older plan is not approval of this cutover.
+        self.database.approvals[0]["command_fingerprint"] = old_digest[7:]
+        self.assertFalse(self.provisioner.inspect(self.plan)["authorizationReady"])
+        with self.assertRaises(ManagedActivationError):
+            self.provisioner.apply(self.plan)
+        self.assertEqual(self.database.memberships, [])
+        self.assertEqual(self.database.events, {})
 
     def test_multi_product_plan_applies_one_membership_with_union_capabilities(self) -> None:
         self.plan = compile_multi_product_activation_plan(
@@ -1172,6 +1220,73 @@ class ManagedActivationCliTests(unittest.TestCase):
             self.assertIn("commerce.write", plan["ownerCapabilities"])
             self.assertIn("production.write", plan["ownerCapabilities"])
             self.assertIn("website.write", plan["ownerCapabilities"])
+
+
+class ManagedV13LocalDatabaseTests(unittest.TestCase):
+    def test_real_v13_authorization_apply_replay_requery_and_legacy_denial(self) -> None:
+        """Synthetic loopback only; never imports provider credentials or calls the wrapper."""
+        from tools import rehearse_self_serve_v13 as proof
+        from tools.validate_supermega_database_url import audit_database
+
+        pg = proof.pg
+        binary, openssl = pg._default_postgres_bin(), pg._default_openssl()
+        self.assertTrue(pg._preflight(binary, openssl).get("ok"))
+        admin_secret, runtime_secret = pg._password(), pg._password()
+        with proof.cluster(binary, openssl, admin_secret, "activation-test") as (port, environment):
+            admin = pg._connection_url("postgres", admin_secret, port, pg.DATABASE_NAME)
+            runtime = pg._connection_url(pg.RUNTIME_ROLE, runtime_secret, port, pg.DATABASE_NAME)
+            pg._create_database_and_roles(pg._connection_url("postgres", admin_secret, port, "postgres"), pg.DATABASE_NAME)
+            pg._create_auth_session_fixture(admin)
+            pg._create_public_browser_fixture(admin)
+            pg._apply_public_browser_quarantine(postgres_bin=binary, admin_password=admin_secret,
+                port=port, database_name=pg.DATABASE_NAME, environment=environment)
+            pg._apply_migrations(postgres_bin=binary, admin_password=admin_secret,
+                admin_database_url=admin, port=port, environment=environment)
+            pg._provision_runtime(admin, runtime_secret)
+            pg._bootstrap_local_storage_catalog_fixture(admin)
+            plan = activation_plan()
+            provisioner = ManagedWorkspaceProvisioner(admin)
+            with self.assertRaisesRegex(ManagedActivationError, "schema version 13"):
+                provisioner.inspect(plan)
+            for name in proof.EXTRAS:
+                with pg._connect(admin, autocommit=True) as conn:
+                    conn.execute((proof.ROOT / "supabase/migrations" / name).read_text(encoding="utf-8"))
+
+            def assert_catalog_ready():
+                report = audit_database(runtime, storage_audit_database_url=admin, schema_profile="v13-self-serve")
+                self.assertTrue(report["ready"], report["failed_checks"])
+                self.assertTrue(all(report["checks"].values()))
+
+            assert_catalog_ready()
+            with pg._connect(admin) as conn:
+                conn.execute("insert into auth.sessions(id,user_id) values (%s::uuid,%s::uuid)", (OWNER_SESSION_ID, OWNER_ID))
+            self.assertEqual(provisioner.inspect(plan)["status"], "authorization_required")
+            before = proof.snapshot(admin)
+            with self.assertRaises(ManagedActivationError):
+                provisioner.apply(plan)
+            self.assertEqual(proof.snapshot(admin), before)
+            authorization = provisioner.authorize(plan, verified_owner_actor_id=OWNER_ID,
+                verified_owner_session_id=OWNER_SESSION_ID, decision_note="Synthetic local test authorization only.")
+            self.assertEqual(authorization["status"], "approved")
+            self.assertEqual(provisioner.inspect(plan)["status"], "ready_to_apply")
+            receipt = provisioner.apply(plan)
+            self.assertEqual(receipt["status"], "active")
+            after = proof.snapshot(admin)
+            self.assertTrue(provisioner.apply(plan)["replayed"])
+            self.assertEqual(proof.snapshot(admin), after)
+            inspection = provisioner.inspect(plan)
+            self.assertEqual(inspection["schemaVersion"], 13)
+            evidence = build_activation_requery_evidence(plan, receipt, inspection)
+            self.assertEqual(evidence["status"], "database_activation_verified")
+            self.assertIn("named_owner_portal_smoke_required", evidence["remainingGates"])
+            self.assertFalse(evidence["controls"]["deploymentPerformed"])
+            self.assertFalse(evidence["controls"]["portalSmokePerformed"])
+            with pg._connect(admin) as conn:
+                conn.execute("set transaction read only")
+                for table in ("billing_invoices", "billing_events", "billing_entitlements"):
+                    # Fixed allowlist, no customer input or arbitrary identifier interpolation.
+                    self.assertEqual(conn.execute(f"select count(*) from app_private.{table}").fetchone()[0], 0)
+            assert_catalog_ready()
 
 
 if __name__ == "__main__":

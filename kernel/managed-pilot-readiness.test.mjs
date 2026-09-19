@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { proofDigest } from './database-rehearsal-evidence.mjs'
 
 import { buildManagedPilotReadiness, readinessDigest, validateManagedPilotReadiness } from './managed-pilot-readiness.mjs'
 
@@ -17,6 +19,10 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
   },
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
+const databaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
+// Unit-only time fixture; never written as operational evidence.
+databaseFixture.recordedAt = '2026-07-31T10:00:00.000Z'
+databaseFixture.receiptDigest = proofDigest(databaseFixture)
 const selfServePilotProof = {
   contract: 'supermega.self-serve-pilot-proof.v1',
   approvalId: 'self-serve-proof-v11c-20260816',
@@ -43,18 +49,10 @@ const selfServePilotProof = {
 }
 const input = {
   portfolio: { schemaVersion: 'supermega.hq.portfolio.v3', products },
-  databaseEvidence: {
-    schemaVersion: 'supermega.hq.database-rehearsal.v2',
-    recordedAt: '2026-07-31T10:00:00.000Z',
-    checks: {
-      ...Object.fromEntries(Array.from({ length: 53 }, (_, index) => [`check${index}`, true])),
-      publicBrowserQuarantineEnforced: true,
-      publicBrowserQuarantineIdempotent: true,
-      restoredPublicBrowserQuarantinePreserved: true,
-    },
-    storage: { hostedStoragePrivacyProofRequired: true },
-    localVerification: { externallyHosted: false },
-  },
+  databaseEvidence: databaseFixture,
+  // Explicit unit fixture binding; production callers hash current implementation bytes.
+  databaseImplementation: { digest: databaseFixture.implementationDigest,
+    fileCount: databaseFixture.implementationFileCount, paths: databaseFixture.implementation.paths },
   storageAudit: 'Status: local verifier ready; hosted proof blocked',
   securityAudit: {
     contract: 'supermega.supabase-security-advisor-audit.v2',
@@ -75,17 +73,41 @@ const input = {
 
 test('derives one blocked four-product ledger from current bounded evidence', () => {
   const ledger = buildManagedPilotReadiness(input)
-  assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v4')
-  assert.equal(ledger.overall.blockingGateCount, 7)
-  assert.equal(ledger.gates[0].status, 'ready-local')
+  assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v5')
+  assert.equal(ledger.pilotMode, 'owner_named')
+  assert.equal(ledger.overall.blockingGateCount, 6)
+  assert.deepEqual(ledger.overall.blockingGateIds, ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'])
+  assert.equal(ledger.gates[0].id, 'preview_rehearsal')
+  assert.equal(ledger.gates[0].status, 'blocked')
+  assert.equal(ledger.previewRehearsal.proofComplete, false)
   assert.equal(
-    ledger.gates.find((gate) => gate.id === 'live_product_contract')?.evidence,
-    'The exact paired release is verified, but its managed product contract remains isolated_demo.',
+    ledger.gates.find((gate) => gate.id === 'pilot_evidence')?.evidence,
+    'Owner-named Shop pilot proof is absent. Required proof remains: shop hosted proof',
   )
   assert.equal(
     ledger.gates.find((gate) => gate.id === 'security')?.evidence,
-    '27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v11.',
+    'Historical blocked audit (27 findings) observed managed schema v7 against its then-target v11. Current schema v13 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.',
   )
+  assert.equal(ledger.liveProduction.schemaVersion, 7)
+  assert.equal(ledger.liveProduction.publicBrowserQuarantine, false)
+  assert.equal(ledger.liveProduction.currentStateRevalidated, false)
+  assert.equal(ledger.liveProduction.localTargetVersion, 13)
+  assert.equal(ledger.liveProduction.versionDrift, 6)
+  assert.equal(ledger.localDatabase.schemaVersion, 13)
+  assert.equal(ledger.localDatabase.migrationCount, 18)
+  assert.equal(ledger.localDatabase.hostedEvidenceCurrent, false)
+  assert.equal(ledger.liveProduction.managedWritesEnabled, false)
+  assert.equal(ledger.pilotEvidence.pilotMode, 'owner_named')
+  assert.equal(ledger.pilotEvidence.requiredAcceptedConsecutiveRuns, 20)
+  assert.equal(ledger.pilotEvidence.acceptedConsecutiveRuns, 0)
+  assert.deepEqual(ledger.pilotEvidence.requiredPilotDayIndexes, [1, 2, 3, 4, 5])
+  assert.deepEqual(ledger.pilotEvidence.acceptedConsecutivePilotDayIndexes, [])
+  assert.equal(ledger.pilotEvidence.pilotSequenceCoverageMet, false)
+  assert.equal(ledger.pilotEvidence.requiredPilotCalendarDates, 5)
+  assert.equal(ledger.pilotEvidence.acceptedConsecutiveObservedDateCount, 0)
+  assert.deepEqual(ledger.pilotEvidence.acceptedConsecutiveObservedDates, [])
+  assert.equal(ledger.pilotEvidence.pilotCalendarCoverageMet, false)
+  assert.equal(ledger.pilotEvidence.syntheticEvidenceAccepted, false)
   assert.doesNotMatch(JSON.stringify(ledger), /app_product_contract_drift/)
   assert.equal(ledger.products.length, 4)
   assert.equal(ledger.controls.modelCallsRequiredToBuild, 0)
@@ -122,20 +144,16 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
 test('records the self-serve pilot proof independently from production activation', () => {
   const withoutProof = buildManagedPilotReadiness(input)
   assert.equal(withoutProof.selfServePilot.proofComplete, false)
-  const blockedGate = withoutProof.gates.find((gate) => gate.id === 'self_serve_pilot')
-  assert.equal(blockedGate.status, 'blocked')
-  assert.equal(blockedGate.evidence, 'HQ records no completed self-serve pilot proof or measured baseline.')
+  assert.equal(withoutProof.gates.some((gate) => gate.id === 'self_serve_pilot'), false)
+  assert.equal(withoutProof.gates.find((gate) => gate.id === 'pilot_evidence').status, 'blocked')
 
   const proven = buildManagedPilotReadiness({ ...input, selfServePilotEvidence: selfServePilotProof })
   assert.equal(proven.selfServePilot.proofComplete, true)
   assert.equal(proven.selfServePilot.approvalId, 'self-serve-proof-v11c-20260816')
   assert.equal(proven.selfServePilot.schemaVersionProven, 11)
   assert.equal(proven.selfServePilot.liveActivationBlockedOn, 'production_activation')
-  const provenGate = proven.gates.find((gate) => gate.id === 'self_serve_pilot')
-  // The fixture still models live v7, so the proof is banked while the hosted schema gate remains blocked.
-  assert.equal(provenGate.status, 'blocked')
-  assert.match(provenGate.evidence, /proven six-for-six/)
-  assert.match(provenGate.nextAction, /runtime-login provisioning/)
+  assert.equal(proven.gates.find((gate) => gate.id === 'pilot_evidence').status, 'blocked')
+  assert.match(proven.gates.find((gate) => gate.id === 'pilot_evidence').evidence, /Owner-named Shop pilot proof is absent/)
   assert.equal(validateManagedPilotReadiness(proven), proven)
 })
 
@@ -161,15 +179,84 @@ test('rejects hosted overclaims and product authority drift', () => {
   assert.throws(() => buildManagedPilotReadiness(ungated), /managed_pilot_readiness_product_invalid/)
 })
 
-test('rejects database evidence that lacks the 56-check quarantine-proving rehearsal', () => {
+test('rejects stale, altered or incomplete current database evidence, even when rehashed', () => {
   const shortChecks = structuredClone(input)
-  delete shortChecks.databaseEvidence.checks.check52
+  delete shortChecks.databaseEvidence.checks.billingRuntimeWriteDenied
+  shortChecks.databaseEvidence.receiptDigest = proofDigest(shortChecks.databaseEvidence)
   assert.throws(() => buildManagedPilotReadiness(shortChecks), /managed_pilot_readiness_database_evidence_invalid/)
 
   const noQuarantine = structuredClone(input)
   delete noQuarantine.databaseEvidence.checks.publicBrowserQuarantineEnforced
   noQuarantine.databaseEvidence.checks.check53 = true
-  assert.throws(() => buildManagedPilotReadiness(noQuarantine), /managed_pilot_readiness_database_quarantine_invalid/)
+  noQuarantine.databaseEvidence.receiptDigest = proofDigest(noQuarantine.databaseEvidence)
+  assert.throws(() => buildManagedPilotReadiness(noQuarantine), /managed_pilot_readiness_database_evidence_invalid/)
+  for (const mutate of [d => { d.schemaVersion = 'supermega.hq.database-rehearsal.v2' },
+    d => { d.migration.schemaVersion = 11 }, d => { d.catalog.after.private_column_acl_exact = false },
+    d => { d.recovery.privateSnapshotAfter = `sha256:${'0'.repeat(64)}` }]) {
+    const invalid = structuredClone(input)
+    mutate(invalid.databaseEvidence)
+    invalid.databaseEvidence.receiptDigest = proofDigest(invalid.databaseEvidence)
+    assert.throws(() => buildManagedPilotReadiness(invalid), /managed_pilot_readiness_database_evidence_invalid/)
+  }
+})
+
+test('historical clean hosted audit cannot satisfy current schema or self-serve gates', () => {
+  const historical = structuredClone(input)
+  historical.securityAudit.advisor = { status: 'clear', findingCount: 0 }
+  historical.securityAudit.managedBackend = { ...historical.securityAudit.managedBackend,
+    liveSchemaVersion: 11, versionDrift: 0, metadataRlsEnabled: true }
+  historical.selfServePilotEvidence = selfServePilotProof
+  const ledger = buildManagedPilotReadiness(historical)
+  assert.equal(ledger.securityAudit.liveSchemaVersion, 11)
+  assert.equal(ledger.securityAudit.localTargetVersion, 11)
+  assert.equal(ledger.selfServePilot.schemaVersionProven, 11)
+  assert.equal(ledger.selfServePilot.currentTargetProven, false)
+  assert.equal(ledger.liveProduction.localTargetVersion, 13)
+  assert.equal(ledger.liveProduction.versionDrift, 2)
+  assert.equal(ledger.gates.find(g => g.id === 'security').status, 'blocked')
+  assert.equal(ledger.overall.blockingGateCount, 6)
+  for (const key of ['storagePrivacy', 'managedPersistence', 'selfServePilot']) {
+    const changed = structuredClone(ledger)
+    changed[key].currentTargetProven = true
+    assert.throws(() => validateManagedPilotReadiness(changed), /managed_pilot_readiness_.*invalid/)
+  }
+  assert.match(ledger.gates.find(g => g.id === 'security').nextAction, /fresh schema v13/)
+  const staleInstruction = structuredClone(ledger)
+  staleInstruction.gates.find(g => g.id === 'security').nextAction = historical.securityAudit.conclusion.nextAction
+  assert.throws(() => validateManagedPilotReadiness(staleInstruction), /managed_pilot_readiness_gate_evidence_invalid/)
+})
+
+test('completed historical persistence and Storage proofs stay retained but cannot clear current gates', () => {
+  const historical = structuredClone(input)
+  historical.storagePrivacyEvidence = JSON.parse(readFileSync(new URL('../hq/readiness/hosted-storage-privacy-proof.json', import.meta.url), 'utf8'))
+  historical.managedPersistenceEvidence = JSON.parse(readFileSync(new URL('../hq/readiness/managed-persistence-proof.json', import.meta.url), 'utf8'))
+  historical.storageAudit = 'Status: hosted proof complete; six-request audit passed on a deleted isolated branch'
+  const ledger = buildManagedPilotReadiness(historical)
+  for (const [summaryKey, gateId] of [['storagePrivacy', 'storage_privacy'], ['managedPersistence', 'managed_persistence']]) {
+    assert.equal(ledger[summaryKey].proofComplete, true)
+    assert.equal(ledger[summaryKey].currentTargetProven, false)
+    assert.equal(ledger.gates.find(g => g.id === gateId).status, 'blocked')
+    assert.match(ledger.gates.find(g => g.id === gateId).evidence, /^Historical /)
+    const overclaim = structuredClone(ledger)
+    overclaim.gates.find(g => g.id === gateId).evidence = 'Current hosted proof complete.'
+    assert.throws(() => validateManagedPilotReadiness(overclaim), /managed_pilot_readiness_gate_evidence_invalid/)
+  }
+})
+
+test('changed implementation binding and local proof summaries cannot be called current evidence', () => {
+  const missing = structuredClone(input)
+  delete missing.databaseImplementation
+  assert.throws(() => buildManagedPilotReadiness(missing), /managed_pilot_readiness_database_evidence_invalid/)
+  const changed = structuredClone(input)
+  changed.databaseImplementation = { paths: databaseFixture.implementation.paths,
+    fileCount: databaseFixture.implementationFileCount, digest: `sha256:${'0'.repeat(64)}` }
+  assert.throws(() => buildManagedPilotReadiness(changed), /managed_pilot_readiness_database_evidence_invalid/)
+  for (const mutate of [d => { d.migrationCount = 14 }, d => { d.migrationCount = 17 }, d => { d.catalogChecksAfter = 32 },
+    d => { d.hostedEvidenceCurrent = true }, d => { d.implementationTree = '' }]) {
+    const ledger = buildManagedPilotReadiness(input)
+    mutate(ledger.localDatabase)
+    assert.throws(() => validateManagedPilotReadiness(ledger), /managed_pilot_readiness_local_database_invalid/)
+  }
 })
 
 test('rejects evidence or ledger state that could touch protected production', () => {

@@ -3,7 +3,7 @@ export const CHANNEL_ORDER_MESSAGE_MAX = 4_000
 export const CHANNEL_ORDER_QUOTE_MAX = 280
 
 export const channelOrderChannels = ['Messenger', 'Viber', 'Telegram', 'TikTok', 'Phone'] as const
-export const channelOrderPayments = ['KBZPay', 'WavePay', 'Cash on delivery', 'Cash', 'Card'] as const
+export const channelOrderPayments = ['KBZPay', 'WavePay', 'AYA Pay', 'MMQR', 'Cash on delivery', 'Cash', 'Card'] as const
 export const channelOrderFields = ['customer', 'sku', 'quantity', 'payment'] as const
 
 export type ChannelOrderChannel = (typeof channelOrderChannels)[number]
@@ -116,6 +116,8 @@ const managedChannels: Record<string, ChannelOrderChannel> = {
 const managedPayments: Record<string, ChannelOrderPayment> = {
   kbzpay: 'KBZPay',
   wavepay: 'WavePay',
+  ayapay: 'AYA Pay',
+  mmqr: 'MMQR',
   cash_on_delivery: 'Cash on delivery',
   cash: 'Cash',
   card: 'Card',

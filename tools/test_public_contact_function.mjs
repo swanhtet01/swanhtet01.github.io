@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { buildClientContactReviewTemplate, initializeClientWorkspaceFromContact, prepareClientDemo, verifyClientDemoPreparation } from './prepare_client_demo.mjs'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 
@@ -186,6 +189,7 @@ try {
   assert.equal(event.record.workflow, 'guide')
   assert.equal(event.record.email, 'operator@example.com')
   assert.equal(event.record.source, 'supermega.dev')
+  assert.equal(event.record.next_step, 'Choose the smallest suitable product path and return one scoped setup recommendation.')
   assert.equal(accepted.body.proof_bound, false)
 
   const replay = await invoke({ body: { ...validSubmission, product: 'guide' }, headers: withKey(3) })
@@ -211,6 +215,7 @@ try {
   const websiteEvent = JSON.parse(delivered.options.body)
   assert.equal(websiteEvent.record.workflow, 'website')
   assert.equal(websiteEvent.record.requested_package, 'lead-generation')
+  assert.equal(websiteEvent.record.next_step, 'Validate the public source material and desired contact action; prepare the page plan and preview scope.')
   assert.equal(websiteEvent.record.utm_source, 'linkedin')
   assert.equal(websiteEvent.record.utm_medium, 'social')
   assert.equal(websiteEvent.record.utm_campaign, 'website-launch')
@@ -225,6 +230,7 @@ try {
   const ecommerceEvent = JSON.parse(delivered.options.body)
   assert.equal(ecommerceEvent.record.workflow, 'ecommerce')
   assert.equal(ecommerceEvent.record.requested_package, 'social-storefront')
+  assert.equal(ecommerceEvent.record.next_step, 'Validate the catalog source, request flow and Shop handoff; prepare the catalog cleanup scope.')
 
   const claimAccepted = await invoke({
     body: { ...validSubmission, trial_claim_code: 'sm-7hk2-9mt4' },
@@ -410,12 +416,43 @@ try {
   assert.deepEqual(founderNotify.body.to, ['swanhtet@supermega.dev'])
   assert.equal(founderNotify.body.reply_to, validSubmission.email)
   assert.ok(founderNotify.body.text.includes('Trial claim code: SM-2CDE-4FGH'))
+  assert.match(founderNotify.body.text, /Operator next step: Validate the operating workflow, accountable roles and sample boundary/)
+  assert.match(founderNotify.body.text, /Customer brief:/)
   assert.deepEqual(customerAck.body.to, [validSubmission.email])
   assert.equal(customerAck.body.reply_to, 'swanhtet@supermega.dev')
   assert.equal(customerAck.headers['idempotency-key'], `supermega-contact-ack/${ackAccepted.body.request_id}`)
   assert.ok(customerAck.body.text.includes(ackAccepted.body.request_id))
   assert.ok(customerAck.body.text.includes('Your trial claim code: SM-2CDE-4FGH'))
   assert.ok(customerAck.body.subject.includes('We received your request'))
+  assert.match(customerAck.body.text, /No action is needed from you now/)
+  assert.match(customerAck.body.text, /reply with one scoped next step/)
+  assert.match(customerAck.body.text, /confirm the scope, price and timing/)
+  assert.match(customerAck.body.text, /You review the result instead of building it yourself/)
+  assert.match(customerAck.body.text, /Going live is a separate step after your approval and readiness checks/)
+  assert.match(customerAck.body.text, /provide a safe transfer method after scope confirmation/)
+  assert.match(customerAck.body.text, /does not create an account, publish a site, connect your business data or take payment/)
+  assert.match(customerAck.body.text, /Do not email passwords, payment slips or customer records/)
+  assert.doesNotMatch(customerAck.body.text, /one business day|founder|trial keeps working/)
+
+  const productAcknowledgements = {
+    shop: /reviewed import, suitable trade defaults and a ready-to-review first-sale workspace/,
+    website: /page plan, starter copy and responsive preview/,
+    ecommerce: /cleaned catalog structure, customer view and request-to-Shop handoff/,
+  }
+  for (const [index, [product, expectedPlan]] of Object.entries(productAcknowledgements).entries()) {
+    const before = resendMail.length
+    const accepted = await invoke({ body: { ...validSubmission, product, template: '', goal: 'Prepare our setup for review' }, headers: withKey(410 + index, { 'x-forwarded-for': '203.0.113.' + (50 + index) }), activeHandler: resendHandler })
+    assert.equal(accepted.status, 202)
+    assert.equal(resendMail.length, before + 2)
+    const acknowledgement = resendMail.at(-1)
+    assert.deepEqual(acknowledgement.body.to, [validSubmission.email])
+    assert.ok(acknowledgement.body.text.includes(accepted.body.request_id))
+    assert.match(acknowledgement.body.text, expectedPlan)
+    assert.match(acknowledgement.body.text, /SuperMega prepares the setup or preview/)
+    assert.match(acknowledgement.body.text, /Reply only if you have a question or correction/)
+    assert.doesNotMatch(acknowledgement.body.text, /Prepare our setup for review/)
+    assert.doesNotMatch(acknowledgement.body.text, /Your trial claim code|one business day|founder|trial keeps working/)
+  }
 
   // The acknowledgement is best-effort: its failure must never fail a delivered lead.
   let ackAttempted = false
@@ -429,6 +466,41 @@ try {
   const ackFailed = await invoke({ body: validSubmission, headers: withKey(401, { 'x-forwarded-for': '203.0.113.41' }), activeHandler: resendHandler })
   assert.equal(ackFailed.status, 202)
   assert.equal(ackAttempted, true)
+
+  // Overlapping retries must not start a second delivery in this instance.
+  let finishDelivery, deliveryStarted
+  const started = new Promise(resolve => { deliveryStarted = resolve })
+  const held = new Promise(resolve => { finishDelivery = resolve })
+  let overlappingCalls = 0
+  globalThis.fetch = async () => {
+    overlappingCalls++
+    if (overlappingCalls === 1) { deliveryStarted(); await held }
+    return { ok: true, status: 200, json: async () => ({ id: 'local-simulated-mail' }) }
+  }
+  const concurrentHandler = loadHandler({ fresh: true })
+  const concurrentArgs = { body: validSubmission, headers: withKey(450), activeHandler: concurrentHandler }
+  const firstDelivery = invoke(concurrentArgs)
+  await started
+  const overlapping = await invoke(concurrentArgs)
+  assert.equal(overlapping.status, 409)
+  assert.equal(overlapping.body.reason, 'request_in_progress')
+  const conflicting = await invoke({ ...concurrentArgs, body: { ...validSubmission, goal: 'A different brief' } })
+  assert.equal(conflicting.body.reason, 'idempotency_conflict')
+  assert.equal(overlappingCalls, 1)
+  finishDelivery()
+  const originalDelivery = await firstDelivery
+  assert.equal(originalDelivery.status, 202)
+  const completedReplay = await invoke(concurrentArgs)
+  assert.deepEqual(completedReplay.body, originalDelivery.body)
+  assert.equal(completedReplay.headers['x-idempotent-replay'], 'true')
+  assert.equal(overlappingCalls, 2, 'one operator notification and one acknowledgement only')
+  const recoveryArgs = { ...concurrentArgs, headers: withKey(451) }
+  globalThis.fetch = async () => { throw new Error('simulated delivery unavailable') }
+  const failedDelivery = await invoke(recoveryArgs)
+  assert.equal(failedDelivery.status, 503)
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ id: 'recovered-local-mail' }) })
+  const recoveredDelivery = await invoke(recoveryArgs)
+  assert.equal(recoveredDelivery.status, 202, 'failed delivery releases the in-flight guard for an exact retry')
 
   clearChannels()
   process.env.SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET = 'test-only-contact-idempotency-secret-0001'
@@ -567,7 +639,76 @@ try {
   assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
   assert.equal(unexpectedDeliveryCalls, 0)
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 145 }, null, 2))
+  // Independent cold handlers share only the simulated atomic database, not maps.
+  const independentOne = loadHandler({ fresh: true })
+  const independentTwo = loadHandler({ fresh: true })
+  const beforeConcurrentRows = persistedLeads.size
+  const independentResults = await Promise.all([
+    invoke({ activeHandler: independentOne, body: validSubmission, headers: withKey(260) }),
+    invoke({ activeHandler: independentTwo, body: validSubmission, headers: withKey(260) }),
+  ])
+  assert.deepEqual(independentResults.map(result => result.status), [202, 202])
+  assert.equal(independentResults[0].body.request_id, independentResults[1].body.request_id)
+  assert.equal(independentResults.filter(result => result.headers['x-idempotent-replay'] === 'true').length, 1)
+  assert.equal(persistedLeads.size, beforeConcurrentRows + 1)
+  assert.equal(unexpectedDeliveryCalls, 1, 'only the insert winner notifies the webhook')
+
+  const conflictResults = await Promise.all([
+    invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(261) }),
+    invoke({ activeHandler: loadHandler({ fresh: true }), body: { ...validSubmission, goal: 'Conflicting concurrent brief' }, headers: withKey(261) }),
+  ])
+  assert.deepEqual(conflictResults.map(result => result.status).sort(), [202, 409])
+  assert.equal(conflictResults.find(result => result.status === 409).body.reason, 'idempotency_conflict')
+  assert.equal(unexpectedDeliveryCalls, 2, 'conflicting cold handler cannot notify')
+
+  // Exercise the actual generated API event through the actual staff preparation
+  // consumer. Delivery is intercepted: no network, messages or customer records.
+  clearChannels()
+  process.env.SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET = randomUUID()
+  process.env.SUPERMEGA_LEAD_WEBHOOK_URL = 'https://lead-router.example.test/events'
+  const integrationRoot = await mkdtemp(resolve(tmpdir(), 'supermega-contact-handoff-'))
+  try {
+    for (const product of ['shop', 'website', 'ecommerce']) {
+      let deliveredEvent
+      let deliveryCount = 0
+      globalThis.fetch = async (url, options) => {
+        assert.equal(url, 'https://lead-router.example.test/events')
+        assert.equal(options.method, 'POST')
+        deliveryCount++
+        deliveredEvent = JSON.parse(options.body)
+        return { ok: true, status: 200 }
+      }
+      const response = await invoke({
+        activeHandler: loadHandler({ fresh: true }),
+        body: { ...validSubmission, product, template: '', goal: 'Prepare our ' + product + ' for review', source_url: 'https://supermega.dev/contact/?product=' + product },
+        headers: { 'x-idempotency-key': randomUUID() },
+      })
+      assert.equal(response.status, 202)
+      assert.equal(deliveryCount, 1)
+      assert.equal(deliveredEvent.record.lead_id, response.body.request_id)
+      assert.equal(deliveredEvent.record.goal, 'Prepare our ' + product + ' for review')
+      const review = {
+        ...buildClientContactReviewTemplate(deliveredEvent),
+        workspace: 'Synthetic handoff workspace', implementationOwner: 'Synthetic reviewer',
+        companyReviewed: true, goalReviewed: true, privateWorkspaceApproved: true,
+        reviewedAt: new Date().toISOString(),
+      }
+      const directory = resolve(integrationRoot, product)
+      const initialized = await initializeClientWorkspaceFromContact({ directory, event: deliveredEvent, review })
+      assert.equal(initialized.requestedProduct, product === 'shop' ? 'commerce' : product)
+      const preparation = await prepareClientDemo({ dataDirectory: directory })
+      assert.deepEqual(preparation.products.map(item => item.product), product === 'ecommerce' ? ['commerce', 'ecommerce'] : [product === 'shop' ? 'commerce' : product])
+      assert.equal(preparation.client.owner, 'Synthetic reviewer')
+      assert.equal(verifyClientDemoPreparation(preparation).status, 'verified_not_applied')
+      assert.equal(preparation.controls.externalWritesPerformed, false)
+      assert.equal(preparation.controls.containsSampleFixtures, true)
+      assert.doesNotMatch(JSON.stringify(preparation), /operator@example\.com|Trial Operator/)
+    }
+  } finally {
+    await rm(integrationRoot, { recursive: true, force: true })
+  }
+
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', assertions: 'all_passed', serviceHandoffJourneys: 3, independentInstanceRaceScenarios: 2, evidence: 'local_mocked_not_hosted' }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {

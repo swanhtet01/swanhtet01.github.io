@@ -6,13 +6,28 @@ param(
     [string]$PublicDomain = "https://supermega.dev",
     [string]$CustomAppDomain = "https://app.supermega.dev",
     [string]$EnvFile = "",
-    [string]$ServiceAccountJson = "C:\Users\swann\OneDrive - BDA\_tmp_keystore_20260328\keystore\supermega-468612-9c08e1ed3bb4.json",
+    [string]$ServiceAccountJson = "",
     [switch]$UseLiveRunUrl,
     [switch]$DeployApp,
-    [switch]$DeployWebsite
+    [switch]$DeployWebsite,
+    [switch]$AllowExternalWrites,
+    [string]$OwnerConfirmation = ""
 )
 
 $ErrorActionPreference = "Stop"
+$ExpectedOwnerConfirmation = "I APPROVE SUPERMEGA GITHUB SECRET AND WORKFLOW WRITES"
+$CloudAiProviderKeys = @(
+    "AI_GATEWAY_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "SUPERMEGA_ANTHROPIC_MODEL",
+    "SUPERMEGA_OPENAI_MODEL",
+    "SUPERMEGA_OR_MODEL_BULK",
+    "SUPERMEGA_OR_MODEL_REASON",
+    "SUPERMEGA_OR_MODEL_DEEP"
+)
 
 function Require-Command {
     param([string]$Name)
@@ -25,11 +40,7 @@ function Get-GitHubToken {
     if (-not [string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
         return $env:GH_TOKEN
     }
-    $remote = git remote get-url origin 2>$null
-    if ($remote -match 'https://([^@]+)@github.com/.+') {
-        return $Matches[1]
-    }
-    throw "Could not resolve GitHub token from GH_TOKEN or git remote URL."
+    throw "GH_TOKEN must be set explicitly. Refusing to infer a token from git remote URLs."
 }
 
 function Load-EnvMap {
@@ -50,21 +61,35 @@ function Load-EnvMap {
 
 function Resolve-EnvFilePath {
     param([string]$Provided)
-    $repoRoot = Split-Path -Parent $PSScriptRoot
-    $candidates = @()
-    if (-not [string]::IsNullOrWhiteSpace($Provided)) {
-        $candidates += $Provided
+    if ([string]::IsNullOrWhiteSpace($Provided)) {
+        throw "Provide -EnvFile explicitly. Legacy default env-file discovery is quarantined."
     }
-    $candidates += @(
-        (Join-Path $repoRoot ".env.app.local"),
-        "C:\Users\swann\OneDrive - BDA\swanhtet01.github.io.worktrees\copilot-worktree-2026-03-04T08-10-33\.env.app.local"
-    )
-    foreach ($candidate in $candidates) {
-        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) {
-            return (Resolve-Path -LiteralPath $candidate).Path
+    if (-not (Test-Path -LiteralPath $Provided)) {
+        throw "Env file not found: $Provided"
+    }
+    return (Resolve-Path -LiteralPath $Provided).Path
+}
+
+function Assert-NoCloudAiProviderSecrets {
+    param([hashtable]$EnvMap)
+
+    foreach ($key in $CloudAiProviderKeys) {
+        if ($EnvMap.ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$EnvMap[$key])) {
+            throw "Hosted AI provider secret key is quarantined for this SuperMega release lane: $key. Use local Ollama only."
         }
     }
-    throw "Could not find .env.app.local. Provide -EnvFile explicitly."
+}
+
+function Assert-ExternalWriteApproval {
+    if (-not $AllowExternalWrites -or $OwnerConfirmation -cne $ExpectedOwnerConfirmation) {
+        throw "Quarantined legacy provider-write script. Re-run only with -AllowExternalWrites and -OwnerConfirmation `"$ExpectedOwnerConfirmation`" after explicit owner approval."
+    }
+    if ([string]::IsNullOrWhiteSpace($ServiceAccountJson)) {
+        throw "Provide -ServiceAccountJson explicitly. Legacy service-account default paths are quarantined."
+    }
+    if (-not (Test-Path -LiteralPath $ServiceAccountJson)) {
+        throw "Service account JSON not found: $ServiceAccountJson"
+    }
 }
 
 function Set-GitHubSecret {
@@ -100,6 +125,7 @@ function Set-GitHubVariableValue {
     gh variable set $Name --repo $RepoName --body $Value | Out-Null
 }
 
+Assert-ExternalWriteApproval
 Require-Command -Name "gh"
 Require-Command -Name "gcloud"
 Require-Command -Name "git"
@@ -110,6 +136,7 @@ try {
     $env:GH_TOKEN = Get-GitHubToken
     $resolvedEnvFile = Resolve-EnvFilePath -Provided $EnvFile
     $envMap = Load-EnvMap -PathValue $resolvedEnvFile
+    Assert-NoCloudAiProviderSecrets -EnvMap $envMap
 
     $dbUrl = (gcloud secrets versions access latest --secret=supermega-database-url --project $ProjectId).Trim()
     $liveServiceUrl = ""
@@ -129,7 +156,6 @@ try {
     Set-GitHubSecret -RepoName $Repo -Name "SUPERMEGA_APP_USERNAME" -Value ([string]$envMap["SUPERMEGA_APP_USERNAME"])
     Set-GitHubSecret -RepoName $Repo -Name "SUPERMEGA_APP_PASSWORD" -Value ([string]$envMap["SUPERMEGA_APP_PASSWORD"])
     Set-GitHubSecret -RepoName $Repo -Name "SUPERMEGA_DATABASE_URL" -Value $dbUrl
-    Set-GitHubSecret -RepoName $Repo -Name "OPENAI_API_KEY" -Value ([string]$envMap["OPENAI_API_KEY"])
     Set-GitHubSecret -RepoName $Repo -Name "VITE_GOOGLE_MAPS_API_KEY" -Value ([string]$envMap["GOOGLE_MAPS_API_KEY"])
 
     if ($envMap.ContainsKey("RESEND_API_KEY")) {

@@ -3,9 +3,10 @@
 
 import { usableOpsKey } from '../ops-key.mjs'
 import store from '../store.mjs'
-import { generateDeal } from './deal.mjs'
+import { generateDeal, normalizeDealPacket } from './deal.mjs'
 import { onDealSaved, onProjectShipped } from './graduation.mjs'
 import connectors from '../connectors/index.mjs'
+import { captureError } from '../alert.mjs'
 import { companyDailyBudgetCap, currentDailyBudgetWindow, providerChain } from '../gateway.mjs'
 import { listLeadsForReview, markLeadReviewed } from './leads-review.mjs'
 import crypto from 'node:crypto'
@@ -40,6 +41,29 @@ const DEAL_STATUSES = ['draft', 'approved', 'sent']
 const OFFER_USD = { 'tool-week': 600, dashboard: 1800, 'ai-agent': 2500, 'design-ship': 6000, build: 1800, 'care-plan': 79 }
 const priceOf = (offer) => OFFER_USD[offer] || OFFER_USD.build
 const aiConfigured = () => providerChain().length > 0
+
+function leadConversionRecordId(kind, leadId) {
+  const digest = crypto.createHash('sha256')
+    .update(`supermega.lead-conversion-${kind}.v1:${leadId}`)
+    .digest('hex')
+  return `lead-${kind}-${digest.slice(0, 40)}`
+}
+
+async function createOrReadConversionRecord(read, create, failureCode) {
+  const existing = await read()
+  if (existing) return existing
+  try {
+    const created = await create()
+    if (created) return created
+  } catch (error) {
+    const recovered = await read().catch(() => null)
+    if (recovered) return recovered
+    throw error
+  }
+  const recovered = await read()
+  if (recovered) return recovered
+  throw new Error(failureCode)
+}
 
 function operatorAiBudgetStatus(usage, window, capUnits) {
   const contract = 'supermega.company-ai-budget-status.v1'
@@ -86,7 +110,20 @@ function operatorAiBudgetStatus(usage, window, capUnits) {
 
 const ok = (json) => ({ status: 200, json })
 const bad = (status, reason) => ({ status, json: { ok: false, reason } })
-const log = (kind, summary, ref) => store.logActivity({ kind, summary, ref }).catch(() => {})
+const safeMetaValue = (value, limit = 120) => {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  return String(value).slice(0, limit)
+}
+const safePath = (value) => String(value || '').split('?')[0].slice(0, 120)
+const recordConsoleError = (context, detail, meta = {}) => captureError(context, detail, Object.fromEntries(
+  Object.entries(meta)
+    .map(([key, value]) => [key, safeMetaValue(value)])
+    .filter(([, value]) => value !== null),
+)).catch(() => {})
+const log = (kind, summary, ref) => store.logActivity({ kind, summary, ref })
+  .then((entry) => entry || recordConsoleError('console.activity_log_failed', 'activity_log_not_recorded', { kind, ref }))
+  .catch((error) => recordConsoleError('console.activity_log_failed', error, { kind, ref }))
 
 // Packet fields are generated text seeded from public contact-form input and can contain
 // characters that are markup in HTML. Interpolating them raw does not just risk injection
@@ -236,11 +273,44 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       if (method === 'POST' && seg[1] && !seg[2] && query.action === 'convert') {
         const lead = await store.getLead(seg[1])
         if (!lead) return bad(404, 'lead_not_found')
-        const client = await store.createClient({ name: lead.company || lead.name || 'New client', contacts: [{ name: lead.name, channel: 'contact', handle: lead.contact }] })
-        const project = await store.createProject({ client_id: client.id, lead_id: lead.id, offer: lead.package || body.offer || 'build', status: 'scoping' })
-        await store.updateLead(seg[1], { stage: 'won' }).catch(() => {})
-        log('won', `Won ${lead.company || lead.name} → ${project.offer} project`, project.id)
-        return ok({ ok: true, client, project })
+        const clientId = leadConversionRecordId('client', lead.id)
+        const projectId = leadConversionRecordId('project', lead.id)
+        const deterministicClient = await store.getClient(clientId)
+        const matchingProjects = (await store.listProjects()).filter((project) => project.lead_id === lead.id)
+        if (matchingProjects.length > 1) return bad(409, 'lead_conversion_ambiguous')
+        let project = matchingProjects[0] || null
+        if (project && ((project.id === projectId && project.client_id !== clientId)
+          || (deterministicClient && project.client_id !== clientId))) {
+          return bad(409, 'lead_conversion_ambiguous')
+        }
+        let client = project?.client_id ? await store.getClient(project.client_id) : deterministicClient
+        if (project && !client) return bad(409, 'lead_conversion_client_missing')
+        if (!project) {
+          if (!client) {
+            client = await createOrReadConversionRecord(
+              () => store.getClient(clientId),
+              () => store.createClient({ id: clientId, name: lead.company || lead.name || 'New client', contacts: [{ name: lead.name, channel: 'contact', handle: lead.contact }] }),
+              'lead_conversion_client_create_failed',
+            )
+          }
+          project = await createOrReadConversionRecord(
+            () => store.getProject(projectId),
+            () => store.createProject({ id: projectId, client_id: client.id, lead_id: lead.id, offer: lead.package || body.offer || 'build', status: 'scoping' }),
+            'lead_conversion_project_create_failed',
+          )
+          if (project.lead_id !== lead.id || project.client_id !== client.id) return bad(409, 'lead_conversion_ambiguous')
+        }
+        if (lead.stage === 'won') return ok({ ok: true, client, project, lead, replayed: true })
+        const wonTransition = await store.markLeadWon(seg[1]).catch(async (error) => {
+          await recordConsoleError('console.lead_convert_won_stage_failed', error, { leadId: lead.id, clientId: client.id, projectId: project.id })
+          return null
+        })
+        if (!wonTransition || wonTransition.lead?.stage !== 'won') {
+          await recordConsoleError('console.lead_convert_partial_project', 'lead_won_stage_not_recorded', { leadId: lead.id, clientId: client.id, projectId: project.id })
+          return bad(500, 'lead_won_stage_update_failed')
+        }
+        if (wonTransition.changed) log('won', `Won ${lead.company || lead.name} → ${project.offer} project`, project.id)
+        return ok({ ok: true, client, project, lead: wonTransition.lead, replayed: !wonTransition.changed })
       }
     }
 
@@ -267,7 +337,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
               if (!modules?.length && project.lead_id) { const byLead = await store.listDeals({ lead_id: project.lead_id }); modules = byLead?.[0]?.packet?.modules }
               if (modules?.length) await onProjectShipped(project.id, modules, project.id)
             })
-            .catch(() => {})
+            .catch((error) => recordConsoleError('console.project_shipped_graduation_failed', error, { projectId: project.id }))
         }
         return ok({ ok: true, project })
       }
@@ -290,10 +360,13 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       }
       if (method === 'POST' && !seg[1]) {
         if (!body.packet) return bad(400, 'no_packet')
-        const deal = await store.saveDeal({ lead_id: body.lead_id || null, project_id: body.project_id || null, packet: body.packet, status: 'draft' })
-        log('deal', `Deal saved: ${String(body.packet.headline || '').slice(0, 60)}`, deal.id)
+        const normalized = normalizeDealPacket(body.packet)
+        if (!normalized.ok) return bad(400, normalized.reason)
+        const deal = await store.saveDeal({ lead_id: body.lead_id || null, project_id: body.project_id || null, packet: normalized.packet, status: 'draft' })
+        log('deal', `Deal saved: ${String(normalized.packet.headline || '').slice(0, 60)}`, deal.id)
         // Auto-graduation flywheel: each module signature in the packet bumps its repeat counter (best-effort).
-        onDealSaved(body.packet, deal.id).catch(() => {})
+        onDealSaved(normalized.packet, deal.id)
+          .catch((error) => recordConsoleError('console.deal_graduation_failed', error, { dealId: deal.id }))
         return ok({ ok: true, deal })
       }
       if (method === 'PATCH' && seg[1] && !seg[2]) {
@@ -417,6 +490,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
 
     return bad(404, 'not_found')
   } catch (err) {
+    await recordConsoleError('console.api_unhandled_error', err, { method, path: safePath(path) })
     return bad(500, String(err.message || 'server_error').slice(0, 160))
   }
 }

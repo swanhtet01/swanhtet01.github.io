@@ -1,20 +1,50 @@
 param(
-    [string]$SecretsFile = "C:\Users\swann\Documents\claude api.txt",
+    [string]$SecretsFile = "",
     [string]$RepoRoot = "",
-    [string]$OutputPath = ""
+    [string]$OutputPath = "",
+    [string]$ShowroomOutputPath = "",
+    [string]$ServiceAccountJson = "",
+    [string]$GmailClientJson = "",
+    [switch]$AllowLocalSecretWrite,
+    [string]$OwnerConfirmation = ""
 )
 
 $ErrorActionPreference = "Stop"
+$ExpectedOwnerConfirmation = "I APPROVE SUPERMEGA LOCAL SECRET MATERIALIZATION"
+$CloudAiProviderKeys = @(
+    "AI_GATEWAY_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "SUPERMEGA_ANTHROPIC_MODEL",
+    "SUPERMEGA_OPENAI_MODEL",
+    "SUPERMEGA_OR_MODEL_BULK",
+    "SUPERMEGA_OR_MODEL_REASON",
+    "SUPERMEGA_OR_MODEL_DEEP"
+)
 
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 }
 
-if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $OutputPath = Join-Path $RepoRoot ".env.app.local"
+if (-not $AllowLocalSecretWrite -or $OwnerConfirmation -cne $ExpectedOwnerConfirmation) {
+    throw "Quarantined legacy local secret materializer. Re-run only with -AllowLocalSecretWrite and -OwnerConfirmation `"$ExpectedOwnerConfirmation`" after explicit owner approval."
 }
 
-$showroomOutputPath = Join-Path $RepoRoot "showroom\.env.local"
+if ([string]::IsNullOrWhiteSpace($SecretsFile)) {
+    throw "Provide -SecretsFile explicitly. Legacy default secret-source paths are quarantined."
+}
+
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    throw "Provide -OutputPath explicitly. Default app env-file writes are quarantined."
+}
+
+if ([string]::IsNullOrWhiteSpace($ShowroomOutputPath)) {
+    throw "Provide -ShowroomOutputPath explicitly. Default showroom env-file writes are quarantined."
+}
+
+$showroomOutputPath = $ShowroomOutputPath
 
 function Read-KeyValueFile {
     param([string]$Path)
@@ -70,6 +100,16 @@ function Find-FirstExistingPath {
     return ""
 }
 
+function Remove-CloudAiProviderMaterial {
+    param([hashtable]$Target)
+
+    foreach ($key in $CloudAiProviderKeys) {
+        if ($Target.Contains($key)) {
+            [void]$Target.Remove($key)
+        }
+    }
+}
+
 if (-not (Test-Path -LiteralPath $SecretsFile)) {
     Write-Warning ("Secret source file not found: " + $SecretsFile)
     exit 0
@@ -77,9 +117,7 @@ if (-not (Test-Path -LiteralPath $SecretsFile)) {
 
 $raw = Get-Content -Raw -LiteralPath $SecretsFile
 
-$anthropic = [regex]::Match($raw, '(?ms)^\s*claude api\s*$\s*([^\r\n]+)').Groups[1].Value.Trim()
 $places = [regex]::Match($raw, '(?ms)^\s*google places api\s*$\s*([^\r\n]+)').Groups[1].Value.Trim()
-$openai = [regex]::Match($raw, '(?ms)^\s*openai\s*$\s*supermega\s*$\s*([^\r\n]+)').Groups[1].Value.Trim()
 $gmailClientId = [regex]::Match($raw, '(?ms)^\s*client id\s*$\s*([^\r\n]+)').Groups[1].Value.Trim()
 $gmailClientSecret = [regex]::Match($raw, '(?ms)^\s*secret\s*$\s*(GOCSPX-[^\r\n]+)').Groups[1].Value.Trim()
 
@@ -89,6 +127,7 @@ $existingMap = Read-KeyValueFile -Path $OutputPath
 
 Merge-Defaults -Target $envMap -Defaults $exampleMap
 Merge-Defaults -Target $envMap -Defaults $existingMap
+Remove-CloudAiProviderMaterial -Target $envMap
 
 $envMap["SUPERMEGA_AUTH_REQUIRED"] = "1"
 $envMap["SUPERMEGA_APP_USERNAME"] = "owner"
@@ -100,19 +139,14 @@ $envMap["SUPERMEGA_WORKSPACE_NAME"] = "SuperMega Lab"
 $envMap["SUPERMEGA_WORKSPACE_PLAN"] = "pilot"
 $envMap["SUPERMEGA_SESSION_HOURS"] = "336"
 $envMap["SUPERMEGA_CORS_ORIGINS"] = "http://localhost:8787"
-$envMap["SUPERMEGA_LLM_PROVIDER"] = "openai"
-$envMap["SUPERMEGA_ANTHROPIC_MODEL"] = "claude-sonnet-4-20250514"
-$envMap["SUPERMEGA_OPENAI_MODEL"] = "gpt-5-mini"
+$envMap["SUPERMEGA_LLM_PROVIDER"] = "ollama"
+$envMap["SUPERMEGA_OLLAMA_ENABLED"] = "1"
+$envMap["SUPERMEGA_OLLAMA_MODEL"] = "llama3.2:1b"
+$envMap["OLLAMA_KEEP_ALIVE"] = "0s"
 
-if (-not [string]::IsNullOrWhiteSpace($anthropic)) {
-    $envMap["ANTHROPIC_API_KEY"] = $anthropic
-}
 if (-not [string]::IsNullOrWhiteSpace($places)) {
     $envMap["GOOGLE_PLACES_API_KEY"] = $places
     $envMap["GOOGLE_MAPS_API_KEY"] = $places
-}
-if (-not [string]::IsNullOrWhiteSpace($openai)) {
-    $envMap["OPENAI_API_KEY"] = $openai
 }
 if (-not [string]::IsNullOrWhiteSpace($gmailClientId)) {
     $envMap["GMAIL_OAUTH_CLIENT_ID"] = $gmailClientId
@@ -121,20 +155,12 @@ if (-not [string]::IsNullOrWhiteSpace($gmailClientSecret)) {
     $envMap["GMAIL_OAUTH_CLIENT_SECRET"] = $gmailClientSecret
 }
 
-$serviceAccountPath = Find-FirstExistingPath -Candidates @(
-    "C:\Users\swann\OneDrive - BDA\_tmp_keystore_20260328\keystore\supermega-468612-9c08e1ed3bb4.json",
-    "C:\Users\swann\Downloads\supermega-468612-9c08e1ed3bb4.json"
-)
+$serviceAccountPath = Find-FirstExistingPath -Candidates @($ServiceAccountJson)
 if (-not [string]::IsNullOrWhiteSpace($serviceAccountPath)) {
     $envMap["GOOGLE_SERVICE_ACCOUNT_JSON"] = $serviceAccountPath
 }
 
-$gmailClientJsonPath = Find-FirstExistingPath -Candidates @(
-    "C:\Users\swann\OneDrive - BDA\_tmp_keystore_20260328\keystore\client_secret_453184845544-5n5pbi2h1f0b0fm2gse87e2bbo3pse0f.apps.googleusercontent.com.json",
-    "C:\Users\swann\OneDrive - BDA\_tmp_keystore_20260328\keystore\client_secret_453184845544-b9u6emogmhs1htshm82t7p5odvfvla7r.apps.googleusercontent.com.json",
-    "C:\Users\swann\Downloads\client_secret_453184845544-5n5pbi2h1f0b0fm2gse87e2bbo3pse0f.apps.googleusercontent.com.json",
-    "C:\Users\swann\Downloads\client_secret_453184845544-b9u6emogmhs1htshm82t7p5odvfvla7r.apps.googleusercontent.com.json"
-)
+$gmailClientJsonPath = Find-FirstExistingPath -Candidates @($GmailClientJson)
 if (-not [string]::IsNullOrWhiteSpace($gmailClientJsonPath)) {
     $envMap["GMAIL_OAUTH_CLIENT_JSON"] = $gmailClientJsonPath
 }

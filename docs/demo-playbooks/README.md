@@ -1,6 +1,6 @@
 # SuperMega client demo playbooks
 
-One playbook per customer product. A founder or sales agent follows the playbook verbatim: every route, query parameter, button label, and copy string written in backticks exists word-for-word in the app source or the public-site generator at this commit, and the drift guard (tools/test_demo_playbooks.mjs, run via the `demo:playbooks:verify` npm script inside `app:verify`) fails the build if any of them drifts.
+These are operator-led local demo playbooks, not instructions customers must complete themselves. Shop, Website and Ecommerce are the current offer; Plant is retained reference only. SuperMega prepares the setup or deliverable after scope agreement; customers review the result. The drift guard (tools/test_demo_playbooks.mjs, run via the `demo:playbooks:verify` npm script inside `app:verify`) checks backticked tokens against source. Token presence alone does not verify a whole journey or prove that a source-only change is deployed.
 
 ## Playbooks
 
@@ -11,15 +11,15 @@ One playbook per customer product. A founder or sales agent follows the playbook
 
 ## Surfaces
 
-- Public site: `https://supermega.dev` — home, `/shop/`, `/plant/`, `/website/`, `/ecommerce/`, `/contact/`, `/privacy/`. The header carries `Company sign in`.
-- App: `https://app.supermega.dev` — the working samples. Opening `/` resumes the last product (Shop on first visit); `/?choose=1` opens the `Switch product` screen. The sidebar shows the current product, `Switch product`, `Company login`, and the runtime badge, which reads `Demo mode` in the browser-local sample.
+- Public site: `https://supermega.dev` — current product entries are `/shop/`, `/website/` and `/ecommerce/`, with `/contact/` and `/privacy/`. The retained `/plant/` route is compatibility, not an active offering. The header carries `Company sign in`.
+- App: `https://app.supermega.dev` is the intended hosted app origin, not proof this commit is deployed. In the current source, a fresh visitor sees the service-first entry; retained setups can resume, and `/?choose=1` opens product choice. The sidebar includes `Switch product` and `Company login`; local samples show `Demo mode`. Verify the exact hosted release before using these instructions with a customer.
 - Guided setup (the target of every public `Start free sample` button): `https://app.supermega.dev/settings/?product=shop`, `/settings/?product=plant`, `/settings/?product=website`, `/settings/?product=ecommerce`. The product parameter also accepts the internal aliases `commerce`, `production`, `retail`, and `factory`.
 - Legacy entry: the app root and the `legacy-entry` route accept a demo query parameter with the values `shop`, `retail`, `plant`, `factory`, `website`, `site`, `ecommerce`, `storefront`, and `online-orders`, redirecting to the matching product route.
 
 ## Before any demo
 
-1. Use a normal browser window you control. The samples are browser-local; nothing about the demo requires an account.
-2. If the workspace was used before, open `/settings/#controls` (the sidebar labels it `Recovery`; the page heading is `Status and recovery`). Use `Save restore point` or `Download workspace backup`, then the destructive `Reset this device` disclosure: `Prepare local reset`, then `Confirm local reset`.
+1. Use a disposable browser profile you control and fictional business/customer details. The samples are browser-local; nothing about the demo requires an account. Contact submission described under the close is a separate authorized follow-up, not part of the no-send demo.
+2. Use a separate disposable browser profile for synthetic demos. Never reset an existing customer's workspace to prepare a demonstration. `/settings/#controls` exposes `Recovery` / `Status and recovery`, including `Save restore point` and `Download workspace backup`; destructive reset is a separate owner-authorized recovery action, not routine demo preparation.
 3. Run the product's guided setup from its playbook so the first task is already on screen when the client sits down.
 
 ## Honest-demo rules

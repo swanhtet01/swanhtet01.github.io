@@ -863,7 +863,9 @@ export function readinessChecks(workspace: WebsiteWorkspace, fingerprint = works
       id: 'navigation',
       label: 'Navigation points to ready pages',
       detail: visibleNavigation.length
-        ? String(visibleNavigation.length) + ' visible navigation items have labels and ready destinations.'
+        ? visibleNavigation.every((page) => page.stage === 'ready' && Boolean(page.navigation.label.trim()))
+          ? String(visibleNavigation.length) + ' visible navigation items have labels and ready destinations.'
+          : 'Review navigation: every visible item needs a label and a page marked ready.'
         : 'Show at least one page in navigation.',
       passed: visibleNavigation.length > 0
         && visibleNavigation.every((page) => page.stage === 'ready' && Boolean(page.navigation.label.trim())),

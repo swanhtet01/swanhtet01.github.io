@@ -16,5 +16,11 @@ create table if not exists public.supermega_payment_events (
   primary key (provider, event_id)
 );
 
+alter table public.supermega_payment_events enable row level security;
+
+-- Explicit browser/API posture for existing Supabase projects and the 2026-10-30 Data API default change.
+revoke all privileges on table public.supermega_payment_events from public, anon, authenticated;
+grant select, insert, delete on table public.supermega_payment_events to service_role;
+
 -- Optional housekeeping — dedup only needs a reasonable replay window:
 -- delete from public.supermega_payment_events where at < now() - interval '90 days';

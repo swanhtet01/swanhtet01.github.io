@@ -1,8 +1,8 @@
 """Deterministic, no-I/O Website release-package foundation.
 
 The foundation binds an already approved Website snapshot to versioned template,
-brand, locale, media, role, candidate, and rollback evidence.  It prepares no
-deployment, domain, credential, provider request, or public claim.
+brand, locale, media, role, candidate, rollback, and domain-handoff evidence.
+It executes no deployment, domain, credential, provider request, or public claim.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ WEBSITE_RELEASE_PACKAGE_CONTRACT = "supermega.website.release_package.v1"
 WEBSITE_RELEASE_PROJECTION_CONTRACT = "supermega.website.release_projection.v1"
 WEBSITE_DEPLOY_PLAN_CONTRACT = "supermega.website.deploy_plan.v1"
 WEBSITE_BRAND_TOKEN_CONTRACT = "supermega.website.brand_tokens.v1"
+WEBSITE_DOMAIN_HANDOFF_CONTRACT = "supermega.website.domain_handoff.v1"
 EMPTY_WEBSITE_RELEASE_DIGEST = f"sha256:{'0' * 64}"
 
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -49,6 +50,34 @@ _TEMPLATE_COMPONENTS: dict[int, tuple[tuple[str, int], ...]] = {
 _MIGRATION_OPERATIONS = ("CMP-HERO:1->2", "CMP-NAVIGATION:1->2")
 _COMMAND_KINDS = frozenset(
     {"prepare_package", "upgrade_template", "approve_release", "prepare_deploy_plan"}
+)
+_DOMAIN_HANDOFF_STAGES = (
+    {"sequence": 1, "action": "verify_domain_ownership", "requiredEvidence": "owner_domain_control_receipt", "authority": "domain_owner", "status": "not_executed"},
+    {"sequence": 2, "action": "add_domain_to_provider_project", "requiredEvidence": "provider_add_receipt", "authority": "owner_credentialed_action", "status": "not_executed"},
+    {"sequence": 3, "action": "capture_provider_dns_challenge", "requiredEvidence": "get_only_provider_dns_receipt", "authority": "release_reviewer", "status": "not_executed"},
+    {"sequence": 4, "action": "apply_exact_dns_mapping", "requiredEvidence": "domain_owner_dns_change_receipt", "authority": "domain_owner_only", "status": "not_executed"},
+    {"sequence": 5, "action": "verify_provider_domain_ready", "requiredEvidence": "get_only_provider_verification_receipt", "authority": "release_reviewer", "status": "not_executed"},
+    {"sequence": 6, "action": "verify_https_and_live_routes", "requiredEvidence": "https_live_route_receipt", "authority": "release_reviewer", "status": "not_executed"},
+    {"sequence": 7, "action": "activate_canonical_domain", "requiredEvidence": "single_use_owner_activation_receipt", "authority": "owner_only", "status": "not_executed"},
+)
+_DOMAIN_ROLLBACK_EVIDENCE = (
+    "provider_domain_removal_receipt",
+    "dns_restore_receipt",
+    "https_previous_route_receipt",
+)
+_DOMAIN_ROLLBACK_BLOCKERS = (
+    "known_good_previous_domain_state_missing",
+    "owner_rollback_approval_missing",
+)
+_DOMAIN_CONTROL_KEYS = (
+    "workspaceStateWritePerformed",
+    "providerWritesPerformed",
+    "dnsWritesPerformed",
+    "deploymentPerformed",
+    "domainActivated",
+    "customerContacted",
+    "paymentActionPerformed",
+    "stockActionPerformed",
 )
 
 
@@ -673,9 +702,55 @@ def upgrade_website_release_package(
     return _validate_package({**body, "packageDigest": _canonical_digest(body)})
 
 
+def normalize_website_domain_hostname(value: object) -> str:
+    """Return one canonical public hostname without claiming ownership."""
+
+    candidate = _text(value, "domain.hostname", maximum=253).lower()
+    if "://" in candidate or any(marker in candidate for marker in "/?#@:"):
+        raise _fail(
+            "domain.hostname must be a hostname without a scheme, port, path, query, fragment, or credentials."
+        )
+    if any(ord(character) < 32 or ord(character) > 126 for character in candidate):
+        raise _fail(
+            "domain.hostname must use ASCII or explicit punycode for cross-runtime verification."
+        )
+    hostname = candidate
+    if (
+        not hostname
+        or len(hostname) > 253
+        or hostname.endswith(".")
+        or ".." in hostname
+    ):
+        raise _fail("domain.hostname must be a canonical public hostname.")
+    labels = hostname.split(".")
+    if len(labels) < 2 or any(
+        re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) is None
+        for label in labels
+    ):
+        raise _fail("domain.hostname must contain valid DNS labels.")
+    final_label = labels[-1]
+    if len(final_label) < 2 or final_label.isdigit():
+        raise _fail("domain.hostname must have a public top-level domain.")
+    reserved_examples = ("example.com", "example.net", "example.org")
+    if (
+        hostname == "localhost"
+        or hostname.endswith(
+            (".localhost", ".local", ".test", ".invalid", ".example")
+        )
+        or any(
+            hostname == reserved or hostname.endswith(f".{reserved}")
+            for reserved in reserved_examples
+        )
+    ):
+        raise _fail("domain.hostname must not use a local or reserved suffix.")
+    return hostname
+
+
 def _target(value: object, field: str) -> dict[str, str]:
     source = _object(
-        value, field, ("provider", "projectRef", "environment", "protection")
+        value,
+        field,
+        ("provider", "projectRef", "environment", "protection"),
     )
     if source["provider"] != "vercel" or source["environment"] != "production":
         raise _fail(f"{field} must describe the reviewed Vercel production target.")
@@ -850,6 +925,181 @@ def _deploy_plan(
         "proof": command["proof"],
         "ownerApprovalRequired": True,
     }
+
+
+def _domain_handoff_release(value: object, field: str) -> dict[str, str]:
+    source = _object(
+        value,
+        field,
+        (
+            "scope",
+            "headDigest",
+            "packageDigest",
+            "artifactDigest",
+            "approvalId",
+            "deployPlanDigest",
+        ),
+    )
+    return {
+        "scope": _token(source["scope"], f"{field}.scope"),
+        "headDigest": _digest(source["headDigest"], f"{field}.headDigest"),
+        "packageDigest": _digest(
+            source["packageDigest"], f"{field}.packageDigest"
+        ),
+        "artifactDigest": _digest(
+            source["artifactDigest"], f"{field}.artifactDigest"
+        ),
+        "approvalId": _token(source["approvalId"], f"{field}.approvalId"),
+        "deployPlanDigest": _digest(
+            source["deployPlanDigest"], f"{field}.deployPlanDigest"
+        ),
+    }
+
+
+def validate_website_domain_handoff(value: object) -> dict[str, Any]:
+    """Validate one downloaded, non-persistent domain lifecycle packet."""
+
+    source = _object(
+        value,
+        "Website domain handoff",
+        (
+            "contract",
+            "hostname",
+            "release",
+            "status",
+            "currentGate",
+            "stages",
+            "rollback",
+            "controls",
+            "packetDigest",
+        ),
+    )
+    if (
+        source["contract"] != WEBSITE_DOMAIN_HANDOFF_CONTRACT
+        or source["status"] != "not_executed"
+        or source["currentGate"] != "domain_ownership_unverified"
+    ):
+        raise _fail("Website domain handoff status is unsupported.")
+    stages: list[dict[str, Any]] = []
+    for index, candidate in enumerate(
+        _array(source["stages"], "Website domain handoff.stages", minimum=7, maximum=7)
+    ):
+        field = f"Website domain handoff.stages[{index}]"
+        row = _object(
+            candidate,
+            field,
+            ("sequence", "action", "requiredEvidence", "authority", "status"),
+        )
+        if row["status"] != "not_executed":
+            raise _fail(f"{field}.status must remain not_executed.")
+        stages.append(
+            {
+                "sequence": _integer(row["sequence"], f"{field}.sequence", minimum=1, maximum=7),
+                "action": _token(row["action"], f"{field}.action"),
+                "requiredEvidence": _token(
+                    row["requiredEvidence"], f"{field}.requiredEvidence"
+                ),
+                "authority": _token(row["authority"], f"{field}.authority"),
+                "status": "not_executed",
+            }
+        )
+    if stages != list(_DOMAIN_HANDOFF_STAGES):
+        raise _fail("Website domain handoff stages drifted from the fail-closed lifecycle.")
+    rollback_source = _object(
+        source["rollback"],
+        "Website domain handoff.rollback",
+        ("mode", "status", "requiredEvidence", "blockers", "ownerApprovalRequired"),
+    )
+    rollback = {
+        "mode": rollback_source["mode"],
+        "status": rollback_source["status"],
+        "requiredEvidence": [
+            _token(entry, f"Website domain handoff.rollback.requiredEvidence[{index}]")
+            for index, entry in enumerate(
+                _array(
+                    rollback_source["requiredEvidence"],
+                    "Website domain handoff.rollback.requiredEvidence",
+                    minimum=3,
+                    maximum=3,
+                )
+            )
+        ],
+        "blockers": [
+            _token(entry, f"Website domain handoff.rollback.blockers[{index}]")
+            for index, entry in enumerate(
+                _array(
+                    rollback_source["blockers"],
+                    "Website domain handoff.rollback.blockers",
+                    minimum=2,
+                    maximum=2,
+                )
+            )
+        ],
+        "ownerApprovalRequired": _boolean(
+            rollback_source["ownerApprovalRequired"],
+            "Website domain handoff.rollback.ownerApprovalRequired",
+        ),
+    }
+    if (
+        rollback["mode"]
+        != "remove_exact_domain_binding_and_restore_previous_canonical"
+        or rollback["status"] != "not_executed"
+        or rollback["ownerApprovalRequired"] is not True
+        or rollback["requiredEvidence"] != list(_DOMAIN_ROLLBACK_EVIDENCE)
+        or rollback["blockers"] != list(_DOMAIN_ROLLBACK_BLOCKERS)
+    ):
+        raise _fail("Website domain handoff rollback gates drifted.")
+    controls_source = _object(
+        source["controls"], "Website domain handoff.controls", _DOMAIN_CONTROL_KEYS
+    )
+    controls = {
+        key: _boolean(controls_source[key], f"Website domain handoff.controls.{key}")
+        for key in _DOMAIN_CONTROL_KEYS
+    }
+    if any(controls.values()):
+        raise _fail("Website domain handoff cannot claim a write or activation.")
+    body = {
+        "contract": WEBSITE_DOMAIN_HANDOFF_CONTRACT,
+        "hostname": normalize_website_domain_hostname(source["hostname"]),
+        "release": _domain_handoff_release(
+            source["release"], "Website domain handoff.release"
+        ),
+        "status": "not_executed",
+        "currentGate": "domain_ownership_unverified",
+        "stages": stages,
+        "rollback": rollback,
+        "controls": controls,
+    }
+    packet_digest = _digest(
+        source["packetDigest"], "Website domain handoff.packetDigest"
+    )
+    if packet_digest != _canonical_digest(body):
+        raise _fail("Website domain handoff.packetDigest does not match its content.")
+    return _canonical_copy({**body, "packetDigest": packet_digest})
+
+
+def build_website_domain_handoff(*, hostname: object, release: object) -> dict[str, Any]:
+    """Build one owner-safe packet without writing workspace or provider state."""
+
+    body = {
+        "contract": WEBSITE_DOMAIN_HANDOFF_CONTRACT,
+        "hostname": normalize_website_domain_hostname(hostname),
+        "release": _domain_handoff_release(release, "release"),
+        "status": "not_executed",
+        "currentGate": "domain_ownership_unverified",
+        "stages": _canonical_copy(_DOMAIN_HANDOFF_STAGES),
+        "rollback": {
+            "mode": "remove_exact_domain_binding_and_restore_previous_canonical",
+            "status": "not_executed",
+            "requiredEvidence": list(_DOMAIN_ROLLBACK_EVIDENCE),
+            "blockers": list(_DOMAIN_ROLLBACK_BLOCKERS),
+            "ownerApprovalRequired": True,
+        },
+        "controls": {key: False for key in _DOMAIN_CONTROL_KEYS},
+    }
+    return validate_website_domain_handoff(
+        {**body, "packetDigest": _canonical_digest(body)}
+    )
 
 
 def _empty_projection() -> dict[str, Any]:
@@ -1177,18 +1427,22 @@ __all__ = (
     "EMPTY_WEBSITE_RELEASE_DIGEST",
     "WEBSITE_BRAND_TOKEN_CONTRACT",
     "WEBSITE_DEPLOY_PLAN_CONTRACT",
+    "WEBSITE_DOMAIN_HANDOFF_CONTRACT",
     "WEBSITE_RELEASE_PACKAGE_CONTRACT",
     "WEBSITE_RELEASE_PROJECTION_CONTRACT",
     "WEBSITE_RELEASE_STATE_SCHEMA",
     "WebsiteReleaseValidationError",
     "apply_website_template_upgrade",
     "approve_website_release_package",
+    "build_website_domain_handoff",
     "build_website_release_package",
     "create_empty_website_release_state",
     "prepare_website_deploy_plan",
+    "normalize_website_domain_hostname",
     "prepare_website_release_package",
     "project_website_release",
     "upgrade_website_release_package",
+    "validate_website_domain_handoff",
     "validate_website_release_state",
     "website_release_evidence_digest",
     "website_release_template",

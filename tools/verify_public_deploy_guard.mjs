@@ -19,6 +19,9 @@ const localMachine = read('tools/supermega_machine.ps1')
 const localControlServer = read('tools/serve_solution.py')
 const denyScript = read('tools/deny_stale_public_deploy.mjs')
 const failures = []
+const prBlocks = [...ciWorkflow.matchAll(/^  pull_request:\n([\s\S]*?)(?=^  \S|^\S|$(?![\s\S]))/gm)]
+const allPullRequests = prBlocks.length === 1 && prBlocks[0][0] === '  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n'
+if (!allPullRequests) failures.push('ci_must_review_all_pull_requests')
 
 function requireToken(text, token, label) {
   if (!text.includes(token)) failures.push(`${label}:${token}`)
@@ -36,9 +39,9 @@ const retiredReleasePaths = [
 ]
 for (const path of retiredReleasePaths) {
   if (existsSync(resolve(root, path))) failures.push(`legacy_release_bypass_present:${path}`)
-  if (!ciWorkflow.includes(`- '${path}'`)) failures.push(`legacy_release_path_not_watched:${path}`)
+  if (!allPullRequests) failures.push(`legacy_release_path_not_watched:${path}`)
 }
-if (!ciWorkflow.includes("- 'tools/serve_solution.py'")) failures.push('local_control_server_not_watched')
+if (!allPullRequests) failures.push('local_control_server_not_watched')
 if (localControlServer.includes('/api/cloud/deployments/production') || localControlServer.includes('_run_production_deploy') || localControlServer.includes('command.append("--prod")') || localControlServer.includes('vercel deploy --prebuilt --prod')) failures.push('local_production_deploy_endpoint_present')
 if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_deployments_not_disabled')
 if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')
@@ -69,7 +72,7 @@ for (const [name, expected] of Object.entries({
   'vercel:deploy': 'node tools/deny_stale_public_deploy.mjs',
   'vercel:deploy:prod': 'node tools/deny_stale_public_deploy.mjs',
   'public:build': 'node tools/create_public_vercel_output.mjs',
-  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify',
+  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify',
   'public:prebuilt': 'npm run public:build && npm run public:verify',
   'public:verify:live': 'node tools/verify_public_release_live.mjs',
   'deploy:public:prod': 'node tools/deny_stale_public_deploy.mjs',

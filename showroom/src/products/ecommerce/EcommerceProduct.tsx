@@ -1,5 +1,7 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import { AssistedDeliveryScope } from '../AssistedDeliveryScope'
+import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
@@ -299,6 +301,7 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
+  const [customerRequestDeliveryConfirmed, setCustomerRequestDeliveryConfirmed] = useState<DeliveryConfirmation | null>(null)
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
   const [orderImportReview, setOrderImportReview] = useState<EcommerceOrderImportReview | null>(null)
@@ -978,6 +981,7 @@ export function EcommerceProduct() {
 
   function focusCurrentRequestReceipt() {
     const receipt = document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="true"]')
+      ?? document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="false"]')
     if (!receipt) {
       prepareQuoteRecovery()
       return
@@ -1485,6 +1489,20 @@ export function EcommerceProduct() {
     ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD' : 'Not charged'],
     ['Boundary', 'No booking'],
   ] as const
+  const requestWaitingInLocalMode = customerRequestState === 'waiting_shop_review' && !managedIdentity
+  const requestDeliveryVerified = Boolean(managedIdentity && deliveryConfirmedForScope(customerRequestDeliveryConfirmed, buyingScope))
+  const requestWaitingQueueLabel = requestWaitingInLocalMode ? 'Saved locally' : requestDeliveryVerified ? 'Request sent' : 'Delivery unverified'
+  const ecommerceWaitingHeadline = requestWaitingInLocalMode ? 'Sample request saved locally' : requestDeliveryVerified ? 'Request sent to Shop' : 'Request saved — verify Shop delivery'
+  const ecommerceWaitingSummary = requestWaitingInLocalMode
+    ? 'The sample customer request is saved on this device for Shop review. No Shop inbox write, charge, stock, delivery, or customer message happened.'
+    : requestDeliveryVerified ? 'No charge or stock change happens until Shop confirms the order.' : 'This device retained the request, but delivery to Company Shop is not verified in this session. Check the request before retrying. No charge or stock change is confirmed.'
+  const ecommerceWaitingMetric = requestWaitingInLocalMode ? 'Local receipt' : requestDeliveryVerified ? 'Review waiting' : 'Delivery unverified'
+  const waitingShopReviewReason = requestWaitingInLocalMode
+    ? 'The customer request is retained only in browser-local recovery until the operator opens the Shop review draft.'
+    : requestDeliveryVerified ? 'The customer request is retained in the Company Shop inbox for operator review.' : 'A local recovery record does not prove Company Shop received the request.'
+  const waitingShopReviewGate = requestWaitingInLocalMode
+    ? 'Open the local Shop review draft before claiming Shop has received the request.'
+    : requestDeliveryVerified ? 'The Shop operator confirms stock, promise, payment, and delivery.' : 'Verify or retry the same request before claiming Company Shop delivery.'
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
     : !selectedSkus.length
@@ -1576,7 +1594,7 @@ export function EcommerceProduct() {
     ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
     ['Merchandise', selectedSkus.length ? `${selectedSkus.length} selected` : 'Pick products'],
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
-    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? 'Request sent' : 'No queue'],
+    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? requestWaitingQueueLabel : 'No queue'],
   ] as const
   const aiAgentJob = pendingManagedRequests.length
     ? 'Review Ecommerce requests in Shop'
@@ -1592,11 +1610,11 @@ export function EcommerceProduct() {
           ? 'Review cart quote'
           : managedIdentity
             ? 'Open store for ordering'
-            : 'Start sample order'
+            : 'Try sample request'
   const aiAgentReason = pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
     : customerRequestState === 'waiting_shop_review'
-      ? 'The customer request is retained separately from the Shop operator review.'
+      ? waitingShopReviewReason
     : ecommerceActiveOrderCount
       ? `${ecommerceActiveOrderCount} Ecommerce order${ecommerceActiveOrderCount === 1 ? '' : 's'} now use the Shop-owned fulfilment record.`
     : importNeeded
@@ -1611,7 +1629,7 @@ export function EcommerceProduct() {
   const aiOwnerGate = pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
     : customerRequestState === 'waiting_shop_review'
-      ? 'The Shop operator confirms stock, promise, payment, and delivery.'
+      ? waitingShopReviewGate
     : ecommerceActiveOrderCount
       ? 'Shop remains authoritative for fulfilment, payment, cancellation, and returns.'
     : importNeeded
@@ -1660,14 +1678,14 @@ export function EcommerceProduct() {
           : pendingManagedRequests.length
             ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
             : customerRequestState === 'waiting_shop_review'
-              ? 'Request sent to Shop'
+              ? ecommerceWaitingHeadline
             : ecommerceActiveOrderCount
               ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
               : ecommerceTodayCartUnits
                 ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'} ready for checkout`
                 : managedIdentity
                   ? 'Your store is ready for the next order'
-                  : 'Try one customer order'
+                  : 'Try one sample request'
   const ecommerceTodaySummary = importNeeded
     ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
     : storefrontSetupRequired
@@ -1675,7 +1693,7 @@ export function EcommerceProduct() {
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
         : customerRequestState === 'waiting_shop_review'
-          ? 'No charge or stock change happens until Shop confirms the order.'
+          ? ecommerceWaitingSummary
         : ecommerceActiveOrderCount
           ? 'Shop owns fulfilment for this order. The storefront stays ready for the next customer.'
           : managedIdentity
@@ -1699,14 +1717,14 @@ export function EcommerceProduct() {
               ? 'Review checkout'
               : managedIdentity
                 ? 'Prepare next order'
-                : 'Start sample order'
+                : 'Try sample request'
   const ecommerceTodayMetrics = [
     ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Sample ready'],
     ['2. Cart', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['3. Shop', pendingManagedRequests.length
       ? `${pendingManagedRequests.length} to review`
       : customerRequestState === 'waiting_shop_review'
-        ? 'Review waiting'
+        ? ecommerceWaitingMetric
       : ecommerceActiveOrderCount
         ? `${ecommerceActiveOrderCount} in progress`
         : ecommerceCompletedOrderCount
@@ -1763,22 +1781,39 @@ export function EcommerceProduct() {
     })
   }, [aiAgentJob, location.pathname, location.search])
 
+  const showAssistedCatalogSetup = !catalogHydrating && !managedIdentity
+    && catalog.source !== 'unavailable' && !draftIssue && !draftBusy
+  const assistedCatalogEntry = showAssistedCatalogSetup && workspaceView === 'preview'
+    && !savedDraft && ecommerceTodayAction === 'Try sample request'
+    && ecommerceTodayState === 'ready' && !ecommerceTodayCartUnits
+
   return (
     <div className="workspace-screen ecommerce-product">
       <header className="ecommerce-heading">
         <div>
           <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Sample store'}</span>
           <h1>Ecommerce</h1>
-          <p>Sell online with products, cart, orders, delivery, and returns.</p>
+          <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Explore a local catalog preview. SuperMega can prepare your catalog for you; sample requests are not live orders.'}</p>
         </div>
+        {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
       </header>
 
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-density={ecommerceTodayGuided ? 'guided' : 'compact'} data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
           <span className="core-eyebrow">Start here</span>
-          <h2 id="ecommerce-today-title">{ecommerceTodayHeadline}</h2>
-          <p>{ecommerceTodaySummary}</p>
-          <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
+          <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Let SuperMega prepare your catalog' : ecommerceTodayHeadline}</h2>
+          <p>{assistedCatalogEntry ? 'Tell us what you sell. We confirm the scope, prepare your catalog and send a preview for approval. You do not need to build the store yourself. Requesting setup does not publish a store or activate orders, payments or stock.' : ecommerceTodaySummary}</p>
+          {assistedCatalogEntry ? <>
+            <details className="ecommerce-assisted-intake">
+              <summary>What to send · about 2 minutes</summary>
+              <p><strong>Tell us what you sell and where a public menu or catalog can be reviewed.</strong> A short list of key products and prices is enough to start. After scope confirmation, SuperMega provides a safe transfer method for any private spreadsheet or POS export.</p>
+              <p>SuperMega cleans the catalog, drafts categories and descriptions, and prepares the customer view and Shop handoff. You review one preview before anything becomes live.</p>
+            </details>
+            <AssistedDeliveryScope product="ecommerce" />
+            <div className="form-actions ecommerce-service-actions">
+              <button className="core-button secondary" onClick={runOrderAutopilot} type="button">Try sample request</button>
+            </div>
+          </> : <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>}
         </div>
         {ecommerceTodayGuided ? (
           <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
@@ -2024,13 +2059,13 @@ export function EcommerceProduct() {
         </div>
       </details>
 
-      <label className="ecommerce-workspace-switch">
+      {!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">
         <span>View</span>
         <select aria-controls={workspaceView === 'preview' ? 'ecommerce-preview-panel' : 'ecommerce-setup-panel'} aria-label="Storefront view" onChange={(event) => showWorkspace(event.target.value as 'setup' | 'preview')} value={workspaceView}>
           <option value="preview">Store</option>
           <option value="setup">Edit store</option>
         </select>
-      </label>
+      </label> : null}
 
       <div className="ecommerce-workspace" data-view={workspaceView}>
         <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
@@ -2266,6 +2301,7 @@ export function EcommerceProduct() {
               onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
               onRecordManagedRequest={managedIdentity && managedCanWrite ? recordManagedBuyingRequest : undefined}
               onRequestStateChange={setCustomerRequestState}
+              onDeliveryConfirmationChange={setCustomerRequestDeliveryConfirmed}
               preview={previewResult.preview}
               scope={buyingScope}
               sourcePreviewDigest={digest}

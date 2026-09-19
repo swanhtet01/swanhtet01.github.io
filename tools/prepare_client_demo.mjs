@@ -20,7 +20,7 @@ export const CLIENT_DEMO_REHEARSAL_PLAN_MAX_BYTES = 512 * 1024
 export const CLIENT_DEMO_REHEARSAL_OBSERVATIONS_CONTRACT = 'supermega.client_demo_rehearsal_observations.v1'
 export const CLIENT_DEMO_REHEARSAL_RESULT_CONTRACT = 'supermega.client_demo_rehearsal_result.v1'
 export const CLIENT_DEMO_REHEARSAL_RESULT_MAX_BYTES = 512 * 1024
-export const CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT = 'supermega.client_contact_intake_review.v1'
+export const CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT = 'supermega.client_contact_intake_review.v2'
 export const CLIENT_CONTACT_INTAKE_CONTRACT = 'supermega.client_contact_intake.v1'
 export const CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT = 'supermega.client_contact_intake_workspace.v1'
 const CLIENT_DEMO_REHEARSAL_OBSERVATIONS_MAX_BYTES = 256 * 1024
@@ -45,6 +45,7 @@ const PRODUCT_PATHS = Object.freeze({
 })
 const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v3'
 const CLIENT_PROFILE_SCHEMA = 'supermega.client_profile.v1'
+const CLIENT_CONTACT_PROFILE_SCHEMA = 'supermega.client_contact_profile.v1'
 export const CLIENT_INTAKE_WORKSPACE_CONTRACT = 'supermega.client_intake_workspace.v1'
 const CLIENT_PROFILE_WORKSPACE_PLACEHOLDER = 'REPLACE WITH CLIENT WORKSPACE'
 const CLIENT_PROFILE_OWNER_PLACEHOLDER = 'REPLACE WITH IMPLEMENTATION OWNER'
@@ -171,6 +172,7 @@ export function buildClientContactReviewTemplate(event) {
   return {
     contract: CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT,
     leadId: contact.leadId,
+    requestDigest: sha256(JSON.stringify(contact)),
     workspace: 'REPLACE WITH REVIEWED WORKSPACE',
     implementationOwner: 'REPLACE WITH IMPLEMENTATION OWNER',
     presetId: CONTACT_PRESET_SUGGESTION[contact.requestedProduct],
@@ -185,10 +187,11 @@ export function buildClientContactReviewTemplate(event) {
 export function buildClientContactIntake(event, review) {
   const contact = normalizedClientContactEvent(event)
   if (!review || typeof review !== 'object' || Array.isArray(review)
-    || !hasExactKeys(review, ['contract', 'leadId', 'workspace', 'implementationOwner', 'presetId', 'products', 'companyReviewed', 'goalReviewed', 'privateWorkspaceApproved', 'reviewedAt'])
+    || !hasExactKeys(review, ['contract', 'leadId', 'requestDigest', 'workspace', 'implementationOwner', 'presetId', 'products', 'companyReviewed', 'goalReviewed', 'privateWorkspaceApproved', 'reviewedAt'])
     || review.contract !== CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT) fail('client_contact_review_invalid')
 
   if (review.leadId !== contact.leadId) fail('client_contact_lead_mismatch')
+  if (review.requestDigest !== sha256(JSON.stringify(contact))) fail('client_contact_review_request_changed')
   const reviewedAt = canonicalTimestamp(review.reviewedAt)
   if (!reviewedAt || Date.parse(reviewedAt) < Date.parse(contact.submittedAt)) fail('client_contact_review_time_invalid')
   if (review.companyReviewed !== true || review.goalReviewed !== true || review.privateWorkspaceApproved !== true) fail('client_contact_review_approval_required')
@@ -362,8 +365,9 @@ async function clientProfileKit(directoryRealPath, timestamp, model) {
   const profileText = await readableFile(resolve(directoryRealPath, 'client.json'), CLIENT_PROFILE_MAX_BYTES, 'client_profile')
   let profile
   try { profile = JSON.parse(profileText) } catch { fail('client_profile_json_invalid') }
-  if (!hasExactKeys(profile, ['schema', 'workspace', 'owner', 'presetId', 'products'])
-    || profile.schema !== CLIENT_PROFILE_SCHEMA
+  const contactBound = profile?.schema === CLIENT_CONTACT_PROFILE_SCHEMA
+  if (!hasExactKeys(profile, ['schema', 'workspace', 'owner', 'presetId', 'products', ...(contactBound ? ['contactIntakeDigest'] : [])])
+    || (!contactBound && profile.schema !== CLIENT_PROFILE_SCHEMA)
     || profile.workspace === CLIENT_PROFILE_WORKSPACE_PLACEHOLDER || profile.owner === CLIENT_PROFILE_OWNER_PLACEHOLDER
     || !Array.isArray(profile.products) || profile.products.length < 1 || profile.products.length > PRODUCT_ORDER.length
     || profile.products.some((product) => !PRODUCT_ORDER.includes(product))
@@ -371,6 +375,7 @@ async function clientProfileKit(directoryRealPath, timestamp, model) {
     || JSON.stringify(profile.products) !== JSON.stringify(PRODUCT_ORDER.filter((product) => profile.products.includes(product)))) {
     fail('client_profile_contract_invalid')
   }
+  if (contactBound) await verifyContactClientWorkspace(directoryRealPath)
   try {
     const preset = model.clientDemoPreset(profile.presetId)
     const recommended = new Map(preset.selections.map((selection) => [selection.product, selection.templateId]))
@@ -475,7 +480,8 @@ async function initializeClientWorkspaceFiles({ directory, presetId, products, w
     await mkdir(templateDirectory, { mode: 0o700 })
     await chmod(templateDirectory, 0o700).catch(() => null)
     const profile = {
-      schema: CLIENT_PROFILE_SCHEMA,
+      schema: contactBound ? CLIENT_CONTACT_PROFILE_SCHEMA : CLIENT_PROFILE_SCHEMA,
+      ...(contactBound ? { contactIntakeDigest: contactIntake.digest } : {}),
       workspace,
       owner,
       presetId: preset.id,
@@ -607,8 +613,9 @@ export async function verifyContactClientWorkspace(directory) {
     fail('client_contact_intake_json_invalid')
   }
   try { profile = JSON.parse(profileText) } catch { fail('client_profile_json_invalid') }
-  if (!hasExactKeys(profile, ['schema', 'workspace', 'owner', 'presetId', 'products'])
-    || profile.schema !== CLIENT_PROFILE_SCHEMA
+  if (!hasExactKeys(profile, ['schema', 'workspace', 'owner', 'presetId', 'products', 'contactIntakeDigest'])
+    || profile.schema !== CLIENT_CONTACT_PROFILE_SCHEMA
+    || profile.contactIntakeDigest !== intake.digest
     || profile.workspace !== intake.client.workspace
     || profile.owner !== intake.client.implementationOwner
     || profile.presetId !== intake.client.presetId
@@ -711,6 +718,15 @@ export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = n
   const model = await import(`${pathToFileURL(resolve(ROOT, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?client-preparation=${Date.now()}`)
   if (!kitPath && !dataDirectory) fail('client_demo_setup_source_invalid')
   const directoryRealPath = dataDirectory ? await clientDataDirectory(resolve(dataDirectory)) : null
+  // An intake-bound folder must retain the reviewed profile before preparation.
+  // Only absence is optional; unreadable files and dangling links fail closed.
+  if (directoryRealPath) {
+    const intakeMetadata = await lstat(resolve(directoryRealPath, CLIENT_CONTACT_INTAKE_FILE)).catch((error) => {
+      if (error.code === 'ENOENT') return null
+      fail('client_contact_intake_unreadable')
+    })
+    if (intakeMetadata) await verifyContactClientWorkspace(directoryRealPath)
+  }
   let kitText
   let kitValue
   const profileMode = !kitPath

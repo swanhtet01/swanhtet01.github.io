@@ -3,6 +3,8 @@ import { readFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import { PGlite } from '@electric-sql/pglite'
+import { verifySelfServeAttemptBudget } from './verify_self_serve_attempt_budget.mjs'
+import { verifyWebsiteReviewMigrationCatalog } from './verify_website_review_migration_catalog.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const migrationDirectory = resolve(root, 'supabase', 'migrations')
@@ -28,7 +30,15 @@ const expectedMigrations = [
   '20260816120000_private_trial_backend_v11_self_serve_grants.sql',
   '20260817090000_private_trial_backend_v12_billing_rail.sql',
   '20260818090000_private_trial_backend_v13_billing_entitlement_read.sql',
+  '20260907024457_self_serve_durable_attempt_budget.sql',
+  '20260915184728_website_customer_review_storage.sql',
+  '20260915191528_website_review_entitlement_proof.sql',
+  '20260918011500_website_customer_acceptance.sql',
 ]
+// Verify the original private catalog before all Website-review extensions, then
+// verify the complete extended catalog. Adding an extension must not shift the
+// baseline boundary and accidentally skip an earlier policy check.
+const websiteReviewStart = expectedMigrations.indexOf('20260915184728_website_customer_review_storage.sql')
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
     command: 'ALL',
@@ -59,6 +69,12 @@ const expectedPolicyFingerprints = {
     permissive: 'PERMISSIVE',
     qual: '28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5',
     check: null,
+  },
+  self_serve_attempt_budget_actor_only: {
+    command: 'ALL',
+    permissive: 'PERMISSIVE',
+    qual: 'b5ae50fbc65c43344b8d3f3938f7b8a26414ae3bbb1781b6e35bf609c954f82c',
+    check: 'b5ae50fbc65c43344b8d3f3938f7b8a26414ae3bbb1781b6e35bf609c954f82c',
   },
   trial_schema_meta_backend_read: {
     command: 'SELECT',
@@ -287,6 +303,7 @@ const expectedIndexes = {
     false,
     'u',
   ],
+  self_serve_attempt_budgets_pkey: ['self_serve_attempt_budgets', ['actor_id'], [0], true, true, 'p'],
   trial_schema_meta_pkey: ['trial_schema_meta', ['component'], [0], true, true, 'p'],
   workspace_access_controls_activation_id_key: [
     'workspace_access_controls',
@@ -422,7 +439,9 @@ const migrationNames = allMigrationNames.filter((name) => !outOfScopeMigrations.
 const database = new PGlite()
 await database.waitReady
 await seedSupabaseRoles(database)
-await applyMigrations(database)
+// Preserve the exact pre-review catalog assertions, then verify the entire
+// resulting private catalog after applying the Website review and acceptance migrations.
+await applyMigrations(database, expectedMigrations.slice(0, websiteReviewStart))
 
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
@@ -448,6 +467,7 @@ requireCheck(
         'billing_entitlements',
         'billing_events',
         'billing_invoices',
+        'self_serve_attempt_budgets',
         'trial_schema_meta',
         'workspace_access_controls',
         'workspace_events',
@@ -472,6 +492,7 @@ const expectedRls = [
   { relation_name: 'billing_entitlements', rls_enabled: true, rls_forced: true },
   { relation_name: 'billing_events', rls_enabled: true, rls_forced: true },
   { relation_name: 'billing_invoices', rls_enabled: true, rls_forced: true },
+  { relation_name: 'self_serve_attempt_budgets', rls_enabled: true, rls_forced: true },
   { relation_name: 'trial_schema_meta', rls_enabled: true, rls_forced: false },
   { relation_name: 'workspace_access_controls', rls_enabled: true, rls_forced: true },
   { relation_name: 'workspace_events', rls_enabled: true, rls_forced: true },
@@ -857,6 +878,10 @@ requireCheck(
       )
     }),
 )
+
+await verifySelfServeAttemptBudget(database, requireCheck)
+await applyMigrations(database, expectedMigrations.slice(websiteReviewStart))
+await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
 
 const unsafeRoleDatabase = new PGlite()
 await unsafeRoleDatabase.waitReady

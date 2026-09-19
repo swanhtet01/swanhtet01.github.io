@@ -16,11 +16,9 @@
 //      validation issues, and publishing is separately approval-gated. This produces a draft
 //      the owner edits, not copy that goes live on its own.
 //
-// On the wording: every `proof` line describes how the trade template actually operates --
-// reorder levels being set, stock counted per size, prep counts recorded -- rather than
-// inventing credentials like customer counts or years in business. The field asks for "one
-// supportable fact", and a fact the owner cannot support is worse than a blank box. These
-// are still drafts to be reviewed, but they start from something true.
+// A selected trade proves no operational facts about the business. Draft useful inquiry
+// guidance, not claims of current inventory, reserved capacity or guaranteed service.
+// The legacy `proof` field holds this guidance until an operator supplies reviewed facts.
 import type { ShopBusinessTemplateId } from '../shop/business-templates.ts'
 import type { WebsiteStarterBrief, WebsiteStarterTemplateId } from './website-starter.ts'
 
@@ -58,71 +56,71 @@ const TRADE_COPY: Readonly<Record<ShopBusinessTemplateId, TradeCopy>> = {
     label: 'Mini-mart & grocery',
     templateId: 'business-presence',
     audience: 'households nearby who shop for daily groceries and basics',
-    offer: 'Everyday groceries and household basics at the counter, with the items families buy most kept in stock and priced clearly.',
-    proof: 'Reorder levels are set on every line we carry, so the basics customers come in for are on the shelf rather than sold out.',
+    offer: 'Ask about everyday groceries and household basics for your next shopping trip.',
+    proof: 'Share your shopping list and quantities. Confirm current prices, availability and collection options before travelling.',
   },
   pharmacy: {
     label: 'Pharmacy',
     templateId: 'business-presence',
     audience: 'nearby households and clinics buying medicine and daily supplies',
-    offer: 'Over-the-counter medicine and clinic supplies, with strict reorder levels so regular items and first-aid stock stay available.',
-    proof: 'Every medicine we stock carries a reorder level, so repeat items are reordered before they run out and stock is counted rather than estimated.',
+    offer: 'Ask about pharmacy products and daily supplies before your visit.',
+    proof: 'Ask a qualified pharmacist about suitability and any prescription requirements. Confirm the exact product, strength and availability; this website does not give medical advice.',
   },
   'phone-electronics': {
     label: 'Phone & electronics',
     templateId: 'catalog-showcase',
     audience: 'customers shopping for phone accessories and small electronics',
-    offer: 'Phone accessories, chargers and small electronics kept at the counter, with prices listed before you make the trip.',
-    proof: 'Fast-moving lines are counted daily, so the accessories listed here are the ones actually on the counter today.',
+    offer: 'Find out about phone accessories, chargers and small electronics for your device.',
+    proof: 'Include your device model and required connector. Confirm compatibility, current price, availability and warranty terms before buying.',
   },
   fashion: {
     label: 'Fashion & clothing',
     templateId: 'catalog-showcase',
     audience: 'shoppers looking for clothing and accessories in their own size',
-    offer: 'Clothing and accessories stocked down to the size, so what is listed is what we can actually hand over today.',
-    proof: 'Stock is tracked per size rather than per style, so an item shown as available is available in the size listed, not just in the design.',
+    offer: 'Explore clothing and accessories and ask about the size and style you need.',
+    proof: 'Include the item, size and colour you want. Confirm measurements, availability and exchange terms before ordering.',
   },
   hardware: {
     label: 'Hardware & construction supply',
     templateId: 'lead-generation',
     audience: 'builders and contractors ordering site materials in bulk',
-    offer: 'Building materials, tools and site consumables, with bulk orders quoted and set aside for collection or delivery.',
-    proof: 'Bulk orders are recorded against stock on hand, so a quantity confirmed for your site is reserved rather than promised twice.',
+    offer: 'Discuss building materials, tools and site consumables for your project.',
+    proof: 'Send the specification, quantities and site location. Request a confirmed quote and collection or delivery terms; an inquiry does not reserve stock.',
   },
   'tea-coffee': {
     label: 'Tea & coffee shop',
     templateId: 'lead-generation',
     audience: 'counter regulars, plus offices ordering tea for events',
-    offer: 'Tea shop menu at the counter, plus large preorders for offices and events prepared for an agreed collection time.',
-    proof: 'Daily prep counts are recorded against every menu item, so a preorder is checked against what the kitchen can actually make that day.',
+    offer: 'Ask about tea, coffee and food options for a visit or group order.',
+    proof: 'Share the drinks or food, quantities and preferred time. Ask about ingredients and confirm capacity and collection details before relying on a group order.',
   },
   'auto-parts': {
     label: 'Auto parts',
     templateId: 'lead-generation',
     audience: 'drivers and workshops looking for vehicle spares and consumables',
-    offer: 'Vehicle consumables and spares at the workshop counter, with the part your vehicle needs checked against stock before you travel.',
-    proof: 'Every part is stocked against its own SKU rather than a description, so a part confirmed as available is the specific fit, not a near match.',
+    offer: 'Ask about vehicle spares and consumables for your repair or maintenance job.',
+    proof: 'Provide the vehicle model, year and part number where available. Confirm fitment, condition, warranty and availability before purchase.',
   },
   restaurant: {
     label: 'Restaurant',
     templateId: 'lead-generation',
     audience: 'diners nearby plus families booking a table for a group meal',
-    offer: 'A full menu served at the table, with group bookings agreed for a set time and party size before you arrive.',
-    proof: 'Table bookings are held against a named zone and party size, so a time confirmed for your group is reserved rather than promised twice.',
+    offer: 'Explore dining options and ask about your next meal or group visit.',
+    proof: 'Share your date, time and party size. Discuss dietary requirements with the team and wait for explicit confirmation before treating a table as booked.',
   },
   'beauty-spa': {
     label: 'Beauty spa',
     templateId: 'lead-generation',
     audience: 'clients booking treatments and buying spa products',
-    offer: 'Massage, facial and body treatments booked for a set time, with spa oils and gift sets available at the counter.',
-    proof: 'Every treatment is held against a named therapist and time, so a booking confirmed for you is reserved rather than promised twice.',
+    offer: 'Ask about treatments, appointment options and products for your next spa visit.',
+    proof: 'Ask about treatment duration, suitability, price and cancellation terms. Request a preferred time; an inquiry is not a confirmed appointment.',
   },
   bakery: {
     label: 'Bakery & patisserie',
     templateId: 'lead-generation',
     audience: 'walk-in customers plus families and offices ordering cakes ahead',
-    offer: 'Fresh bread, cakes and pastries at the counter, plus custom cake orders prepared for an agreed collection time.',
-    proof: 'Every cake order is checked against opening stock and a named collection slot, so a cake confirmed for you is actually being baked, not just promised.',
+    offer: 'Ask about bread, pastries and cake options for your next occasion.',
+    proof: 'Share the date, servings and design you have in mind. Confirm ingredients, allergens, lead time, price and collection details before placing an order.',
   },
 }
 

@@ -73,6 +73,9 @@ export function ProductSystemNavigator({ product, managed = false }: { product: 
   const [open, setOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
   const details = productDetails[product]
+  const assistedSetupProduct = !managed && product !== 'production'
+    ? product === 'commerce' ? 'shop' : product
+    : null
   const capabilities = useMemo(() => productCapabilityCatalog(product), [product])
   const workingFlows = useMemo(() => {
     const seen = new Set<string>()
@@ -114,8 +117,8 @@ export function ProductSystemNavigator({ product, managed = false }: { product: 
       </summary>
       <div className="product-system-body">
         <header>
-          <div><span className="core-eyebrow">{details.label}</span><h2>Keep working in {details.label}</h2><p>Choose another working flow, use your data, or make this sample yours.</p></div>
-          <div className="product-system-actions"><Link className="core-button compact primary" to={clientSetupPath(product)}>Make {details.label} mine</Link></div>
+          <div><span className="core-eyebrow">{details.label}</span><h2>Keep working in {details.label}</h2><p>{assistedSetupProduct ? 'We can configure this for your business. Tell us what you need; we agree the scope and prepare it for your review. The tools below remain available for local preparation.' : 'Choose another working flow, use your data, or make this sample yours.'}</p></div>
+          <div className="product-system-actions">{assistedSetupProduct ? <a className="core-button compact primary" href={`https://supermega.dev/contact/?product=${assistedSetupProduct}&source=product-next-steps`} target="_blank" rel="noopener noreferrer">Request {details.label} setup<span className="sr-only"> (opens in a new tab)</span></a> : <Link className="core-button compact primary" to={clientSetupPath(product)}>Make {details.label} mine</Link>}</div>
         </header>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
           {workingFlows.map((capability) => <WorkflowLink capability={capability} fallbackPath={details.primaryPath} key={capability.id} />)}
