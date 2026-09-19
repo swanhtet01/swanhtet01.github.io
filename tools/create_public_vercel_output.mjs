@@ -4,6 +4,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
@@ -97,6 +98,14 @@ const release = {
   catalogVersion: manifest.catalogVersion,
   generatedAt: new Date().toISOString(),
 }
+
+const previewAppBinding = parsePreviewAppBinding(
+  process.env.SUPERMEGA_PUBLIC_PREVIEW_APP_BINDING,
+  release.commit,
+  process.env.SUPERMEGA_PUBLIC_PREVIEW_APP_BINDING === undefined ? null
+    : (await run('git', ['rev-parse', 'HEAD'], { cwd: root, windowsHide: true })).stdout.trim(),
+)
+if (previewAppBinding) release.previewNavigation = previewAppBinding
 
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision"><rect width="64" height="64" rx="8" fill="${brand.colors.background}"/><rect x="1" y="1" width="62" height="62" rx="7" fill="none" stroke="${brand.colors.ink}" stroke-opacity=".16"/><path d="M13 18 27 32 13 46" fill="none" stroke="${brand.colors.accent}" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/><path d="M34 46h17" fill="none" stroke="${brand.colors.ink}" stroke-width="4.5" stroke-linecap="square"/></svg>\n`
 
@@ -1337,7 +1346,7 @@ const vercelConfig = {
 async function writeStatic(relativePath, content) {
   const destination = resolve(staticDir, relativePath)
   await mkdir(dirname(destination), { recursive: true })
-  await writeFile(destination, content, 'utf8')
+  await writeFile(destination, relativePath.endsWith('.html') ? bindPreviewNavigation(content, previewAppBinding) : content, 'utf8')
 }
 
 async function writeFunction(name, source) {
@@ -1348,6 +1357,9 @@ async function writeFunction(name, source) {
   await writeFile(resolve(functionDir, '.vc-config.json'), `${JSON.stringify({ handler: 'index.js', runtime: 'nodejs24.x', architecture: 'x86_64', environment: {}, shouldDisableAutomaticFetchInstrumentation: false, launcherType: 'Nodejs', shouldAddHelpers: true, shouldAddSourcemapSupport: false, awsLambdaHandler: '' }, null, 2)}\n`, 'utf8')
 }
 
+if (previewAppBinding) {
+  vercelConfig.routes.unshift({ src: '^/(.*)$', headers: { 'X-Robots-Tag': 'noindex, noarchive' }, continue: true })
+}
 await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
 await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
@@ -1358,7 +1370,7 @@ await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
 for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)
-await writeStatic('robots.txt', 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
+await writeStatic('robots.txt', previewAppBinding ? 'User-agent: *\nDisallow: /\n' : 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
 await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${discoverablePages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><lastmod>${release.generatedAt.slice(0, 10)}</lastmod><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)
 await writeStatic('site.webmanifest', `${JSON.stringify({ name: 'SuperMega', short_name: 'SuperMega', start_url: '/', display: 'browser', background_color: brand.colors.background, theme_color: brand.colors.background, icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }] }, null, 2)}\n`)
 
