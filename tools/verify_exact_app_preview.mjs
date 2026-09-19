@@ -24,6 +24,7 @@ import {
 
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS } from './retired_product_preview_policy.mjs'
 import { PAIRED_TRANSITION_CONTRACT } from './paired_preview_transition.mjs'
+import { consumePreviewAccessEnvironment } from './preview_scoped_access.mjs'
 export const EXACT_APP_PREVIEW_CONTRACT = 'supermega.exact-app-preview-rendered.v2'
 export const EXACT_APP_PREVIEW_VALIDATION_CONTRACT = 'supermega.exact-app-preview-validation.v2'
 
@@ -1103,12 +1104,15 @@ async function main() {
   const userDataDir = await mkdtemp(resolve(tmpdir(), 'supermega-exact-preview-'))
   let browserProcess = null
   let cdp = null
+  let scopedAccess = null
   try {
+    scopedAccess = consumePreviewAccessEnvironment(operationsBinding.binding)
     const launched = await launchBrowser(browserBin, userDataDir)
     browserProcess = launched.browser
     cdp = await Cdp.connect(launched.wsUrl)
     const version = await cdp.send('Browser.getVersion')
     const releaseBefore = await probeExactPairedReleaseIdentity({
+      scopedAccess,
       publicOrigin: operationsBinding.binding.publicOrigin,
       appOrigin: operationsBinding.binding.appOrigin,
       expectedCommit,
@@ -1118,9 +1122,10 @@ async function main() {
       const origin = ['public', 'transition'].includes(spec.surface)
         ? operationsBinding.binding.publicOrigin
         : operationsBinding.binding.appOrigin
-      cases.push(await verifyCase(cdp, origin, browserCase(spec, origin, publicHomepageExpectedText, operationsBinding.binding.appOrigin)))
+      cases.push(await verifyCase(cdp, origin, browserCase(spec, origin, publicHomepageExpectedText, operationsBinding.binding.appOrigin), scopedAccess))
     }
     const releaseAfter = await probeExactPairedReleaseIdentity({
+      scopedAccess,
       publicOrigin: operationsBinding.binding.publicOrigin,
       appOrigin: operationsBinding.binding.appOrigin,
       expectedCommit,
@@ -1163,6 +1168,7 @@ async function main() {
       await cdp.close().catch(() => {})
     }
     browserProcess?.kill()
+    scopedAccess?.dispose()
     await rm(userDataDir, { recursive: true, force: true }).catch(() => {})
   }
 }

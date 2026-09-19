@@ -36,16 +36,23 @@ fixtures and are technical review evidence, not approved marketing imagery.
 - Put the evidence directory outside the verifier checkout. The verifier must
   stay clean while it rereads its Git HEAD/tree and the exact verifier and
   browser-harness bytes before accepting or generating evidence.
-- Do not supply a Vercel bypass token, browser session, credential, or
+- Do not supply browser sessions, credentials in URLs/CLI arguments, or a
   production URL. The browser profile is newly created and deleted per run,
   and every matrix case runs in a separate ephemeral browser context so local
   state cannot leak from one viewport or product proof into another.
-- The exported release-identity probe supports an explicit in-memory
-  `scopedAccess` transport for the exact immutable pair. It does not enable
-  protected browser access or load credentials from files/CLI/environment.
-  The CLI prohibition above remains in force until browser interception is
-  independently reviewed and integrated. Synthetic transport tests are not
-  proof of authenticated provider access or hosted acceptance.
+- Protected immutable pairs can use separately authorized process-local
+  `SUPERMEGA_PUBLIC_PREVIEW_BYPASS` and `SUPERMEGA_APP_PREVIEW_BYPASS` inputs.
+  Both are required together and removed from the environment before Chrome
+  is spawned. No credential file loading or provider-token creation occurs.
+  Release GETs reject redirects; browser HTTP requests are intercepted per
+  request, admit only GET/HEAD/OPTIONS at the exact pair, and replace access
+  headers on each hop. Cookies/authorization/referrers are not forwarded.
+  Child targets are paused and closed; service-worker handling and caches
+  are bypassed. A denied request fails the case; interception is kept until
+  target closure. This is not a general browser sandbox or managed-write
+  journey test. Synthetic transport tests are not proof of authenticated
+  provider access or hosted acceptance. Independent review is required before
+  first credential-bearing execution.
 - Use a new empty evidence directory. The report and screenshots are written
   exclusively and never overwrite prior evidence.
 

@@ -9,6 +9,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
 import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
+import { installPreviewBrowserAccess } from './preview_scoped_access.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -643,7 +644,8 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   }
 }
 
-export async function verifyCase(cdp, origin, testCase) {
+export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
+  if (scopedAccess && testCase.isolatedBrowserContext !== true) throw new Error('preview_browser_access_requires_isolation')
   if (testCase.pairedAppOrigin && (testCase.isolatedBrowserContext !== true
     || testCase.expectedOrigin !== testCase.pairedAppOrigin || testCase.route !== '/'
     || !Array.isArray(testCase.pairedPublicExpectedText) || testCase.pairedPublicExpectedText.length < 1)) {
@@ -672,11 +674,13 @@ export async function verifyCase(cdp, origin, testCase) {
   const networkRequestUrls = new Map()
   const failedNetworkRequests = []
   const disposers = []
+  let accessGuard = null
   try {
     await cdp.send('Page.enable', {}, sessionId)
     await cdp.send('Runtime.enable', {}, sessionId)
     await cdp.send('Log.enable', {}, sessionId)
     await cdp.send('Network.enable', {}, sessionId)
+    if (scopedAccess) accessGuard = await installPreviewBrowserAccess({ cdp, sessionId, targetId, access: scopedAccess })
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: testCase.width,
       height: testCase.height,
@@ -743,6 +747,10 @@ export async function verifyCase(cdp, origin, testCase) {
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
       : null
     const beforeCapture = await readRenderedState(cdp, sessionId, Boolean(testCase.retirementCaseId))
+    if (accessGuard) {
+      await accessGuard.assertClean()
+      scopedAccess.assertNoCredential({ beforeCapture, errors, warnings, networkRequests })
+    }
     let screenshot = null
     if (screenshotDir && testCase.screenshotName) {
       const capture = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId)
@@ -752,6 +760,10 @@ export async function verifyCase(cdp, origin, testCase) {
       await writeFile(screenshotPath, screenshotPayload, { flag: 'wx' })
     }
     const afterCapture = await readRenderedState(cdp, sessionId, Boolean(testCase.retirementCaseId))
+    if (accessGuard) {
+      await accessGuard.assertClean()
+      scopedAccess.assertNoCredential({ afterCapture, errors, warnings, networkRequests })
+    }
     let pairedTransition = null
     let pairedFailure = ''
     if (testCase.pairedAppOrigin) {
@@ -876,6 +888,7 @@ export async function verifyCase(cdp, origin, testCase) {
       failures,
     }
   } finally {
+    if (accessGuard) await accessGuard.dispose()
     for (const dispose of disposers) dispose()
     await cdp.send('Target.closeTarget', { targetId }).catch(() => {})
     if (browserContextId) {
