@@ -313,15 +313,17 @@ export async function probeExactPairedReleaseIdentity({
   appOrigin,
   expectedCommit,
   fetchImpl = fetch,
+  scopedAccess = null,
 }) {
   const commit = exactSha(expectedCommit, 'exact_app_preview_release_expected_commit_invalid')
   const origins = {
     public: normalizePreviewOrigin(publicOrigin, 'exact_app_preview_release_public_origin_invalid'),
     app: normalizePreviewOrigin(appOrigin, 'exact_app_preview_release_app_origin_invalid'),
   }
+  const transport = scopedAccess ? (url) => scopedAccess.fetchReadOnly(url, fetchImpl) : fetchImpl
   return {
-    public: await probeReleaseSurface(fetchImpl, origins.public, 'public', commit),
-    app: await probeReleaseSurface(fetchImpl, origins.app, 'app', commit),
+    public: await probeReleaseSurface(transport, origins.public, 'public', commit),
+    app: await probeReleaseSurface(transport, origins.app, 'app', commit),
   }
 }
 

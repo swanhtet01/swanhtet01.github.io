@@ -27,6 +27,36 @@ import {
   validateExactAppPreviewReport,
 } from './verify_exact_app_preview.mjs'
 import { evaluateFinalRenderedLocation } from './verify_app_entry_rendered.mjs'
+import { createPreviewScopedAccess } from './preview_scoped_access.mjs'
+
+test('protected release probes bind credentials to the exact pair and reject redirects and wrong pairs', async () => {
+  const publicOrigin = 'https://supermega-public-123456789-swanhtet01s-projects.vercel.app'
+  const appOrigin = 'https://megaos-123456789-swanhtet01s-projects.vercel.app'
+  const publicToken = 'synthetic-public-fixture-not-a-secret'
+  const appToken = 'synthetic-app-fixture-not-a-secret'
+  const scopedAccess = createPreviewScopedAccess({ publicOrigin, appOrigin, publicToken, appToken })
+  const calls = []
+  const fetchImpl = async (url, options) => {
+    const isPublic = new URL(url).origin === publicOrigin
+    assert.equal(options.headers['x-vercel-protection-bypass'], isPublic ? publicToken : appToken)
+    assert.equal(options.redirect, 'manual')
+    assert.equal(options.cache, 'no-store')
+    calls.push(url)
+    return new Response(JSON.stringify({ service: isPublic ? 'supermega-public-site' : 'supermega-app',
+      commit: expectedCommit, ...(isPublic ? {} : { canonicalDomain: 'https://app.supermega.dev' }) }),
+    { headers: { 'content-type': 'application/json' } })
+  }
+  const result = await probeExactPairedReleaseIdentity({ publicOrigin, appOrigin, expectedCommit, scopedAccess, fetchImpl })
+  assert.equal(calls.length, 2)
+  assert.equal(JSON.stringify(result).includes(publicToken), false)
+  assert.equal(JSON.stringify(result).includes(appToken), false)
+  await assert.rejects(() => probeExactPairedReleaseIdentity({ publicOrigin: publicOrigin.replace('123456789', '987654321'),
+    appOrigin, expectedCommit, scopedAccess, fetchImpl }), /release_probe_unavailable:public/)
+  assert.equal(calls.length, 2)
+  await assert.rejects(() => probeExactPairedReleaseIdentity({ publicOrigin, appOrigin, expectedCommit, scopedAccess,
+    fetchImpl: async () => new Response('', { status: 307, headers: { location: 'https://example.com/' } }) }), /release_probe_unavailable:public/)
+  scopedAccess.dispose()
+})
 
 const operationsGeneratedAt = '2026-08-28T12:00:00.000Z'
 test('Website preview expects the assisted delivery boundary rather than the retired builder', async () => {

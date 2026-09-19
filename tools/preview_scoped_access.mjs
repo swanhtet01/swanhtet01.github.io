@@ -24,7 +24,7 @@ export function createPreviewScopedAccess({ publicOrigin, appOrigin, publicToken
       // Redirects cannot carry credentials onwards; callers must validate the
       // exact nonredirecting response and release body independently.
       let response
-      try { response = await fetchImpl(url, { method: 'GET', headers, redirect: 'manual', credentials: 'omit', signal: AbortSignal.timeout(15000) }) }
+      try { response = await fetchImpl(url, { method: 'GET', headers: { accept: 'application/json', 'cache-control': 'no-cache, no-store', ...headers }, cache: 'no-store', redirect: 'manual', credentials: 'omit', signal: AbortSignal.timeout(15000) }) }
       catch { throw new Error('preview_access_fetch_failed') }
       if (response.status >= 300 && response.status < 400) throw new Error('preview_access_redirect_denied')
       return response

@@ -40,6 +40,12 @@ fixtures and are technical review evidence, not approved marketing imagery.
   production URL. The browser profile is newly created and deleted per run,
   and every matrix case runs in a separate ephemeral browser context so local
   state cannot leak from one viewport or product proof into another.
+- The exported release-identity probe supports an explicit in-memory
+  `scopedAccess` transport for the exact immutable pair. It does not enable
+  protected browser access or load credentials from files/CLI/environment.
+  The CLI prohibition above remains in force until browser interception is
+  independently reviewed and integrated. Synthetic transport tests are not
+  proof of authenticated provider access or hosted acceptance.
 - Use a new empty evidence directory. The report and screenshots are written
   exclusively and never overwrite prior evidence.
 
