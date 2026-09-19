@@ -252,14 +252,14 @@ async function evalInPage(cdp, sessionId, expression) {
   return result.value
 }
 
-function seedScript(seed) {
+export function seedScript(seed) {
   return `
 try {
   if (!sessionStorage.getItem('supermega.entry-rendered.seeded.v1')) {
     localStorage.clear();
     ${seed.lastProduct ? `localStorage.setItem('supermega.last-product.v1', ${JSON.stringify(seed.lastProduct)});` : ''}
     ${seed.productSetups ? `localStorage.setItem('supermega.product_setups.v1', ${JSON.stringify(JSON.stringify(seed.productSetups))});` : ''}
-    ${seed.retained ? Object.entries(seed.retained).map(([key, value]) => `localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(value)});`).join('\n') : ''}
+    ${seed.retained ? Object.entries(seed.retained).map(([key, value]) => `localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(value)});`).join('') : ''}
     sessionStorage.setItem('supermega.entry-rendered.seeded.v1', 'true');
   }
 } catch (error) {
@@ -267,8 +267,8 @@ try {
 }`
 }
 
-async function readRenderedState(cdp, sessionId, retirement = false) {
-  return evalInPage(cdp, sessionId, `(() => ({
+export function renderedStateScript(retirement = false) {
+  return `(() => ({
       origin: location.origin,
       path: location.pathname + location.search,
       hash: location.hash,
@@ -285,7 +285,11 @@ async function readRenderedState(cdp, sessionId, retirement = false) {
       launcherLinks: [...document.querySelectorAll('nav[aria-label="Choose product"] a')]
         .filter(link => link.getClientRects().length && getComputedStyle(link).visibility !== 'hidden')
         .map(link => ({ name: link.querySelector('h2')?.textContent.trim() || '', href: link.getAttribute('href') })),
-    }))()`)
+    }))()`
+}
+
+async function readRenderedState(cdp, sessionId, retirement = false) {
+  return evalInPage(cdp, sessionId, renderedStateScript(retirement))
 }
 
 function matchesExpectedPath(expectedPath, value) {

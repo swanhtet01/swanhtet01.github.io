@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { runInNewContext } from 'node:vm'
+import { seedScript, renderedStateScript } from './verify_app_entry_rendered.mjs'
 import { RETIRED_PRODUCT_PREVIEW_POLICY as policy, RETIRED_PRODUCT_CASES as cases,
   RETIRED_STORAGE_KEYS as keys, validateRetiredProductObservation as validate } from './retired_product_preview_policy.mjs'
 
@@ -11,6 +13,41 @@ function fixture(spec = cases[0]) {
     retiredToolVisible: false, retiredActionVisible: false, retained: { ...retainedBefore } }
   return { policy, caseId: spec.id, origin: state.origin, before: structuredClone(state), after: structuredClone(state), retainedBefore }
 }
+test('exact generated seed executes all retained keys and is repeat-call idempotent', () => {
+  const backing = new Map(); let clears = 0
+  const localStorage = { clear() { clears++; backing.clear() }, setItem(k, v) { backing.set(k, String(v)) }, getItem(k) { return backing.get(k) ?? null } }
+  const session = new Map()
+  const context = { localStorage, sessionStorage: { getItem: k => session.get(k), setItem: (k, v) => session.set(k, v) }, window: {} }
+  const retained = Object.fromEntries(keys.map(k => [k, JSON.stringify({ synthetic: 'quote" newline\n backslash\\', key: k })]))
+  const script = seedScript({ retained })
+  runInNewContext(script, context)
+  for (const key of keys) assert.equal(localStorage.getItem(key), retained[key])
+  localStorage.setItem(keys[0], 'subsequent-user-change')
+  runInNewContext(script, context)
+  assert.equal(clears, 1)
+  assert.equal(localStorage.getItem(keys[0]), 'subsequent-user-change')
+  assert.equal(context.window.__supermegaSeedError, undefined)
+})
+test('exact generated observation script detects rendered retired headings and actions', () => {
+  let headings = []; let actions = []
+  const element = (text, href = '', visible = true) => ({ textContent: text,
+    getClientRects: () => visible ? [1] : [], getAttribute: () => href })
+  const context = { location: { origin: 'https://isolated.example', pathname: '/', search: '?choose=1', hash: '' },
+    window: { innerWidth: 1280, innerHeight: 900 }, localStorage: { getItem: () => null },
+    getComputedStyle: () => ({ visibility: 'visible' }), document: { body: { innerText: 'Shop Website Ecommerce' },
+      documentElement: { scrollWidth: 1280 }, querySelector: () => null,
+      querySelectorAll: selector => selector === 'a,button' ? actions : selector.startsWith('h1,') ? headings : [] } }
+  const observe = () => runInNewContext(renderedStateScript(true), context)
+  assert.equal(observe().retiredActionVisible, false)
+  for (const href of ['/plant/', '/operations/production/', '/?demo=factory', '/settings/?product=production']) {
+    actions = [element('Open', href)]; assert.equal(observe().retiredActionVisible, true, href)
+  }
+  actions = [element('Open Plant')]; assert.equal(observe().retiredActionVisible, true)
+  actions = [element('Open Plant', '/plant/', false)]; assert.equal(observe().retiredActionVisible, false)
+  headings = [element('Plant')]; assert.equal(observe().retiredToolVisible, true)
+  assert.equal(Object.keys(observe().retained).length, 4)
+  assert.equal(Object.hasOwn(runInNewContext(renderedStateScript(false), context), 'retained'), false)
+})
 test('all seven retired entry routes have distinct desktop/mobile cases', () => {
   assert.equal(cases.length, 14)
   assert.equal(new Set(cases.map(item => item.id)).size, 14)
