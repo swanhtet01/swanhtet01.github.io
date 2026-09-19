@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { previewProfile, validatePreviewContact, validatePreviewLinks, validatePreviewDeployment } from './public_preview_profile.mjs'
+import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
 
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
 const baseUrl = String(process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '')
@@ -11,6 +12,7 @@ const policy = previewProfile({ profile: process.env.PUBLIC_PREVIEW_PROFILE || '
 const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
 const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
 const maxAttempts = 6
+const linkOptions = { publicOrigin: baseUrl, shopTemplateIds: validateShopBusinessTemplates().map(item => item.id) }
 const retryWaitBuffer = new Int32Array(new SharedArrayBuffer(4))
 
 if (!baseUrl.startsWith('https://')) throw new Error('public_preview_url_required')
@@ -54,6 +56,7 @@ function get(path) {
 
 for (const page of manifest.pages) {
   const html = get(page.route)
+  validatePreviewLinks(html, policy, manifest.customerProducts, { ...linkOptions, requireActions: false })
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
@@ -67,7 +70,7 @@ for (const page of manifest.pages) {
 }
 
 const homepage = get('/')
-const navigation = validatePreviewLinks(homepage, policy, manifest.customerProducts)
+const navigation = validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)
 
 const release = JSON.parse(get(manifest.release.releaseEndpoint))
 if (release.brandVersion !== manifest.brand.version) throw new Error('preview_brand_version_wrong')

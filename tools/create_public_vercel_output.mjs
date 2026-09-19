@@ -1322,7 +1322,7 @@ for (const page of manifest.pages.filter((entry) => entry.productId)) {
     route: page.route, title: product.name + ' | Retained workspace access',
     description: 'Compatibility access for retained workspaces. Not offered for new-product setup.',
     robots: 'noindex,follow',
-    content: `<main class="frame" id="content"><section class="page-hero"><h1>${escapeHtml(product.name)} retained workspace access</h1><p>This product is not offered for new setup. Existing workspace records and compatibility routes are preserved; nothing is deleted or migrated by this page.</p><a class="button" href="${escapeHtml(product.appRoute)}">Open retained workspace</a><a class="button" href="/#products">View current products</a></section></main>`,
+    content: `<main class="frame" id="content"><section class="page-hero"><h1>${escapeHtml(product.name)} retained records</h1><p>This product is not offered for new setup. Existing workspace records are preserved; nothing is deleted or migrated by this page.</p><a class="button" href="/#products">View current products</a></section></main>`,
   }))
 }
 

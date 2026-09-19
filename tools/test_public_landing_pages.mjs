@@ -57,7 +57,8 @@ for (const page of landingPages) {
   const html = readStatic(page.file)
   if (!activeIds.includes(page.productId)) {
     check(html.includes('name="robots" content="noindex,follow"'), `retained_noindex:${page.route}`)
-    check(html.includes(`href="${product.appRoute}"`), `retained_workspace_link:${page.route}`)
+    check(!html.includes(`href="${product.appRoute}"`) && !html.includes('Open retained workspace'), `retired_tool_link_absent:${page.route}`)
+    check(html.includes('href="/#products"') && html.includes('Existing workspace records are preserved'), `retained_records_and_active_return:${page.route}`)
     check(html.includes('not offered for new setup'), `retained_boundary:${page.route}`)
     check(!html.includes('class="trade-card') && !html.includes('Request assisted setup'), `retained_no_acquisition:${page.route}`)
     continue
