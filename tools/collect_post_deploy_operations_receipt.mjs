@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { capturePreviewAccessEnvironment } from './preview_scoped_access.mjs'
 
 export const POST_DEPLOY_OPERATIONS_CONTRACT = 'supermega.post-deploy-operations-receipt.v2'
 export const RUNTIME_LOG_EVIDENCE_CONTRACT = 'supermega.vercel-runtime-log-scan.v1'
@@ -651,7 +652,15 @@ async function probeProviderScript(fetchImpl, origin, path, kind) {
   }
 }
 
-export async function collectPostDeployProbes({ stage, publicOrigin, appOrigin, fetchImpl = fetch }) {
+export async function collectPostDeployProbes({ stage, publicOrigin, appOrigin, fetchImpl = fetch, scopedAccess = null }) {
+  if (scopedAccess) {
+    if (stage !== 'preview') fail('post_deploy_protected_access_preview_only')
+    // Validate both bindings before issuing either request.
+    scopedAccess.headersFor(publicOrigin)
+    scopedAccess.headersFor(appOrigin)
+    const underlyingFetch = fetchImpl
+    fetchImpl = url => scopedAccess.fetchReadOnly(url, underlyingFetch)
+  }
   const release = {
     public: await probeRelease(fetchImpl, publicOrigin, 'public'),
     app: await probeRelease(fetchImpl, appOrigin, 'app'),
@@ -679,7 +688,9 @@ export async function collectPostDeployProbes({ stage, publicOrigin, appOrigin, 
         speedInsights: await probeProviderScript(fetchImpl, publicOrigin, '/_vercel/speed-insights/script.js', 'speed-insights'),
       }
     : { expected: false, webAnalytics: null, speedInsights: null }
-  return { release, health, publicHome, routes, observability: { loader, publicLoader, providerRuntime, publicProviderRuntime } }
+  const probes = { release, health, publicHome, routes, observability: { loader, publicLoader, providerRuntime, publicProviderRuntime } }
+  scopedAccess?.assertNoCredential(probes)
+  return probes
 }
 
 function normalizeReleaseProbe(value, code) {
@@ -1232,6 +1243,9 @@ function parseArgs(argv) {
 }
 
 async function main() {
+  const accessInputs = capturePreviewAccessEnvironment()
+  let scopedAccess = null
+  try {
   const options = parseArgs(process.argv.slice(2))
   if (options.verifyPath) {
     const packet = validatePostDeployOperationsReceipt(JSON.parse(await readFile(resolve(options.verifyPath), 'utf8')))
@@ -1270,6 +1284,7 @@ async function main() {
     'post_deploy_public_observability_visibility_attestation',
   )
   const probes = await collectPostDeployProbes({
+    scopedAccess: (scopedAccess = accessInputs.bind(context)),
     stage: context.stage,
     publicOrigin: context.publicOrigin,
     appOrigin: context.appOrigin,
@@ -1302,6 +1317,10 @@ async function main() {
     providerWritesPerformed: false,
   }, null, 2))
   if (packet.operations.status !== 'pass') process.exitCode = 1
+  } finally {
+    scopedAccess?.dispose()
+    accessInputs.dispose()
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

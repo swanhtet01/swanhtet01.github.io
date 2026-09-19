@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { createPreviewScopedAccess } from './preview_scoped_access.mjs'
 
 import {
   POST_DEPLOY_OPERATIONS_CONTRACT,
@@ -14,6 +15,28 @@ import {
 } from './collect_post_deploy_operations_receipt.mjs'
 
 const generatedAt = '2026-08-28T12:00:00.000Z'
+test('protected operations probes use exact paired access without widening production authority', async () => {
+  const origins = { public: 'https://supermega-public-123456789-swanhtet01s-projects.vercel.app', app: 'https://megaos-123456789-swanhtet01s-projects.vercel.app' }
+  const publicToken = 'synthetic-public-fixture-not-a-secret'
+  const appToken = 'synthetic-app-fixture-not-a-secret'
+  const scopedAccess = createPreviewScopedAccess({ publicOrigin: origins.public, appOrigin: origins.app, publicToken, appToken })
+  const fixture = fixtureFetch(origins)
+  const args = { stage: 'preview', publicOrigin: origins.public, appOrigin: origins.app, scopedAccess, fetchImpl: fixture.fetchImpl }
+  const probes = await collectPostDeployProbes(args)
+  assert.ok(fixture.calls.length > 5)
+  for (const call of fixture.calls) {
+    assert.equal(call.request.headers['x-vercel-protection-bypass'], new URL(call.url).origin === origins.public ? publicToken : appToken)
+    assert.equal(call.request.method, 'GET')
+    assert.equal(call.request.redirect, 'manual')
+  }
+  assert.ok(!JSON.stringify(probes).includes(publicToken))
+  assert.ok(!JSON.stringify(probes).includes(appToken))
+  const count = fixture.calls.length
+  await assert.rejects(() => collectPostDeployProbes({ ...args, stage: 'production' }), /preview_only/)
+  await assert.rejects(() => collectPostDeployProbes({ ...args, appOrigin: 'https://megaos-987654321-swanhtet01s-projects.vercel.app' }), /request_denied/)
+  assert.equal(fixture.calls.length, count)
+  scopedAccess.dispose()
+})
 const expectedCommit = 'a'.repeat(40)
 const previousCommit = 'b'.repeat(40)
 const previewOrigins = {
