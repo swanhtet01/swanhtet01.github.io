@@ -314,7 +314,7 @@ const plantLanding = readStatic('plant/index.html')
 const plantDoors = publicFirstJobDoors(plantLanding)
 check(plantTemplates.length === 2, 'plant_shipped_template_registry_count')
 check(plantDoors.length === 0, 'plant_acquisition_doors_retired')
-check(plantLanding.includes('Open retained workspace'), 'plant_retained_access_preserved')
+check(!plantLanding.includes('Open retained workspace') && plantLanding.includes('Existing workspace records are preserved'), 'plant_retained_records_without_tool_action')
 
 for (const productId of ['website', 'ecommerce']) {
   const product = productContract(productId)
