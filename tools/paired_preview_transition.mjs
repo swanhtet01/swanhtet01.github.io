@@ -1,5 +1,15 @@
 export const PAIRED_TRANSITION_CONTRACT = 'supermega.paired-preview-transition.v1'
 
+export async function activateReadyPairedTransition({ state, publicOrigin, requiredText, activate }) {
+  if (!state || state.origin !== publicOrigin || state.path !== '/' || state.hash !== ''
+    || !(state.bodyLength > 0) || typeof state.text !== 'string'
+    || !Array.isArray(requiredText) || requiredText.length === 0
+    || requiredText.some(text => typeof text !== 'string' || !text.trim() || !state.text.includes(text))) {
+    throw new Error('paired_transition_public_prerequisite_failed')
+  }
+  return activate()
+}
+
 function origins(publicOrigin, appOrigin) {
   for (const value of [publicOrigin, appOrigin]) {
     const url = new URL(value)

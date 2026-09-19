@@ -1,9 +1,22 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { runInNewContext } from 'node:vm'
-import { pairedClickScript, validatePairedTransition } from './paired_preview_transition.mjs'
+import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
 const publicOrigin = 'https://public-123.vercel.app', appOrigin = 'https://app-123.vercel.app'
 const target = `${appOrigin}/shop/?tab=today`
+test('timed-out or incomplete public state cannot activate any click', async () => {
+  let clicks = 0
+  const state = { origin: publicOrigin, path: '/', hash: '', bodyLength: 20, text: 'Required public headline' }
+  const activate = async () => { clicks++; return { activated: true } }
+  for (const bad of [null, { ...state, text: 'incomplete' }, { ...state, bodyLength: 0 },
+    { ...state, origin: appOrigin }, { ...state, path: '/contact/' }, { ...state, hash: '#other' }]) {
+    await assert.rejects(() => activateReadyPairedTransition({ state: bad, publicOrigin,
+      requiredText: ['Required public headline'], activate }), /prerequisite_failed/)
+  }
+  assert.equal(clicks, 0)
+  await activateReadyPairedTransition({ state, publicOrigin, requiredText: ['Required public headline'], activate })
+  assert.equal(clicks, 1)
+})
 test('generated click script activates only one visible exact same-tab primary action', () => {
   let clicks = 0
   const action = { href: target, target: '', getClientRects: () => [1], hasAttribute: () => false, getAttribute: () => null, click: () => { clicks++ } }

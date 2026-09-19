@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
-import { pairedClickScript, validatePairedTransition } from './paired_preview_transition.mjs'
+import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -727,8 +727,10 @@ export async function verifyCase(cdp, origin, testCase) {
     await load
     let pairedClick = null
     if (testCase.pairedAppOrigin) {
-      await waitForRenderedState(cdp, sessionId, '/', testCase.pairedPublicExpectedText, testCase.timeoutMs)
-      pairedClick = await evalInPage(cdp, sessionId, pairedClickScript(origin, testCase.pairedAppOrigin))
+      const publicState = await waitForRenderedState(cdp, sessionId, '/', testCase.pairedPublicExpectedText, testCase.timeoutMs)
+      pairedClick = await activateReadyPairedTransition({ state: publicState, publicOrigin: origin,
+        requiredText: testCase.pairedPublicExpectedText,
+        activate: () => evalInPage(cdp, sessionId, pairedClickScript(origin, testCase.pairedAppOrigin)) })
     }
     await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
     const shopCounter = testCase.exerciseShopCounter
