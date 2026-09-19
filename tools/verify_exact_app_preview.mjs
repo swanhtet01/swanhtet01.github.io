@@ -24,7 +24,7 @@ import {
 
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS } from './retired_product_preview_policy.mjs'
 import { PAIRED_TRANSITION_CONTRACT } from './paired_preview_transition.mjs'
-import { capturePreviewAccessEnvironment } from './preview_scoped_access.mjs'
+import { capturePreviewAccessEnvironment, finishPreviewBrowser } from './preview_scoped_access.mjs'
 export const EXACT_APP_PREVIEW_CONTRACT = 'supermega.exact-app-preview-rendered.v2'
 export const EXACT_APP_PREVIEW_VALIDATION_CONTRACT = 'supermega.exact-app-preview-validation.v2'
 
@@ -1109,6 +1109,7 @@ async function main() {
   const userDataDir = await mkdtemp(resolve(tmpdir(), 'supermega-exact-preview-'))
   let browserProcess = null
   let cdp = null
+  let completedReport = null
   try {
     scopedAccess = accessInputs.bind(operationsBinding.binding)
     accessInputs.dispose()
@@ -1165,16 +1166,14 @@ async function main() {
       screenshotPayloads,
     })
     const serialized = `${JSON.stringify(report, null, 2)}\n`
-    await writeFile(resolve(options.outputPath), serialized, { encoding: 'utf8', flag: 'wx' })
-    console.log(JSON.stringify({ ok: true, output: resolve(options.outputPath), ...validation }, null, 2))
+    completedReport = { serialized, validation }
   } finally {
-    if (cdp) {
-      await cdp.send('Browser.close').catch(() => {})
-      await cdp.close().catch(() => {})
-    }
-    browserProcess?.kill()
-    await rm(userDataDir, { recursive: true, force: true }).catch(() => {})
+    try { await finishPreviewBrowser({ cdp, browserProcess, access: scopedAccess }) }
+    finally { await rm(userDataDir, { recursive: true, force: true }).catch(() => {}) }
   }
+  // No passing artifact or success output exists until containment succeeds.
+  await writeFile(resolve(options.outputPath), completedReport.serialized, { encoding: 'utf8', flag: 'wx' })
+  console.log(JSON.stringify({ ok: true, output: resolve(options.outputPath), ...completedReport.validation }, null, 2))
   } finally {
     scopedAccess?.dispose()
     accessInputs.dispose()

@@ -146,3 +146,52 @@ export async function installPreviewBrowserAccess({ cdp, sessionId, targetId, ac
     },
   }
 }
+
+async function boundedCleanup(action, timeoutMs) {
+  let timer
+  try {
+    return await Promise.race([Promise.resolve().then(action), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('preview_cleanup_timeout')), timeoutMs)
+    })])
+  } finally { clearTimeout(timer) }
+}
+
+export async function finishPreviewCase({ cdp, targetId, browserContextId, accessGuard, disposers = [], timeoutMs = 5000 }) {
+  let failed = false
+  let closed = false
+  try {
+    if (accessGuard) {
+      try { await boundedCleanup(() => accessGuard.dispose(), timeoutMs * 2); closed = true }
+      catch { failed = true }
+    }
+    if (!closed) {
+      try {
+        const result = await boundedCleanup(() => cdp.send('Target.closeTarget', { targetId }), timeoutMs)
+        if (result?.success !== true) failed = true
+      } catch { failed = true }
+    }
+    if (browserContextId) {
+      try { await boundedCleanup(() => cdp.send('Target.disposeBrowserContext', { browserContextId }), timeoutMs) }
+      catch { failed = true }
+    }
+  } finally {
+    for (const dispose of disposers) {
+      try { dispose() } catch { failed = true }
+    }
+  }
+  if (failed) throw new Error('preview_case_cleanup_failed')
+}
+
+export async function finishPreviewBrowser({ cdp, browserProcess, access, timeoutMs = 5000 }) {
+  let failed = false
+  try {
+    if (cdp) {
+      try { await boundedCleanup(() => cdp.send('Browser.close'), timeoutMs) } catch { failed = true }
+      try { await boundedCleanup(() => cdp.close(), timeoutMs) } catch { failed = true }
+    }
+  } finally {
+    try { browserProcess?.kill() } catch { failed = true }
+    finally { access?.dispose() }
+  }
+  if (failed) throw new Error('preview_browser_cleanup_failed')
+}

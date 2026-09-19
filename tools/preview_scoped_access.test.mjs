@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createPreviewScopedAccess, capturePreviewAccessEnvironment, consumePreviewAccessEnvironment, installPreviewBrowserAccess } from './preview_scoped_access.mjs'
+import { createPreviewScopedAccess, capturePreviewAccessEnvironment, consumePreviewAccessEnvironment, installPreviewBrowserAccess, finishPreviewCase, finishPreviewBrowser } from './preview_scoped_access.mjs'
 import { readFile } from 'node:fs/promises'
 const publicOrigin = 'https://supermega-public-123456789-swanhtet01s-projects.vercel.app'
 const appOrigin = 'https://megaos-123456789-swanhtet01s-projects.vercel.app'
@@ -144,7 +144,9 @@ test('CLI and harness keep protected transport inside isolated cases and before 
   assert.match(harness, /scopedAccess && testCase.isolatedBrowserContext !== true/)
   assert.ok(harness.indexOf('accessGuard = await installPreviewBrowserAccess') < harness.indexOf("await cdp.send('Page.navigate'"))
   assert.ok(harness.indexOf('await accessGuard.assertClean()') < harness.indexOf("await cdp.send('Page.captureScreenshot'"))
-  assert.match(harness, /if \(accessGuard\) await accessGuard.dispose\(\)/)
+  assert.match(harness, /await finishPreviewCase\(\{ cdp, targetId, browserContextId, accessGuard, disposers \}\)/)
+  assert.match(verifier, /await finishPreviewBrowser\(\{ cdp, browserProcess, access: scopedAccess \}\)/)
+  assert.ok(main.indexOf('await finishPreviewBrowser(') < main.indexOf('await writeFile(resolve(options.outputPath)'))
 })
 
 test('captured inputs cannot reach mocked Git preflight or command-name browser discovery', () => {
@@ -190,4 +192,35 @@ test('a denial arriving during confirmed closure prevents a successful case', as
   await assert.rejects(() => guard.dispose(), /preview_browser_access_request_failed/)
   assert.equal(cdp.listeners.size, 0)
   access.dispose()
+})
+
+test('nonresponsive harness and CLI cleanup still terminate browser and dispose access within bounds', async () => {
+  const calls = []
+  const cdp = { send(method) { calls.push(method); return new Promise(() => {}) }, close() { calls.push('socket.close'); return new Promise(() => {}) } }
+  let listenerDisposed = false
+  let terminated = false
+  let accessDisposed = false
+  const start = Date.now()
+  try {
+    await assert.rejects(() => finishPreviewCase({ cdp, targetId: 'target', browserContextId: 'context',
+      accessGuard: { dispose: () => Promise.reject(new Error('guard timeout')) },
+      disposers: [() => { listenerDisposed = true }], timeoutMs: 5 }), /preview_case_cleanup_failed/)
+  } finally {
+    await assert.rejects(() => finishPreviewBrowser({ cdp, browserProcess: { kill() { terminated = true } },
+      access: { dispose() { accessDisposed = true } }, timeoutMs: 5 }), /preview_browser_cleanup_failed/)
+  }
+  assert.ok(Date.now() - start < 1000)
+  assert.deepEqual(calls, ['Target.closeTarget', 'Target.disposeBrowserContext', 'Browser.close', 'socket.close'])
+  assert.equal(listenerDisposed, true)
+  assert.equal(terminated, true)
+  assert.equal(accessDisposed, true)
+})
+
+test('successful case cleanup avoids a duplicate target close and still disposes its context', async () => {
+  const cdp = fakeCdp()
+  let disposed = false
+  await finishPreviewCase({ cdp, targetId: 'target', browserContextId: 'context',
+    accessGuard: { async dispose() { disposed = true } } })
+  assert.equal(disposed, true)
+  assert.deepEqual(cdp.calls.map(call => call.method), ['Target.disposeBrowserContext'])
 })

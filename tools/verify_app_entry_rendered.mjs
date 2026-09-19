@@ -9,7 +9,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
 import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
-import { installPreviewBrowserAccess } from './preview_scoped_access.mjs'
+import { installPreviewBrowserAccess, finishPreviewCase } from './preview_scoped_access.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -888,15 +888,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       failures,
     }
   } finally {
-    try {
-      if (accessGuard) await accessGuard.dispose()
-    } finally {
-      for (const dispose of disposers) dispose()
-      await cdp.send('Target.closeTarget', { targetId }).catch(() => {})
-      if (browserContextId) {
-        await cdp.send('Target.disposeBrowserContext', { browserContextId }).catch(() => {})
-      }
-    }
+    await finishPreviewCase({ cdp, targetId, browserContextId, accessGuard, disposers })
   }
 }
 

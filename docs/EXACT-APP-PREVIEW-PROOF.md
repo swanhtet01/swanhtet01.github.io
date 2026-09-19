@@ -52,7 +52,9 @@ fixtures and are technical review evidence, not approved marketing imagery.
   are bypassed. A denied request fails the case; interception is kept until
   confirmed target closure. Close rejection, timeout, negative acknowledgement
   or a late policy failure prevents a successful case; outer cleanup still
-  disposes the context/browser. This is not a general browser sandbox or managed-write
+  disposes the context/browser. Harness and CLI cleanup commands have independent
+  deadlines; process termination and access disposal run even if CDP never
+  answers. Ambiguous teardown is a failed run. This is not a general browser sandbox or managed-write
   journey test. Synthetic transport tests are not proof of authenticated
   provider access or hosted acceptance. Independent review is required before
   first credential-bearing execution.
