@@ -268,10 +268,13 @@ function rawCase(spec, index) {
     origin: spec.surface === 'public' ? previewOrigins.public : previewOrigins.app,
     hash: '',
     viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
-    path: spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.expectedPath || spec.route,
+    path: spec.surface === 'transition' ? '/shop/?tab=today' : spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.expectedPath || spec.route,
     rendered: { retirement: spec.surface === 'retired_plant' ? {
       policy: 'supermega.retired-product-preview.v1', caseId: spec.id, redirectVerified: true,
       activeChooserVerified: true, retiredUiAbsent: true, retainedDataUnchanged: true,
+    } : null, pairedTransition: spec.surface === 'transition' ? {
+      contract: 'supermega.paired-preview-transition.v1', publicOrigin: previewOrigins.public, appOrigin: previewOrigins.app,
+      targetPath: '/shop/?tab=today', visibleActionActivated: true, destinationStable: true, pairOnlyRequests: true, noMutatingRequests: true,
     } : null },
     bodyLength: 2048 + index,
     layout: spec.surface === 'shop' ? { ok: true, aboveFold: true, accessibility: { ok: true } } : null,
@@ -414,7 +417,7 @@ test('requires one exact generation or validation argument set', () => {
   )
 })
 
-test('builds and validates the exact twenty-four-case technical preview proof', async () => {
+test('builds and validates the exact twenty-six-case technical preview proof', async () => {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'site-manifest.json'), 'utf8'))
   const generatorSource = await readFile(join(repoRoot, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
   const proofGuide = await readFile(join(repoRoot, 'docs', 'EXACT-APP-PREVIEW-PROOF.md'), 'utf8')
@@ -426,9 +429,9 @@ test('builds and validates the exact twenty-four-case technical preview proof', 
   assert.equal(proofGuide.split(profitControlGuideRow).length - 1, 1)
   assert.match(proofGuide, /The Shop Profit Control cases do not edit browser storage\./)
   assert.match(proofGuide, /`Review payments` links to\s+`\/shop\/\?tab=orders#shop-order-queue`/)
-  assert.match(proofGuide, /all twenty-four\s+screenshots/)
-  assert.match(proofGuide, /before and after the twenty-four browser cases/)
-  assert.match(proofGuide, /all twenty-four PNG files, including both Shop Counter and\s+Shop Profit Control/)
+  assert.match(proofGuide, /all twenty-six\s+screenshots/)
+  assert.match(proofGuide, /before and after the twenty-six browser cases/)
+  assert.match(proofGuide, /all twenty-six PNG files, including both Shop Counter and\s+Shop Profit Control/)
   assert.doesNotMatch(proofGuide, /all ten|ten browser cases/)
   assert.match(renderedHarnessSource, /event\.type === 'warning' \|\| event\.type === 'warn'/)
   assert.match(renderedHarnessSource, /event\.entry\?\.level === 'warning'/)
@@ -512,7 +515,7 @@ test('builds and validates the exact twenty-four-case technical preview proof', 
     screenshotPayloads: screenshotPayloads(),
   })
   assert.equal(report.contract, EXACT_APP_PREVIEW_CONTRACT)
-  assert.equal(report.cases.length, 24)
+  assert.equal(report.cases.length, 26)
   assert.deepEqual(report.cases.map((entry) => entry.id), EXACT_APP_PREVIEW_CASE_MATRIX.map((entry) => entry.id))
   assert.equal(report.cases.every((entry) => entry.mutatingRequestCount === 0), true)
   assert.equal(report.cases.every((entry) => entry.browserContextIsolated === true), true)
@@ -528,7 +531,7 @@ test('builds and validates the exact twenty-four-case technical preview proof', 
   assert.equal(Object.hasOwn(report.controls, 'providerWritesPerformed'), false)
   assert.equal(Object.hasOwn(report.controls, 'databaseConnectionsPerformed'), false)
   assert.equal(validation.technicalRenderedPreviewPassed, true)
-  assert.equal(validation.screenshots.length, 24)
+  assert.equal(validation.screenshots.length, 26)
   assert.equal(validation.exactPreviewAccepted, false)
 })
 
@@ -540,16 +543,16 @@ test('rejects swapped, missing, extra, wrong-route, wrong-viewport, and wrong-sc
   await assert.rejects(() => reportFixture({ cases: validCases.slice(1) }), /exact_app_preview_case_matrix_invalid/)
   await assert.rejects(() => reportFixture({ cases: [...validCases, validCases[0]] }), /exact_app_preview_case_matrix_invalid/)
   const wrongViewport = clone(validCases)
-  wrongViewport[3].viewport = '391x844 mobile'
+  wrongViewport[caseIndex('shop_mobile')].viewport = '391x844 mobile'
   await assert.rejects(() => reportFixture({ cases: wrongViewport }), /exact_app_preview_case_invalid:shop_mobile/)
   const wrongRoute = clone(validCases)
-  wrongRoute[2].path = '/shop/?tab=counter&template=mini-mart&unreviewed=true'
+  wrongRoute[caseIndex('shop_desktop')].path = '/shop/?tab=counter&template=mini-mart&unreviewed=true'
   await assert.rejects(() => reportFixture({ cases: wrongRoute }), /exact_app_preview_case_invalid:shop_desktop/)
   const crossOrigin = clone(validCases)
   crossOrigin[0].origin = previewOrigins.app
   await assert.rejects(() => reportFixture({ cases: crossOrigin }), /exact_app_preview_case_invalid:public_desktop/)
   const sharedContext = clone(validCases)
-  sharedContext[2].browserContextIsolated = false
+  sharedContext[caseIndex('shop_desktop')].browserContextIsolated = false
   await assert.rejects(() => reportFixture({ cases: sharedContext }), /exact_app_preview_case_invalid:shop_desktop/)
   const wrongScreenshot = clone(validCases)
   wrongScreenshot[caseIndex('website_desktop')].screenshot.file = 'other.png'
@@ -605,7 +608,7 @@ test('rejects browser writes and missing Shop or Ecommerce flow proof', async ()
   mutating[caseIndex('retired_plant_0_desktop')].network = { mutatingRequestCount: 1, mutatingRequests: [{ method: 'POST', path: '/api/write' }] }
   await assert.rejects(() => reportFixture({ cases: mutating }), /exact_app_preview_browser_write_observed:retired_plant_0_desktop/)
   const shop = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
-  shop[2].layout.aboveFold = false
+  shop[caseIndex('shop_desktop')].layout.aboveFold = false
   await assert.rejects(() => reportFixture({ cases: shop }), /exact_app_preview_shop_flow_invalid:shop_desktop/)
   const ecommerce = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
   ecommerce[caseIndex('ecommerce_desktop')].claimBoundary.ok = false
@@ -744,6 +747,13 @@ test('retirement cases require explicit policy, preservation and chooser proof',
     const cases = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
     mutate(cases[caseIndex('retired_plant_0_desktop')])
     await assert.rejects(() => reportFixture({ cases }), /exact_app_preview_(case_invalid|retirement_invalid)/)
+  }
+})
+test('transition evidence cannot be replaced by a direct route screenshot or wrong pair', async () => {
+  for (const field of ['publicOrigin', 'appOrigin', 'targetPath', 'contract', 'visibleActionActivated', 'destinationStable', 'pairOnlyRequests', 'noMutatingRequests']) {
+    const cases = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
+    cases[caseIndex('transition_desktop')].rendered.pairedTransition[field] = null
+    await assert.rejects(() => reportFixture({ cases }), /exact_app_preview_transition_invalid/)
   }
 })
 
