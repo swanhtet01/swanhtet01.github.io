@@ -28,7 +28,7 @@ export function verifyCurrentReleaseAssets({
   activationRunbookChunk,
 }) {
   const groups = [
-    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'We set it up. You approve the result and run your business.', 'supermega.last-product.v1', 'First action', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Complete a sample sale', 'Run a sample production job', 'Preview a business website', 'Save a sample request on this device', 'Sales, orders, stock, close.', 'Jobs, materials, quality.', 'Pages, leads, preview.', 'Storefront to Shop handoff.', 'Samples stay separate.', 'Open', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'We set it up. You approve the result and run your business.', 'supermega.last-product.v1', 'First action', 'Shop', 'Website', 'Ecommerce', 'Complete a sample sale', 'Preview a business website', 'Save a sample request on this device', 'Sales, orders, stock, close.', 'Pages, leads, preview.', 'Storefront to Shop handoff.', 'Samples stay separate.', 'Open', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['guided_outcomes', productOnboardingChunk, ['Complete a sample sale', 'Create Shop and start selling', 'Run a sample production job', 'Create Plant and open the job', 'Preview a business website', 'Create Website and preview it', 'Open a working online store', 'Create Ecommerce and open the store']],
     ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'We will add realistic sample records now; replace them with your data whenever you are ready.', 'First useful result:', 'Creates local sample records, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
     ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'One review records payment, handoff, stock, and the order record.', 'Keep as open order', 'Create order', 'Creates an open order; payment and handoff stay for Orders.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'It does not charge a wallet or card', 'No payment is captured']],
@@ -54,7 +54,7 @@ export function verifyCurrentReleaseAssets({
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
-  for (const forbidden of ['Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
+  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
     checks += 1
     if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
   }
@@ -144,7 +144,7 @@ if (artifactSelfTest) {
   const websiteDependencyCorpus = (await Promise.all(
     extractRelativeJavascriptDependencies(websiteChunk).map((name) => readFile(join(assetsDir, name), 'utf8')),
   )).join('\n')
-  const result = verifyCurrentReleaseAssets({
+  const artifactInput = {
     manifest: artifactManifest,
     assetCorpus,
     operationsChunk,
@@ -158,8 +158,25 @@ if (artifactSelfTest) {
     managedAccountChunk,
     companyBackupCorpus: `${settingsChunk}\n${companyBackupChunk}`,
     activationRunbookChunk,
-  })
-  console.log(JSON.stringify({ ok: true, ...result, evidenceVersion }, null, 2))
+  }
+  const result = verifyCurrentReleaseAssets(artifactInput)
+  const launcherMutations = [
+    ...['Complete a sample sale', 'Preview a business website', 'Save a sample request on this device'].map((text) => ({
+      corpus: assetCorpus.replaceAll(text, ''), expected: `missing_current_release_asset:launcher:${text}`,
+    })),
+    ...['Run a sample production job', 'Jobs, materials, quality.'].map((text) => ({
+      corpus: `${assetCorpus}\n${text}`, expected: `retired_launcher_release_asset:${text}`,
+    })),
+  ]
+  for (const { corpus, expected } of launcherMutations) {
+    let rejected = false
+    try { verifyCurrentReleaseAssets({ ...artifactInput, assetCorpus: corpus }) } catch (error) {
+      if (error.message !== expected) throw error
+      rejected = true
+    }
+    if (!rejected) throw new Error(`launcher_mutation_not_rejected:${expected}`)
+  }
+  console.log(JSON.stringify({ ok: true, ...result, launcherMutationChecks: launcherMutations.length, evidenceVersion }, null, 2))
   process.exit(0)
 }
 
