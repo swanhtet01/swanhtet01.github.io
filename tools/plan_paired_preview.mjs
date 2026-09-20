@@ -23,12 +23,17 @@ function git(path, args) {
   }).trim()
 }
 
-export function inspectSource(path) {
+export function inspectSource(path, runGit = git) {
   try {
     const root = realpathSync(path)
-    if (realpathSync(git(root, ['rev-parse', '--show-toplevel'])) !== root) fail('root_required')
-    return { root, commit: git(root, ['rev-parse', 'HEAD']), tree: git(root, ['rev-parse', 'HEAD^{tree}']),
-      clean: git(root, ['status', '--porcelain', '--untracked-files=all']) === '' }
+    // Status can execute local clean/process filters outside commit identity.
+    let filters = ''
+    try { filters = runGit(root, ['config', '--get-regexp', '^filter\\..*\\.(process|smudge|clean)$']) }
+    catch (error) { if (error.status !== 1) fail('filter_inspection_failed') }
+    if (filters) fail('filters_not_allowed')
+    if (realpathSync(runGit(root, ['rev-parse', '--show-toplevel'])) !== root) fail('root_required')
+    return { root, commit: runGit(root, ['rev-parse', 'HEAD']), tree: runGit(root, ['rev-parse', 'HEAD^{tree}']),
+      clean: runGit(root, ['status', '--porcelain', '--untracked-files=all']) === '' }
   } catch { fail('source_inspection_failed') }
 }
 

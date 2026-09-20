@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { digest, planPairedPreview } from './plan_paired_preview.mjs'
+import { realpathSync } from 'node:fs'
+import { digest, inspectSource, planPairedPreview } from './plan_paired_preview.mjs'
 
 const commit = 'a'.repeat(40), tree = 'b'.repeat(40)
 const body = () => ({ contract: 'supermega.paired-preview-source-preparation.v1', state: 'local_sources_prepared',
@@ -44,4 +45,26 @@ test('untrusted provider claims cannot clear blockers or leak through output', (
 test('dirty tooling is rejected', () => {
   const args = input(); args.tooling.clean = false
   assert.throws(() => planPairedPreview(args, inspect), /tooling_invalid/)
+})
+for (const mode of ['clean', 'process', 'smudge', 'inspection_error']) test(`Git boundary blocks ${mode} before status`, () => {
+  const calls = []
+  assert.throws(() => inspectSource(process.cwd(), (_root, args) => {
+    calls.push(args[0])
+    if (mode === 'inspection_error') throw Object.assign(new Error('SYNTHETIC-PRIVATE-SENTINEL'), {status: 2})
+    return `filter.synthetic.${mode} SYNTHETIC-PRIVATE-SENTINEL`
+  }), /^Error: paired_preview_plan_source_inspection_failed$/)
+  assert.deepEqual(calls, ['config'])
+})
+test('no-filter exit one allows normal identity and status reads', () => {
+  const calls = []
+  const actual = inspectSource(process.cwd(), (_root, args) => {
+    calls.push(args[0])
+    if (args[0] === 'config') throw Object.assign(new Error('no matches'), {status: 1})
+    if (args[1] === '--show-toplevel') return realpathSync(process.cwd())
+    if (args[1] === 'HEAD') return commit
+    if (args[1] === 'HEAD^{tree}') return tree
+    return ''
+  })
+  assert.equal(actual.clean, true)
+  assert.deepEqual(calls, ['config', 'rev-parse', 'rev-parse', 'rev-parse', 'status'])
 })
