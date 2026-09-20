@@ -90,8 +90,12 @@ jobs:
 
       - name: Verify desktop and 390px product journeys
         env:
+          CHROMIUM_BIN: /usr/bin/google-chrome
           SUPERMEGA_RENDERED_EVIDENCE_DIR: ${{ runner.temp }}/supermega-app-entry-rendered-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
+          test -x "$CHROMIUM_BIN"
+          "$CHROMIUM_BIN" --version
+          node --test --test-concurrency=1 tools/browser_startup.test.mjs
           node tools/verify_app_entry_rendered.mjs \
             --out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json" \
             --screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR" \

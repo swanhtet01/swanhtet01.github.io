@@ -5,7 +5,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
+import { startBrowser } from './browser_startup.mjs'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
 import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
@@ -53,9 +54,17 @@ const mime = {
   '.woff2': 'font/woff2',
 }
 
-export function findBrowser() {
+export function findBrowser({ explicit = explicitChromium, exists = existsSync, probe = spawnSync } = {}) {
+  if (explicit) {
+    if (explicit.includes('/') || explicit.includes('\\')) {
+      if (!exists(explicit)) throw new Error('explicit_browser_missing')
+    } else {
+      const result = probe(explicit, ['--version'], { stdio: 'ignore', timeout: 5_000 })
+      if (result.error || result.status !== 0) throw new Error('explicit_browser_unavailable')
+    }
+    return explicit
+  }
   const candidates = [
-    explicitChromium,
     process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : '',
     process.platform === 'win32' ? 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' : '',
     process.platform === 'win32' ? 'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe' : '',
@@ -71,11 +80,11 @@ export function findBrowser() {
   ].filter(Boolean)
   for (const candidate of candidates) {
     if (candidate.includes(sep) || /^[A-Za-z]:[\\/]/.test(candidate)) {
-      if (existsSync(candidate)) return candidate
+      if (exists(candidate)) return candidate
       continue
     }
-    const probe = spawnSync(candidate, ['--version'], { stdio: 'ignore' })
-    if (!probe.error) return candidate
+    const result = probe(candidate, ['--version'], { stdio: 'ignore', timeout: 5_000 })
+    if (!result.error && result.status === 0) return candidate
   }
   throw new Error('No Chromium-compatible browser found. Set CHROMIUM_BIN or pass --chromium.')
 }
@@ -196,9 +205,7 @@ export class Cdp {
 
 export async function launchBrowser(browserBin, userDataDir) {
   const debugPort = await reservePort()
-  let stderr = ''
-  let exited = null
-  const browser = spawn(browserBin, [
+  return startBrowser(browserBin, [
     '--headless=new',
     '--no-first-run',
     '--no-default-browser-check',
@@ -209,27 +216,7 @@ export async function launchBrowser(browserBin, userDataDir) {
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${userDataDir}`,
     'about:blank',
-  ], { stdio: ['ignore', 'ignore', 'pipe'] })
-
-  browser.stderr.on('data', (chunk) => { stderr += chunk })
-  browser.on('exit', (code) => { exited = code })
-
-  const deadline = Date.now() + 30_000
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${debugPort}/json/version`)
-      if (response.ok) {
-        const version = await response.json()
-        if (version.webSocketDebuggerUrl) return { browser, wsUrl: version.webSocketDebuggerUrl }
-      }
-    } catch {
-      // Browser startup is still in progress.
-    }
-    await new Promise((resolveWait) => setTimeout(resolveWait, 250))
-  }
-  const exitNote = exited === null ? 'still running' : `exited with code ${exited}`
-  browser.kill()
-  throw new Error(`browser did not expose DevTools on port ${debugPort} (${exitNote}). ${stderr.trim()}`.trim())
+  ], debugPort)
 }
 
 async function evalInPage(cdp, sessionId, expression) {
@@ -1090,9 +1077,12 @@ async function main() {
   const userDataDir = await mkdtemp(join(tmpdir(), 'supermega-entry-rendered-'))
   const server = await startServer()
   const origin = `http://127.0.0.1:${server.address().port}`
-  const { browser, wsUrl } = await launchBrowser(browserBin, userDataDir)
-  const cdp = await Cdp.connect(wsUrl)
+  let browser
+  let cdp
   try {
+    const started = await launchBrowser(browserBin, userDataDir)
+    browser = started.browser
+    cdp = await Cdp.connect(started.wsUrl)
     const version = await cdp.send('Browser.getVersion')
     const cases = []
     const selectedTests = shopOnly
@@ -1135,10 +1125,12 @@ async function main() {
       process.exitCode = 1
     }
   } finally {
-    await cdp.send('Browser.close').catch(() => {})
-    await cdp.close().catch(() => {})
+    if (cdp) {
+      await cdp.send('Browser.close').catch(() => {})
+      await cdp.close().catch(() => {})
+    }
     server.close()
-    browser.kill()
+    browser?.kill()
     await rm(userDataDir, { recursive: true, force: true }).catch(() => {})
   }
 }
