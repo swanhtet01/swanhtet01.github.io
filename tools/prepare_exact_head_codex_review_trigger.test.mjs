@@ -18,13 +18,13 @@ const head = 'a'.repeat(40)
 const base = 'b'.repeat(40)
 const tree = 'c'.repeat(40)
 const now = new Date('2026-08-31T10:00:00.000Z')
-const authority = { handoff: { candidate: head, fileDigest: `sha256:${'1'.repeat(64)}`, bodyDigest: `sha256:${'2'.repeat(64)}` }, protection: { healthy: true, fileDigest: `sha256:${'3'.repeat(64)}`, bodyDigest: `sha256:${'4'.repeat(64)}` } }
+const authority = { handoff: { candidate: head, branch: 'codex/release-stack-integration-rehearsal-20260825', origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', mainCommit: base, fileDigest: `sha256:${'1'.repeat(64)}`, bodyDigest: `sha256:${'2'.repeat(64)}` }, protection: { mainCommit: base, healthy: true, fileDigest: `sha256:${'3'.repeat(64)}`, bodyDigest: `sha256:${'4'.repeat(64)}` } }
 const gitState = { branch: 'codex/release-stack-integration-rehearsal-20260825', head, tree, origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', clean: true }
 const tools = [{ path: 'tools/prepare_exact_head_codex_review_trigger.mjs', digest: `sha256:${'5'.repeat(64)}` }, { path: 'tools/apply_exact_head_codex_review_trigger.mjs', digest: `sha256:${'6'.repeat(64)}` }]
 
 function state(overrides = {}) {
   const value = {
-    pr: { number: 561, state: 'open', draft: false, updated_at: '2026-08-31T09:48:04Z', base: { sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { sha: head } },
+    pr: { number: 561, state: 'open', draft: false, updated_at: '2026-08-31T09:48:04Z', base: { ref: 'main', sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { ref: 'codex/release-stack-integration-rehearsal-20260825', sha: head, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } } },
     checks: { check_runs: [{ id: 1, name: 'validate', status: 'completed', conclusion: 'success' }] },
     reviews: [], comments: [], timeline: [{ event: 'committed', sha: head }], ...overrides,
   }
@@ -36,6 +36,43 @@ async function plan(value = state()) { return collectExactHeadCodexReviewPlan({ 
 function response(status, json, link = null) { return { ok: status >= 200 && status < 300, status, headers: { get: (name) => name.toLowerCase() === 'link' ? link : null }, async json() { return json } } }
 function digest(value) { return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}` }
 function sealed(body) { return { ...body, digest: digest(JSON.stringify(body)) } }
+
+test('sealed branch authority supports paired preview and rejects ref, fork, base and PR substitution', async () => {
+  const branch = 'codex/paired-preview-navigation-20260919'
+  const auth = { ...authority, handoff: { ...authority.handoff, branch } }
+  const local = { ...gitState, branch }
+  const current = state()
+  current.pr.number = 594
+  current.pr.head.ref = branch
+  const collect = (value = current, a = auth, g = local) => collectExactHeadCodexReviewPlan({ prNumber: 594, authority: a, fetchJson: fetcher(value), gitState: g, now, toolDigests: Promise.resolve(tools) })
+  const accepted = await collect()
+  assert.equal(validateExactHeadCodexReviewPlan(accepted, { now }), accepted)
+  for (const mutate of [
+    p => { p.head.ref = 'codex/other' },
+    p => { p.head.repo.full_name = 'attacker/fork' },
+    p => { p.base.ref = 'codex/other' },
+    p => { p.base.repo.full_name = 'attacker/fork' },
+    p => { p.base.sha = 'e'.repeat(40) },
+    p => { p.number = 595 },
+  ]) {
+    const changed = structuredClone(current); mutate(changed.pr)
+    await assert.rejects(collect(changed), /exact_head_codex_review_(ref_binding_invalid|pr_number_mismatch)/)
+  }
+  await assert.rejects(collect(current, auth, { ...local, branch: 'codex/other' }), /ref_binding_invalid/)
+  for (const field of ['branch', 'origin', 'mainCommit']) {
+    const altered = structuredClone(accepted); delete altered.authority.handoff[field]
+    const { digest: ignored, ...body } = altered
+    assert.throws(() => validateExactHeadCodexReviewPlan(sealed(body), { now }), /ref_binding_invalid/)
+  }
+  for (const field of ['headRef', 'baseRef', 'headRepository', 'baseRepository']) {
+    const altered = structuredClone(accepted); altered.pullRequest[field] = 'codex/other'
+    const { digest: ignored, ...body } = altered
+    assert.throws(() => validateExactHeadCodexReviewPlan(sealed(body), { now }), /ref_binding_invalid/)
+  }
+  for (const branch of ['main', 'HEAD', 'codex/a..b', 'codex/a.lock', 'codex/.hidden', 'codex/a//b']) {
+    await assert.rejects(collect(current, auth, { ...local, branch }), /local_state_invalid/)
+  }
+})
 
 test('plan is read-only, digest-bound, exact-head, and hard-codes the sole comment body', async () => {
   const packet = await plan()
@@ -156,8 +193,8 @@ test('CLI main uses the exhaustive GET-only collector to write an exact no-write
   const handoffPath = join(directory, 'handoff.json')
   const protectionPath = join(directory, 'protection.json')
   const outputPath = join(directory, 'plan.json')
-  const handoff = sealed({ contract: 'supermega.release-handoff.v2', repository: 'swanhtet01/swanhtet01.github.io', candidate: { commit: head, clean: true }, verification: { passed: true, verifiedCommit: head }, authority: { pushApproved: false, mergeApproved: false, workflowDispatchApproved: false, deploymentApproved: false, domainChangeApproved: false, providerMutationApproved: false, remoteWritesPerformed: false, providerWritesPerformed: false, credentialValuesInspected: false } })
-  const protection = sealed({ contract: 'supermega.github-main-protection-snapshot.v1', repository: 'swanhtet01/swanhtet01.github.io', assessment: { ok: true, failures: [] }, controls: { githubApiMethods: ['GET'], githubWritesPerformed: false, repositorySettingsMutated: false, branchMutated: false, pullRequestCreated: false, mergePerformed: false, deploymentPerformed: false, supabaseMutated: false, credentialValueExposed: false } })
+  const handoff = sealed({ contract: 'supermega.release-handoff.v2', repository: 'swanhtet01/swanhtet01.github.io', candidate: { branch: gitState.branch, commit: head, clean: true }, remote: { origin: gitState.origin, mainCommit: base }, verification: { passed: true, verifiedCommit: head }, authority: { pushApproved: false, mergeApproved: false, workflowDispatchApproved: false, deploymentApproved: false, domainChangeApproved: false, providerMutationApproved: false, remoteWritesPerformed: false, providerWritesPerformed: false, credentialValuesInspected: false } })
+  const protection = sealed({ contract: 'supermega.github-main-protection-snapshot.v1', branch: { name: 'main', commit: { sha: base } }, repository: 'swanhtet01/swanhtet01.github.io', assessment: { ok: true, failures: [] }, controls: { githubApiMethods: ['GET'], githubWritesPerformed: false, repositorySettingsMutated: false, branchMutated: false, pullRequestCreated: false, mergePerformed: false, deploymentPerformed: false, supabaseMutated: false, credentialValueExposed: false } })
   await writeFile(handoffPath, JSON.stringify(handoff), 'utf8')
   await writeFile(protectionPath, JSON.stringify(protection), 'utf8')
   const originalFetch = globalThis.fetch

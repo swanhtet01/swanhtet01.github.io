@@ -18,7 +18,31 @@ const SHA = /^[0-9a-f]{40}$/
 const DIGEST = /^sha256:[0-9a-f]{64}$/
 const MAX_FILE_BYTES = 1_000_000
 const ACCEPTED_CHECK_CONCLUSIONS = new Set(['success', 'neutral', 'skipped'])
-const CANONICAL_BRANCH = 'codex/release-stack-integration-rehearsal-20260825'
+function reviewBranch(value) {
+  return typeof value === 'string' && /^codex\/[a-z0-9][a-z0-9._/-]{0,119}$/.test(value)
+    && !value.includes('..') && !value.includes('//') && !value.endsWith('/')
+    && value.split('/').every((part) => !part.startsWith('.') && !part.endsWith('.') && !part.endsWith('.lock'))
+}
+
+export function reviewIdentity(pr) {
+  if (!record(pr) || pr.base?.repo?.full_name !== EXACT_HEAD_CODEX_REVIEW_REPOSITORY
+    || pr.head?.repo?.full_name !== EXACT_HEAD_CODEX_REVIEW_REPOSITORY
+    || pr.base?.ref !== 'main' || !reviewBranch(pr.head?.ref)) fail('exact_head_codex_review_ref_binding_invalid')
+  return { number: exactNumber(pr.number, 'exact_head_codex_review_pr_invalid'), headRef: pr.head.ref,
+    baseRef: pr.base.ref, headRepository: pr.head.repo.full_name, baseRepository: pr.base.repo.full_name,
+    head: exactSha(pr.head.sha, 'exact_head_codex_review_head_invalid'), base: exactSha(pr.base.sha, 'exact_head_codex_review_base_invalid') }
+}
+
+function validateBindings(authority, identity, local) {
+  if (!reviewBranch(authority?.handoff?.branch) || authority.handoff.branch !== identity.headRef
+    || authority.handoff.branch !== local?.branch || authority.handoff.candidate !== identity.head
+    || authority.handoff.origin !== EXACT_HEAD_CODEX_REVIEW_ORIGIN
+    || authority.handoff.mainCommit !== identity.base || authority.protection?.mainCommit !== identity.base
+    || identity.headRepository !== EXACT_HEAD_CODEX_REVIEW_REPOSITORY
+    || identity.baseRepository !== EXACT_HEAD_CODEX_REVIEW_REPOSITORY || identity.baseRef !== 'main') {
+    fail('exact_head_codex_review_ref_binding_invalid')
+  }
+}
 const TOOL_PATHS = ['tools/prepare_exact_head_codex_review_trigger.mjs', 'tools/apply_exact_head_codex_review_trigger.mjs']
 const CONTROL_FALSE_KEYS = ['githubWriteAttempted', 'githubWritesPerformed', 'issueCommentPosted', 'ownerApprovalReceiptConsumed', 'reviewerRequested', 'pullRequestMutated', 'workflowDispatched', 'repositorySettingsMutated', 'mergePerformed', 'deploymentPerformed', 'providerMutated', 'credentialValueExposed']
 
@@ -105,8 +129,11 @@ function validateAuthority(authority, head) {
 export async function collectExactHeadCodexReviewPlan({ prNumber = 561, authority, fetchJson, gitState = localGitState(), now = new Date(), toolDigests = sourceToolDigests() } = {}) {
   const number = exactNumber(prNumber, 'exact_head_codex_review_pr_invalid')
   if (typeof fetchJson !== 'function') fail('exact_head_codex_review_fetch_required')
-  if (!gitState.clean || gitState.branch !== CANONICAL_BRANCH || gitState.origin !== EXACT_HEAD_CODEX_REVIEW_ORIGIN) fail('exact_head_codex_review_local_state_invalid')
+  if (!gitState.clean || !reviewBranch(gitState.branch) || gitState.origin !== EXACT_HEAD_CODEX_REVIEW_ORIGIN) fail('exact_head_codex_review_local_state_invalid')
   const pr = await fetchJson(`/pulls/${number}`)
+  const identity = reviewIdentity(pr)
+  if (identity.number !== number) fail('exact_head_codex_review_pr_number_mismatch')
+  validateBindings(authority, identity, gitState)
   const head = exactSha(pr?.head?.sha, 'exact_head_codex_review_head_invalid')
   const [checks, reviews, comments, timeline, resolvedToolDigests] = await Promise.all([fetchJson(`/commits/${head}/check-runs?per_page=100&filter=latest`), fetchJson(`/pulls/${number}/reviews?per_page=100`), fetchJson(`/issues/${number}/comments?per_page=100`), fetchJson(`/issues/${number}/timeline?per_page=100`), toolDigests])
   const observed = normaliseState({ pr, checks, reviews, comments, timeline })
@@ -117,7 +144,7 @@ export async function collectExactHeadCodexReviewPlan({ prNumber = 561, authorit
   const body = {
     ok: true, contract: EXACT_HEAD_CODEX_REVIEW_TRIGGER_PLAN_CONTRACT, digestScope: 'utf8_compact_json_without_digest', mode: 'plan_only_no_github_write', generatedAt: generatedAt.toISOString(), expiresAt,
     repository: EXACT_HEAD_CODEX_REVIEW_REPOSITORY, origin: EXACT_HEAD_CODEX_REVIEW_ORIGIN,
-    pullRequest: { number: observed.number, state: 'open', draft: false, base: observed.base, head: observed.head, headUpdatedAt: observed.updatedAt },
+    pullRequest: { ...identity, state: 'open', draft: false, headUpdatedAt: observed.updatedAt },
     local: { branch: gitState.branch, head: gitState.head, tree: gitState.tree, clean: true, origin: gitState.origin },
     authority: acceptedAuthority,
     observed: { exactHeadChecks: observed.checks, exactHeadReviews: observed.exactHeadReviews, reviewNamedChecks: observed.reviewNamedChecks, codexReviewComments: observed.codexReviewComments, headTimeline: observed.headTimeline, currentHeadTriggerCount: 0 },
@@ -138,7 +165,8 @@ export function validateExactHeadCodexReviewPlan(packet, { now = new Date() } = 
   const expires = exactDate(packet.expiresAt, 'exact_head_codex_review_plan_expiry_invalid'); const current = now instanceof Date ? now.getTime() : new Date(now).getTime(); if (!Number.isFinite(current) || current >= expires.getTime()) fail('exact_head_codex_review_plan_expired')
   normaliseState({ pr: { number: packet.pullRequest?.number, state: packet.pullRequest?.state, draft: packet.pullRequest?.draft, base: { repo: { full_name: packet.repository }, sha: packet.pullRequest?.base }, head: { sha: packet.pullRequest?.head }, updated_at: packet.pullRequest?.headUpdatedAt }, checks: { check_runs: packet.observed?.exactHeadChecks }, reviews: packet.observed?.exactHeadReviews.map((id) => ({ id, commit_id: packet.pullRequest?.head })) || [], comments: packet.observed?.codexReviewComments.map((comment) => ({ ...comment, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: comment.createdAt })) || [], headTimeline: packet.observed?.headTimeline })
   validateAuthority(packet.authority, packet.pullRequest?.head)
-  if (!packet.local?.clean || packet.local?.branch !== CANONICAL_BRANCH || packet.local?.origin !== EXACT_HEAD_CODEX_REVIEW_ORIGIN || packet.local?.head !== packet.pullRequest?.head || !SHA.test(String(packet.local?.tree || '')) || !Array.isArray(packet.sourceToolDigests) || packet.sourceToolDigests.length !== TOOL_PATHS.length || packet.sourceToolDigests.some((entry, index) => entry?.path !== TOOL_PATHS[index] || !DIGEST.test(String(entry?.digest || ''))) || packet.readiness?.executeReady !== false || packet.readiness?.ownerApprovalRequired !== true || packet.readiness?.blockers?.length !== 0 || packet.controls?.githubWriteOutcome !== 'confirmed_not_performed' || packet.controls?.githubWriteRetryAllowed !== false || CONTROL_FALSE_KEYS.some((key) => packet.controls?.[key] !== false) || Object.keys(packet.controls || {}).length !== CONTROL_FALSE_KEYS.length + 2) fail('exact_head_codex_review_plan_controls_invalid')
+  validateBindings(packet.authority, packet.pullRequest, packet.local)
+  if (!packet.local?.clean || !reviewBranch(packet.local?.branch) || packet.local?.origin !== EXACT_HEAD_CODEX_REVIEW_ORIGIN || packet.local?.head !== packet.pullRequest?.head || !SHA.test(String(packet.local?.tree || '')) || !Array.isArray(packet.sourceToolDigests) || packet.sourceToolDigests.length !== TOOL_PATHS.length || packet.sourceToolDigests.some((entry, index) => entry?.path !== TOOL_PATHS[index] || !DIGEST.test(String(entry?.digest || ''))) || packet.readiness?.executeReady !== false || packet.readiness?.ownerApprovalRequired !== true || packet.readiness?.blockers?.length !== 0 || packet.controls?.githubWriteOutcome !== 'confirmed_not_performed' || packet.controls?.githubWriteRetryAllowed !== false || CONTROL_FALSE_KEYS.some((key) => packet.controls?.[key] !== false) || Object.keys(packet.controls || {}).length !== CONTROL_FALSE_KEYS.length + 2) fail('exact_head_codex_review_plan_controls_invalid')
   noSecrets(packet)
   return packet
 }
@@ -249,7 +277,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const [handoff, protection] = await Promise.all([readAuthority(options.handoff, 'handoff'), readAuthority(options.protection, 'protection')])
   assertAuthorityPackets(handoff, protection)
   const candidate = handoff.packet?.candidate?.commit
-  const plan = await collectExactHeadCodexReviewPlan({ ...dependencies, prNumber: options.pr, fetchJson: fetchGitHubJson, authority: { handoff: { candidate, fileDigest: handoff.fileDigest, bodyDigest: handoff.bodyDigest }, protection: { healthy: protection.packet?.assessment?.ok === true && Array.isArray(protection.packet?.assessment?.failures) && protection.packet.assessment.failures.length === 0, fileDigest: protection.fileDigest, bodyDigest: protection.bodyDigest } } })
+  const plan = await collectExactHeadCodexReviewPlan({ ...dependencies, prNumber: options.pr, fetchJson: fetchGitHubJson, authority: { handoff: { candidate, branch: handoff.packet.candidate.branch, origin: handoff.packet.remote?.origin, mainCommit: handoff.packet.remote?.mainCommit, fileDigest: handoff.fileDigest, bodyDigest: handoff.bodyDigest }, protection: { mainCommit: protection.packet.branch?.commit?.sha, healthy: protection.packet?.assessment?.ok === true && Array.isArray(protection.packet?.assessment?.failures) && protection.packet.assessment.failures.length === 0, fileDigest: protection.fileDigest, bodyDigest: protection.bodyDigest } } })
   const output = resolve(options.output); await mkdir(dirname(output), { recursive: true }); await writeFile(output, `${JSON.stringify(plan, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' }); console.log(JSON.stringify({ ok: true, contract: plan.contract, output, fileDigest: compactDigest(await readFile(output, 'utf8')), digest: plan.digest, githubWritesPerformed: false }, null, 2))
 }
 

@@ -17,13 +17,13 @@ const head = 'a'.repeat(40)
 const base = 'b'.repeat(40)
 const tree = 'c'.repeat(40)
 const fixedNow = new Date('2026-08-31T09:00:00.000Z')
-const authority = { handoff: { candidate: head, fileDigest: `sha256:${'1'.repeat(64)}`, bodyDigest: `sha256:${'2'.repeat(64)}` }, protection: { healthy: true, fileDigest: `sha256:${'3'.repeat(64)}`, bodyDigest: `sha256:${'4'.repeat(64)}` } }
+const authority = { handoff: { candidate: head, branch: 'codex/release-stack-integration-rehearsal-20260825', origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', mainCommit: base, fileDigest: `sha256:${'1'.repeat(64)}`, bodyDigest: `sha256:${'2'.repeat(64)}` }, protection: { mainCommit: base, healthy: true, fileDigest: `sha256:${'3'.repeat(64)}`, bodyDigest: `sha256:${'4'.repeat(64)}` } }
 const gitState = { branch: 'codex/release-stack-integration-rehearsal-20260825', head, tree, origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', clean: true }
 const tools = [{ path: 'tools/prepare_exact_head_codex_review_trigger.mjs', digest: `sha256:${'5'.repeat(64)}` }, { path: 'tools/apply_exact_head_codex_review_trigger.mjs', digest: `sha256:${'6'.repeat(64)}` }]
 const digest = (value) => `sha256:${createHash('sha256').update(value.replace(/\r\n?/g, '\n')).digest('hex')}`
 
 function api(overrides = {}) {
-  const value = { pr: { number: 561, state: 'open', draft: false, updated_at: '2026-08-31T08:04:23.000Z', base: { sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { sha: head } }, checks: { check_runs: [{ id: 1, name: 'validate', status: 'completed', conclusion: 'success' }] }, reviews: [], comments: [], timeline: [{ event: 'committed', sha: head }], ...overrides }
+  const value = { pr: { number: 561, state: 'open', draft: false, updated_at: '2026-08-31T08:04:23.000Z', base: { ref: 'main', sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { ref: 'codex/release-stack-integration-rehearsal-20260825', sha: head, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } } }, checks: { check_runs: [{ id: 1, name: 'validate', status: 'completed', conclusion: 'success' }] }, reviews: [], comments: [], timeline: [{ event: 'committed', sha: head }], ...overrides }
   if (!Object.hasOwn(overrides, 'timeline')) value.timeline = [{ event: 'committed', sha: head }, ...value.comments.map((comment) => ({ event: 'commented', id: comment.id }))]
   return value
 }
@@ -31,6 +31,22 @@ function fetcher(current) { return async (path) => path.startsWith('/pulls/') &&
 async function fixture(current = api()) { const plan = await collectExactHeadCodexReviewPlan({ authority, fetchJson: fetcher(current), gitState, now: fixedNow, toolDigests: Promise.resolve(tools) }); return { plan, payload: JSON.stringify(plan), current } }
 function response(status, json) { return { ok: status >= 200 && status < 300, status, async json() { return json } } }
 function options(plan, payload, current, request, extra = {}) { return { plan, planPayload: payload, planFileDigest: digest(payload), fetchJson: fetcher(current), request, confirmer: () => true, env: { GITHUB_TOKEN: 'unit-test-token' }, gitState, now: () => fixedNow, toolDigests: Promise.resolve(tools), nonce: () => '9'.repeat(64), ...extra } }
+
+test('ref-only change during owner dialog blocks POST; after POST retains unknown outcome', async () => {
+  const { plan, payload, current } = await fixture()
+  let posts = 0
+  await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current,
+    async () => { posts++; return response(201, { id: 77 }) },
+    { confirmer: () => { current.pr.head.ref = 'codex/other'; return true } })), /ref_binding_invalid/)
+  assert.equal(posts, 0)
+  const next = await fixture()
+  const request = async (_url, init) => {
+    if (init.method === 'POST') { posts++; next.current.pr.head.ref = 'codex/other'; return response(201, { id: 77 }) }
+    return response(200, { id: 77, body: EXACT_HEAD_CODEX_REVIEW_BODY, user: { login: 'codex-bot' }, created_at: '2026-08-31T09:00:01.000Z' })
+  }
+  await assert.rejects(applyExactHeadCodexReviewTrigger(options(next.plan, next.payload, next.current, request, { nonce: () => 'c'.repeat(64) })), /write_outcome_unknown/)
+  assert.equal(posts, 1)
+})
 
 test('owner-approved executor posts one exact body and reads it back against the same PR head', async () => {
   const { plan, payload, current } = await fixture(); let posts = 0
@@ -123,7 +139,7 @@ test('decline, stale or changed plan, and pre-post head/base/comment drift fail 
   await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { confirmer: () => false })), /exact_head_codex_review_trigger_owner_declined/)
   await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, current, request, { now: () => new Date('2026-08-31T09:10:00.000Z') })), /exact_head_codex_review_plan_expired/)
   const baseDrift = api({ pr: { ...current.pr, base: { ...current.pr.base, sha: 'd'.repeat(40) } } })
-  await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, baseDrift, request)), /exact_head_codex_review_trigger_state_drift/)
+  await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, baseDrift, request)), /exact_head_codex_review_ref_binding_invalid/)
   const checkDrift = api({ checks: { check_runs: [{ id: 1, name: 'validate', status: 'completed', conclusion: 'neutral' }] } })
   await assert.rejects(applyExactHeadCodexReviewTrigger(options(plan, payload, checkDrift, request)), /exact_head_codex_review_trigger_state_drift/)
   const reviewDrift = api({ reviews: [{ id: 12, commit_id: head }] })
