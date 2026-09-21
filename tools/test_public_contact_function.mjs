@@ -32,6 +32,27 @@ function clearChannels() {
   for (const name of environmentNames) delete process.env[name]
 }
 
+// Notification fixtures still require an independent retained full record.
+const notificationFixtureRows = new Map()
+function enableFixtureStore() {
+  process.env.SUPABASE_URL = 'https://retention.example.test'
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only-retention-key'
+}
+function retainedFixtureResponse(url, options) {
+  const target = new URL(String(url))
+  if (target.origin !== 'https://retention.example.test') return null
+  let rows
+  if (options.method === 'POST') {
+    const record = JSON.parse(options.body)
+    rows = notificationFixtureRows.has(record.lead_id) ? [] : [record]
+    if (rows.length) notificationFixtureRows.set(record.lead_id, record)
+  } else {
+    const record = notificationFixtureRows.get(target.searchParams.get('lead_id').slice(3))
+    rows = record ? [record] : []
+  }
+  return { ok: true, status: 200, json: async () => structuredClone(rows) }
+}
+
 function responseRecorder() {
   return {
     statusCode: 0,
@@ -161,14 +182,17 @@ try {
 
   const unavailable = await invoke({ body: validSubmission, headers: withKey(2) })
   assert.equal(unavailable.status, 503)
-  assert.equal(unavailable.body.reason, 'contact_channel_unavailable')
+  assert.equal(unavailable.body.reason, 'contact_persistence_unavailable')
   assert.equal(unavailable.body.fallback_email, 'swanhtet@supermega.dev')
 
   let delivered
+  enableFixtureStore()
   let fetchCalls = 0
   process.env.SUPERMEGA_LEAD_WEBHOOK_URL = 'https://lead-router.example.test/events'
   process.env.SUPERMEGA_LEAD_WEBHOOK_SECRET = 'test-only-webhook-secret'
   globalThis.fetch = async (url, options) => {
+    const stored = retainedFixtureResponse(url, options)
+    if (stored) return stored
     fetchCalls += 1
     delivered = { url: String(url), options }
     return { ok: true, status: 202 }
@@ -401,8 +425,11 @@ try {
   clearChannels()
   process.env.SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET = 'test-only-contact-idempotency-secret-0001'
   process.env.RESEND_API_KEY = 're_test_only_key'
+  enableFixtureStore()
   const resendMail = []
   globalThis.fetch = async (url, options) => {
+    const stored = retainedFixtureResponse(url, options)
+    if (stored) return stored
     assert.equal(String(url), 'https://api.resend.com/emails')
     resendMail.push({ headers: options.headers, body: JSON.parse(options.body) })
     return { ok: true, status: 200, json: async () => ({ id: 'email-' + resendMail.length }) }
@@ -457,6 +484,8 @@ try {
   // The acknowledgement is best-effort: its failure must never fail a delivered lead.
   let ackAttempted = false
   globalThis.fetch = async (url, options) => {
+    const stored = retainedFixtureResponse(url, options)
+    if (stored) return stored
     if (String(options.headers['idempotency-key'] || '').startsWith('supermega-contact-ack/')) {
       ackAttempted = true
       return { ok: false, status: 500, json: async () => ({ message: 'ack_down' }) }
@@ -472,7 +501,9 @@ try {
   const started = new Promise(resolve => { deliveryStarted = resolve })
   const held = new Promise(resolve => { finishDelivery = resolve })
   let overlappingCalls = 0
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (url, options) => {
+    const stored = retainedFixtureResponse(url, options)
+    if (stored) return stored
     overlappingCalls++
     if (overlappingCalls === 1) { deliveryStarted(); await held }
     return { ok: true, status: 200, json: async () => ({ id: 'local-simulated-mail' }) }
@@ -498,7 +529,7 @@ try {
   globalThis.fetch = async () => { throw new Error('simulated delivery unavailable') }
   const failedDelivery = await invoke(recoveryArgs)
   assert.equal(failedDelivery.status, 503)
-  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ id: 'recovered-local-mail' }) })
+  globalThis.fetch = async (url, options) => retainedFixtureResponse(url, options) || ({ ok: true, status: 200, json: async () => ({ id: 'recovered-local-mail' }) })
   const recoveredDelivery = await invoke(recoveryArgs)
   assert.equal(recoveredDelivery.status, 202, 'failed delivery releases the in-flight guard for an exact retry')
 
@@ -665,6 +696,7 @@ try {
   // consumer. Delivery is intercepted: no network, messages or customer records.
   clearChannels()
   process.env.SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET = randomUUID()
+  enableFixtureStore()
   process.env.SUPERMEGA_LEAD_WEBHOOK_URL = 'https://lead-router.example.test/events'
   const integrationRoot = await mkdtemp(resolve(tmpdir(), 'supermega-contact-handoff-'))
   try {
@@ -672,6 +704,8 @@ try {
       let deliveredEvent
       let deliveryCount = 0
       globalThis.fetch = async (url, options) => {
+        const stored = retainedFixtureResponse(url, options)
+        if (stored) return stored
         assert.equal(url, 'https://lead-router.example.test/events')
         assert.equal(options.method, 'POST')
         deliveryCount++
@@ -716,3 +750,5 @@ try {
     else process.env[name] = savedEnvironment[name]
   }
 }
+
+await import('./test_public_contact_retention.mjs')

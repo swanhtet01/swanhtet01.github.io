@@ -831,7 +831,7 @@ const idempotencySecret = () => {
   const value = env('SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET')
   return value.length >= 32 ? value : ''
 }
-const deliveryConfigured = () => Boolean((env('SUPABASE_URL') && env('SUPABASE_SERVICE_ROLE_KEY')) || env('RESEND_API_KEY') || (env('TELEGRAM_BOT_TOKEN') && env('TELEGRAM_CHAT_ID')) || env('SUPERMEGA_LEAD_WEBHOOK_URL'))
+const deliveryConfigured = () => Boolean(env('SUPABASE_URL') && env('SUPABASE_SERVICE_ROLE_KEY'))
 const configured = () => Boolean(idempotencySecret() && deliveryConfigured())
 
 function send(res, statusCode, body, headers = {}) {
@@ -1161,7 +1161,7 @@ async function fetchSupabaseLead(base, key, leadId) {
 async function saveSupabase(record, fingerprint) {
   const base = env('SUPABASE_URL').replace(/\\/$/, '')
   const key = env('SUPABASE_SERVICE_ROLE_KEY')
-  if (!base || !key) return { status: 'skipped' }
+  if (!base || !key) throw new Error('lead_store_unconfigured')
   const response = await fetch(base + '/rest/v1/supermega_leads?on_conflict=lead_id', { method: 'POST', headers: { apikey: key, authorization: 'Bearer ' + key, 'content-type': 'application/json', prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify(record), signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('lead_store_' + response.status)
   const rows = await responseRows(response)
@@ -1294,9 +1294,10 @@ module.exports = async function handler(req, res) {
     return
   }
 
-  const attempts = await Promise.allSettled([Promise.resolve(storeResult), sendResend(record), sendTelegram(record), sendWebhook(record)])
-  const ready = attempts.some((attempt) => attempt.status === 'fulfilled' && attempt.value?.status === 'ready')
-  if (!ready) { send(res, 503, { status: 'error', reason: 'contact_channel_unavailable', fallback_email: 'swanhtet@supermega.dev' }); return }
+  if (storeResult.status !== 'ready') { send(res, 503, { status: 'error', reason: 'contact_persistence_unavailable' }); return }
+  // Receipt confirms retained storage, never notification delivery. Unknown
+  // notification outcomes are not retried by a cold replay of the saved lead.
+  await Promise.allSettled([sendResend(record), sendTelegram(record), sendWebhook(record)])
   try { await sendCustomerAcknowledgement(record) } catch {}
   replayCache.set(cacheKey, { fingerprint, body: acceptedBody, expiresAt: now + IDEMPOTENCY_TTL_MS })
   send(res, 202, acceptedBody)
