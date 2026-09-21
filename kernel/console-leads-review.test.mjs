@@ -45,6 +45,26 @@ test('real REST store sends bounded keyset queries and rejects cursor injection 
     assert.equal(calls.length,2);
     await store.listLeads(10);
     assert.equal(calls[2].searchParams.get('order'), 'submitted_at.desc.nullslast,created_at.desc');
+    const conversionCalls = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input);
+      assert.equal(url.origin, 'https://fixture.invalid');
+      assert.equal(url.pathname, '/rest/v1/supermega_console_projects');
+      assert.equal(init.method, 'GET');
+      assert.equal(url.searchParams.get('limit'), '1');
+      assert.equal(url.searchParams.get('select'), 'lead_id');
+      const filter = url.searchParams.get('lead_id');
+      conversionCalls.push(filter);
+      // Provider row cap of one; even many duplicate projects cannot hide another ID.
+      return new Response(JSON.stringify(filter === 'eq.lead-002' ? [{lead_id:'lead-002'}] : []), {status:200});
+    };
+    assert.deepEqual(await store.convertedLeadIds(['lead-001','lead-002','lead-002']), ['lead-002']);
+    assert.deepEqual(conversionCalls, ['eq.lead-001','eq.lead-002']);
+    assert.deepEqual(await store.convertedLeadIds([]), []);
+    await assert.rejects(store.convertedLeadIds(['x&limit=999']), /invalid_conversion_page/);
+    assert.equal(conversionCalls.length, 2);
+    globalThis.fetch = async () => new Response('unavailable', {status:503});
+    await assert.rejects(store.convertedLeadIds(['lead-002']), /supabase_503/);
   `
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', source], {
     encoding: 'utf8', timeout: 10000,
@@ -222,6 +242,17 @@ test('unavailable conversion or review state fails rather than returning false l
   store.convertedLeadIds = async () => []
   store.getControlRecord = async () => { throw new Error('review_unavailable') }
   await assert.rejects(listLeadsForReview({}, store), /review_unavailable/)
+})
+
+test('conversion state requests only the visible page instead of trusting a truncated global result', async () => {
+  const store = fakeStore()
+  store.convertedLeadIds = async ids => {
+    if (!ids) return ['unrelated-project-lead'] // A successful but truncated global response.
+    assert.deepEqual(ids, ['lead-1', 'lead-2'])
+    return ['lead-2']
+  }
+  const result = await listLeadsForReview({}, store)
+  assert.equal(result.leads.find(lead => lead.id === 'lead-2').converted, true)
 })
 
 test('review lookup uses exact page keys, not a capped global scan', async () => {

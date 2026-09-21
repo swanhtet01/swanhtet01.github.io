@@ -95,13 +95,11 @@ export async function listLeadsForReview({ limit = 50, includeSynthetic = false,
   // Stable reference ordering permits continuation even across entirely synthetic pages.
   // New records before the cursor are found on restart; this is not a snapshot export.
   const scanLimit = includeSynthetic ? bounded : MAX_LIST_LIMIT
-  const [leads, converted] = await Promise.all([
-    store.listLeads(scanLimit, { after: cursor }),
-    store.convertedLeadIds(),
-  ])
+  const leads = await store.listLeads(scanLimit, { after: cursor })
   const classified = leads.map(lead => ({ ...lead, synthetic: isSyntheticLead(lead) }))
   const kept = includeSynthetic ? classified : classified.filter(lead => !lead.synthetic)
   const visible = kept.slice(0, bounded)
+  const converted = await store.convertedLeadIds(visible.map(lead => lead.id))
   const reviewByLead = new Map()
   // Exact page-local lookup avoids a global review-record cap. Limit concurrency to five.
   for (let start = 0; start < visible.length; start += 5) {

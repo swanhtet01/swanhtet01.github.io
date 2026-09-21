@@ -460,7 +460,24 @@ export async function markDepositPaid(id, { method = null } = {}) {
   if (mode === 'postgres') { await ensurePgTables(); return (await q(`update supermega_console_projects set deposit_status='paid', deposit_method=$2 where id=$1 and deposit_status='unpaid' returning *`, [id, method]))[0] || null }
   const cur = mem.project.get(id); if (!cur || cur.deposit_status === 'paid') return null; const next = { ...cur, deposit_status: 'paid', deposit_method: method }; mem.project.set(id, next); return next
 }
-export async function convertedLeadIds() {
+export async function convertedLeadIds(leadIds = null) {
+  if (leadIds !== null) {
+    if (!Array.isArray(leadIds) || leadIds.length > 200 || leadIds.some(id => typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id))) throw new Error('invalid_conversion_page')
+    const ids = [...new Set(leadIds)]
+    if (!ids.length) return []
+    if (mode === 'supabase') {
+      const converted = []
+      // Existence per ID is complete even when duplicate projects exceed the REST row ceiling.
+      for (let start = 0; start < ids.length; start += 5) {
+        const batch = ids.slice(start, start + 5)
+        const found = await Promise.all(batch.map(id => rest('GET', `supermega_console_projects?select=lead_id&lead_id=eq.${encodeURIComponent(id)}&limit=1`)))
+        found.forEach((rows, i) => { if (rows.some(row => row.lead_id === batch[i])) converted.push(batch[i]) })
+      }
+      return converted
+    }
+    if (mode === 'postgres') { await ensurePgTables(); return (await q('select distinct lead_id from supermega_console_projects where lead_id = any($1::text[])', [ids])).map(row => row.lead_id) }
+    return [...new Set([...mem.project.values()].map(project => project.lead_id).filter(id => ids.includes(id)))]
+  }
   if (mode === 'supabase') return [...new Set((await rest('GET', 'supermega_console_projects?select=lead_id&lead_id=not.is.null')).map((r) => r.lead_id))]
   if (mode === 'postgres') { await ensurePgTables(); return (await q('select distinct lead_id from supermega_console_projects where lead_id is not null')).map((r) => r.lead_id) }
   return [...mem.project.values()].map((p) => p.lead_id).filter(Boolean)
