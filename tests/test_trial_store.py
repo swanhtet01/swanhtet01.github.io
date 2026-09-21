@@ -457,6 +457,8 @@ class TrialStoreTests(unittest.TestCase):
             "backend_member_exact",
             "no_runtime_role_members",
             "no_elevated_membership",
+            "no_private_schema_create",
+            "no_database_object_ownership",
             "tls_active",
         )
 
@@ -486,6 +488,12 @@ class TrialStoreTests(unittest.TestCase):
         self.assertIn("membership.inherit_option", safe_cursor.query.lower())
         self.assertIn("not membership.set_option", safe_cursor.query.lower())
         self.assertIn("not membership.admin_option", safe_cursor.query.lower())
+        self.assertIn("has_schema_privilege(current_user, n.oid, 'CREATE')", safe_cursor.query)
+        self.assertIn("has_schema_privilege(b.oid, n.oid, 'CREATE')", safe_cursor.query)
+        self.assertIn("pg_shdepend", safe_cursor.query)
+        self.assertIn("d.deptype = 'o'", safe_cursor.query)
+        self.assertIn("pg_has_role(current_user, d.refobjid, 'USAGE')", safe_cursor.query)
+        self.assertIn("d.dbid = (select oid from pg_database", safe_cursor.query)
 
         for failed_check in required:
             with self.subTest(failed_check=failed_check):
@@ -493,6 +501,17 @@ class TrialStoreTests(unittest.TestCase):
                 with self.assertRaises(TrialNotReadyError) as error:
                     PostgresTrialStore._assert_runtime_role(cursor)
                 self.assertEqual(error.exception.reasons, ("role_ready",))
+
+        # Catalog observation unavailable is not evidence of safe privileges.
+        for check in ("no_private_schema_create", "no_database_object_ownership"):
+            for value in (None, False):
+                with self.subTest(catalog_check=check, value=value):
+                    with self.assertRaises(TrialNotReadyError):
+                        PostgresTrialStore._assert_runtime_role(RoleCursor({**safe, check: value}))
+            missing = dict(safe)
+            del missing[check]
+            with self.assertRaises(TrialNotReadyError):
+                PostgresTrialStore._assert_runtime_role(RoleCursor(missing))
 
     def test_postgres_guarded_cursor_rolls_back_and_closes_on_failure(self) -> None:
         events: list[str] = []
