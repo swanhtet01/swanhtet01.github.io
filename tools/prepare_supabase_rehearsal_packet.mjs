@@ -145,6 +145,12 @@ export function originMainReleaseReview(releaseCommit) {
   }
 }
 
+function matchingReviewState(state, action) {
+  return (state === 'unpublished' && action === 'owner_review_initial_branch_push')
+    || (state === 'different' && action === 'owner_review_fast_forward_branch_push')
+    || (state === 'exact' && action === 'owner_review_pull_request_creation')
+}
+
 export function candidateReleaseReviewFromReceipt(receipt) {
   const candidate = receipt?.candidate
   const nextAction = receipt?.nextAction
@@ -157,9 +163,7 @@ export function candidateReleaseReviewFromReceipt(receipt) {
     || !commitPattern.test(candidate?.commit || '')
     || !digestPattern.test(receipt?.digest || '')
     || !digestPattern.test(receipt?.packetDigest || '')
-    || !['unpublished', 'exact', 'different'].includes(receipt?.remoteCandidateState)
-    || !['owner_review_initial_branch_push', 'owner_review_fast_forward_branch_push'].includes(nextAction?.kind)
-    || (receipt?.remoteCandidateState === 'unpublished') !== (nextAction?.kind === 'owner_review_initial_branch_push')
+    || !matchingReviewState(receipt?.remoteCandidateState, nextAction?.kind)
     || nextAction?.exactCommit !== candidate.commit
     || nextAction?.forcePushAllowed !== false
     || nextAction?.mergeIncluded !== false
@@ -206,9 +210,7 @@ function validateReleaseReview(review, releaseCommit) {
       || review.handoffContract !== RELEASE_HANDOFF_CONTRACT
       || !digestPattern.test(review.handoffFileDigest || '')
       || !digestPattern.test(review.handoffPacketDigest || '')
-      || !['unpublished', 'exact', 'different'].includes(review.remoteCandidateState)
-      || !['owner_review_initial_branch_push', 'owner_review_fast_forward_branch_push'].includes(review.nextAction)
-      || (review.remoteCandidateState === 'unpublished') !== (review.nextAction === 'owner_review_initial_branch_push')
+      || !matchingReviewState(review.remoteCandidateState, review.nextAction)
       || review.pushApproved !== false
       || review.mergeApproved !== false
       || review.workflowDispatchApproved !== false

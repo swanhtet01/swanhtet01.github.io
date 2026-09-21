@@ -118,7 +118,11 @@ test('rejects malformed target refs and stale evidence', async () => {
   )
 })
 
-test('binds an unpublished candidate only through an exact owner-review handoff receipt', async () => {
+for (const [remoteCandidateState, action] of [
+  ['unpublished', 'owner_review_initial_branch_push'],
+  ['different', 'owner_review_fast_forward_branch_push'],
+  ['exact', 'owner_review_pull_request_creation'],
+]) test(`binds ${remoteCandidateState} candidate through the matching no-authority handoff`, async () => {
   const receipt = {
     ok: true,
     contract: 'supermega.release-handoff.v2',
@@ -126,9 +130,9 @@ test('binds an unpublished candidate only through an exact owner-review handoff 
     digest: `sha256:${'1'.repeat(64)}`,
     packetDigest: `sha256:${'2'.repeat(64)}`,
     candidate: { branch: 'codex/reviewed-candidate', commit: releaseCommit, clean: true },
-    remoteCandidateState: 'unpublished',
+    remoteCandidateState,
     nextAction: {
-      kind: 'owner_review_initial_branch_push',
+      kind: action,
       exactCommit: releaseCommit,
       forcePushAllowed: false,
       mergeIncluded: false,
@@ -163,6 +167,14 @@ test('binds an unpublished candidate only through an exact owner-review handoff 
   assert.equal(packet.release.review.handoffPacketDigest, receipt.packetDigest)
   assert.equal(packet.release.review.pushApproved, false)
   assert.equal(packet.controls.externalMutationPerformed, false)
+
+  for (const wrongAction of ['owner_review_initial_branch_push', 'owner_review_fast_forward_branch_push', 'owner_review_pull_request_creation', 'deploy']) {
+    if (wrongAction === action) continue
+    assert.throws(() => candidateReleaseReviewFromReceipt({ ...receipt, nextAction: { ...receipt.nextAction, kind: wrongAction } }), /supabase_rehearsal_release_handoff_invalid/)
+    const altered = structuredClone(packet)
+    altered.release.review.nextAction = wrongAction
+    await assert.rejects(() => validateSupabaseRehearsalPacket(altered, {repositoryRoot}), /supabase_rehearsal_/)
+  }
 
   assert.throws(
     () => candidateReleaseReviewFromReceipt({ ...receipt, authority: { ...receipt.authority, providerMutationApproved: true } }),
