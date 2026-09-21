@@ -3659,6 +3659,9 @@ class PostgresTrialStore:
         }
         if actual_triggers != expected_triggers:
             raise TrialNotReadyError(("schema_ready",))
+        from .core_security_catalog import core_security_catalog_verified
+        if not core_security_catalog_verified(cursor, TRIAL_SCHEMA_VERSION):
+            raise TrialNotReadyError(("schema_ready",))
 
     @staticmethod
     def _assert_runtime_role(cursor: Any) -> None:
@@ -3771,6 +3774,27 @@ class PostgresTrialStore:
                 where runtime_role.oid <> elevated_role.oid
                   and pg_has_role(runtime_role.oid, elevated_role.oid, 'USAGE')
               ) as no_elevated_membership,
+              coalesce((
+                select not has_schema_privilege(current_user, n.oid, 'CREATE')
+                  and not has_schema_privilege(b.oid, n.oid, 'CREATE')
+                from pg_namespace n cross join backend_role b
+                where n.nspname = 'app_private'
+              ), false) as no_private_schema_create,
+              not exists (
+                -- Ownership permits DDL independently of ordinary ACL grants.
+                -- Reject ownership by the login or any effectively inherited
+                -- role, including the backend role, in this database.
+                select 1
+                from pg_shdepend d
+                where d.refclassid = 'pg_authid'::regclass
+                  and d.deptype = 'o'
+                  and (
+                    d.dbid = (select oid from pg_database where datname = current_database())
+                    or (d.classid = 'pg_database'::regclass
+                        and d.objid = (select oid from pg_database where datname = current_database()))
+                  )
+                  and pg_has_role(current_user, d.refobjid, 'USAGE')
+              ) as no_database_object_ownership,
               coalesce((select setting = 'on' from pg_settings where name = 'ssl'), false) as tls_active
             """
         )
@@ -3789,6 +3813,8 @@ class PostgresTrialStore:
             "backend_member_exact",
             "no_runtime_role_members",
             "no_elevated_membership",
+            "no_private_schema_create",
+            "no_database_object_ownership",
             "tls_active",
         )
         if not all(bool(row.get(check)) for check in required):

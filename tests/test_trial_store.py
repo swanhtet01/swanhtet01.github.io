@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 import supermega_runtime.trial_store as trial_store_module
@@ -457,6 +458,8 @@ class TrialStoreTests(unittest.TestCase):
             "backend_member_exact",
             "no_runtime_role_members",
             "no_elevated_membership",
+            "no_private_schema_create",
+            "no_database_object_ownership",
             "tls_active",
         )
 
@@ -486,6 +489,12 @@ class TrialStoreTests(unittest.TestCase):
         self.assertIn("membership.inherit_option", safe_cursor.query.lower())
         self.assertIn("not membership.set_option", safe_cursor.query.lower())
         self.assertIn("not membership.admin_option", safe_cursor.query.lower())
+        self.assertIn("has_schema_privilege(current_user, n.oid, 'CREATE')", safe_cursor.query)
+        self.assertIn("has_schema_privilege(b.oid, n.oid, 'CREATE')", safe_cursor.query)
+        self.assertIn("pg_shdepend", safe_cursor.query)
+        self.assertIn("d.deptype = 'o'", safe_cursor.query)
+        self.assertIn("pg_has_role(current_user, d.refobjid, 'USAGE')", safe_cursor.query)
+        self.assertIn("d.dbid = (select oid from pg_database", safe_cursor.query)
 
         for failed_check in required:
             with self.subTest(failed_check=failed_check):
@@ -493,6 +502,17 @@ class TrialStoreTests(unittest.TestCase):
                 with self.assertRaises(TrialNotReadyError) as error:
                     PostgresTrialStore._assert_runtime_role(cursor)
                 self.assertEqual(error.exception.reasons, ("role_ready",))
+
+        # Catalog observation unavailable is not evidence of safe privileges.
+        for check in ("no_private_schema_create", "no_database_object_ownership"):
+            for value in (None, False):
+                with self.subTest(catalog_check=check, value=value):
+                    with self.assertRaises(TrialNotReadyError):
+                        PostgresTrialStore._assert_runtime_role(RoleCursor({**safe, check: value}))
+            missing = dict(safe)
+            del missing[check]
+            with self.assertRaises(TrialNotReadyError):
+                PostgresTrialStore._assert_runtime_role(RoleCursor(missing))
 
     def test_postgres_guarded_cursor_rolls_back_and_closes_on_failure(self) -> None:
         events: list[str] = []
@@ -688,7 +708,8 @@ class TrialStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(TrialNotReadyError, "auth_session_active"):
             store.list_actor_workspaces(principal, limit=2)
 
-    def test_postgres_schema_probe_requires_version_10_and_hardening_controls(self) -> None:
+    @patch("supermega_runtime.core_security_catalog.core_security_catalog_verified", return_value=True)
+    def test_postgres_schema_probe_requires_version_10_and_hardening_controls(self, catalog_guard) -> None:
         def canonical_trigger_rows() -> list[dict[str, object]]:
             return [
                 {
@@ -744,6 +765,12 @@ class TrialStoreTests(unittest.TestCase):
         }
         cursor = SchemaCursor(ready)
         PostgresTrialStore._assert_schema(cursor)
+        catalog_guard.assert_called_once_with(cursor, trial_store_module.TRIAL_SCHEMA_VERSION)
+        catalog_guard.return_value = False
+        with self.assertRaises(TrialNotReadyError) as catalog_error:
+            PostgresTrialStore._assert_schema(SchemaCursor(ready))
+        self.assertEqual(catalog_error.exception.reasons, ("schema_ready",))
+        catalog_guard.return_value = True
         combined_query = "\n".join(cursor.queries)
         self.assertIn("information_schema.columns", combined_query.lower())
         self.assertIn("approval_requests_terminal_decision_v2_check", combined_query)
