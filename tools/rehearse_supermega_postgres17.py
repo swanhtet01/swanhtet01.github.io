@@ -108,6 +108,7 @@ IMPLEMENTATION_PATHS = (
     "supermega_runtime/runtime.py",
     "supermega_runtime/trial_runtime.py",
     "supermega_runtime/trial_store.py",
+    "supermega_runtime/core_security_catalog.py",
     "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
     "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
     "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",

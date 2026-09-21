@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, mkdtemp, rm, writeFile, access } from 'node:fs/promises'
+import { readFile, mkdtemp, rm, writeFile, access, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 import {
@@ -16,6 +16,26 @@ import {
   withRecorderLease,
   recordCompletionSummary,
 } from './record_postgres17_rehearsal.mjs'
+
+test('core security catalog changes invalidate implementation evidence', async () => {
+  const baseline = await implementationEvidence()
+  const securityPath = 'supermega_runtime/core_security_catalog.py'
+  assert.equal(baseline.paths.filter(path => path === securityPath).length, 1)
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-evidence-binding-'))
+  try {
+    for (const path of baseline.paths) {
+      const target = join(folder, path)
+      await mkdir(dirname(target), { recursive: true })
+      await writeFile(target, await readFile(new URL(`../${path}`, import.meta.url)))
+    }
+    assert.deepEqual(await implementationEvidence(folder), baseline)
+    const target = join(folder, securityPath)
+    await writeFile(target, `${await readFile(target, 'utf8')}\n# changed security contract\n`)
+    assert.notEqual((await implementationEvidence(folder)).digest, baseline.digest)
+  } finally {
+    await rm(folder, { recursive: true, force: true })
+  }
+})
 
 const checkNames = [
   'approval_agent_row_spoof_denied', 'approval_decision_event_immutable', 'approval_exact_retry', 'approval_human_decision_once',
