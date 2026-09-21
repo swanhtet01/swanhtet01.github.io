@@ -34,7 +34,7 @@ try {
   assert.equal(calls, 0)
   process.env.SUPABASE_URL = 'https://store.example.test'
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'synthetic'
-  let retained, notifications = 0
+  let retained, notificationBody, notificationUrl, notifications = 0
   globalThis.fetch = async (url, options) => {
     if (String(url).startsWith('https://store.example.test/')) {
       let rows
@@ -45,13 +45,17 @@ try {
       return { ok: true, status: 200, json: async () => rows }
     }
     notifications++
-    assert.ok(JSON.parse(options.body).text.length <= 3900)
+    notificationBody = JSON.parse(options.body)
+    notificationUrl = String(url)
     throw new Error('notification response lost after simulated acceptance')
   }
   const accepted = await invoke()
   assert.equal(accepted.statusCode, 202)
   assert.equal(retained.goal, body.goal, 'complete brief survives truncated notification')
   assert.equal(notifications, 1)
+  assert.ok(notificationUrl.startsWith('https://api.telegram.org/'))
+  assert.equal(notificationBody.text.length, 3900)
+  assert.equal(notificationBody.text.includes(body.goal), false)
   const replay = await invoke()
   assert.deepEqual(replay.body, accepted.body)
   assert.equal(notifications, 1, 'cold retry must not repeat ambiguous notification')
