@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 import supermega_runtime.trial_store as trial_store_module
@@ -707,7 +708,8 @@ class TrialStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(TrialNotReadyError, "auth_session_active"):
             store.list_actor_workspaces(principal, limit=2)
 
-    def test_postgres_schema_probe_requires_version_10_and_hardening_controls(self) -> None:
+    @patch("supermega_runtime.core_security_catalog.core_security_catalog_verified", return_value=True)
+    def test_postgres_schema_probe_requires_version_10_and_hardening_controls(self, catalog_guard) -> None:
         def canonical_trigger_rows() -> list[dict[str, object]]:
             return [
                 {
@@ -763,6 +765,12 @@ class TrialStoreTests(unittest.TestCase):
         }
         cursor = SchemaCursor(ready)
         PostgresTrialStore._assert_schema(cursor)
+        catalog_guard.assert_called_once_with(cursor, trial_store_module.TRIAL_SCHEMA_VERSION)
+        catalog_guard.return_value = False
+        with self.assertRaises(TrialNotReadyError) as catalog_error:
+            PostgresTrialStore._assert_schema(SchemaCursor(ready))
+        self.assertEqual(catalog_error.exception.reasons, ("schema_ready",))
+        catalog_guard.return_value = True
         combined_query = "\n".join(cursor.queries)
         self.assertIn("information_schema.columns", combined_query.lower())
         self.assertIn("approval_requests_terminal_decision_v2_check", combined_query)

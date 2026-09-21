@@ -3659,6 +3659,9 @@ class PostgresTrialStore:
         }
         if actual_triggers != expected_triggers:
             raise TrialNotReadyError(("schema_ready",))
+        from .core_security_catalog import core_security_catalog_verified
+        if not core_security_catalog_verified(cursor, TRIAL_SCHEMA_VERSION):
+            raise TrialNotReadyError(("schema_ready",))
 
     @staticmethod
     def _assert_runtime_role(cursor: Any) -> None:
