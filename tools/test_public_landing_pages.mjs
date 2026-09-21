@@ -110,6 +110,8 @@ for (const page of landingPages) {
     check(html.includes(product.id === 'website' ? 'Domain ownership, publishing, maintenance and any forms are scoped and checked separately.' : 'a request is not a confirmed order or payment.'), `landing_product_delivery_boundary:${page.route}`)
   }
   check(html.includes('Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.'), `landing_external_effect_boundary:${page.route}`)
+  const websiteOfferingBoundary = 'The current Website starter supports up to four featured offerings, not full menu management.'
+  check(html.includes(websiteOfferingBoundary) === (product.id === 'website'), `landing_website_offering_scope:${page.route}`)
   check(html.includes('Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.'), `landing_managed_activation_boundary:${page.route}`)
   check(!html.includes(`href="${product.appRoute}"`), `landing_no_direct_app_route:${page.route}`)
   check(html.includes('href="/contact/">Contact</a>') && html.includes('href="/privacy/">Privacy</a>'), `landing_footer_parity:${page.route}`)

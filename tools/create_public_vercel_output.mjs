@@ -615,7 +615,7 @@ function assistedDeliverablesHtml(productId) {
     website: {
       title: 'A Website prepared for your business, not another builder to learn.',
       steps: [
-        ['Share the essentials', 'Tell us what you offer, who it is for and how people should reach you. Existing copy and photos are optional starting points.'],
+        ['Share the essentials', 'Tell us what you offer, who it is for and how people should reach you. The current Website starter supports up to four featured offerings, not full menu management. Existing copy and photos are optional starting points.'],
         ['Review your prepared pages', 'We agree the scope, then prepare a responsive layout, business copy and clear contact actions. You review names, services, images and claims before approval.'],
         ['Approve a separate launch', 'Receive a reviewed preview and an agreed handoff. Domain ownership, publishing, maintenance and any forms are scoped and checked separately.'],
       ],
