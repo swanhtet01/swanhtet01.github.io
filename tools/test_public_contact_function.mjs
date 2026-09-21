@@ -642,7 +642,7 @@ try {
 
   // Frozen pre-privacy v1/v2 fingerprints must replay without notifying or
   // rewriting the original retained row. A changed business brief conflicts.
-  for (const [version, submission, row, key] of [[1, validSubmission, durableRecord, 200], [2, durableProofSubmission, durableProofRecord, 203]]) {
+  for (const [version, submission, row, key] of [[1, validSubmission, persistedLeads.get(durableAccepted.body.request_id), 200], [2, durableProofSubmission, durableProofRecord, 203]]) {
     const projection = {
       name: submission.name, email: submission.email.toLowerCase(), company: submission.company,
       product: submission.product, template: submission.template, goal: submission.goal,
@@ -650,13 +650,15 @@ try {
       ...(version === 2 ? { trial_proof: row.raw.trial_proof } : {}),
     }
     row.raw.contact_idempotency = { version, algorithm: 'sha256', payload_fingerprint: createHash('sha256').update('supermega.contact.payload.v' + version + '\n' + JSON.stringify(projection)).digest('hex') }
+    assert.equal(persistedLeads.get(row.lead_id).raw.contact_idempotency.version, version)
     const before = JSON.stringify(row)
     const replay = await invoke({ activeHandler: loadHandler({ fresh: true }), body: submission, headers: withKey(key) })
     assert.equal(replay.status, 202)
     assert.equal(replay.headers['x-idempotent-replay'], 'true')
-    assert.equal(JSON.stringify(row), before)
+    assert.equal(JSON.stringify(persistedLeads.get(row.lead_id)), before)
     const conflict = await invoke({ activeHandler: loadHandler({ fresh: true }), body: { ...submission, goal: 'changed' }, headers: withKey(key) })
     assert.equal(conflict.status, 409)
+    assert.equal(JSON.stringify(persistedLeads.get(row.lead_id)), before)
   }
 
   const legacyAccepted = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(201, { 'x-forwarded-for': '203.0.113.91' }) })
