@@ -1,13 +1,13 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v3",
-  "recordedAt": "2026-09-18T13:30:57.455Z",
+  "recordedAt": "2026-09-21T10:05:33.898Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "fb0b7193abf08794306d8ad2edfbf317b337fbe9",
-  "implementationTree": "2e835443d04133f533e72944c3e8a83aebb81354",
+  "implementationCommit": "2aa313bd0537f1af2be4d381b528e4c4bb97fbdc",
+  "implementationTree": "8f4f9210f9e3f06dddda190d63af4f33d28a636a",
   "sourceCleanBeforeAndAfter": true,
-  "rawReportDigest": "sha256:18460542f9ac07c53eae91fbd27398e0423320804f1d8971b643682f8e1462ca",
+  "rawReportDigest": "sha256:dd6caf6bdd1ffaaf57c84b18acbe4fb905591bb47eaf389a46293ad44d4f28af",
   "implementation": {
-    "digest": "sha256:f4a9a8ef4b2b5ffbfac9e18ac8e28ecc6ca4e0f638683a3b2249fff86037913e",
+    "digest": "sha256:96ffbb098a5efc1fb6af8e830252a0d102d2d61450350bee47d26d5b912725fe",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -30,6 +30,7 @@
       "supabase/migrations/20260918011500_website_customer_acceptance.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
+      "supermega_runtime/core_security_catalog.py",
       "supermega_runtime/managed_activation.py",
       "supermega_runtime/managed_context.py",
       "supermega_runtime/runtime.py",
@@ -55,8 +56,8 @@
       "tools/verify_public_browser_quarantine.mjs"
     ]
   },
-  "implementationDigest": "sha256:f4a9a8ef4b2b5ffbfac9e18ac8e28ecc6ca4e0f638683a3b2249fff86037913e",
-  "implementationFileCount": 44,
+  "implementationDigest": "sha256:96ffbb098a5efc1fb6af8e830252a0d102d2d61450350bee47d26d5b912725fe",
+  "implementationFileCount": 45,
   "localVerification": {
     "command": "npm run database:postgres17:record",
     "conclusion": "success",
@@ -266,8 +267,8 @@
     "backupNonempty": true,
     "format": "pg_dump_custom",
     "restoredSchemaVersion": 13,
-    "privateSnapshotBefore": "sha256:25ccf1c60c2f4ce23f3c9d8a79056bd87667febae23c4a61a48c911cad5e9dc5",
-    "privateSnapshotAfter": "sha256:25ccf1c60c2f4ce23f3c9d8a79056bd87667febae23c4a61a48c911cad5e9dc5"
+    "privateSnapshotBefore": "sha256:e679ede53bee0486d4b44ad2a031445f9cd23c52ffd56c7e99bfc93dcdd345fa",
+    "privateSnapshotAfter": "sha256:e679ede53bee0486d4b44ad2a031445f9cd23c52ffd56c7e99bfc93dcdd345fa"
   },
   "storage": {
     "catalogMode": "local_private_fixture",
@@ -291,5 +292,5 @@
     "Prove real Auth signup, verified email, account recovery, admin MFA and revocation on the hosted target.",
     "Keep production writes disabled until founder approval."
   ],
-  "receiptDigest": "sha256:e443f1a061e436e7224216ac56abbf6e3c97c213102f16ad6bb25d7f3ce5926e"
+  "receiptDigest": "sha256:69fd223eacda1d4b04147cb2cd0ae3b413a30b8f803ceaa024a762d461406c31"
 }

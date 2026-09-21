@@ -160,7 +160,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:f4a9a8ef4b2b5ffbfac9e18ac8e28ecc6ca4e0f638683a3b2249fff86037913e",
+    "digest": "sha256:96ffbb098a5efc1fb6af8e830252a0d102d2d61450350bee47d26d5b912725fe",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -183,6 +183,7 @@
       "supabase/migrations/20260918011500_website_customer_acceptance.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
+      "supermega_runtime/core_security_catalog.py",
       "supermega_runtime/managed_activation.py",
       "supermega_runtime/managed_context.py",
       "supermega_runtime/runtime.py",
@@ -241,15 +242,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:25ccf1c60c2f4ce23f3c9d8a79056bd87667febae23c4a61a48c911cad5e9dc5",
-    "private_snapshot_before": "sha256:25ccf1c60c2f4ce23f3c9d8a79056bd87667febae23c4a61a48c911cad5e9dc5",
+    "private_snapshot_after": "sha256:e679ede53bee0486d4b44ad2a031445f9cd23c52ffd56c7e99bfc93dcdd345fa",
+    "private_snapshot_before": "sha256:e679ede53bee0486d4b44ad2a031445f9cd23c52ffd56c7e99bfc93dcdd345fa",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "fb0b7193abf08794306d8ad2edfbf317b337fbe9",
-    "implementation_digest": "sha256:f4a9a8ef4b2b5ffbfac9e18ac8e28ecc6ca4e0f638683a3b2249fff86037913e",
-    "tree": "2e835443d04133f533e72944c3e8a83aebb81354"
+    "head": "2aa313bd0537f1af2be4d381b528e4c4bb97fbdc",
+    "implementation_digest": "sha256:96ffbb098a5efc1fb6af8e830252a0d102d2d61450350bee47d26d5b912725fe",
+    "tree": "8f4f9210f9e3f06dddda190d63af4f33d28a636a"
   },
   "status": "rehearsed",
   "storage": {
