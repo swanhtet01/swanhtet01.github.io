@@ -8,7 +8,7 @@ const fresh = () => { delete require.cache[path]; return require(path) }
 const names = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'RESEND_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'SUPERMEGA_LEAD_WEBHOOK_URL']
 const saved = Object.fromEntries(names.map(name => [name, process.env[name]]))
 const originalFetch = globalThis.fetch
-const body = { name: 'Synthetic', company: 'Synthetic', email: 'test@example.com', product: 'shop', goal: 'x'.repeat(4000) }
+const body = { name: 'Synthetic', company: 'Synthetic', email: 'test@example.com', product: 'shop', goal: 'x'.repeat(4000), source_url: 'https://url-user:url-password@supermega.dev/contact/?token=private-query&email=private-contact#private-fragment', referrer: 'data:text/plain,private-referrer' }
 async function invoke(method = 'POST') {
   const res = { statusCode: 0, setHeader() {}, end(value) { this.body = JSON.parse(value) } }
   await fresh()({ method, body, headers: { host: 'supermega.dev', origin: 'https://supermega.dev', 'content-type': 'application/json', 'x-idempotency-key': 'durable-retention-test-0001' } }, res)
@@ -52,6 +52,11 @@ try {
   const accepted = await invoke()
   assert.equal(accepted.statusCode, 202)
   assert.equal(retained.goal, body.goal, 'complete brief survives truncated notification')
+  assert.equal(retained.source_url, 'https://supermega.dev/contact/')
+  assert.equal(retained.page_path, '/contact/')
+  assert.equal(retained.referrer, '')
+  assert.doesNotMatch(JSON.stringify(retained), /url-user|url-password|private-query|private-contact|private-fragment|private-referrer/)
+  assert.doesNotMatch(JSON.stringify(notificationBody), /url-user|url-password|private-query|private-contact|private-fragment|private-referrer/)
   assert.equal(notifications, 1)
   assert.ok(notificationUrl.startsWith('https://api.telegram.org/'))
   assert.equal(notificationBody.text.length, 3900)

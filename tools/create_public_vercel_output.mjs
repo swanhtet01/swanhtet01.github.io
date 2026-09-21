@@ -812,7 +812,7 @@ const RATE_LIMIT = 5
 const RATE_WINDOW_MS = 10 * 60 * 1000
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const CACHE_LIMIT = 2000
-const CONTACT_FINGERPRINT_CURRENT_VERSION = 2
+const CONTACT_FINGERPRINT_CURRENT_VERSION = 3
 const CONTACT_FINGERPRINT_LEGACY_VERSION = 1
 const CONTACT_FINGERPRINT_ALGORITHM = 'sha256'
 const TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v2'
@@ -865,10 +865,14 @@ function privacyUrl(value, max = 700) {
   if (!source) return ''
   try {
     const parsed = new URL(source)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return ''
+    parsed.username = ''
+    parsed.password = ''
+    parsed.search = ''
     parsed.hash = ''
     return text(parsed.toString(), max)
   } catch {
-    return text(source.split('#')[0], max)
+    return ''
   }
 }
 
@@ -976,7 +980,21 @@ function keyedDigest(value) {
 }
 
 function fingerprintVersion(safe) {
-  return safe.trial_proof ? CONTACT_FINGERPRINT_CURRENT_VERSION : CONTACT_FINGERPRINT_LEGACY_VERSION
+  return CONTACT_FINGERPRINT_CURRENT_VERSION
+}
+
+// Historical URL projections are used only in memory to reconcile exact old
+// retries. They must never be written back or sent to a notification channel.
+function historicalFingerprints(payload, safe) {
+  const oldUrl = (value) => {
+    const source = text(value, 700)
+    if (!source) return ''
+    try { const parsed = new URL(source); parsed.hash = ''; return text(parsed.toString(), 700) }
+    catch { return text(source.split('#')[0], 700) }
+  }
+  const previous = { ...safe, source_url: oldUrl(payload.source_url), referrer: oldUrl(payload.referrer) }
+  const version = safe.trial_proof ? 2 : 1
+  return { [version]: payloadFingerprint(previous, version) }
 }
 
 function payloadFingerprint(safe, version = fingerprintVersion(safe)) {
@@ -1028,7 +1046,7 @@ function sourceAttribution(sourceUrl) {
     if (source.protocol !== 'https:' && source.protocol !== 'http:') return fallback
     const campaign = (name) => text(source.searchParams.get(name), 160)
     return {
-      page_path: text(source.pathname + source.search, 700) || '/contact/',
+    page_path: text(source.pathname, 700) || '/contact/',
       utm_source: campaign('utm_source'),
       utm_medium: campaign('utm_medium'),
       utm_campaign: campaign('utm_campaign'),
@@ -1127,12 +1145,12 @@ function storedFingerprint(row) {
     !marker ||
     typeof marker !== 'object' ||
     Array.isArray(marker) ||
-    ![CONTACT_FINGERPRINT_LEGACY_VERSION, CONTACT_FINGERPRINT_CURRENT_VERSION].includes(marker.version) ||
+    ![CONTACT_FINGERPRINT_LEGACY_VERSION, 2, CONTACT_FINGERPRINT_CURRENT_VERSION].includes(marker.version) ||
     marker.algorithm !== CONTACT_FINGERPRINT_ALGORITHM ||
     typeof marker.payload_fingerprint !== 'string' ||
     !/^[a-f0-9]{64}$/.test(marker.payload_fingerprint)
   ) throw new Error('lead_store_fingerprint_ambiguous')
-  return { fingerprint: marker.payload_fingerprint, legacy: false }
+  return { fingerprint: marker.payload_fingerprint, version: marker.version, legacy: false }
 }
 
 async function responseRows(response) {
@@ -1158,7 +1176,7 @@ async function fetchSupabaseLead(base, key, leadId) {
   return rows[0]
 }
 
-async function saveSupabase(record, fingerprint) {
+async function saveSupabase(record, fingerprint, historical) {
   const base = env('SUPABASE_URL').replace(/\\/$/, '')
   const key = env('SUPABASE_SERVICE_ROLE_KEY')
   if (!base || !key) throw new Error('lead_store_unconfigured')
@@ -1177,7 +1195,8 @@ async function saveSupabase(record, fingerprint) {
   // lead_id already existed; the exact follow-up read resolves replay vs conflict.
   const existing = await fetchSupabaseLead(base, key, record.lead_id)
   const persisted = storedFingerprint(existing)
-  if (persisted.fingerprint !== fingerprint) return { status: 'conflict', channel: 'lead_store' }
+  const expected = persisted.version && persisted.version < CONTACT_FINGERPRINT_CURRENT_VERSION ? historical[persisted.version] : fingerprint
+  if (persisted.fingerprint !== expected) return { status: 'conflict', channel: 'lead_store' }
   return { status: 'ready', channel: 'lead_store', created: false, legacy: persisted.legacy }
 }
 
@@ -1279,7 +1298,7 @@ module.exports = async function handler(req, res) {
   try {
   const record = recordFrom(safe, req, idempotencyKey, fingerprint)
   let storeResult
-  try { storeResult = await saveSupabase(record, fingerprint) } catch {
+  try { storeResult = await saveSupabase(record, fingerprint, historicalFingerprints(payload, safe)) } catch {
     send(res, 503, { status: 'error', reason: 'contact_persistence_unavailable', fallback_email: 'swanhtet@supermega.dev' })
     return
   }

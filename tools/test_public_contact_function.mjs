@@ -240,11 +240,7 @@ try {
   assert.equal(websiteEvent.record.workflow, 'website')
   assert.equal(websiteEvent.record.requested_package, 'lead-generation')
   assert.equal(websiteEvent.record.next_step, 'Validate the public source material and desired contact action; prepare the page plan and preview scope.')
-  assert.equal(websiteEvent.record.utm_source, 'linkedin')
-  assert.equal(websiteEvent.record.utm_medium, 'social')
-  assert.equal(websiteEvent.record.utm_campaign, 'website-launch')
-  assert.equal(websiteEvent.record.utm_content, 'carousel')
-  assert.equal(websiteEvent.record.utm_term, 'myanmar')
+  for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) assert.equal(websiteEvent.record[key], '')
 
   const ecommerceAccepted = await invoke({
     body: { ...validSubmission, product: 'ecommerce', template: 'social-storefront' },
@@ -289,8 +285,8 @@ try {
   assert.equal(proofAccepted.body.proof_bound, true)
   const proofEvent = JSON.parse(delivered.options.body)
   assert.equal(proofEvent.record.workflow, 'production')
-  assert.equal(proofEvent.record.source_url, 'https://supermega.dev/contact/?product=plant&template=production-control')
-  assert.equal(proofEvent.record.referrer, 'https://app.supermega.dev/settings/?product=plant')
+  assert.equal(proofEvent.record.source_url, 'https://supermega.dev/contact/')
+  assert.equal(proofEvent.record.referrer, 'https://app.supermega.dev/settings/')
   assert.deepEqual(proofEvent.record.raw.trial_proof, {
     contract: 'supermega.managed_trial_proof.v2',
     version: 2,
@@ -315,7 +311,7 @@ try {
       verification: 'client_provided_digest',
     },
   })
-  assert.equal(proofEvent.record.raw.contact_idempotency.version, 2)
+  assert.equal(proofEvent.record.raw.contact_idempotency.version, 3)
   assert.equal(JSON.stringify(proofEvent.record.raw).includes('private-fragment'), false)
 
   const tamperedProof = await invoke({
@@ -579,7 +575,7 @@ try {
   const durableRecord = storeRequests[0].record
   assert.equal(durableRecord.lead_id, durableAccepted.body.request_id)
   assert.deepEqual(durableRecord.raw.contact_idempotency, {
-    version: 1,
+    version: 3,
     algorithm: 'sha256',
     payload_fingerprint: durableRecord.raw.contact_idempotency.payload_fingerprint,
   })
@@ -625,7 +621,7 @@ try {
   assert.equal(durableProofAccepted.status, 202)
   assert.equal(durableProofAccepted.body.proof_bound, true)
   const durableProofRecord = persistedLeads.get(durableProofAccepted.body.request_id)
-  assert.equal(durableProofRecord.raw.contact_idempotency.version, 2)
+  assert.equal(durableProofRecord.raw.contact_idempotency.version, 3)
   assert.equal(durableProofRecord.raw.trial_proof.verification, 'client_provided_summary')
   assert.equal(durableProofRecord.raw.trial_proof.summary_digest, durableProofSubmission.proof_digest)
   assert.equal(durableProofRecord.raw.trial_proof.raw_records_included, false)
@@ -643,6 +639,25 @@ try {
   assert.equal(durableProofReplay.body.request_id, durableProofAccepted.body.request_id)
   assert.equal(durableProofReplay.body.proof_bound, true)
   assert.equal(durableProofReplay.headers['x-idempotent-replay'], 'true')
+
+  // Frozen pre-privacy v1/v2 fingerprints must replay without notifying or
+  // rewriting the original retained row. A changed business brief conflicts.
+  for (const [version, submission, row, key] of [[1, validSubmission, durableRecord, 200], [2, durableProofSubmission, durableProofRecord, 203]]) {
+    const projection = {
+      name: submission.name, email: submission.email.toLowerCase(), company: submission.company,
+      product: submission.product, template: submission.template, goal: submission.goal,
+      source_url: submission.source_url.split('#')[0], referrer: '',
+      ...(version === 2 ? { trial_proof: row.raw.trial_proof } : {}),
+    }
+    row.raw.contact_idempotency = { version, algorithm: 'sha256', payload_fingerprint: createHash('sha256').update('supermega.contact.payload.v' + version + '\n' + JSON.stringify(projection)).digest('hex') }
+    const before = JSON.stringify(row)
+    const replay = await invoke({ activeHandler: loadHandler({ fresh: true }), body: submission, headers: withKey(key) })
+    assert.equal(replay.status, 202)
+    assert.equal(replay.headers['x-idempotent-replay'], 'true')
+    assert.equal(JSON.stringify(row), before)
+    const conflict = await invoke({ activeHandler: loadHandler({ fresh: true }), body: { ...submission, goal: 'changed' }, headers: withKey(key) })
+    assert.equal(conflict.status, 409)
+  }
 
   const legacyAccepted = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(201, { 'x-forwarded-for': '203.0.113.91' }) })
   assert.equal(legacyAccepted.status, 202)
