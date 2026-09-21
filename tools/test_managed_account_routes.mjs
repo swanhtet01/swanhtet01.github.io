@@ -145,7 +145,7 @@ async function withAuth(run, configured = true) {
     resendResult: { data: {}, error: null },
   }
   const auth = {}
-  for (const name of ['getSession', 'signUp', 'resend', 'signOut', 'getUser', 'exchangeCodeForSession', 'setSession', 'resetPasswordForEmail', 'updateUser']) {
+  for (const name of ['getSession', 'signInWithPassword', 'signUp', 'resend', 'signOut', 'getUser', 'exchangeCodeForSession', 'setSession', 'resetPasswordForEmail', 'updateUser']) {
     auth[name] = async (...args) => {
       calls.push([name, ...args])
       if (state[name]) return state[name](...args)
@@ -197,6 +197,60 @@ async function withAuth(run, configured = true) {
   }
 }
 const rejectsCode = (promise, code) => assert.rejects(promise, (error) => error.code === code)
+
+test('late discovery failure cannot sign out or erase a newer successful login', async () => {
+  for (const oldMethod of ['discoverManagedWorkspacesForCurrentSession', 'signInAndDiscoverManagedWorkspaces']) {
+    await withAuth(async (mod, state) => {
+      state.session = { ...fixedSession }
+      const newer = { ...fixedSession, access_token: 'synthetic-newer-session', user: { ...fixedUser, id: 'newer-user' } }
+      let releaseOld
+      let oldStarted
+      const started = new Promise(resolve => { oldStarted = resolve })
+      const delayed = new Promise(resolve => { releaseOld = resolve })
+      state.signInWithPassword = async ({ email }) => {
+        state.session = email === 'newer@example.invalid' ? newer : { ...fixedSession }
+        return { data: { session: state.session, user: state.session.user }, error: null }
+      }
+      state.fetch = async (_url, init) => {
+        if (init.headers.get('authorization') === `Bearer ${fixedSession.access_token}`) { oldStarted(); return delayed }
+        return response(directoryBody())
+      }
+      const old = mod[oldMethod]('owner@example.invalid', 'synthetic-password')
+      const rejected = assert.rejects(old)
+      await started
+      const result = await mod.signInAndDiscoverManagedWorkspaces('newer@example.invalid', 'synthetic-password')
+      assert.equal(result.userId, newer.user.id)
+      const retainedSelection = ['supermega.managed.workspace.v1', 'newer-company']
+      state.storage.set(...retainedSelection)
+      const before = [...state.storage]
+      releaseOld(response({ detail: { code: 'trial_auth_required' } }, 403))
+      await rejected
+      assert.equal(state.session, newer)
+      assert.deepEqual([...state.storage], before)
+      assert.equal(state.calls.some(([name]) => name === 'signOut'), false)
+    })
+  }
+})
+
+test('discovery success from a replaced session is rejected without clearing the current session', async () => {
+  await withAuth(async (mod, state) => {
+    state.session = { ...fixedSession }
+    const newer = { ...fixedSession, access_token: 'synthetic-replaced-session' }
+    state.fetch = async () => { state.session = newer; return response(directoryBody()) }
+    await rejectsCode(mod.discoverManagedWorkspacesForCurrentSession(), 'managed_identity_changed')
+    assert.equal(state.session, newer)
+    assert.equal(state.calls.some(([name]) => name === 'signOut'), false)
+  })
+})
+
+test('discovery denial still rejects and cannot create workspace access', async () => {
+  await withAuth(async (mod, state) => {
+    state.session = { ...fixedSession }
+    state.fetch = async () => response({ detail: { code: 'trial_auth_required' } }, 403)
+    await assert.rejects(mod.discoverManagedWorkspacesForCurrentSession())
+    assert.equal(state.calls.some(([name]) => name === 'storage-write'), false)
+  })
+})
 function codeLink(state, purpose = 'signup') {
   state.location.search = `?mode=${purpose}&code=${'c'.repeat(20)}`
 }

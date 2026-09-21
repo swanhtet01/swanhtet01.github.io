@@ -2867,7 +2867,7 @@ async function discoverManagedWorkspaces(session: Session): Promise<ManagedWorks
   // Zero companies is a STATE, not an error: since the 2026-08-12 self-serve
   // decision the signed-in user IS the prospective owner, and this is exactly
   // the moment they activate with their trial claim code. Throwing here (and
-  // the wrappers' sign-out-on-error) used to log the user out at the one point
+  // the former wrappers' sign-out-on-error) used to log the user out at the one point
   // the activation UI needs their session. completeManagedWorkspaceSignIn still
   // fail-closes independently, so an empty directory can never open a company.
   return {
@@ -2884,13 +2884,22 @@ export async function discoverManagedWorkspacesForCurrentSession(): Promise<Mana
   }
   const { data, error } = await supabase.auth.getSession()
   if (error || !validNamedUserSession(data.session)) throw accountLinkError()
-  try {
-    return await discoverManagedWorkspaces(data.session)
-  } catch (discoveryError) {
-    await supabase.auth.signOut({ scope: 'local' })
-    forgetWorkspace()
-    throw discoveryError
+  return discoverForUnchangedSession(supabase, data.session)
+}
+
+async function discoverForUnchangedSession(supabase: ManagedAuthClient, session: Session): Promise<ManagedWorkspaceSignIn> {
+  // Discovery is a read, not authority to destroy the current login. Its failure
+  // must propagate without signing out a newer session (including another tab).
+  const directory = await discoverManagedWorkspaces(session)
+  const { data, error } = await supabase.auth.getSession()
+  if (error || !validNamedUserSession(data.session)
+    || data.session.user.id !== session.user.id
+    || data.session.access_token !== session.access_token) {
+    throw new ManagedTrialError('The managed session changed. Sign in again.', {
+      code: 'managed_identity_changed',
+    })
   }
+  return directory
 }
 
 export async function completeManagedAccountPassword(password: string): Promise<ManagedWorkspaceSignIn> {
@@ -2928,13 +2937,7 @@ export async function signInAndDiscoverManagedWorkspaces(email: string, password
       code: error?.code ?? 'sign_in_failed',
     })
   }
-  try {
-    return await discoverManagedWorkspaces(data.session)
-  } catch (discoveryError) {
-    await supabase.auth.signOut({ scope: 'local' })
-    forgetWorkspace()
-    throw discoveryError
-  }
+  return discoverForUnchangedSession(supabase, data.session)
 }
 
 export async function completeManagedWorkspaceSignIn(
