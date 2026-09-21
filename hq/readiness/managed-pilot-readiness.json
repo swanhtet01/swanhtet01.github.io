@@ -16,7 +16,7 @@
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:9f68e642f2debc5d9e2b374fe12f2c00b7207d2e67a01022f8fb8a81822611fc",
+  "sourceDigest": "sha256:82bed643a758314431c7128b505011f7f4c9641ae4da444f338575b581b2b817",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -278,7 +278,7 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:952074c01bd97f591f02271cdb7acd8ced3051198e126407c720775b821b1423"
+      "digest": "sha256:fc8c9fdd444cc11c7a0e33cf2015b455e1dfeb53408e6b5a35ea5cdd169aeff6"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
