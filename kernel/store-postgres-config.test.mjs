@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { postgresPoolConfig } from './store-postgres-config.mjs'
+import { createRequire } from 'node:module'
 
 const base = 'postgresql://fixture:synthetic@db.example.com/fixture'
 test('remote TLS verifies certificates without a connection-string override', () => {
@@ -38,4 +39,22 @@ test('store pool uses the guarded config', async () => {
   const source = await readFile(new URL('./store.mjs', import.meta.url), 'utf8')
   assert.ok(source.includes('new pgmod.Pool(postgresPoolConfig(CONN,'))
   assert.equal(source.includes('rejectUnauthorized: false'), false)
+})
+
+test('installed pg driver retains explicit remote verification despite PGSSLMODE', () => {
+  const require = createRequire(import.meta.url)
+  const { Client } = require('pg')
+  const prior = process.env.PGSSLMODE
+  try {
+    process.env.PGSSLMODE = 'disable'
+    for (const suffix of ['', '?sslmode=require', '?sslmode=verify-full']) {
+      const client = new Client(postgresPoolConfig(base + suffix))
+      assert.equal(client.connectionParameters.host, 'db.example.com')
+      assert.equal(client.connectionParameters.ssl.rejectUnauthorized, true)
+      assert.equal(client.connectionParameters.password, 'synthetic')
+    }
+  } finally {
+    if (prior === undefined) delete process.env.PGSSLMODE
+    else process.env.PGSSLMODE = prior
+  }
 })
