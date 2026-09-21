@@ -298,7 +298,14 @@ const LEAD_COLS = 'lead_id,source,name,email,company,requested_package,goal,lead
 function mapLead(r) {
   return { id: r.lead_id, lead_id: r.lead_id, source: r.source || 'website', name: r.name || '', company: r.company || '', contact: r.email || '', package: r.requested_package || '', message: r.goal || '', score: Number(r.lead_score) || 0, stage: r.lead_stage || '', created_at: r.submitted_at || r.created_at || null }
 }
-export async function listLeads(limit = 150) {
+export async function listLeads(limit = 150, page = null) {
+  if (page) {
+    const after = page.after || ''
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200 || (after && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(after))) throw new Error('invalid_leads_page')
+    if (mode === 'supabase') return (await rest('GET', `supermega_leads?select=${LEAD_COLS}&order=lead_id.asc&limit=${limit}${after ? '&lead_id=gt.' + encodeURIComponent(after) : ''}`)).map(mapLead)
+    if (mode === 'postgres') return (await q(`select ${LEAD_COLS} from public.supermega_leads ${after ? 'where lead_id > $2' : ''} order by lead_id asc limit $1`, after ? [limit, after] : [limit])).map(mapLead)
+    return [...mem.lead.values()].filter((lead) => !after || lead.id > after).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).slice(0, limit)
+  }
   if (mode === 'supabase') return (await rest('GET', `supermega_leads?select=${LEAD_COLS}&order=submitted_at.desc.nullslast,created_at.desc&limit=${limit}`)).map(mapLead)
   if (mode === 'postgres') return (await q(`select ${LEAD_COLS} from public.supermega_leads order by submitted_at desc nulls last, created_at desc limit $1`, [limit])).map(mapLead)
   return memSort([...mem.lead.values()])

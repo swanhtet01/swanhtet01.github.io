@@ -31,7 +31,7 @@ function fakeStore({ leads = LEADS, converted = [], mode = 'supabase', putResult
     mode,
     calls,
     controlRecords,
-    async listLeads(limit) { calls.push('listLeads'); return leads.slice(0, limit) },
+    async listLeads(limit, page) { calls.push('listLeads'); return page ? [...leads].filter(l => !page.after || l.id > page.after).sort((a,b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).slice(0,limit) : leads.slice(0, limit) },
     async getLead(id) { calls.push('getLead'); return leads.find((l) => l.id === id) || null },
     async convertedLeadIds() { calls.push('convertedLeadIds'); return converted },
     async listControlRecords({ prefix, clientId, status, limit }) {
@@ -133,6 +133,22 @@ test('smoke-test leads are hidden by default, counted, and never crowd out a rea
   assert.equal((await listLeadsForReview({ includeSynthetic: 'yes' }, store)).reason, 'invalid_leads_review_query')
 })
 
+test('a full synthetic scan exposes continuation to an older real enquiry', async () => {
+  const smoke = Array.from({ length: 200 }, (_, i) => ({
+    ...LEADS[0], id: `smoke-${i}`, lead_id: `smoke-${i}`, contact: 'qa@example.com',
+  }))
+  const real = { ...LEADS[0], id: 'z-older-real', lead_id: 'z-older-real' }
+  const store = fakeStore({ leads: [...smoke, real] })
+  const first = await listLeadsForReview({}, store)
+  assert.equal(first.ok, true)
+  assert.equal(first.leads.length, 0)
+  assert.equal(first.scanTruncated, true)
+  assert.ok(first.nextCursor, 'a full filtered page must offer continuation, not a dead end')
+  const next = await listLeadsForReview({ cursor: first.nextCursor }, store)
+  assert.equal(next.ok, true)
+  assert.ok(next.leads.some((lead) => lead.id === real.id), 'the older enquiry must be discoverable')
+})
+
 test('review records are tenant-scoped: a foreign-tenant record never marks a lead reviewed', async () => {
   const store = fakeStore()
   store.controlRecords.set(leadReviewRecordKey('lead-2'), {
@@ -145,6 +161,39 @@ test('review records are tenant-scoped: a foreign-tenant record never marks a le
   const mark = await markLeadReviewed({ leadId: 'lead-2' }, store)
   assert.equal(mark.ok, false)
   assert.equal(mark.reason, 'lead_review_conflict')
+})
+
+test('all real enquiries are reachable without skips across display limits', async () => {
+  const leads = Array.from({ length: 461 }, (_, i) => ({ ...LEADS[0], id: `lead-${String(i).padStart(4, '0')}` }))
+  const store = fakeStore({ leads })
+  const seen = []
+  let cursor = ''
+  do {
+    const page = await listLeadsForReview({ cursor }, store)
+    seen.push(...page.leads.map(lead => lead.id))
+    assert.equal(page.hasMore, Boolean(page.nextCursor))
+    cursor = page.nextCursor
+  } while (cursor)
+  assert.deepEqual(seen, leads.map(lead => lead.id))
+  assert.equal(new Set(seen).size, 461)
+  for (const invalid of ['x&limit=999', {}, 12, 'a'.repeat(81)]) assert.equal((await listLeadsForReview({ cursor: invalid }, store)).ok, false)
+})
+
+test('unavailable conversion or review state fails rather than returning false labels', async () => {
+  const store = fakeStore()
+  store.convertedLeadIds = async () => { throw new Error('conversion_unavailable') }
+  await assert.rejects(listLeadsForReview({}, store), /conversion_unavailable/)
+  store.convertedLeadIds = async () => []
+  store.getControlRecord = async () => { throw new Error('review_unavailable') }
+  await assert.rejects(listLeadsForReview({}, store), /review_unavailable/)
+})
+
+test('review lookup uses exact page keys, not a capped global scan', async () => {
+  const store = fakeStore()
+  store.listControlRecords = async () => { throw new Error('global_scan_forbidden') }
+  await markLeadReviewed({ leadId: 'lead-1' }, store)
+  const result = await listLeadsForReview({}, store)
+  assert.equal(result.leads.find(lead => lead.id === 'lead-1').reviewed, true)
 })
 
 test('mark-reviewed stores a well-formed lead_review control record and is idempotent', async () => {
@@ -222,7 +271,9 @@ test('console API exposes the review surface behind the ops key and fails closed
 
 test('console UI wires the review surface: fail-closed banner, reviewed pill, mark-reviewed action', async () => {
   const html = await readFile(new URL('./public/index.html', import.meta.url), 'utf8')
-  assert.match(html, /api\('GET','\/api\/leads\/review'\)/)
+  assert.ok(html.includes("api('GET','/api/leads/review'+(cursor?'?cursor='+encodeURIComponent(cursor):''))"))
+  assert.ok(html.includes("next.onclick=()=>loadLeads(r.nextCursor)"))
+  assert.ok(html.includes('No customer enquiries in this page. Continue to the next page.'))
   assert.match(html, /leads_source_not_configured/)
   assert.match(html, /SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY/)
   assert.match(html, /data-review="\$\{esc\(l\.id\)\}">Mark reviewed<\/button>/)

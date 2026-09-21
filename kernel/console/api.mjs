@@ -217,7 +217,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         const limit = query.limit != null && String(query.limit).trim() !== '' ? Number(query.limit) : 50
         // Smoke-test submissions share this table with customers; they stay hidden unless asked for.
         const includeSynthetic = String(query.includeSynthetic ?? '').trim() === '1'
-        const result = await listLeadsForReview({ limit, includeSynthetic })
+        const result = await listLeadsForReview({ limit, includeSynthetic, cursor: query.cursor ?? '' })
         if (!result.ok) return { status: result.reason === 'leads_source_not_configured' ? 503 : 400, json: result }
         return ok(result)
       }
