@@ -113,6 +113,10 @@ for (const page of landingPages) {
   const websiteOfferingBoundary = 'The current Website starter supports up to four featured offerings, not full menu management.'
   check(html.includes(websiteOfferingBoundary) === (product.id === 'website'), `landing_website_offering_scope:${page.route}`)
   check(html.includes('Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.'), `landing_managed_activation_boundary:${page.route}`)
+  for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
+    check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
+  }
+  check(html.includes('Agreed setup from approved business information'), `landing_assisted_setup_offer:${page.route}`)
   check(!html.includes(`href="${product.appRoute}"`), `landing_no_direct_app_route:${page.route}`)
   check(html.includes('href="/contact/">Contact</a>') && html.includes('href="/privacy/">Privacy</a>'), `landing_footer_parity:${page.route}`)
   check(html.includes('aria-label="SuperMega home"'), `landing_home_navigation:${page.route}`)
