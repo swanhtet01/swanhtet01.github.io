@@ -249,7 +249,7 @@
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
-      "digest": "sha256:915ef2578bb5101a1fc43f2a8876659b6e0de82b91c1e20c21cd47fed8a918ad"
+      "digest": "sha256:7abc0ac8a1db42808dc46760104d4d0f05359b5f384eaa5544903703d7330a75"
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
@@ -276,5 +276,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:e9cab72bbea758618b333af46ba0e97a2af0e0d526d02f390fd7d03997a08b43"
+  "digest": "sha256:fba9afd8dfb5c67933c583d15140885c2c21d67742840e3534ab6de76cc3213b"
 }
