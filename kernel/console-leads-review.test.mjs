@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import realStore from './store.mjs'
 import {
   LEAD_REVIEW_RECORD_PREFIX,
@@ -16,6 +17,41 @@ import {
 } from './console/leads-review.mjs'
 
 const HASH_RE = /^[a-f0-9]{64}$/
+
+test('real REST store sends bounded keyset queries and rejects cursor injection before fetch', () => {
+  const source = `
+    import assert from 'node:assert/strict';
+    const calls = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input);
+      assert.equal(url.origin, 'https://fixture.invalid');
+      assert.equal(url.pathname, '/rest/v1/supermega_leads');
+      assert.equal(init.method, 'GET');
+      assert.equal(init.body, undefined);
+      calls.push(url);
+      return new Response(JSON.stringify([{lead_id:'lead-002',email:'qa@example.com',goal:'retained brief'}]), {status:200});
+    };
+    const store = await import(${JSON.stringify(new URL('./store.mjs', import.meta.url).href)});
+    const first = await store.listLeads(50, {after:''});
+    assert.equal(first[0].message, 'retained brief');
+    assert.equal(calls[0].searchParams.get('order'), 'lead_id.asc');
+    assert.equal(calls[0].searchParams.get('limit'), '50');
+    assert.equal(calls[0].searchParams.has('lead_id'), false);
+    await store.listLeads(200, {after:'lead-001'});
+    assert.equal(calls[1].searchParams.get('lead_id'), 'gt.lead-001');
+    assert.equal(calls[1].searchParams.get('limit'), '200');
+    for(const after of ['x&limit=999','x,or=(lead_id.gt.a)','a'.repeat(81)]) await assert.rejects(store.listLeads(50,{after}), /invalid_leads_page/);
+    await assert.rejects(store.listLeads(201,{after:''}), /invalid_leads_page/);
+    assert.equal(calls.length,2);
+    await store.listLeads(10);
+    assert.equal(calls[2].searchParams.get('order'), 'submitted_at.desc.nullslast,created_at.desc');
+  `
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', source], {
+    encoding: 'utf8', timeout: 10000,
+    env: { SystemRoot: process.env.SystemRoot || '', SUPABASE_URL: 'https://fixture.invalid', SUPABASE_SERVICE_ROLE_KEY: 'synthetic-test-only' },
+  })
+  assert.equal(result.status, 0, result.stderr || String(result.error || 'child failed'))
+})
 
 // Fixture addresses must NOT use RFC 2606 reserved names: those are exactly what
 // isSyntheticLead filters out, and these cases are about review mechanics, not classification.
