@@ -33,10 +33,9 @@ async function rest(method, pathAndQuery, body) {
 let pool
 async function pg() {
   if (!pool) {
+    const { postgresPoolConfig } = await import('./store-postgres-config.mjs')
     const pgmod = (await import('pg')).default
-    let ssl = { rejectUnauthorized: false }
-    try { const u = new URL(CONN); if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.searchParams.get('sslmode') === 'disable') ssl = false } catch { /* keep ssl */ }
-    pool = new pgmod.Pool({ connectionString: CONN, ssl, max: 3, idleTimeoutMillis: 10_000 })
+    pool = new pgmod.Pool(postgresPoolConfig(CONN, process.env.SUPERMEGA_POSTGRES_CA_CERT || ''))
   }
   return pool
 }
