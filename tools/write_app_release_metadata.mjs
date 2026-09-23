@@ -188,10 +188,20 @@ const themeRestoreScript = `try {
 `
 const serviceWorkerRegisterScript = `if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))
 `
-// Vercel Web Analytics: cookieless aggregate pageviews, no PII. Loaded dynamically because
-// /_vercel/insights/ exists only on the deployment edge, never in dist/, and only on the
-// production host so local/dev stays beacon-free.
-const insightsScript = `if (/(^|\\.)supermega\\.dev$/.test(location.hostname)) { const insights = document.createElement('script'); insights.defer = true; insights.src = '/_vercel/insights/script.js'; document.head.append(insights) }
+// Vercel Web Analytics and Speed Insights. Both use same-origin Vercel endpoints and load
+// only on a SuperMega production hostname, so local development and immutable preview URLs
+// remain beacon-free. The queue stubs follow Vercel's framework-agnostic bootstrap contract;
+// they also let the bounded client-error lane enqueue an event before Analytics finishes.
+const insightsScript = `if (/(^|\\.)supermega\\.dev$/.test(location.hostname)) {
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) }
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments) }
+  for (const src of ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js']) {
+    const script = document.createElement('script')
+    script.defer = true
+    script.src = src
+    document.head.append(script)
+  }
+}
 `
 
 // SHELL is what the worker can name before the build exists: the document plus the icon and

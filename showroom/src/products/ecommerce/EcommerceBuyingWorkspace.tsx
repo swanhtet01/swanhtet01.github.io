@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { SavedRequestReceipt } from './SavedRequestReceipt'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
+import { confirmManagedRequest, managedRequestWasConfirmed, type DeliveryConfirmation } from './managed-request-confirmation'
 
 import {
   buildEcommerceCheckoutQuote,
@@ -75,6 +77,7 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
   onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void
+  onDeliveryConfirmationChange?: (confirmation: DeliveryConfirmation | null) => void
   preview: StorefrontPreview
   scope: string
   sourcePreviewDigest: string
@@ -145,6 +148,7 @@ export function EcommerceBuyingWorkspace({
   onOpenSupport,
   onRecordManagedRequest,
   onRequestStateChange,
+  onDeliveryConfirmationChange,
   preview,
   scope,
   sourcePreviewDigest,
@@ -167,8 +171,11 @@ export function EcommerceBuyingWorkspace({
   const [promotionCode, setPromotionCode] = useState('')
   const [open, setOpen] = useState(false)
   const [quoteBusy, setQuoteBusy] = useState(false)
+  const quoteInFlight = useRef(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
+  const handoffInFlight = useRef(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
+  const [managedConfirmation, setManagedConfirmation] = useState('')
   const [quoteClock, setQuoteClock] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
   const [cartDrafts, setCartDrafts] = useState<Record<string, string>>({})
@@ -216,7 +223,13 @@ export function EcommerceBuyingWorkspace({
   const [amendmentBusy, setAmendmentBusy] = useState(false)
   const [rescheduleDraft, setRescheduleDraft] = useState<{ orderId: string; requestedPromisedAt: string; reason: string } | null>(null)
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
-  const requestReceiptRef = useRef<HTMLElement>(null)
+  const focusRequestReceipt = useCallback((receipt: HTMLElement | null) => {
+    if (!receipt) return
+    requestAnimationFrame(() => {
+      receipt.querySelector('p')?.scrollIntoView({ block: 'center' })
+      receipt.focus({ preventScroll: true })
+    })
+  }, [])
   const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
@@ -319,6 +332,7 @@ export function EcommerceBuyingWorkspace({
   }, [freshQuoteId])
 
   const latestRequest = activeBuyingState.requests[0] ?? null
+  const managedDeliveryConfirmed = Boolean(onRecordManagedRequest && managedRequestWasConfirmed(latestRequest, managedConfirmation))
   const combinedOrderTimeline = useMemo(() => {
     const sharedRequests = commerceStorefrontRequests(commerceState)
     const sharedRequestIds = new Set(sharedRequests.map((request) => request.id))
@@ -354,6 +368,10 @@ export function EcommerceBuyingWorkspace({
   const latestRequestOrder = latestRequestEntry?.order ?? null
   const customerRequestState = latestRequestOrder ? 'confirmed' : latestRequest ? 'waiting_shop_review' : 'idle'
   useEffect(() => onRequestStateChange(customerRequestState), [customerRequestState, onRequestStateChange])
+  useEffect(() => {
+    onDeliveryConfirmationChange?.({ scope, requestId: latestRequest?.id ?? '', confirmed: managedDeliveryConfirmed })
+    return () => onDeliveryConfirmationChange?.(null)
+  }, [scope, latestRequest?.id, managedDeliveryConfirmed, onDeliveryConfirmationChange])
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
   const replacementRequestIds = new Set([
@@ -1091,7 +1109,7 @@ export function EcommerceBuyingWorkspace({
 
   async function reviewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (disabled || quoteBusy || recoveryBlocked || !cart.length) return
+    if (disabled || quoteBusy || quoteInFlight.current || recoveryBlocked || !cart.length) return
     if (!paymentPolicyReady) {
       setNotice(`Shop has no active payment method for ${fulfilment}. Set one up in Shop before reviewing this order.`)
       return
@@ -1100,6 +1118,7 @@ export function EcommerceBuyingWorkspace({
       setNotice('Secure checkout identity is unavailable. Nothing was recorded.')
       return
     }
+    quoteInFlight.current = true
     setQuoteBusy(true)
     setNotice('')
     try {
@@ -1127,14 +1146,11 @@ export function EcommerceBuyingWorkspace({
         && Date.parse(retained.quote.expiresAt) > quotedAt.getTime()
         && cartMatchesRequest(cart, retained))
       if (retainedMatches && retained && onRecordManagedRequest) {
-        await onRecordManagedRequest(retained)
+        setManagedConfirmation('')
+        setManagedConfirmation(await confirmManagedRequest(retained, onRecordManagedRequest))
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
         setNotice('This order request is in the Company Shop inbox. No order, stock, message, or charge changed.')
-        requestAnimationFrame(() => {
-          requestReceiptRef.current?.scrollIntoView({ block: 'center' })
-          requestReceiptRef.current?.focus({ preventScroll: true })
-        })
         return
       }
       const quote = await buildEcommerceCheckoutQuote({
@@ -1167,31 +1183,34 @@ export function EcommerceBuyingWorkspace({
       setRecoveryRead({ scope, status: 'ready', issue: '' })
       emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'order.request.submitted', ts: Date.now() })
       setFreshQuoteId('')
-      if (onRecordManagedRequest) await onRecordManagedRequest(request)
-      recordBehaviorSignal(window.localStorage, {
-        event: 'first_value_completed',
-        product: 'ecommerce',
-        route: window.location.pathname + window.location.search,
-        detail: 'Saved a reviewed Ecommerce order request for Shop review.',
-      })
+      setManagedConfirmation('')
+      if (onRecordManagedRequest) setManagedConfirmation(await confirmManagedRequest(request, onRecordManagedRequest))
+      try {
+        recordBehaviorSignal(window.localStorage, {
+          event: 'first_value_completed',
+          product: 'ecommerce',
+          route: window.location.pathname + window.location.search,
+          detail: 'Saved a reviewed Ecommerce order request for Shop review.',
+        })
+      } catch {
+        // Optional behavior recording cannot invalidate a retained request.
+      }
       setFreshQuoteId(request.id)
       setQuoteClock(quotedAt.getTime())
       setNotice(onRecordManagedRequest
         ? 'This order request is in the Company Shop inbox and local recovery. No order, stock, message, or charge changed.'
         : 'This sample order request is saved on this device for Shop review. No order, stock, message, or charge changed.')
-      requestAnimationFrame(() => {
-        requestReceiptRef.current?.scrollIntoView({ block: 'center' })
-        requestReceiptRef.current?.focus({ preventScroll: true })
-      })
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Checkout review failed closed.')
     } finally {
+      quoteInFlight.current = false
       setQuoteBusy(false)
     }
   }
 
   async function openOperatorReview() {
-    if (!latestRequest || latestRequestConfirmed || !quoteCurrent || handoffBusy) return
+    if (disabled || recoveryBlocked || !latestRequest || latestRequestConfirmed || !quoteCurrent || handoffBusy || handoffInFlight.current) return
+    handoffInFlight.current = true
     setHandoffBusy(true)
     setNotice('')
     try {
@@ -1221,6 +1240,7 @@ export function EcommerceBuyingWorkspace({
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Shop review failed closed.')
     } finally {
+      handoffInFlight.current = false
       setHandoffBusy(false)
     }
   }
@@ -1315,8 +1335,8 @@ export function EcommerceBuyingWorkspace({
               <span>Promotion code <small>optional · Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => setPromotionCode(event.target.value)} placeholder="Optional" value={promotionCode} />
             </label>
-            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
-              {quoteBusy ? 'Sending...' : 'Send order request'}
+            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" data-request-mode={onRecordManagedRequest ? 'managed' : 'local'} disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
+              {quoteBusy ? (onRecordManagedRequest ? 'Sending...' : 'Saving on this device...') : (onRecordManagedRequest ? 'Send order request' : 'Save request on this device')}
             </button> : null}
             <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
               ? 'Checking saved checkout recovery...'
@@ -1339,8 +1359,8 @@ export function EcommerceBuyingWorkspace({
               <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
             </article>
           ) : quoteCurrent ? (
-            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={requestReceiptRef} tabIndex={-1}>
-              <span className="status-pill ready">Request sent</span>
+            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={focusRequestReceipt} tabIndex={-1}>
+              <span className="status-pill ready">{managedDeliveryConfirmed ? 'Request sent to Shop' : 'Request saved on this device'}</span>
               <strong>Request for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
               <div className="ecommerce-quote-boundaries">
@@ -1350,17 +1370,19 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Payment</small><b>{paymentLabel(latestRequest.quote.payment.adapter)} · not charged</b></span>
               </div>
               <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
-              <p>{onRecordManagedRequest ? 'Company Shop received this request.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
-              <button className="core-button secondary" disabled={!quoteCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
+              <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : onRecordManagedRequest ? 'Saved on this device. Company Shop delivery is not verified here.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
+              <button className="core-button secondary" disabled={disabled || recoveryBlocked || !quoteCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
                 {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>
             </article>
-          ) : (
+          ) : !latestRequestOrder ? <SavedRequestReceipt reference={latestRequest.id} total={formatMmk(latestRequest.totalMmk)}
+            expiresAt={latestRequest.quote.expiresAt} expired={Date.parse(latestRequest.quote.expiresAt) <= quoteClock}
+            delivery={managedDeliveryConfirmed ? 'confirmed' : onRecordManagedRequest ? 'unverified' : 'local'} /> : (
             <div className="ecommerce-stale-quote" role="status">
-              <strong>{latestRequestOrder ? 'Start another order' : 'Cart changed — review a new total'}</strong>
+              <strong>{latestRequestOrder ? 'Start another order' : 'Review a new total'}</strong>
               <small>{latestRequestOrder
                 ? `Order ${latestRequestOrder.id} is already confirmed. Review a new total only when creating another order.`
-                : 'The previous quote remains in Your orders and cannot continue with this cart.'}</small>
+                : 'The previous quote remains in Your orders. Review the current items and details before requesting a new total.'}</small>
             </div>
           ) : null}
 
@@ -1384,7 +1406,7 @@ export function EcommerceBuyingWorkspace({
                        {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : quoteExpiredWithoutOrder(entry) ? <small>Review again for the current total</small> : <small>Shop confirms the promise</small>}
                        {entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}
                     </div>
-                    <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">Reorder</button>
+                    <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">{entry.order ? 'Reorder' : 'Review items again'}</button>
                   </article>
                 ))}
               </div>

@@ -1,0 +1,40 @@
+{
+  "contract": "supermega.shop.pilot_public_boundary.v1",
+  "product": "shop",
+  "pilotMode": "owner_named",
+  "stage": "owner-decision-required",
+  "decision": "revise",
+  "controls": {
+    "automaticSendAllowed": false,
+    "paymentAllowed": false,
+    "deploymentAllowed": false,
+    "productionActivationAllowed": false,
+    "hostedWritesAllowed": false,
+    "externalWritesPerformed": false,
+    "customerContactPerformed": false,
+    "managedActivation": false,
+    "managedActivationReady": false,
+    "managedPersistenceReady": false,
+    "shopPilotProof": false,
+    "pilotProof": false,
+    "promotionEvidence": false,
+    "readyToRecord": false,
+    "paymentAccepted": false,
+    "stockMovementPerformed": false,
+    "serverWritePerformed": false,
+    "hostedWritePerformed": false,
+    "credentialChangePerformed": false,
+    "providerMutationPerformed": false
+  },
+  "counts": {
+    "privateArtifactsCreated": 0,
+    "publicSafeArtifactCount": 1
+  },
+  "digests": {
+    "contactEventSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "acceptedRuns": 0,
+  "consecutiveAcceptedRuns": 0,
+  "participantIdentityPresent": false,
+  "secretValuesExposed": false
+}

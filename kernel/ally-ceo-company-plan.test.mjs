@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
 
 import { buildAllyCeoCompanyPlan } from './ally-ceo-company-plan.mjs'
 import { buildManagedPilotReadiness, readinessDigest } from './managed-pilot-readiness.mjs'
@@ -63,22 +64,14 @@ function portfolio(overrides = {}, automationOverrides = {}) {
 }
 
 function managedReadiness() {
+  const database = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
   const sourceReceipts = ['portfolio', 'database', 'storage', 'security', 'storageproof', 'persistenceproof', 'selfserveproof', 'now', 'package', 'kernel']
     .map((path) => ({ path, digest: readinessDigest(path) }))
   return JSON.stringify(buildManagedPilotReadiness({
     portfolio: JSON.parse(portfolio({}, { ecommerce: { status: 'owner-gated' } })),
-    databaseEvidence: {
-      schemaVersion: 'supermega.hq.database-rehearsal.v2',
-      recordedAt: '2026-07-31T10:00:00.000Z',
-      checks: {
-        ...Object.fromEntries(Array.from({ length: 53 }, (_, index) => [`check${index}`, true])),
-        publicBrowserQuarantineEnforced: true,
-        publicBrowserQuarantineIdempotent: true,
-        restoredPublicBrowserQuarantinePreserved: true,
-      },
-      storage: { hostedStoragePrivacyProofRequired: true },
-      localVerification: { externallyHosted: false },
-    },
+    databaseEvidence: database,
+    databaseImplementation: { digest: database.implementationDigest,
+      fileCount: database.implementationFileCount, paths: database.implementation.paths },
     storageAudit: 'Status: local verifier ready; hosted proof blocked',
     securityAudit: {
       contract: 'supermega.supabase-security-advisor-audit.v2',
@@ -176,7 +169,7 @@ test('CEO planning carries compact four-product managed-pilot truth within the e
   assert.equal(readiness.status, 'blocked')
   assert.equal(readiness.localDatabaseProofReady, true)
   assert.equal(readiness.hostedActivationReady, false)
-  assert.equal(readiness.blockingGateIds.length, 7)
+  assert.deepEqual(readiness.blockingGateIds, ['preview_rehearsal', 'managed_persistence', 'storage_privacy', 'security', 'pilot_evidence', 'production_activation'])
   assert.deepEqual(readiness.products.map(({ productId }) => productId), ['shop', 'plant', 'website', 'ecommerce'])
   assert.equal(result.manifest.evidence['operations-analyst'].sourceReceipts.at(-1).path, 'hq/readiness/managed-pilot-readiness.json')
   assert.ok(result.preflight.totalEvidenceBytes <= 8_192)

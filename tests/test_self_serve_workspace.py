@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from copy import deepcopy
 import os
+from threading import get_ident
 import unittest
 from unittest.mock import patch
 
@@ -386,6 +387,8 @@ class SelfServeWelcomeEmailTests(unittest.TestCase):
         self.store = InMemoryTrialStore(reducer=MergeReducer())
         self.sends: list[dict[str, str]] = []
         self.sender_raises = False
+        self.response_events = []
+        self.sender_thread = None
         self.sessions = {
             OWNER_SESSION: TrialSignupSession(
                 actor_id=OWNER_ACTOR_ID,
@@ -405,6 +408,7 @@ class SelfServeWelcomeEmailTests(unittest.TestCase):
         def send_welcome_email(
             *, to_email: str, business_name: str, workspace_id: str, claim_code: str
         ) -> bool:
+            self.sender_thread = get_ident()
             if self.sender_raises:
                 raise RuntimeError("provider exploded")
             self.sends.append(
@@ -429,7 +433,14 @@ class SelfServeWelcomeEmailTests(unittest.TestCase):
                 send_welcome_email=send_welcome_email,
             )
         )
-        self.client = TestClient(app)
+        async def record_response(scope, receive, send):
+            async def record_send(message):
+                await send(message)
+                if message["type"] in ("http.response.start", "http.response.body"):
+                    self.response_events.append((dict(message), get_ident()))
+            await app(scope, receive, record_send)
+
+        self.client = TestClient(record_response)
 
     def tearDown(self) -> None:
         self.client.close()
@@ -457,6 +468,24 @@ class SelfServeWelcomeEmailTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_courtesy_is_deferred_until_response_and_runs_off_event_loop(self) -> None:
+        # Inspect the real ASGI response boundary, not TestClient elapsed time
+        # (TestClient waits for background tasks before returning to the test).
+        seen_at_sender = []
+        class RecordingSends(list):
+            def append(inner_self, message):
+                seen_at_sender.extend(self.response_events)
+                super().append(message)
+
+        self.sends = RecordingSends()
+        with activation_window("open"):
+            response = self._post()
+        self.assertEqual(response.status_code, 200)
+        completed = [(event, thread) for event, thread in seen_at_sender
+                     if event["type"] == "http.response.body" and not event.get("more_body", False)]
+        self.assertEqual(len(completed), 1)
+        self.assertNotEqual(self.sender_thread, completed[0][1])
 
     def test_idempotent_replay_never_sends_again(self) -> None:
         with activation_window("open"):

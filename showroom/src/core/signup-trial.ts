@@ -94,10 +94,10 @@ export type TrialSignupProductChoice = {
 }
 
 export const TRIAL_SIGNUP_PRODUCT_CHOICES: readonly TrialSignupProductChoice[] = [
-  { id: 'commerce', slug: 'shop', label: 'Shop', outcome: 'Sell, book, stock, and close the day.', setupPath: '/settings/?product=shop', workspacePath: '/shop/' },
-  { id: 'production', slug: 'plant', label: 'Plant', outcome: 'Plan work, materials, quality, and maintenance.', setupPath: '/settings/?product=plant', workspacePath: '/plant/' },
-  { id: 'website', slug: 'website', label: 'Website', outcome: 'Build, preview, approve, and publish your business site.', setupPath: '/settings/?product=website', workspacePath: '/website/' },
-  { id: 'ecommerce', slug: 'ecommerce', label: 'Ecommerce', outcome: 'Open a storefront and turn requests into reviewed orders.', setupPath: '/settings/?product=ecommerce', workspacePath: '/ecommerce/' },
+  { id: 'commerce', slug: 'shop', label: 'Shop', outcome: 'Sample sales, appointments, and closes on this device.', setupPath: '/settings/?product=shop', workspacePath: '/shop/' },
+  { id: 'production', slug: 'plant', label: 'Plant', outcome: 'Sample production and quality checks on this device.', setupPath: '/settings/?product=plant', workspacePath: '/plant/' },
+  { id: 'website', slug: 'website', label: 'Website', outcome: 'Preview a local draft. Publishing needs separate review.', setupPath: '/settings/?product=website', workspacePath: '/website/' },
+  { id: 'ecommerce', slug: 'ecommerce', label: 'Ecommerce', outcome: 'Try a local catalog and request draft. Nothing is sent or paid.', setupPath: '/settings/?product=ecommerce', workspacePath: '/ecommerce/' },
 ] as const
 
 export function trialSignupProductChoice(value: unknown): TrialSignupProductChoice {
@@ -289,25 +289,27 @@ export type TrialSignupDoor = {
  * `managedTrialAuthConfigured()`, both required, and the signal is fail-closed at the runtime
  * behind SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW (design section 7).
  */
+export const ACCOUNT_REQUEST_DETAIL = 'Account setup and moving local records need separate review.'
+
 export function trialSignupDoors({ managedReady, signupOpen = false }: { managedReady: boolean; signupOpen?: boolean }): readonly TrialSignupDoor[] {
   return [
     {
       id: 'trial',
       label: 'Open your workspace',
-      detail: 'Your trial runs on this device with a full starter catalog. Nothing to install, no card, no waiting.',
+      detail: 'Local sample only. No account or cloud backup.',
       action: 'open-product',
     },
     managedReady
       ? {
         id: 'managed',
         label: 'Sign in to your company',
-        detail: 'Your company account is active. Sign in to work with your team on shared records.',
+        detail: 'Existing accounts only. Local trials do not create an account.',
         action: 'sign-in',
       }
       : {
         id: 'managed',
-        label: 'Activate your company account',
-        detail: 'Shared records, your team, and your data off this device. You have already named your business and hold the claim code -- send your activation request, and a person is on hand whenever you want help.',
+        label: 'Request a company account',
+        detail: ACCOUNT_REQUEST_DETAIL,
         action: 'request-activation',
       },
     ...(signupOpen

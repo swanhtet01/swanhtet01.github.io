@@ -28,7 +28,11 @@ const bundle = await build({
       createSeedCommerce, reserveCommerceOrder, reconcileCommercePayment, advanceCommerceOrder,
       cancelCommerceOrder, receiveCommerceStock, validateCommerceState,
       commerceOrderAcknowledgement, commerceOrderAcknowledgementReader,
-    } from './commerce-workspace.ts'`,
+    } from './commerce-workspace.ts'
+    export {
+      commerceOrderDraftResetEpoch, readCommerceOrderDraft, saveCommerceOrderDraft,
+      discardCommerceOrderDraft, resetCommerceOrderDraftRecovery, commerceOrderDraftStorageKey,
+    } from './commerce-order-draft.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/order-integrity-entry.ts',
     loader: 'ts',
@@ -44,6 +48,8 @@ const {
   createSeedCommerce, reserveCommerceOrder, reconcileCommercePayment, advanceCommerceOrder,
   cancelCommerceOrder, receiveCommerceStock, validateCommerceState,
   commerceOrderAcknowledgement, commerceOrderAcknowledgementReader,
+  commerceOrderDraftResetEpoch, readCommerceOrderDraft, saveCommerceOrderDraft,
+  discardCommerceOrderDraft, resetCommerceOrderDraftRecovery, commerceOrderDraftStorageKey,
 } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
@@ -246,6 +252,56 @@ check(reusedId === null, 'reusing one actionId across composed transitions is re
 const baseOrderAfter = settleBase.orders.find((candidate) => candidate.id === 'ORD-TEST-1')
 check(baseOrderAfter.status === 'confirmed' && baseOrderAfter.paymentStatus === 'pending', 'the composition does not mutate the state it was given')
 
+// --- direct counter review: default completion versus explicit open order ----
+// The counter now creates and settles a routine walk-in inside one local recovery
+// intent. This mirrors the exact branch in CoreApp: reserve uses the reviewed action
+// id, payment and fulfilment use derived ids, while the opt-in pay-later branch stops
+// immediately after reserve. Both begin from the same untouched workspace fixture.
+function composeCounterReview(startState, outcome, reviewedOrder, baseProof) {
+  let composed = reserveCommerceOrder(startState, reviewedOrder, baseProof)
+  if (!composed || outcome === 'open_order') return composed
+  composed = reconcileCommercePayment(composed, reviewedOrder.id, { ...baseProof, actionId: `${baseProof.actionId}:payment` })
+  if (!composed) return null
+  for (let step = 0; step < 3; step += 1) {
+    const live = composed.orders.find((candidate) => candidate.id === reviewedOrder.id)
+    if (!live || live.status === 'cancelled') return null
+    if (live.status === 'completed') break
+    const advanced = advanceCommerceOrder(
+      composed,
+      reviewedOrder.id,
+      live.status,
+      { ...baseProof, actionId: `${baseProof.actionId}:advance-${live.status}` },
+      'client',
+    )
+    if (!advanced) return null
+    composed = advanced
+  }
+  const completed = composed.orders.find((candidate) => candidate.id === reviewedOrder.id)
+  return completed?.status === 'completed' && completed.paymentStatus === 'reconciled' ? composed : null
+}
+
+const counterStart = createSeedCommerce()
+const counterItem = counterStart.items.find((candidate) => candidate.onHand > 0)
+assert.ok(counterItem, 'direct counter review needs one sellable catalog item')
+const counterLines = [{ sku: counterItem.sku, name: counterItem.name, variant: counterItem.variant, quantity: 1, unitPriceMmk: counterItem.price }]
+const counterOrder = orderFor(counterLines, { id: 'ORD-DIRECT-1', fulfilmentReference: 'Counter ORD-DIRECT-1' })
+const counterProof = { ...settleProof, actionId: 'ACT-DIRECT-1', evidenceReference: 'Counter order DIRECT-1' }
+
+const openCounter = composeCounterReview(counterStart, 'open_order', counterOrder, counterProof)
+check(openCounter !== null, 'explicit open-order counter review is accepted')
+const openCounterOrder = openCounter.orders.find((candidate) => candidate.id === counterOrder.id)
+check(openCounterOrder.status === 'confirmed' && openCounterOrder.paymentStatus === 'pending', 'open-order review stops at reserved and payment-pending')
+check(openCounterOrder.paymentReconciliationActionId === undefined, 'open-order review records no payment proof')
+
+const paidCounter = composeCounterReview(counterStart, 'paid_handoff', counterOrder, counterProof)
+check(paidCounter !== null, 'default paid-and-handoff counter review is accepted')
+const paidCounterOrder = paidCounter.orders.find((candidate) => candidate.id === counterOrder.id)
+check(paidCounterOrder.status === 'completed' && paidCounterOrder.paymentStatus === 'reconciled', 'default counter review reaches completed and reconciled')
+check(paidCounterOrder.paymentReconciliationActionId === 'ACT-DIRECT-1:payment', 'direct counter payment has its own derived proof id')
+check(paidCounterOrder.completion?.actionId === 'ACT-DIRECT-1:advance-ready', 'direct counter handoff completion has its own derived proof id')
+check(Boolean(commerceOrderAcknowledgement(paidCounter, counterOrder.id)), 'completed direct counter review produces a sealed receipt')
+check(counterStart.orders.every((candidate) => candidate.id !== counterOrder.id), 'neither direct counter outcome mutates the starting workspace')
+
 // --- READ: the sealed document, and how many times a workspace is checked to make one ----
 //
 // commerceOrderAcknowledgement validated the ENTIRE workspace once per order. The Shop screen
@@ -436,6 +492,145 @@ function countValidations(subject) {
   check(
     validations() === perOrder + 1,
     `and never again, however many documents are read out of it (counted ${validations() - perOrder - 1} more over ${ackAllIds.length} orders)`,
+  )
+}
+
+// --- RECOVERY: two-tab order drafts fail closed -------------------------------
+//
+// The pilot asks an operator to start an order, reload, retry, and sometimes keep another
+// screen open while the counter is in use. That is not the same boundary as the final order
+// write above: this one protects the unfinished order before it becomes a sale. Two properties
+// matter for the day-one till:
+//
+//   1. a stale tab cannot overwrite a newer draft or discard it; and
+//   2. an explicit recovery reset makes old screens stop writing until they reload.
+//
+// The test uses one shared storage map and one lock manager, which is the same origin/profile
+// sharing model localStorage and Web Locks give two browser tabs.
+class DraftMemoryStorage {
+  constructor(seed = {}) {
+    this.map = new Map(Object.entries(seed))
+  }
+  get length() { return this.map.size }
+  key(index) { return [...this.map.keys()][index] ?? null }
+  getItem(key) { return this.map.has(key) ? this.map.get(key) : null }
+  setItem(key, value) { this.map.set(key, String(value)) }
+  removeItem(key) { this.map.delete(key) }
+}
+
+const recordingLocks = () => {
+  const calls = []
+  return {
+    calls,
+    async request(name, options, callback) {
+      calls.push({ name, options })
+      return callback()
+    },
+  }
+}
+
+async function rejectsAsync(action, pattern, label) {
+  checks += 1
+  await assert.rejects(action, pattern, label)
+}
+
+const draftInput = (customer, quantity = 1) => ({
+  customer,
+  channel: 'Walk-in',
+  payment: 'Cash',
+  fulfilment: 'pickup',
+  fulfilmentReference: `Counter handoff for ${customer}`,
+  promisedAt: '2026-07-23T10:30:00.000Z',
+  paymentTermsDays: 0,
+  lines: [{
+    sku: item.sku,
+    quantity,
+    unitPriceMmk: item.price,
+    availableAtSave: item.onHand,
+  }],
+})
+
+{
+  const storage = new DraftMemoryStorage()
+  const locks = recordingLocks()
+  const scope = 'local'
+  const initialEpoch = commerceOrderDraftResetEpoch(storage)
+  check(initialEpoch === 0, 'new Shop draft recovery storage starts at reset epoch zero')
+
+  const first = await saveCommerceOrderDraft(draftInput('First tab customer'), 0, scope, {
+    storage,
+    locks,
+    now: () => '2026-07-23T09:10:00.000Z',
+    expectedResetEpoch: initialEpoch,
+  })
+  check(first.revision === 1, 'first tab saves the initial unfinished order at revision one')
+  const tabA = readCommerceOrderDraft(scope, storage)
+  check(tabA.status === 'ready' && tabA.draft?.revision === 1, 'tab A reads a recoverable draft before another tab edits it')
+
+  const second = await saveCommerceOrderDraft(draftInput('Second tab customer', 2), 1, scope, {
+    storage,
+    locks,
+    now: () => '2026-07-23T09:11:00.000Z',
+    expectedResetEpoch: initialEpoch,
+  })
+  check(second.revision === 2, 'tab B can advance the shared unfinished order to revision two')
+
+  await rejectsAsync(
+    () => saveCommerceOrderDraft(draftInput('Stale tab customer', 3), tabA.draft.revision, scope, {
+      storage,
+      locks,
+      now: () => '2026-07-23T09:12:00.000Z',
+      expectedResetEpoch: initialEpoch,
+    }),
+    /changed in another tab/,
+    'a stale tab cannot overwrite the newer order draft',
+  )
+  const afterStaleSave = readCommerceOrderDraft(scope, storage)
+  check(
+    afterStaleSave.status === 'ready'
+      && afterStaleSave.draft?.revision === 2
+      && afterStaleSave.draft.customer === 'Second tab customer',
+    'the newer order draft survives the stale save attempt unchanged',
+  )
+
+  const retry = await saveCommerceOrderDraft(draftInput('Second tab customer', 2), 2, scope, {
+    storage,
+    locks,
+    now: () => '2026-07-23T09:13:00.000Z',
+    expectedResetEpoch: initialEpoch,
+  })
+  check(retry.revision === 2 && retry.savedAt === second.savedAt, 'retrying the same unfinished order is idempotent and does not advance revision')
+
+  await rejectsAsync(
+    () => discardCommerceOrderDraft(scope, tabA.draft.revision, { storage, locks, expectedResetEpoch: initialEpoch }),
+    /changed in another tab/,
+    'a stale tab cannot discard a newer order draft',
+  )
+  check(readCommerceOrderDraft(scope, storage).status === 'ready', 'the newer order draft remains recoverable after the stale discard attempt')
+
+  const resetEpoch = await resetCommerceOrderDraftRecovery({ storage, locks })
+  check(resetEpoch === initialEpoch + 1, 'explicit local reset advances the recovery epoch')
+  check(readCommerceOrderDraft(scope, storage).status === 'empty', 'explicit local reset removes unfinished Shop order drafts')
+  await rejectsAsync(
+    () => saveCommerceOrderDraft(draftInput('Old screen after reset'), 0, scope, {
+      storage,
+      locks,
+      now: () => '2026-07-23T09:14:00.000Z',
+      expectedResetEpoch: initialEpoch,
+    }),
+    /reset while this order was open/,
+    'an old screen cannot save after local recovery was reset',
+  )
+
+  const lockNames = locks.calls.map((call) => call.name)
+  check(lockNames.includes('supermega:shop:order-draft:reset'), 'draft writes use the shared reset lock')
+  check(
+    lockNames.includes(`supermega:shop:order-draft:${encodeURIComponent(scope)}`),
+    'draft writes use the scope-specific order lock',
+  )
+  check(
+    storage.getItem(commerceOrderDraftStorageKey(scope)) === null,
+    'the tested storage key is empty after reset and stale write refusal',
   )
 }
 

@@ -22,7 +22,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export * from './capability-tiers.ts'`,
+    contents: `export * from './capability-tiers.ts'; export { shopBusinessTemplates } from '../products/shop/business-templates.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/capability-tiers-entry.ts',
     loader: 'ts',
@@ -37,6 +37,7 @@ const bundle = await build({
 const {
   FREE_FOREVER, capabilities, capability, capabilitiesForTier, capabilityTierOrder,
   currentCapabilityTier, isCapabilityAvailable, lockedCapabilityNotice,
+  shopBusinessTemplates, shopPlanGuideForTemplate, shopPlanTemplateIds,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -130,6 +131,27 @@ check(
 check(!isCapabilityAvailable('ai-order-intake', 'free'), 'a premium capability is not free')
 check(isCapabilityAvailable('ai-order-intake', 'premium'), 'and is reachable when premium')
 check(isCapabilityAvailable('shop-counter', 'free'), 'the till is always reachable')
+
+// --- each trade gets a truthful Core -> Premium -> Managed path ------------------------------
+check(shopPlanTemplateIds.length === 10, 'all ten Shop trade templates have a plan guide')
+check(
+  JSON.stringify([...shopPlanTemplateIds].sort()) === JSON.stringify(shopBusinessTemplates.map((template) => template.id).sort()),
+  'plan guides bind the exact Shop business-template registry',
+)
+for (const templateId of shopPlanTemplateIds) {
+  const guide = shopPlanGuideForTemplate(templateId)
+  check(guide.templateId === templateId, `${templateId}: guide binds the requested template`)
+  check(guide.core.length >= 4 && guide.core.every((item) => item.tier === 'free'), `${templateId}: Core contains only free-forever daily operations`)
+  check(guide.premium.length >= 3 && guide.premium.every((item) => item.tier === 'premium'), `${templateId}: Premium contains only server-assisted capabilities`)
+  check(guide.managed.length >= 3 && guide.managed.every((item) => item.tier === 'enterprise'), `${templateId}: Managed contains only shared-team capabilities`)
+  check(new Set([...guide.core, ...guide.premium, ...guide.managed].map((item) => item.id)).size === guide.core.length + guide.premium.length + guide.managed.length, `${templateId}: guide repeats no capability`)
+  check(guide.boundary.includes('neither charges nor activates'), `${templateId}: plan guide grants no commercial authority`)
+  for (const id of ['cloud-backup', 'ai-demand-advice']) {
+    check(guide.premium.find((item) => item.id === id)?.availabilityLabel === 'Planned', `${templateId}: ${id} cannot be advertised as available`)
+  }
+  check(guide.managed.every((item) => item.availabilityLabel === 'Availability confirmed during setup'), `${templateId}: a plan guide does not establish managed activation`)
+}
+assert.throws(() => shopPlanGuideForTemplate('unknown-template'), /Unknown Shop plan template/)
 
 // --- a locked capability explains itself ------------------------------------------------------
 const notice = lockedCapabilityNotice('ai-order-intake')

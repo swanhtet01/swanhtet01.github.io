@@ -1,10 +1,21 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto'
-import { open, lstat, mkdir, readFile } from 'node:fs/promises'
+import { open, lstat, mkdir, readFile, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+
+import {
+  GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS,
+  GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT,
+  collectGitHubMainProtectionSnapshot,
+  validateGitHubMainProtectionBranchEvidence,
+} from './collect_github_main_protection_snapshot.mjs'
+import {
+  REQUIRED_MAIN_CHECKS,
+  assessGitHubMainProtection,
+} from './verify_github_main_protection.mjs'
 
 export const RELEASE_HANDOFF_CONTRACT = 'supermega.release-handoff.v2'
 
@@ -17,6 +28,7 @@ const LEGACY_RELEASE_BRANCH = 'agent/supermega-release-candidate'
 const MAX_OUTPUT_BYTES = 1_000_000
 const MAX_LIVE_BYTES = 65_536
 const SHA_PATTERN = /^[0-9a-f]{40}$/
+const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const BRANCH_PATTERN = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
 
 function fail(reason) {
@@ -33,9 +45,19 @@ function exactSha(value, reason) {
   return normalized
 }
 
+function exactDigest(value, reason) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!DIGEST_PATTERN.test(normalized)) fail(reason)
+  return normalized
+}
+
 function exactCount(value, reason) {
   if (!Number.isSafeInteger(value) || value < 0 || value > 1_000_000) fail(reason)
   return value
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 function releaseIdentity(value, reason) {
@@ -131,6 +153,213 @@ function releaseWorkflowAuthority(value) {
   }
 }
 
+function githubMainProtectionEvidence(value) {
+  if (!isRecord(value)) fail('release_handoff_github_main_protection_invalid')
+  if (value.contract !== GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT
+    || value.repository !== REPOSITORY
+    || value.mode !== 'read_only_no_github_write') {
+    fail('release_handoff_github_main_protection_invalid')
+  }
+  const generatedAt = String(value.generatedAt || '')
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(generatedAt)
+    || new Date(generatedAt).toISOString() !== generatedAt) {
+    fail('release_handoff_github_main_protection_time_invalid')
+  }
+  if (!Array.isArray(value.requiredChecks)
+    || value.requiredChecks.join(',') !== REQUIRED_MAIN_CHECKS.join(',')) {
+    fail('release_handoff_github_main_protection_checks_invalid')
+  }
+  if (!isRecord(value.controls)
+    || !Array.isArray(value.controls.githubApiMethods)
+    || value.controls.githubApiMethods.join(',') !== 'GET') {
+    fail('release_handoff_github_main_protection_controls_invalid')
+  }
+  for (const [key, controlValue] of Object.entries(value.controls)) {
+    if (key !== 'githubApiMethods' && controlValue !== false) {
+      fail(`release_handoff_github_main_protection_controls_invalid:${key}`)
+    }
+  }
+  const assessment = assessGitHubMainProtection({ branch: value.branch, rulesets: value.rulesets })
+  if (JSON.stringify(assessment) !== JSON.stringify(value.assessment)) {
+    fail('release_handoff_github_main_protection_assessment_invalid')
+  }
+  const expectedAction = assessment.ok
+    ? 'main_protection_verified_continue_to_review_branch_push'
+    : 'apply_github_main_protection_after_owner_approval'
+  if (value.currentAction !== expectedAction) fail('release_handoff_github_main_protection_action_invalid')
+  const branchEvidence = validateGitHubMainProtectionBranchEvidence(value.source?.branchEvidence, value.branch)
+  if (JSON.stringify(branchEvidence) !== JSON.stringify(value.source.branchEvidence)) {
+    fail('release_handoff_github_main_protection_branch_evidence_invalid')
+  }
+  if (branchEvidence.fallbackUsed && assessment.ok !== true) {
+    fail('release_handoff_github_main_protection_fallback_rulesets_incomplete')
+  }
+  return {
+    contract: GITHUB_MAIN_PROTECTION_SNAPSHOT_CONTRACT,
+    generatedAt,
+    repository: REPOSITORY,
+    mode: 'read_only_no_github_write',
+    source: { branchEvidence },
+    branch: value.branch,
+    rulesets: value.rulesets,
+    assessment,
+    currentAction: value.currentAction,
+    requiredChecks: [...REQUIRED_MAIN_CHECKS],
+    controls: {
+      githubApiMethods: ['GET'],
+      githubWritesPerformed: false,
+      repositorySettingsMutated: false,
+      branchMutated: false,
+      pullRequestCreated: false,
+      mergePerformed: false,
+      deploymentPerformed: false,
+      supabaseMutated: false,
+      credentialValueExposed: false,
+    },
+    snapshotDigest: exactDigest(value.snapshotDigest || value.digest, 'release_handoff_github_main_protection_digest_invalid'),
+  }
+}
+
+function githubMainProtectionExactState(value) {
+  const evidence = githubMainProtectionEvidence(value)
+  const { generatedAt, snapshotDigest, ...state } = evidence
+  return state
+}
+
+function githubMainProtectionCommonState(evidence) {
+  return {
+    contract: evidence.contract,
+    repository: evidence.repository,
+    mode: evidence.mode,
+    currentAction: evidence.currentAction,
+    requiredChecks: evidence.requiredChecks,
+    controls: evidence.controls,
+  }
+}
+
+export function githubMainProtectionStatesEqual(left, right) {
+  const leftEvidence = githubMainProtectionEvidence(left)
+  const rightEvidence = githubMainProtectionEvidence(right)
+  const leftKind = leftEvidence.source.branchEvidence.kind
+  const rightKind = rightEvidence.source.branchEvidence.kind
+  if (leftKind === rightKind) {
+    return JSON.stringify(githubMainProtectionExactState(leftEvidence))
+      === JSON.stringify(githubMainProtectionExactState(rightEvidence))
+  }
+  const kinds = [leftKind, rightKind].sort().join(',')
+  if (kinds !== 'expected_remote_main_fallback,github_branch_endpoint') return false
+  const fallback = leftEvidence.source.branchEvidence.fallbackUsed ? leftEvidence : rightEvidence
+  const endpoint = fallback === leftEvidence ? rightEvidence : leftEvidence
+  const fallbackCommit = fallback.branch.commit?.sha
+  const endpointCommit = endpoint.branch.commit?.sha
+  if (fallbackCommit !== endpointCommit
+    || fallback.branch.name !== 'main'
+    || endpoint.branch.name !== 'main'
+    || fallback.source.branchEvidence.expectedRemoteMainCommit !== fallbackCommit
+    || endpoint.source.branchEvidence.expectedRemoteMainCommit !== endpointCommit
+    || JSON.stringify(fallback.rulesets) !== JSON.stringify(endpoint.rulesets)
+    || JSON.stringify(githubMainProtectionCommonState(fallback)) !== JSON.stringify(githubMainProtectionCommonState(endpoint))) {
+    return false
+  }
+  const fallbackRulesetOnly = assessGitHubMainProtection({
+    branch: fallback.branch,
+    rulesets: fallback.rulesets,
+  })
+  const endpointRulesetOnly = assessGitHubMainProtection({
+    branch: fallback.branch,
+    rulesets: endpoint.rulesets,
+  })
+  return fallbackRulesetOnly.ok === true
+    && endpointRulesetOnly.ok === true
+    && JSON.stringify(fallbackRulesetOnly) === JSON.stringify(endpointRulesetOnly)
+}
+
+export async function collectGitHubMainProtectionSnapshotForHandoff({
+  collect = collectGitHubMainProtectionSnapshot,
+  attempts = GITHUB_MAIN_PROTECTION_SNAPSHOT_ATTEMPTS,
+  delay,
+  expectedMainCommit = null,
+} = {}) {
+  try {
+    const result = await collect({ attempts, delay, expectedMainCommit })
+    if (!isRecord(result) || !isRecord(result.packet)) {
+      fail('release_handoff_github_main_protection_snapshot_result_invalid')
+    }
+    return result
+  } catch (error) {
+    const reason = String(error?.message || '')
+    if (reason === 'github_main_protection_snapshot_attempts_invalid') {
+      fail('release_handoff_github_main_protection_snapshot_attempts_invalid')
+    }
+    const prefix = 'github_main_protection_snapshot_unavailable:'
+    if (reason.startsWith(prefix)) {
+      fail(`release_handoff_github_main_protection_snapshot_unavailable:${reason.slice(prefix.length)}`)
+    }
+    if (reason.startsWith('github_main_protection_snapshot_')) {
+      fail(`release_handoff_${reason}`)
+    }
+    throw error
+  }
+}
+
+function reviewBranchPushAction({ remoteBranchState, branch, candidateCommit }) {
+  if (!['unpublished', 'different'].includes(remoteBranchState)) {
+    fail('release_handoff_remote_candidate_state_invalid')
+  }
+  const initial = remoteBranchState === 'unpublished'
+  const action = initial ? 'initial' : 'fast-forward-only'
+  return {
+    kind: initial
+      ? 'owner_review_initial_branch_push'
+      : 'owner_review_fast_forward_branch_push',
+    branch,
+    exactCommit: candidateCommit,
+    forcePushAllowed: false,
+    mergeIncluded: false,
+    deploymentIncluded: false,
+    approvalTemplate: `I approve one normal ${action} push of ${candidateCommit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
+  }
+}
+
+function pullRequestCreationAction({ branch, candidateCommit }) {
+  return {
+    kind: 'owner_review_pull_request_creation',
+    branch,
+    exactCommit: candidateCommit,
+    baseBranch: 'main',
+    forcePushAllowed: false,
+    mergeIncluded: false,
+    deploymentIncluded: false,
+    gitRemoteWriteIncluded: false,
+    pullRequestIncluded: true,
+    approvalTemplate: `I approve one GitHub pull request creation from ${branch} at ${candidateCommit} into main for SuperMega review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
+  }
+}
+
+function candidateReviewAction({ remoteBranchState, branch, candidateCommit }) {
+  if (remoteBranchState === 'exact') {
+    return pullRequestCreationAction({ branch, candidateCommit })
+  }
+  if (remoteBranchState === 'unpublished' || remoteBranchState === 'different') {
+    return reviewBranchPushAction({ remoteBranchState, branch, candidateCommit })
+  }
+  fail('release_handoff_remote_candidate_state_invalid')
+}
+
+function githubMainProtectionAction({ branch, candidateCommit }) {
+  return {
+    kind: 'owner_review_github_main_protection',
+    branch,
+    exactCommit: candidateCommit,
+    forcePushAllowed: false,
+    mergeIncluded: false,
+    deploymentIncluded: false,
+    gitRemoteWriteIncluded: false,
+    pullRequestIncluded: false,
+    approvalTemplate: `I approve applying the SuperMega main release gate ruleset to ${REPOSITORY} main after reviewing the signed plan for ${candidateCommit}. I do not approve branch push, pull request creation, merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, customer contact, stock, or production changes.`,
+  }
+}
+
 export function buildReleaseHandoff(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('release_handoff_input_invalid')
   const candidateCommit = exactSha(input.candidate?.commit, 'release_handoff_candidate_invalid')
@@ -156,6 +385,7 @@ export function buildReleaseHandoff(input) {
   const legacyOnly = exactCount(input.legacyReleaseBranch?.legacyOnlyCommits ?? 0, 'release_handoff_legacy_count_invalid')
   const candidateOnly = exactCount(input.legacyReleaseBranch?.candidateOnlyCommits ?? 0, 'release_handoff_candidate_count_invalid')
   const workflowAuthority = releaseWorkflowAuthority(input.verification?.workflowAuthority)
+  const githubMainProtection = githubMainProtectionEvidence(input.githubMainProtection)
   if (candidateAheadOfMain < 1 || candidateAheadOfLive < 1) fail('release_handoff_no_release_delta')
 
   const remoteBranchState = remoteCandidateCommit === null
@@ -170,6 +400,13 @@ export function buildReleaseHandoff(input) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(generatedAt)
     || new Date(generatedAt).toISOString() !== generatedAt) fail('release_handoff_time_invalid')
 
+  const candidateAction = candidateReviewAction({ remoteBranchState, branch, candidateCommit })
+  const nextAction = githubMainProtection.assessment.ok === true
+    ? candidateAction
+    : githubMainProtectionAction({ branch, candidateCommit })
+  const actions = remoteBranchState === 'exact'
+    ? { pullRequestCreation: candidateAction }
+    : { reviewBranchPush: candidateAction }
   const body = {
     contract: RELEASE_HANDOFF_CONTRACT,
     digestScope: 'utf8_compact_json_without_digest',
@@ -187,6 +424,7 @@ export function buildReleaseHandoff(input) {
       canonicalPair: ['https://supermega.dev', 'https://app.supermega.dev'],
       identity: liveApp,
     },
+    githubMainProtection,
     relations: {
       mainIsAncestor: true,
       liveIsAncestor: true,
@@ -219,15 +457,8 @@ export function buildReleaseHandoff(input) {
       providerWritesPerformed: false,
       credentialValuesInspected: false,
     },
-    nextAction: {
-      kind: remoteBranchState === 'unpublished' ? 'owner_review_initial_branch_push' : 'owner_review_fast_forward_branch_push',
-      branch,
-      exactCommit: candidateCommit,
-      forcePushAllowed: false,
-      mergeIncluded: false,
-      deploymentIncluded: false,
-      approvalTemplate: `I approve one normal ${remoteBranchState === 'unpublished' ? 'initial' : 'fast-forward-only'} push of ${candidateCommit} to origin/${branch} for review only. I do not approve merge, workflow dispatch, deployment, domain, environment, database, credential, payment, message, or production changes.`,
-    },
+    nextAction,
+    actions,
   }
   return { ...body, digest: `sha256:${sha256(JSON.stringify(body))}` }
 }
@@ -244,6 +475,7 @@ export function validateReleaseHandoffPacket(packet) {
       candidateCommit: packet.remote?.candidateCommit,
     },
     live: { app: packet.live?.identity, public: packet.live?.identity },
+    githubMainProtection: packet.githubMainProtection,
     relations: packet.relations,
     legacyReleaseBranch: {
       commit: packet.legacyReleaseBranch?.commit,
@@ -268,10 +500,60 @@ function run(file, args, { inherit = false, allowFailure = false } = {}) {
     // complete green run is possible without permitting an unbounded process.
     timeout: 35 * 60 * 1_000,
     windowsHide: true,
-    stdio: inherit ? 'inherit' : undefined,
+    stdio: inherit ? ['ignore', 'pipe', 'pipe'] : undefined,
   })
+  const stdout = String(result.stdout || '')
+  const stderr = String(result.stderr || '')
+  if (inherit) {
+    if (stdout) process.stdout.write(stdout)
+    if (stderr) process.stderr.write(stderr)
+  }
   if (!allowFailure && (result.error || result.signal || result.status !== 0)) fail('release_handoff_command_failed')
-  return { status: result.status, stdout: String(result.stdout || '').trim() }
+  return {
+    status: result.status,
+    stdout: stdout.trim(),
+    stderr: stderr.trim(),
+    signal: result.signal || null,
+    errorCode: result.error?.code || null,
+  }
+}
+
+function runStreaming(file, args, { timeoutMs = 35 * 60 * 1_000 } = {}) {
+  return new Promise((resolve) => {
+    let settled = false
+    let timedOut = false
+    let timer = null
+    const child = spawn(file, args, {
+      cwd: root,
+      env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' },
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      resolve(result)
+    }
+    timer = setTimeout(() => {
+      timedOut = true
+      child.kill('SIGTERM')
+    }, timeoutMs)
+    child.stdout.on('data', (chunk) => process.stdout.write(chunk))
+    child.stderr.on('data', (chunk) => process.stderr.write(chunk))
+    child.on('error', (error) => finish({
+      status: null,
+      signal: null,
+      errorCode: error?.code || 'spawn_error',
+      timedOut,
+    }))
+    child.on('exit', (status, signal) => finish({
+      status,
+      signal: signal || null,
+      errorCode: timedOut ? 'ETIMEDOUT' : null,
+      timedOut,
+    }))
+  })
 }
 
 function git(...args) {
@@ -341,6 +623,33 @@ export async function writeExclusiveJson(outputPath, packet) {
   }
 }
 
+export async function withReleaseHandoffOutputLock(outputPath, action) {
+  const absolute = resolve(outputPath)
+  await mkdir(dirname(absolute), { recursive: true })
+  const existing = await lstat(absolute).catch(() => null)
+  if (existing) fail('release_handoff_output_exists')
+  const lockPath = `${absolute}.lock`
+  let handle
+  try {
+    handle = await open(lockPath, 'wx', 0o600)
+  } catch (error) {
+    if (error?.code === 'EEXIST') fail('release_handoff_output_lock_exists')
+    throw error
+  }
+  try {
+    await handle.writeFile(`${JSON.stringify({
+      contract: `${RELEASE_HANDOFF_CONTRACT}.lock`,
+      output: absolute,
+      pid: process.pid,
+      createdAt: new Date().toISOString(),
+    })}\n`, 'utf8')
+    return await action(absolute)
+  } finally {
+    await handle.close().catch(() => {})
+    await rm(lockPath, { force: true }).catch(() => {})
+  }
+}
+
 function parseArgs(argv) {
   if (argv.length !== 2 || !argv[1]) fail('release_handoff_path_required')
   if (argv[0] === '--output') return { mode: 'prepare', path: argv[1] }
@@ -349,6 +658,7 @@ function parseArgs(argv) {
 }
 
 async function prepareReleaseHandoff(output) {
+  return withReleaseHandoffOutputLock(output, async (lockedOutput) => {
   const branch = git('symbolic-ref', '--short', 'HEAD')
   const candidateCommit = exactSha(git('rev-parse', 'HEAD'), 'release_handoff_candidate_invalid')
   const origin = git('remote', 'get-url', 'origin')
@@ -372,10 +682,26 @@ async function prepareReleaseHandoff(output) {
   validateReleaseCandidateAncestry(relations)
 
   const verificationCommand = appVerifyCommand()
-  const verified = run(verificationCommand.file, verificationCommand.args, { inherit: true, allowFailure: true })
+  const verified = process.env.SUPERMEGA_RELEASE_HANDOFF_STREAM === '1'
+    ? await runStreaming(verificationCommand.file, verificationCommand.args)
+    : run(verificationCommand.file, verificationCommand.args, { inherit: true, allowFailure: true })
+  if (verified.errorCode) fail(`release_handoff_app_verify_spawn_error:${verified.errorCode}`)
+  if (verified.signal) fail(`release_handoff_app_verify_signal:${verified.signal}`)
   if (verified.status !== 0) fail('release_handoff_app_verify_failed')
   if (git('rev-parse', 'HEAD') !== candidateCommit || git('status', '--porcelain=v1')) fail('release_handoff_candidate_changed_during_verify')
 
+  const postVerifyRemoteMainCommit = remoteHead('main')
+  const postVerifyRemoteCandidateCommit = remoteHead(branch)
+  const postVerifyLegacyCommit = remoteHead(LEGACY_RELEASE_BRANCH)
+  if (postVerifyRemoteMainCommit !== remoteMainCommit
+    || postVerifyRemoteCandidateCommit !== remoteCandidateCommit
+    || postVerifyLegacyCommit !== legacyCommit) {
+    fail('release_handoff_remote_state_changed_during_verify')
+  }
+
+  const { packet: githubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff({
+    expectedMainCommit: postVerifyRemoteMainCommit,
+  })
   const legacyCounts = legacyCommit ? git('rev-list', '--left-right', '--count', `${legacyCommit}...${candidateCommit}`).split(/\s+/).map(Number) : [0, 0]
   const packet = buildReleaseHandoff({
     generatedAt: new Date().toISOString(),
@@ -391,9 +717,11 @@ async function prepareReleaseHandoff(output) {
       candidateOnlyCommits: legacyCounts[1],
     },
     verification: { passed: true, verifiedCommit: candidateCommit, workflowAuthority },
+    githubMainProtection,
   })
-  const receipt = await writeExclusiveJson(output, packet)
+  const receipt = await writeExclusiveJson(lockedOutput, packet)
   return { ok: true, contract: RELEASE_HANDOFF_CONTRACT, ...receipt }
+  })
 }
 
 export async function verifyCurrentReleaseHandoff(inputPath) {
@@ -440,6 +768,12 @@ export async function verifyCurrentReleaseHandoff(inputPath) {
     || JSON.stringify(publicIdentity) !== JSON.stringify(packet.live.identity)) {
     fail('release_handoff_live_state_changed')
   }
+  const { packet: currentGitHubMainProtection } = await collectGitHubMainProtectionSnapshotForHandoff({
+    expectedMainCommit: remoteMainCommit,
+  })
+  if (!githubMainProtectionStatesEqual(currentGitHubMainProtection, packet.githubMainProtection)) {
+    fail('release_handoff_github_main_protection_state_changed')
+  }
 
   const legacyCounts = legacyCommit ? git('rev-list', '--left-right', '--count', `${legacyCommit}...${head}`).split(/\s+/).map(Number) : [0, 0]
   const currentRelations = {
@@ -468,6 +802,11 @@ export async function verifyCurrentReleaseHandoff(inputPath) {
     liveCommit: packet.live.identity.commit,
     remoteMainCommit: packet.remote.mainCommit,
     remoteCandidateState: packet.remote.candidateBranchState,
+    githubMainProtection: {
+      assessmentOk: packet.githubMainProtection.assessment.ok,
+      currentAction: packet.githubMainProtection.currentAction,
+      failures: packet.githubMainProtection.assessment.failures,
+    },
     nextAction: {
       kind: packet.nextAction.kind,
       exactCommit: packet.nextAction.exactCommit,

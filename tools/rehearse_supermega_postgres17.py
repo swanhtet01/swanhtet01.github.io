@@ -10,6 +10,7 @@ behaviour, proves dump/restore recovery, and removes the temporary cluster.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -49,7 +50,20 @@ MIGRATIONS = (
     "20260816120000_private_trial_backend_v11_self_serve_grants.sql",
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
-CONTRACT = "supermega_postgres17_rehearsal_v1"
+CONTRACT = "supermega_postgres17_rehearsal_v2"
+CURRENT_SCHEMA_VERSION = 13
+CURRENT_PROFILE = "v13-self-serve"
+CURRENT_CATALOG_CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
+# MIGRATIONS remains an explicit legacy baseline for isolated migration tests.
+# The release entrypoint below always passes this complete current chain.
+CURRENT_MIGRATIONS = (*MIGRATIONS,
+    "20260817090000_private_trial_backend_v12_billing_rail.sql",
+    "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
+    "20260907024457_self_serve_durable_attempt_budget.sql",
+    "20260915184728_website_customer_review_storage.sql",
+    "20260915191528_website_review_entitlement_proof.sql",
+    "20260918011500_website_customer_acceptance.sql",
+)
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
@@ -94,6 +108,7 @@ IMPLEMENTATION_PATHS = (
     "supermega_runtime/runtime.py",
     "supermega_runtime/trial_runtime.py",
     "supermega_runtime/trial_store.py",
+    "supermega_runtime/core_security_catalog.py",
     "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
     "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
     "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
@@ -106,6 +121,30 @@ IMPLEMENTATION_PATHS = (
     "tools/validate_supermega_database_url.py",
     "tools/verify_public_browser_quarantine.mjs",
     "tools/verify_managed_runtime_environment_values.mjs",
+)
+IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
+    "kernel/database-rehearsal-evidence.mjs",
+    *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
+    "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
+    "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
+    "supermega_runtime/website_acceptance_schema.py",
+    "supermega_runtime/website_runtime.py", "supermega_runtime/website_release_foundation.py",
+    "tests/test_website_runtime.py",
+    "tools/rehearse_self_serve_v13.py", "tools/private_trial_v13_contract.py",
+    "tools/run_postgres17_rehearsal.mjs", "tools/record_postgres17_rehearsal.mjs",
+    "tools/record_postgres17_rehearsal.test.mjs", "tests/test_postgres17_rehearsal_contract.py",
+))))
+CURRENT_ACCOUNT_CHECKS = (
+    "self_serve_four_product_workspaces_created", "self_serve_product_entitlements_exact",
+    "self_serve_exact_create_replay", "self_serve_claim_conflict_without_takeover",
+    "self_serve_durable_budget_enforced", "self_serve_actor_directory_isolated",
+    "self_serve_cross_actor_read_denied", "self_serve_revoked_session_denied",
+    "billing_unpaid_invoice_not_entitled", "billing_payment_confirmation_not_entitlement",
+    "billing_separate_entitlement_grant_visible", "billing_runtime_write_denied",
+)
+CURRENT_RESTORE_CHECKS = (
+    "billing_entitlement_preserved_after_restore", "self_serve_budget_preserved_after_restore",
+    "private_rows_exact_after_restore", "current_catalog_checked_before_and_after_restore",
 )
 JOURNEY_PRODUCT_WORKSPACE = "rehearsal-product"
 JOURNEY_PRODUCT_ACTOR = "owner-product"
@@ -139,7 +178,31 @@ def _implementation_digest() -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
+def _source_identity(expected_head: str | None) -> dict[str, str]:
+    if not isinstance(expected_head, str) or not re.fullmatch(r"[0-9a-f]{40}", expected_head):
+        raise RehearsalFailure("expected_head_required")
+    def git(*args: str) -> str:
+        result = subprocess.run(["git", "--no-optional-locks", *args], cwd=ROOT,
+            capture_output=True, text=True, timeout=10, check=False)
+        if result.returncode != 0:
+            raise RehearsalFailure("source_identity_unavailable")
+        return result.stdout.strip()
+    if git("status", "--porcelain", "--untracked-files=all"):
+        raise RehearsalFailure("source_dirty")
+    if git("rev-parse", "HEAD") != expected_head:
+        raise RehearsalFailure("source_head_mismatch")
+    observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
+        if path.name != "20260711081300_public_legacy_baseline.sql"))
+    if observed != CURRENT_MIGRATIONS:
+        raise RehearsalFailure("private_migration_inventory_mismatch")
+    return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
+            "implementation_digest": _implementation_digest()}
+
+
 def _default_postgres_bin() -> Path:
+    configured = str(os.getenv("SUPERMEGA_POSTGRES17_BIN", "")).strip()
+    if configured:
+        return Path(configured).expanduser()
     if os.name == "nt":
         return (
             Path.home()
@@ -149,7 +212,8 @@ def _default_postgres_bin() -> Path:
             / "pgsql"
             / "bin"
         )
-    return Path("")
+    # Ubuntu installs server tools outside PATH; require major17 at preflight.
+    return Path("/usr/lib/postgresql/17/bin")
 
 
 def _default_openssl() -> Path:
@@ -192,8 +256,25 @@ def _emit(report: dict[str, Any], evidence_file: Path | None) -> None:
     serialized = json.dumps(report, indent=2, sort_keys=True)
     if evidence_file is not None:
         evidence_file.parent.mkdir(parents=True, exist_ok=True)
-        evidence_file.write_text(serialized + "\n", encoding="utf-8")
+        with evidence_file.open("x", encoding="utf-8") as output:
+            output.write(serialized + "\n")
     print(serialized)
+
+
+@contextmanager
+def _disposable_workspace():
+    workspace = Path(tempfile.mkdtemp(prefix="supermega-pg17-")).resolve()
+    cleanup = {"stopped": False}
+    try:
+        yield workspace, cleanup
+    finally:
+        # A failed/unknown shutdown must not delete a possibly live cluster.
+        if cleanup["stopped"]:
+            if (workspace.parent != Path(tempfile.gettempdir()).resolve()
+                    or not workspace.name.startswith("supermega-pg17-")
+                    or workspace.is_symlink()):
+                raise RehearsalFailure("cleanup_path_invalid")
+            shutil.rmtree(workspace)
 
 
 def _run(
@@ -389,6 +470,7 @@ def _initialize_cluster(
     with (data_directory / "postgresql.conf").open("a", encoding="utf-8") as config:
         config.write("\n# SuperMega disposable PostgreSQL 17 rehearsal\n")
         config.write("listen_addresses = '127.0.0.1'\n")
+        config.write("unix_socket_directories = ''\n")
         config.write(f"port = {port}\n")
         config.write("ssl = on\n")
         config.write("ssl_cert_file = 'server.crt'\n")
@@ -673,11 +755,12 @@ def _apply_migrations(
     admin_database_url: str,
     port: int,
     environment: dict[str, str],
+    migrations: tuple[str, ...] = MIGRATIONS,
 ) -> None:
     psql = _binary(postgres_bin, "psql")
     migration_environment = dict(environment)
     migration_environment["PGPASSWORD"] = admin_password
-    for position, migration in enumerate(MIGRATIONS):
+    for position, migration in enumerate(migrations):
         migration_path = MIGRATION_DIRECTORY / migration
         if not migration_path.is_file():
             raise RehearsalFailure("migration_inventory_incomplete")
@@ -3270,6 +3353,8 @@ def _run_validator(
     runtime_database_url: str,
     storage_audit_database_url: str,
     environment: dict[str, str],
+    *,
+    schema_profile: str = "legacy-v11",
 ) -> dict[str, Any]:
     validator_environment = dict(environment)
     validator_environment["SUPERMEGA_REHEARSAL_DATABASE_URL"] = runtime_database_url
@@ -3284,6 +3369,7 @@ def _run_validator(
             "SUPERMEGA_REHEARSAL_DATABASE_URL",
             "--ensure-schema",
             "--require-ready",
+            "--schema-profile", schema_profile,
         ],
         environment=validator_environment,
         timeout=90,
@@ -3296,6 +3382,12 @@ def _run_validator(
         raise RehearsalFailure("database_validator_output_invalid") from exc
     if payload.get("ok") is not True or payload.get("ready") is not True:
         raise RehearsalFailure("database_validator_not_ready")
+    if schema_profile == CURRENT_PROFILE and (
+        payload.get("contract") != CURRENT_CATALOG_CONTRACT
+        or not isinstance(payload.get("checks"), dict)
+        or not payload["checks"] or not all(value is True for value in payload["checks"].values())
+    ):
+        raise RehearsalFailure("current_catalog_contract_mismatch")
     return payload
 
 
@@ -3372,6 +3464,8 @@ def _verify_restored_data(
     admin_database_url: str,
     *,
     expected_approval_authority_snapshot: dict[str, Any],
+    schema_version: int = 11,
+    expected_row_counts: tuple[int, ...] = (11, 7, 23, 3),
 ) -> None:
     from supermega_runtime.managed_context import build_managed_context_profile
 
@@ -3405,11 +3499,8 @@ def _verify_restored_data(
             """
         ).fetchone()
     if row != (
-        11,
-        11,
-        7,
-        23,
-        3,
+        schema_version,
+        *expected_row_counts,
         approved_context["contextDigest"],
         expected_profile["profileDigest"],
         expected_profile["profileDigest"],
@@ -3453,6 +3544,8 @@ def _run_rehearsal(
     postgres_bin: Path,
     openssl: Path,
     evidence_file: Path | None,
+    *,
+    source_identity: dict[str, str],
 ) -> int:
     environment = _clean_environment(postgres_bin)
     preflight = _preflight(postgres_bin, openssl)
@@ -3460,10 +3553,11 @@ def _run_rehearsal(
         _emit(preflight, evidence_file)
         return 2
 
-    # The runtime schema contract is process-scoped for this disposable v11
+    # The runtime schema contract is process-scoped for this disposable v13
     # rehearsal. The launcher is a short-lived child process, so this cannot
     # alter the caller or any hosted environment.
-    os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "11"
+    os.environ["SUPERMEGA_TRIAL_SCHEMA_VERSION"] = "13"
+    os.environ["SUPERMEGA_BILLING_SCHEMA_VERSION"] = "13"
     os.environ["SUPERMEGA_OTEL_DISABLED"] = "1"
 
     admin_password = _password()
@@ -3473,8 +3567,7 @@ def _run_rehearsal(
     phase = "workspace_initialization"
     report: dict[str, Any] | None = None
 
-    with tempfile.TemporaryDirectory(prefix="supermega-pg17-") as temporary:
-        workspace = Path(temporary)
+    with _disposable_workspace() as (workspace, cleanup_state):
         primary_data_directory = workspace / "primary-data"
         restore_data_directory = workspace / "restore-data"
         active_data_directory: Path | None = None
@@ -3493,6 +3586,9 @@ def _run_rehearsal(
                 environment=environment,
             )
             phase = "cluster_start"
+            # A failed start can leave a server alive; attempt shutdown in finally.
+            started = True
+            active_data_directory = primary_data_directory
             _start_cluster(
                 postgres_bin=postgres_bin,
                 data_directory=primary_data_directory,
@@ -3500,8 +3596,6 @@ def _run_rehearsal(
                 port=port,
                 environment=environment,
             )
-            started = True
-            active_data_directory = primary_data_directory
 
             admin_root_url = _connection_url("postgres", admin_password, port, "postgres")
             admin_database_url = _connection_url(
@@ -3544,6 +3638,7 @@ def _run_rehearsal(
                 admin_database_url=admin_database_url,
                 port=port,
                 environment=environment,
+                migrations=CURRENT_MIGRATIONS,
             )
             phase = "runtime_provisioning"
             _provision_runtime(admin_database_url, runtime_password)
@@ -3556,6 +3651,7 @@ def _run_rehearsal(
                 runtime_database_url,
                 admin_database_url,
                 environment,
+                schema_profile=CURRENT_PROFILE,
             )
             phase = "upgrade_and_role_boundaries"
             boundaries = _verify_upgrade_and_role_boundaries(
@@ -3582,6 +3678,23 @@ def _run_rehearsal(
                 runtime_database_url,
                 admin_database_url,
             )
+            # First retain the original exact journey-count and authority proof;
+            # then include signup/billing rows in the complete recovery snapshot.
+            _verify_restored_data(admin_database_url,
+                expected_approval_authority_snapshot=approval_authority_snapshot,
+                schema_version=CURRENT_SCHEMA_VERSION)
+            phase = "current_account_and_billing_journeys"
+            if str(ROOT) not in sys.path:
+                sys.path.insert(0, str(ROOT))
+            from tools import rehearse_self_serve_v13 as account_proof
+            if account_proof.MIGRATIONS != CURRENT_MIGRATIONS:
+                raise RehearsalFailure("account_migration_chain_mismatch")
+            retained = account_proof.exercise(admin_database_url, runtime_database_url, source_identity["head"])
+            private_snapshot = account_proof.snapshot(admin_database_url)
+            with _connect(admin_database_url) as conn:
+                conn.execute("set transaction read only")
+                row_counts = tuple(conn.execute(f"select count(*) from app_private.{table}").fetchone()[0]
+                    for table in ("workspace_memberships", "workspace_state", "workspace_events", "approval_requests"))
             phase = "database_backup"
             _backup_database(
                 postgres_bin=postgres_bin,
@@ -3611,6 +3724,8 @@ def _run_rehearsal(
                 environment=environment,
             )
             phase = "restore_cluster_start"
+            started = True
+            active_data_directory = restore_data_directory
             _start_cluster(
                 postgres_bin=postgres_bin,
                 data_directory=restore_data_directory,
@@ -3618,8 +3733,6 @@ def _run_rehearsal(
                 port=restore_port,
                 environment=environment,
             )
-            started = True
-            active_data_directory = restore_data_directory
 
             restore_admin_root_url = _connection_url(
                 "postgres",
@@ -3659,12 +3772,34 @@ def _run_rehearsal(
                 restored_runtime_url,
                 restore_admin_database_url,
                 environment,
+                schema_profile=CURRENT_PROFILE,
             )
             _verify_restored_data(
                 restore_admin_database_url,
                 expected_approval_authority_snapshot=approval_authority_snapshot,
+                schema_version=CURRENT_SCHEMA_VERSION,
+                expected_row_counts=row_counts,
             )
             _verify_public_browser_quarantine(restore_admin_database_url)
+            restored_snapshot = account_proof.snapshot(restore_admin_database_url)
+            if restored_snapshot != private_snapshot:
+                raise RehearsalFailure("restored_private_rows_mismatch")
+            account_proof.verify_website_review(restored_runtime_url, retained)
+            from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialRateLimited
+            store = PostgresTrialStore(restored_runtime_url, reducer=lambda *_: None, write_enabled=True)
+            identity = TrialPrincipal(workspace_id=retained["workspace"], actor_id=retained["actor"],
+                actor_kind="human", authenticated=True, session_id=retained["session"], identity_provider="supabase")
+            ready = store.readiness(identity)
+            if not ready.write_ready or not ready.premium_unlocked:
+                raise RehearsalFailure("restored_account_or_billing_not_ready")
+            try:
+                store.create_self_serve_workspace(actor_id=identity.actor_id, claim_code="SM-TEST-0007",
+                    business_name="Synthetic company", session_id=identity.session_id, identity_provider="supabase")
+                raise RehearsalFailure("restored_budget_bypassed")
+            except TrialRateLimited:
+                pass
+            if _source_identity(source_identity["head"]) != source_identity:
+                raise RehearsalFailure("source_changed_during_rehearsal")
 
             version = str(preflight["engine"]["version"])
             major = int(preflight["engine"]["major"])
@@ -3673,6 +3808,7 @@ def _run_rehearsal(
                 "ready": True,
                 "status": "rehearsed",
                 "contract": CONTRACT,
+                "source": source_identity,
                 "implementation": {
                     "paths": list(IMPLEMENTATION_PATHS),
                     "digest": _implementation_digest(),
@@ -3690,8 +3826,11 @@ def _run_rehearsal(
                     ),
                 },
                 "migrations": {
-                    "count": len(MIGRATIONS),
-                    "schema_version": 11,
+                    "count": len(CURRENT_MIGRATIONS),
+                    "names": list(CURRENT_MIGRATIONS),
+                    "schema_version": CURRENT_SCHEMA_VERSION,
+                    "schema_profile": CURRENT_PROFILE,
+                    "catalog_contract": CURRENT_CATALOG_CONTRACT,
                     "production_validator_ready": primary_validation.get("ready") is True,
                 },
                 "storage": {
@@ -3710,6 +3849,8 @@ def _run_rehearsal(
                     **approval_authority,
                     **behaviour,
                     **managed_activation,
+                    **dict.fromkeys(CURRENT_ACCOUNT_CHECKS, True),
+                    **dict.fromkeys(CURRENT_RESTORE_CHECKS, True),
                     "backup_created": True,
                     "restore_completed": True,
                     "restored_database_validated": restored_validation.get("ready") is True,
@@ -3724,8 +3865,11 @@ def _run_rehearsal(
                 "recovery": {
                     "format": "pg_dump_custom",
                     "backup_nonempty": True,
-                    "restored_schema_version": 11,
+                    "restored_schema_version": CURRENT_SCHEMA_VERSION,
+                    "private_snapshot_before": private_snapshot,
+                    "private_snapshot_after": restored_snapshot,
                 },
+                "catalog": {"before": primary_validation["checks"], "after": restored_validation["checks"]},
                 "cleanup_complete": False,
                 "secret_values_exposed": False,
                 "production_mutated": False,
@@ -3753,6 +3897,7 @@ def _run_rehearsal(
                 )
             else:
                 cleanup_complete = True
+            cleanup_state["stopped"] = cleanup_complete
             admin_password = ""
             runtime_password = ""
             if report is not None:
@@ -3794,7 +3939,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Verify local PostgreSQL 17 tooling without starting a server.",
     )
+    parser.add_argument("--expected-head", help="Exact clean local source commit required for a full rehearsal.")
     args = parser.parse_args(argv)
+
+    if args.evidence_file is not None and args.evidence_file.exists():
+        _emit(_safe_report("evidence_output_exists", cleanup_complete=True), None)
+        return 2
 
     postgres_bin = args.postgres_bin.expanduser().resolve()
     openssl = _resolve_executable(args.openssl)
@@ -3802,7 +3952,12 @@ def main(argv: list[str] | None = None) -> int:
         report = _preflight(postgres_bin, openssl)
         _emit(report, args.evidence_file)
         return 0 if report.get("ok") is True else 1
-    return _run_rehearsal(postgres_bin, openssl, args.evidence_file)
+    try:
+        source = _source_identity(args.expected_head)
+    except RehearsalFailure as exc:
+        _emit(_safe_report(str(exc), cleanup_complete=True), args.evidence_file)
+        return 2
+    return _run_rehearsal(postgres_bin, openssl, args.evidence_file, source_identity=source)
 
 
 if __name__ == "__main__":

@@ -109,7 +109,9 @@ const appConfig = {
       src: '/(.*)',
       headers: {
         'Content-Security-Policy': appContentSecurityPolicy,
-        'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+        // Camera is used only by the same-origin barcode scanner. The remaining
+        // listed browser capabilities stay denied.
+        'Permissions-Policy': 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()',
         'Referrer-Policy': 'no-referrer',
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'DENY',

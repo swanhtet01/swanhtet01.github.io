@@ -131,7 +131,7 @@ function PaymentQrMethodControl({ method, scope }: { method: string; scope: stri
 
 /**
  * Settings body for the Payment QR section: one upload slot per non-cash payment
- * method label the counter offers. An owner whose single Wave MMQR takes every
+ * method label the counter offers. An owner whose single MMQR takes every
  * wallet simply uploads the same image to each method they accept. Renders an
  * explanatory notice instead of dead controls where IndexedDB is unavailable.
  */

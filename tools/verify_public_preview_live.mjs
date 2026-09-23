@@ -1,16 +1,23 @@
 import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { previewProfile, validatePreviewContact, validatePreviewLinks, validatePreviewDeployment } from './public_preview_profile.mjs'
+import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
 
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
 const baseUrl = String(process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '')
 const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').toLowerCase()
+const policy = previewProfile({ profile: process.env.PUBLIC_PREVIEW_PROFILE || 'production-contract',
+  expectedCommit, appBinding: process.env.SUPERMEGA_PREVIEW_APP_BINDING })
 const vercelToken = String(process.env.VERCEL_TOKEN || '').trim()
 const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
 const maxAttempts = 6
+const linkOptions = { publicOrigin: baseUrl, shopTemplateIds: validateShopBusinessTemplates().map(item => item.id) }
 const retryWaitBuffer = new Int32Array(new SharedArrayBuffer(4))
 
 if (!baseUrl.startsWith('https://')) throw new Error('public_preview_url_required')
+if (policy.app && (!/^https:\/\/supermega-public-[a-z0-9]{9}-swanhtet01s-projects\.vercel\.app$/.test(baseUrl)
+  || !/^dpl_[A-Za-z0-9]{8,80}$/.test(process.env.PUBLIC_PREVIEW_DEPLOYMENT_ID || ''))) throw new Error('public_preview_identity_required')
 
 function describeFailure(error) {
   const status = Number.isInteger(error?.status) ? error.status : 'unknown'
@@ -49,6 +56,7 @@ function get(path) {
 
 for (const page of manifest.pages) {
   const html = get(page.route)
+  validatePreviewLinks(html, policy, manifest.customerProducts, { ...linkOptions, requireActions: false })
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
@@ -62,11 +70,7 @@ for (const page of manifest.pages) {
 }
 
 const homepage = get('/')
-for (const product of manifest.customerProducts) {
-  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  if (!homepage.includes(`href="${guidedSampleRoute}"`)) throw new Error(`preview_guided_product_route_missing:${product.id}`)
-  if (homepage.includes(`href="${product.appRoute}"`)) throw new Error(`preview_direct_product_route_remains_primary:${product.id}`)
-}
+const navigation = validatePreviewLinks(homepage, policy, manifest.customerProducts, linkOptions)
 
 const release = JSON.parse(get(manifest.release.releaseEndpoint))
 if (release.brandVersion !== manifest.brand.version) throw new Error('preview_brand_version_wrong')
@@ -74,8 +78,7 @@ if (release.contextVersion !== manifest.contextVersion) throw new Error('preview
 if (expectedCommit && release.commit !== expectedCommit) throw new Error(`preview_commit_wrong:${release.commit}`)
 
 const contact = JSON.parse(get('/api/contact-submissions/status'))
-if (contact.status !== 'ready' || contact.service !== 'supermega-contact' || contact.accepting !== true) throw new Error('preview_contact_not_accepting')
-if (contact.controls?.idempotency !== 'required' || contact.controls?.edge_rate_limit !== 'required') throw new Error('preview_contact_controls_wrong')
+validatePreviewContact(contact, policy)
 
 const inspectArgs = ['--yes', 'vercel@56.1.0', 'inspect', baseUrl, '--format=json']
 const inspectExecutable = process.platform === 'win32' ? process.execPath : 'npx'
@@ -94,6 +97,19 @@ try {
   throw new Error(`protected_preview_inspect_failed:${describeFailure(error)}`)
 }
 const deployment = JSON.parse(deploymentOutput)
+if (policy.app) {
+  validatePreviewDeployment(deployment, { origin: baseUrl, projectId: 'prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
+    deploymentId: process.env.PUBLIC_PREVIEW_DEPLOYMENT_ID, commit: expectedCommit })
+  const appArgs = [...inspectExecutableArgs]
+  appArgs[appArgs.indexOf(baseUrl)] = policy.app.origin
+  let appDeployment
+  try {
+    appDeployment = JSON.parse(execFileSync(inspectExecutable, appArgs, {
+      encoding: 'utf8', env: cliEnv, maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+    }))
+  } catch (error) { throw new Error(`protected_preview_app_inspect_failed:${describeFailure(error)}`) }
+  validatePreviewDeployment(appDeployment, policy.app)
+}
 const deploymentFunctions = (deployment.builds || [])
   .flatMap((build) => build.output || [])
   .filter((output) => output.type === 'lambda')
@@ -102,4 +118,6 @@ const deploymentFunctions = (deployment.builds || [])
 const expectedFunctions = ['api/contact-submissions.js', 'api/health.js', 'api/not-found.js']
 if (JSON.stringify(deploymentFunctions) !== JSON.stringify(expectedFunctions)) throw new Error(`deployment_function_surface_wrong:${deploymentFunctions.join(',')}`)
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_public_preview', baseUrl, pages: manifest.pages.map((page) => page.route), release, contact: 'ready', deploymentFunctions }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_public_preview.v2', profile: policy.profile, baseUrl,
+  pages: manifest.pages.map((page) => page.route), release, contact: contact.status, navigation, deploymentFunctions,
+  browserTransitionProven: false, environmentIsolationProven: false, hostedCustomerAcceptanceProven: false }, null, 2))

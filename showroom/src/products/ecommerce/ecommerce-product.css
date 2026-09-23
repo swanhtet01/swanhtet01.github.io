@@ -139,6 +139,35 @@
 .ecommerce-today[data-density="compact"] .ecommerce-today-priority > p { grid-area: summary; margin-bottom: 0; }
 .ecommerce-today[data-density="compact"] .ecommerce-today-priority > .core-button { grid-area: action; min-width: 132px; }
 
+.ecommerce-today-priority > .ecommerce-service-actions {
+  grid-area: action;
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.ecommerce-assisted-intake {
+  width: min(100%, 36.875rem);
+  border: .0625rem solid color-mix(in srgb, var(--core-line) 80%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--core-panel) 72%, transparent);
+  color: var(--core-muted);
+  font-size: var(--font-size-sm);
+}
+
+.ecommerce-assisted-intake > summary {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  padding: .5rem .75rem;
+  color: var(--core-ink);
+  cursor: pointer;
+  font-weight: var(--font-weight-bold);
+}
+
+.ecommerce-assisted-intake > p { margin: 0; padding: 0 .75rem .625rem; }
+.ecommerce-assisted-intake > p + p { padding-top: .125rem; }
+.ecommerce-assisted-intake > summary:focus-visible { outline: .125rem solid var(--core-green); outline-offset: .125rem; }
+
 .ecommerce-today-priority {
   min-width: 0;
   display: grid;
@@ -1331,6 +1360,32 @@
   line-height: 1.4;
 }
 
+/* A retained receipt is evidence the customer needs to read, not fine print. */
+.ecommerce-quote-receipt[data-current="false"] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: .5rem;
+  padding: 1rem;
+}
+
+.ecommerce-quote-receipt[data-current="false"] > * {
+  grid-column: 1;
+  grid-row: auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: .875rem;
+  line-height: 1.5;
+}
+
+.ecommerce-quote-receipt[data-current="false"] > strong {
+  font-size: 1rem;
+}
+
+.ecommerce-quote-receipt[data-current="false"] > b {
+  font-size: 1.125rem;
+}
+
 .ecommerce-buying-notice {
   grid-column: 1 / -1;
   margin: 0;
@@ -1946,6 +2001,22 @@
    light document (see THEME_BLIND), so photos need no dark treatment.
    ========================================================================== */
 .storefront-grid article > .storefront-product-photo { object-fit: cover; }
+
+/* A retained Desktop preview selection must not squeeze two cards onto a phone. */
+@media (max-width: 47.5rem) {
+  .ecommerce-preview-frame .storefront-preview .storefront-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) {
+    grid-template-columns: 4rem minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto;
+  }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > small { grid-column: 2; grid-row: 1; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > strong { grid-column: 2; grid-row: 2; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > span { grid-column: 2; grid-row: 3; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > b { grid-column: 2; grid-row: 4; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > .storefront-request-button { grid-column: 1 / -1; grid-row: 5; }
+}
 
 /* ============================================================================
    Photo-first storefront cards (2026-08-19). A card whose item carries a

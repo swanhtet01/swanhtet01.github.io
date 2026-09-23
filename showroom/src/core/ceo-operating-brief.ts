@@ -10,8 +10,25 @@ export type OperatingAlert = {
   message: string
 }
 
+export type LocalProductEvidenceState = 'no_local_records' | 'browser_local_records_present'
+
 export type CeoOperatingBrief = {
   asOf: string
+  evidenceBoundary: {
+    scope: 'browser_local_unverified'
+    source: 'this_device_saved_workspace'
+    localRecordProductCount: number
+    pilotEvidenceProven: false
+    customerEvidenceProven: false
+    commercialPerformanceProven: false
+    productionTelemetryObserved: false
+    products: {
+      shop: LocalProductEvidenceState
+      plant: LocalProductEvidenceState
+      website: LocalProductEvidenceState
+      ecommerce: LocalProductEvidenceState
+    }
+  }
   shopRevenue: {
     totalRevenue: number
     orderCount: number
@@ -58,6 +75,18 @@ export function projectCeoOperatingBrief(
   asOf: string,
 ): CeoOperatingBrief {
   const alerts: OperatingAlert[] = []
+  const evidenceProducts = {
+    shop: shopRevenue.orderCount + shopRevenue.cancelledCount > 0
+      ? 'browser_local_records_present'
+      : 'no_local_records',
+    plant: plantOee.totalJobs > 0 ? 'browser_local_records_present' : 'no_local_records',
+    website: websiteLeads.totalLeads > 0 ? 'browser_local_records_present' : 'no_local_records',
+    ecommerce: ecommercePipeline.totalRequests
+      + ecommercePipeline.pendingReturnIntents
+      + ecommercePipeline.pendingCancellationIntents > 0
+      ? 'browser_local_records_present'
+      : 'no_local_records',
+  } satisfies CeoOperatingBrief['evidenceBoundary']['products']
 
   if (shopRevenue.cancelledCount > 0) {
     const cancelRate = Math.round(
@@ -105,6 +134,17 @@ export function projectCeoOperatingBrief(
 
   return {
     asOf,
+    evidenceBoundary: {
+      scope: 'browser_local_unverified',
+      source: 'this_device_saved_workspace',
+      localRecordProductCount: Object.values(evidenceProducts)
+        .filter((state) => state === 'browser_local_records_present').length,
+      pilotEvidenceProven: false,
+      customerEvidenceProven: false,
+      commercialPerformanceProven: false,
+      productionTelemetryObserved: false,
+      products: evidenceProducts,
+    },
     shopRevenue: {
       totalRevenue: shopRevenue.totalRevenue,
       orderCount: shopRevenue.orderCount,

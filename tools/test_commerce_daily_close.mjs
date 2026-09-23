@@ -209,6 +209,20 @@ check(csv.split('\n').filter((line) => line.trim()).length >= exported.orders.le
 const { readFile } = await import('node:fs/promises')
 const encodedBytes = (text) => new TextEncoder().encode(text).byteLength
 const corePageSource = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+// Execute the actual UI draft projection: expected sales are not cashier counts.
+const settlementDraftExpression = corePageSource.match(/const effectiveCloseSettlementDraft = ([\s\S]*?)\n  const closeSettlementInput =/)
+check(Boolean(settlementDraftExpression), 'settlement draft projection remains inspectable')
+const projectSettlementDraft = new Function('closeExpectedByPayment', 'closeSettlementDraft', `return (${settlementDraftExpression[1]})`)
+const expectedPayments = new Map([['Cash', 29000], ['KBZPay', 6500]])
+const emptyCounts = projectSettlementDraft(expectedPayments, [])
+check(emptyCounts.length === 2 && emptyCounts.every(line => line.countedMmk === ''), 'unentered counts must remain blank, never copy expected money')
+check(projectSettlementDraft(new Map([['Cash', 0]]), [])[0].countedMmk === '', 'zero expected money still requires an explicit count')
+const enteredCount = { paymentMethod: 'Cash', countedMmk: '0', varianceOwner: 'Sample cashier', varianceReason: 'Synthetic count discrepancy' }
+const retainedCounts = projectSettlementDraft(expectedPayments, [enteredCount])
+check(retainedCounts[0] === enteredCount && retainedCounts[1].countedMmk === '', 'explicit zero and its variance evidence survive while new methods remain uncounted')
+check(projectSettlementDraft(new Map([['Cash', 35000]]), [enteredCount])[0] === enteredCount, 'changed expectation must not overwrite a cashier count')
+check(corePageSource.includes('!closePreview || !closeSettlement} onClick={closeDay}'), 'close action remains disabled without a complete settlement')
+check(corePageSource.includes("if (!/^(?:0|[1-9]\\d*)$/.test(line.countedMmk)) return null"), 'empty settlement input remains invalid rather than zero')
 
 // Exactly what CoreApp.tsx built on the render path before this change, kept here so the cost
 // it carried stays measurable after the code that carried it is gone.

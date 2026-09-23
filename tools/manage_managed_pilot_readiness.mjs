@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
+import { implementationEvidence } from './record_postgres17_rehearsal.mjs'
+import { buildSanitizedProof, validateSanitizedProof } from '../kernel/database-rehearsal-evidence.mjs'
 
 import {
   buildManagedPilotReadiness,
@@ -27,9 +29,20 @@ async function currentLedger() {
   const texts = new Map()
   for (const path of sources) texts.set(path, await readFile(resolve(root, path), 'utf8'))
   const sourceReceipts = sources.map((path) => ({ path, digest: readinessDigest(texts.get(path)) }))
+  const databaseEvidence = JSON.parse(texts.get('hq/research/postgres17-rehearsal.json'))
+  const databaseImplementation = await implementationEvidence()
+  validateSanitizedProof(databaseEvidence, databaseImplementation)
+  const raw = JSON.parse(await readFile(resolve(root, 'hq/research/postgres17-rehearsal.json.raw.json'), 'utf8'))
+  const rebuilt = buildSanitizedProof(raw, {
+    recordedAt: databaseEvidence.recordedAt, implementationCommit: databaseEvidence.implementationCommit,
+    implementationTree: databaseEvidence.implementationTree, implementation: databaseImplementation,
+    archive: { bytes: databaseEvidence.engine.archiveBytes, sha256: databaseEvidence.engine.observedArchiveSha256 },
+  })
+  if (JSON.stringify(rebuilt) !== JSON.stringify(databaseEvidence)) throw new Error('managed_pilot_readiness_raw_database_mismatch')
   return buildManagedPilotReadiness({
     portfolio: JSON.parse(texts.get('hq/portfolio.json')),
-    databaseEvidence: JSON.parse(texts.get('hq/research/postgres17-rehearsal.json')),
+    databaseEvidence,
+    databaseImplementation,
     storageAudit: texts.get('hq/pilots/private-storage-privacy-audit.md'),
     storagePrivacyEvidence: JSON.parse(texts.get('hq/readiness/hosted-storage-privacy-proof.json')),
     managedPersistenceEvidence: JSON.parse(texts.get('hq/readiness/managed-persistence-proof.json')),

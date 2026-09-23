@@ -1,4 +1,7 @@
-import type { Session, SupabaseClient } from '@supabase/supabase-js'
+import type { Session } from '@supabase/auth-js'
+import { managedLoginReviewPath } from './account-routes.ts'
+import { validateCreateAccountRequest, type CreateAccountInput } from './signup-account.ts'
+import { readManagedSignupPolicy } from './managed-signup-policy.ts'
 import type { buildClientImportStagingPackage, ClientSolutionId } from './client-onboarding'
 import type { PlantEquipmentImportPackage } from './plant-equipment-import.ts'
 import {
@@ -115,7 +118,7 @@ export type ManagedSelfServeWorkspace = {
 export type ManagedAccountSetup = {
   purpose: 'account' | 'invite' | 'recovery'
   email: string
-}
+} | { purpose: 'signup'; email: string; directory: ManagedWorkspaceSignIn }
 
 export type ManagedApprovalRecord = {
   approval_id: string
@@ -2496,7 +2499,9 @@ export function requireManagedSurfaceState(
   return record
 }
 
-let clientPromise: Promise<SupabaseClient | null> | undefined
+type ManagedAuthClient = { auth: InstanceType<typeof import('@supabase/auth-js').AuthClient> }
+
+let clientPromise: Promise<ManagedAuthClient | null> | undefined
 let pendingManagedAccountSetup: Promise<ManagedAccountSetup> | undefined
 
 function validSupabaseUrl(value: string) {
@@ -2532,13 +2537,20 @@ export function managedTrialAuthConfigured() {
 function authClient() {
   if (clientPromise) return clientPromise
   if (!managedTrialAuthConfigured()) return Promise.resolve(null)
-  clientPromise = import('@supabase/supabase-js').then(({ createClient }) => createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    auth: {
+  clientPromise = import('@supabase/auth-js').then(({ AuthClient }) => ({
+    auth: new AuthClient({
+      url: new URL('auth/v1', SUPABASE_URL.endsWith('/') ? SUPABASE_URL : `${SUPABASE_URL}/`).href,
+      headers: {
+        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        'X-Client-Info': 'supabase-js/2.110.8; runtime=web',
+      },
       autoRefreshToken: true,
       detectSessionInUrl: false,
       persistSession: true,
       storageKey: 'supermega.auth.session.v1',
-    },
+      hasCustomAuthorizationHeader: false,
+    }),
   }))
   return clientPromise
 }
@@ -2637,16 +2649,18 @@ function normalizeAuthEmail(value: string) {
   return email
 }
 
-function managedAccountRedirectUrl() {
+function managedAccountRedirectUrl(purpose: 'recovery' | 'signup' = 'recovery') {
   const origin = new URL(window.location.origin)
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
   if (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && loopback)) {
-    throw new ManagedTrialError('Password recovery requires a secure SuperMega address.', {
+    throw new ManagedTrialError('Account access requires a secure SuperMega address.', {
       code: 'auth_redirect_insecure',
     })
   }
   const redirect = new URL('/account/setup', origin)
-  redirect.searchParams.set('mode', 'recovery')
+  redirect.searchParams.set('mode', purpose)
+  const reviewPath = purpose === 'recovery' ? managedLoginReviewPath(window.location.search) : null
+  if (reviewPath) redirect.searchParams.set('review', reviewPath.split('/').at(-1)!)
   return redirect.toString()
 }
 
@@ -2661,13 +2675,15 @@ function exactAuthParameters(parameters: URLSearchParams, allowed: readonly stri
   return keys.every((key, index) => allowed.includes(key) && keys.indexOf(key) === index)
 }
 
-function scrubManagedAccountCallback() {
-  window.history.replaceState(window.history.state, '', '/account/setup')
+export function scrubManagedAccountCallback() {
+  if (window.location.search || window.location.hash) {
+    window.history.replaceState(window.history.state, '', '/account/setup')
+  }
 }
 
 function accountPurpose(...values: Array<string | null>): ManagedAccountSetup['purpose'] {
   const purposes = values.filter((value): value is string => Boolean(value))
-  if (purposes.some((value) => value !== 'invite' && value !== 'recovery') || new Set(purposes).size > 1) {
+  if (purposes.some((value) => !['invite', 'recovery', 'signup'].includes(value)) || new Set(purposes).size > 1) {
     throw accountLinkError()
   }
   return (purposes[0] as ManagedAccountSetup['purpose'] | undefined) ?? 'account'
@@ -2675,6 +2691,70 @@ function accountPurpose(...values: Array<string | null>): ManagedAccountSetup['p
 
 function validNamedUserSession(session: Session | null): session is Session {
   return Boolean(session && session.user.is_anonymous === false && session.user.id)
+}
+
+let signupRequestPending = false
+
+// UI backpressure only, not a rate limiter. Provider signup, durable abuse controls,
+// SMTP and the default-closed runtime window require a separate activation review.
+async function requestManagedSignup(input: CreateAccountInput | string, shownTermsVersion: string) {
+  const request = typeof input === 'string' ? { email: normalizeAuthEmail(input) } : validateCreateAccountRequest(input)
+  if (typeof shownTermsVersion !== 'string' || shownTermsVersion.trim() !== shownTermsVersion || !/^v[1-9][0-9]{0,3}$/.test(shownTermsVersion)) {
+    throw new ManagedTrialError('Read and accept the current terms before requesting an account.', { code: 'account_terms_required' })
+  }
+  const emailRedirectTo = managedAccountRedirectUrl('signup')
+  if (!managedTrialAuthConfigured()) throw new ManagedTrialError('Company signup is unavailable.', { code: 'auth_not_configured' })
+  if (signupRequestPending) throw new ManagedTrialError('An account request is already pending.', { code: 'account_request_pending' })
+  signupRequestPending = true
+  try {
+    // Never accept a caller-supplied flag or reuse a cached successful health response.
+    const response = await fetch('/api/health', {
+      headers: { accept: 'application/json' }, cache: 'no-store', credentials: 'omit',
+      redirect: 'error', signal: AbortSignal.timeout(8000),
+    })
+    const health = response.ok && response.headers.get('content-type')?.includes('application/json')
+      ? await response.json() : null
+    const policy = readManagedSignupPolicy(health)
+    if (!policy) {
+      throw new ManagedTrialError('Company signup is not open. Sign in or request an account.', { code: 'signup_window_closed' })
+    }
+    if (policy.termsVersion !== shownTermsVersion) {
+      throw new ManagedTrialError('The terms changed. Reload and read the current version before trying again.', { code: 'account_terms_changed' })
+    }
+    const supabase = await authClient()
+    if (!supabase) throw new ManagedTrialError('Company signup is unavailable.', { code: 'auth_not_configured' })
+    const current = await supabase.auth.getSession()
+    if (current.error || current.data.session) {
+      throw new ManagedTrialError('Sign out before requesting another account.', { code: 'auth_existing_session' })
+    }
+    const result = 'password' in request
+      ? await supabase.auth.signUp({ email: request.email, password: request.password, options: { emailRedirectTo } })
+      : await supabase.auth.resend({ type: 'signup', email: request.email, options: { emailRedirectTo } })
+    if (result.data && 'session' in result.data && result.data.session) {
+      // A misconfigured provider must not silently turn signup into signed-in access.
+      await supabase.auth.signOut({ scope: 'local' })
+      forgetWorkspace()
+      throw new ManagedTrialError('Email confirmation is required before account access.', { code: 'email_confirmation_required' })
+    }
+    if (result.error && !['user_already_exists', 'email_exists', 'user_not_found'].includes(result.error.code ?? '')) {
+      throw new Error('account_request_failed')
+    }
+    // No user/identity count, provider wording, password, email or session in this result.
+    return { status: 'confirmation_requested' as const }
+  } catch (error) {
+    if (error instanceof ManagedTrialError) throw error
+    throw new ManagedTrialError('The account request could not be confirmed. Wait before trying again.', { code: 'account_request_failed' })
+  } finally {
+    signupRequestPending = false
+  }
+}
+
+export function createManagedAccount(input: CreateAccountInput, shownTermsVersion: string) {
+  return requestManagedSignup(input, shownTermsVersion)
+}
+
+export function resendManagedAccountConfirmation(email: string, shownTermsVersion: string) {
+  return requestManagedSignup(email, shownTermsVersion)
 }
 
 export async function requestManagedPasswordRecovery(email: string) {
@@ -2696,24 +2776,20 @@ export async function requestManagedPasswordRecovery(email: string) {
 }
 
 async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
-  const supabase = await authClient()
-  if (!supabase) {
-    throw new ManagedTrialError('Managed account setup is not configured in this app build.', {
-      code: 'auth_not_configured',
-    })
-  }
-
   const rawQuery = window.location.search
   const rawFragment = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
   const hasCallback = Boolean(rawQuery || rawFragment)
+  // Scrub even unknown purposes, duplicate parameters and unconfigured builds,
+  // before parsing or loading the provider client can fail.
+  if (hasCallback) scrubManagedAccountCallback()
   if (rawQuery.length > 4096 || rawFragment.length > 40000) {
-    if (hasCallback) scrubManagedAccountCallback()
     throw accountLinkError()
   }
   const query = new URLSearchParams(rawQuery)
   const fragment = new URLSearchParams(rawFragment)
   const purpose = accountPurpose(query.get('mode'), fragment.get('type'))
-  const queryAllowed = exactAuthParameters(query, ['code', 'mode', 'error', 'error_code', 'error_description'])
+  const queryAllowed = exactAuthParameters(query, ['code', 'mode', 'review', 'error', 'error_code', 'error_description'])
+    && (!query.has('review') || (purpose === 'recovery' && managedLoginReviewPath(rawQuery) !== null))
   const fragmentAllowed = exactAuthParameters(fragment, ['access_token', 'refresh_token', 'expires_at', 'expires_in', 'token_type', 'type', 'error', 'error_code', 'error_description'])
   const code = query.get('code') ?? ''
   const accessToken = fragment.get('access_token') ?? ''
@@ -2724,7 +2800,6 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
   const providerError = query.has('error') || query.has('error_code') || query.has('error_description')
     || fragment.has('error') || fragment.has('error_code') || fragment.has('error_description')
 
-  if (hasCallback) scrubManagedAccountCallback()
   if (!queryAllowed
     || !fragmentAllowed
     || providerError
@@ -2732,26 +2807,41 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
     || (expiresIn !== null && !/^\d{1,10}$/.test(expiresIn))
     || (expiresAt !== null && !/^\d{1,12}$/.test(expiresAt))) throw accountLinkError()
 
-  let session: Session
+  // Reject malformed tokens before even constructing the Auth client.
   if (code) {
     if (!AUTH_CODE.test(code) || accessToken || refreshToken) throw accountLinkError()
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-    if (error || !validNamedUserSession(data.session)) throw accountLinkError()
-    session = data.session
   } else if (accessToken || refreshToken) {
     if (!AUTH_TOKEN.test(accessToken) || !AUTH_TOKEN.test(refreshToken)) throw accountLinkError()
-    const { data, error } = await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    })
-    if (error || !validNamedUserSession(data.session)) throw accountLinkError()
-    session = data.session
   } else {
     throw accountLinkError()
   }
 
   forgetWorkspace()
-  return { purpose, email: session.user.email ?? 'Named user' }
+  const supabase = await authClient()
+  if (!supabase) throw new ManagedTrialError('Managed account setup is unavailable.', { code: 'auth_not_configured' })
+  try {
+    const { data, error } = code
+      ? await supabase.auth.exchangeCodeForSession(code)
+      : await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+    if (error || !validNamedUserSession(data.session)) throw accountLinkError()
+    const session = data.session
+    if (purpose === 'signup') {
+      // The URL, local session and user_metadata cannot attest email verification.
+      const verified = await supabase.auth.getUser(session.access_token)
+      const user = verified.data.user
+      if (verified.error || !user || user.id !== session.user.id || user.is_anonymous !== false
+        || !user.email || !AUTH_EMAIL.test(user.email) || user.email.length > 160
+        || !user.email_confirmed_at || !Number.isFinite(Date.parse(user.email_confirmed_at))) throw accountLinkError()
+      const directory = await discoverManagedWorkspaces({ ...session, user })
+      return { purpose, email: user.email, directory }
+    }
+    return { purpose, email: session.user.email ?? 'Named user' }
+  } catch {
+    // Request local-session cleanup, but never report account success if cleanup fails.
+    try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* Preserve the fixed-copy failure. */ }
+    forgetWorkspace()
+    throw accountLinkError()
+  }
 }
 
 export function beginManagedAccountSetup(): Promise<ManagedAccountSetup> {
@@ -2777,7 +2867,7 @@ async function discoverManagedWorkspaces(session: Session): Promise<ManagedWorks
   // Zero companies is a STATE, not an error: since the 2026-08-12 self-serve
   // decision the signed-in user IS the prospective owner, and this is exactly
   // the moment they activate with their trial claim code. Throwing here (and
-  // the wrappers' sign-out-on-error) used to log the user out at the one point
+  // the former wrappers' sign-out-on-error) used to log the user out at the one point
   // the activation UI needs their session. completeManagedWorkspaceSignIn still
   // fail-closes independently, so an empty directory can never open a company.
   return {
@@ -2794,13 +2884,22 @@ export async function discoverManagedWorkspacesForCurrentSession(): Promise<Mana
   }
   const { data, error } = await supabase.auth.getSession()
   if (error || !validNamedUserSession(data.session)) throw accountLinkError()
-  try {
-    return await discoverManagedWorkspaces(data.session)
-  } catch (discoveryError) {
-    await supabase.auth.signOut({ scope: 'local' })
-    forgetWorkspace()
-    throw discoveryError
+  return discoverForUnchangedSession(supabase, data.session)
+}
+
+async function discoverForUnchangedSession(supabase: ManagedAuthClient, session: Session): Promise<ManagedWorkspaceSignIn> {
+  // Discovery is a read, not authority to destroy the current login. Its failure
+  // must propagate without signing out a newer session (including another tab).
+  const directory = await discoverManagedWorkspaces(session)
+  const { data, error } = await supabase.auth.getSession()
+  if (error || !validNamedUserSession(data.session)
+    || data.session.user.id !== session.user.id
+    || data.session.access_token !== session.access_token) {
+    throw new ManagedTrialError('The managed session changed. Sign in again.', {
+      code: 'managed_identity_changed',
+    })
   }
+  return directory
 }
 
 export async function completeManagedAccountPassword(password: string): Promise<ManagedWorkspaceSignIn> {
@@ -2838,13 +2937,7 @@ export async function signInAndDiscoverManagedWorkspaces(email: string, password
       code: error?.code ?? 'sign_in_failed',
     })
   }
-  try {
-    return await discoverManagedWorkspaces(data.session)
-  } catch (discoveryError) {
-    await supabase.auth.signOut({ scope: 'local' })
-    forgetWorkspace()
-    throw discoveryError
-  }
+  return discoverForUnchangedSession(supabase, data.session)
 }
 
 export async function completeManagedWorkspaceSignIn(
@@ -3085,6 +3178,91 @@ export async function validateManagedClientImport(
     expectedIdentity,
     expectedPackageDigest,
   )
+}
+
+export async function loadManagedWebsiteRecipients(expectedIdentity: ManagedIdentity, after?: string) {
+  if (after !== undefined && (after.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(after))) {
+    throw new ManagedTrialError('The customer page is invalid.', { code: 'website_review_invalid' })
+  }
+  return authorizedRequest<unknown>('/api/trial/v1/website-review-recipients' + (after ? `?after=${after}` : ''),
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function prepareManagedWebsiteReview(
+  payload: { reviewId: string; recipientGrantId: string; expectedVersion: number; expiresAt: string }, expectedIdentity: ManagedIdentity,
+) {
+  for (const id of [payload.reviewId, payload.recipientGrantId]) {
+    if (id.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      throw new ManagedTrialError('The selected customer review is invalid.', { code: 'website_review_invalid' })
+    }
+  }
+  return authorizedRequest<unknown>('/api/trial/v1/website-reviews',
+    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function withdrawManagedWebsiteReview(reviewId: string, expectedIdentity: ManagedIdentity) {
+  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}/withdraw`,
+    { method: 'POST', body: JSON.stringify({}), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function loadManagedWebsitePreparation(expectedIdentity: ManagedIdentity) {
+  return authorizedRequest<unknown>('/api/trial/v1/website-review-preparation',
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function loadManagedWebsiteReviewStaffPage(expectedIdentity: ManagedIdentity, reviewId?: string, after?: string) {
+  for (const value of [reviewId, after]) {
+    if (value !== undefined && (value.length !== 36 || !/^[0-9a-f-]{36}$/.test(value)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value))) {
+      throw new ManagedTrialError('The review page is invalid.', { code: 'website_review_invalid' })
+    }
+  }
+  const path = '/api/trial/v1/website-reviews' + (reviewId ? `/${reviewId}/change-requests` : '')
+  return authorizedRequest<unknown>(path + (after ? `?after=${after}` : ''),
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function loadManagedWebsiteReview(reviewId: string, expectedIdentity: ManagedIdentity) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}`,
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function sendManagedWebsiteReviewChanges(
+  payload: { reviewId: string; commandId: string; previewDigest: string; note: string },
+  expectedIdentity: ManagedIdentity,
+) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${payload.reviewId}/change-requests`,
+    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error', credentials: 'omit' },
+    true, expectedIdentity)
+}
+
+export async function loadManagedWebsiteAcceptance(reviewId: string, expectedIdentity: ManagedIdentity) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}/acceptance`,
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function sendManagedWebsiteAcceptance(
+  payload: { reviewId: string; commandId: string; previewDigest: string; decision: 'accept_preview_for_release_review' },
+  expectedIdentity: ManagedIdentity,
+) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${payload.reviewId}/acceptance`,
+    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error', credentials: 'omit' },
+    true, expectedIdentity)
 }
 
 export async function preflightManagedClientImport(request: {

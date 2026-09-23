@@ -6,7 +6,7 @@ const root = resolve(import.meta.dirname, '..')
 const packageState = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const projectRef = String(packageState?.supermega?.productionSupabaseProjectRef || '').trim()
 const runtimeRole = 'supermega_trial_login'
-const managedSchemaVersion = '11'
+const managedSchemaVersion = '13'
 
 const evaluate = (environment, expectedMode) => {
   const failures = []
@@ -17,6 +17,7 @@ const evaluate = (environment, expectedMode) => {
   const supabaseUrl = String(environment.VITE_SUPABASE_URL || '').trim()
   const publishableKey = String(environment.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim()
   const schemaVersion = String(environment.SUPERMEGA_TRIAL_SCHEMA_VERSION || '').trim()
+  const billingSchemaVersion = String(environment.SUPERMEGA_BILLING_SCHEMA_VERSION || '').trim()
   const boundProjectRef = String(environment.SUPERMEGA_SUPABASE_PROJECT_REF || '').trim()
   const configuredReleaseCommit = String(environment.SUPERMEGA_RELEASE_COMMIT || '').trim()
   const releaseCommit = String(
@@ -54,6 +55,7 @@ const evaluate = (environment, expectedMode) => {
     addFailure('managed_browser_publishable_key_invalid')
   }
   if (schemaVersion !== managedSchemaVersion) addFailure('managed_schema_version_invalid')
+  if (billingSchemaVersion !== managedSchemaVersion) addFailure('managed_billing_schema_version_invalid')
   if (boundProjectRef !== projectRef) addFailure('managed_project_binding_invalid')
   if (!/^[0-9a-f]{40}$/.test(releaseCommit)) addFailure('managed_release_commit_invalid')
   if (selfServeWindow && selfServeWindow !== 'open') addFailure('managed_self_serve_window_invalid')
@@ -67,7 +69,7 @@ const evaluate = (environment, expectedMode) => {
     addFailure('staged_environment_must_not_enable_writes')
   }
   if (expectedMode === 'isolated_demo') {
-    if ([databaseUrl, supabaseUrl, publishableKey, schemaVersion, boundProjectRef, configuredReleaseCommit, selfServeWindow, writesEnabled].some(Boolean)) {
+    if ([databaseUrl, supabaseUrl, publishableKey, schemaVersion, billingSchemaVersion, boundProjectRef, configuredReleaseCommit, selfServeWindow, writesEnabled].some(Boolean)) {
       addFailure('isolated_environment_contains_managed_runtime_values')
     } else {
       failures.splice(0, failures.length)
@@ -85,6 +87,7 @@ const evaluate = (environment, expectedMode) => {
     browserAuthReady: supabaseUrl === `https://${projectRef}.supabase.co`
       && /^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(publishableKey),
     schemaVersionMatched: schemaVersion === managedSchemaVersion,
+    billingSchemaVersionMatched: billingSchemaVersion === managedSchemaVersion,
     releaseCommitBound: /^[0-9a-f]{40}$/.test(releaseCommit),
     selfServeEnabled: selfServeWindow === 'open',
     writesEnabled: writesEnabled === 'true',
@@ -99,6 +102,7 @@ if (process.argv.includes('--self-test')) {
     VITE_SUPABASE_URL: `https://${projectRef}.supabase.co`,
     VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_1234567890abcdef',
     SUPERMEGA_TRIAL_SCHEMA_VERSION: managedSchemaVersion,
+    SUPERMEGA_BILLING_SCHEMA_VERSION: managedSchemaVersion,
     SUPERMEGA_SUPABASE_PROJECT_REF: projectRef,
     SUPERMEGA_RELEASE_COMMIT: 'a'.repeat(40),
   }
@@ -124,7 +128,20 @@ if (process.argv.includes('--self-test')) {
   assert.equal(evaluate({ GITHUB_SHA: 'd'.repeat(40) }, 'isolated_demo').ok, true)
   assert.equal(evaluate({ SUPERMEGA_RELEASE_COMMIT: 'd'.repeat(40) }, 'isolated_demo').ok, false)
   assert.equal(evaluate(valid, 'isolated_demo').ok, false)
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_managed_runtime_environment_values_self_test.v1', checks: 22 }))
+  let additionalChecks = 0
+  for (const value of ['', '10', '11', '12', '14', '13.0']) {
+    assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_SCHEMA_VERSION: value }, 'staged').failures.includes('managed_schema_version_invalid'), true)
+    additionalChecks++
+    for (const mode of ['staged', 'managed_trial', 'self_serve']) {
+      assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_WRITES_ENABLED: mode === 'staged' ? '' : 'true', SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW: 'open', SUPERMEGA_BILLING_SCHEMA_VERSION: value }, mode).failures.includes('managed_billing_schema_version_invalid'), true)
+      additionalChecks++
+    }
+  }
+  assert.equal(evaluate({ SUPERMEGA_BILLING_SCHEMA_VERSION: '13' }, 'isolated_demo').ok, false)
+  additionalChecks++
+  assert.equal(evaluate(valid, 'staged').billingSchemaVersionMatched, true)
+  additionalChecks++
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_managed_runtime_environment_values_self_test.v1', checks: 22 + additionalChecks }))
   process.exit(0)
 }
 

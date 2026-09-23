@@ -6,7 +6,7 @@ const COMMERCE_ORDER_DRAFT_RESET_LOCK = 'supermega:shop:order-draft:reset'
 const COMMERCE_ORDER_DRAFT_MAX_BYTES = 16_384
 
 export const commerceOrderDraftChannels = ['Messenger', 'Viber', 'Phone', 'Website', 'Ecommerce', 'Walk-in'] as const
-export const commerceOrderDraftPayments = ['KBZPay', 'WavePay', 'Cash on delivery', 'Cash', 'Card'] as const
+export const commerceOrderDraftPayments = ['KBZPay', 'WavePay', 'AYA Pay', 'MMQR', 'Cash on delivery', 'Cash', 'Card'] as const
 
 export type CommerceOrderDraftChannel = typeof commerceOrderDraftChannels[number]
 export type CommerceOrderDraftPayment = '' | typeof commerceOrderDraftPayments[number]

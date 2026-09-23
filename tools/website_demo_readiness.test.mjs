@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { runInNewContext } from 'node:vm'
+import './test_website_status_guidance_ui.mjs'
+import './website_download_feedback.test.mjs'
 
 import {
   MAX_WEBSITE_PAGES,
@@ -50,10 +54,129 @@ import {
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
 const CONTENT_CHECK_IDS = ['ready-pages', 'home-path', 'navigation']
+const websiteProductSource = await readFile(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
+const websiteProductCss = (await readFile(new URL('../showroom/src/products/website/website-product.css', import.meta.url), 'utf8')).replaceAll('\r\n', '\n')
 
 function contentChecks(workspace) {
   return readinessChecks(workspace).filter((check) => CONTENT_CHECK_IDS.includes(check.id))
 }
+
+test('assisted Website entry stays local-only and defers to recovery and edit states', () => {
+  assert.match(websiteProductSource, /const canRequestWebsiteSetup = storageMode !== 'managed'/)
+  assert.match(websiteProductSource, /const showAssistedWebsitePreview = canRequestWebsiteSetup && surface === 'preview'/)
+  assert.match(websiteProductSource, /!storageIssue && !canRepairLocalStorage && !pendingRestoredDraft/)
+  assert.match(websiteProductSource, /!hasUnsavedChanges && !starterSetupActive/)
+  const safeLink = 'href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>'
+  assert.equal(websiteProductSource.split(safeLink).length - 1, 1, 'operator workspace retains the direct setup route')
+  assert.equal(websiteProductSource.split('<AssistedDeliveryScope product="website" />').length - 1, 1, 'customer preview uses the template-aware request component')
+  assert.match(websiteProductSource, /canRequestWebsiteSetup && surface === 'work' \? <a/)
+  const expression = websiteProductSource.match(/const canRequestWebsiteSetup = ([\s\S]*?)\n\s*const showAssistedWebsitePreview/)?.[1]
+  assert.ok(expression)
+  const ready = { storageMode: 'local', view: 'content', storageIssue: '', canRepairLocalStorage: false, pendingRestoredDraft: null, hasUnsavedChanges: false, starterSetupActive: false }
+  for (const surface of ['preview', 'work']) {
+    assert.equal(runInNewContext(expression, {...ready, surface}), true)
+    for (const blocked of [{storageMode:'managed'}, {view:'publish'}, {storageIssue:'error'}, {canRepairLocalStorage:true}, {pendingRestoredDraft:{}}, {hasUnsavedChanges:true}, {starterSetupActive:true}]) {
+      assert.equal(runInNewContext(expression, {...ready, surface, ...blocked}), false)
+    }
+  }
+  assert.match(websiteProductSource, /You do not need to edit the site yourself\./)
+  assert.match(websiteProductSource, /Tell us your business name, best contact, and where public material can be reviewed/)
+  assert.match(websiteProductSource, /A Facebook page, public menu, or short description is enough to start/)
+  assert.match(websiteProductSource, /Keep passwords and private customer data out/)
+  assert.match(websiteProductSource, /SuperMega prepares the page plan, starter copy, responsive layout, and first reviewable preview/)
+  assert.match(websiteProductSource, /You review one preview; domain connection and publishing stay separate/)
+  assert.match(websiteProductSource, /disabled=\{portalViewOnly\} onClick=\{runWebsiteAutopilot\}/)
+})
+
+test('untouched assisted preview does not invite customers into the builder', () => {
+  const expression = websiteProductSource.match(/const showWebsiteEditorAction = ([^\r\n]+)/)?.[1]
+  assert.ok(expression)
+  for (const showAssistedWebsitePreview of [false, true]) {
+    for (const starterAvailable of [false, true]) {
+      assert.equal(runInNewContext(expression, { showAssistedWebsitePreview, starterAvailable }), !(showAssistedWebsitePreview && starterAvailable))
+    }
+  }
+  assert.match(websiteProductSource, /\{showWebsiteEditorAction \? <button[\s\S]*?\{websiteSurfaceActionLabel\}\s*<\/button> : null\}/)
+  assert.match(websiteProductSource, /if \(pendingRestoredDraft\) \{\s*focusRestoredDraftChoice\(\)/)
+})
+
+test('Website keeps readiness visible while detailed checks collapse before the preview', () => {
+  assert.match(websiteProductSource, /<details className="website-today-checks">\s*<summary>Site checks · \{websiteTodayMetrics\[1\]\[1\]\}<\/summary>/)
+  const checks = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))
+  assert.match(checks, /aria-label="Website today status"/)
+  assert.match(checks, /websiteTodayMetrics\.map/)
+  assert.match(checks, /<\/details>/)
+  assert.match(websiteProductSource, /<div className="website-today-source" role="status">[\s\S]*?\{showAssistedWebsitePreview \? 'Requesting setup does not publish this preview, connect a domain or approve a release\.' : websiteReviewNote\}/)
+  assert.match(websiteProductCss, /\.website-today-checks > summary \{\s*min-height: 2\.75rem;/)
+  assert.match(websiteProductCss, /\.website-today-checks > summary:focus-visible \{ outline: \.125rem solid var\(--website-green\);/)
+})
+
+test('expanded checks explain failures without inviting assisted customers to publish or edit', () => {
+  const panel = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))
+  assert.match(panel, /hasUnsavedChanges \? \([\s\S]*Save or discard your draft[\s\S]*\) : failingContentChecks.length > 0 \? /)
+  assert.match(panel, /failingContentChecks\.map\(\(check\) => <li key=\{check.id\}><strong>\{check.label\}<\/strong><p>\{check.detail\}<\/p><\/li>\)/)
+  assert.match(panel, /showAssistedWebsitePreview \? <p>You do not need to fix these yourself\./)
+  assert.match(panel, /Nothing is published automatically\./)
+  assert.doesNotMatch(panel, /dangerouslySetInnerHTML|onClick=|<button|<a\s/)
+  assert.match(websiteProductCss, /\.website-check-guidance \{[^}]*overflow-wrap: anywhere;/)
+})
+
+test('failed navigation checks never claim their destinations are ready', () => {
+  const workspace = createInitialWorkspace()
+  const navigation = () => readinessChecks(workspace).find((check) => check.id === 'navigation')
+  assert.equal(navigation().passed, true)
+  workspace.pages[0].stage = 'draft'
+  assert.equal(navigation().passed, false)
+  assert.equal(navigation().detail, 'Review navigation: every visible item needs a label and a page marked ready.')
+  workspace.pages[0].stage = 'ready'
+  workspace.pages[0].navigation.label = '  '
+  assert.equal(navigation().passed, false)
+  assert.match(navigation().detail, /every visible item needs a label/)
+  workspace.pages[0].navigation.label = 'Home'
+  assert.equal(navigation().passed, true)
+  assert.match(navigation().detail, /have labels and ready destinations/)
+  for (const page of workspace.pages) page.navigation.visible = false
+  assert.equal(navigation().passed, false)
+  assert.equal(navigation().detail, 'Show at least one page in navigation.')
+})
+
+test('mobile Website actions wrap complete labels without shrinking tap targets', () => {
+  assert.match(websiteProductCss, /\.website-preview-controls > button \{\s*min-width: 76px;\s*min-height: 2\.75rem;/)
+  const mobile = websiteProductCss.slice(websiteProductCss.indexOf('@media screen and (max-width: 560px) {'))
+  assert.match(mobile, /\.website-primary-actions > \.website-button \{\s*white-space: normal;\s*overflow-wrap: anywhere;\s*line-height: 1\.3;\s*padding-block: \.5rem;\s*text-align: center;\s*\}/)
+  assert.match(websiteProductCss, /\.website-primary-actions > \.website-button,\s*\.website-site-settings > summary \{\s*min-width: 78px;\s*min-height: 46px;/)
+  assert.ok(websiteProductSource.includes('Download preview'), 'preserve the complete user-facing action label')
+})
+
+test('narrow phones give the saved Website primary action a full row without changing wider screens', () => {
+  const narrowRule = '@media screen and (max-width: 22.5rem) {'
+  const narrow = websiteProductCss.slice(websiteProductCss.indexOf(narrowRule), websiteProductCss.indexOf('/* A first-run business brief'))
+  assert.ok(websiteProductCss.indexOf(narrowRule) > websiteProductCss.indexOf('@media screen and (max-width: 560px) {'))
+  assert.match(narrow, /\.website-primary-actions \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);\s*\}/)
+  assert.match(narrow, /\.website-action-bar\[data-surface="work"\]\[data-editing="false"\] \.website-primary-actions > \.website-button\.is-primary \{\s*grid-column: 1 \/ -1;\s*\}/)
+  assert.match(websiteProductCss, /\.website-primary-actions \{\s*width: 100%;\s*display: grid;\s*grid-column: 1;\s*grid-row: 3;\s*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/)
+  assert.match(websiteProductSource, /data-editing=\{hasUnsavedChanges \? 'true' : 'false'\}/)
+  assert.match(websiteProductSource, /surface === 'work' \? \(/)
+})
+
+test('all Website status values wrap in container-fitting cells and keep the mobile layout', () => {
+  assert.match(
+    websiteProductSource,
+    /\['File', hasUnsavedChanges \? 'Blocked by draft' : releaseRecordRequired \? publishIsCurrent \? 'Ready' : 'Needed' : 'Ready to download'\]/,
+    'the guarded status must remain the current source-owned FILE truth',
+  )
+
+  assert.match(websiteProductCss, /\.website-today-metrics \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 8rem\), 1fr\)\);/, 'tablet panels must fit cells to their own width, not force five columns')
+  const valueRules = [...websiteProductCss.matchAll(/\.website-today-metrics[^{}]*strong\s*\{([^}]*)\}/g)].map((match) => match[1]).join('\n')
+  assert.match(valueRules, /white-space: normal;/, 'every status can wrap, not only FILE')
+  assert.match(valueRules, /overflow-wrap: anywhere;/, 'long status tokens cannot force overflow')
+  assert.doesNotMatch(valueRules, /text-overflow:\s*ellipsis|white-space:\s*nowrap|overflow:\s*hidden/, 'later value rules must not restore truncation')
+  assert.match(
+    websiteProductCss,
+    /@media \(max-width: 760px\) \{[\s\S]*?\.website-today-metrics \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}\n  \.website-today-metrics span:last-child \{ grid-column: 1 \/ -1; \}/,
+    'mobile keeps its two-column grid with the FILE metric spanning the full row',
+  )
+})
 
 test('a fresh Website workspace opens on a complete, previewable site', () => {
   const workspace = createInitialWorkspace()
@@ -67,6 +190,34 @@ test('a fresh Website workspace opens on a complete, previewable site', () => {
   }
   assert.ok(workspace.pages.some((page) => page.navigation.visible), 'navigation must show at least one page')
   assert.ok(isUntouchedWebsiteStarter(workspace))
+})
+
+test('a recovered tab draft waits for an explicit provenance choice', () => {
+  assert.match(
+    websiteProductSource,
+    /setEditSessionState\(null\)\s+setRestoredDraftState\(next\)/,
+    'restoration must hold the candidate aside instead of silently activating it',
+  )
+  assert.match(websiteProductSource, /Unsaved tab draft found/)
+  assert.match(websiteProductSource, /Current \{isUntouchedWebsiteStarter\(workspace\) \? 'sample' : 'saved Website'\}/)
+  assert.match(websiteProductSource, /Continue saved draft/)
+  assert.match(websiteProductSource, /Start from this \{isUntouchedWebsiteStarter\(workspace\) \? 'sample' : 'Website'\}/)
+  assert.match(websiteProductSource, /Nothing was overwritten, deployed, published, or sent\./)
+  assert.match(
+    websiteProductSource,
+    /window\.sessionStorage\.removeItem\(websiteEditSessionStorageKey\(pendingRestoredDraft\.scope\)\)/,
+    'choosing the current Website must remove the older tab draft',
+  )
+  assert.match(
+    websiteProductSource,
+    /The older tab draft could not be discarded safely[\s\S]*?focusRestoredDraftChoice\(\)[\s\S]*?return/,
+    'a storage failure must keep the provenance choice unresolved',
+  )
+  assert.match(
+    websiteProductSource,
+    /if \(pendingRestoredDraft\) \{\s+focusRestoredDraftChoice\(\)\s+return\s+\}/,
+    'the primary action must return to the unresolved choice instead of bypassing it',
+  )
 })
 
 test('the seeded site passes every content readiness check', () => {

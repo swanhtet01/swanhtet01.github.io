@@ -20,7 +20,6 @@ export const LEADS_SOURCE_ALTERNATE_ENV = Object.freeze(['POSTGRES_URL_NON_POOLI
 const LEAD_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
 const REVIEWER_RE = /^[A-Za-z0-9][A-Za-z0-9 ._:@-]{0,79}$/
 const MAX_LIST_LIMIT = 200
-const REVIEW_RECORD_SCAN_LIMIT = 250
 
 // Smoke tests submit through the same public /contact/ function as customers, so the leads table
 // mixes both. Classify ONLY on RFC 2606 reserved names, which can never belong to a real business.
@@ -85,36 +84,34 @@ function leadSnapshotHash(lead) {
   }))
 }
 
-export async function listLeadsForReview({ limit = 50, includeSynthetic = false } = {}, store = defaultStore) {
+export async function listLeadsForReview({ limit = 50, includeSynthetic = false, cursor = '' } = {}, store = defaultStore) {
   const bounded = Number(limit)
   if (!Number.isInteger(bounded) || bounded < 1 || bounded > MAX_LIST_LIMIT) {
     return { ok: false, reason: 'invalid_leads_review_query' }
   }
   if (typeof includeSynthetic !== 'boolean') return { ok: false, reason: 'invalid_leads_review_query' }
+  if (typeof cursor !== 'string' || (cursor && !LEAD_ID_RE.test(cursor))) return { ok: false, reason: 'invalid_leads_review_query' }
   if (!leadsSourceConfigured(store)) return sourceNotConfigured()
-  // Real leads are not necessarily the newest rows — a burst of smoke tests can push genuine
-  // prospects out of a small window. When filtering, scan the widest allowed page and narrow
-  // afterwards, so a real lead is never lost behind test traffic.
+  // Stable reference ordering permits continuation even across entirely synthetic pages.
+  // New records before the cursor are found on restart; this is not a snapshot export.
   const scanLimit = includeSynthetic ? bounded : MAX_LIST_LIMIT
-  const [leads, converted, reviews] = await Promise.all([
-    store.listLeads(scanLimit),
-    store.convertedLeadIds().catch(() => []),
-    store.listControlRecords({
-      prefix: LEAD_REVIEW_RECORD_PREFIX,
-      clientId: LEADS_REVIEW_TENANT,
-      status: 'reviewed',
-      limit: REVIEW_RECORD_SCAN_LIMIT,
-    }),
-  ])
+  const leads = await store.listLeads(scanLimit, { after: cursor })
+  const classified = leads.map(lead => ({ ...lead, synthetic: isSyntheticLead(lead) }))
+  const kept = includeSynthetic ? classified : classified.filter(lead => !lead.synthetic)
+  const visible = kept.slice(0, bounded)
+  const converted = await store.convertedLeadIds(visible.map(lead => lead.id))
   const reviewByLead = new Map()
-  for (const record of reviews?.records || []) {
-    const payload = record?.payload
-    if (payload && payload.status === 'reviewed' && typeof payload.leadId === 'string') {
-      reviewByLead.set(payload.leadId, payload)
+  // Exact page-local lookup avoids a global review-record cap. Limit concurrency to five.
+  for (let start = 0; start < visible.length; start += 5) {
+    const batch = visible.slice(start, start + 5)
+    const records = await Promise.all(batch.map(lead => store.getControlRecord(leadReviewRecordKey(lead.id))))
+    for (let i = 0; i < batch.length; i++) {
+      const payload = records[i]
+      if (payload?.status === 'reviewed' && payload.leadId === batch[i].id && payload.clientId === LEADS_REVIEW_TENANT) reviewByLead.set(batch[i].id, payload)
     }
   }
   const convertedSet = new Set(converted)
-  const classified = leads.map((lead) => {
+  const enriched = visible.map((lead) => {
     const review = reviewByLead.get(lead.id)
     return {
       ...lead,
@@ -124,7 +121,8 @@ export async function listLeadsForReview({ limit = 50, includeSynthetic = false 
       ...(review ? { review: publicReview(review) } : {}),
     }
   })
-  const kept = includeSynthetic ? classified : classified.filter((lead) => !lead.synthetic)
+  const hasMore = kept.length > bounded || leads.length >= scanLimit
+  const nextCursor = hasMore ? (kept.length > bounded ? visible.at(-1)?.id : leads.at(-1)?.id) : null
   return {
     ok: true,
     mode: store.mode,
@@ -133,7 +131,10 @@ export async function listLeadsForReview({ limit = 50, includeSynthetic = false 
     syntheticHidden: includeSynthetic ? 0 : classified.length - kept.length,
     // The scan window is finite; say so rather than implying the funnel is this small.
     scanTruncated: leads.length >= scanLimit,
-    leads: kept.slice(0, bounded),
+    hasMore,
+    nextCursor,
+    order: 'lead_id_ascending',
+    leads: enriched,
   }
 }
 

@@ -196,9 +196,9 @@ test('app shell requires production safeguards and candidate task-first UX toget
   assert.equal(assessAppShellSources(withoutBoundary).ok, false)
 
   const detachedShopSizing = appShellSources()
-  const shopRule = '.shop-counter-module > .shop-counter-surface { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }'
+  const shopRule = '.shop-counter-module > .shop-counter-surface { min-height: 440px; flex: 0 0 clamp(440px,calc(100svh - 280px),620px); overflow: hidden; }'
   detachedShopSizing['showroom/src/core/core-app.css'] = detachedShopSizing['showroom/src/core/core-app.css']
-    .replace(shopRule, '.shop-counter-module > .shop-counter-surface { min-height: 500px; overflow: hidden; }\n.decoy { flex: 0 0 clamp(500px,calc(100svh - 280px),620px); }')
+    .replace(shopRule, '.shop-counter-module > .shop-counter-surface { min-height: 440px; overflow: hidden; }\n.decoy { flex: 0 0 clamp(440px,calc(100svh - 280px),620px); }')
   assert.equal(assessAppShellSources(detachedShopSizing).ok, false)
 
   const detachedMobileSetup = appShellSources()

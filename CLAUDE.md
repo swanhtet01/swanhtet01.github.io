@@ -102,6 +102,9 @@ actor string — actor strings are display copy and will be rewritten.
 
 ## Design system rules (2026-08 tribunal — binding)
 
+- Read root `DESIGN.md` first for the portable product-door, agent-loop,
+  review-rubric, and rendered-evidence contract. It projects this section and
+  the detailed program; it does not replace either source.
 - **No new hex/px literal where a token exists.** Consume the ramps in
   `showroom/src/core/core-app.css` `:root` (`--font-size-*`, `--font-weight-*`,
   `--radius-*`, `--space-*`, `--shadow-*`, `--core-on-accent`,

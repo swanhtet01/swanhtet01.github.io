@@ -1562,15 +1562,20 @@ async function loadOverview(){
   renderOverview(r)
 }
 
-async function loadLeads(){
+async function loadLeads(cursor=''){
   const box=$('#leads');box.innerHTML='<div class="loading-pulse">Loading leads…</div>'
   let r
-  try{r=await api('GET','/api/leads/review')}catch(e){box.innerHTML=`<div class="err-banner">Could not load leads — ${esc(String(e.message||'network error'))}</div>`;return}
+  try{r=await api('GET','/api/leads/review'+(cursor?'?cursor='+encodeURIComponent(cursor):''))}catch(e){box.innerHTML=`<div class="err-banner">Could not load leads — ${esc(String(e.message||'network error'))}</div>`;return}
   if(r.reason==='leads_source_not_configured'){$('#addLead').hidden=true;box.innerHTML=`<div class="err-banner">Leads source not configured — this console cannot see contact-form leads. Set ${esc((r.requiredEnv||['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY']).join(' + '))} on the kernel deployment (the same Supabase project the /contact/ form writes to), then reload.</div>`;return}
   if(!r.ok){box.innerHTML=`<div class="err-banner">Could not load leads — ${esc(String(r.reason||'error'))}</div>`;return}
   $('#addLead').hidden=(r.mode!=='memory')
   box.innerHTML=''
-  if(!r.leads||!r.leads.length){box.innerHTML='<div class="empty">No leads yet. They arrive here from the /contact/ form.</div>';return}
+  const navigation=document.createElement('div');navigation.className='row'
+  navigation.innerHTML='<span class="muted">Enquiries ordered by reference. Restart to include newly arrived records.</span>'
+  if(cursor){const restart=document.createElement('button');restart.textContent='Restart enquiry list';restart.onclick=()=>loadLeads();navigation.appendChild(restart)}
+  if(r.nextCursor){const next=document.createElement('button');next.textContent='Next enquiries';next.onclick=()=>loadLeads(r.nextCursor);navigation.appendChild(next)}
+  box.appendChild(navigation)
+  if(!r.leads||!r.leads.length){const empty=document.createElement('div');empty.className='empty';empty.textContent=r.hasMore?'No customer enquiries in this page. Continue to the next page.':cursor?'End of enquiry list.':'No customer enquiries found.';box.appendChild(empty);return}
   for(const l of r.leads){
     const el=document.createElement('div');el.className='lead'
     const stage=l.stage?`<span class="pill">${esc(l.stage)}</span>`:''

@@ -4,6 +4,29 @@
 
 The validator is intentionally read-only. It does not apply migrations, create users, provision workspaces, or enable writes.
 
+## Current full-candidate rehearsal packet (v3)
+
+The rehearsal packet now binds all 19 committed migrations: the legacy public baseline,
+the 14 private-core migrations through schema v13, and four later migrations for durable
+signup attempts, Website review storage, entitlement proof and immutable customer acceptance.
+Core schema version 13 alone does not prove those later features exist. Historical local
+rehearsal descriptions below retain their original scope; they are not full-candidate proof.
+
+Before any schema apply, inspect the exact non-production target, health, verified TLS,
+catalog and migration history using metadata only. Supabase branch creation can replay
+historical migrations that assume public tables already exist; creation success therefore
+does not establish successful schema initialization. The baseline is a separately reviewed
+compatibility prerequisite, not permission to create tables merely to make a test pass.
+Apply it only to a proven empty applicable target with explicit schema-apply authority.
+On any existing or partial catalog, stop for reviewed reconciliation; never blindly replay.
+Then verify the exact public inventory before the unchanged browser-quarantine guard,
+and apply the remaining digest-bound chain in order, stopping on the first error.
+
+Migration completion does not satisfy hosted login, tenant isolation, revoked sessions,
+Website customer acceptance, recovery or customer journeys. Branch creation approval does
+not grant SQL, environment, deployment or production authority. A 24-hour branch deadline
+requires verified cleanup; the packet does not automatically expire or delete a branch.
+
 ## Local PostgreSQL 17 release gate
 
 Run this first on a development machine with PostgreSQL 17 binaries, matching `psql`, `pg_dump`, and `pg_restore`, Psycopg 3, and OpenSSL:

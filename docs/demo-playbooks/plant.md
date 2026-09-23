@@ -6,7 +6,7 @@ Who this is for: factories and workshops that plan jobs and record output by shi
 
 The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 
-- `Operating software for Myanmar companies.`
+- `Start with POS-independent Shop Profit Control, with Ecommerce requests and Website delivery as connected workflows.`
 - `Plan jobs, record output, and close shifts.`
 - `Use the working Plant sample for jobs, output, material trace, quality holds, maintenance, problems, and shift close. Machine control and live production writes stay behind review.`
 
@@ -33,13 +33,13 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 
 "Where does the demo data live?" — the panel's source line says `Local sample records on this device`, and setup says `Stays on this device. Nothing is sent or published.`
 
-"What do I get free, and what is paid?" — approved framing only: `Free product. Managed intelligence.`, `Run the products free. Add managed company intelligence when the workflow proves value.`, free lane `Operate without a stripped-down plan.` with `No account or model call required`; managed gate `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.` No prices — the public site carries none.
+"What do I get free, and what is paid?" — current public framing: `Explore local examples free. Assisted setup and ongoing service are scoped separately. A sample or submitted brief is not a live business account.` Agree a reviewed quote before paid preparation; do not infer a managed entitlement. The activation gate remains: `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.`
 
 "Who is accountable for a bad entry?" — every change goes through the `Confirm change` gate with a named person, reason, and evidence reference, and the trust line applies: `Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.`
 
 ## 5. The close
 
 - Self-serve close: public `/plant/` page, `Start free sample` (`https://app.supermega.dev/settings/?product=plant`), on the supervisor's own phone.
-- Assisted close: the landing page's `Set up Plant data` button opens `/contact/?product=plant` with Plant pre-selected in `Starting point`; the form submits with `Send workflow` and confirms with `Request received: ` plus an ID.
+- Retained compatibility route: the historical `Request assisted setup` target is `/contact/?product=plant`. Plant is not in the current public product selector; do not promise Plant pre-selection or sell this retained sample as an active offering. For an explicitly requested enquiry, use `Help me choose` under `What do you need?` and submit with `Request setup` only with authorization; a `Request received: ` ID confirms the brief, not Plant activation.
 - From inside the app: the setup page's "Ask SuperMega to set up Plant" link carries the template, for example `https://supermega.dev/contact/?product=plant&template=production-control&utm_source=app&utm_medium=guided_trial`.
-- Managed pilot close: `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.
+- Existing-workspace assistance: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Plant is not a current acquisition offer; any retained-workspace support requires an explicitly agreed scope, not automatic managed activation.

@@ -4,6 +4,12 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_navigation.mjs'
+
+import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
+
+import { validatePlantBusinessTemplates } from '../showroom/src/products/plant/business-templates.ts'
+import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
 
 const run = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -43,9 +49,18 @@ for (const product of manifest.customerProducts) {
   productOgCards.set(fileName, cardPng)
 }
 
-const publicProducts = manifest.customerProducts
+const publicProducts = activeProductContracts(manifest)
+const publicProductNames = publicProducts.map(product => product.name).join(', ')
+const discoverablePages = manifest.pages.filter(page => !page.productId || publicProducts.some(product => product.id === page.productId))
 
 const brand = manifest.brand
+
+function productFirstOperatingLoop(product) {
+  assert(Array.isArray(product.firstOperatingLoop), `first_operating_loop_missing:${product.id}`)
+  assert(product.firstOperatingLoop.length === 4, `first_operating_loop_length:${product.id}`)
+  assert(product.firstOperatingLoop.every((item) => typeof item === 'string' && item.length >= 24 && item.length <= 96), `first_operating_loop_copy_invalid:${product.id}`)
+  return product.firstOperatingLoop
+}
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -84,6 +99,14 @@ const release = {
   generatedAt: new Date().toISOString(),
 }
 
+const previewAppBinding = parsePreviewAppBinding(
+  process.env.SUPERMEGA_PUBLIC_PREVIEW_APP_BINDING,
+  release.commit,
+  process.env.SUPERMEGA_PUBLIC_PREVIEW_APP_BINDING === undefined ? null
+    : (await run('git', ['rev-parse', 'HEAD'], { cwd: root, windowsHide: true })).stdout.trim(),
+)
+if (previewAppBinding) release.previewNavigation = previewAppBinding
+
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision"><rect width="64" height="64" rx="8" fill="${brand.colors.background}"/><rect x="1" y="1" width="62" height="62" rx="7" fill="none" stroke="${brand.colors.ink}" stroke-opacity=".16"/><path d="M13 18 27 32 13 46" fill="none" stroke="${brand.colors.accent}" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/><path d="M34 46h17" fill="none" stroke="${brand.colors.ink}" stroke-width="4.5" stroke-linecap="square"/></svg>\n`
 
 const sharedStyle = `
@@ -115,7 +138,7 @@ const sharedStyle = `
   a { color: inherit; }
   button, input, select, textarea { font: inherit; }
   img, svg { display: block; max-width: 100%; }
-  .skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }
+  .skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }
   .skip-link:focus { transform: translateY(0); }
   .shell { min-height: 100svh; }
   .frame { width: min(calc(100% - 48px), 1200px); margin-inline: auto; }
@@ -218,6 +241,12 @@ const sharedStyle = `
   .contact-layout { display: grid; grid-template-columns: minmax(0,.78fr) minmax(430px,1.22fr); gap: 76px; align-items: start; padding-bottom: 110px; }
   .contact-copy { padding-top: 24px; }
   .contact-copy p { color: var(--muted); font-size: 18px; }
+  .contact-page .page-hero { padding: 36px 0 24px; }
+  .contact-page .page-hero .lede { font-size: 18px; }
+  .contact-page .contact-layout { gap: 24px; }
+  .contact-page .contact-copy { padding-top: 0; }
+  .contact-page .contact-copy h2 { font-size: 24px; }
+  .contact-page .contact-copy p { font-size: 16px; }
   .trial-proof-summary { margin-top: 34px; padding: 24px 0; border-block: 1px solid var(--line); }
   .trial-proof-summary[hidden] { display: none; }
   .trial-proof-summary h3 { margin-top: 8px; }
@@ -267,7 +296,7 @@ const sharedStyle = `
   .solution-modules span { min-height: 52px; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 14px; line-height: 1.45; padding: 10px 0; }
   .solution-modules i { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; font-style: normal; font-variant-numeric: tabular-nums; }
   /* Design tribunal phase 1 language, applied to the public site: the free/premium/
-     managed story and the nine trade demo links, at a readable size on a cheap phone. */
+     managed story and the registry-backed trade demo links, at a readable size on a cheap phone. */
   .tier-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; border-top: 1px solid var(--line-strong); padding-top: 24px; }
   .tier-lane h3 { margin: 4px 0 8px; font-size: 17px; letter-spacing: -.01em; }
   .tier-lane .eyebrow { color: var(--green); }
@@ -287,12 +316,27 @@ const sharedStyle = `
   .trust-strip { padding-bottom: 24px; }
   .control-line { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; gap: 22px; border: 1px solid rgba(11,116,94,.2); border-radius: var(--radius); padding: 18px 22px; background: var(--green-soft); }
   .control-line p { max-width: 760px; margin: 0; color: var(--muted); font-size: 12px; }
-  .compact-solutions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+  .compact-solutions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; }
+  .delivery-steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; padding: 0; list-style: none; counter-reset: delivery; }
+  .delivery-steps li { padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-solid); counter-increment: delivery; }
+  .delivery-steps li::before { content: "0" counter(delivery); display: block; margin-bottom: 24px; color: var(--green); font-weight: 800; }
+  .delivery-steps p { color: var(--muted); margin-bottom: 0; }
+  .delivery-summary { max-width: 760px; color: var(--muted); font-size: 16px; }
+  .delivery-boundary { margin-top: 24px; max-width: 760px; color: var(--muted); }
+  .delivery-boundary summary { min-height: 44px; align-content: center; cursor: pointer; font-weight: 650; }
+  .delivery-boundary p { font-size: 14px; margin-block: 12px; }
+  @media (max-width: 760px) { .delivery-steps { grid-template-columns: 1fr; } }
   .compact-solution { min-width: 0; min-height: 270px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(25,54,42,.045); }
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
-  .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 13px; }
+  .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 16px; }
+  .compact-first { display: grid; gap: 4px; margin-top: 14px; border-left: 2px solid var(--green); padding-left: 10px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .compact-first span { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; font-weight: 760; text-transform: uppercase; }
   .compact-solution > .card-link { margin-top: auto; }
   .compact-solution > .card-link + .card-link { margin-top: 2px; }
+  .first-loop { scroll-margin-top: 92px; }
+  .first-loop-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .first-loop-list li { min-height: 58px; display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--panel-solid); color: var(--muted); font-size: 14px; line-height: 1.45; }
+  .first-loop-list i { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; font-style: normal; font-weight: 800; }
   .product-roadmap { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
   .roadmap-solution { min-height: 228px; display: flex; flex-direction: column; }
   .roadmap-solution > p { min-height: 0; }
@@ -333,7 +377,7 @@ const sharedStyle = `
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 38px; } .product-card { padding: 24px; } .compact-solution { padding: 22px; } }
   @media (min-width: 761px) { .detail-disclosure > summary { display: none; } details.detail-disclosure:not([open]) > .disclosure-body { display: block; } .detail-disclosure { margin-top: 0; border-top: 0; } .product-disclosure .disclosure-body { padding-top: 16px; } }
   @media (max-width: 760px) { .hero { gap: 28px; padding-top: 28px; padding-bottom: 32px; } .hero-note { display: none; } .section { padding: 32px 0; } .section-head { margin-bottom: 18px; } .section-head p { font-size: 16px; } .workspace-bar { min-height: 44px; } .system-preview-body { padding: 14px 16px; } .system-row { min-height: 44px; } .system-boundary { margin-top: 14px; } .compact-solution > p { min-height: 0; } .closing-strip { padding: 22px; } }
-  @media (max-width: 420px) { .compact-solution { padding: 18px; } }
+  @media (max-width: 420px) { .compact-solution { padding: 18px; } .first-loop-list li { grid-template-columns: 28px minmax(0,1fr); padding: 10px 11px; font-size: 13px; } }
   @media (max-width: 520px) { .compact-solutions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } .compact-solution { min-height: 250px; padding: 16px; } .compact-solution h3 { margin-top: 12px; font-size: 22px; } .compact-solution > p { font-size: 11px; line-height: 1.45; } .compact-solution .card-index { min-height: 28px; font-size: 8px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { font-size: 12px; } }
   @media (max-width: 760px) { .offer-model-grid { grid-template-columns: 1fr; } .offer-model-lane { padding: 24px 0; } .offer-model-lane + .offer-model-lane { border-top: 1px solid var(--line-strong); border-left: 0; padding-left: 0; } .offer-model-action { align-items: stretch; flex-direction: column; } .offer-model-action .button { width: 100%; } }
 `
@@ -362,6 +406,39 @@ function structuredDataHtml(schema) {
   const json = JSON.stringify({ '@context': 'https://schema.org', ...schema }).replaceAll('<', '\\u003c')
   return `\n    <script type="application/ld+json">${json}</script>`
 }
+
+const publicObservabilityHosts = Object.freeze(['supermega.dev', 'www.supermega.dev'])
+const publicObservabilityPaths = Object.freeze(manifest.pages.map((page) => page.route))
+assert(publicObservabilityPaths.join(',') === '/,/shop/,/plant/,/website/,/ecommerce/,/contact/,/privacy/', 'public_observability_path_surface_changed')
+
+// Source presence is only delivery readiness. Provider-visible pageviews and
+// vitals remain unobserved until a separate read-only provider receipt proves
+// them after deployment.
+const publicObservabilityScript = `(function () {
+  var hosts = ${JSON.stringify(publicObservabilityHosts)}
+  var paths = new Set(${JSON.stringify(publicObservabilityPaths)})
+  if (location.protocol !== 'https:' || !hosts.includes(location.hostname)) return
+  function safeEvent(event, expectedType) {
+    if (!event || event.type !== expectedType || typeof event.url !== 'string') return null
+    var url
+    try { url = new URL(event.url, location.origin) } catch { return null }
+    if (url.origin !== location.origin || !paths.has(url.pathname)) return null
+    var safe = { type: expectedType, url: url.origin + url.pathname }
+    if (expectedType === 'vital') safe.route = url.pathname
+    return safe
+  }
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) }
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments) }
+  window.va('beforeSend', function (event) { return safeEvent(event, 'pageview') })
+  window.si('beforeSend', function (event) { return safeEvent(event, 'vital') })
+  for (var src of ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js']) {
+    var script = document.createElement('script')
+    script.defer = true
+    script.src = src
+    document.head.append(script)
+  }
+})()
+`
 
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
@@ -395,60 +472,178 @@ function documentHtml({ route, title, description, content, schema = null, robot
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
     <a class="skip-link" href="#content">Skip to content</a>
     <div class="shell">${headerHtml(route)}${content}${footerHtml(route)}</div>
+    <script src="/vercel-insights.js"></script>
   </body>
 </html>`
 }
 
+function guidedSampleAction(product) {
+  const href = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  return product.id === 'shop'
+    ? { href, label: 'Choose Shop type or continue saved' }
+    : { href, label: 'Start free sample' }
+}
+
+function assistedSetupAction(product) {
+  const expectedHref = `/contact/?product=${encodeURIComponent(product.id)}`
+  assert(product.secondaryCta?.label === 'Request assisted setup', `assisted_setup_label_invalid:${product.id}`)
+  assert(product.secondaryCta.url === expectedHref, `assisted_setup_route_invalid:${product.id}`)
+  return { href: product.secondaryCta.url, label: product.secondaryCta.label }
+}
+
+function shopProfitControlAction() {
+  const shop = publicProducts.find((product) => product.id === 'shop')
+  assert(shop?.primaryCta?.label === 'Open Shop Profit Control', 'shop_profit_control_label_invalid')
+  assert(shop.primaryCta.url === 'https://app.supermega.dev/shop/?tab=today', 'shop_profit_control_route_invalid')
+  return { href: shop.primaryCta.url, label: shop.primaryCta.label }
+}
+
+const SHOP_PROFIT_CONTROL_ACTION = shopProfitControlAction()
+
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
-  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  const firstLoop = productFirstOperatingLoop(product)
+  const guidedSample = guidedSampleAction(product)
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
+    <div class="compact-first"><span>Start here</span>${escapeHtml(firstLoop[0])}</div>
     <div class="module-tags" role="group" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
     <a class="card-link" href="/${escapeHtml(product.id)}/">${escapeHtml(product.name)} overview</a>
-    <a class="card-link" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a>
+    <a class="card-link" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a>
   </article>`
 }
 
+const homePage = manifest.pages.find((page) => page.route === '/')
+assert(homePage?.file === 'index.html', 'home_page_manifest_entry_invalid')
+assert(typeof homePage.title === 'string' && homePage.title.includes('Shop Profit Control'), 'home_page_title_invalid')
+assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
+
 const homeHtml = documentHtml({
   route: '/',
-  title: 'SuperMega | Four products',
-  description: manifest.company.statement,
-  schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: manifest.company.statement },
+  title: homePage.title,
+  description: homePage.description,
+  schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: homePage.description },
   content: `<main id="content">
-    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four focused products</span><span>Working samples</span><span>Mobile-ready workflows</span></div></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to try.</h2><p>Name the business, choose its type, and start with one guided job. Real client data stays optional until the workflow makes sense.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
-    <section class="frame section offer-model" id="model" aria-label="Free and managed SuperMega"><div class="section-head"><span class="eyebrow">Free product. Managed intelligence.</span><h2>Run the products free. Add managed company intelligence when the workflow proves value.</h2><p>The free workspace keeps the operating software useful on its own. Managed service adds approved AI context and company controls without replacing the underlying record.</p></div><div class="offer-model-grid"><div class="offer-model-lane"><span class="eyebrow">Free local workspace</span><h3>Operate without a stripped-down plan.</h3><p>Every workflow visible in Shop, Plant, Website, and Ecommerce remains available in the browser workspace.</p><ul class="offer-model-list"><li>Full local operating modules and imports</li><li>Grounded answers from validated local records</li><li>Approvals, evidence, backup, and export</li><li>No account or model call required</li></ul></div><div class="offer-model-lane"><span class="eyebrow">Managed company intelligence</span><h3>Use approved context across products.</h3><p>SuperMega can retain reviewed context, rank next actions, and prepare controlled work only after company controls pass.</p><ul class="offer-model-list"><li>Approved AI context across all four products</li><li>Persistent company history and role-aware access</li><li>Reviewed recommendations and accountable actions</li><li>Managed setup, recovery, and support</li></ul></div></div><div class="offer-model-action"><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p><a class="button primary" href="/contact/?product=guide&amp;source=managed-intelligence">Request managed pilot</a></div></section>
+    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">Business tools, prepared with you</span><h1>Less setup.<br>More time for your business.</h1><p class="lede">A clearer shop day, a Website you are proud to share, and a catalog customers can request from. Tell us what you need. SuperMega prepares the details with you.</p><div class="actions"><a class="button primary" href="${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.href)}">${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.label)}</a><a class="button" href="#products">Explore all products</a></div><div class="hero-note"><span>Shop</span><span>Website</span><span>Ecommerce</span></div><details class="delivery-boundary"><summary>What the Shop example does</summary><p>${escapeHtml(manifest.company.headline)}</p><p>${escapeHtml(manifest.company.supporting)}</p><p>POS-independent · Read-only local record · No payment or stock write</p></details></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Start with Shop Profit Control, then choose a connected workflow.</h2><p>${escapeHtml(manifest.company.statement)}</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
+    <section class="frame section offer-model" id="model" aria-label="How SuperMega prepares your business tools"><div class="section-head"><span class="eyebrow">Prepared with you</span><h2>Your business. Our setup work.</h2><p>Start with what you already have. We prepare the workflow, you review it, and we agree the next step before live use.</p></div><ol class="delivery-steps"><li><h3>Tell us the job</h3><p>Share your business type and what needs to work better. An existing catalog, brochure or short description is enough to start the conversation.</p></li><li><h3>Review a prepared result</h3><p>We confirm scope, price and timing, then prepare your Shop workflow, Website or catalog. You check the business details without learning a builder.</p></li><li><h3>Prepare for daily use</h3><p>We check access, devices, data and recovery before handoff. Publishing and managed activation require their own checks and approval.</p></li></ol><div class="offer-model-action"><p class="delivery-summary">Explore local examples free. Assisted setup and ongoing service are scoped separately. A sample or submitted brief is not a live business account.</p><a class="button primary" href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })
 
-// The nine shipped Shop trade templates. Each link opens the real app with that
-// trade's catalog, sample sales and a live order already loaded — no signup. This
-// is the strongest thing the site can offer a shop owner: their own trade, running.
-const SHOP_TRADES = [
-  ['mini-mart', 'Mini-mart & grocery', 'Daily groceries and household basics'],
-  ['pharmacy', 'Pharmacy', 'Medicine and clinic supplies with strict reorder levels'],
-  ['phone-electronics', 'Phone & electronics', 'Accessories and small electronics'],
-  ['fashion', 'Fashion & clothing', 'Stock tracked down to the size'],
-  ['hardware', 'Hardware & construction', 'Bulk orders quoted and set aside'],
-  ['tea-coffee', 'Tea & coffee shop', 'Counter menu plus office preorders'],
-  ['auto-parts', 'Auto parts', 'Exact-fit spares checked against stock'],
-  ['restaurant', 'Restaurant', 'Full menu with table bookings'],
-  ['beauty-spa', 'Beauty spa', 'Treatments booked against staff and rooms'],
-]
+// Every validated Shop trade template is projected into the public site. Keeping
+// this projection registry-backed prevents a shipped template from disappearing
+// from the public door when the product registry changes.
+const SHOP_TRADES = validateShopBusinessTemplates().map((template) => ({
+  id: template.id,
+  name: template.name.en,
+  note: template.description,
+}))
 
 function tradeTemplatesHtml() {
-  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one loads a real catalog, sample sales and a live order in your browser. Nothing to install, no account, free.</p></div><div class="trade-grid">${SHOP_TRADES.map(([id, name, note]) => `<a class="trade-card" href="https://app.supermega.dev/settings/?product=shop&amp;template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
+  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one opens Sell with a real catalog, sample sales and a live order in your browser. Nothing to install and no account required.</p></div><div class="trade-grid">${SHOP_TRADES.map(({ id, name, note }) => `<a class="trade-card" href="https://app.supermega.dev/shop/?template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
+}
+
+function customerProductContract(id) {
+  const product = manifest.customerProducts.find((candidate) => candidate.id === id)
+  assert(product, `customer_product_missing:${id}`)
+  return product
+}
+
+function validatedProductTemplates(productId, expectedCount) {
+  const templates = customerProductContract(productId).templates
+  assert(Array.isArray(templates) && templates.length === expectedCount, `public_template_count_changed:${productId}`)
+  assert(templates.every((template) => /^[a-z][a-z0-9-]{1,39}$/.test(template.id)
+    && typeof template.name === 'string' && template.name.trim()
+    && typeof template.outcome === 'string' && template.outcome.trim()), `public_template_copy_invalid:${productId}`)
+  assert(new Set(templates.map((template) => template.id)).size === templates.length, `public_template_id_duplicate:${productId}`)
+  return templates
+}
+
+function guidedTemplateRoute(productId, templateId, extra = {}) {
+  const query = new URLSearchParams({ product: productId, template: templateId, ...extra })
+  return `https://app.supermega.dev/settings/?${query.toString()}`
+}
+
+const plantWorkflowTemplate = validatedProductTemplates('plant', 3).find((template) => template.id === 'production-control')
+assert(plantWorkflowTemplate, 'plant_primary_workflow_template_missing')
+const FIRST_JOB_TEMPLATE_SECTIONS = {
+  plant: {
+    title: 'Choose a shipped production sample.',
+    intro: 'Each door carries its validated Plant pack and first production workflow into guided setup.',
+    doors: validatePlantBusinessTemplates().map((template) => ({
+      id: template.id,
+      name: template.name.en,
+      note: template.description,
+      href: guidedTemplateRoute('plant', plantWorkflowTemplate.id, { pack: template.industryPackId }),
+    })),
+  },
+  website: {
+    title: 'Choose the first job for your website.',
+    intro: 'Start from one validated layout, then review the local draft before any publishing decision.',
+    doors: validatedProductTemplates('website', 3).map((template) => ({
+      id: template.id,
+      name: template.name,
+      note: template.outcome,
+      href: guidedTemplateRoute('website', template.id),
+    })),
+  },
+  ecommerce: {
+    title: 'Choose the first ordering workflow.',
+    intro: 'Start with one validated Shop-connected request flow while Shop remains the operating record.',
+    doors: validatedProductTemplates('ecommerce', 3).map((template) => ({
+      id: template.id,
+      name: template.name,
+      note: template.outcome,
+      href: guidedTemplateRoute('ecommerce', template.id),
+    })),
+  },
+}
+
+function firstJobTemplatesHtml(productId) {
+  const section = FIRST_JOB_TEMPLATE_SECTIONS[productId]
+  if (!section) return ''
+  const hrefs = section.doors.map((door) => door.href)
+  assert(new Set(hrefs).size === hrefs.length, `public_template_route_duplicate:${productId}`)
+  return `<section class="frame section" id="first-job-templates"><div class="section-head"><span class="eyebrow">${escapeHtml(section.doors.length)} validated starting points</span><h2>${escapeHtml(section.title)}</h2><p>${escapeHtml(section.intro)}</p></div><div class="trade-grid" aria-label="${escapeHtml(customerProductContract(productId).name)} first-job templates">${section.doors.map(({ id, name, note, href }) => `<a class="trade-card first-job-card" data-template="${escapeHtml(id)}" href="${escapeHtml(href)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div><div class="control-line"><span class="eyebrow">Browser-local setup only</span><p>Opening a door does not overwrite an existing workspace, create a managed record, contact a customer, publish or send anything, accept payment, move stock, or record revenue. Any later setup change remains an explicit reviewed action.</p></div></section>`
+}
+
+function assistedDeliverablesHtml(productId) {
+  const offers = {
+    website: {
+      title: 'A Website prepared for your business, not another builder to learn.',
+      steps: [
+        ['Share the essentials', 'Tell us what you offer, who it is for and how people should reach you. The current Website starter supports up to four featured offerings, not full menu management. Existing copy and photos are optional starting points.'],
+        ['Review your prepared pages', 'We agree the scope, then prepare a responsive layout, business copy and clear contact actions. You review names, services, images and claims before approval.'],
+        ['Approve a separate launch', 'Receive a reviewed preview and an agreed handoff. Domain ownership, publishing, maintenance and any forms are scoped and checked separately.'],
+      ],
+    },
+    ecommerce: {
+      title: 'A prepared catalog with a clear path from interest to request.',
+      steps: [
+        ['Share your product list', 'Start with a list or existing catalog. We confirm product details, variants, photos and prices with you rather than inventing them.'],
+        ['Review the customer journey', 'We prepare the catalog and cart for review. Check the item details and request handoff; a request is not a confirmed order or payment.'],
+        ['Agree how requests are handled', 'Confirm who reviews requests and how availability and manual payment are checked. Live access, delivery rules and integrations require a separate agreed setup.'],
+      ],
+    },
+  }
+  const offer = offers[productId]
+  if (!offer) return ''
+  return `<section class="frame section" id="prepared-delivery"><div class="section-head"><span class="eyebrow">Done with SuperMega</span><h2>${escapeHtml(offer.title)}</h2><p>No builder experience needed. Scope, price and timing are agreed before work begins.</p></div><ol class="delivery-steps">${offer.steps.map(([title, body]) => `<li><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></li>`).join('')}</ol><p class="delivery-summary">We prepare your agreed deliverables from approved material. You review facts and image rights; nothing is published, sent or charged automatically. The free sample is optional and is not a live service.</p></section>`
 }
 
 function productLandingHtml(product, page) {
-  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
+  const guidedSample = guidedSampleAction(product)
+  const assistedSetup = assistedSetupAction(product)
+  const leadingAction = product.id === 'shop' ? SHOP_PROFIT_CONTROL_ACTION : assistedSetup
+  const actionsHtml = product.id === 'shop'
+    ? `<a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a><a class="button" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
+    : `<a class="button primary" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a><a class="button" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a>`
   const description = page.description || product.description
   const moduleItems = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
+  const firstLoop = productFirstOperatingLoop(product)
   const launchModuleLimit = manifest.templatePackPolicy.maxEnabledModulesAtLaunch
   assert(Number.isSafeInteger(launchModuleLimit) && launchModuleLimit >= 1 && launchModuleLimit <= 8, 'launch_module_limit_invalid')
   const launchModules = moduleItems.slice(0, launchModuleLimit)
@@ -459,12 +654,15 @@ function productLandingHtml(product, page) {
     shareImage: `/og-card-${product.id}.png`,
     schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
     content: `<main id="content">
-    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${escapeHtml(setupLabel)}</a></div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
+    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions">${actionsHtml}</div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
+    ${assistedDeliverablesHtml(product.id)}
+    <section class="frame section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">${product.id === 'shop' ? 'First operating loop' : 'Optional sample walkthrough'}</span><h2>${product.id === 'shop' ? `Start with one ${escapeHtml(product.name)} job.` : 'Want to explore the example first?'}</h2><p>${product.id === 'shop' ? 'This is the path a new owner should understand before looking at advanced modules.' : 'You can request assisted setup without completing this sample. These steps explain the local example, not work you must do before contacting us.'}</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
+    ${firstJobTemplatesHtml(product.id)}
     <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">Start here</span><h2>${escapeHtml(launchModules.length)} core ${escapeHtml(product.name)} workflows.</h2><p>Begin with the work used most often. Advanced tools stay inside the workspace and appear when they are relevant.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} core workflows">${launchModules.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
     ${product.id === 'shop' ? tradeTemplatesHtml() : ''}
-    <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Use the core workflow before adding complexity.</h2><p>The guided workspace runs on the owner’s device. Managed service is only for shared records, approved AI context, and infrastructure the business asks SuperMega to operate.</p></div><div class="tier-grid"><div class="tier-lane"><span class="eyebrow">Local</span><h3>Start one real job</h3><ul class="offer-model-list"><li>The ${escapeHtml(launchModules.length)} core workflows above</li><li>Backup and restore</li><li>Review before consequential actions</li></ul></div><div class="tier-lane"><span class="eyebrow">AI assisted</span><h3>Prepare, then review</h3><ul class="offer-model-list"><li>Source-backed drafts from approved records</li><li>Ranked next actions</li><li>No automatic send or payment</li></ul></div><div class="tier-lane"><span class="eyebrow">Managed</span><h3>One company workspace</h3><ul class="offer-model-list"><li>Separate client portal</li><li>Staff sign-ins and limits</li><li>Shared records with recovery controls</li></ul></div></div></section>
+    <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Use the core workflow before adding complexity.</h2><p>The guided workspace runs on the owner’s device. Managed service is scoped separately for shared records and infrastructure the business asks SuperMega to operate.</p></div><div class="tier-grid"><div class="tier-lane"><span class="eyebrow">Local</span><h3>Start one real job</h3><ul class="offer-model-list"><li>The ${escapeHtml(launchModules.length)} core workflows above</li><li>Backup and restore</li><li>Review before consequential actions</li></ul></div><div class="tier-lane"><span class="eyebrow">Assisted setup</span><h3>Prepare, then review</h3><ul class="offer-model-list"><li>Agreed setup from approved business information</li><li>Review scope and delivery before activation</li><li>No automatic send or payment</li></ul></div><div class="tier-lane"><span class="eyebrow">Managed</span><h3>One company workspace</h3><ul class="offer-model-list"><li>Separate client portal</li><li>Staff sign-ins and limits</li><li>Shared records with recovery controls</li></ul></div></div></section>
     <section class="frame trust-strip" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
-    <section class="frame section"><div class="closing-strip"><div><h2>Free product. Managed intelligence.</h2><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></div><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a></div></section>
+    <section class="frame section"><div class="closing-strip"><div><h2>Free product. Managed intelligence.</h2><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></div><a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a></div></section>
   </main>`,
   })
 }
@@ -484,8 +682,9 @@ const contactScript = `<script>(function(){
     var valid=values.proof_contract==='supermega.managed_trial_proof.v2'&&values.proof_version==='2'&&/^sha256:[0-9a-f]{64}$/.test(values.proof_digest)&&/^(shop|plant|website|ecommerce)$/.test(values.proof_product)&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(values.proof_template)&&boundedInteger(values.proof_readiness,100)&&boundedInteger(values.proof_sources,1000000)&&boundedInteger(values.proof_behavior,1000000)&&boundedInteger(values.proof_decisions,1000000)&&/^(not_started|collecting|target_met|improved|unchanged|regressed)$/.test(values.proof_outcome)&&outcomeDigestValid&&/^(true|false)$/.test(values.proof_outcome_accepted)&&(!outcomeAccepted||/^(target_met|improved)$/.test(values.proof_outcome))&&values.proof_raw_records==='false'&&values.proof_product===(query.get('product')||'')&&values.proof_template===(query.get('template')||'')&&contextValid;
     return {attempted:true,proof:valid?values:null};
   }
-  var requestedProduct=query.get('product'),managedIntelligenceRequest=query.get('source')==='managed-intelligence';if(product&&/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||''))product.value=requestedProduct;
-  if(query.get('template')&&template)template.value=query.get('template');
+  var requestedProduct=query.get('product'),managedIntelligenceRequest=query.get('source')==='managed-intelligence';if(product&&${JSON.stringify(['guide', ...publicProducts.map(item => item.id)])}.includes(requestedProduct||''))product.value=requestedProduct;
+  var requestedTemplate=query.get('template')||'';
+  if(template&&product&&requestedProduct!=='guide'&&product.value===requestedProduct&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(requestedTemplate))template.value=requestedTemplate;
   if(handoff.get('company')&&company)company.value=handoff.get('company').slice(0,180);
   if(handoff.get('goal')&&goal)goal.value=handoff.get('goal').slice(0,4000);
   var claimInput=form.querySelector('[name="trial_claim_code"]'),claimValue=(handoff.get('claim')||'').toUpperCase();
@@ -499,13 +698,24 @@ const contactScript = `<script>(function(){
     if(!proof)return;
     if(proof.proof_product===(product&&product.value||'')&&proof.proof_template===(template&&template.value.trim().toLowerCase()||''))return;
     proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;
-    if(copyHeading)copyHeading.textContent='Your setup is ready.';if(copy)copy.textContent='Only the company and goal remain attached. The trial summary was removed because the product or template changed.';status.textContent='Trial summary detached. Review the updated request before sending.';
+    if(copyHeading)copyHeading.textContent='Your brief is ready to review.';if(copy)copy.textContent='Only the company and goal remain attached. The trial summary was removed because the product or template changed.';status.textContent='Trial summary detached. Review the updated request before sending.';
   }
-  if(product)product.addEventListener('change',detachProofIfChanged);
+  function updateBriefHint(){
+    if(!goal)return;
+    var hints={
+      website:'What does your business offer, who should the Website reach, and what should visitors do? Existing text or photos are optional. Do not paste passwords or customer records.',
+      ecommerce:'What do you sell, roughly how many products, and how should you receive customer requests? Mention delivery or collection needs. Do not paste payment slips or customer records.',
+      shop:'What type of shop do you run, which devices do staff use, and what is the main daily task to improve? Do not paste customer records or payment details.',
+      guide:'Tell us your business type and the main result you need. We can help choose the right service. Do not paste passwords, payment details or customer records.'
+    };
+    goal.placeholder=hints[product&&product.value]||hints.guide;
+  }
+  updateBriefHint();
+  if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateBriefHint()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(managedIntelligenceRequest&&!handoff.toString()){
     if(heading)heading.textContent='Request managed company intelligence.';
-    if(lede)lede.textContent='Describe the first Shop, Plant, Website, or Ecommerce workflow that should use approved company context.';
+    if(lede)lede.textContent='Describe the first ${escapeHtml(publicProductNames)} workflow that should use approved company context.';
     if(copyHeading)copyHeading.textContent='Start with one proven workflow.';
     if(copy)copy.textContent='We will confirm the records, responsible owner, acceptance test, tenant boundary, recovery plan, and actions that must stay review-gated.';
     submit.textContent='Request managed pilot';
@@ -514,18 +724,26 @@ const contactScript = `<script>(function(){
     var productName=product&&product.selectedOptions.length?product.selectedOptions[0].textContent:'managed AI';
     if(heading)heading.textContent='Finish your '+productName+' request.';
     if(lede)lede.textContent='Your company and goal are already filled. Add your name and reply email, review the request, then send it.';
-    if(copyHeading)copyHeading.textContent=proof?'Your trial proof is attached.':'Your setup is ready.';
+    if(copyHeading)copyHeading.textContent=proof?'Your trial proof is attached.':'Your brief is ready to review.';
     if(copy)copy.textContent=proof?'Readiness, source count, behavior count, reviewed decisions, and the digest-bound outcome summary move forward. Raw records, questions, approval contents, and account details stay out.':'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.';
     status.textContent=proof?'Trial summary attached for review. Nothing has been sent.':proofResult.attempted?'Company and goal are ready. Trial proof was not attached because it did not match this request.':'Company and goal are ready for review from your AI memory.';
     history.replaceState(null,'',location.pathname+location.search);
   }
+  var unconfirmedPayload=null,submittedFields=null;
+  function warnUnconfirmedNavigation(event){if(unconfirmedPayload){event.preventDefault();event.returnValue=true;}}
   form.addEventListener('submit',async function(event){
-    event.preventDefault();status.textContent='Sending...';submit.disabled=true;if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';
-    var payload=Object.fromEntries(new FormData(form).entries());
+    event.preventDefault();if(submit.disabled)return;status.textContent='Sending...';submit.disabled=true;var deadline;
     try{
-      var response=await fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:JSON.stringify(payload)});
-      var body=await response.json().catch(function(){return {}});if(!response.ok)throw new Error(body.reason||'send_failed');form.reset();requestKey.value='';status.textContent='Request received: '+(body.request_id||'confirmed')+'. Keep this ID for follow-up.';
-    }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached trial summary changed or does not match this request. Open the request again from SuperMega.':'Could not route the request here. Please wait and try again.';}finally{submit.disabled=false;}
+      if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';
+      if(!unconfirmedPayload){submittedFields=JSON.stringify(Object.fromEntries(new FormData(form).entries()));unconfirmedPayload=submittedFields;}
+      var payload=unconfirmedPayload;
+      window.addEventListener('beforeunload',warnUnconfirmedNavigation);
+      status.textContent='Sending... Keep this page open until receipt is confirmed.';
+      var controller=new AbortController();
+      var pending=fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:payload,signal:controller.signal}).then(async function(response){return {response:response,body:await response.json().catch(function(){return null})}});
+      var result=await Promise.race([pending,new Promise(function(resolve,reject){deadline=setTimeout(function(){reject(new Error('receipt_unconfirmed'));controller.abort()},20000)})]);
+var response=result.response,body=result.body;if(!response.ok){if(response.status===400&&body&&body.status==='error'&&['invalid_request','required_fields_missing','product_not_supported','trial_proof_invalid','idempotency_key_required'].includes(body.reason)){unconfirmedPayload=null;submittedFields=null;requestKey.value='';status.textContent=body.reason==='trial_proof_invalid'?'The attached trial summary is invalid. Your brief is still here. Reopen the request from SuperMega without the invalid summary.':'This brief was rejected before delivery. Your details are still here. Check the required fields and product, then submit your corrected brief.';return;}throw new Error(body&&body.reason||'send_failed');}if(!body||body.status!=='ready'||typeof body.request_id!=='string'||!/^LEAD-[0-9A-F]{16}$/.test(body.request_id)||typeof body.proof_bound!=='boolean')throw new Error('receipt_unconfirmed');var edited=JSON.stringify(Object.fromEntries(new FormData(form).entries()))!==submittedFields;if(!edited){form.reset();proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;updateBriefHint();}requestKey.value='';unconfirmedPayload=null;submittedFields=null;status.textContent='Request received: '+body.request_id+'. Keep this ID for follow-up. Next step: SuperMega reviews your brief to confirm scope, price and timing. This receipt does not confirm an email reply, create an account, take payment or make anything live.'+(edited?' Your later edits are still here and have not been sent. Submit them separately if needed.':'');
+    }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached trial summary changed or does not match this request. Open the request again from SuperMega.':'We could not confirm receipt. Your details are still here. Please try again; the same request reference will be reused.';if(unconfirmedPayload)status.textContent+=' Retry sends the original brief, not later edits. Later edits stay here until the original receipt is confirmed. Keep this page open and retry here; reloading or closing it loses this retry state.';}finally{clearTimeout(deadline);if(!unconfirmedPayload)window.removeEventListener('beforeunload',warnUnconfirmedNavigation);submit.disabled=false;}
   });
 })();</script>`
 
@@ -535,8 +753,8 @@ const publicSecurityHeaders = {
   'content-security-policy': `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-${inlineDigest(contactScriptBody)}'; script-src-attr 'none'; style-src 'self' 'sha256-${inlineDigest(sharedStyle)}'; style-src-attr 'none'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; media-src 'none'; worker-src 'none'; manifest-src 'self'`,
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
-  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
-  'referrer-policy': 'strict-origin-when-cross-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
 }
@@ -544,14 +762,14 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Start a system</span><h1 data-contact-heading>What should run better?</h1><p class="lede" data-contact-lede>Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2 data-contact-copy-heading>Start with the work.</h2><p data-contact-copy>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Client-provided trial proof</span><h3>Reviewed setup summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Setup by SuperMega</span><h1 data-contact-heading>Tell us what your business needs.</h1><p class="lede" data-contact-lede>We build your Website or Ecommerce catalog, or set up Shop for daily sales. Tell us the result you need; no builder experience required.</p></section><section class="contact-layout"><div class="contact-copy"><h2 data-contact-copy-heading>We set it up. You review.</h2><p data-contact-copy>First we confirm your needs, scope, price and timing. Once agreed, we prepare a preview for your review. Going live is a separate step after approval.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Client-provided trial proof</span><h3>Reviewed setup summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Your business brief</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>What do you need?<select name="product"><option value="guide">Help me choose</option>${publicProducts.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')}</select></label><input type="hidden" name="template" maxlength="120" /><label class="wide">What would you like us to prepare?<textarea name="goal" required maxlength="4000" placeholder="For example: a website for my salon, a catalog for customer requests, or Shop set up for my retail counter."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Request setup</button><p class="form-note">We use your details to respond. Sending this brief does not create an account, connect data, publish anything or start automation.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the seven public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
 const notFoundHtml = documentHtml({
@@ -594,7 +812,7 @@ const RATE_LIMIT = 5
 const RATE_WINDOW_MS = 10 * 60 * 1000
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const CACHE_LIMIT = 2000
-const CONTACT_FINGERPRINT_CURRENT_VERSION = 2
+const CONTACT_FINGERPRINT_CURRENT_VERSION = 3
 const CONTACT_FINGERPRINT_LEGACY_VERSION = 1
 const CONTACT_FINGERPRINT_ALGORITHM = 'sha256'
 const TRIAL_PROOF_CONTRACT = 'supermega.managed_trial_proof.v2'
@@ -603,6 +821,7 @@ const TRIAL_PROOF_BASE_FIELDS = ['proof_contract', 'proof_version', 'proof_diges
 const APPROVED_CONTEXT_FIELDS = ['proof_context_contract', 'proof_context_digest', 'proof_context_outcome_digest', 'proof_context_approved', 'proof_context_raw_records']
 const TRIAL_PROOF_FIELDS = [...TRIAL_PROOF_BASE_FIELDS, ...APPROVED_CONTEXT_FIELDS]
 const replayCache = new Map()
+const inFlightRequests = new Map()
 const rateBuckets = new Map()
 
 const text = (value, max = 4000) => String(value || '').trim().slice(0, max)
@@ -612,7 +831,7 @@ const idempotencySecret = () => {
   const value = env('SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET')
   return value.length >= 32 ? value : ''
 }
-const deliveryConfigured = () => Boolean((env('SUPABASE_URL') && env('SUPABASE_SERVICE_ROLE_KEY')) || env('RESEND_API_KEY') || (env('TELEGRAM_BOT_TOKEN') && env('TELEGRAM_CHAT_ID')) || env('SUPERMEGA_LEAD_WEBHOOK_URL'))
+const deliveryConfigured = () => Boolean(env('SUPABASE_URL') && env('SUPABASE_SERVICE_ROLE_KEY'))
 const configured = () => Boolean(idempotencySecret() && deliveryConfigured())
 
 function send(res, statusCode, body, headers = {}) {
@@ -646,10 +865,14 @@ function privacyUrl(value, max = 700) {
   if (!source) return ''
   try {
     const parsed = new URL(source)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return ''
+    parsed.username = ''
+    parsed.password = ''
+    parsed.search = ''
     parsed.hash = ''
     return text(parsed.toString(), max)
   } catch {
-    return text(source.split('#')[0], max)
+    return ''
   }
 }
 
@@ -757,7 +980,21 @@ function keyedDigest(value) {
 }
 
 function fingerprintVersion(safe) {
-  return safe.trial_proof ? CONTACT_FINGERPRINT_CURRENT_VERSION : CONTACT_FINGERPRINT_LEGACY_VERSION
+  return CONTACT_FINGERPRINT_CURRENT_VERSION
+}
+
+// Historical URL projections are used only in memory to reconcile exact old
+// retries. They must never be written back or sent to a notification channel.
+function historicalFingerprints(payload, safe) {
+  const oldUrl = (value) => {
+    const source = text(value, 700)
+    if (!source) return ''
+    try { const parsed = new URL(source); parsed.hash = ''; return text(parsed.toString(), 700) }
+    catch { return text(source.split('#')[0], 700) }
+  }
+  const previous = { ...safe, source_url: oldUrl(payload.source_url), referrer: oldUrl(payload.referrer) }
+  const version = safe.trial_proof ? 2 : 1
+  return { [version]: payloadFingerprint(previous, version) }
 }
 
 function payloadFingerprint(safe, version = fingerprintVersion(safe)) {
@@ -809,7 +1046,7 @@ function sourceAttribution(sourceUrl) {
     if (source.protocol !== 'https:' && source.protocol !== 'http:') return fallback
     const campaign = (name) => text(source.searchParams.get(name), 160)
     return {
-      page_path: text(source.pathname + source.search, 700) || '/contact/',
+    page_path: text(source.pathname, 700) || '/contact/',
       utm_source: campaign('utm_source'),
       utm_medium: campaign('utm_medium'),
       utm_campaign: campaign('utm_campaign'),
@@ -819,6 +1056,17 @@ function sourceAttribution(sourceUrl) {
   } catch {
     return fallback
   }
+}
+
+function deliveryNextStep(workflow) {
+  const steps = {
+    commerce: 'Validate the Shop trade, import source and first-sale workflow; return one scoped setup plan.',
+    website: 'Validate the public source material and desired contact action; prepare the page plan and preview scope.',
+    ecommerce: 'Validate the catalog source, request flow and Shop handoff; prepare the catalog cleanup scope.',
+    production: 'Validate the operating workflow, accountable roles and sample boundary; prepare the Plant setup scope.',
+    guide: 'Choose the smallest suitable product path and return one scoped setup recommendation.',
+  }
+  return steps[text(workflow, 40).toLowerCase()] || steps.guide
 }
 
 function recordFrom(safe, req, idempotencyKey, fingerprint) {
@@ -851,7 +1099,7 @@ function recordFrom(safe, req, idempotencyKey, fingerprint) {
     lead_stage: 'new',
     status: 'new',
     owner: 'SuperMega',
-    next_step: 'Review the workflow and reply with the smallest useful next step.',
+    next_step: deliveryNextStep(safe.product),
     submitted_at: submittedAt,
     raw: {
       ...contactSafe,
@@ -897,12 +1145,12 @@ function storedFingerprint(row) {
     !marker ||
     typeof marker !== 'object' ||
     Array.isArray(marker) ||
-    ![CONTACT_FINGERPRINT_LEGACY_VERSION, CONTACT_FINGERPRINT_CURRENT_VERSION].includes(marker.version) ||
+    ![CONTACT_FINGERPRINT_LEGACY_VERSION, 2, CONTACT_FINGERPRINT_CURRENT_VERSION].includes(marker.version) ||
     marker.algorithm !== CONTACT_FINGERPRINT_ALGORITHM ||
     typeof marker.payload_fingerprint !== 'string' ||
     !/^[a-f0-9]{64}$/.test(marker.payload_fingerprint)
   ) throw new Error('lead_store_fingerprint_ambiguous')
-  return { fingerprint: marker.payload_fingerprint, legacy: false }
+  return { fingerprint: marker.payload_fingerprint, version: marker.version, legacy: false }
 }
 
 async function responseRows(response) {
@@ -928,10 +1176,10 @@ async function fetchSupabaseLead(base, key, leadId) {
   return rows[0]
 }
 
-async function saveSupabase(record, fingerprint) {
+async function saveSupabase(record, fingerprint, historical) {
   const base = env('SUPABASE_URL').replace(/\\/$/, '')
   const key = env('SUPABASE_SERVICE_ROLE_KEY')
-  if (!base || !key) return { status: 'skipped' }
+  if (!base || !key) throw new Error('lead_store_unconfigured')
   const response = await fetch(base + '/rest/v1/supermega_leads?on_conflict=lead_id', { method: 'POST', headers: { apikey: key, authorization: 'Bearer ' + key, 'content-type': 'application/json', prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify(record), signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('lead_store_' + response.status)
   const rows = await responseRows(response)
@@ -947,7 +1195,8 @@ async function saveSupabase(record, fingerprint) {
   // lead_id already existed; the exact follow-up read resolves replay vs conflict.
   const existing = await fetchSupabaseLead(base, key, record.lead_id)
   const persisted = storedFingerprint(existing)
-  if (persisted.fingerprint !== fingerprint) return { status: 'conflict', channel: 'lead_store' }
+  const expected = persisted.version && persisted.version < CONTACT_FINGERPRINT_CURRENT_VERSION ? historical[persisted.version] : fingerprint
+  if (persisted.fingerprint !== expected) return { status: 'conflict', channel: 'lead_store' }
   return { status: 'ready', channel: 'lead_store', created: false, legacy: persisted.legacy }
 }
 
@@ -956,7 +1205,7 @@ async function sendResend(record) {
   if (!key) return { status: 'skipped' }
   const to = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
-  const body = ['New SuperMega request', '', 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected'), 'Company: ' + record.company, 'Name: ' + record.name, 'Email: ' + record.email].concat(record.raw.trial_claim_code ? ['Trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', record.goal, '', 'Source: ' + record.source_url, 'Lead: ' + record.lead_id]).join('\\n')
+  const body = ['New SuperMega request', '', 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected'), 'Company: ' + record.company, 'Name: ' + record.name, 'Email: ' + record.email].concat(record.raw.trial_claim_code ? ['Trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Operator next step: ' + record.next_step, '', 'Customer brief:', record.goal, '', 'Source: ' + record.source_url, 'Lead: ' + record.lead_id]).join('\\n')
   const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-email/' + record.lead_id }, body: JSON.stringify({ from, to: [to], reply_to: record.email, subject: 'SuperMega request — ' + record.company, text: body }), signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('email_' + response.status)
   return { status: 'ready', channel: 'email' }
@@ -966,7 +1215,7 @@ async function sendTelegram(record) {
   const token = env('TELEGRAM_BOT_TOKEN')
   const chatId = env('TELEGRAM_CHAT_ID')
   if (!token || !chatId) return { status: 'skipped' }
-  const message = ['New SuperMega request', record.company + ' · ' + record.name, record.email, 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected')].concat(record.raw.trial_claim_code ? ['Claim: ' + record.raw.trial_claim_code] : []).concat(['', record.goal, '', record.lead_id]).join('\\n').slice(0, 3900)
+  const message = ['New SuperMega request', record.company + ' · ' + record.name, record.email, 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected')].concat(record.raw.trial_claim_code ? ['Claim: ' + record.raw.trial_claim_code] : []).concat(['', 'Next: ' + record.next_step, '', 'Customer brief:', record.goal, '', record.lead_id]).join('\\n').slice(0, 3900)
   const response = await fetch('https://api.telegram.org/bot' + token + '/sendMessage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text: message, disable_web_page_preview: true }), signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('telegram_' + response.status)
   return { status: 'ready', channel: 'telegram' }
@@ -981,13 +1230,28 @@ async function sendWebhook(record) {
   return { status: 'ready', channel: 'webhook' }
 }
 
+function acknowledgementPlan(workflow) {
+  const plans = {
+    commerce: 'For Shop, we prepare a reviewed import, suitable trade defaults and a ready-to-review first-sale workspace.',
+    website: 'For Website, we prepare the page plan, starter copy and responsive preview for your review.',
+    ecommerce: 'For Ecommerce, we prepare a cleaned catalog structure, customer view and request-to-Shop handoff for your review.',
+    production: 'For Plant, we prepare the operating workflow, role boundaries and sample workspace for your review.',
+    guide: 'For a guided recommendation, we review the brief and return the smallest suitable SuperMega setup path.',
+  }
+  return plans[recordWorkflow(workflow)] || plans.guide
+}
+
+function recordWorkflow(value) {
+  return text(value, 40).toLowerCase()
+}
+
 async function sendCustomerAcknowledgement(record) {
   const key = env('RESEND_API_KEY')
   if (!key) return { status: 'skipped' }
   if (!emailOk(record.email)) return { status: 'skipped' }
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
   const replyTo = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
-  const body = ['Hi ' + record.name + ',', '', 'Thanks for reaching out to SuperMega. Your request for ' + record.workflow + ' is in.', '', 'What happens next:', '1. A founder reads every request personally.', '2. You get a reply from a real person, usually within one business day.', '3. Your trial keeps working on your device the whole time.', '', 'Your reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Your trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply to this email any time. It reaches the founder directly.', '', 'SuperMega - https://supermega.dev']).join('\\n')
+  const body = ['Hi ' + record.name + ',', '', 'Thanks for contacting SuperMega. We received your setup request for ' + record.company + '.', '', 'No action is needed from you now. We will review this brief and reply with one scoped next step.', '', acknowledgementPlan(record.workflow), '', 'What happens next:', '1. We confirm the scope, price and timing with you.', '2. Once agreed, SuperMega prepares the setup or preview. You review the result instead of building it yourself.', '3. Going live is a separate step after your approval and readiness checks.', '', 'If private files are needed, we will provide a safe transfer method after scope confirmation. Do not email passwords, payment slips or customer records.', '', 'This receipt does not create an account, publish a site, connect your business data or take payment.', '', 'Your reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Your trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply only if you have a question or correction, and keep the reference above.', '', 'SuperMega - https://supermega.dev']).join('\\n')
   const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-ack/' + record.lead_id }, body: JSON.stringify({ from, to: [record.email], reply_to: replyTo, subject: 'We received your request - SuperMega', text: body }), signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('ack_email_' + response.status)
   return { status: 'ready', channel: 'ack_email' }
@@ -1023,13 +1287,18 @@ module.exports = async function handler(req, res) {
   const cached = replayCache.get(cacheKey)
   if (cached && cached.fingerprint !== fingerprint) { send(res, 409, { status: 'error', reason: 'idempotency_conflict' }); return }
   if (cached) { send(res, 202, cached.body, { 'x-idempotent-replay': 'true' }); return }
+  const pendingFingerprint = inFlightRequests.get(cacheKey)
+  if (pendingFingerprint) { send(res, 409, { status: 'error', reason: pendingFingerprint === fingerprint ? 'request_in_progress' : 'idempotency_conflict' }, { 'retry-after': '2' }); return }
+  if (inFlightRequests.size >= CACHE_LIMIT) { send(res, 503, { status: 'error', reason: 'contact_busy' }, { 'retry-after': '2' }); return }
 
   const rate = localRateLimit(req, now)
   if (!rate.allowed) { send(res, 429, { status: 'error', reason: 'rate_limited' }, { 'retry-after': String(rate.retryAfter) }); return }
 
+  inFlightRequests.set(cacheKey, fingerprint)
+  try {
   const record = recordFrom(safe, req, idempotencyKey, fingerprint)
   let storeResult
-  try { storeResult = await saveSupabase(record, fingerprint) } catch {
+  try { storeResult = await saveSupabase(record, fingerprint, historicalFingerprints(payload, safe)) } catch {
     send(res, 503, { status: 'error', reason: 'contact_persistence_unavailable', fallback_email: 'swanhtet@supermega.dev' })
     return
   }
@@ -1044,12 +1313,16 @@ module.exports = async function handler(req, res) {
     return
   }
 
-  const attempts = await Promise.allSettled([Promise.resolve(storeResult), sendResend(record), sendTelegram(record), sendWebhook(record)])
-  const ready = attempts.some((attempt) => attempt.status === 'fulfilled' && attempt.value?.status === 'ready')
-  if (!ready) { send(res, 503, { status: 'error', reason: 'contact_channel_unavailable', fallback_email: 'swanhtet@supermega.dev' }); return }
+  if (storeResult.status !== 'ready') { send(res, 503, { status: 'error', reason: 'contact_persistence_unavailable' }); return }
+  // Receipt confirms retained storage, never notification delivery. Unknown
+  // notification outcomes are not retried by a cold replay of the saved lead.
+  await Promise.allSettled([sendResend(record), sendTelegram(record), sendWebhook(record)])
   try { await sendCustomerAcknowledgement(record) } catch {}
   replayCache.set(cacheKey, { fingerprint, body: acceptedBody, expiresAt: now + IDEMPOTENCY_TTL_MS })
   send(res, 202, acceptedBody)
+  } finally {
+    inFlightRequests.delete(cacheKey)
+  }
 }
 `
 
@@ -1061,11 +1334,16 @@ const pageFiles = new Map([
 ])
 
 for (const page of manifest.pages.filter((entry) => entry.productId)) {
-  const product = publicProducts.find((candidate) => candidate.id === page.productId)
+  const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
   assert(product, `landing_page_product_missing:${page.productId}`)
   assert(page.route === `/${product.id}/` && page.file === `${product.id}/index.html`, `landing_page_route_drift:${page.route}`)
   assert(page.liveGate === 'post-release', `landing_page_live_gate_missing:${page.route}`)
-  pageFiles.set(page.file, productLandingHtml(product, page))
+  pageFiles.set(page.file, publicProducts.includes(product) ? productLandingHtml(product, page) : documentHtml({
+    route: page.route, title: product.name + ' | Retained workspace access',
+    description: 'Compatibility access for retained workspaces. Not offered for new-product setup.',
+    robots: 'noindex,follow',
+    content: `<main class="frame" id="content"><section class="page-hero"><h1>${escapeHtml(product.name)} retained records</h1><p>This product is not offered for new setup. Existing workspace records are preserved; nothing is deleted or migrated by this page.</p><a class="button" href="/#products">View current products</a></section></main>`,
+  }))
 }
 
 const vercelConfig = {
@@ -1076,8 +1354,9 @@ const vercelConfig = {
     { src: '^/api/contact-submissions/?$', dest: '/api/contact-submissions.js' },
     { src: '^/api/health/?$', dest: '/api/health.js' },
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
-    ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: redirect.destination } })),
+    ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: manifest.customerProducts.some(product => product.publicAnchor === redirect.destination && !publicProducts.includes(product)) ? `/${manifest.customerProducts.find(product => product.publicAnchor === redirect.destination).id}/` : redirect.destination } })),
     { src: '^/__release\\.json$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
+    { src: '^/vercel-insights\\.js$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
     { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
     { handle: 'filesystem' },
     { src: '^/(.*)$', status: 404, dest: '/404.html' },
@@ -1087,7 +1366,7 @@ const vercelConfig = {
 async function writeStatic(relativePath, content) {
   const destination = resolve(staticDir, relativePath)
   await mkdir(dirname(destination), { recursive: true })
-  await writeFile(destination, content, 'utf8')
+  await writeFile(destination, relativePath.endsWith('.html') ? bindPreviewNavigation(content, previewAppBinding) : content, 'utf8')
 }
 
 async function writeFunction(name, source) {
@@ -1098,17 +1377,21 @@ async function writeFunction(name, source) {
   await writeFile(resolve(functionDir, '.vc-config.json'), `${JSON.stringify({ handler: 'index.js', runtime: 'nodejs24.x', architecture: 'x86_64', environment: {}, shouldDisableAutomaticFetchInstrumentation: false, launcherType: 'Nodejs', shouldAddHelpers: true, shouldAddSourcemapSupport: false, awsLambdaHandler: '' }, null, 2)}\n`, 'utf8')
 }
 
+if (previewAppBinding) {
+  vercelConfig.routes.unshift({ src: '^/(.*)$', headers: { 'X-Robots-Tag': 'noindex, noarchive' }, continue: true })
+}
 await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
 await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
 await writeStatic('favicon.svg', faviconSvg)
+await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
 for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)
-await writeStatic('robots.txt', 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
-await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${manifest.pages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><lastmod>${release.generatedAt.slice(0, 10)}</lastmod><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)
+await writeStatic('robots.txt', previewAppBinding ? 'User-agent: *\nDisallow: /\n' : 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
+await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${discoverablePages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><lastmod>${release.generatedAt.slice(0, 10)}</lastmod><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)
 await writeStatic('site.webmanifest', `${JSON.stringify({ name: 'SuperMega', short_name: 'SuperMega', start_url: '/', display: 'browser', background_color: brand.colors.background, theme_color: brand.colors.background, icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }] }, null, 2)}\n`)
 
 await writeFunction('health.js', healthFunction)

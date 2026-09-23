@@ -26,6 +26,7 @@ export type WebsiteStarterBrief = {
   offer: string
   proof: string
   contactHref: string
+  offerings?: string
 }
 
 export type WebsiteStarterBriefIssue = {
@@ -78,6 +79,13 @@ function isCanonicalTimestamp(value: string) {
 export function websiteStarterBriefIssues(brief: WebsiteStarterBrief) {
   const issues: WebsiteStarterBriefIssue[] = []
   const contactHref = normalizedLine(brief.contactHref)
+  const offerings = (brief.offerings ?? '').split(/\r?\n/u).filter((line) => line.trim())
+  if (offerings.length > 4 || offerings.some((line) => {
+    const separator = line.indexOf('|')
+    return separator < 1 || !isBoundedLine(line.slice(0, separator), 80) || !isBoundedLine(line.slice(separator + 1), 360)
+  })) {
+    issues.push({ field: 'offerings', message: 'Add up to four entries, one per line: name | description, with optional price or duration. Names must be at most 80 characters and details at most 360.' })
+  }
 
   if (!websiteStarterTemplates.some((template) => template.id === brief.templateId)) {
     issues.push({ field: 'templateId', message: 'Choose a supported website layout.' })
@@ -92,7 +100,7 @@ export function websiteStarterBriefIssues(brief: WebsiteStarterBrief) {
     issues.push({ field: 'offer', message: 'Describe the main offer in 140 characters or fewer.' })
   }
   if (!isBoundedLine(brief.proof, 360)) {
-    issues.push({ field: 'proof', message: 'Add one supportable fact in 360 characters or fewer.' })
+    issues.push({ field: 'proof', message: 'Add useful contact guidance or a verified business fact in 360 characters or fewer.' })
   }
   if (contactHref && (contactHref.length > 160 || !isSafeHttpsDestination(contactHref))) {
     issues.push({ field: 'contactHref', message: 'Use a complete HTTPS contact link or leave it blank.' })
@@ -147,6 +155,10 @@ export function applyWebsiteStarterBrief(
   const offer = normalizedLine(brief.offer)
   const proof = normalizedLine(brief.proof)
   const contactHref = normalizedLine(brief.contactHref)
+  const offeringSections = (brief.offerings ?? '').split(/\r?\n/u).filter((line) => line.trim()).map((line, index) => {
+    const separator = line.indexOf('|')
+    return { id: `${secondary.id}-offering-${index + 1}`, eyebrow: 'What we offer', title: normalizedLine(line.slice(0, separator)), body: normalizedLine(line.slice(separator + 1)) }
+  })
   const secondaryPage = brief.templateId === 'business-presence'
     ? { name: 'About', slug: '/about', eyebrow: 'Our business', headline: `Why ${businessName} exists`, sectionEyebrow: 'How we work', sectionTitle: 'Clear service, clear next step.' }
     : brief.templateId === 'lead-generation'
@@ -154,6 +166,11 @@ export function applyWebsiteStarterBrief(
       : { name: 'Catalog', slug: '/catalog', eyebrow: 'Catalog', headline: `Explore ${businessName}`, sectionEyebrow: 'Products and packages', sectionTitle: 'Start with the right option.' }
   const contactDestination = contactHref || '/contact'
   const contactDescription = boundedSeoDescription(`Contact ${businessName} about ${offer}`)
+  const inquiry = brief.templateId === 'business-presence'
+    ? { label: 'Ask about our business', title: 'Is this the right business for you?', body: 'Tell us which service or information you need, your location if relevant, and how you would like to be contacted.', nextTitle: 'Make an informed first contact', nextBody: 'Read the business information, then ask about anything you need confirmed before making a decision.' }
+    : brief.templateId === 'lead-generation'
+      ? { label: 'Discuss your requirements', title: 'Prepare a useful service inquiry', body: 'Describe the result you need, the scope of the work, your preferred timing, and any constraints. Ask for the price and what is included before agreeing to proceed.', nextTitle: 'Compare scope, not just a headline price', nextBody: 'Ask what is included, what information is needed from you, and how changes will be handled. An inquiry is not a confirmed booking or quote.' }
+      : { label: 'Ask about an item', title: 'Find the right item or package', body: 'Include the item or package name, quantity, preferred variant, and whether you need pickup or delivery. Ask the business to confirm current price and availability.', nextTitle: 'Confirm the details before ordering', nextBody: 'Check the exact variant, total price, collection or delivery arrangements, and return terms. Browsing this catalog does not reserve stock or place an order.' }
 
   return {
     ...workspace,
@@ -174,7 +191,7 @@ export function applyWebsiteStarterBrief(
           ctaHref: secondaryPage.slug,
         },
         sections: [
-          { ...home.sections[0], eyebrow: 'Proof', title: `Why choose ${businessName}?`, body: proof },
+          { ...home.sections[0], eyebrow: 'Business details', title: `About ${businessName}`, body: proof },
           { ...home.sections[1], eyebrow: 'Next step', title: 'Know what happens before you contact us.', body: `Review our ${secondaryPage.name.toLowerCase()}, then use one clear contact route when you are ready.` },
         ],
         seo: { title: `${businessName} | Home`, description: offer },
@@ -190,10 +207,14 @@ export function applyWebsiteStarterBrief(
           eyebrow: secondaryPage.eyebrow,
           headline: secondaryPage.headline,
           summary: offer,
-          ctaLabel: 'Contact us',
+          ctaLabel: inquiry.label,
           ctaHref: contactDestination,
         },
-        sections: [{ ...secondary.sections[0], eyebrow: secondaryPage.sectionEyebrow, title: secondaryPage.sectionTitle, body: proof }],
+        sections: offeringSections.length ? offeringSections : [
+          { ...secondary.sections[0], eyebrow: secondaryPage.sectionEyebrow, title: secondaryPage.sectionTitle, body: proof },
+          { id: `${secondary.id}-inquiry`, eyebrow: 'Your requirements', title: inquiry.title, body: inquiry.body },
+          { id: `${secondary.id}-decision`, eyebrow: 'Before deciding', title: inquiry.nextTitle, body: inquiry.nextBody },
+        ],
         seo: { title: `${secondaryPage.name} | ${businessName}`, description: offer },
         updatedAt: capturedAt,
       },
@@ -210,7 +231,7 @@ export function applyWebsiteStarterBrief(
           ctaLabel: contactHref ? 'Open contact channel' : '',
           ctaHref: contactHref,
         },
-        sections: [{ ...contact.sections[0], eyebrow: 'Before you send', title: 'Share the need, quantity, location, and timing.', body: `This page is for ${audience}. Contact details and claims still require owner review before release.` }],
+        sections: [{ ...contact.sections[0], eyebrow: 'Before you send', title: inquiry.title, body: inquiry.body }],
         seo: { title: `Contact | ${businessName}`, description: contactDescription },
         updatedAt: capturedAt,
       },
@@ -226,7 +247,7 @@ function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteSta
       businessName,
       audience: 'customers ready to ask for help or a quote',
       offer: `Tell ${businessName} what you need and get one clear next step.`,
-      proof: 'Tell us what you need and get one clear next step. Every request is tracked from the first message to the final answer, so nothing is lost and nobody has to chase.',
+      proof: 'Describe the work, preferred timing and any constraints. Ask the business to confirm scope, price and the next step before agreeing to proceed.',
       contactHref: '',
     }
   }
@@ -236,7 +257,7 @@ function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteSta
       businessName,
       audience: 'customers comparing products or packages',
       offer: `Explore what ${businessName} offers and ask about the right option.`,
-      proof: 'Browse what is available now and ask about the option that fits. Prices and availability come from the same record the team works from, so what you see is what we can supply.',
+      proof: 'Compare the options and ask about the exact variant, current price and availability. A catalog inquiry does not reserve stock or place an order.',
       contactHref: '',
     }
   }
@@ -245,7 +266,7 @@ function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteSta
     businessName,
     audience: 'customers looking for clear company information',
     offer: `Meet ${businessName} and understand the easiest way to get help.`,
-    proof: 'Orders, questions, and delivery promises stay on one shared record, so you get a clear and consistent answer from whoever picks up.',
+    proof: 'Read the business details and ask about anything you need confirmed before visiting or choosing a service.',
     contactHref: '',
   }
 }

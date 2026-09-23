@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 
 import {
   approveWebsiteReleasePackage,
+  buildWebsiteDomainHandoff,
   buildWebsiteReleasePackage,
   createEmptyWebsiteReleaseState,
   loadWebsiteReleaseWorkspace,
   mutateWebsiteReleaseWorkspace,
+  normalizeWebsiteDomainHostname,
   prepareWebsiteDeployPlan,
   prepareWebsiteReleasePackage,
   projectWebsiteRelease,
@@ -65,6 +67,7 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
   const [projection, setProjection] = useState<WebsiteReleaseProjection | null>(null)
   const [releaseManager, setReleaseManager] = useState(managedActorId || currentApproval?.reviewer || '')
   const [releaseReviewer, setReleaseReviewer] = useState(currentApproval?.reviewer || '')
+  const [domainHostname, setDomainHostname] = useState('')
   const [includeMyanmarDraft, setIncludeMyanmarDraft] = useState(true)
   const [accent, setAccent] = useState('#087f5b')
   const [reviewConfirmed, setReviewConfirmed] = useState(false)
@@ -195,6 +198,14 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
       ? roleActor(packageValue ?? null, 'release_manager')
       : ''
   const managedRoleBlocked = Boolean(managed && assignedStepActor && assignedStepActor !== managedActorId)
+  const domainHostnameIsValid = (() => {
+    try {
+      normalizeWebsiteDomainHostname(domainHostname)
+      return true
+    } catch {
+      return false
+    }
+  })()
 
   async function saveTransition(
     kind: 'review' | 'plan',
@@ -283,6 +294,22 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
     }))
   }
 
+  function downloadDomainHandoff() {
+    if (!packageValue || !currentProjection?.approval || !currentProjection.deployPlan) return
+    const packet = buildWebsiteDomainHandoff({
+      hostname: domainHostname,
+      release: {
+        scope: currentProjection.scope,
+        headDigest: currentProjection.headDigest,
+        packageDigest: packageValue.packageDigest,
+        artifactDigest: packageValue.source.artifactDigest,
+        approvalId: currentProjection.approval.id,
+        deployPlanDigest: websiteReleaseEvidenceDigest(currentProjection.deployPlan),
+      },
+    })
+    downloadJson(`website-domain-handoff-${packet.hostname.replaceAll('.', '-')}-${packet.packetDigest.slice(7, 19)}.json`, packet)
+  }
+
   if (!publishIsCurrent || !currentPublish?.artifact || !currentApproval) {
     return (
       <section className="website-release-foundation is-locked" aria-label="Client release package">
@@ -363,14 +390,32 @@ export default function WebsiteReleaseFoundation({ managedActorId, managedRecord
         </div>
       ) : status === 'ready_for_plan' ? (
         <div className="website-release-action">
-          <p>The exact package is reviewed. The plan will stay unexecuted and rollback stays blocked until the owner binds a known-good deployment.</p>
+          <p>The exact package is reviewed. The rollout plan stays unexecuted and rollback stays blocked until the owner binds a known-good deployment.</p>
           <button className="website-button is-primary" disabled={managedRoleBlocked || Boolean(busy)} onClick={() => void preparePlan()} type="button">
             {busy === 'plan' ? 'Preparing...' : 'Prepare rollout plan'}
           </button>
         </div>
       ) : (
         <div className="website-release-action is-complete">
-          <p><strong>Ready for owner handoff.</strong> Candidate promotion and rollback both remain unexecuted.</p>
+          <p><strong>Ready for owner handoff.</strong> Candidate promotion and rollback remain unexecuted. Add a hostname below only to download a separate domain checklist.</p>
+          <label>
+            <span>Customer domain</span>
+            <input
+              autoCapitalize="none"
+              autoComplete="off"
+              inputMode="url"
+              onChange={(event) => setDomainHostname(event.target.value)}
+              placeholder="Enter a domain you control"
+              spellCheck={false}
+              value={domainHostname}
+            />
+            {domainHostname && !domainHostnameIsValid
+              ? <small role="alert">Enter an ASCII public hostname or explicit punycode only — no scheme, port, path, credentials, or local address.</small>
+              : <small>The hostname stays only in this form until download. It is not saved to Website history; ownership, provider add, DNS, HTTPS, activation, and rollback remain separate gates.</small>}
+          </label>
+          <button className="website-button is-secondary" disabled={!domainHostnameIsValid} onClick={downloadDomainHandoff} type="button">
+            Download domain handoff
+          </button>
           <button
             className="website-button is-secondary"
             onClick={() => downloadJson(`website-release-${packageValue?.packageDigest.slice(7, 19)}.json`, { state, projection: currentProjection })}

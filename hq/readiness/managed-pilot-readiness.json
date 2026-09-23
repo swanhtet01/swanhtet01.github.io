@@ -1,12 +1,35 @@
 {
-  "contract": "supermega.managed-pilot-readiness.v4",
-  "asOf": "2026-08-22T07:44:43.854Z",
-  "sourceDigest": "sha256:6df97a9099b856ee4db6be4f673ee35e5a4086005e1cfa5f7a04a6c02d30d4e4",
+  "contract": "supermega.managed-pilot-readiness.v5",
+  "asOf": "2026-09-21T10:05:33.898Z",
+  "pilotMode": "owner_named",
+  "localDatabase": {
+    "contract": "supermega.hq.database-rehearsal.v3",
+    "schemaVersion": 13,
+    "schemaProfile": "v13-self-serve",
+    "migrationCount": 18,
+    "implementationCommit": "2aa313bd0537f1af2be4d381b528e4c4bb97fbdc",
+    "implementationTree": "8f4f9210f9e3f06dddda190d63af4f33d28a636a",
+    "implementationDigest": "sha256:96ffbb098a5efc1fb6af8e830252a0d102d2d61450350bee47d26d5b912725fe",
+    "receiptDigest": "sha256:69fd223eacda1d4b04147cb2cd0ae3b413a30b8f803ceaa024a762d461406c31",
+    "behaviorChecks": 72,
+    "catalogChecksBefore": 33,
+    "catalogChecksAfter": 33,
+    "hostedEvidenceCurrent": false
+  },
+  "sourceDigest": "sha256:82bed643a758314431c7128b505011f7f4c9641ae4da444f338575b581b2b817",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 1,
+    "blockingGateCount": 6,
+    "blockingGateIds": [
+      "preview_rehearsal",
+      "managed_persistence",
+      "storage_privacy",
+      "security",
+      "pilot_evidence",
+      "production_activation"
+    ],
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "managed-production-activation",
@@ -84,8 +107,28 @@
     "productionMutationAuthorized": false,
     "databaseWrites": 0
   },
+  "liveProduction": {
+    "operatingMode": "isolated_demo",
+    "schemaVersion": 11,
+    "observedAt": "2026-08-20T17:02:04.312+06:30",
+    "currentStateRevalidated": false,
+    "localTargetVersion": 13,
+    "versionDrift": 2,
+    "browserRolesDenied": true,
+    "publicBrowserQuarantine": false,
+    "managedWritesEnabled": false,
+    "productionMutationAuthorized": false
+  },
+  "previewRehearsal": {
+    "proofComplete": false,
+    "exactCandidateRequired": true,
+    "productionRefsRejected": true,
+    "productionDataRejected": true,
+    "privilegedRuntimeCredentialsRejected": true
+  },
   "storagePrivacy": {
     "proofComplete": true,
+    "currentTargetProven": false,
     "contract": "supermega.hosted-storage-privacy-proof.v1",
     "approvalId": "storage-privacy-proof-24h-20260814",
     "recordedAt": "2026-08-14T20:46:15.344Z",
@@ -93,6 +136,7 @@
   },
   "managedPersistence": {
     "proofComplete": true,
+    "currentTargetProven": false,
     "contract": "supermega.managed-persistence-proof.v1",
     "approvalId": "persistence-proof-24h-20260816",
     "recordedAt": "2026-08-16T09:14:56.804Z",
@@ -100,6 +144,7 @@
   },
   "selfServePilot": {
     "proofComplete": true,
+    "currentTargetProven": false,
     "contract": "supermega.self-serve-pilot-proof.v1",
     "approvalId": "self-serve-proof-v11c-20260816",
     "recordedAt": "2026-08-16T17:00:52.000Z",
@@ -107,48 +152,59 @@
     "schemaVersionProven": 11,
     "liveActivationBlockedOn": "production_activation"
   },
+  "pilotEvidence": {
+    "pilotMode": "owner_named",
+    "productId": "shop",
+    "proofComplete": false,
+    "requiredAcceptedConsecutiveRuns": 20,
+    "acceptedConsecutiveRuns": 0,
+    "requiredPilotDayIndexes": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "acceptedConsecutivePilotDayIndexes": [],
+    "pilotSequenceCoverageMet": false,
+    "requiredPilotCalendarDates": 5,
+    "acceptedConsecutiveObservedDateCount": 0,
+    "acceptedConsecutiveObservedDates": [],
+    "pilotCalendarCoverageMet": false,
+    "syntheticEvidenceAccepted": false,
+    "publicIdentityAllowed": false,
+    "privateWorkspaceRequired": true
+  },
   "gates": [
     {
-      "id": "local_postgres17",
-      "status": "ready-local",
-      "evidence": "56 checks, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup and restore.",
-      "nextAction": "Keep the digest-bound rehearsal current."
-    },
-    {
-      "id": "hosted_postgres17",
-      "status": "ready-hosted",
-      "evidence": "Protected production is PostgreSQL 17 at managed schema v11 with zero drift from local target v11.",
-      "nextAction": "Keep the hosted schema at the local target and the audit current."
-    },
-    {
-      "id": "hosted_storage_privacy",
-      "status": "ready-hosted",
-      "evidence": "Six-request hosted audit passed: anonymous and cross-tenant access denied with canary confirmation, owner and signed access working, zero mutations, branch deleted after evidence.",
-      "nextAction": "Keep the storage-privacy evidence and instrument current."
-    },
-    {
-      "id": "live_product_contract",
-      "status": "ready-hosted",
-      "evidence": "Managed persistence and security are proven on isolated targets; the live product contract remains isolated_demo by design until the activation window and production gates open.",
-      "nextAction": "Keep the paired release and proof evidence current; the next steps are founder decisions."
+      "id": "preview_rehearsal",
+      "status": "blocked",
+      "evidence": "No exact-candidate protected preview rehearsal receipt is present for this local branch; release handoff still requires a current HEAD and fresh preview proof.",
+      "nextAction": "Run a protected preview rehearsal for the exact candidate after owner-approved PR/review setup."
     },
     {
       "id": "managed_persistence",
-      "status": "ready-hosted",
-      "evidence": "Seven-proof hosted audit passed: durable writes with read-back, exact idempotent retry, version-conflict rejection, event immutability, cross-tenant denial, recovery round-trip, and induced atomic rollback, on a deleted isolated branch.",
-      "nextAction": "Keep the persistence evidence and instrument current."
+      "status": "blocked",
+      "evidence": "Historical seven-proof hosted audit is retained for its deleted branch; it does not bind current schema v13, billing, durable signup limits or this candidate.",
+      "nextAction": "Prove current durable commands, billing, attempt limits, recovery and tenant isolation on an owner-approved isolated target."
+    },
+    {
+      "id": "storage_privacy",
+      "status": "blocked",
+      "evidence": "Historical six-request Storage audit is retained for its deleted branch; current candidate access and uploaded object recovery remain unproven.",
+      "nextAction": "Prove current private access plus object export/restore on an owner-approved isolated target."
     },
     {
       "id": "security",
-      "status": "ready-hosted",
-      "evidence": "Advisor is clear on protected managed schema v11 with metadata RLS enabled and zero drift from local target v11.",
-      "nextAction": "Schema v11 and the public browser quarantine are live with a clear advisor. Current objects and postgres-owned application defaults deny browser roles; monitor provider-owned supabase_admin defaults, provision the dedicated runtime login, and complete hosted activation proofs."
+      "status": "blocked",
+      "evidence": "Historical clear audit (0 findings) observed managed schema v11 against its then-target v11. Current schema v13 and this candidate require new hosted security evidence; older findings and local quarantine tests are not current production proof.",
+      "nextAction": "Obtain fresh schema v13, privilege/RLS and session/billing evidence for this candidate on an owner-approved isolated target; retain the prior security audit only as history."
     },
     {
-      "id": "self_serve_pilot",
-      "status": "ready-hosted",
-      "evidence": "Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch through the session pooler under real RLS, and protected production now carries the reviewed v11 grants. Runtime-login provisioning, the first named owner, deployment, and the activation window remain under the separate production_activation decision.",
-      "nextAction": "Keep the six-proof evidence current; execute runtime-login provisioning and the first named-owner activation only through the exact founder-approved production handoff."
+      "id": "pilot_evidence",
+      "status": "blocked",
+      "evidence": "Owner-named Shop pilot proof is absent. Required proof remains: One named Spa owner completes reviewed import, reconciled package sale, matching treatment redemption, daily close, and recovery on an isolated hosted tenant; record setup time, correction effort, and five-day evidence without treating sample data as client proof.",
+      "nextAction": "Complete the private owner-named Shop pilot sequence and retain identity only in the private workspace."
     },
     {
       "id": "production_activation",
@@ -222,11 +278,11 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:cc61a7ccf1f1f6d2164448c7e29097884814b467705d83351c65c4237f665730"
+      "digest": "sha256:fc8c9fdd444cc11c7a0e33cf2015b455e1dfeb53408e6b5a35ea5cdd169aeff6"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:b160ca85da2753a5ce470b9c6a60d261997ff42fe3f171f988f281c6a56bc8b3"
+      "digest": "sha256:6293fdf6acb995f0bf53911639f67d74e3789d6b018b22d2d2a333375f89a9bf"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -250,15 +306,15 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:538c9c979b74d41563028f96c32ac340693a02a6cb20d5a9e63bd34fe87c4439"
+      "digest": "sha256:1502e906047cf2cb67bb641256c55dd62728a8c16c50921f768ee78ee95aa4a4"
     },
     {
       "path": "package.json",
-      "digest": "sha256:6ab18de152b808058925b58dd5101004d3235de1c5146d1130000ddb85762105"
+      "digest": "sha256:a4883fe6a098ca3902efc0fa9e337061c4d254614ed9aae2fc60db11382d62af"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:9d4874bd708ef350c811101d503720d54993f599caeb47f5cda1331fb5f9c7ba"
+      "digest": "sha256:358eb40bef292a49099382f747250c5dc6041bd79857f99791937e2d80b6408c"
     }
   ]
 }

@@ -1,8 +1,10 @@
+import { sha256Hex } from "../../core/sha256.ts"
 export const WEBSITE_RELEASE_STATE_SCHEMA = 'supermega.website.release_foundation.v1' as const
 export const WEBSITE_RELEASE_PACKAGE_CONTRACT = 'supermega.website.release_package.v1' as const
 export const WEBSITE_RELEASE_PROJECTION_CONTRACT = 'supermega.website.release_projection.v1' as const
 export const WEBSITE_DEPLOY_PLAN_CONTRACT = 'supermega.website.deploy_plan.v1' as const
 export const WEBSITE_BRAND_TOKEN_CONTRACT = 'supermega.website.brand_tokens.v1' as const
+export const WEBSITE_DOMAIN_HANDOFF_CONTRACT = 'supermega.website.domain_handoff.v1' as const
 export const EMPTY_WEBSITE_RELEASE_DIGEST = `sha256:${'0'.repeat(64)}`
 export const WEBSITE_RELEASE_STORAGE_PREFIX = 'supermega.website.release-foundation.v1:'
 
@@ -103,6 +105,7 @@ type PrepareDeployPlanCommand = {
   previousDeployment: { deploymentId: string; packageDigest: string; artifactDigest: string } | null
   proof: WebsiteReleaseProof
 }
+
 export type WebsiteReleaseCommandPayload = PreparePackageCommand | UpgradeTemplateCommand | ApproveReleaseCommand | PrepareDeployPlanCommand
 export type WebsiteReleaseCommand = { sequence: number; previousDigest: string; payload: WebsiteReleaseCommandPayload; digest: string }
 export type WebsiteReleaseState = {
@@ -130,6 +133,46 @@ export type WebsiteDeployPlan = {
   }
   proof: WebsiteReleaseProof
   ownerApprovalRequired: true
+}
+
+export type WebsiteDomainHandoff = {
+  contract: typeof WEBSITE_DOMAIN_HANDOFF_CONTRACT
+  hostname: string
+  release: {
+    scope: string
+    headDigest: string
+    packageDigest: string
+    artifactDigest: string
+    approvalId: string
+    deployPlanDigest: string
+  }
+  status: 'not_executed'
+  currentGate: 'domain_ownership_unverified'
+  stages: Array<{
+    sequence: number
+    action: string
+    requiredEvidence: string
+    authority: string
+    status: 'not_executed'
+  }>
+  rollback: {
+    mode: 'remove_exact_domain_binding_and_restore_previous_canonical'
+    status: 'not_executed'
+    requiredEvidence: string[]
+    blockers: string[]
+    ownerApprovalRequired: true
+  }
+  controls: {
+    workspaceStateWritePerformed: false
+    providerWritesPerformed: false
+    dnsWritesPerformed: false
+    deploymentPerformed: false
+    domainActivated: false
+    customerContacted: false
+    paymentActionPerformed: false
+    stockActionPerformed: false
+  }
+  packetDigest: string
 }
 
 export type WebsiteReleaseProjection = {
@@ -163,6 +206,18 @@ const templateComponents = {
 } as const
 const migrationOperations = ['CMP-HERO:1->2', 'CMP-NAVIGATION:1->2'] as const
 const commandKinds = new Set(['prepare_package', 'upgrade_template', 'approve_release', 'prepare_deploy_plan'])
+const websiteDomainHandoffStages = [
+  { sequence: 1, action: 'verify_domain_ownership', requiredEvidence: 'owner_domain_control_receipt', authority: 'domain_owner', status: 'not_executed' },
+  { sequence: 2, action: 'add_domain_to_provider_project', requiredEvidence: 'provider_add_receipt', authority: 'owner_credentialed_action', status: 'not_executed' },
+  { sequence: 3, action: 'capture_provider_dns_challenge', requiredEvidence: 'get_only_provider_dns_receipt', authority: 'release_reviewer', status: 'not_executed' },
+  { sequence: 4, action: 'apply_exact_dns_mapping', requiredEvidence: 'domain_owner_dns_change_receipt', authority: 'domain_owner_only', status: 'not_executed' },
+  { sequence: 5, action: 'verify_provider_domain_ready', requiredEvidence: 'get_only_provider_verification_receipt', authority: 'release_reviewer', status: 'not_executed' },
+  { sequence: 6, action: 'verify_https_and_live_routes', requiredEvidence: 'https_live_route_receipt', authority: 'release_reviewer', status: 'not_executed' },
+  { sequence: 7, action: 'activate_canonical_domain', requiredEvidence: 'single_use_owner_activation_receipt', authority: 'owner_only', status: 'not_executed' },
+] as const
+const websiteDomainRollbackEvidence = ['provider_domain_removal_receipt', 'dns_restore_receipt', 'https_previous_route_receipt'] as const
+const websiteDomainRollbackBlockers = ['known_good_previous_domain_state_missing', 'owner_rollback_approval_missing'] as const
+const websiteDomainControlKeys = ['workspaceStateWritePerformed', 'providerWritesPerformed', 'dnsWritesPerformed', 'deploymentPerformed', 'domainActivated', 'customerContacted', 'paymentActionPerformed', 'stockActionPerformed'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -193,6 +248,27 @@ function token(value: unknown, field: string) {
   const candidate = text(value, field, 180)
   if (!tokenPattern.test(candidate)) throw new Error(`${field} must be a canonical token.`)
   return candidate
+}
+
+export function normalizeWebsiteDomainHostname(value: unknown) {
+  const candidate = text(value, 'domain.hostname', 253).toLowerCase()
+  if (candidate.includes('://') || /[/?#@:]/.test(candidate)) throw new Error('domain.hostname must be a hostname without a scheme, port, path, query, fragment, or credentials.')
+  if (!/^[\x20-\x7e]+$/.test(candidate)) throw new Error('domain.hostname must use ASCII or explicit punycode for cross-runtime verification.')
+  const hostname = candidate
+  if (!hostname || hostname.length > 253 || hostname.endsWith('.') || hostname.includes('..')) throw new Error('domain.hostname must be a canonical public hostname.')
+  const labels = hostname.split('.')
+  if (labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) throw new Error('domain.hostname must contain valid DNS labels.')
+  const finalLabel = labels.at(-1) ?? ''
+  if (finalLabel.length < 2 || /^\d+$/.test(finalLabel)) throw new Error('domain.hostname must have a public top-level domain.')
+  const reservedExamples = ['example.com', 'example.net', 'example.org']
+  if (hostname === 'localhost'
+    || hostname.endsWith('.localhost')
+    || hostname.endsWith('.local')
+    || hostname.endsWith('.test')
+    || hostname.endsWith('.invalid')
+    || hostname.endsWith('.example')
+    || reservedExamples.some((reserved) => hostname === reserved || hostname.endsWith(`.${reserved}`))) throw new Error('domain.hostname must not use a local or reserved suffix.')
+  return hostname
 }
 
 function integer(value: unknown, field: string, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
@@ -252,55 +328,8 @@ function canonicalCopy<T>(value: T): T {
   return JSON.parse(canonicalJson(value)) as T
 }
 
-const sha256RoundConstants = new Uint32Array([
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-])
 
-function rotateRight(value: number, bits: number) {
-  return (value >>> bits) | (value << (32 - bits))
-}
 
-function sha256Hex(source: string) {
-  const input = new TextEncoder().encode(source)
-  const paddedLength = Math.ceil((input.length + 9) / 64) * 64
-  const padded = new Uint8Array(paddedLength)
-  padded.set(input); padded[input.length] = 0x80
-  const view = new DataView(padded.buffer)
-  const bitLength = BigInt(input.length) * 8n
-  view.setUint32(paddedLength - 8, Number(bitLength >> 32n), false)
-  view.setUint32(paddedLength - 4, Number(bitLength & 0xffffffffn), false)
-  const hash = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19])
-  const words = new Uint32Array(64)
-  for (let offset = 0; offset < paddedLength; offset += 64) {
-    for (let index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4, false)
-    for (let index = 16; index < 64; index += 1) {
-      const before15 = words[index - 15]; const before2 = words[index - 2]
-      const sigma0 = rotateRight(before15, 7) ^ rotateRight(before15, 18) ^ (before15 >>> 3)
-      const sigma1 = rotateRight(before2, 17) ^ rotateRight(before2, 19) ^ (before2 >>> 10)
-      words[index] = (words[index - 16] + sigma0 + words[index - 7] + sigma1) >>> 0
-    }
-    let [a, b, c, d, e, f, g, h] = hash
-    for (let index = 0; index < 64; index += 1) {
-      const sum1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25)
-      const choice = (e & f) ^ (~e & g)
-      const temporary1 = (h + sum1 + choice + sha256RoundConstants[index] + words[index]) >>> 0
-      const sum0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22)
-      const majority = (a & b) ^ (a & c) ^ (b & c)
-      const temporary2 = (sum0 + majority) >>> 0
-      h = g; g = f; f = e; e = (d + temporary1) >>> 0; d = c; c = b; b = a; a = (temporary1 + temporary2) >>> 0
-    }
-    hash[0] = (hash[0] + a) >>> 0; hash[1] = (hash[1] + b) >>> 0; hash[2] = (hash[2] + c) >>> 0; hash[3] = (hash[3] + d) >>> 0
-    hash[4] = (hash[4] + e) >>> 0; hash[5] = (hash[5] + f) >>> 0; hash[6] = (hash[6] + g) >>> 0; hash[7] = (hash[7] + h) >>> 0
-  }
-  return Array.from(hash, (value) => value.toString(16).padStart(8, '0')).join('')
-}
 
 export function websiteReleaseEvidenceDigest(value: unknown) {
   return `sha256:${sha256Hex(canonicalJson(value))}`
@@ -547,6 +576,84 @@ function createDeployPlan(packageValue: WebsiteReleasePackage, approval: NonNull
     proof: command.proof,
     ownerApprovalRequired: true,
   }
+}
+
+function domainHandoffRelease(value: unknown, field: string): WebsiteDomainHandoff['release'] {
+  const source = exact(value, field, ['scope', 'headDigest', 'packageDigest', 'artifactDigest', 'approvalId', 'deployPlanDigest'])
+  return {
+    scope: token(source.scope, `${field}.scope`),
+    headDigest: digest(source.headDigest, `${field}.headDigest`),
+    packageDigest: digest(source.packageDigest, `${field}.packageDigest`),
+    artifactDigest: digest(source.artifactDigest, `${field}.artifactDigest`),
+    approvalId: token(source.approvalId, `${field}.approvalId`),
+    deployPlanDigest: digest(source.deployPlanDigest, `${field}.deployPlanDigest`),
+  }
+}
+
+export function validateWebsiteDomainHandoff(value: unknown): WebsiteDomainHandoff {
+  const source = exact(value, 'Website domain handoff', ['contract', 'hostname', 'release', 'status', 'currentGate', 'stages', 'rollback', 'controls', 'packetDigest'])
+  if (source.contract !== WEBSITE_DOMAIN_HANDOFF_CONTRACT || source.status !== 'not_executed' || source.currentGate !== 'domain_ownership_unverified') throw new Error('Website domain handoff status is unsupported.')
+  const stages = array(source.stages, 'Website domain handoff.stages', 7, 7).map((candidate, index) => {
+    const row = exact(candidate, `Website domain handoff.stages[${index}]`, ['sequence', 'action', 'requiredEvidence', 'authority', 'status'])
+    if (row.status !== 'not_executed') throw new Error(`Website domain handoff.stages[${index}].status must remain not_executed.`)
+    return {
+      sequence: integer(row.sequence, `Website domain handoff.stages[${index}].sequence`, 1, 7),
+      action: token(row.action, `Website domain handoff.stages[${index}].action`),
+      requiredEvidence: token(row.requiredEvidence, `Website domain handoff.stages[${index}].requiredEvidence`),
+      authority: token(row.authority, `Website domain handoff.stages[${index}].authority`),
+      status: 'not_executed' as const,
+    }
+  })
+  if (canonicalJson(stages) !== canonicalJson(websiteDomainHandoffStages)) throw new Error('Website domain handoff stages drifted from the fail-closed lifecycle.')
+  const rollbackSource = exact(source.rollback, 'Website domain handoff.rollback', ['mode', 'status', 'requiredEvidence', 'blockers', 'ownerApprovalRequired'])
+  const rollback = {
+    mode: rollbackSource.mode,
+    status: rollbackSource.status,
+    requiredEvidence: array(rollbackSource.requiredEvidence, 'Website domain handoff.rollback.requiredEvidence', 3, 3).map((entry, index) => token(entry, `Website domain handoff.rollback.requiredEvidence[${index}]`)),
+    blockers: array(rollbackSource.blockers, 'Website domain handoff.rollback.blockers', 2, 2).map((entry, index) => token(entry, `Website domain handoff.rollback.blockers[${index}]`)),
+    ownerApprovalRequired: boolean(rollbackSource.ownerApprovalRequired, 'Website domain handoff.rollback.ownerApprovalRequired'),
+  }
+  if (rollback.mode !== 'remove_exact_domain_binding_and_restore_previous_canonical'
+    || rollback.status !== 'not_executed'
+    || !rollback.ownerApprovalRequired
+    || canonicalJson(rollback.requiredEvidence) !== canonicalJson(websiteDomainRollbackEvidence)
+    || canonicalJson(rollback.blockers) !== canonicalJson(websiteDomainRollbackBlockers)) throw new Error('Website domain handoff rollback gates drifted.')
+  const controlsSource = exact(source.controls, 'Website domain handoff.controls', [...websiteDomainControlKeys])
+  const controls = Object.fromEntries(websiteDomainControlKeys.map((key) => [key, boolean(controlsSource[key], `Website domain handoff.controls.${key}`)])) as WebsiteDomainHandoff['controls']
+  if (Object.values(controls).some(Boolean)) throw new Error('Website domain handoff cannot claim a write or activation.')
+  const body = {
+    contract: WEBSITE_DOMAIN_HANDOFF_CONTRACT,
+    hostname: normalizeWebsiteDomainHostname(source.hostname),
+    release: domainHandoffRelease(source.release, 'Website domain handoff.release'),
+    status: 'not_executed' as const,
+    currentGate: 'domain_ownership_unverified' as const,
+    stages,
+    rollback,
+    controls,
+  }
+  const packetDigest = digest(source.packetDigest, 'Website domain handoff.packetDigest')
+  if (packetDigest !== websiteReleaseEvidenceDigest(body)) throw new Error('Website domain handoff.packetDigest does not match its content.')
+  return canonicalCopy({ ...body, packetDigest }) as WebsiteDomainHandoff
+}
+
+export function buildWebsiteDomainHandoff(input: { hostname: unknown; release: unknown }) {
+  const body = {
+    contract: WEBSITE_DOMAIN_HANDOFF_CONTRACT,
+    hostname: normalizeWebsiteDomainHostname(input.hostname),
+    release: domainHandoffRelease(input.release, 'release'),
+    status: 'not_executed' as const,
+    currentGate: 'domain_ownership_unverified' as const,
+    stages: canonicalCopy(websiteDomainHandoffStages),
+    rollback: {
+      mode: 'remove_exact_domain_binding_and_restore_previous_canonical' as const,
+      status: 'not_executed' as const,
+      requiredEvidence: [...websiteDomainRollbackEvidence],
+      blockers: [...websiteDomainRollbackBlockers],
+      ownerApprovalRequired: true as const,
+    },
+    controls: Object.fromEntries(websiteDomainControlKeys.map((key) => [key, false])) as WebsiteDomainHandoff['controls'],
+  }
+  return validateWebsiteDomainHandoff({ ...body, packetDigest: websiteReleaseEvidenceDigest(body) })
 }
 
 function replayCommands(commands: WebsiteReleaseCommandPayload[], scope: string): Omit<WebsiteReleaseProjection, 'contract' | 'scope' | 'revision' | 'headDigest'> {

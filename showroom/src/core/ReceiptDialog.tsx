@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { type CommerceOrderAcknowledgement, commerceOrderAcknowledgementText } from './commerce-workspace'
 import { bi } from './i18n-actions'
 import { PaymentQrButton } from './PaymentQr'
+import { copyOrderRecordText } from './copy-order-record'
 
 function formatReceiptDate(iso: string) {
   try {
@@ -170,10 +171,12 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
 
   async function copyReceiptText() {
     if (!ack) return
-    try {
-      await navigator.clipboard.writeText(commerceOrderAcknowledgementText(ack))
-    } catch { /* clipboard unavailable on this device */ }
+    const current = ack
+    const notice = await copyOrderRecordText(commerceOrderAcknowledgementText(current), navigator.clipboard)
+    setCopyResult({ record: current, notice })
   }
+
+  const [copyResult, setCopyResult] = useState<{ record: CommerceOrderAcknowledgement; notice: string } | null>(null)
 
   const hasPromotion = ack ? (ack.promotion.discountMmk ?? 0) > 0 : false
   const hasTax = ack ? (ack.tax.taxMmk ?? 0) > 0 : false
@@ -228,8 +231,9 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
           {ack.delivery.promisedAt ? <small>Promised {formatReceiptDate(ack.delivery.promisedAt)}</small> : null}
         </div> : null}
         <p className="receipt-dialog-notice">{ack.notice}</p>
+        <p className="receipt-dialog-notice" aria-live="polite" role="status">{copyResult?.record === ack ? copyResult.notice : ''}</p>
         <div className="receipt-dialog-actions">
-          <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print receipt')}</button>
+          <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
           <button className="core-button compact" onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
           <button className="core-button compact" onClick={onClose} type="button">{bi('Close')}</button>
         </div>

@@ -23,6 +23,13 @@ pilot as a floor, not a current reading, until a full re-grade pass is done.
 and its citation was wrong even when written — see the correction inline at
 that item. Do not resurrect it as open work without reading that note first.
 
+**Freshness note, 2026-08-26:** managed readiness is now
+`supermega.managed-pilot-readiness.v5` with `pilotMode: owner_named`; protected
+production and the local target are schema v11 with zero drift, browser roles
+denied, public-browser quarantine recorded, and managed writes disabled. Grades
+below still reflect the older scorecard frame and should not be used to justify
+self-serve activation, production writes, or managed-pilot claims.
+
 Grading key: A = provable today against an enterprise buyer's checklist.
 C = built or designed but not activated. F = absent with no plan.
 
@@ -41,7 +48,7 @@ C = built or designed but not activated. F = absent with no plan.
 
 ## 1. Security: A-
 
-Justification: RLS on every managed table with browser roles denied, schema v10
+Justification: RLS on every managed table with browser roles denied, schema v11
 zero drift, Security Advisor clear (findingCount 0, browser quarantine applied,
 zero browser-privileged objects) per managed-pilot-readiness.json securityAudit
 and hq/NOW.md Blockers; public repo carries zero secrets (env-only credentials,

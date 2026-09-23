@@ -1848,7 +1848,7 @@
 .website-today {
   order: 1;
   display: grid;
-  grid-template-columns: minmax(260px, .9fr) minmax(420px, 1.45fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
   gap: 12px;
   border: 1px solid var(--website-line-strong);
   border-radius: 14px;
@@ -1866,10 +1866,26 @@
 .website-today-priority p { margin: 0; color: var(--website-muted); font-size: 0.6875rem; line-height: 1.5; }
 .website-today-priority > .website-button { width: max-content; margin-top: 3px; }
 
+.website-today-checks { min-width: 0; align-self: start; }
+.website-today-checks > summary {
+  min-height: 2.75rem;
+  padding: .75rem;
+  border: .0625rem solid var(--website-line-strong);
+  border-radius: .625rem;
+  color: var(--website-ink);
+  background: var(--website-panel);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.website-today-checks > summary:focus-visible { outline: .125rem solid var(--website-green); outline-offset: .125rem; }
+.website-today-checks[open] > summary { margin-bottom: .5rem; }
+
 .website-today-metrics {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
   align-self: start;
   gap: 1px;
   overflow: hidden;
@@ -1880,7 +1896,13 @@
 
 .website-today-metrics span { min-width: 0; display: grid; gap: 3px; padding: 10px 8px; background: var(--website-panel); }
 .website-today-metrics small { color: var(--website-quiet); font-family: var(--website-mono); font-size: 0.5rem; text-transform: uppercase; }
-.website-today-metrics strong { overflow: hidden; color: var(--website-ink); font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }
+.website-today-metrics strong { color: var(--website-ink); font-size: 0.6875rem; white-space: normal; overflow-wrap: anywhere; }
+
+.website-check-guidance { margin: .75rem 0 0; color: var(--website-ink); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.website-check-guidance h3 { margin: 0 0 .5rem; font-size: inherit; }
+.website-check-guidance ul { margin: 0; padding-inline-start: 1.25rem; }
+.website-check-guidance li + li { margin-top: .75rem; }
+.website-check-guidance p { margin: .375rem 0 0; }
 
 .website-today-source {
   grid-column: 1 / -1;
@@ -2100,7 +2122,7 @@
 
 .website-preview-controls > button {
   min-width: 76px;
-  min-height: 36px;
+  min-height: 2.75rem;
   border-radius: 6px;
   padding: 0 10px;
   color: var(--website-muted);
@@ -2696,6 +2718,46 @@
 .website-start-tools > summary b { text-transform: uppercase; }
 .website-start-tools > div { display: grid; gap: 12px; border-top: 1px solid var(--website-line); padding: 12px; }
 
+/* The Website starter is a customer-facing brief, not a dense operator console. Keep the
+   few decisions it asks for comfortably readable on a counter tablet and a phone. */
+.website-starter-setup .website-panel-head p {
+  max-width: 58ch;
+  font-size: .875rem;
+  line-height: 1.45;
+}
+
+.website-starter-setup .website-status {
+  min-height: 1.75rem;
+  font-size: .75rem;
+}
+
+.website-starter-setup label {
+  gap: .4375rem;
+  font-size: .875rem;
+}
+
+.website-starter-setup input,
+.website-starter-setup select,
+.website-starter-setup textarea {
+  min-height: 2.75rem;
+  font-size: 1rem;
+}
+
+.website-starter-setup textarea {
+  min-height: 5.5rem;
+}
+
+.website-starter-setup label small,
+.website-starter-setup #website-starter-proof-help,
+.website-starter-setup .website-field-error {
+  font-size: .8125rem;
+  line-height: 1.4;
+}
+
+.website-starter-setup .website-button {
+  font-size: .875rem;
+}
+
 @media screen and (max-width: 900px) {
   .website-product {
     height: auto;
@@ -3274,6 +3336,15 @@
     min-width: 0;
   }
 
+  /* Three compact actions must not clip labels such as Download preview. */
+  .website-primary-actions > .website-button {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+    padding-block: .5rem;
+    text-align: center;
+  }
+
   .website-site-settings-content {
     top: calc(100% + 6px);
     right: 0;
@@ -3302,6 +3373,17 @@
 
   .website-recovery-actions > button {
     width: 100%;
+  }
+}
+
+/* Narrow phones need two readable actions per row, not broken words. */
+@media screen and (max-width: 22.5rem) {
+  .website-primary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .website-action-bar[data-surface="work"][data-editing="false"] .website-primary-actions > .website-button.is-primary {
+    grid-column: 1 / -1;
   }
 }
 
@@ -3625,4 +3707,43 @@
      --website-sans, the pre-P3.2 winner — the de-terminal-look decision).
      --website-sans itself is undisputed: it is declared only at :1716. */
   --website-mono: var(--website-sans);
+}
+
+.website-restored-draft-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.125rem;
+  border: .0625rem solid var(--website-warn);
+  border-radius: var(--radius-lg);
+  background: var(--website-panel);
+  padding: var(--space-4) 1.125rem;
+}
+
+.website-restored-draft-choice h2 {
+  margin: .1875rem 0 .3125rem;
+  font-size: var(--font-size-lg);
+}
+
+.website-restored-draft-choice p,
+.website-restored-draft-choice small {
+  display: block;
+  margin: 0;
+  color: var(--website-muted);
+  line-height: 1.45;
+}
+
+.website-restored-draft-choice small { margin-top: var(--space-1); }
+
+.website-restored-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (max-width: 47.5rem) {
+  .website-restored-draft-choice { grid-template-columns: 1fr; }
+  .website-restored-draft-actions { display: grid; justify-content: stretch; }
+  .website-restored-draft-actions .website-button { width: 100%; }
 }
