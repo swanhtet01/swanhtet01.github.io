@@ -31,7 +31,7 @@ export function productSwitcherVisible(
   status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
   assignedProducts: readonly ClientSolutionId[],
 ) {
-  return status === 'local' || status === 'ready' && assignedProducts.length > 1
+  return status === 'local' || status === 'ready' && assignedProducts.filter(product => product !== 'production').length > 1
 }
 
 export function resolveManagedProductRoute(
@@ -41,7 +41,8 @@ export function resolveManagedProductRoute(
   if (!requestedProduct || managedProductIsVisible(assignedProducts, requestedProduct)) {
     return { kind: 'allow' }
   }
-  const fallback = assignedProducts[0]
+  // Retained Plant access remains explicit; never promote it as a fallback.
+  const fallback = assignedProducts.find(product => product !== 'production')
   return fallback
     ? { kind: 'redirect', product: fallback, path: managedProductPath(fallback) }
     : { kind: 'empty' }
@@ -68,9 +69,10 @@ export function resolveManagedProductHome({
     }
   }
   if (choosingProduct || assignedProducts.length === 0) return { kind: 'launcher' }
-  const fallbackProduct = assignedProducts[0]
+  const activeAssignments = assignedProducts.filter(product => product !== 'production')
+  const fallbackProduct = activeAssignments[0]
   if (!fallbackProduct) return { kind: 'launcher' }
-  const product = rememberedProduct && managedProductIsVisible(assignedProducts, rememberedProduct)
+  const product = rememberedProduct && rememberedProduct !== 'production' && activeAssignments.includes(rememberedProduct)
     ? rememberedProduct
     : fallbackProduct
   return { kind: 'redirect', product, path: managedProductPath(product) }

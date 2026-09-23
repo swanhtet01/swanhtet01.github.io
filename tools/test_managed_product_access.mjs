@@ -37,13 +37,14 @@ test('redirects an unauthorized direct URL to the first assigned product', () =>
   })
   assert.deepEqual(resolveManagedProductRoute('website', ['production', 'ecommerce']), {
     kind: 'redirect',
-    product: 'production',
-    path: '/plant/',
+    product: 'ecommerce',
+    path: '/ecommerce/',
   })
 })
 
 test('returns an explicit empty decision when no product is assigned', () => {
   assert.deepEqual(resolveManagedProductRoute('commerce', []), { kind: 'empty' })
+  assert.deepEqual(resolveManagedProductRoute('commerce', ['production']), { kind: 'empty' })
 })
 
 test('the managed launcher shows only assigned products', () => {
@@ -58,6 +59,8 @@ test('the managed launcher shows only assigned products', () => {
 test('the product switcher appears only when there is somewhere authorized to switch', () => {
   assert.equal(productSwitcherVisible('local', []), true)
   assert.equal(productSwitcherVisible('ready', ['commerce']), false)
+  assert.equal(productSwitcherVisible('ready', ['production']), false)
+  assert.equal(productSwitcherVisible('ready', ['production', 'commerce']), false)
   assert.equal(productSwitcherVisible('ready', ['commerce', 'website']), true)
   assert.equal(productSwitcherVisible('checking', []), false)
   assert.equal(productSwitcherVisible('reauthenticate', []), false)
@@ -126,6 +129,19 @@ test('home resumes an assigned remembered product', () => {
     product: 'website',
     path: '/website/',
   })
+})
+
+test('retained Plant stays explicit and never becomes the default company entry', () => {
+  const base = { requestedProduct: null, requestedPath: null, rememberedProduct: 'production', choosingProduct: false }
+  const assignedProducts = Object.freeze(['production', 'commerce'])
+  assert.deepEqual(resolveManagedProductHome({ ...base, assignedProducts }), {
+    kind: 'redirect', product: 'commerce', path: '/shop/',
+  })
+  assert.deepEqual(resolveManagedProductHome({ ...base, assignedProducts: ['production'] }), { kind: 'launcher' })
+  assert.deepEqual(resolveManagedProductHome({ ...base, requestedProduct: 'production', requestedPath: '/plant/jobs/', assignedProducts }), {
+    kind: 'redirect', product: 'production', path: '/plant/jobs/',
+  })
+  assert.deepEqual(assignedProducts, ['production', 'commerce'])
 })
 
 test('home ignores stale remembered access and opens the first assigned product', () => {
