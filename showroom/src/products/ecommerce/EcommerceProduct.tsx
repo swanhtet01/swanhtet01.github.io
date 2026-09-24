@@ -1813,7 +1813,14 @@ export function EcommerceProduct() {
     && !savedDraft && ecommerceTodayAction === 'Try sample request'
     && ecommerceTodayState === 'ready' && !ecommerceTodayCartUnits
 
-  if (assistedCatalogEntry && !workspaceOpened) return <BusinessBrief product="ecommerce" onOpenWorkspace={() => setWorkspaceOpened(true)} />
+  if (assistedCatalogEntry && !workspaceOpened && new URLSearchParams(location.search).get('workspace') !== '1') {
+    return <BusinessBrief product="ecommerce" onOpenWorkspace={() => {
+      setWorkspaceOpened(true)
+      const search = new URLSearchParams(location.search)
+      search.set('workspace', '1')
+      navigate({ pathname: location.pathname, search: search.toString() }, { replace: true })
+    }} />
+  }
 
   return (
     <div className="workspace-screen ecommerce-product">
