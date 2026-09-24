@@ -469,6 +469,45 @@ test('Website review recovery retains only the canonical review ID and scrubs th
   assert.ok(managedLoginSource.includes("managedAccountPath('/account/recovery', productIntent, location.search)"))
 })
 
+test('Ecommerce recovery retains product and review without granting catalog access', async () => {
+  const review = '11111111-1111-4111-8111-111111111111'
+  const query = `?product=ecommerce&review=${review}&returnTo=https://outside.invalid&workspace=other`
+  const recovery = managedAccountPath('/account/recovery', 'website', query)
+  assert.equal(recovery, `/account/recovery?product=ecommerce&review=${review}`)
+  await withAuth(async (mod, state) => {
+    state.location.search = recovery.slice(recovery.indexOf('?'))
+    await mod.requestManagedPasswordRecovery('owner@example.invalid')
+    const redirect = state.calls.find(([name]) => name === 'resetPasswordForEmail')[2].redirectTo
+    assert.equal(redirect, `https://app.example.invalid/account/setup?mode=recovery&review=${review}&product=ecommerce`)
+    state.calls.length = 0
+    state.location.search = new URL(redirect).search + `&code=${'c'.repeat(20)}`
+    const result = await mod.beginManagedAccountSetup()
+    assert.equal(result.purpose, 'recovery')
+    assert.deepEqual(state.calls[0], ['scrub', '/account/setup'])
+    assert.equal(state.location.search, '')
+    assert.equal(state.calls.filter(([name]) => name === 'exchangeCodeForSession').length, 1)
+    assert.equal(state.calls.some(([name]) => name === 'fetch'), false)
+  })
+})
+
+test('Ecommerce callback product cannot bypass purpose, ID or duplicate checks', async () => {
+  const review = '11111111-1111-4111-8111-111111111111'
+  for (const query of [
+    `mode=signup&product=ecommerce&review=${review}`,
+    `mode=invite&product=ecommerce&review=${review}`,
+    'mode=recovery&product=ecommerce',
+    `mode=recovery&product=ecommerce&review=${review}%0A`,
+    `mode=recovery&product=ecommerce&product=ecommerce&review=${review}`,
+    `mode=recovery&product=ecommerce&product=website&review=${review}`,
+    `mode=recovery&product=shop&review=${review}`,
+    `mode=recovery&product=ecommerce&review=${review}&review=${review}`,
+  ]) await withAuth(async (mod, state) => {
+    state.location.search = `?${query}&code=${'c'.repeat(20)}`
+    await rejectsCode(mod.beginManagedAccountSetup(), 'account_link_invalid')
+    assert.deepEqual(state.calls, [['scrub', '/account/setup']])
+  })
+})
+
 test('invalid or wrong-purpose review callbacks fail before provider access', async () => {
   const review = '11111111-1111-4111-8111-111111111111'
   for (const query of [
