@@ -202,3 +202,40 @@ test('confirmed signup and mismatched passwords cannot invoke password update', 
   assert.deepEqual(busyStates, [])
   assert.equal(context.accountRequestPending.current, false)
 })
+
+
+test('actual company entry waits for membership and bootstrap before navigating', async () => {
+  const { context } = fixture()
+  const calls = [], identity = { userId: 'synthetic-user', workspaceId: 'synthetic-company' }
+  let releaseMembership, releaseBootstrap
+  Object.assign(context, {
+    portalEntryPath: '/website/review/11111111-1111-4111-8111-111111111111',
+    completeManagedWorkspaceSignIn: () => new Promise(resolve => { releaseMembership = resolve }),
+    loadManagedBootstrap: value => { assert.equal(value, identity); calls.push('bootstrap'); return new Promise(resolve => { releaseBootstrap = resolve }) },
+    setExistingIdentity: value => { assert.equal(value, identity); calls.push('identity') },
+    navigate: path => calls.push(path),
+  })
+  const pending = handler('openWorkspace', context)({}, identity.workspaceId)
+  assert.deepEqual(calls, [])
+  releaseMembership(identity)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(calls, ['bootstrap'])
+  releaseBootstrap({})
+  await pending
+  assert.deepEqual(calls, ['bootstrap', 'identity', context.portalEntryPath])
+})
+
+for (const failedStage of ['membership', 'bootstrap']) {
+  test(`actual company entry never navigates after ${failedStage} failure`, async () => {
+    const { context } = fixture()
+    const calls = []
+    Object.assign(context, {
+      portalEntryPath: '/shop/',
+      completeManagedWorkspaceSignIn: async () => { if (failedStage === 'membership') throw Error('Synthetic membership failure'); return { workspaceId: 'synthetic' } },
+      loadManagedBootstrap: async () => { calls.push('bootstrap'); throw Error('Synthetic bootstrap failure') },
+      setExistingIdentity: () => calls.push('identity'), navigate: () => calls.push('navigate'),
+    })
+    await assert.rejects(() => handler('openWorkspace', context)({}, 'synthetic'), /Synthetic/)
+    assert.deepEqual(calls, failedStage === 'membership' ? [] : ['bootstrap'])
+  })
+}
