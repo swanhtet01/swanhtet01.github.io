@@ -53,7 +53,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     return () => window.clearTimeout(timer)
   }, [review, access])
 
-  return <main aria-busy={opening}>
+  return <main className="catalog-review-page" aria-busy={opening}>
     {review ? <PreparedCatalog preview={review.preview} /> : <section className="prepared-catalog">
       <h1>Your catalog</h1><p role="status">{message}</p>
       {!opening ? <p><Link to={customerEcommerceReviewLoginPath(reviewId)}>Sign in</Link></p> : null}

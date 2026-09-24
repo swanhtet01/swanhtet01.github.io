@@ -26,3 +26,12 @@
 .prepared-catalog small, .prepared-catalog p, .prepared-catalog footer { color: var(--core-muted); }
 .prepared-catalog small { display: block; margin-bottom: .5rem; }
 .prepared-catalog footer { margin-top: 1.5rem; font-size: .875rem; line-height: 1.7; }
+
+
+.catalog-review-page { --core-bg: #f6f4ee; --core-ink: #17231d; --core-muted: #56665d; --core-panel: #fff; --core-line: #d4dcd5; --core-field-line: #7d9185; min-height: 100vh; background: var(--core-bg, #f6f4ee); color: var(--core-ink, #17231d); }
+.catalog-review-page button, .catalog-review-page a {
+  display: inline-flex; align-items: center; min-height: 44px; box-sizing: border-box;
+  margin-top: 12px; padding: 8px 16px; border: 1px solid var(--core-field-line);
+  border-radius: 8px; background: var(--core-panel); color: inherit; font: inherit; cursor: pointer;
+}
+.catalog-review-page button:disabled { opacity: .6; cursor: wait; }
