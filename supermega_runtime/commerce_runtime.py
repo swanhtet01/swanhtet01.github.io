@@ -7759,10 +7759,10 @@ def commerce_supplier_payables_aging(
     }
 
 
-def _configured_storefront_preview_digest(
+def _configured_storefront_preview(
     state: Mapping[str, Any],
     configuration: Mapping[str, Any],
-) -> str:
+) -> dict[str, Any]:
     item_by_sku = {item["sku"]: item for item in state["items"]}
     merchandising_by_sku = {
         row["sku"]: row for row in configuration.get("merchandising", [])
@@ -7796,16 +7796,17 @@ def _configured_storefront_preview_digest(
         "currency": "MMK",
         "items": [preview_item(sku) for sku in configuration["selectedSkus"]],
     }
-    encoded = json.dumps(
-        preview,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    return preview
+
+
+def _configured_storefront_preview_digest(state: Mapping[str, Any], configuration: Mapping[str, Any]) -> str:
+    preview = _configured_storefront_preview(state, configuration)
+    encoded = json.dumps(preview, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return f"sha256:{sha256(encoded).hexdigest()}"
 
 
-def commerce_storefront_preview_digest(state: Mapping[str, Any]) -> str:
-    """Return the digest of the saved storefront rendered from the current Shop state."""
+def commerce_storefront_preview(state: Mapping[str, Any]) -> dict[str, Any]:
+    """Project only prepared public catalog fields; callers must authorize access separately."""
 
     current = validate_commerce_state(state)
     configuration = _storefront_configuration(current)
@@ -7817,7 +7818,13 @@ def commerce_storefront_preview_digest(state: Mapping[str, Any]) -> str:
         raise TrialValidationError(
             "the saved storefront configuration does not match the current Shop catalog."
         )
-    return _configured_storefront_preview_digest(current, configuration)
+    return _configured_storefront_preview(current, configuration)
+
+
+def commerce_storefront_preview_digest(state: Mapping[str, Any]) -> str:
+    preview = commerce_storefront_preview(state)
+    encoded = json.dumps(preview, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return f"sha256:{sha256(encoded).hexdigest()}"
 
 
 def _require_website_intakes_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -11649,6 +11656,7 @@ __all__ = [
     "commerce_daily_close_csv",
     "commerce_daily_close_export",
     "commerce_storefront_preview_digest",
+    "commerce_storefront_preview",
     "commerce_supplier_invoice_match",
     "commerce_supplier_payables_handoff",
     "commerce_supplier_payables_handoff_csv",

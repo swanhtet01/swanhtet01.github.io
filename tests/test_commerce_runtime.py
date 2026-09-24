@@ -2568,6 +2568,22 @@ class CommerceRuntimeTests(unittest.TestCase):
             "sha256:c03d623521a78627b7c324771c02be32dcc2f25c7e61d0883ebc6106042e0af2",
         )
 
+    def test_prepared_catalog_projection_is_public_isolated_and_current(self) -> None:
+        from supermega_runtime.commerce_runtime import commerce_storefront_preview
+        current = catalog_state()
+        with self.assertRaises(TrialValidationError):
+            commerce_storefront_preview(current)
+        current["storefrontConfiguration"] = storefront_configuration(current)
+        preview = commerce_storefront_preview(current)
+        self.assertEqual(set(preview), {"schema", "mode", "sourceCatalogSchema", "storeName", "summary", "currency", "items"})
+        for item in preview["items"]:
+            self.assertEqual(set(item), {"sku", "name", "variant", "unitPriceMmk", "availability"})
+        preview["items"][0]["name"] = "Changed locally"
+        self.assertNotEqual(current["items"][0]["name"], "Changed locally")
+        current["items"][0]["price"] += 1
+        with self.assertRaises(TrialValidationError):
+            commerce_storefront_preview(current)
+
     def test_storefront_preview_digest_matches_cross_runtime_golden(self) -> None:
         current = catalog_state()
         current["storefrontConfiguration"] = storefront_configuration(current)
