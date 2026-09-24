@@ -66,7 +66,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                   values (%s,%s,%s,%s,1,%s::jsonb,%s,clock_timestamp()+interval '1 day')""",
                   (review,workspace,recipient,owner,json.dumps(commerce_storefront_preview(source)),digest))
         from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
-        from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialValidationError, TrialPermissionDenied
+        from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialValidationError, TrialPermissionDenied, TrialNotReadyError
         adapter = EcommerceCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=True))
         actor = TrialPrincipal(workspace, recipient, 'human')
         for review_id, kind in [(reviews[3], 'acceptance'), (reviews[4], 'feedback')]:
@@ -76,6 +76,16 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             replay = adapter.record_decision(actor,payload,kind=kind)
             self.assertTrue(first['persisted']); self.assertFalse(first['replayed'])
             self.assertEqual(replay, first | {'replayed': True})
+            readback = adapter.decisions(actor, review_id)
+            self.assertEqual(readback['decisions'], [dict(commandId=payload['commandId'], kind=kind,
+                note=payload.get('note'), createdAt=first['acceptedAt' if kind=='acceptance' else 'createdAt'])])
+            self.assertIsNone(readback['nextAfter'])
+            self.assertFalse(readback['publicationAuthorized'])
+            self.assertEqual(adapter.decisions(actor, review_id, after=payload['commandId'])['decisions'], [])
+            with self.assertRaises(TrialPermissionDenied):
+                adapter.decisions(TrialPrincipal(workspace, owner, 'human'), review_id)
+            with self.assertRaisesRegex(TrialNotReadyError, 'membership_ready'):
+                adapter.decisions(TrialPrincipal('other-company', recipient, 'human'), review_id)
             if kind=='feedback':
                 with self.assertRaises(TrialValidationError):
                     adapter.record_decision(actor,payload | {'note': 'Changed request'},kind=kind)
@@ -126,6 +136,18 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                 self.assertEqual(immutable.exception.sqlstate, '55000')
             self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],4)
         with pg._connect(self.runtime_url) as connection:
+            self.context(connection,recipient)
+            for _ in range(51):
+                insert(connection,reviews[1],'feedback')
+        page = adapter.decisions(actor, reviews[1])
+        tail = adapter.decisions(actor, reviews[1], after=page['nextAfter'])
+        self.assertEqual(len(page['decisions']), 50)
+        self.assertEqual(len(tail['decisions']), 2)
+        self.assertIsNone(tail['nextAfter'])
+        commands = [item['commandId'] for item in page['decisions'] + tail['decisions']]
+        self.assertEqual(len(set(commands)), 52)
+        self.assertEqual(commands, sorted(commands))
+        with pg._connect(self.runtime_url) as connection:
             self.context(connection,owner)
             connection.execute("update app_private.workspace_state set version=version+1 where workspace_id=%s and surface='commerce'", (workspace,))
             self.context(connection,recipient)
@@ -134,6 +156,8 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             self.assertEqual(stale.exception.sqlstate, '42501')
         with self.assertRaises(TrialPermissionDenied):
             adapter.record_decision(actor,payload,kind='feedback')
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.decisions(actor, payload['reviewId'])
         with pg._connect(self.admin_url) as connection:
             for role in ('anon','authenticated','service_role'):
                 self.assertFalse(connection.execute("select has_table_privilege(%s,'app_private.ecommerce_customer_decisions','SELECT,INSERT,UPDATE,DELETE')",(role,)).fetchone()[0])
