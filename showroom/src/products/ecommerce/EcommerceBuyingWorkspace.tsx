@@ -274,7 +274,14 @@ export function EcommerceBuyingWorkspace({
       setRescheduleDraft(null)
       setNotice('')
       const latest = recoveredState.requests[0]
-      if (sessionCart !== null || !latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
+      if (sessionCart !== null) {
+        if (!sessionCart.length && latest?.sourcePreviewDigest === sourcePreviewDigest) {
+          setOpen(true)
+          setFreshQuoteId(Date.parse(latest.quote.expiresAt) > Date.now() ? latest.id : '')
+        }
+        return
+      }
+      if (!latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
       onCartChange(latest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
       setCustomerName(latest.customerProfile?.name ?? latest.customerReference)
       setCustomerPhone(latest.customerProfile?.phone ?? '')
@@ -545,7 +552,11 @@ export function EcommerceBuyingWorkspace({
     && latestRequest.quote.payment.adapter === effectivePaymentAdapter
     && (latestRequest.quote.promotion.code ?? '') === promotionCode.trim()
     && cartMatchesRequest(cart, latestRequest))
-  const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
+  // A retained receipt belongs to the saved request, not the next editable cart.
+  const receiptCurrent = quoteCurrent || Boolean(!cart.length && latestRequest
+    && latestRequest.id === freshQuoteId && latestRequest.scope === scope
+    && latestRequest.sourcePreviewDigest === sourcePreviewDigest)
+  const latestRequestConfirmed = Boolean(latestRequestOrder && receiptCurrent)
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
   const recoveredCheckoutNotice = latestRequest
     ? Date.parse(latestRequest.quote.expiresAt) > quoteClock
@@ -1151,6 +1162,7 @@ export function EcommerceBuyingWorkspace({
       if (retainedMatches && retained && onRecordManagedRequest) {
         setManagedConfirmation('')
         setManagedConfirmation(await confirmManagedRequest(retained, onRecordManagedRequest))
+        onCartChange([])
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
         setNotice('This order request is in the Company Shop inbox. No order, stock, message, or charge changed.')
@@ -1188,6 +1200,7 @@ export function EcommerceBuyingWorkspace({
       setFreshQuoteId('')
       setManagedConfirmation('')
       if (onRecordManagedRequest) setManagedConfirmation(await confirmManagedRequest(request, onRecordManagedRequest))
+      onCartChange([])
       try {
         recordBehaviorSignal(window.localStorage, {
           event: 'first_value_completed',
@@ -1212,7 +1225,7 @@ export function EcommerceBuyingWorkspace({
   }
 
   async function openOperatorReview() {
-    if (disabled || recoveryBlocked || !latestRequest || latestRequestConfirmed || !quoteCurrent || handoffBusy || handoffInFlight.current) return
+    if (disabled || recoveryBlocked || !latestRequest || latestRequestConfirmed || !receiptCurrent || handoffBusy || handoffInFlight.current) return
     handoffInFlight.current = true
     setHandoffBusy(true)
     setNotice('')
@@ -1361,7 +1374,7 @@ export function EcommerceBuyingWorkspace({
               <button className="core-button primary" disabled={disabled} onClick={() => onContinueInShop(latestRequest.id)} type="button">Continue in Shop</button>
               <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
             </article>
-          ) : quoteCurrent ? (
+          ) : receiptCurrent ? (
             <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={focusRequestReceipt} tabIndex={-1}>
               <span className="status-pill ready">{managedDeliveryConfirmed ? 'Request sent to Shop' : 'Request saved on this device'}</span>
               <strong>Request for {latestRequest.customerReference}</strong>
@@ -1374,7 +1387,7 @@ export function EcommerceBuyingWorkspace({
               </div>
               <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
               <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : onRecordManagedRequest ? 'Saved on this device. Company Shop delivery is not verified here.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
-              <button className="core-button secondary" disabled={disabled || recoveryBlocked || !quoteCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
+              <button className="core-button secondary" disabled={disabled || recoveryBlocked || !receiptCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
                 {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>
             </article>

@@ -10,7 +10,7 @@ assert.ok(start >= 0 && end > start)
 const handler = source.slice(start, end).replace('event: FormEvent<HTMLFormElement>', 'event')
 
 async function run({ managed = false, failure = '', duplicate = false } = {}) {
-  const result = { saved: 0, delivered: 0, notice: '', fresh: '', busy: false }
+  const result = { saved: 0, delivered: 0, notice: '', fresh: '', busy: false, cartClears: 0 }
   const window = { location: { pathname: '/ecommerce/', search: '' } }
   Object.defineProperty(window, 'localStorage', { get() {
     if (failure === 'storage') throw new Error('storage unavailable')
@@ -30,6 +30,7 @@ async function run({ managed = false, failure = '', duplicate = false } = {}) {
       if (failure === 'save') throw new Error('save unconfirmed')
       result.saved++; return {}
     },
+    onCartChange: lines => { assert.equal(lines.length, 0); result.cartClears++ },
     setBuyingState() {}, setRecoveryRead() {}, emitMetric() {},
     setFreshQuoteId: value => { result.fresh = value }, setQuoteClock() {}, setManagedConfirmation() {},
     onRecordManagedRequest: managed ? async () => {
@@ -50,6 +51,7 @@ for (const managed of [false, true]) for (const failure of ['', 'storage', 'beha
   test(`retained request feedback: managed=${managed}, optional failure=${failure || 'none'}`, async () => {
     const result = await run({ managed, failure })
     assert.equal(result.saved, 1)
+    assert.equal(result.cartClears, 1)
     assert.equal(result.delivered, managed ? 1 : 0)
     assert.equal(result.fresh, 'REQUEST')
     assert.equal(result.busy, false)
@@ -61,6 +63,7 @@ for (const failure of ['save', 'delivery']) {
     const result = await run({ managed: true, failure })
     assert.equal(result.saved, failure === 'save' ? 0 : 1)
     assert.equal(result.delivered, 0)
+    assert.equal(result.cartClears, 0, 'unconfirmed save or delivery must preserve cart')
     assert.equal(result.fresh, '')
     assert.equal(result.busy, false)
     assert.match(result.notice, /unconfirmed/)
@@ -71,6 +74,7 @@ for (const managed of [false, true]) {
   test(`same-render double submit starts one request: managed=${managed}`, async () => {
     const result = await run({ managed, duplicate: true })
     assert.equal(result.saved, 1)
+    assert.equal(result.cartClears, 1)
     assert.equal(result.delivered, managed ? 1 : 0)
     assert.equal(result.fresh, 'REQUEST')
     assert.equal(result.busy, false)
@@ -90,7 +94,7 @@ for (const managed of [false, true]) {
     const context = {
       Error, disabled: false, recoveryBlocked: false, latestRequestConfirmed: false,
       latestRequest: { id: 'REQUEST', quote: { pimDigest: 'pim' } },
-      quoteCurrent: true, handoffBusy: false, handoffInFlight: { current: false },
+      quoteCurrent: false, receiptCurrent: true, handoffBusy: false, handoffInFlight: { current: false },
       scope: 'local', sourcePreviewDigest: 'digest', preview: {}, activeBuyingState: {},
       currentCatalog: [], commerceState: {}, checkoutPaymentPolicies: [],
       setHandoffBusy() {}, setNotice() {}, emitMetric() {}, formatMmk: String,
@@ -123,3 +127,17 @@ for (const managed of [false, true]) {
     assert.equal(opened, 1)
   })
 }
+
+const receiptStart = source.indexOf('  const receiptCurrent =')
+const receiptEnd = source.indexOf('  const latestRequestConfirmed', receiptStart)
+assert.ok(receiptStart >= 0 && receiptEnd > receiptStart)
+test('saved receipt remains current with an empty cart only for the matching request and scope', () => {
+  const context = { quoteCurrent: false, cart: [], latestRequest: { id: 'r', scope: 'a', sourcePreviewDigest: 'd' },
+    freshQuoteId: 'r', scope: 'a', sourcePreviewDigest: 'd' }
+  const evaluate = extra => runInNewContext(source.slice(receiptStart, receiptEnd) + '\nreceiptCurrent', { ...context, ...extra })
+  assert.equal(evaluate({}), true)
+  assert.equal(evaluate({ cart: [{ sku: 'new' }] }), false)
+  assert.equal(evaluate({ freshQuoteId: '' }), false)
+  assert.equal(evaluate({ scope: 'other' }), false)
+  assert.equal(evaluate({ sourcePreviewDigest: 'changed' }), false)
+})
