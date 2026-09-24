@@ -10574,22 +10574,26 @@ function QualityHoldList({ disabled, jobs, onRelease }: { disabled: boolean; job
   })}</div>
 }
 
+function HandoffSection({ title, count, open, children }: { title: string; count: number; open?: boolean; children: ReactNode }) {
+  return <details className="compact-disclosure production-history" open={open}>
+    <summary>{title} <span>{count}</span></summary>
+    <div className="issue-list">{children}</div>
+  </details>
+}
+
 function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff; onCopy: () => void }) {
   const visibleMaterialEntries = handoff.materialEntries.slice(0, 8)
   const controlledOrderBlockers = handoff.controlledOrders.filter((order) => order.blockingReasons.length > 0)
   return <div>
     <p className="panel-copy"><strong>Close gate</strong> | {controlledOrderBlockers.length} controlled-order blockers | {handoff.openQualityIssues.length} open quality | {handoff.activeDowntime.length} downtime open | {handoff.activeMaintenance.length} maintenance open.</p>
     <p className="form-notice" role="status">{handoff.shiftRef} · revision {handoff.sourceRevision} · {handoff.shiftOutput.goodUnits.toLocaleString()} good · {handoff.shiftOutput.scrapUnits.toLocaleString()} scrap · {handoff.materialTotals.length} material totals · {handoff.controlledOrders.length} controlled orders · {handoff.shortCloses.length} closed short · {handoff.unfinishedJobs.length} unfinished · {handoff.activeHolds.length} held · {handoff.priorityProblems.length} critical/high · {handoff.activeMaintenance.length} maintenance open.</p>
-    <details className="compact-disclosure production-history">
-      <summary>Shift entries <span>{handoff.shiftEntries.length}</span></summary>
-      <div className="issue-list">
+    <HandoffSection title="Shift entries" count={handoff.shiftEntries.length}>
         {handoff.shiftEntries.map((entry) => <article key={entry.actionId}>
           <span className="issue-mark resolved">{entry.outputKind === 'scrap' ? 'S' : 'G'}</span>
           <div><strong>{entry.quantity.toLocaleString()} {entry.outputKind} · {entry.product}</strong><small style={wrappedIssueDetail}>{entry.jobId} · {formatIssueDue(entry.recordedAt)} · {entry.recordedBy}</small><small style={wrappedIssueDetail}>Reason: {entry.reason}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
         </article>)}
         {!handoff.shiftEntries.length ? <Empty>No output entry is attributed to this shift reference.</Empty> : null}
-      </div>
-    </details>
+    </HandoffSection>
     <details className="compact-disclosure production-history">
       <summary>Material use <span>{handoff.materialEntries.length}</span></summary>
       <p className="panel-copy"><strong>Shift totals</strong></p>
@@ -10606,96 +10610,69 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
       </article>)}</div></> : null}
       {handoff.materialEntries.length > visibleMaterialEntries.length ? <p className="panel-copy">Showing the latest {visibleMaterialEntries.length} of {handoff.materialEntries.length} entries. Copy keeps every attributed entry.</p> : null}
     </details>
-    <details className="compact-disclosure production-history" open={Boolean(controlledOrderBlockers.length)}>
-      <summary>Controlled orders <span>{handoff.controlledOrders.length}</span></summary>
-      <div className="issue-list">
+    <HandoffSection title="Controlled orders" count={handoff.controlledOrders.length} open={Boolean(controlledOrderBlockers.length)}>
         {handoff.controlledOrders.map((order) => <article key={order.jobId}>
           <span className={`issue-mark ${order.blockingReasons.length ? 'open' : 'resolved'}`}>{order.disposition === 'released' ? 'R' : order.disposition === 'carry_forward' ? 'C' : 'Q'}</span>
           <div><strong>{order.product} · {order.jobId}</strong><small style={wrappedIssueDetail}>{order.disposition.replaceAll('_', ' ')} · {order.status.replaceAll('_', ' ')} · Binding {order.bindingCurrent ? 'current' : 'stale'} · Plan {order.planId}</small><small style={wrappedIssueDetail}>Operations {order.completedOperationCount}/{order.operationCount} · Output {order.outputUnits.toLocaleString()}/{order.targetUnits.toLocaleString()} · Accepted {order.acceptedUnits.toLocaleString()} · Trace links {order.genealogyLinkCount}</small>{order.owner || order.dueAt ? <small style={wrappedIssueDetail}>{order.owner ? `Owner ${order.owner}` : 'Owner missing'} · {order.dueAt ? `Due ${formatIssueDue(order.dueAt)}` : 'Due time missing'}</small> : null}{order.nextOperation ? <small style={wrappedIssueDetail}>Next: {order.nextOperation.operationId} · {order.nextOperation.name} · {order.nextOperation.remainingUnits.toLocaleString()} remaining</small> : null}{order.inspection ? <small style={wrappedIssueDetail}>Inspection {order.inspection.inspectionId} · {order.inspection.result} · {order.inspection.acceptedUnits.toLocaleString()} accepted · {order.inspection.rejectedUnits.toLocaleString()} rejected · Evidence {order.inspection.evidenceReference}</small> : null}{order.batchRelease ? <small style={wrappedIssueDetail}>Release {order.batchRelease.releaseId} · {formatIssueDue(order.batchRelease.releasedAt)} · {order.batchRelease.releasedBy} · Evidence {order.batchRelease.evidenceReference}</small> : null}{order.exceptions.map((exception) => <small key={exception} style={wrappedIssueDetail}>Exception: {exception}</small>)}{order.blockingReasons.map((reason) => <small key={reason} style={wrappedIssueDetail}>BLOCKED: {reason}</small>)}<small style={wrappedIssueDetail}>Plan digest: {order.planDigest}</small></div>
         </article>)}
         {!handoff.controlledOrders.length ? <Empty>No controlled order exists in this Plant workspace.</Empty> : null}
-      </div>
-    </details>
-    <details className="compact-disclosure production-history">
-      <summary>Closed short <span>{handoff.shortCloses.length}</span></summary>
-      <div className="issue-list">
+    </HandoffSection>
+    <HandoffSection title="Closed short" count={handoff.shortCloses.length}>
         {handoff.shortCloses.map((entry) => <article key={entry.actionId}>
           <span aria-hidden="true" className="issue-mark resolved">C</span>
           <div><strong>{entry.product} · {entry.jobId}</strong><small style={wrappedIssueDetail}>{entry.goodUnits.toLocaleString()} good · {entry.scrapUnits.toLocaleString()} scrap · {entry.remainingUnits.toLocaleString()} not produced</small><small style={wrappedIssueDetail}>Closed {formatIssueDue(entry.recordedAt)} by {entry.recordedBy} · Shift {entry.shiftRef}</small><small style={wrappedIssueDetail}>Reason: {entry.reason}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
         </article>)}
         {!handoff.shortCloses.length ? <Empty>No job was closed short in this shift.</Empty> : null}
-      </div>
-    </details>
-    <details className="compact-disclosure production-history">
-      <summary>Unfinished jobs <span>{handoff.unfinishedJobs.length}</span></summary>
-      <div className="issue-list">
+    </HandoffSection>
+    <HandoffSection title="Unfinished jobs" count={handoff.unfinishedJobs.length}>
         {handoff.unfinishedJobs.map((job) => <article key={job.id}>
           <span className={`issue-mark ${job.qualityHold ? 'open' : 'resolved'}`}>{job.qualityHold ? 'H' : 'J'}</span>
           <div><strong>{job.product} · {job.id}</strong><small style={wrappedIssueDetail}>{job.line} · {job.remainingUnits.toLocaleString()} remaining · {job.goodUnits.toLocaleString()} good · {job.scrapUnits.toLocaleString()} scrap</small><small style={wrappedIssueDetail}>{job.priority && job.dueAt ? `${productionJobPriorityLabels[job.priority]} · Due ${formatIssueDue(job.dueAt)}` : 'Schedule not recorded · legacy job'}</small>{job.qualityHold ? <small style={wrappedIssueDetail}>QUALITY HOLD · {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}</div>
         </article>)}
         {!handoff.unfinishedJobs.length ? <Empty>No unfinished job is recorded.</Empty> : null}
-      </div>
-    </details>
-    <details className="compact-disclosure production-history">
-      <summary>Active quality holds <span>{handoff.activeHolds.length}</span></summary>
-      <div className="issue-list">
+    </HandoffSection>
+    <HandoffSection title="Active quality holds" count={handoff.activeHolds.length}>
         {handoff.activeHolds.map((heldJob) => <article key={heldJob.id}>
           <span className="issue-mark open">H</span>
           <div><strong>{heldJob.product} · {heldJob.id}</strong><small style={wrappedIssueDetail}>{heldJob.line} · target {heldJob.target.toLocaleString()} · {heldJob.goodUnits.toLocaleString()} good · {heldJob.scrapUnits.toLocaleString()} scrap · {heldJob.remainingUnits.toLocaleString()} remaining</small><small style={wrappedIssueDetail}>Held {formatIssueDue(heldJob.qualityHold.heldAt)} by {heldJob.qualityHold.heldBy}</small><small style={wrappedIssueDetail}>Reason: {heldJob.qualityHold.reason}</small><small style={wrappedIssueDetail}>Evidence: {heldJob.qualityHold.evidenceReference} · Action: {heldJob.qualityHold.actionId}</small></div>
         </article>)}
         {!handoff.activeHolds.length ? <Empty>No active quality hold is recorded.</Empty> : null}
-      </div>
-    </details>
-    <details className="compact-disclosure production-history">
-      <summary>Open quality problems <span>{handoff.openQualityIssues.length}</span></summary>
-      <div className="issue-list">
+    </HandoffSection>
+    <HandoffSection title="Open quality problems" count={handoff.openQualityIssues.length}>
         {handoff.openQualityIssues.map((problem) => <article key={problem.id}>
           <span className="issue-mark open">{problem.severity.charAt(0).toUpperCase()}</span>
           <div><strong>{problem.summary}</strong><small style={wrappedIssueDetail}>{productionIssueSeverityLabels[problem.severity]} · {problem.area}</small><small style={wrappedIssueDetail}>Owner {problem.owner} · Due {formatIssueDue(problem.dueAt)}</small><small style={wrappedIssueDetail}>Next: {problem.containment}</small></div>
         </article>)}
         {!handoff.openQualityIssues.length ? <Empty>No open quality problem is recorded.</Empty> : null}
-      </div>
-    </details>
-    <details className="compact-disclosure production-history">
-      <summary>Critical/high problems <span>{handoff.priorityProblems.length}</span></summary>
-      <div className="issue-list">
+    </HandoffSection>
+    <HandoffSection title="Critical/high problems" count={handoff.priorityProblems.length}>
         {handoff.priorityProblems.map((problem) => <article key={problem.id}>
           <span className="issue-mark open">{problem.severity.charAt(0).toUpperCase()}</span>
           <div><strong>{problem.summary}</strong><small style={wrappedIssueDetail}>{productionIssueSeverityLabels[problem.severity]} · {problem.area} · Opened {formatIssueDue(problem.openedAt)} by {problem.openedBy}</small><small style={wrappedIssueDetail}>Owner {problem.owner} · Due {formatIssueDue(problem.dueAt)}</small><small style={wrappedIssueDetail}>Next: {problem.containment}</small><small style={wrappedIssueDetail}>Evidence: {problem.evidenceReference} · Action: {problem.actionId}</small></div>
         </article>)}
         {!handoff.priorityProblems.length ? <Empty>No open critical or high problem is recorded.</Empty> : null}
-      </div>
-    </details>
-    <details className="compact-disclosure production-history">
-      <summary>Active downtime <span>{handoff.activeDowntime.length}</span></summary>
-      <div className="issue-list">
+    </HandoffSection>
+    <HandoffSection title="Active downtime" count={handoff.activeDowntime.length}>
         {handoff.activeDowntime.map((interval) => <article key={interval.startActionId}>
           <span className="issue-mark open">DT</span>
           <div><strong>{interval.machineName}</strong><small style={wrappedIssueDetail}>{interval.machineId} · Started {formatIssueDue(interval.startedAt)} by {interval.startedBy}</small><small style={wrappedIssueDetail}>Reason: {interval.startReason}</small><small style={wrappedIssueDetail}>Evidence: {interval.startEvidenceReference} · Action: {interval.startActionId}</small></div>
         </article>)}
         {!handoff.activeDowntime.length ? <Empty>No active downtime is recorded.</Empty> : null}
-      </div>
-    </details>
-    <details className="compact-disclosure production-history">
-      <summary>Active maintenance <span>{handoff.activeMaintenance.length}</span></summary>
-      <div className="issue-list">
+    </HandoffSection>
+    <HandoffSection title="Active maintenance" count={handoff.activeMaintenance.length}>
         {handoff.activeMaintenance.map((record) => <article key={record.startActionId}>
           <span className="issue-mark open">MX</span>
           <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>{record.machineId} · Started {formatIssueDue(record.startedAt)} by {record.startedBy}</small><small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
         </article>)}
         {!handoff.activeMaintenance.length ? <Empty>No active maintenance work is recorded.</Empty> : null}
-      </div>
-    </details>
-    <details className="compact-disclosure production-history">
-      <summary>Machine observations <span>{handoff.machineObservations.length}</span></summary>
-      <div className="issue-list">
+    </HandoffSection>
+    <HandoffSection title="Machine observations" count={handoff.machineObservations.length}>
         {handoff.machineObservations.map((machine) => <article key={machine.id}>
           <span className={`machine-dot ${machine.state}`} />
           <div><strong>{machine.name}</strong><small style={wrappedIssueDetail}>{machine.id} · Recorded: {productionMachineStateLabels[machine.state]}</small>{machine.observation ? <><small style={wrappedIssueDetail}>Observed {formatIssueDue(machine.observation.observedAt)} by {machine.observation.observedBy}</small><small style={wrappedIssueDetail}>Reason: {machine.observation.reason}</small><small style={wrappedIssueDetail}>Evidence: {machine.observation.evidenceReference} · Action: {machine.observation.actionId}</small></> : <small style={wrappedIssueDetail}>No attributed observation recorded</small>}</div>
         </article>)}
         {!handoff.machineObservations.length ? <Empty>No machine record exists.</Empty> : null}
-      </div>
-    </details>
+    </HandoffSection>
     <button className="core-button" onClick={onCopy} type="button">Copy close file</button>
   </div>
 }
