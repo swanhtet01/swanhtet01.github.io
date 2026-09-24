@@ -60,3 +60,12 @@ test('a failed incoming write rolls back the original registered data', async ()
     assert.deepEqual(Object.fromEntries(target.records), original)
   }
 })
+
+test('a failed rollback reports incomplete recovery instead of only the initial write error', async () => {
+  const target = memoryStorage({
+    'unrelated.preference': 'keep',
+    'supermega.website.leads.v1': '[{"synthetic":"original"}]',
+  }, () => true)
+  await assert.rejects(applyLocalWorkspaceBackup(target, fixture), /Restore failed and the previous records could not be fully recovered/)
+  assert.equal(target.getItem('unrelated.preference'), 'keep')
+})

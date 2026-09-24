@@ -489,7 +489,9 @@ export async function applyLocalWorkspaceBackup(
       for (const [key, raw] of Object.entries(previous.records)) {
         await withWorkspaceLock(key, lockManager, () => storage.setItem(key, raw))
       }
-    } catch { /* Preserve the original failure. */ }
+    } catch {
+      throw new Error('Restore failed and the previous records could not be fully recovered. Keep your backup file and do not reset this device.')
+    }
     throw error
   }
 }
