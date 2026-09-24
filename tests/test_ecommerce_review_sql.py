@@ -324,7 +324,15 @@ class CatalogEnrollmentSqlTests(unittest.TestCase):
         self.assertEqual(store.readiness(customer).capabilities, frozenset({'ecommerce.review'}))
         with self.assertRaises(TrialPermissionDenied): store.get_state(customer,'commerce')
         with self.assertRaises(TrialPermissionDenied): adapter.preparation_preview(customer)
-        review = adapter.prepare(writer, review_id=str(uuid4()),recipient_actor_id=recipient,
+        choices=adapter.list_recipients(writer)
+        self.assertEqual(choices['recipients'],[{'grantId':plan['grantId'],'label':'Synthetic catalog reviewer'}])
+        self.assertNotIn(recipient,json.dumps(choices))
+        self.assertEqual(adapter.list_recipients(writer,after=plan['grantId'])['recipients'],[])
+        with self.assertRaises(TrialPermissionDenied): adapter.list_recipients(customer)
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.prepare(writer,review_id=str(uuid4()),recipient_grant_id=str(uuid4()),
+                expected_version=1,expires_at=(now+timedelta(hours=1)).isoformat())
+        review = adapter.prepare(writer, review_id=str(uuid4()),recipient_grant_id=plan['grantId'],
             expected_version=1,expires_at=(now+timedelta(hours=1)).isoformat())
         self.assertEqual(adapter.preview(customer,review['reviewId'])['previewDigest'],review['previewDigest'])
         args=dict(verified_owner_actor_id=OWNER_ID,verified_owner_session_id=OWNER_SESSION_ID,reason='Synthetic review ended.')
@@ -332,3 +340,7 @@ class CatalogEnrollmentSqlTests(unittest.TestCase):
         self.assertTrue(provisioner.revoke(plan,activation,**args)['replayed'])
         with self.assertRaises(TrialNotReadyError): adapter.preview(customer,review['reviewId'])
         self.assertEqual(store.readiness(customer).capabilities,frozenset())
+        self.assertEqual(adapter.list_recipients(writer)['recipients'],[])
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.prepare(writer,review_id=str(uuid4()),recipient_grant_id=plan['grantId'],
+                expected_version=1,expires_at=(now+timedelta(hours=1)).isoformat())
