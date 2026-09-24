@@ -760,6 +760,40 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 finally:
                     connection.rollback()
 
+    def test_sql_catalog_projection_matches_python_public_fields(self):
+        from pathlib import Path
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        from supermega_runtime.commerce_runtime import commerce_storefront_preview
+        source = catalog_state()
+        source['items'].append(dict(sku='SKU-2',name='Tea',variant='Small',onHand=0,reorderAt=0,price=500))
+        merchandising = [dict(sku=sku,featured=sku=='SKU-1',collection='Local',displayName=name,note='Prepared') for sku,name in [('SKU-1','Coffee'),('SKU-2','Tea')]]
+        source['storefrontConfiguration'] = storefront_configuration(source,selected_skus=['SKU-1','SKU-2'],merchandising=merchandising)
+        expected = commerce_storefront_preview(source)
+        # Extra private facts must not leak even if a future state adds fields.
+        source['items'][0]['privateCost'] = 777
+        source['privateCustomer'] = 'PRIVATE_TEST_DATA'
+        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        with pg._connect(self.admin_url) as connection:
+            try:
+                connection.execute(sql)
+                actual = connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(source),)).fetchone()[0]
+                self.assertEqual(actual, expected)
+                self.assertNotIn('privateCost',json.dumps(actual))
+                self.assertNotIn('PRIVATE_TEST_DATA',json.dumps(actual))
+                for role in ('anon','authenticated','service_role'):
+                    self.assertFalse(connection.execute("select has_function_privilege(%s,'app_private.ecommerce_review_projection(jsonb)','execute')",(role,)).fetchone()[0])
+                for mutation in ('missing','duplicate','empty','unknown'):
+                    broken = deepcopy(source)
+                    if mutation == 'missing': del broken['storefrontConfiguration']
+                    if mutation == 'duplicate': broken['items'].append(deepcopy(broken['items'][0]))
+                    if mutation == 'empty': broken['storefrontConfiguration']['selectedSkus'] = []
+                    if mutation == 'unknown': broken['storefrontConfiguration']['selectedSkus'] = ['missing']
+                    with self.subTest(mutation=mutation),self.assertRaises(self.db_error):
+                        with connection.transaction():
+                            connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(broken),))
+            finally:
+                connection.rollback()
+
     def test_ecommerce_entitlement_is_private_and_product_specific(self):
         vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
                    ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),
