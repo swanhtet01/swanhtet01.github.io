@@ -51,7 +51,7 @@ for (const mode of ['pending-success', 'rejected', 'busy', 'unready', 'switched'
   assert.equal(writes.length, accepted ? 2 : 0)
   assert.equal(context.managedVersionRef.current, accepted ? 2 : 1)
   assert.equal(context.managedSaveBusyRef.current, false)
-  if (mode === 'rejected') assert.ok(calls.some(([kind, text]) => kind === 'notice' && text.includes('not confirmed')))
+  if (mode === 'rejected') assert.ok(calls.some(([kind, text]) => kind === 'notice' && text.includes('Save unconfirmed. Reload before retrying.')))
 }
 console.log('Managed schedule acknowledgement: 7 handler scenarios passed')
 
