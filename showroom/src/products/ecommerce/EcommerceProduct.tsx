@@ -1788,7 +1788,7 @@ export function EcommerceProduct() {
     && !savedDraft && ecommerceTodayAction === 'Try sample request'
     && ecommerceTodayState === 'ready' && !ecommerceTodayCartUnits
 
-  if (showAssistedCatalogSetup && workspaceView === 'preview' && !workspaceOpened) return <BusinessBrief product="ecommerce" onOpenWorkspace={() => setWorkspaceOpened(true)} />
+  if (assistedCatalogEntry && !workspaceOpened) return <BusinessBrief product="ecommerce" onOpenWorkspace={() => setWorkspaceOpened(true)} />
 
   return (
     <div className="workspace-screen ecommerce-product">

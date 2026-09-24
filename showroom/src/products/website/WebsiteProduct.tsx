@@ -1144,7 +1144,7 @@ export function WebsiteProduct() {
     }
   }
 
-  if (canRequestWebsiteSetup && !workspaceOpened) return <BusinessBrief product="website" onOpenWorkspace={() => setWorkspaceOpened(true)} />
+  if (showAssistedWebsitePreview && !workspaceOpened) return <BusinessBrief product="website" onOpenWorkspace={() => setWorkspaceOpened(true)} />
 
   return (
     <div className="website-product">
