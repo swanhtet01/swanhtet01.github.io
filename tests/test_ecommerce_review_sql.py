@@ -228,6 +228,25 @@ class CatalogReviewSqlTests(unittest.TestCase):
         owner_headers = {'x-test-actor': 'operator'}
         customer_headers = {'x-test-actor': 'customer'}
         with TestClient(app) as client:
+            preparation_url = '/api/trial/v1/ecommerce-review-preparation'
+            with pg._connect(self.admin_url) as connection:
+                before = connection.execute('select count(*) from app_private.ecommerce_customer_reviews').fetchone()[0]
+            saved = client.get(preparation_url, headers=owner_headers)
+            self.assertEqual(saved.status_code, 200, saved.text)
+            saved = saved.json()
+            self.assertEqual(saved['sourceVersion'], http_version)
+            self.assertEqual(saved['preview'], commerce_storefront_preview(source))
+            self.assertEqual(saved['previewDigest'], commerce_storefront_preview_digest(source))
+            self.assertFalse(saved['reviewCreated'])
+            self.assertFalse(saved['publicationAuthorized'])
+            self.assertFalse(saved['deploymentAuthorized'])
+            for headers, status in (({}, 401), (customer_headers, 403), ({'x-test-actor':'other'}, 403)):
+                self.assertEqual(client.get(preparation_url, headers=headers).status_code, status)
+            self.assertEqual(client.get(preparation_url+'?workspaceId=other', headers=owner_headers).status_code, 422)
+            readonly = EcommerceCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *_: None, write_enabled=False))
+            self.assertEqual(readonly.preparation_preview(principals['operator'])['preview'], saved['preview'])
+            with pg._connect(self.admin_url) as connection:
+                self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_reviews').fetchone()[0], before)
             for headers, status in (({}, 401), ({'x-test-actor': 'agent'}, 403), (customer_headers, 403)):
                 response = client.post(base, json=body, headers=headers)
                 self.assertEqual(response.status_code, status)

@@ -1,4 +1,4 @@
-"""Private catalog review adapter. No HTTP route, grant or publication authority."""
+"""Private catalog review adapter. No grant or publication authority."""
 from copy import deepcopy
 from contextlib import contextmanager
 from datetime import timedelta
@@ -51,8 +51,8 @@ class EcommerceCustomerReviewStore:
         self.store=store
 
     @contextmanager
-    def _transaction(self,principal,*,write=False,lock_source=False):
-        capability='commerce.write' if write else 'ecommerce.review'
+    def _transaction(self,principal,*,write=False,lock_source=False,capability=None):
+        capability=capability or ('commerce.write' if write else 'ecommerce.review')
         actor=principal.normalized()
         if actor.actor_kind!='human': raise TrialPermissionDenied(capability)
         with self.store._guarded_cursor(actor,write=write,capability=capability) as (cursor,_):
@@ -69,6 +69,22 @@ class EcommerceCustomerReviewStore:
                 or 'ecommerce' not in self.store._product_entitlements(cursor,actor.workspace_id)):
                 raise TrialPermissionDenied(capability)
             yield cursor,actor
+
+    def preparation_preview(self,principal):
+        """Read saved public catalog facts; prepare still checks version under lock."""
+        with self._transaction(principal,capability='commerce.write') as (cursor,actor):
+            cursor.execute("select version,state_json,clock_timestamp() as read_at from app_private.workspace_state where workspace_id=%s and surface='commerce'",(actor.workspace_id,))
+            source=cursor.fetchone()
+            if source is None: raise TrialValidationError('ecommerce_review_source_missing')
+            if not 1<=source['version']<=9_007_199_254_740_991:
+                raise TrialValidationError('ecommerce_review_source_stale')
+            preview=commerce_storefront_preview(source['state_json'])
+            result=dict(status='saved_source_preview',sourceVersion=source['version'],
+                contentRevision=source['state_json']['storefrontConfiguration']['revision'],
+                preview=deepcopy(preview),previewDigest=commerce_storefront_preview_digest(source['state_json']),
+                readAt=source['read_at'].isoformat(),reviewCreated=False,
+                publicationAuthorized=False,deploymentAuthorized=False)
+        return result
 
     def preview(self,principal,review_id):
         review_id=uuid(review_id)

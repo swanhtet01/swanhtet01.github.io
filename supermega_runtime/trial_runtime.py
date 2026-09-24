@@ -1101,6 +1101,14 @@ def create_trial_router(
             exc.headers = {**(exc.headers or {}), **headers}
             raise
 
+    @router.get("/ecommerce-review-preparation")
+    async def preview_ecommerce_review_preparation(request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            if request.query_params:
+                raise TrialValidationError("ecommerce_review_request_invalid")
+            return adapter.preparation_preview(principal)
+        return await ecommerce_review_request(request, operation)
+
     @router.post("/ecommerce-reviews")
     async def prepare_ecommerce_review(request: Request) -> JSONResponse:
         def operation(adapter, principal, body):
