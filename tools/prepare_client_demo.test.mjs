@@ -885,3 +885,25 @@ test('selected-package server validation rejects duplicate order and split clien
     await rm(source.directory, { recursive: true, force: true })
   }
 })
+
+
+test('contact workspace rejects missing essentials and review gates before creating files', async () => {
+  const parent = await mkdtemp(resolve(tmpdir(), 'supermega-contact-rejected-'))
+  const directory = resolve(parent, 'workspace')
+  try {
+    const event = contactEvent()
+    for (const field of ['companyReviewed', 'goalReviewed', 'privateWorkspaceApproved']) {
+      await assert.rejects(initializeClientWorkspaceFromContact({ directory, event,
+        review: contactReview({ event, overrides: { [field]: false } }) }), /client_contact_review_approval_required/)
+      await assert.rejects(stat(directory), { code: 'ENOENT' })
+    }
+    for (const field of ['company', 'goal']) {
+      await assert.rejects(initializeClientWorkspaceFromContact({ directory,
+        event: { ...event, record: { ...event.record, [field]: '  ' } }, review: contactReview({ event }) }),
+        new RegExp('client_contact_' + field + '_invalid'))
+      await assert.rejects(stat(directory), { code: 'ENOENT' })
+    }
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
