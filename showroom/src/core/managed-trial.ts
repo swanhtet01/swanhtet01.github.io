@@ -2936,7 +2936,14 @@ export async function signInAndDiscoverManagedWorkspaces(email: string, password
   forgetWorkspace()
   const { data, error } = await supabase.auth.signInWithPassword({ email: normalizeAuthEmail(email), password })
   if (error || !data.session || data.user.is_anonymous !== false) {
-    throw new ManagedTrialError('Sign-in failed. Check the account and password.', {
+    const status = error?.status
+    const unavailable = error?.name === 'AuthRetryableFetchError' || status === 0
+      || (typeof status === 'number' && status >= 500 && status < 600)
+    const message = status === 429
+      ? 'Too many sign-in attempts. Wait a few minutes and try again.'
+      : unavailable ? 'Sign-in is temporarily unavailable. Check your connection and try again.'
+        : 'Sign-in failed. Check the account and password.'
+    throw new ManagedTrialError(message, {
       status: error?.status,
       code: error?.code ?? 'sign_in_failed',
     })

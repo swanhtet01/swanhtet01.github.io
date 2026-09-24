@@ -775,3 +775,28 @@ test('Ecommerce invalid identifiers fail before provider or network access', asy
     assert.deepEqual(state.calls, [])
   })
 })
+
+
+test('sign-in distinguishes unavailable service and rate limits without exposing provider details', async () => {
+  for (const [status, name, expected] of [
+    [0, 'AuthRetryableFetchError', /temporarily unavailable/],
+    [503, 'AuthRetryableFetchError', /temporarily unavailable/],
+    [500, 'AuthApiError', /temporarily unavailable/],
+    [429, 'AuthApiError', /Wait a few minutes/],
+    [400, 'AuthApiError', /Check the account and password/],
+  ]) {
+    await withAuth(async (mod, state) => {
+      state.signInWithPassword = async () => ({ data: { user: null, session: null },
+        error: { name, status, code: 'synthetic_auth_error', message: 'PRIVATE_PROVIDER_DETAIL' } })
+      await assert.rejects(mod.signInAndDiscoverManagedWorkspaces('owner@example.invalid', 'synthetic-input'), error => {
+        assert.match(error.message, expected)
+        assert.ok(!error.message.includes('PRIVATE_PROVIDER_DETAIL'))
+        assert.equal(error.status, status)
+        assert.equal(error.code, 'synthetic_auth_error')
+        return true
+      })
+      assert.equal(state.calls.filter(([name]) => name === 'signInWithPassword').length, 1)
+      assert.equal(state.calls.filter(([name]) => name === 'fetch').length, 0, 'failed sign-in cannot discover company data')
+    })
+  }
+})
