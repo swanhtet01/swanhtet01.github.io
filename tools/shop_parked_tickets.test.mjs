@@ -4,6 +4,29 @@ import { readFileSync } from 'node:fs'
 import { COUNTER_TICKETS_KEY, emptyCounterBasket, parseCounterTickets, transitionCounterTickets, mutateCounterTickets, createCounterTicketSession } from '../showroom/src/core/shop-parked-tickets.ts'
 const input = { cart: { 'TEA-1': 2 }, customer: '', payment: 'Cash', outcome: 'paid_handoff' }
 const saved = () => transitionCounterTickets(parseCounterTickets(null), { kind: 'save', basket: input })
+
+test('memory-only company baskets remain isolated without global storage fallback', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw Error('Global storage forbidden') } })
+  try {
+    const first = createCounterTicketSession(null, null, 'Synthetic A')
+    assert.equal(first.dispatch({ kind: 'save', basket: { ...input, customer: 'Synthetic A' } }), true)
+    await first.settled()
+    assert.equal(first.getSnapshot().pending, 0)
+    assert.equal(first.checkpoint(), true)
+    const second = createCounterTicketSession(null, null, 'Synthetic B')
+    assert.deepEqual(second.getSnapshot().state.cart, {})
+    assert.equal(second.getSnapshot().state.customer, 'Synthetic B')
+    assert.deepEqual(first.getSnapshot().state.cart, input.cart)
+    first.deactivate()
+    assert.equal(first.dispatch({ kind: 'save', basket: { ...input, cart: {} } }), false)
+    assert.equal(first.checkpoint(), false)
+    assert.deepEqual(first.getSnapshot().state.cart, input.cart)
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'localStorage', previous)
+    else delete globalThis.localStorage
+  }
+})
 test('legacy recovery migrates without changing basket contents', () => {
   const result = parseCounterTickets(JSON.stringify(input))
   assert.deepEqual(result.cart, input.cart)
