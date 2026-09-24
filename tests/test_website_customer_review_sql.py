@@ -948,6 +948,22 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'commerce',1,%s::jsonb,%s) on conflict(workspace_id,surface) do update set state_json=excluded.state_json,version=app_private.workspace_state.version+1",(WORKSPACE,json.dumps(source),OWNER))
                 version=connection.execute("select version from app_private.workspace_state where workspace_id=%s and surface='commerce'",(WORKSPACE,)).fetchone()[0]
                 connection.execute('set local role supermega_trial_backend')
+                from psycopg.rows import dict_row
+                with connection.cursor(row_factory=dict_row) as cursor:
+                    PostgresTrialStore._assert_schema(cursor)
+                for alter in (
+                    'alter table app_private.ecommerce_customer_reviews disable trigger ecommerce_review_guard',
+                    'drop trigger ecommerce_reviews_invalidate on app_private.workspace_state',
+                    'alter function app_private.guard_ecommerce_review() security definer',
+                ):
+                    connection.execute('savepoint changed_guard')
+                    connection.execute('reset role')
+                    connection.execute(alter)
+                    connection.execute('set local role supermega_trial_backend')
+                    with connection.cursor(row_factory=dict_row) as cursor,self.assertRaises(TrialNotReadyError):
+                        PostgresTrialStore._assert_schema(cursor)
+                    connection.execute('rollback to savepoint changed_guard')
+
                 valid = dict(workspace=WORKSPACE,recipient=RECIPIENT,preparer=OWNER,version=version,
                              preview=commerce_storefront_preview(source),digest=commerce_storefront_preview_digest(source),
                              expiry=datetime.now(timezone.utc)+timedelta(days=1))

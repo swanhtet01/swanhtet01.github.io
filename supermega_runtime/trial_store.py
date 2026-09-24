@@ -3384,6 +3384,30 @@ def _without_verified_website_review_triggers(rows: Sequence[Mapping[str, Any]])
     return [row for row in rows if (row.get("table_name"), row.get("trigger_name")) not in _WEBSITE_REVIEW_TRIGGERS]
 
 
+_ECOMMERCE_REVIEW_TRIGGERS = {
+    ("ecommerce_customer_reviews", "ecommerce_review_guard"): (31, "guard_ecommerce_review", "41583ca2889b54fcf7c77c68d307f55ec127b218b27f3bc001cf05418e4776d9"),
+    ("workspace_state", "ecommerce_reviews_invalidate"): (25, "invalidate_ecommerce_reviews", "2f8e3905cd867d3a118d4fd6eaf9963248cee9ea14cfd7df0160d073f2167959"),
+}
+
+def _without_verified_ecommerce_review_triggers(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Optional extension: accept both exact guards or none, never ignore drift."""
+    extension = [row for row in rows if (row.get("table_name"), row.get("trigger_name")) in _ECOMMERCE_REVIEW_TRIGGERS]
+    if not extension:
+        return list(rows)
+    if len(extension) != 2 or len({(row["table_name"], row["trigger_name"]) for row in extension}) != 2:
+        raise TrialNotReadyError(("schema_ready",))
+    for row in extension:
+        mask, function, digest = _ECOMMERCE_REVIEW_TRIGGERS[(row["table_name"], row["trigger_name"])]
+        if (row.get("event_mask") != mask or row.get("enabled") != "O"
+                or not all(row.get(key) for key in ("no_when_clause", "no_arguments", "no_column_filter", "no_constraint_link", "not_deferrable", "not_initially_deferred", "no_transition_tables"))
+                or row.get("function_schema") != "app_private" or row.get("function_name") != function
+                or row.get("function_language") != "plpgsql" or row.get("security_definer") is not False
+                or tuple(row.get("function_config") or ()) != ("search_path=pg_catalog, app_private",)
+                or sha256(str(row.get("function_source") or "").replace("\r\n", "\n").strip().encode()).hexdigest() != digest):
+            raise TrialNotReadyError(("schema_ready",))
+    return [row for row in rows if (row.get("table_name"), row.get("trigger_name")) not in _ECOMMERCE_REVIEW_TRIGGERS]
+
+
 def _require_human_decider(principal: TrialPrincipal) -> None:
     if principal.actor_kind != HUMAN_ACTOR_KIND:
         raise TrialHumanApprovalRequired()
@@ -3606,7 +3630,8 @@ class PostgresTrialStore:
             """
         )
         raw_triggers = cursor.fetchall()
-        trigger_rows = _without_verified_website_review_triggers(raw_triggers)
+        trigger_rows = _without_verified_ecommerce_review_triggers(
+            _without_verified_website_review_triggers(raw_triggers))
         from .website_acceptance_schema import ACCEPTANCE_TRIGGERS, acceptance_triggers_verified, acceptance_storage_verified
         if any((row.get("table_name"), row.get("trigger_name")) in ACCEPTANCE_TRIGGERS for row in trigger_rows):
             # Optional extension: never whitelist a trigger by name alone.
