@@ -1,3 +1,4 @@
+import { spaCounterFields } from './shop-spa-counter-fields'
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
@@ -4001,6 +4002,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice('Add at least one item and choose payment before reviewing the sale.')
       return
     }
+    let counterFields: { customer: string; payment: string }
+    try {
+      counterFields = spaCounterFields(review.customer, review.payment, Boolean(managedIdentity && shopPack?.id === 'spa'))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Review the client and payment method.')
+      return
+    }
     const reviewedAt = new Date()
     const orderLines: CommerceOrderLine[] = []
     const seenSkus = new Set<string>()
@@ -4029,12 +4037,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const order: CommerceOrder = {
       id: orderId,
       createdAt: reviewedAt.toISOString(),
-      customer: review.customer || 'Guest',
+      customer: counterFields.customer || 'Guest',
       channel: 'Walk-in',
       item: commerceOrderItemSummary(orderLines),
       ...(orderLines.length === 1 ? { itemSku: orderLines[0].sku } : {}),
       quantity: orderQuantity,
-      payment: review.payment,
+      payment: counterFields.payment,
       paymentStatus: 'pending',
       refundStatus: 'none',
       fulfilment: 'pickup',
