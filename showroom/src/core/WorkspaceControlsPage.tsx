@@ -733,7 +733,7 @@ export function WorkspaceControlsPage() {
     <div className="workspace-screen settings-screen">
       <PageHeading
         actions={<Link className="core-button" to="/">Back to products</Link>}
-        copy="Check company readiness and protect the work saved in this browser. Product setup and internal client tools stay separate."
+        copy="Manage your connection and back up your work."
         eyebrow="Workspace controls"
         title="Status and recovery"
       />
@@ -746,7 +746,7 @@ export function WorkspaceControlsPage() {
           <p className="authority-note">SuperMega can prepare local work. Customer messages, payments, publishing, imports, and managed writes still require verified company controls and human approval.</p>
         </section>
 
-        <section className="core-panel">
+        <details className="core-panel compact-disclosure"><summary>Business reports</summary>
           <div><span className="core-eyebrow">Reports</span><h2>See how the business is doing.</h2><p>Read-only summaries of saved Shop, Plant, Website and Ecommerce records.</p></div>
           <div className="trial-actions">
             <Link className="core-button primary" to="/settings/?view=ceo-brief#controls">Operating brief</Link>
@@ -758,18 +758,18 @@ export function WorkspaceControlsPage() {
             <Link className="core-button" to="/settings/?view=cross-product#controls">Order and production status</Link>
             <Link className="core-button" to="/settings/?view=local-metrics#controls">Device activity</Link>
           </div>
-        </section>
+        </details>
 
-        <section className="core-panel">
+        <details className="core-panel compact-disclosure"><summary>Payment QR</summary>
           {/* S2 merchant payment QR (display-only — boundary documented in payment-qr-store.ts).
               The image is stored in this device's IndexedDB only: it is never uploaded, and it
               is not part of workspace backups by construction (the backup snapshots registered
               localStorage keys; this store is invisible to it, like product photos). */}
           <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (MMQR, AYA Pay, WavePay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
           <PaymentQrSettingsControls scope={paymentQrScope} />
-        </section>
+        </details>
 
-        <section className="core-panel">
+        <details className="core-panel compact-disclosure"><summary>Customer points</summary>
           {/* S3 customer points (module boundary, the per-device managed gap, the
               guided-sample exclusion, and the PR2 redemption design are documented in
               shop-loyalty.ts). Balances are recomputed from recorded orders on every
@@ -777,7 +777,7 @@ export function WorkspaceControlsPage() {
               each redemption appends a spend row beside it. */}
           <div><span className="core-eyebrow">Customer points</span><h2>Reward repeat customers at the counter.</h2><p>Points are counted on this device from the day you turn them on. Balances come from your recorded sales — refunds subtract automatically. A sale earns points once it is paid and handed over, credited to the exact customer name on the order; Guest sales earn nothing. Points are redeemed as a discount recorded on the order — 1 point = 1 MMK, spent from a completed sale in Orders. Another register or browser keeps its own setting.</p></div>
           <LoyaltySettingsControls actor={managedIdentity?.email ?? 'Local Shop operator'} scope={shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)} />
-        </section>
+        </details>
 
         {/* Native anchor scrolling fires before this lazy route has rendered the target. The ref
             repeats it at mount so recovery opens here instead of 2,000px above this panel. */}
