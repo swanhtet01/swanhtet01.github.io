@@ -1,6 +1,7 @@
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
+import { readSessionCart, saveSessionCart } from './cart-session'
 import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -301,6 +302,8 @@ export function EcommerceProduct() {
     error: '',
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
+  const restoredCartScope = useRef('')
+  const [cartSessionUnavailable, setCartSessionUnavailable] = useState(false)
   const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
   const [customerRequestDeliveryConfirmed, setCustomerRequestDeliveryConfirmed] = useState<DeliveryConfirmation | null>(null)
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
@@ -447,6 +450,28 @@ export function EcommerceProduct() {
   const previewJson = previewResult.preview ? JSON.stringify(previewResult.preview) : ''
   const digest = digestState.previewJson === previewJson ? digestState.value : ''
   const digestError = digestState.previewJson === previewJson ? digestState.error : ''
+  const cartScope = !catalogHydrating && digest && catalog.source !== 'unavailable'
+    ? JSON.stringify([managedIdentity ? [managedIdentity.workspaceId, managedIdentity.userId] : 'local', digest]) : ''
+  const recoverSessionCart = useCallback(() => {
+    try { return readSessionCart(window.sessionStorage, cartScope, catalog.items) } catch { return [] }
+  }, [cartScope, catalog.items])
+  useEffect(() => {
+    if (!cartScope) return
+    let current = true
+    queueMicrotask(() => {
+      if (!current) return
+      if (restoredCartScope.current !== cartScope) {
+        restoredCartScope.current = cartScope
+        try { setBuyingCart(readSessionCart(window.sessionStorage, cartScope, catalog.items)) }
+        catch { setBuyingCart([]); setCartSessionUnavailable(true) }
+        return
+      }
+      try { setCartSessionUnavailable(!saveSessionCart(window.sessionStorage, cartScope, buyingCart)) }
+      catch { setCartSessionUnavailable(true) }
+    })
+    return () => { current = false }
+  }, [cartScope, buyingCart, catalog.items])
+
   const managedCatalogSource = managedInbox
     ? commerceCatalogDigestSource(managedInbox.state)
     : ''
@@ -1792,6 +1817,7 @@ export function EcommerceProduct() {
 
   return (
     <div className="workspace-screen ecommerce-product">
+      {cartSessionUnavailable ? <p role="status">This browser cannot keep your cart after a refresh.</p> : null}
       <header className="ecommerce-heading">
         <div>
           <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Sample store'}</span>
@@ -2293,6 +2319,7 @@ export function EcommerceProduct() {
               currentCatalog={catalog.items}
               disabled={catalogHydrating}
               onCartChange={setBuyingCart}
+              recoverSessionCart={recoverSessionCart}
               onContinueInShop={(requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`)}
               onDraft={openShopDraft}
               onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`) : undefined}
