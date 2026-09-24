@@ -136,31 +136,42 @@ class CatalogReviewSqlTests(unittest.TestCase):
                 started.put(connection.info.backend_pid)
                 return connection
         waiting_adapter=EcommerceCustomerReviewStore(ObservedStore(self.runtime_url,reducer=lambda *args:{},write_enabled=False))
-        with pg._connect(self.runtime_url) as blocker:
-            self.context(blocker,OWNER)
-            blocker.execute("select pg_advisory_xact_lock(hashtextextended('ecommerce-review:' || %s,0))",(WORKSPACE,))
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                pending=pool.submit(waiting_adapter.preview,actor,str(review_id))
-                try:
-                    pid=started.get(timeout=5)
-                    waiting=False
-                    with pg._connect(self.admin_url,autocommit=True) as observer:
-                        deadline=time.monotonic()+5
-                        while time.monotonic()<deadline:
-                            row=observer.execute("select wait_event_type='Lock' from pg_stat_activity where pid=%s",(pid,)).fetchone()
-                            if row and row[0]:
-                                waiting=True
-                                break
-                            time.sleep(0.02)
-                        self.assertTrue(waiting,'preview must reach the review lock before revocation')
-                        observer.execute("update app_private.workspace_memberships set capabilities=array[]::text[] where workspace_id=%s and actor_id=%s",(WORKSPACE,RECIPIENT))
-                    blocker.commit()
-                    with self.assertRaises(TrialPermissionDenied): pending.result(timeout=10)
-                finally:
-                    blocker.rollback()
+        def assert_revoked_during_wait(principal,revoke_sql,revoke_params,error_type):
+            with pg._connect(self.runtime_url) as blocker:
+                self.context(blocker,OWNER)
+                blocker.execute("select pg_advisory_xact_lock(hashtextextended('ecommerce-review:' || %s,0))",(WORKSPACE,))
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    pending=pool.submit(waiting_adapter.preview,principal,str(review_id))
+                    try:
+                        pid=started.get(timeout=5)
+                        waiting=False
+                        with pg._connect(self.admin_url,autocommit=True) as observer:
+                            deadline=time.monotonic()+5
+                            while time.monotonic()<deadline:
+                                row=observer.execute("select wait_event_type='Lock' from pg_stat_activity where pid=%s",(pid,)).fetchone()
+                                if row and row[0]:
+                                    waiting=True
+                                    break
+                                time.sleep(0.02)
+                            self.assertTrue(waiting,'preview must reach the review lock before revocation')
+                            observer.execute(revoke_sql,revoke_params)
+                        blocker.commit()
+                        with self.assertRaises(error_type): pending.result(timeout=10)
+                    finally:
+                        blocker.rollback()
+        assert_revoked_during_wait(actor,
+            "update app_private.workspace_memberships set capabilities=array[]::text[] where workspace_id=%s and actor_id=%s",
+            (WORKSPACE,RECIPIENT),TrialPermissionDenied)
         with pg._connect(self.admin_url) as connection:
             connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s",(WORKSPACE,RECIPIENT))
         self.assertEqual(adapter.preview(actor,str(review_id))['reviewId'],str(review_id))
+        session=str(uuid4())
+        managed_actor=TrialPrincipal(WORKSPACE,RECIPIENT,'human',session_id=session,identity_provider='supabase')
+        with pg._connect(self.admin_url) as connection:
+            connection.execute('insert into auth.sessions(id,user_id) values (%s,%s)',(session,RECIPIENT))
+        self.assertEqual(adapter.preview(managed_actor,str(review_id))['reviewId'],str(review_id))
+        assert_revoked_during_wait(managed_actor,'delete from auth.sessions where id=%s',(session,),TrialNotReadyError)
+        with self.assertRaises(TrialNotReadyError): adapter.preview(managed_actor,str(review_id))
         with pg._connect(self.admin_url) as connection:
             connection.execute('grant execute on function app_private.ecommerce_review_recipient_ready(text) to public')
         with self.assertRaises(TrialNotReadyError): adapter.preview(actor,str(review_id))
