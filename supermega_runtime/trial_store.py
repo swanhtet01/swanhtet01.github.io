@@ -314,7 +314,7 @@ def capabilities_for_product_entitlements(
         capability
         for surface in ("commerce", "production", "website")
         for capability in (f"{surface}.read", f"{surface}.write")
-    } | {"website.review"}
+    } | {"website.review", "ecommerce.review"}
     allowed_capabilities = {
         capability
         for surface in allowed_surfaces
@@ -322,6 +322,10 @@ def capabilities_for_product_entitlements(
     }
     if "website" in allowed_surfaces:
         allowed_capabilities.add("website.review")
+    # Shop and Ecommerce share commerce data, but private catalog review is
+    # an Ecommerce delivery capability, never implied by Shop activation.
+    if "ecommerce" in products:
+        allowed_capabilities.add("ecommerce.review")
     return frozenset(
         capability
         for capability in granted

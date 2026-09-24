@@ -124,6 +124,17 @@ class ActivationProductEntitlementTests(unittest.TestCase):
                 self.assertEqual(capabilities_for_product_entitlements({"website.review"}, products), frozenset())
         self.assertEqual(capabilities_for_product_entitlements({"website.review"}, ("website",)), frozenset({"website.review"}))
 
+    def test_catalog_review_requires_ecommerce_without_granting_data_access(self) -> None:
+        granted = {"company.read", "ecommerce.review"}
+        for products in ((), ("commerce",), ("website",), ("production",),
+                         ("ecommerce", "commerce"), ("ecommerce", "ecommerce"), (42,)):
+            with self.subTest(products=products):
+                self.assertEqual(capabilities_for_product_entitlements(granted, products), frozenset({"company.read"}))
+        for products in (("ecommerce",), ("commerce", "ecommerce")):
+            with self.subTest(products=products):
+                self.assertEqual(capabilities_for_product_entitlements(granted, products), frozenset(granted))
+        self.assertEqual(capabilities_for_product_entitlements({"company.read"}, ("ecommerce",)), frozenset({"company.read"}))
+
     def test_store_data_access_cannot_bypass_activation_entitlements(self) -> None:
         store = InMemoryTrialStore(
             reducer=lambda _surface, _event, current, _payload: current,
