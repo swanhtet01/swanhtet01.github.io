@@ -1500,6 +1500,8 @@ export function WebsiteProduct() {
                   <strong>{hasUnsavedChanges ? 'Unsaved preview' : 'Preview'}</strong>
                   <small>{selectedPage.internalName || 'Untitled page'}</small>
                 </div>
+                <details className="compact-disclosure">
+                  <summary>Preview options</summary>
                 <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
                   {previewDevices.map((option) => (
                     <button
@@ -1513,6 +1515,7 @@ export function WebsiteProduct() {
                     </button>
                   ))}
                 </div>
+                </details>
               </header>
               <SitePreview
                 device={device}
