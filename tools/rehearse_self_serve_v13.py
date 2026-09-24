@@ -33,12 +33,13 @@ EXTRAS = (
     "20260918011500_website_customer_acceptance.sql",
     "20260924190304_ecommerce_review_entitlement_proof.sql",
     "20260924194557_ecommerce_customer_review_storage.sql",
+    "20260924231714_ecommerce_customer_decisions.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
 PRODUCTS = ("commerce", "production", "website", "ecommerce")
 TABLES = (
     "approval_requests", "billing_entitlements", "billing_events", "billing_invoices",
-    "ecommerce_customer_reviews", "self_serve_attempt_budgets", "trial_schema_meta",
+    "ecommerce_customer_decisions", "ecommerce_customer_reviews", "self_serve_attempt_budgets", "trial_schema_meta",
     "website_customer_acceptances", "website_customer_feedback", "website_customer_reviews", "workspace_access_controls",
     "workspace_events", "workspace_memberships", "workspace_state",
 )

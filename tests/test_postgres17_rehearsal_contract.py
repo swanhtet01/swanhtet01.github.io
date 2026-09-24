@@ -77,7 +77,10 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20260907024457_self_serve_durable_attempt_budget.sql",
             "20260915184728_website_customer_review_storage.sql",
             "20260915191528_website_review_entitlement_proof.sql",
-            "20260918011500_website_customer_acceptance.sql"))
+            "20260918011500_website_customer_acceptance.sql",
+            "20260924190304_ecommerce_review_entitlement_proof.sql",
+            "20260924194557_ecommerce_customer_review_storage.sql",
+            "20260924231714_ecommerce_customer_decisions.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name != "20260711081300_public_legacy_baseline.sql"))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)
@@ -87,10 +90,13 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         module = _load_rehearsal()
         self.assertEqual(account.MIGRATIONS, module.CURRENT_MIGRATIONS)
         self.assertEqual(account.TABLES, tuple(sorted(set(account.TABLES))))
+        self.assertIn("ecommerce_customer_decisions", account.TABLES)
+        self.assertIn("ecommerce_customer_reviews", account.TABLES)
         self.assertIn("website_customer_reviews", account.TABLES)
         self.assertIn("website_customer_feedback", account.TABLES)
         self.assertIn("website_customer_acceptances", account.TABLES)
         self.assertIn("supermega_runtime/website_acceptance_schema.py", module.IMPLEMENTATION_PATHS)
+        self.assertIn("supermega_runtime/ecommerce_decision_schema.py", module.IMPLEMENTATION_PATHS)
 
     def test_rehearsal_declares_the_complete_fail_closed_boundary(self) -> None:
         source = REHEARSAL.read_text(encoding="utf-8")
