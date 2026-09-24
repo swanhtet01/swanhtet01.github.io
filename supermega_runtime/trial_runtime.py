@@ -1139,6 +1139,14 @@ def create_trial_router(
             return adapter.preview(principal, review_id)
         return await ecommerce_review_request(request, operation)
 
+    @router.post("/ecommerce-reviews/{review_id}/resolve-expired")
+    async def resolve_expired_ecommerce_review(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, body):
+            if request.query_params or not isinstance(body, dict) or set(body) != {"expiresAt"}:
+                raise TrialValidationError("ecommerce_review_request_invalid")
+            return adapter.resolve_expired(principal, review_id, expires_at=body["expiresAt"])
+        return await ecommerce_review_request(request, operation, body_limit=256)
+
     @router.get("/ecommerce-reviews/{review_id}/reconciliation")
     async def reconcile_ecommerce_review(review_id: str, request: Request) -> JSONResponse:
         def operation(adapter, principal, _body):

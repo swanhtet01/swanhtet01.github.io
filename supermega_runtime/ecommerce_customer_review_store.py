@@ -87,6 +87,23 @@ class EcommerceCustomerReviewStore:
                 publicationAuthorized=False,deploymentAuthorized=False)
         return result
 
+    def resolve_expired(self,principal,review_id,*,expires_at):
+        """Confirm absence only after this exact request can no longer prepare."""
+        review_id=uuid(review_id)
+        expiry=stamp(expires_at)
+        with self._transaction(principal,capability='commerce.write') as (cursor,actor):
+            # Preparation checks expiry after acquiring this same advisory lock.
+            # Do not treat absence before expiry as cancellation or terminal proof.
+            cursor.execute('select clock_timestamp() as now')
+            now=cursor.fetchone()['now']
+            if expiry>now: raise TrialValidationError('ecommerce_review_request_not_expired')
+            cursor.execute('select review_id from app_private.ecommerce_customer_reviews where workspace_id=%s and review_id=%s',
+                (actor.workspace_id,review_id))
+            if cursor.fetchone() is not None: raise TrialValidationError('ecommerce_review_assignment_exists')
+            result=dict(reviewId=review_id,status='absent_expired',expiresAt=expiry.isoformat(),
+                readAt=now.isoformat(),publicationAuthorized=False,deploymentAuthorized=False)
+        return result
+
     def reconcile(self,principal,review_id):
         """Read only the caller's retained assignment; absence stays uncertain."""
         review_id=uuid(review_id)

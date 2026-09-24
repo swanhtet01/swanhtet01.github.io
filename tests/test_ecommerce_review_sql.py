@@ -288,6 +288,30 @@ class CatalogReviewSqlTests(unittest.TestCase):
         writer.prepare(operator,**short_args)
         time.sleep(2.1)
         self.assertEqual(adapter.reconcile(operator,short_args['review_id'])['status'],'expired')
+        absent_args=short_args|dict(review_id=str(uuid4()))
+        resolved=adapter.resolve_expired(operator,absent_args['review_id'],expires_at=absent_args['expires_at'])
+        self.assertEqual(resolved['status'],'absent_expired')
+        self.assertEqual(set(resolved),{'reviewId','status','expiresAt','readAt','publicationAuthorized','deploymentAuthorized'})
+        with self.assertRaises(TrialValidationError): writer.prepare(operator,**absent_args)
+        with self.assertRaises(TrialValidationError):
+            adapter.resolve_expired(operator,str(uuid4()),expires_at=args['expires_at'])
+        with self.assertRaises(TrialValidationError):
+            adapter.resolve_expired(operator,short_args['review_id'],expires_at=short_args['expires_at'])
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.resolve_expired(actor,absent_args['review_id'],expires_at=absent_args['expires_at'])
+        with TestClient(app) as client:
+            path='/api/trial/v1/ecommerce-reviews/'+absent_args['review_id']+'/resolve-expired'
+            body={'expiresAt':absent_args['expires_at']}
+            response=client.post(path,headers=owner_headers,json=body)
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertEqual(response.json()['status'],'absent_expired')
+            self.assertEqual(response.headers['cache-control'],'private, no-store')
+            self.assertEqual(client.post(path,json=body).status_code,401)
+            self.assertEqual(client.post(path,headers=customer_headers,json=body).status_code,403)
+            for invalid in ({},dict(body,workspaceId=WORKSPACE),{'expiresAt':'bad'}):
+                self.assertEqual(client.post(path,headers=owner_headers,json=invalid).status_code,422)
+            self.assertEqual(client.post(path+'?x=1',headers=owner_headers,json=body).status_code,422)
+
         stale_args=args|dict(review_id=str(uuid4()))
         writer.prepare(operator,**stale_args)
         with self.transaction() as connection:
