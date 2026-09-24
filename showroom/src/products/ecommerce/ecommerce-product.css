@@ -1360,6 +1360,10 @@
   line-height: 1.4;
 }
 
+.ecommerce-stale-quote details > small { display: block; margin-top: .5rem; font-size: .875rem; line-height: 1.5; }
+.ecommerce-stale-quote summary { min-height: 44px; align-content: center; cursor: pointer; }
+.ecommerce-stale-quote summary:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
 /* A retained receipt is evidence the customer needs to read, not fine print. */
 .ecommerce-quote-receipt[data-current="false"] {
   grid-template-columns: minmax(0, 1fr);
