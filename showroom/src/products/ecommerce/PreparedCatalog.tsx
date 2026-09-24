@@ -1,11 +1,12 @@
 import { validateStorefrontPreview } from './storefront-model'
+import './prepared-catalog.css'
 
 /** Inert prepared content only. Access, revision verification and consent belong to the review route. */
 export function PreparedCatalog({ preview }: { preview: unknown }) {
   const catalog = validateStorefrontPreview(preview)
-  return <section className="storefront-preview" aria-label="Prepared catalog">
+  return <section className="prepared-catalog" aria-label="Prepared catalog">
     <header><h2>{catalog.storeName}</h2><p>{catalog.summary}</p></header>
-    <div className="storefront-grid">{catalog.items.map(item => <article key={item.sku}>
+    <div className="prepared-catalog-grid">{catalog.items.map(item => <article key={item.sku}>
       {item.merchandising?.collection ? <small>{item.merchandising.collection}</small> : null}
       <h3>{item.merchandising?.displayName || item.name}</h3>
       {item.variant ? <p>{item.variant}</p> : null}

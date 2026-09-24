@@ -10,7 +10,7 @@ const React = require('react'), { renderToStaticMarkup } = require('react-dom/se
 const source = readFileSync(new URL('../showroom/src/products/ecommerce/PreparedCatalog.tsx', import.meta.url), 'utf8')
 const compiled = require('typescript').transpileModule(source, { compilerOptions: { module: 1, jsx: 4, target: 9 } }).outputText
 const exports = {}
-vm.runInNewContext(compiled, { exports, Intl, require: name => name === './storefront-model' ? { validateStorefrontPreview } : require(name) })
+vm.runInNewContext(compiled, { exports, Intl, require: name => name.endsWith('.css') ? {} : name === './storefront-model' ? { validateStorefrontPreview } : require(name) })
 const preview = () => ({ schema: STOREFRONT_PREVIEW_SCHEMA, mode: 'browser-local-preview', sourceCatalogSchema: COMMERCE_WORKSPACE_SCHEMA,
   storeName: 'ဆိုင်', summary: 'Prepared <catalog>', currency: 'MMK', items: [
     { sku: 'A', name: '<script>item</script>', variant: 'Large', unitPriceMmk: 12500, availability: 'available' },

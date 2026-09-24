@@ -1,0 +1,28 @@
+.prepared-catalog {
+  width: min(100%, 64rem);
+  margin-inline: auto;
+  padding: clamp(1rem, 4vw, 2.5rem);
+  box-sizing: border-box;
+  color: var(--core-ink);
+  overflow-wrap: anywhere;
+}
+.prepared-catalog header { margin-bottom: 1.5rem; }
+.prepared-catalog h2, .prepared-catalog h3 { margin: 0; line-height: 1.4; }
+.prepared-catalog p { margin: .5rem 0 0; line-height: 1.7; }
+.prepared-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+}
+.prepared-catalog-grid article {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--core-line);
+  border-radius: 1rem;
+  background: var(--core-panel);
+}
+.prepared-catalog-grid h3 { font-size: 1.125rem; }
+.prepared-catalog-grid span { display: block; margin-top: 1rem; font-weight: 700; }
+.prepared-catalog small, .prepared-catalog p, .prepared-catalog footer { color: var(--core-muted); }
+.prepared-catalog small { display: block; margin-bottom: .5rem; }
+.prepared-catalog footer { margin-top: 1.5rem; font-size: .875rem; line-height: 1.7; }
