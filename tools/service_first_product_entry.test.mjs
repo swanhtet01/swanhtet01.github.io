@@ -6,7 +6,7 @@ import vm from 'node:vm'
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 const source = await read('showroom/src/core/CoreShell.tsx')
 const entry = source.slice(source.indexOf('export function ProductHomePage()'))
-const message = 'We set it up. You approve the result and run your business.'
+const message = 'Try a sample'
 
 test('next steps routes active local products to assisted setup and preserves managed and Plant behavior', async () => {
   const navigator = await read('showroom/src/core/ProductSystemNavigator.tsx')
@@ -31,11 +31,12 @@ test('both shell headers offer setup help without changing login or signup route
   assert.ok(source.includes('https://supermega.dev/contact/?product=guide&source=assisted-app-header'))
 })
 
-test('new visitors get assisted setup, without silently activating or replacing workspaces', () => {
+test('new visitors get an optional device sample and company sign-in without replacing workspaces', () => {
   assert.ok(entry.includes(message))
+  assert.ok(entry.includes('to="/login">Company sign in</Link>'))
   assert.match(entry, /!managedPortal && productSetups && !anyStarted \? \(\s*<section aria-label="Setup by SuperMega"/)
   assert.match(entry, /href="https:\/\/supermega.dev\/contact\/\?product=guide&amp;source=assisted-app-entry"/)
-  assert.ok(entry.includes('The sample workspaces below are optional. They are not a live customer setup.'))
+  assert.ok(entry.includes('No account needed. Sample records stay on this device.'))
   assert.ok(entry.includes('Your saved work stays here.'))
   assert.ok(!entry.includes('Working samples. Add data when ready.'))
   assert.ok(!entry.includes("to={clientSetupPath('commerce')}"))
