@@ -748,7 +748,7 @@ const contactScript = `<script>(function(){
     goal.placeholder=hints[product&&product.value]||hints.guide;
   }
   var serviceChoice=form.querySelector('[data-contact-service]'),serviceSummary=form.querySelector('[data-contact-service-summary]');
-  function updateServiceSummary(){if(serviceSummary&&product)serviceSummary.textContent=({website:'Website',ecommerce:'Ecommerce',shop:'Shop'})[product.value]||'Choose a service';}
+  function updateServiceSummary(){var serviceName=product&&({website:'Website',ecommerce:'Ecommerce',shop:'Shop'})[product.value];if(serviceSummary)serviceSummary.textContent=serviceName||'Choose a service';if(heading&&handoff.toString())heading.textContent='Finish your '+(serviceName||'setup')+' request.';}
   updateServiceSummary();
   if(serviceChoice&&['website','ecommerce'].includes(requestedProduct)&&query.get('source')===requestedProduct+'-brief'&&company&&company.value.trim()&&goal&&goal.value.trim())serviceChoice.open=false;
   updateBriefHint();

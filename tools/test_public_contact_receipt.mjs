@@ -79,6 +79,7 @@ test('complete assisted briefs collapse the editable service choice only', () =>
     assert.equal(state.fields.get('[data-contact-service-summary]').textContent.toLowerCase(), product)
     state.changeProduct('shop')
     assert.equal(state.fields.get('[data-contact-service-summary]').textContent, 'Shop')
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Finish your Shop request.')
     assert.equal(state.fields.get('[name="goal"]').value, 'Prepare our site')
     assert.equal(state.calls.length, 0)
   }
