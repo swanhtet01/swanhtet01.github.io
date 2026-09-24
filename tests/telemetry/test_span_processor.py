@@ -36,6 +36,27 @@ def sample_span():
 
 
 class SpanProcessorTests(unittest.TestCase):
+    def test_resource_metadata_cannot_bypass_export_scrubbing(self):
+        original = ReadableSpan(
+            name="shop.order.confirm",
+            context=SpanContext(1, 2, False, TraceFlags(1)),
+            resource=Resource({
+                "service.name": "private-service-name",
+                "customer.note": "private-customer-note",
+                "host.name": "private-machine-name",
+            }, schema_url="https://example.invalid/private-schema"),
+            start_time=1,
+            end_time=3,
+        )
+        exporter = RecordingExporter()
+        with patch.dict("os.environ", {"OTEL_RESOURCE_ATTRIBUTES": "customer.note=private-env"}):
+            RedactingSpanProcessor(exporter).on_end(original)
+        self.assertEqual(len(exporter.spans), 1)
+        safe = exporter.spans[0]
+        self.assertEqual(dict(safe.resource.attributes), {"service.name": "supermega-runtime"})
+        self.assertNotIn("private", safe.to_json())
+        self.assertEqual(original.resource.attributes["customer.note"], "private-customer-note")
+
     def test_links_and_trace_state_cannot_bypass_scrubbing(self):
         context = SpanContext(12, 34, True, TraceFlags(1), TraceState([("vendor", "private-context")]))
         original = ReadableSpan(

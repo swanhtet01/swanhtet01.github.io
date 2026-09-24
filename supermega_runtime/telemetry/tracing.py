@@ -119,6 +119,7 @@ class RedactingSpanProcessor:
         this scrubber independent of that private implementation detail.
         """
 
+        from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import Event, ReadableSpan
         from opentelemetry.trace import Link, SpanContext, Status
 
@@ -143,7 +144,10 @@ class RedactingSpanProcessor:
             name=sanitized_name,
             context=safe_context(span.context),
             parent=safe_context(span.parent),
-            resource=span.resource,
+            # Resource.create merges environment/detector metadata. Reconstruct
+            # only our fixed identity at the export boundary, without detectors
+            # or an untrusted resource schema URL.
+            resource=Resource({"service.name": SERVICE_NAME}),
             attributes=sanitized_attributes,
             # Exception events can contain raw request data and full local
             # paths even when top-level attributes have been scrubbed.
