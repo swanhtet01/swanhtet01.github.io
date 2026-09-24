@@ -28,3 +28,23 @@ test('malformed catalogs cannot render as customer-ready products', () => {
     const p = preview(); mutate(p); assert.throws(() => render(p))
   }
 })
+
+test('prepared review binds exact identity, revision, expiry and catalog digest', async () => {
+  const { verifyPreparedCatalogReview } = await import('../showroom/src/products/ecommerce/prepared-catalog-review.ts')
+  const { storefrontPreviewDigest } = await import('../showroom/src/products/ecommerce/storefront-model.ts')
+  const id = '11111111-1111-4111-8111-111111111111', now = Date.parse('2026-09-25T00:00:00Z')
+  const catalog = preview()
+  const packet = { reviewId: id, contentRevision: 1, preview: catalog, previewDigest: await storefrontPreviewDigest(catalog), expiresAt: '2026-09-26T00:00:00Z', status: 'prepared_preview', publicationAuthorized: false, deploymentAuthorized: false }
+  const result = await verifyPreparedCatalogReview(packet, id, now)
+  result.preview.items[0].name = 'Local edit'
+  assert.notEqual(packet.preview.items[0].name, 'Local edit')
+  for (const patch of [{ reviewId: 'other' }, { contentRevision: -1 }, { contentRevision: 1.5 }, { expiresAt: 'invalid' }, { expiresAt: new Date(now).toISOString() }, { previewDigest: 'wrong' }, { status: 'published' }, { publicationAuthorized: true }, { deploymentAuthorized: true }, { recipientEmail: 'private@example.invalid' }]) {
+    await assert.rejects(verifyPreparedCatalogReview({ ...packet, ...patch }, id, now))
+  }
+  for (const edit of [p => p.items[0].unitPriceMmk++, p => p.items[0].name = 'Changed', p => p.items[0].availability = 'sold_out']) {
+    const altered = structuredClone(packet); edit(altered.preview)
+    await assert.rejects(verifyPreparedCatalogReview(altered, id, now))
+  }
+  await assert.rejects(verifyPreparedCatalogReview(packet, id + '\n', now))
+  await assert.rejects(verifyPreparedCatalogReview(packet, id, NaN))
+})
