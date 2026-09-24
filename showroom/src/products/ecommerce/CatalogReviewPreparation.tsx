@@ -167,19 +167,22 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
     } catch { if (started === epoch.current) setMessage('Withdrawal is unconfirmed. Retry withdrawal for this review.') }
     finally { lock.current = false; setBusy(false) }
   }
-  return <section aria-label="Prepare customer catalog" aria-busy={busy}>
-    <h2>Customer review</h2><p role="status">{message}</p>
-    <button type="button" disabled={busy} onClick={() => void open()}>Open saved catalog</button>
+  return <section className="catalog-review-tools" aria-label="Prepare customer catalog" aria-busy={busy}>
+    <p role="status">{message}</p>
+    <button className="core-button" type="button" disabled={busy} onClick={() => void open()}>Open saved catalog</button>
     {source ? <details><summary>Preview catalog</summary><PreparedCatalog preview={source.preview} /></details> : null}
     {recipients && !receipt ? <>
       <label>Customer<select value={selected} disabled={busy || !!pending} onChange={event => setSelected(event.target.value)}>
         {recipients.recipients.map(row => <option key={row.grantId} value={row.grantId}>{row.label}</option>)}
       </select></label>
-      {recipients.nextAfter && !pending ? <button type="button" disabled={busy} onClick={() => void open(recipients.nextAfter!)}>More customers</button> : null}
+      {recipients.nextAfter && !pending ? <button className="core-button" type="button" disabled={busy} onClick={() => void open(recipients.nextAfter!)}>More customers</button> : null}
     </> : null}
-    {!receipt && (pending || (source && recipients)) ? <button type="button" disabled={busy || (!pending && !selected)} onClick={() => void prepare()}>{pending ? 'Retry same request' : 'Prepare review'}</button> : null}
-    {pending && !receipt ? <button type="button" disabled={busy} onClick={() => void resolveExpired()}>Resolve expired request</button> : null}
-    {pending || receipt ? <button type="button" disabled={busy} onClick={() => void reconcile()}>Check review status</button> : null}
-    {receipt ? <><p>Customer review link: <a href={`/ecommerce/review/${receipt.reviewId}`}>Open private review</a></p><button type="button" disabled={busy} onClick={() => void withdraw()}>Withdraw review</button></> : null}
+    {!receipt && (pending || (source && recipients)) ? <button className="core-button primary" type="button" disabled={busy || (!pending && !selected)} onClick={() => void prepare()}>{pending ? 'Retry same request' : 'Prepare review'}</button> : null}
+    {receipt ? <a className="core-button primary" href={`/ecommerce/review/${receipt.reviewId}`}>Open private review</a> : null}
+    {pending || receipt ? <details className="catalog-review-recovery"><summary>Review options</summary><div>
+      <button className="core-button" type="button" disabled={busy} onClick={() => void reconcile()}>Check review status</button>
+      {pending && !receipt ? <button className="core-button" type="button" disabled={busy} onClick={() => void resolveExpired()}>Resolve expired request</button> : null}
+      {receipt ? <button className="core-button danger" type="button" disabled={busy} onClick={() => void withdraw()}>Withdraw review</button> : null}
+    </div></details> : null}
   </section>
 }

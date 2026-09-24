@@ -1993,3 +1993,30 @@
 .storefront-grid:has(article > .storefront-product-photo) article {
   align-content: start;
 }
+
+
+/* Private review delivery stays secondary to the storefront workspace. */
+.ecommerce-product > .compact-disclosure {
+  border: 1px solid var(--core-line);
+  border-radius: var(--radius-md);
+  padding-inline: 16px;
+  margin-bottom: 16px;
+}
+.ecommerce-product > .compact-disclosure > summary,
+.catalog-review-tools summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+  font-size: .875rem;
+}
+.catalog-review-tools { display: grid; gap: 12px; min-width: 0; padding-block: 4px 16px; }
+.catalog-review-tools > p { margin: 0; color: var(--core-muted); font-size: .875rem; line-height: 1.5; }
+.catalog-review-tools > .core-button { justify-self: start; max-width: 100%; }
+.catalog-review-tools label { display: grid; gap: 6px; font-size: .875rem; }
+.catalog-review-tools select {
+  min-height: 44px; min-width: 0; width: 100%; max-width: 28rem;
+  border: 1px solid var(--core-line-strong); border-radius: var(--radius-md);
+  padding: 8px 12px; background: var(--core-panel); color: var(--core-ink); font: inherit;
+}
+.catalog-review-recovery { border-top: 1px solid var(--core-line); }
+.catalog-review-recovery > div { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
