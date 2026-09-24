@@ -2244,7 +2244,9 @@ export function EcommerceProduct() {
 
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
-            <div><span className="core-eyebrow">Store demo</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Shop the sample</h2></div>
+            <div><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>{managedIdentity ? 'Your store' : 'Shop the sample'}</h2></div>
+            <details className="compact-disclosure">
+              <summary>Preview options</summary>
             <label className="ecommerce-preview-size">
               <span>Preview</span>
               <select aria-label="Preview size" onChange={(event) => setDevice(event.target.value as PreviewDevice)} value={device}>
@@ -2252,6 +2254,7 @@ export function EcommerceProduct() {
                 <option value="desktop">Desktop</option>
               </select>
             </label>
+            </details>
           </div>
 
           {!buyingReady && !catalogHydrating ? (
