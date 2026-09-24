@@ -388,3 +388,49 @@ test('recovery chooser keeps temporary failures available for retry without redi
   assert.match(notices.at(-1), /could not be opened/)
   assert.equal(context.accountRequestPending.current, false)
 })
+
+
+test('directory timeout releases sign-in for a deliberate retry while retaining private review context', async () => {
+  for (const product of ['website', 'ecommerce']) {
+    const { context, passwords, busyStates } = fixture()
+    const reviewPath = `/${product}/review/11111111-1111-4111-8111-111111111111`
+    const message = 'Your company list could not be loaded. Check your connection and try again.'
+    const notices = [], tones = [], opened = [], credentials = []
+    let rejectDirectory
+    Object.assign(context, { Error, reviewReturnPath: reviewPath,
+      setNotice: value => notices.push(value), setNoticeTone: value => tones.push(value),
+      setPassword: value => { passwords.push(value); context.password = value },
+      setActivating: () => assert.fail('timeout must not offer activation'),
+      signInAndDiscoverManagedWorkspaces: (email, password) => {
+        credentials.push({ email, password })
+        return new Promise((_, reject) => { rejectDirectory = reject })
+      },
+      openWorkspace: async (directory, workspaceId) => opened.push({ directory, workspaceId }),
+    })
+    const submit = handler('submit', context)
+    const first = submit(event)
+    await submit(event)
+    assert.equal(credentials.length, 1)
+    assert.equal(context.accountRequestPending.current, true)
+    rejectDirectory(Object.assign(new Error(message), { code: 'workspace_directory_unavailable' }))
+    await first
+    assert.equal(context.accountRequestPending.current, false)
+    assert.equal(context.password, '')
+    assert.equal(notices.at(-1), message)
+    assert.equal(tones.at(-1), 'error')
+    assert.equal(opened.length, 0)
+    assert.equal(context.reviewReturnPath, reviewPath)
+    const directory = { email: context.email, workspaces: [{ workspaceId: 'one' }] }
+    context.password = 'deliberate-synthetic-retry'
+    context.signInAndDiscoverManagedWorkspaces = async (email, password) => {
+      credentials.push({ email, password }); return directory
+    }
+    await handler('submit', context)(event)
+    assert.equal(credentials.length, 2)
+    assert.equal(credentials[1].password, 'deliberate-synthetic-retry')
+    assert.deepEqual(opened, [{ directory, workspaceId: 'one' }])
+    assert.deepEqual(busyStates, [true, false, true, false])
+    assert.equal(context.password, '')
+    assert.equal(context.reviewReturnPath, reviewPath)
+  }
+})
