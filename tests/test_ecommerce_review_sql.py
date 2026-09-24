@@ -19,6 +19,21 @@ class CatalogReviewSqlTests(unittest.TestCase):
     context = fixture.WebsiteReviewSqlTests.context
     transaction = fixture.WebsiteReviewSqlTests.transaction
 
+    def test_reviewer_cannot_read_or_lock_private_commerce_source(self):
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        source = catalog_state()
+        source['storefrontConfiguration'] = storefront_configuration(source)
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s", (WORKSPACE, RECIPIENT))
+            self.context(connection, OWNER)
+            connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'commerce',1,%s::jsonb,%s) on conflict(workspace_id,surface) do update set state_json=excluded.state_json,version=app_private.workspace_state.version+1", (WORKSPACE, json.dumps(source), OWNER))
+            self.assertEqual(connection.execute("select count(*) from app_private.workspace_state where workspace_id=%s and surface='commerce'", (WORKSPACE,)).fetchone()[0], 1)
+        with pg._connect(self.runtime_url) as connection:
+            self.context(connection, RECIPIENT)
+            for suffix in ('', ' for update'):
+                rows = connection.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='commerce'" + suffix, (WORKSPACE,)).fetchall()
+                self.assertEqual(rows, [], 'reviewer decisions must not require raw commerce access')
+
     def test_preparation_and_source_save_serialize_in_both_orders(self):
         # Committed test data belongs only to this isolated disposable cluster.
         from tests.test_commerce_runtime import catalog_state, storefront_configuration
