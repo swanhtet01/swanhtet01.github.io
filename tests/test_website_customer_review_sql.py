@@ -948,10 +948,34 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'commerce',1,%s::jsonb,%s) on conflict(workspace_id,surface) do update set state_json=excluded.state_json,version=app_private.workspace_state.version+1",(WORKSPACE,json.dumps(source),OWNER))
                 version=connection.execute("select version from app_private.workspace_state where workspace_id=%s and surface='commerce'",(WORKSPACE,)).fetchone()[0]
                 connection.execute('set local role supermega_trial_backend')
+                valid = dict(workspace=WORKSPACE,recipient=RECIPIENT,preparer=OWNER,version=version,
+                             preview=commerce_storefront_preview(source),digest=commerce_storefront_preview_digest(source),
+                             expiry=datetime.now(timezone.utc)+timedelta(days=1))
+                for change in (dict(version=version+1),dict(recipient=str(uuid4())),dict(preparer=RECIPIENT),
+                               dict(workspace='rehearsal-b'),dict(preview={}),dict(digest='sha256:'+'0'*64),
+                               dict(expiry=datetime.now(timezone.utc)-timedelta(seconds=1)),
+                               dict(expiry=datetime.now(timezone.utc)+timedelta(days=8))):
+                    values=valid|change
+                    with self.subTest(insert_change=list(change)),self.assertRaises(self.db_error):
+                        with connection.transaction():
+                            connection.execute("""insert into app_private.ecommerce_customer_reviews
+                                (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,preview,preview_digest,expires_at)
+                                values (%s,%s,%s,%s,%s,%s::jsonb,%s,%s)""",
+                                (uuid4(),values['workspace'],values['recipient'],values['preparer'],values['version'],json.dumps(values['preview']),values['digest'],values['expiry']))
+                self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_reviews').fetchone()[0],0)
                 connection.execute("""insert into app_private.ecommerce_customer_reviews
                     (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,preview,preview_digest,expires_at)
                     values (%s,%s,%s,%s,%s,%s::jsonb,%s,clock_timestamp()+interval '1 day')""",
                     (review_id,WORKSPACE,RECIPIENT,OWNER,version,json.dumps(commerce_storefront_preview(source)),commerce_storefront_preview_digest(source)))
+                for update in ("preview='{}'::jsonb", "source_version=source_version+1",
+                               "recipient_actor_id='other'", "expires_at=expires_at+interval '1 hour'",
+                               "status='stale'"):
+                    with self.subTest(update=update),self.assertRaises(self.db_error):
+                        with connection.transaction():
+                            connection.execute('update app_private.ecommerce_customer_reviews set '+update)
+                with self.assertRaises(self.db_error):
+                    with connection.transaction():
+                        connection.execute('delete from app_private.ecommerce_customer_reviews')
                 self.context(connection,RECIPIENT)
                 self.assertEqual(connection.execute('select preview from app_private.ecommerce_customer_reviews').fetchone()[0],commerce_storefront_preview(source))
                 self.assertEqual(connection.execute("select state_json from app_private.workspace_state where surface='commerce'").fetchall(),[])
