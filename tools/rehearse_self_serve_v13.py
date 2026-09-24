@@ -291,6 +291,21 @@ def exercise(admin_url, runtime_url, head):
         "session": recipient_session, "reviewId": catalog_review["reviewId"],
         "preview": catalog_adapter.preview(catalog_recipient, catalog_review["reviewId"])}
     require(bool(retained["ecommerce"]["preview"]["preview"]["items"]), "ecommerce_preview_empty")
+    retained['ecommerce']['decisionReviews'] = []
+    for kind in ('acceptance', 'feedback'):
+        decision_review = catalog_adapter.prepare(principal(ecommerce), review_id=str(uuid4()),
+            recipient_actor_id=recipient_id, expected_version=1,
+            expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+        payload = dict(commandId=str(uuid4()), reviewId=decision_review['reviewId'],
+                       previewDigest=decision_review['previewDigest'])
+        payload.update(dict(decision='accept_preview_for_release_review') if kind=='acceptance'
+                       else dict(note='စျေးနှုန်း ပြင်ပါ'))
+        receipt = catalog_adapter.record_decision(catalog_recipient, payload, kind=kind)
+        require(receipt['persisted'] and not receipt['replayed'], 'ecommerce_decision_not_retained')
+        saved = catalog_adapter.decisions(catalog_recipient, decision_review['reviewId'])
+        require(len(saved['decisions']) == 1 and saved['decisions'][0]['kind'] == kind,
+                'ecommerce_decision_history_empty')
+        retained['ecommerce']['decisionReviews'].append(saved)
     verify_customer_reviews(runtime_url, retained)
     return retained
 
@@ -338,6 +353,12 @@ def verify_customer_reviews(runtime_url, retained):
     require(catalog_preview == ecommerce["preview"] and bool(catalog_preview["preview"]["items"])
             and catalog_preview["publicationAuthorized"] is False
             and catalog_preview["deploymentAuthorized"] is False, "restored_ecommerce_preview_mismatch")
+    require(len(ecommerce['decisionReviews']) == 2, 'ecommerce_decision_fixtures_missing')
+    for saved in ecommerce['decisionReviews']:
+        restored = catalog_adapter.decisions(recipient, saved['reviewId'])
+        require(restored == saved and len(restored['decisions']) == 1
+                and restored['publicationAuthorized'] is False
+                and restored['deploymentAuthorized'] is False, 'restored_ecommerce_decisions_mismatch')
 
 
 def run(expected_head):
