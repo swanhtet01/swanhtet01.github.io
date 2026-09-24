@@ -1,7 +1,7 @@
 """Private catalog review adapter. No grant or publication authority."""
 from copy import deepcopy
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import timedelta, timezone
 import json
 from .commerce_runtime import commerce_storefront_preview, commerce_storefront_preview_digest
 from hashlib import sha256
@@ -262,7 +262,7 @@ class EcommerceCustomerReviewStore:
             if row is None: raise TrialPermissionDenied('ecommerce.review')
             assignment = dict(contract=CONTRACT, reviewId=str(row['review_id']), workspaceId=row['workspace_id'],
                 recipientActorId=row['recipient_actor_id'], preparedBy=row['prepared_by'],
-                preparedAt=row['prepared_at'].isoformat(), expiresAt=row['expires_at'].isoformat(),
+                preparedAt=row['prepared_at'].astimezone(timezone.utc).isoformat(), expiresAt=row['expires_at'].astimezone(timezone.utc).isoformat(),
                 sourceVersion=row['source_version'], contentRevision=row['content_revision'],
                 preview=row['preview'], previewDigest=row['preview_digest'], status=row['status'])
             # These flags are established by the guarded transaction and its
@@ -272,7 +272,7 @@ class EcommerceCustomerReviewStore:
                 write_enabled=True, capabilities=frozenset({'ecommerce.review'}), product_entitlements=('ecommerce',))
             build = build_catalog_acceptance if kind == 'acceptance' else build_catalog_change_request
             candidate = build(assignment, payload, principal=actor, readiness=verified,
-                source_version=row['source_version'], now=row['checked_at'])
+                source_version=row['source_version'], now=row['checked_at'].astimezone(timezone.utc))
             params = (actor.workspace_id, actor.actor_id, candidate['commandId'])
             query = """select review_id,source_version,content_revision,preview_digest,command_fingerprint,kind,note,created_at
                 from app_private.ecommerce_customer_decisions where workspace_id=%s and actor_id=%s and command_id=%s"""
@@ -295,5 +295,5 @@ class EcommerceCustomerReviewStore:
                 or retained['kind'] != kind or retained['note'] != candidate.get('note')):
                 raise TrialValidationError('ecommerce_decision_command_conflict')
             result = candidate | dict(persisted=True, replayed=replayed)
-            result['acceptedAt' if kind == 'acceptance' else 'createdAt'] = retained['created_at'].isoformat()
+            result['acceptedAt' if kind == 'acceptance' else 'createdAt'] = retained['created_at'].astimezone(timezone.utc).isoformat()
         return result

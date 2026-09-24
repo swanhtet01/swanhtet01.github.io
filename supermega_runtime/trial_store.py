@@ -3582,6 +3582,8 @@ class PostgresTrialStore:
                     'workspace_events_approval_surface_v4_check'
                   )
               ) as security_constraints_ready,
+              to_regclass('app_private.ecommerce_customer_decisions') is not null
+                as ecommerce_decision_storage_present,
               true as schema_contract_row_ready
             from app_private.trial_schema_meta schema_meta
             where schema_meta.component = %s
@@ -3642,6 +3644,19 @@ class PostgresTrialStore:
                 raise TrialNotReadyError(("website_acceptance_storage_ready",))
             trigger_rows = [row for row in trigger_rows
                             if (row.get("table_name"), row.get("trigger_name")) not in ACCEPTANCE_TRIGGERS]
+        from .ecommerce_decision_schema import (
+            ACCEPTANCE_TRIGGERS as CATALOG_DECISION_TRIGGERS,
+            acceptance_triggers_verified as catalog_decision_triggers_verified,
+            acceptance_storage_verified as catalog_decision_storage_verified,
+        )
+        if row.get("ecommerce_decision_storage_present") or any(
+                (item.get("table_name"), item.get("trigger_name")) in CATALOG_DECISION_TRIGGERS
+                for item in raw_triggers):
+            if (not catalog_decision_triggers_verified(raw_triggers)
+                    or not catalog_decision_storage_verified(cursor)):
+                raise TrialNotReadyError(("ecommerce_decision_storage_ready",))
+            trigger_rows = [row for row in trigger_rows
+                           if (row.get("table_name"), row.get("trigger_name")) not in CATALOG_DECISION_TRIGGERS]
         if len(trigger_rows) != len(_PRIVATE_HARDENING_TRIGGER_CONTRACT):
             raise TrialNotReadyError(("schema_ready",))
         actual_triggers: dict[tuple[str, str], dict[str, Any]] = {}

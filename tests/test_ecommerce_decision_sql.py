@@ -20,7 +20,35 @@ class CatalogDecisionSqlTests(unittest.TestCase):
         with pg._connect(cls.admin_url) as connection:
             connection.execute(migration.read_text(encoding='utf-8'))
 
+    def test_schema_guard_rejects_storage_tampering(self):
+        from psycopg.rows import dict_row
+        from supermega_runtime.trial_store import PostgresTrialStore, TrialNotReadyError
+        mutations = [
+            "alter table app_private.ecommerce_customer_decisions disable row level security",
+            "drop policy ecommerce_decisions_insert on app_private.ecommerce_customer_decisions",
+            "grant select on app_private.ecommerce_customer_decisions to authenticated",
+            "alter table app_private.ecommerce_customer_decisions disable trigger ecommerce_decision_guard",
+            "alter function app_private.guard_ecommerce_decision() security definer",
+        ]
+        with pg._connect(self.admin_url) as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                PostgresTrialStore._assert_schema(cursor)
+                for mutation in mutations:
+                    with self.subTest(mutation=mutation):
+                        cursor.execute('savepoint schema_probe')
+                        try:
+                            cursor.execute(mutation)
+                            with self.assertRaises(TrialNotReadyError):
+                                PostgresTrialStore._assert_schema(cursor)
+                        finally:
+                            cursor.execute('rollback to savepoint schema_probe')
+                            cursor.execute('release savepoint schema_probe')
+                        PostgresTrialStore._assert_schema(cursor)
+
     def test_decisions_are_private_immutable_and_mutually_exclusive(self):
+        from supermega_runtime.ecommerce_decision_schema import acceptance_catalog_digest, ACCEPTANCE_CATALOG_DIGEST
+        with pg._connect(self.admin_url) as connection:
+            self.assertEqual(acceptance_catalog_digest(connection.cursor()), ACCEPTANCE_CATALOG_DIGEST)
         from tests.test_commerce_runtime import catalog_state, storefront_configuration
         from supermega_runtime.commerce_runtime import commerce_storefront_preview, commerce_storefront_preview_digest
         workspace, owner, recipient = fixture.WORKSPACE, fixture.OWNER, fixture.RECIPIENT
@@ -42,7 +70,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                   values (%s,%s,%s,%s,1,%s::jsonb,%s,clock_timestamp()+interval '1 day')""",
                   (review,workspace,recipient,owner,json.dumps(commerce_storefront_preview(source)),digest))
         from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
-        from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialValidationError
+        from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialValidationError, TrialPermissionDenied
         adapter = EcommerceCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=True))
         actor = TrialPrincipal(workspace, recipient, 'human')
         for review_id, kind in [(reviews[3], 'acceptance'), (reviews[4], 'feedback')]:
@@ -108,7 +136,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             with self.assertRaises(self.db_error) as stale, connection.transaction():
                 insert(connection,reviews[1],'feedback')
             self.assertEqual(stale.exception.sqlstate, '42501')
-        with self.assertRaises(TrialValidationError):
+        with self.assertRaises(TrialPermissionDenied):
             adapter.record_decision(actor,payload,kind='feedback')
         with pg._connect(self.admin_url) as connection:
             for role in ('anon','authenticated','service_role'):
