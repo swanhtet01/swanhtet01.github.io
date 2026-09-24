@@ -68,3 +68,33 @@ test('rendered review login offers no sample, trial activation or self-registrat
     } else assert.match(content, ready ? /Create an account/ : /Try a sample/)
   }
 })
+
+test('unavailable recovery preserves private review context without sample or account-request detours', () => {
+  const require = createRequire(new URL('../showroom/package.json', import.meta.url))
+  const ts = require('typescript')
+  const source = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')
+  const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
+  for (const pathname of ['/account/recovery', '/account/setup']) for (const reviewing of [true, false]) {
+    const exports = {}, links = []
+    const jsx = (type, props) => {
+      if (typeof type === 'function') return type(props)
+      if (type === 'a') links.push(props)
+      return { type, props }
+    }
+    const dependencies = {
+      react: { useState: init => [typeof init === 'function' ? init() : init, () => {}], useRef: init => ({ current: init }), useEffect() {} },
+      'react/jsx-runtime': { jsx, jsxs: jsx },
+      'react-router': { Link: 'a', useNavigate: () => () => {}, useLocation: () => ({ pathname, search: reviewing ? `?review=${id}&product=website` : '?product=shop' }), useOutletContext: () => ({ authReady: false, status: 'demo' }) },
+      './CoreShell': { PageHeading: 'heading' }, './account-routes': routes, './managed-trial': {},
+    }
+    runInNewContext(compiled, { exports, URLSearchParams, require: name => { assert.ok(name in dependencies, name); return dependencies[name] } })
+    exports.ManagedAccountPage()
+    if (reviewing) {
+      assert.equal(links.length, 1)
+      assert.equal(links[0].to, `/login?product=website&review=${id}`)
+    } else {
+      assert.ok(links.some(link => link.to === '/'))
+      assert.ok(links.some(link => link.href === routes.managedAccountRequestUrl('shop')))
+    }
+  }
+})
