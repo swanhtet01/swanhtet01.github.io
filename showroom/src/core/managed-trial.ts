@@ -3253,7 +3253,7 @@ export async function loadManagedWebsiteReview(reviewId: string, expectedIdentit
     throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}`,
-    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { cache: 'no-store', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
 export async function sendManagedWebsiteReviewChanges(
@@ -3273,7 +3273,7 @@ export async function loadManagedWebsiteAcceptance(reviewId: string, expectedIde
     throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}/acceptance`,
-    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { cache: 'no-store', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
 export async function sendManagedWebsiteAcceptance(
@@ -4175,7 +4175,7 @@ export async function loadManagedEcommerceReview(reviewId: string, expectedIdent
     throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}`,
-    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { cache: 'no-store', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
 export async function loadManagedEcommerceRecipients(expectedIdentity: ManagedIdentity, after?: string) {

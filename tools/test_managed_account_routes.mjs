@@ -802,6 +802,35 @@ test('sign-in distinguishes unavailable service and rate limits without exposing
 })
 
 
+test('customer review reads bound stalled requests and bodies without retrying or clearing identity', async () => {
+  for (const method of ['loadManagedWebsiteReview', 'loadManagedWebsiteAcceptance', 'loadManagedEcommerceReview']) {
+    for (const phase of ['request', 'body']) await withAuth(async (mod, state) => {
+      state.session = { ...fixedSession }
+      state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'synthetic-company')
+      const identity = await mod.currentManagedIdentity()
+      const controller = new AbortController()
+      const timeout = AbortSignal.timeout
+      AbortSignal.timeout = milliseconds => { assert.equal(milliseconds, 8000); return controller.signal }
+      try {
+        state.fetch = async (_url, init) => {
+          assert.equal(init.signal, controller.signal)
+          assert.equal(init.redirect, 'error')
+          assert.equal(init.cache, 'no-store')
+          const stalled = () => new Promise((_resolve, reject) => {
+            init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true })
+            queueMicrotask(() => controller.abort(new DOMException('Timed out', 'TimeoutError')))
+          })
+          return phase === 'request' ? stalled() : { ok: true, status: 200, json: stalled }
+        }
+        await assert.rejects(mod[method]('11111111-1111-4111-8111-111111111111', identity), { name: 'TimeoutError' })
+        assert.equal(state.calls.filter(([name]) => name === 'fetch').length, 1)
+        assert.equal(state.calls.some(([name]) => name === 'signOut'), false)
+        assert.deepEqual(await mod.currentManagedIdentity(), identity)
+      } finally { AbortSignal.timeout = timeout }
+    })
+  }
+})
+
 test('company discovery transport failures preserve the signed-in session and give safe retry advice', async () => {
   for (const phase of ['request', 'body']) {
     await withAuth(async (mod, state) => {
