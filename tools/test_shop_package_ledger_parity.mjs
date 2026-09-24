@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import vm from 'node:vm'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
@@ -86,3 +88,22 @@ print(json.dumps(result))
   assert.deepEqual(setupState.serviceSchedule, nextSchedule)
 }
 console.log('Generated package setup and purchase allocation accepted by runtime; duplicate setup/allocation rejected')
+
+// Exercise the actual UI eligibility projection against runtime-produced records.
+const ui = readFileSync('showroom/src/core/ShopServiceSchedule.tsx', 'utf8')
+const projectionStart = ui.indexOf('  const membershipByBookingId = useMemo(')
+const projectionEnd = ui.indexOf('  // A restaurant', projectionStart)
+assert.ok(projectionStart > 0 && projectionEnd > projectionStart)
+const projectionCode = require('esbuild').transformSync(ui.slice(projectionStart, projectionEnd), { loader: 'ts' }).code
+function projectButtons(book) {
+  return vm.runInNewContext(projectionCode + '\nmembershipByBookingId', {
+    schedule: book, commerce: before,
+    membershipBalances: model.spaMembershipBalances(before, book, proof.happenedAt),
+    useMemo: fn => fn(),
+    availableSpaMembershipForBooking: (commerce, schedule, id) => model.availableSpaMembershipForBooking(commerce, schedule, id, proof.happenedAt),
+  })
+}
+assert.equal(projectButtons(schedule).get(bookingId)?.entitlementId, balance.entitlementId)
+assert.equal(projectButtons(renamed).get(bookingId)?.entitlementId, balance.entitlementId)
+assert.equal(projectButtons(next).has(bookingId), false, 'redeemed visit has no action even when another package has sessions')
+console.log('Actual schedule UI projection: eligible and renamed clients match; already-redeemed visits have no package action')

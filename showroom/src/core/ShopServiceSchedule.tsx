@@ -114,13 +114,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   const settledSourceRecordIds = useMemo(() => new Set(commerce.orders.flatMap((order) => order.sourceRecordId && order.status === 'completed' && order.paymentStatus === 'reconciled' && order.refundStatus !== 'due' ? [order.sourceRecordId] : [])), [commerce])
   const membershipByBookingId = useMemo(() => {
     if (!schedule || !membershipBalances.length) return new Map<string, (typeof membershipBalances)[number]>()
-    const balancesByCustomerService = new Map(membershipBalances.map((balance) => [`${balance.customer}\u0000${balance.serviceId}`, balance]))
-    const redeemedBookingIds = new Set(schedule.events.filter((event) => event.type === 'package_redeemed').map((event) => event.subjectId))
     return new Map(schedule.bookings.flatMap((booking) => {
-      const balance = balancesByCustomerService.get(`${booking.customerName.trim()}\u0000${booking.serviceId}`)
-      return booking.status === 'completed' && !redeemedBookingIds.has(booking.id) && balance && balance.remaining > 0 ? [[booking.id, balance] as const] : []
+      const balance = availableSpaMembershipForBooking(commerce, schedule, booking.id)
+      return balance ? [[booking.id, balance] as const] : []
     }))
-  }, [membershipBalances, schedule])
+  }, [commerce, membershipBalances, schedule])
   // A restaurant sees "Reservations" and a school sees "Classes"; the generic
   // "appointment" made every pack read as the same untailored template. The
   // action notices need it too, so it is derived here rather than at render.
