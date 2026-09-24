@@ -9,6 +9,7 @@ import {
   managedProductsFromBootstrap,
   normalizeSelfServeClaimCode,
   requestSelfServeWorkspace,
+  requireManagedSurfaceState,
 } from '../showroom/src/core/managed-trial.ts'
 
 const CLAIM_CODE = 'SM-ABCD-2345'
@@ -289,5 +290,30 @@ test('managed staff writes require an explicit valid surface capability', () => 
       () => managedBootstrapHasCapability({ ...bootstrap, readiness: { capabilities } }, identity, 'commerce.write'),
       (error) => error instanceof ManagedTrialError && error.code === 'managed_bootstrap_invalid',
     )
+  }
+})
+
+
+test('bootstrap rejects wrong actors, malformed grants and invalid surface versions', () => {
+  const identity = { workspaceId: WORKSPACE_ID, userId: session.user.id, email: session.user.email }
+  const record = { surface: 'commerce', version: 0, state: {} }
+  const bootstrap = {
+    identity: { workspace_id: WORKSPACE_ID, actor_id: session.user.id, actor_kind: 'human' },
+    readiness: { productEntitlements: ['commerce'] }, states: { commerce: record }, approvals: [],
+  }
+  for (const changed of [{ actor_id: 'another-user' }, { actor_kind: 'agent' }, { workspace_id: 'another-company' }]) {
+    assert.throws(() => managedProductsFromBootstrap({ ...bootstrap, identity: { ...bootstrap.identity, ...changed } }, identity),
+      error => error instanceof ManagedTrialError && error.code === 'managed_identity_changed')
+  }
+  for (const grants of [null, 'commerce', ['commerce', 'commerce'], ['unknown'], ['website', 'commerce'], [null]]) {
+    assert.throws(() => managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: grants } }, identity),
+      error => error instanceof ManagedTrialError && error.code === 'managed_bootstrap_invalid')
+  }
+  assert.deepEqual(managedProductsFromBootstrap({ ...bootstrap, readiness: { productEntitlements: [] } }, identity), [])
+  assert.deepEqual(managedProductsFromBootstrap({ ...bootstrap, states: {} }, identity), [])
+  assert.equal(requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'), record)
+  for (const changed of [{ surface: 'website' }, { version: -1 }, { version: 0.5 }, { version: Number.MAX_SAFE_INTEGER + 1 }, { state: null }, { state: [] }]) {
+    assert.throws(() => requireManagedSurfaceState({ ...bootstrap, states: { commerce: { ...record, ...changed } } }, 'commerce', 'Shop'),
+      error => error instanceof ManagedTrialError && error.code === 'managed_state_invalid')
   }
 })
