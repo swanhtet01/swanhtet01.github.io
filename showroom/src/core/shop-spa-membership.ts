@@ -1,3 +1,4 @@
+import { sha256Hex } from './sha256.ts'
 import {
   validateShopServiceSchedule,
   type ShopServiceSchedule,
@@ -12,13 +13,15 @@ export const spaMembershipPackages = [
 type SpaMembershipPackage = typeof spaMembershipPackages[number]
 
 export type SpaMembershipOrderView = {
+  id?: string
+  completion?: { capturedAt: string }
   sourceRecordId?: string
   customer: string
   status: string
   paymentStatus: string
   refundStatus: string
   paymentReconciledAt?: string
-  lines?: readonly { sku: string; quantity: number }[]
+  lines?: readonly { sku: string; quantity: number; unitPriceMmk?: number }[]
 }
 
 export type SpaMembershipCommerceView = {
@@ -52,6 +55,15 @@ function bounded(value: string, label: string, maximum: number) {
   return normalized
 }
 
+function packageOrderDigest(value: unknown): string {
+  function canonical(item: unknown): unknown {
+    if (Array.isArray(item)) return item.map(canonical)
+    if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, entry]) => [key, canonical(entry)]))
+    return item
+  }
+  return `sha256:${sha256Hex(JSON.stringify(canonical(value)))}`
+}
+
 export function spaMembershipBalances(
   commerce: SpaMembershipCommerceView,
   schedule: ShopServiceSchedule,
@@ -66,12 +78,23 @@ export function spaMembershipBalances(
     return schedule.packageLedger.filter(entry => Date.parse(entry.issuedAt) <= ledgerTime).map(entry => {
       const definition = schedule.packageDefinitions!.find(d => d.id === entry.definitionId)!
       const client = schedule.clients.find(c => c.id === entry.clientId)!
+      const order = commerce.orders.find(order => order.id === entry.sourceOrderId)
+      const line = order?.lines?.[entry.sourceOrderLineIndex]
+      const paidAt = order?.paymentReconciledAt ? Date.parse(order.paymentReconciledAt) : NaN
+      const completedAt = order?.completion?.capturedAt ? Date.parse(order.completion.capturedAt) : NaN
+      const purchaseMatches = order && order.customer === entry.clientId && order.status === 'completed'
+        && order.paymentStatus === 'reconciled' && order.refundStatus === 'none'
+        && Number.isFinite(paidAt) && paidAt <= ledgerTime && Number.isFinite(completedAt) && completedAt <= ledgerTime
+        && line?.sku === definition.purchaseSku && line.unitPriceMmk === entry.purchasePriceMmk
+        && Number.isSafeInteger(line.quantity) && line.quantity > 0
+        && entry.allocatedSessions === line.quantity * definition.sessionsPerPurchase
+        && packageOrderDigest(order) === entry.sourceOrderDigest
       return {
         customer: client.name, clientId: entry.clientId, entitlementId: entry.id,
         packageSku: definition.purchaseSku as SpaMembershipPackage['sku'], label: definition.label,
         serviceId: definition.eligibleServiceIds[0], eligibleServiceIds: definition.eligibleServiceIds,
         purchased: entry.allocatedSessions, redeemed: entry.allocatedSessions - entry.remainingSessions,
-        remaining: definition.active && !client.anonymizedAt && Date.parse(entry.expiresAt) > ledgerTime ? entry.remainingSessions : 0,
+        remaining: purchaseMatches && definition.active && !client.anonymizedAt && Date.parse(entry.expiresAt) > ledgerTime ? entry.remainingSessions : 0,
       }
     })
   }

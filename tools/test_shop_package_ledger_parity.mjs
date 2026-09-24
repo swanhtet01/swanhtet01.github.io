@@ -37,6 +37,14 @@ const bookingId = expected.packageLedger[0].evidence.at(-1).bookingId
 const balance = model.availableSpaMembershipForBooking(before, schedule, bookingId, proof.happenedAt)
 assert.equal(balance.clientId, schedule.bookings.find(b => b.id === bookingId).clientId)
 assert.equal(balance.remaining, 5)
+for (const [field, value] of [['refundStatus', 'requested'], ['paymentStatus', 'pending'], ['customer', 'client-other'], ['owner', 'changed evidence']]) {
+  const changed = structuredClone(before)
+  for (const order of changed.orders) order[field] = value
+  assert.equal(model.availableSpaMembershipForBooking(changed, schedule, bookingId, proof.happenedAt), null, field)
+  assert.throws(() => model.redeemSpaMembershipSession(schedule, changed, bookingId, proof), undefined, field)
+}
+const missingOrders = { ...before, orders: [] }
+assert.equal(model.availableSpaMembershipForBooking(missingOrders, schedule, bookingId, proof.happenedAt), null)
 const next = model.redeemSpaMembershipSession(schedule, before, bookingId, proof)
 assert.deepEqual(next, expected)
 assert.equal(model.redeemSpaMembershipSession(next, before, bookingId, proof), next)
