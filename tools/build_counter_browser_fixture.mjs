@@ -7,12 +7,26 @@ mkdirSync(out, { recursive: true })
 await build({ stdin: { resolveDir: resolve('showroom'), loader: 'tsx', contents: `
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {MemoryRouter} from 'react-router';
 import {ShopCounter} from './src/core/CoreApp';
+import {createSeedCommerce,reserveCommerceOrder,mutateCommerceWorkspace} from './src/core/commerce-workspace';
 const memory=()=>{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),key:i=>[...m.keys()][i]??null,get length(){return m.size}}};
 Object.defineProperty(window,'localStorage',{value:memory()});Object.defineProperty(window,'sessionStorage',{value:memory()});
-function Fixture(){const [review,setReview]=useState(null);const [result,setResult]=useState('');return <>
-<p>Synthetic Counter. Callback check only; no sale is recorded.</p>
-<ShopCounter businessTemplate={null} industryPack={null} canCompleteInOneReview={false} disabled={false} initialCustomer="" initialQuery="" items={[{sku:'QA-TEA',name:'Synthetic tea',price:5000,onHand:10,reorderAt:2}]} localDemoStatus={null} lowStockCount={0} loyaltyPoints={null} onReview={value=>{setReview(value);setResult('')}} openOrderCount={0} paymentQrScope="synthetic" persistLocalDraft={false} productImageScope="synthetic" recordedOrderIds={[]} sampleCatalogActive={false}/>
-{review ? <section aria-label="Synthetic review"><pre>{JSON.stringify({lines:review.lines,payment:review.payment,outcome:review.outcome})}</pre><button onClick={async()=>{setResult(await review.beforeCommit('ORD-SYNTHETIC')?'Review still current':'Review changed; rejected')}}>Check reviewed basket</button><button onClick={()=>{review.onCommitted('ORD-SYNTHETIC');setResult('Synthetic callback completed')}}>Simulate acknowledged callback</button></section>:null}<p role="status">{result}</p></>}
+const seed=createSeedCommerce();const key='supermega.commerce.workspace.v2';localStorage.setItem(key,JSON.stringify(seed));let failWrites=true;
+const store={getItem:k=>localStorage.getItem(k),setItem:(k,v)=>{if(failWrites)throw Error('Synthetic quota');localStorage.setItem(k,v)},removeItem:k=>localStorage.removeItem(k)};
+function Fixture(){const [review,setReview]=useState(null);const [result,setResult]=useState('');const [commerce,setCommerce]=useState(seed);
+async function persist(){
+ const id='ORD-SYNTHETIC'; if(!await review.beforeCommit(id)){setResult('Review changed; rejected');return}
+ const at=new Date().toISOString();const lines=review.lines.map(l=>{const i=commerce.items.find(i=>i.sku===l.sku);return {sku:i.sku,name:i.name,quantity:l.quantity,unitPriceMmk:i.price}});
+ const order={id,createdAt:at,customer:review.customer||'Synthetic guest',owner:'Synthetic operator',channel:'Counter',item:lines.map(l=>l.name).join(', '),itemSku:lines.length===1?lines[0].sku:undefined,quantity:lines.reduce((n,l)=>n+l.quantity,0),payment:review.payment,paymentStatus:'pending',refundStatus:'none',fulfilment:'pickup',fulfilmentReference:'Synthetic counter',promisedAt:new Date(Date.parse(at)+1800000).toISOString(),total:lines.reduce((n,l)=>n+l.quantity*l.unitPriceMmk,0),status:'confirmed',lines};
+ const proof={actionId:'ACT-SYNTHETIC',capturedAt:at,actor:'Synthetic operator',reason:'Isolated browser acceptance',evidenceReference:'SYNTHETIC'};
+ const saved=await mutateCommerceWorkspace(state=>reserveCommerceOrder(state,order,proof),store,navigator.locks);
+ if(!saved.ok){setResult('Write rejected; basket retained: '+saved.error);return}
+ const retained=JSON.parse(localStorage.getItem(key));if(!retained.orders.some(o=>o.id===id)){setResult('Readback failed');return}
+ setCommerce(saved.state);review.onCommitted(id);setReview(null);setResult('Order retained; count '+retained.orders.filter(o=>o.id===id).length);
+}
+return <>
+<p>Synthetic Counter. Orders are saved in memory only; no payment or hosted write.</p>
+<ShopCounter businessTemplate={null} industryPack={null} canCompleteInOneReview={false} disabled={false} initialCustomer="" initialQuery="" items={commerce.items.filter(i=>i.onHand>3).slice(0,1)} localDemoStatus={null} lowStockCount={0} loyaltyPoints={null} onReview={value=>{setReview(value);setResult('')}} openOrderCount={0} paymentQrScope="synthetic" persistLocalDraft={false} productImageScope="synthetic" recordedOrderIds={[]} sampleCatalogActive={false}/>
+{review ? <section aria-label="Synthetic review"><pre>{JSON.stringify({lines:review.lines,payment:review.payment,outcome:review.outcome})}</pre><button onClick={async()=>{setResult(await review.beforeCommit('ORD-SYNTHETIC')?'Review still current':'Review changed; rejected')}}>Check reviewed basket</button><button onClick={persist}>Save synthetic order</button><button onClick={()=>{failWrites=false;setResult('Synthetic writes enabled')}}>Enable synthetic writes</button></section>:null}<p role="status">{result}</p></>}
 createRoot(document.getElementById('root')).render(<MemoryRouter><Fixture/></MemoryRouter>);
 ` }, plugins: [{ name: 'fixture-only-counter-export', setup(b) {
   b.onLoad({ filter: /CoreApp\.tsx$/ }, args => ({ loader: 'tsx', contents: readFileSync(args.path,'utf8').replace('function ShopCounter({','export function ShopCounter({') }))
