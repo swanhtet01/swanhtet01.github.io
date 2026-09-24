@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
+import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, readCatalogCommand, retainCatalogCommand, clearCatalogCommand } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
 import { storefrontPreviewDigest, STOREFRONT_PREVIEW_SCHEMA } from '../showroom/src/products/ecommerce/storefront-model.ts'
 import { COMMERCE_WORKSPACE_SCHEMA } from '../showroom/src/core/commerce-workspace.ts'
 const id = n => `11111111-1111-4111-8111-${String(n).padStart(12,'0')}`
@@ -53,4 +53,21 @@ test('withdrawal receipt cannot confirm another review or publication', () => {
   assert.equal(verifyCatalogWithdrawal(receipt,id(1)).status,'revoked')
   for(const patch of [{reviewId:id(2)},{status:'active'},{persisted:false},{replayed:1},{publicationAuthorized:true},{deploymentAuthorized:true},{extra:1}])
     assert.throws(()=>verifyCatalogWithdrawal({...receipt,...patch},id(1)))
+})
+
+test('uncertain preparation retains one exact command and refuses storage conflicts', () => {
+  const map=new Map(), storage={getItem:key=>map.get(key)??null,setItem:(key,value)=>map.set(key,value),removeItem:key=>map.delete(key)}
+  const command={reviewId:id(1),recipientGrantId:id(2),expectedVersion:1,contentRevision:0,previewDigest:'sha256:'+'a'.repeat(64),readAt:'2026-09-25T00:00:00Z',expiresAt:'2026-09-26T00:00:00Z'}
+  retainCatalogCommand(storage,'identity-a',command)
+  assert.deepEqual(readCatalogCommand(storage,'identity-a'),command)
+  retainCatalogCommand(storage,'identity-a',command)
+  assert.throws(()=>retainCatalogCommand(storage,'identity-a',{...command,reviewId:id(3)}))
+  assert.throws(()=>clearCatalogCommand(storage,'identity-a',{...command,reviewId:id(3)}))
+  assert.equal(readCatalogCommand(storage,'identity-b'),null)
+  clearCatalogCommand(storage,'identity-a',command);assert.equal(readCatalogCommand(storage,'identity-a'),null)
+  map.set('identity-a','broken');assert.equal(readCatalogCommand(storage,'identity-a'),'unavailable')
+  assert.throws(()=>retainCatalogCommand(storage,'identity-a',command))
+  const denied={getItem:()=>{throw Error('denied')},setItem:()=>{throw Error('denied')}}
+  assert.equal(readCatalogCommand(denied,'key'),'unavailable')
+  assert.throws(()=>retainCatalogCommand(denied,'key',command))
 })

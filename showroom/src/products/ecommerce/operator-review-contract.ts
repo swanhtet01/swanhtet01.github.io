@@ -66,3 +66,30 @@ export function verifyCatalogWithdrawal(value: unknown, reviewId: string) {
     || typeof row.replayed !== 'boolean' || row.publicationAuthorized !== false || row.deploymentAuthorized !== false) return invalid()
   return { reviewId, status: 'revoked' as const, replayed: row.replayed }
 }
+
+export function readCatalogCommand(storage: Pick<Storage, 'getItem'>, key: string): CatalogPreparationCommand | null | 'unavailable' {
+  try {
+    const raw = storage.getItem(key)
+    if (raw === null) return null
+    if (raw.length > 1024) return 'unavailable'
+    const row = exact(JSON.parse(raw), ['reviewId', 'recipientGrantId', 'expectedVersion', 'expiresAt', 'contentRevision', 'previewDigest', 'readAt'])
+    if (!uuid(row.reviewId) || !uuid(row.recipientGrantId) || !Number.isSafeInteger(row.expectedVersion) || Number(row.expectedVersion) < 1
+      || !Number.isSafeInteger(row.contentRevision) || Number(row.contentRevision) < 0 || !time(row.readAt) || !time(row.expiresAt)
+      || instant(row.expiresAt) <= instant(row.readAt) || typeof row.previewDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(row.previewDigest)) return 'unavailable'
+    return row as CatalogPreparationCommand
+  } catch { return 'unavailable' }
+}
+function sameCommand(left: CatalogPreparationCommand | null | 'unavailable', right: CatalogPreparationCommand) {
+  return left !== null && left !== 'unavailable' && Object.entries(right).every(([key, value]) => left[key as keyof CatalogPreparationCommand] === value)
+}
+export function retainCatalogCommand(storage: Storage, key: string, command: CatalogPreparationCommand) {
+  const prior = readCatalogCommand(storage, key)
+  if (prior !== null && !sameCommand(prior, command)) throw new Error('Pending review requires reconciliation')
+  storage.setItem(key, JSON.stringify(command))
+  if (!sameCommand(readCatalogCommand(storage, key), command)) throw new Error('Pending review could not be retained')
+}
+export function clearCatalogCommand(storage: Storage, key: string, command: CatalogPreparationCommand) {
+  if (!sameCommand(readCatalogCommand(storage, key), command)) throw new Error('Pending review changed')
+  storage.removeItem(key)
+  if (readCatalogCommand(storage, key) !== null) throw new Error('Pending review could not be cleared')
+}
