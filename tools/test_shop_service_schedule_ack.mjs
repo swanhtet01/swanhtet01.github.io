@@ -172,7 +172,7 @@ const loadStart = source.indexOf('  useEffect(() => {\n    let active = true')
 const loadEnd = source.indexOf('\n  // Used only where', loadStart)
 assert.ok(loadStart > 0 && loadEnd > loadStart)
 const loadCode = transformSync(source.slice(loadStart, loadEnd), { loader: 'ts' }).code
-for (const mode of ['cache-rejected', 'account-changed', 'unmounted']) {
+for (const mode of ['cache-rejected', 'empty-company', 'account-changed', 'unmounted']) {
   let finish, cleanup
   const pending = new Promise(resolve => { finish = resolve })
   const updates = []
@@ -183,19 +183,22 @@ for (const mode of ['cache-rejected', 'account-changed', 'unmounted']) {
     loadManagedServiceSchedule: () => pending,
     isCurrentScheduleIdentity: async () => mode !== 'account-changed',
     setManagedConnected: () => {}, setManagedPrivacyOwner: value => updates.push(['owner', value]),
-    setSchedule: value => updates.push(['schedule', value]), setRetentionDraft: () => {},
+    setSchedule: value => updates.push(['schedule', value]), setScheduleState: value => updates.push(['schedule', value]), setRetentionDraft: () => {},
     persistLocal: () => { throw new Error('Device cache rejected') },
     setNotice: value => updates.push(['notice', value]), setManagedLoading: () => {},
   }
   vm.createContext(context); vm.runInContext(loadCode, context)
   await new Promise(resolve => setImmediate(resolve))
   if (mode === 'unmounted') cleanup()
-  finish({ version: 8, privacyOwner: true, schedule: { revision: 4, privacyPolicy: {} } })
+  finish({ version: 8, privacyOwner: true, schedule: mode === 'empty-company' ? null : { revision: 4, privacyPolicy: {} } })
   await new Promise(resolve => setImmediate(resolve))
   if (mode === 'cache-rejected') {
     assert.equal(context.managedVersionRef.current, 8)
     assert.equal(updates.filter(([kind]) => kind === 'schedule').length, 1)
     assert.deepEqual(updates.filter(([kind]) => kind === 'notice'), [['notice', 'Company schedule loaded.']])
+  } else if (mode === 'empty-company') {
+    assert.deepEqual(updates.filter(([kind]) => kind === 'schedule'), [['schedule', null]], 'empty company must not retain device bookings')
+    assert.ok(updates.some(([kind, text]) => kind === 'notice' && text.includes('onboarding')))
   } else {
     assert.equal(context.managedVersionRef.current, null)
     assert.equal(updates.length, 0, 'late load must not install schedule or privacy authority')

@@ -149,7 +149,8 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         try { persistLocal(managed.schedule) } catch { /* Loading the managed copy does not require a device cache. */ }
         setNotice('Company schedule loaded.')
       } else {
-        setNotice('Company schedule ready.')
+        setScheduleState(null)
+        setNotice('Set up your company schedule in onboarding, then reload.')
       }
     }).catch((error) => {
       if (active) setNotice(error instanceof Error ? `${error.message} The schedule remains available on this device.` : 'Company schedule unavailable. Device copy available.')
