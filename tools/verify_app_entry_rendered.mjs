@@ -747,7 +747,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const shopCounter = testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
-    const briefControls = testCase.inspectBusinessBrief ? await evaluate(cdp, sessionId, `(${inspectBusinessBrief.toString()})(document)`) : null
+    const briefControls = testCase.inspectBusinessBrief ? await evalInPage(cdp, sessionId, `(${inspectBusinessBrief.toString()})(document)`) : null
     const rawShopProfitControl = testCase.exerciseShopProfitControl
       ? await exerciseShopProfitControl(cdp, sessionId, Boolean(testCase.mobile), testCase.sourceControlledFixture === true)
       : null

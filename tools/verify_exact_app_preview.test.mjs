@@ -1,3 +1,5 @@
+import { runInNewContext } from 'node:vm'
+import { inspectBusinessBrief } from './verify_app_entry_rendered.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -1017,4 +1019,30 @@ test('brief proof refuses missing, disabled, unrequired or prematurely enabled c
       await assert.rejects(() => reportFixture({ cases }), /brief_controls_invalid/)
     }
   }
+})
+
+
+test('actual brief harness expression rejects unusable DOM controls', async () => {
+  const source = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
+  const line = source.split('\n').find(line => line.includes('const briefControls = testCase.inspectBusinessBrief'))
+  assert.ok(line)
+  async function inspect(change = () => {}) {
+    const field = required => ({ required, value: '', disabled: false, readOnly: false, tabIndex: 0, labels: [{ textContent: 'Field' }], getClientRects: () => [{}], visibility: 'visible' })
+    const data = { fields: [field(true), field(true), field(false)], submit: { ...field(false), disabled: true, textContent: 'Continue' }, absent: false }
+    change(data)
+    const document = { querySelector: () => data.absent ? null : { querySelectorAll: () => data.fields, querySelector: () => data.submit } }
+    const context = { testCase: { inspectBusinessBrief: true }, cdp: {}, sessionId: 'synthetic', inspectBusinessBrief,
+      evalInPage: async (_cdp, _session, expression) => runInNewContext(expression, { document, getComputedStyle: node => ({ visibility: node.visibility }) }) }
+    return runInNewContext(`(async () => { ${line}; return briefControls })()`, context)
+  }
+  assert.ok(Object.values(await inspect()).every(value => value === true))
+  for (const change of [
+    d => { d.absent = true }, d => { d.fields.pop() }, d => { d.fields.push(d.fields[0]) },
+    d => { d.fields[0].getClientRects = () => [] }, d => { d.fields[0].visibility = 'hidden' },
+    d => { d.fields[0].disabled = true }, d => { d.fields[0].readOnly = true },
+    d => { d.fields[0].tabIndex = -1 }, d => { d.fields[0].labels = [] },
+    d => { d.fields[0].required = false }, d => { d.fields[2].required = true },
+    d => { d.fields[0].value = 'Unexpected draft' }, d => { d.submit = null },
+    d => { d.submit.disabled = false }, d => { d.submit.textContent = 'Publish' },
+  ]) assert.ok(Object.values(await inspect(change)).some(value => value !== true))
 })
