@@ -22,6 +22,8 @@ print(json.dumps(samples))
 if(result.status !== 0) throw new Error(result.stderr)
 const samples = JSON.parse(result.stdout)
 const failWrites = process.argv.includes('--fail-writes')
+const managedEmpty = process.argv.includes('--managed-empty')
+const managedFailure = process.argv.includes('--managed-failure')
 const mode = process.argv.includes('--legacy') ? 'legacy' : process.argv.includes('--setup') ? 'setup' : 'redeem'
 const fixture = samples[mode === 'setup' ? '4' : '7']
 let at = samples['8'].serviceSchedule.events.at(-1).happenedAt
@@ -54,7 +56,7 @@ const values=new Map([[SHOP_SERVICE_SCHEDULE_STORAGE_KEY,JSON.stringify(fixture.
 const storage={getItem:(k:string)=>values.get(k)??null,setItem:(k:string,v:string)=>{if(${failWrites}) throw new Error('Synthetic storage failure'); values.set(k,String(v))},removeItem:(k:string)=>values.delete(k),clear:()=>values.clear(),key:(i:number)=>[...values.keys()][i]??null,get length(){return values.size}};
 Object.defineProperty(window,'localStorage',{value:storage});
 createRoot(document.getElementById('root')!).render(<MemoryRouter><p role="status">Synthetic QA · memory only · reload resets · no managed connection</p><ShopServiceSchedule initiallyOpen commerce={fixture} actor="Synthetic QA" /></MemoryRouter>);
-`},jsx:'automatic',bundle:true,format:'esm',outfile:resolve(out,'fixture.js'),plugins:[{name:'offline-managed',setup(b){b.onResolve({filter:/^\.\/managed-trial$/},()=>({path:'managed',namespace:'qa'}));b.onLoad({filter:/.*/,namespace:'qa'},()=>({contents:`export class ManagedTrialError extends Error{}; export async function currentManagedIdentity(){return null}; export async function loadManagedServiceSchedule(){throw Error('QA blocked')}; export async function saveManagedServiceSchedule(){throw Error('QA blocked')};`,loader:'js'}))}}]})
+`},jsx:'automatic',bundle:true,format:'esm',outfile:resolve(out,'fixture.js'),plugins:[{name:'offline-managed',setup(b){b.onResolve({filter:/^\.\/managed-trial$/},()=>({path:'managed',namespace:'qa'}));b.onLoad({filter:/.*/,namespace:'qa'},()=>({contents:`export class ManagedTrialError extends Error{}; export async function currentManagedIdentity(){return ${managedEmpty || managedFailure ? "{workspaceId: 'synthetic-qa', userId: 'synthetic-user'}" : "null"}}; export async function loadManagedServiceSchedule(){${managedEmpty ? "return {version: 1, schedule: null, privacyOwner: false}" : "throw Error('Synthetic managed load failure')"}}; export async function saveManagedServiceSchedule(){throw Error('QA blocked')};`,loader:'js'}))}}]})
 writeFileSync(resolve(out,'index.html'),'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="connect-src \'none\'"><title>Synthetic Spa QA</title><link rel="stylesheet" href="fixture.css"><div id="root"></div><script type="module" src="fixture.js"></script>')
 console.log('Synthetic fixture built at /__qa-spa/; memory-only storage, fixed fixture time, managed API stubbed, connect-src none.')
 
