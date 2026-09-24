@@ -2,7 +2,8 @@ import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { mkdirSync, writeFileSync } from 'node:fs'
 const { build } = createRequire(resolve('showroom/package.json'))('esbuild')
-const emptyCompany = process.argv.includes('--empty-company')
+const assignedCompany = process.argv.includes('--assigned-company')
+const emptyCompany = assignedCompany || process.argv.includes('--empty-company')
 const out = resolve('showroom/dist/__qa-spa')
 mkdirSync(out, {recursive:true})
 await build({stdin:{resolveDir:resolve('showroom'),loader:'tsx',contents:`
@@ -21,7 +22,7 @@ createRoot(document.getElementById('root')).render(<><p>Synthetic shell · memor
   b.onLoad({filter:/.*/,namespace:'fixture'},()=>({loader:'js',contents:`
     export async function currentManagedIdentity(){return {workspaceId:'synthetic-empty-company',userId:'synthetic-owner'}}
     export async function loadManagedBootstrap(){return {}}
-    export function managedProductsFromBootstrap(){return []}
+    export function managedProductsFromBootstrap(){return ${assignedCompany ? JSON.stringify(['commerce','website','ecommerce']) : '[]'}}
     export async function discoverManagedWorkspacesForCurrentSession(){return {userId:'synthetic-owner',email:'owner@example.invalid',workspaces:[{workspaceId:'synthetic-empty-company',label:'Synthetic company',access:'Owner'}]}}
   `}));
 }}] : [],jsx:'automatic',bundle:true,format:'esm',target:'es2022',define:{'import.meta.env':'{}'},outfile:resolve(out,'fixture.js')})
