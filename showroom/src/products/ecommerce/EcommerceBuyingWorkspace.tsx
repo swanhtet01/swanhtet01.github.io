@@ -1364,10 +1364,13 @@ export function EcommerceBuyingWorkspace({
               : !availablePaymentAdapters.length
                 ? <p className="form-notice" role="status">Set up an active Shop payment method for {fulfilment} before reviewing an order.</p>
                 : null}
+            <details className="compact-disclosure">
+              <summary>{promotionCode.trim() ? `Promotion: ${promotionCode.trim()}` : 'Add a promotion code'}</summary>
             <label>
-              <span>Promotion code <small>optional · Shop checks it</small></span>
+              <span>Promotion code <small>Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => setPromotionCode(event.target.value)} placeholder="Optional" value={promotionCode} />
             </label>
+            </details>
             {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" data-request-mode={onRecordManagedRequest ? 'managed' : 'local'} disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
               {quoteBusy ? (onRecordManagedRequest ? 'Sending...' : 'Saving on this device...') : (onRecordManagedRequest ? 'Send order request' : 'Save request on this device')}
             </button> : null}
