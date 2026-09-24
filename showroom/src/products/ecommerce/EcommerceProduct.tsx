@@ -1,7 +1,7 @@
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
-import { readSessionCart, saveSessionCart } from './cart-session'
+import { readSessionCart, readSessionCartSnapshot, saveSessionCart } from './cart-session'
 import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -453,7 +453,7 @@ export function EcommerceProduct() {
   const cartScope = !catalogHydrating && digest && catalog.source !== 'unavailable'
     ? JSON.stringify([managedIdentity ? [managedIdentity.workspaceId, managedIdentity.userId] : 'local', digest]) : ''
   const recoverSessionCart = useCallback(() => {
-    try { return readSessionCart(window.sessionStorage, cartScope, catalog.items) } catch { return [] }
+    try { return readSessionCartSnapshot(window.sessionStorage, cartScope, catalog.items) } catch { return null }
   }, [cartScope, catalog.items])
   useEffect(() => {
     if (!cartScope) return

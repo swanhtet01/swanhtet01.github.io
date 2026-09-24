@@ -66,7 +66,7 @@ type EcommerceBuyingWorkspaceProps = {
   currentCatalog: CommerceItem[]
   disabled: boolean
   onCartChange: (cart: EcommerceCartLine[]) => void
-  recoverSessionCart?: () => EcommerceCartLine[]
+  recoverSessionCart?: () => EcommerceCartLine[] | null
   onContinueInShop: (requestId: string) => void
   onDraft: (draft: EcommerceShopDraftV2) => void
   onOpenManagedRequest?: (requestId: string) => void
@@ -253,8 +253,8 @@ export function EcommerceBuyingWorkspace({
       const recoveredState = result.state ?? createEmptyEcommerceBuyingState(scope)
       setRecoveryRead({ scope, status: result.status, issue: result.error })
       setBuyingState(recoveredState)
-      const sessionCart = recoverSessionCart?.() ?? []
-      onCartChange(sessionCart)
+      const sessionCart = recoverSessionCart?.() ?? null
+      onCartChange(sessionCart ?? [])
       setCustomerName('')
       setCustomerPhone('')
       setAddressLine1('')
@@ -274,7 +274,7 @@ export function EcommerceBuyingWorkspace({
       setRescheduleDraft(null)
       setNotice('')
       const latest = recoveredState.requests[0]
-      if (sessionCart.length || !latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
+      if (sessionCart !== null || !latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
       onCartChange(latest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
       setCustomerName(latest.customerProfile?.name ?? latest.customerReference)
       setCustomerPhone(latest.customerProfile?.phone ?? '')

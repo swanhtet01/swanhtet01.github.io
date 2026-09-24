@@ -11,10 +11,10 @@ function validLines(value: unknown): value is SessionCartLine[] {
     return true
   })
 }
-export function readSessionCart(storage: StoragePort, scope: string, items: readonly { sku: string; onHand: number }[], now = Date.now()): SessionCartLine[] {
+export function readSessionCartSnapshot(storage: StoragePort, scope: string, items: readonly { sku: string; onHand: number }[], now = Date.now()): SessionCartLine[] | null {
   try {
     const raw = storage.getItem(key)
-    if (!raw) return []
+    if (!raw) return null
     if (raw.length > 40000) throw Error('size')
     const saved = JSON.parse(raw)
     if (!scope || saved?.scope !== scope || !Number.isFinite(saved.savedAt) || saved.savedAt > now
@@ -23,14 +23,17 @@ export function readSessionCart(storage: StoragePort, scope: string, items: read
       .map((line: SessionCartLine) => ({ sku: line.sku, quantity: line.quantity }))
   } catch {
     try { storage.removeItem(key) } catch { /* Best effort only. */ }
-    return []
+    return null
   }
 }
 export function saveSessionCart(storage: StoragePort, scope: string, lines: SessionCartLine[], now = Date.now()): boolean {
   try {
     if (!scope || !validLines(lines)) return false
-    if (!lines.length) storage.removeItem(key)
-    else storage.setItem(key, JSON.stringify({ scope, savedAt: now, lines: lines.map(({ sku, quantity }) => ({ sku, quantity })) }))
+    storage.setItem(key, JSON.stringify({ scope, savedAt: now, lines: lines.map(({ sku, quantity }) => ({ sku, quantity })) }))
     return true
   } catch { return false }
+}
+
+export function readSessionCart(storage: StoragePort, scope: string, items: readonly { sku: string; onHand: number }[], now = Date.now()): SessionCartLine[] {
+  return readSessionCartSnapshot(storage, scope, items, now) ?? []
 }
