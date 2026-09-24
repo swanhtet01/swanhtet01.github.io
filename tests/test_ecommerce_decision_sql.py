@@ -1,7 +1,6 @@
 """Decision storage on generated loopback PostgreSQL only; no managed target."""
 import json
 import os
-from pathlib import Path
 from hashlib import sha256
 from uuid import uuid4
 import unittest
@@ -16,9 +15,6 @@ class CatalogDecisionSqlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         fixture.WebsiteReviewSqlTests.setUpClass.__func__(cls)
-        migration = Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924231714_ecommerce_customer_decisions.sql'
-        with pg._connect(cls.admin_url) as connection:
-            connection.execute(migration.read_text(encoding='utf-8'))
 
     def test_schema_guard_rejects_storage_tampering(self):
         from psycopg.rows import dict_row
