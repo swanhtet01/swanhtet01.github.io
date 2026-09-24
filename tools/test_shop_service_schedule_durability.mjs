@@ -183,13 +183,32 @@ const booked = (base, startsAt = '2026-09-01T03:00:00.000Z', customerName = 'Daw
   check(readShopServiceSchedule(storage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)).bookings.length === 2, 'and both real bookings are now in the book')
 }
 
+// Rapid submissions share one lock queue before any result reaches the UI.
+{
+  const storage = memoryStorage()
+  const locks = recordingLocks()
+  const base = createShopServiceSchedule('spa')
+  const proposals = ['First', 'Second', 'Third'].map((name, index) =>
+    booked(base, `2026-09-01T0${3 + index}:00:00.000Z`, name))
+  const pending = proposals.map(next =>
+    mutateShopServiceSchedule(planShopServiceScheduleWrite(base.revision, next), storage, locks))
+  const outcomes = await Promise.all(pending)
+  check(outcomes[0].ok && outcomes.slice(1).every(result => !result.ok), 'queued stale submissions are refused after the first accepted write')
+  const stored = readShopServiceSchedule(storage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY))
+  check(stored.bookings.length === 1 && stored.bookings[0].customerName === 'First', 'rapid submissions preserve the first confirmed customer')
+  const retry = booked(stored, '2026-09-01T07:00:00.000Z', 'Second')
+  const retried = await mutateShopServiceSchedule(planShopServiceScheduleWrite(stored.revision, retry), storage, locks)
+  check(retried.ok && retried.schedule.bookings.length === 2, 'a reviewed retry after readback preserves both bookings')
+}
+
 // ---- 6b. the guard must survive MORE THAN ONE collision -------------------------------
-// The dangerous case is the refused tab's SECOND attempt. The component advances its
-// on-screen book optimistically, so after a refusal its in-memory revision equals the
+// The dangerous case is the refused tab's SECOND attempt. Historically the component
+// advanced its book optimistically, so after a refusal its in-memory revision equalled the
 // revision storage independently reached. If that stale book is used as the next
 // baseline, the numbers match by coincidence, the guard says yes, and the other tab's
 // booking is overwritten -- the exact loss this whole change exists to prevent.
-// commit() therefore re-reads storage on refusal; this asserts the consequence.
+// commit() now waits for acknowledgement and re-reads storage on refusal. Keep this
+// regression example to document why a phantom baseline must never be reused.
 {
   const storage = memoryStorage()
   const base = createShopServiceSchedule('spa')
