@@ -64,7 +64,7 @@ const FULL_CASE_MATRIX = Object.freeze([
   { name: 'demo ecommerce opens explicit ecommerce route', route: '/?demo=ecommerce', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/ecommerce/', screenshot: null },
   {
     name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
-    route: '/ecommerce/',
+    route: '/ecommerce/?workspace=1',
     viewport: '1280x900',
     width: 1280,
     height: 900,
@@ -74,7 +74,7 @@ const FULL_CASE_MATRIX = Object.freeze([
   },
   {
     name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
-    route: '/ecommerce/',
+    route: '/ecommerce/?workspace=1',
     viewport: '390x844 mobile',
     width: 390,
     height: 844,

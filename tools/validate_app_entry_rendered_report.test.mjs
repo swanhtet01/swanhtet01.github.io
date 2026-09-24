@@ -80,7 +80,7 @@ function ecommerceCase({ file, screenshot, viewport, width, height }) {
     name: width === 1280
       ? 'desktop isolated Ecommerce keeps a submitted sample request browser-local'
       : 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
-    route: '/ecommerce/',
+    route: '/ecommerce/?workspace=1',
     viewport,
     path: '/ecommerce/',
     bodyLength: 500,
@@ -280,14 +280,14 @@ function fullCaseMatrixFixture() {
     },
     {
       name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
-      route: '/ecommerce/',
+      route: '/ecommerce/?workspace=1',
       viewport: '1280x900',
       path: '/ecommerce/',
       screenshot: { file: 'ecommerce-local-request-desktop-1280x900.png' },
     },
     {
       name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
-      route: '/ecommerce/',
+      route: '/ecommerce/?workspace=1',
       viewport: '390x844 mobile',
       path: '/ecommerce/',
       screenshot: { file: 'ecommerce-local-request-mobile-390x844.png' },
@@ -317,6 +317,9 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
   assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 26)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(4, 6), 'shop-counter').length, 2)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(-2), 'ecommerce-claim').length, 2)
+  const obsoleteEntry = structuredClone(full.slice(-2))
+  obsoleteEntry[0].route = '/ecommerce/'
+  assert.throws(() => assertRenderedProofCaseMatrix(obsoleteEntry, 'ecommerce-claim'), /case_matrix_mismatch/)
   assert.deepEqual(full.filter((entry) => entry.screenshot).map((entry) => entry.screenshot.file), [
     'app-launcher-desktop-1280x900.png',
     'app-launcher-mobile-390x844.png',

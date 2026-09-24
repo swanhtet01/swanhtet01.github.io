@@ -1035,7 +1035,7 @@ const tests = [
   },
   {
     name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
-    route: '/ecommerce/',
+    route: '/ecommerce/?workspace=1',
     width: 1280,
     height: 900,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
@@ -1049,7 +1049,7 @@ const tests = [
   },
   {
     name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
-    route: '/ecommerce/',
+    route: '/ecommerce/?workspace=1',
     width: 390,
     height: 844,
     mobile: true,
