@@ -37,6 +37,27 @@ def sample_span():
 
 
 class SpanProcessorTests(unittest.TestCase):
+    def test_shutdown_failure_is_nonfatal_and_does_not_log_payload(self):
+        exporter = RecordingExporter()
+        with patch.object(exporter, "shutdown", create=True, side_effect=RuntimeError("private shutdown detail")):
+            with self.assertLogs("supermega.telemetry", level="WARNING") as logs:
+                RedactingSpanProcessor(exporter).shutdown()
+        self.assertEqual(len(logs.output), 1)
+        self.assertNotIn("private", str(logs.output))
+        self.assertIsNone(logs.records[0].exc_info)
+
+    def test_flush_preserves_timeout_result_and_contains_failures(self):
+        exporter = RecordingExporter()
+        processor = RedactingSpanProcessor(exporter)
+        self.assertTrue(processor.force_flush())
+        with patch.object(exporter, "force_flush", create=True, return_value=True) as flush:
+            self.assertTrue(processor.force_flush(123))
+            flush.assert_called_once_with(123)
+        with patch.object(exporter, "force_flush", create=True, return_value=False):
+            self.assertFalse(processor.force_flush())
+        with patch.object(exporter, "force_flush", create=True, side_effect=RuntimeError("private flush detail")):
+            self.assertFalse(processor.force_flush())
+
     def test_instrumentation_metadata_cannot_bypass_export_scrubbing(self):
         scope = InstrumentationScope(
             "private-module", version="private-version",

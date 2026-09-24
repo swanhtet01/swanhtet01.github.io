@@ -96,7 +96,10 @@ class RedactingSpanProcessor:
             _LOGGER.warning("supermega.telemetry: span export failed; dropping span")
 
     def shutdown(self) -> None:
-        self._exporter.shutdown()
+        try:
+            self._exporter.shutdown()
+        except Exception:
+            _LOGGER.warning("supermega.telemetry: exporter shutdown failed")
 
     def force_flush(self, timeout_millis: int = 30_000) -> bool:
         flush = getattr(self._exporter, "force_flush", None)
