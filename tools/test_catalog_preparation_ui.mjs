@@ -22,6 +22,11 @@ function harness() {
   if(name==='../../core/managed-trial')return {
    currentManagedIdentity:async()=>h.who,sameManagedIdentity:(a,b)=>a.workspaceId===b.workspaceId&&a.userId===b.userId,
    loadManagedEcommercePreparation:async()=>{h.sourceReads=(h.sourceReads??0)+1;if(h.readFail)throw Error('unavailable');return {}},loadManagedEcommerceRecipients:async()=>{h.recipientReads=(h.recipientReads??0)+1;if(h.readFail)throw Error('unavailable');return {recipients:[{grantId:id,label:'Customer'}],nextAfter:null}},
+   resolveExpiredManagedEcommerceReview:async (reviewId,expiresAt)=>{
+    h.resolutions=(h.resolutions??0)+1;h.resolutionPayload={reviewId,expiresAt}
+    if(h.resolveWait)await h.resolveWait;if(h.resolveFail)throw Error('unconfirmed')
+    return {reviewId,expiresAt,readAt:expiresAt,status:'absent_expired',publicationAuthorized:false,deploymentAuthorized:false,...h.resolvePatch}
+   },
    reconcileManagedEcommerceReview:async reviewId=>{
     h.checks=(h.checks??0)+1;if(h.checkWait)await h.checkWait;if(h.checkFail)throw Error('unconfirmed')
     const values=[...h.storage.values()].map(JSON.parse),command=values.find(v=>v.reviewId)??values.find(v=>v.command)?.command
@@ -127,5 +132,29 @@ test('inactive receipt cleanup can reopen after either removal fails',async()=>{
   h.checkStatus='stale';h.removeDenied=key=>key.endsWith(':receipt')===receiptFailure;h.click('Check review status');await flush()
   assert.ok(h.storage.size>0);h.listeners.get('focus')();h.click('Open saved catalog');await flush();assert.ok(h.slots[4])
   h.removeDenied=null;h.click('Check review status');await flush();assert.equal(h.storage.size,0);assert.equal(h.writes.length,1)
+ }
+})
+
+
+test('expired absence clears only after exact server proof and prevents duplicate calls',async()=>{
+ const h=harness();h.click('Open saved catalog');await flush();h.fail=true;h.click('Prepare review');await flush()
+ h.click('Resolve expired request');h.click('Resolve expired request');await flush()
+ assert.equal(h.resolutions,1);assert.deepEqual(h.resolutionPayload,{reviewId:h.writes[0].reviewId,expiresAt:h.writes[0].expiresAt})
+ assert.equal(h.storage.size,0);assert.equal(h.slots[3],null);assert.equal(h.writes.length,1)
+})
+test('expired recovery retains requests on failed proof, storage denial or identity change',async()=>{
+ for(const failure of ['network','wrong-review','early','storage','focus','account','changed-command']){
+  const h=harness();h.click('Open saved catalog');await flush();h.fail=true;h.click('Prepare review');await flush()
+  if(failure==='network')h.resolveFail=true
+  if(failure==='wrong-review')h.resolvePatch={reviewId:'22222222-2222-4222-8222-222222222222'}
+  if(failure==='early')h.resolvePatch={readAt:prepared.readAt}
+  if(failure==='storage')h.removeDenied=()=>true
+  let release;h.resolveWait=new Promise(resolve=>{release=resolve});h.click('Resolve expired request');await flush()
+  if(failure==='focus')h.listeners.get('focus')()
+  if(failure==='account')h.who={workspaceId:'other',userId:'other'}
+  if(failure==='changed-command'){
+   const [key,raw]=[...h.storage][0];h.storage.set(key,JSON.stringify({...JSON.parse(raw),expectedVersion:2}))
+  }
+  release();await flush();assert.equal(h.storage.size,1,failure);assert.equal(h.writes.length,1)
  }
 })

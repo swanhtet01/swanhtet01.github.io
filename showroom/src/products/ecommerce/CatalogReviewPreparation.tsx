@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { currentManagedIdentity, sameManagedIdentity, loadManagedEcommercePreparation, loadManagedEcommerceRecipients, prepareManagedEcommerceReview, withdrawManagedEcommerceReview, reconcileManagedEcommerceReview, type ManagedIdentity } from '../../core/managed-trial'
-import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, verifyCatalogReconciliation, readCatalogCommand, retainCatalogCommand, clearCatalogCommand, type CatalogPreparation, type CatalogRecipients, type CatalogPreparationCommand, type CatalogPreparationReceipt } from './operator-review-contract'
+import { currentManagedIdentity, sameManagedIdentity, loadManagedEcommercePreparation, loadManagedEcommerceRecipients, prepareManagedEcommerceReview, withdrawManagedEcommerceReview, reconcileManagedEcommerceReview, resolveExpiredManagedEcommerceReview, type ManagedIdentity } from '../../core/managed-trial'
+import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, verifyCatalogReconciliation, verifyCatalogExpiredAbsence, readCatalogCommand, retainCatalogCommand, clearCatalogCommand, type CatalogPreparation, type CatalogRecipients, type CatalogPreparationCommand, type CatalogPreparationReceipt } from './operator-review-contract'
 import { PreparedCatalog } from './PreparedCatalog'
 
 export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId: string; actorId: string }) {
@@ -95,6 +95,23 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
     } catch { if (started === epoch.current) setMessage('Preparation is unconfirmed. Reopen and retry the same request.') }
     finally { lock.current = false; setBusy(false) }
   }
+  async function resolveExpired() {
+    if (lock.current || !pending || receipt) return
+    lock.current = true; setBusy(true)
+    const started = epoch.current
+    try {
+      const who = await identity()
+      const retained = readCatalogCommand(window.sessionStorage, key)
+      if (!retained || retained === 'unavailable' || JSON.stringify(retained) !== JSON.stringify(pending) || savedReview()) throw Error('Request changed')
+      verifyCatalogExpiredAbsence(await resolveExpiredManagedEcommerceReview(retained.reviewId, retained.expiresAt, who), retained)
+      if (!await current(who, started)) return
+      if (savedReview()) throw Error('Review receipt exists')
+      clearCatalogCommand(window.sessionStorage, key, retained)
+      setPending(null); setSource(null); setRecipients(null); setSelected('')
+      setMessage('Expired request cleared. Open the saved catalog to prepare a new review.')
+    } catch { if (started === epoch.current) setMessage('Request retained. It must be expired and have no review before it can be cleared. Check review status or try again later.') }
+    finally { lock.current = false; setBusy(false) }
+  }
   async function reconcile() {
     const displayed = pending ?? receipt
     if (lock.current || !displayed) return
@@ -161,6 +178,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
       {recipients.nextAfter && !pending ? <button type="button" disabled={busy} onClick={() => void open(recipients.nextAfter!)}>More customers</button> : null}
     </> : null}
     {!receipt && (pending || (source && recipients)) ? <button type="button" disabled={busy || (!pending && !selected)} onClick={() => void prepare()}>{pending ? 'Retry same request' : 'Prepare review'}</button> : null}
+    {pending && !receipt ? <button type="button" disabled={busy} onClick={() => void resolveExpired()}>Resolve expired request</button> : null}
     {pending || receipt ? <button type="button" disabled={busy} onClick={() => void reconcile()}>Check review status</button> : null}
     {receipt ? <><p>Customer review link: <a href={`/ecommerce/review/${receipt.reviewId}`}>Open private review</a></p><button type="button" disabled={busy} onClick={() => void withdraw()}>Withdraw review</button></> : null}
   </section>
