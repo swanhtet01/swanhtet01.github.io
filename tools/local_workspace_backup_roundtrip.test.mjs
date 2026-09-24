@@ -69,3 +69,34 @@ test('a failed rollback reports incomplete recovery instead of only the initial 
   await assert.rejects(applyLocalWorkspaceBackup(target, fixture), /Restore failed and the previous records could not be fully recovered/)
   assert.equal(target.getItem('unrelated.preference'), 'keep')
 })
+
+
+test('restore holds both product locks through snapshot, replacement and rollback', async () => {
+  for (const failIncoming of [false, true]) {
+    const held = new Set()
+    const commerce = 'supermega-commerce-workspace-v2'
+    const production = 'supermega-production-workspace-v2'
+    const lockManager = { async request(name, options, run) {
+      assert.equal(options.mode, 'exclusive')
+      assert.ok(!held.has(name), 'must not reacquire a held lock')
+      held.add(name)
+      try { return await run() } finally { held.delete(name) }
+    } }
+    const key = 'supermega.commerce.workspace.v2'
+    const incoming = collectLocalWorkspaceBackup(memoryStorage({ [key]: 'incoming' }))
+    const target = memoryStorage({ [key]: 'original' }, (_, value) => failIncoming && value === 'incoming')
+    const unlockedOperations = []
+    for (const operation of ['getItem', 'removeItem', 'setItem']) {
+      const original = target[operation]
+      target[operation] = (...args) => {
+        if (!held.has(commerce) || !held.has(production)) unlockedOperations.push(operation)
+        return original(...args)
+      }
+    }
+    if (failIncoming) await assert.rejects(applyLocalWorkspaceBackup(target, incoming, lockManager), /synthetic_storage_write_failure/)
+    else await applyLocalWorkspaceBackup(target, incoming, lockManager)
+    assert.deepEqual(unlockedOperations, [], 'a writer could enter during these restore operations')
+    assert.equal(target.records.get(key), failIncoming ? 'original' : 'incoming')
+    assert.equal(held.size, 0, 'all locks released after completion or failure')
+  }
+})
