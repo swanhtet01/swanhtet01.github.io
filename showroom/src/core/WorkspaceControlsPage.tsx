@@ -552,9 +552,8 @@ export function WorkspaceControlsPage() {
   const recordCount = currentBackup ? Object.keys(currentBackup.records).length : backupRefusal?.records ?? 0
   const statusRows: Array<readonly [string, string]> = [
     ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Demo on this device'],
-    ['Writes', runtime.writesReady ? 'Ready' : 'Locked'],
+    ['Company changes', runtime.writesReady ? 'Available' : 'Unavailable'],
     ['Local records', currentBackup ? String(recordCount) : `${recordCount} · no backup file possible`],
-    ['Next action', runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Open a product and continue working.'],
   ]
   if (searchParams.get('view') === 'local-metrics') return <LocalMetricsView />
   if (searchParams.get('view') === 'cross-product') return <CrossProductView />
@@ -739,9 +738,13 @@ export function WorkspaceControlsPage() {
       />
       <div className="settings-control-stack">
         <section className="core-panel system-boundary-panel">
-          <div className="panel-head"><div><span className="core-eyebrow">Company boundary</span><h2>{runtime.writesReady ? 'Company writes are ready' : 'Real changes stay locked'}</h2><p>Local work remains usable while hosted identity, persistence, and security evidence are checked.</p></div><RuntimeBadge status={runtime.status} /></div>
+          <div className="panel-head"><div><span className="core-eyebrow">Company boundary</span><h2>{runtime.status === 'checking' ? 'Checking your connection' : runtime.writesReady ? 'Company workspace connected' : 'Company workspace unavailable'}</h2><p>Work saved on this device stays here. Company changes need a connected, authorised account.</p></div><RuntimeBadge status={runtime.status} /></div>
           <div aria-label="Workspace readiness" className="readiness-list">{statusRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-          {runtime.requirements.length ? <ul className="requirement-list">{runtime.requirements.slice(0, 4).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
+          {runtime.requirements.length || runtime.activationManifest?.next_action ? <details className="compact-disclosure">
+            <summary>Connection details for support</summary>
+            {runtime.activationManifest?.next_action ? <p>{runtime.activationManifest.next_action}</p> : null}
+            {runtime.requirements.length ? <ul className="requirement-list">{runtime.requirements.map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
+          </details> : null}
           <div className="trial-actions"><Link className="core-button" to="/login">Company login</Link><Link className="core-button primary" to="/">Open a product</Link></div>
           <p className="authority-note">SuperMega can prepare local work. Customer messages, payments, publishing, imports, and managed writes still require verified company controls and human approval.</p>
         </section>
