@@ -185,6 +185,10 @@ export function ManagedLoginPage() {
       setWorkspaceId(signIn.workspaces[0].workspaceId)
       setNotice(`Choose one of ${signIn.workspaces.length} companies assigned to ${signIn.email}.`)
     } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'managed_identity_changed') {
+        setDirectory(null)
+        setWorkspaceId('')
+      }
       setNoticeTone('error')
       setNotice(error instanceof Error ? error.message : 'Managed sign-in failed.')
     } finally {

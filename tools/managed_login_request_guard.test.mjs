@@ -320,3 +320,39 @@ test('actual recovery completion retains review destination for zero, one and mu
     assert.equal(context.accountRequestPending.current, false)
   }
 })
+
+
+test('changed session returns company selection to sign-in without losing review destination', async () => {
+  const { context, passwords } = fixture()
+  const reviewPath = '/website/review/11111111-1111-4111-8111-111111111111'
+  const notices = []
+  Object.assign(context, {
+    directory: { workspaces: [{ workspaceId: 'one' }] }, workspaceId: 'one', reviewReturnPath: reviewPath,
+    setDirectory: value => { context.directory = value }, setWorkspaceId: value => { context.workspaceId = value },
+    setNotice: value => notices.push(value),
+    openWorkspace: async () => { throw Object.assign(new Error('Sign in again.'), { code: 'managed_identity_changed' }) },
+  })
+  await handler('submit', context)(event)
+  assert.equal(context.directory, null)
+  assert.equal(context.workspaceId, '')
+  assert.equal(context.reviewReturnPath, reviewPath)
+  assert.equal(context.accountRequestPending.current, false)
+  assert.equal(passwords.at(-1), '')
+  let signIns = 0
+  context.signInAndDiscoverManagedWorkspaces = async () => { signIns++; return { workspaces: [], email: context.email } }
+  await handler('submit', context)(event)
+  assert.equal(signIns, 1)
+})
+
+test('temporary company-opening failure preserves selection for a deliberate retry', async () => {
+  const { context } = fixture()
+  const directory = { workspaces: [{ workspaceId: 'one' }] }
+  Object.assign(context, { directory, workspaceId: 'one',
+    setDirectory: value => { context.directory = value }, setWorkspaceId: value => { context.workspaceId = value },
+    openWorkspace: async () => { throw new Error('Temporary connection failure') },
+  })
+  await handler('submit', context)(event)
+  assert.equal(context.directory, directory)
+  assert.equal(context.workspaceId, 'one')
+  assert.equal(context.accountRequestPending.current, false)
+})
