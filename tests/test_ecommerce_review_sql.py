@@ -270,3 +270,65 @@ class CatalogReviewSqlTests(unittest.TestCase):
         with pg._connect(self.admin_url) as connection:
             connection.execute('grant execute on function app_private.ecommerce_review_recipient_ready(text) to public')
         with self.assertRaises(TrialNotReadyError): adapter.preview(actor,str(review_id))
+
+@unittest.skipUnless(os.environ.get('SUPERMEGA_RUN_WEBSITE_REVIEW_SQL') == '1', 'explicit local SQL rehearsal only')
+class CatalogEnrollmentSqlTests(unittest.TestCase):
+    # Committed enrollment evidence has its own cluster, separate from source-race fixtures.
+    setUpClass = classmethod(fixture.WebsiteReviewSqlTests.setUpClass.__func__)
+    stop = classmethod(fixture.WebsiteReviewSqlTests.stop.__func__)
+
+    def test_enrollment_review_and_revocation_use_real_local_provisioners(self):
+        import psycopg
+        from psycopg.rows import dict_row
+        from datetime import datetime, timedelta, timezone
+        from supermega_runtime.managed_activation import ManagedWorkspaceProvisioner, ManagedActivationConflict, _timestamp_text
+        from supermega_runtime.managed_staff_access import ManagedStaffAccessProvisioner, compile_staff_access_plan
+        from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
+        from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialPermissionDenied, TrialNotReadyError
+        from tests.test_managed_activation import activation_plan, OWNER_ID, OWNER_SESSION_ID
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        activation = activation_plan('ecommerce')
+        workspace, recipient, session = activation['workspaceId'], str(uuid4()), str(uuid4())
+        connect = lambda url: psycopg.connect(url, row_factory=dict_row)
+        with pg._connect(self.admin_url) as connection:
+            connection.execute('create table if not exists auth.users (id uuid primary key, is_anonymous boolean not null)')
+            connection.execute('insert into auth.users values (%s,false)', (recipient,))
+            connection.execute('insert into auth.sessions(id,user_id) values (%s,%s),(%s,%s)',
+                               (OWNER_SESSION_ID, OWNER_ID, session, recipient))
+        owner = ManagedWorkspaceProvisioner(self.admin_url, connection_factory=connect)
+        owner.authorize(activation, verified_owner_actor_id=OWNER_ID, verified_owner_session_id=OWNER_SESSION_ID,
+                        decision_note='Synthetic disposable enrollment only.')
+        owner.apply(activation)
+        now = datetime.now(timezone.utc)
+        plan = compile_staff_access_plan(activation, member_actor_id=recipient, member_label='Synthetic catalog reviewer',
+            role_id='ecommerce-reviewer', approval_id=str(uuid4()), approved_at=_timestamp_text(now),
+            expires_at=_timestamp_text(now+timedelta(hours=1)), now=now)
+        provisioner = ManagedStaffAccessProvisioner(self.admin_url, connection_factory=connect)
+        with self.assertRaises(ManagedActivationConflict): provisioner.apply(plan, activation)
+        provisioner.authorize(plan, activation, verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID, decision_note='Synthetic review-only enrollment.')
+        granted = provisioner.apply(plan, activation)
+        self.assertFalse(granted['authUserCreated'])
+        self.assertFalse(granted['invitationEmailSent'])
+        self.assertTrue(provisioner.apply(plan, activation)['replayed'])
+        source = catalog_state(); source['storefrontConfiguration'] = storefront_configuration(source)
+        with pg._connect(self.admin_url) as connection:
+            self.assertEqual(connection.execute('select capabilities from app_private.workspace_memberships where workspace_id=%s and actor_id=%s',
+                (workspace, recipient)).fetchone()[0], ['ecommerce.review'])
+            connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'commerce',1,%s::jsonb,%s)",
+                (workspace,json.dumps(source),OWNER_ID))
+        store = PostgresTrialStore(self.runtime_url, reducer=lambda *_: None, write_enabled=True)
+        adapter = EcommerceCustomerReviewStore(store)
+        customer = TrialPrincipal(workspace,recipient,'human',identity_provider='supabase',session_id=session)
+        writer = TrialPrincipal(workspace,OWNER_ID,'human',identity_provider='supabase',session_id=OWNER_SESSION_ID)
+        self.assertEqual(store.readiness(customer).capabilities, frozenset({'ecommerce.review'}))
+        with self.assertRaises(TrialPermissionDenied): store.get_state(customer,'commerce')
+        with self.assertRaises(TrialPermissionDenied): adapter.preparation_preview(customer)
+        review = adapter.prepare(writer, review_id=str(uuid4()),recipient_actor_id=recipient,
+            expected_version=1,expires_at=(now+timedelta(hours=1)).isoformat())
+        self.assertEqual(adapter.preview(customer,review['reviewId'])['previewDigest'],review['previewDigest'])
+        args=dict(verified_owner_actor_id=OWNER_ID,verified_owner_session_id=OWNER_SESSION_ID,reason='Synthetic review ended.')
+        self.assertEqual(provisioner.revoke(plan,activation,**args)['status'],'revoked')
+        self.assertTrue(provisioner.revoke(plan,activation,**args)['replayed'])
+        with self.assertRaises(TrialNotReadyError): adapter.preview(customer,review['reviewId'])
+        self.assertEqual(store.readiness(customer).capabilities,frozenset())
