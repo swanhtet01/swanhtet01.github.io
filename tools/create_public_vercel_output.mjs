@@ -543,7 +543,7 @@ function productCardHtml(product, index) {
     <h3>${escapeHtml(job)}</h3>
     <p lang="my" class="myanmar-label">${escapeHtml(myanmar)}</p>
     <p>${escapeHtml(description)}</p>
-    <a class="card-link" href="/${escapeHtml(product.id)}/">Explore ${escapeHtml(product.name)} <span aria-hidden="true">↗</span></a>
+    <a class="card-link" href="/${escapeHtml(product.id)}/">Explore ${escapeHtml(product.name)}</a>
   </article>`
 }
 
