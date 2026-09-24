@@ -901,6 +901,34 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             finally:
                 connection.rollback()
 
+    def test_sql_catalog_text_limits_count_utf16_units(self):
+        from pathlib import Path
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        from supermega_runtime.commerce_runtime import commerce_catalog_digest
+        sql=(Path(__file__).resolve().parents[1]/'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        with pg._connect(self.admin_url) as connection:
+            try:
+                connection.execute(sql)
+                for value in ('', 'Myanmar', '\u1006\u102d\u102f\u1004\u103a', chr(0x1f600), 'A'+chr(0x1f600)):
+                    actual=connection.execute('select app_private.ecommerce_review_text_length(%s)',(value,)).fetchone()[0]
+                    self.assertEqual(actual,len(value.encode('utf-16-le'))//2)
+                for location,field,limit in [('configuration','storeName',60),('configuration','summary',180),('item','name',180),('item','variant',180),('merch','collection',120),('merch','displayName',180),('merch','note',300)]:
+                    for extra in (0,1):
+                        source=catalog_state()
+                        source['storefrontConfiguration']=storefront_configuration(source,merchandising=[dict(sku='SKU-1',featured=False,collection='Local',displayName='',note='')])
+                        target=source['storefrontConfiguration'] if location=='configuration' else source['items'][0] if location=='item' else source['storefrontConfiguration']['merchandising'][0]
+                        target[field]=chr(0x1f600)*(limit//2)+('a' if extra else '')
+                        source['storefrontConfiguration']['shopCatalogDigest']=commerce_catalog_digest(source)
+                        with self.subTest(field=field,extra=extra):
+                            if extra:
+                                with self.assertRaises(self.db_error):
+                                    with connection.transaction():
+                                        connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(source),))
+                            else:
+                                connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(source),))
+            finally:
+                connection.rollback()
+
     def test_ecommerce_entitlement_is_private_and_product_specific(self):
         vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
                    ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),

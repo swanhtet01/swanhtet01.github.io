@@ -2,6 +2,14 @@
 -- Caller must validate the complete saved-state grammar and assignment separately.
 -- Catalog product-field freshness is checked here; stock binds through preview/source version.
 -- No table reads; never returns inventory quantities, costs, orders or evidence.
+-- Browser String.length counts supplementary characters as two UTF-16 units.
+create function app_private.ecommerce_review_text_length(value text) returns bigint
+language sql immutable strict security invoker set search_path=pg_catalog,app_private as $$
+  select coalesce(sum(case when ascii(character)>65535 then 2 else 1 end),0)
+  from regexp_split_to_table(value,'') character where character <> '';
+$$;
+revoke all on function app_private.ecommerce_review_text_length(text) from public,anon,authenticated,service_role;
+
 create function app_private.ecommerce_review_projection(source jsonb) returns jsonb
 language plpgsql immutable security invoker set search_path=pg_catalog,app_private as $$
 declare
@@ -25,7 +33,7 @@ begin
     if jsonb_typeof(configuration->field) is distinct from 'string'
       or length(btrim(configuration->>field,trim_chars)) = 0
       or configuration->>field <> btrim(configuration->>field,trim_chars)
-      or length(configuration->>field) > (case when field='storeName' then 60 else 180 end) then
+      or app_private.ecommerce_review_text_length(configuration->>field) > (case when field='storeName' then 60 else 180 end) then
       raise exception using errcode='22023',message='ecommerce_review_text_invalid';
     end if;
   end loop;
@@ -64,13 +72,13 @@ begin
       if jsonb_typeof(item->field) is distinct from 'string'
         or length(btrim(item->>field,trim_chars)) = 0
         or item->>field <> btrim(item->>field,trim_chars)
-        or length(item->>field) > (case when field='sku' then 80 else 180 end) then
+        or app_private.ecommerce_review_text_length(item->>field) > (case when field='sku' then 80 else 180 end) then
         raise exception using errcode='22023',message='ecommerce_review_text_invalid';
       end if;
     end loop;
     if item ? 'variant' and item->'variant' <> 'null'::jsonb then
       if jsonb_typeof(item->'variant') is distinct from 'string'
-        or length(item->>'variant') not between 1 and 180
+        or app_private.ecommerce_review_text_length(item->>'variant') not between 1 and 180
         or item->>'variant' <> btrim(item->>'variant',trim_chars) then
         raise exception using errcode='22023',message='ecommerce_review_variant_invalid';
       end if;
@@ -99,8 +107,8 @@ begin
       foreach field in array array['collection','displayName','note'] loop
         if jsonb_typeof(merch->field) is distinct from 'string'
           or merch->>field <> btrim(merch->>field,trim_chars)
-          or (field='collection' and length(merch->>field)=0)
-          or length(merch->>field) > (case field when 'collection' then 120 when 'displayName' then 180 else 300 end) then
+          or (field='collection' and app_private.ecommerce_review_text_length(merch->>field)=0)
+          or app_private.ecommerce_review_text_length(merch->>field) > (case field when 'collection' then 120 when 'displayName' then 180 else 300 end) then
           raise exception using errcode='22023',message='ecommerce_review_merchandising_invalid';
         end if;
       end loop;
