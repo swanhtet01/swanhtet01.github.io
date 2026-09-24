@@ -4,10 +4,23 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { counterCaptureReady } from './verify_app_entry_rendered.mjs'
+import { counterCaptureReady, receiptBoundaryVisible } from './verify_app_entry_rendered.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
 
 const renderedVerifierSource = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
+
+test('receipt boundary must be visibly sized and inside the viewport', () => {
+  const box = { top: 10, left: 10, bottom: 40, right: 300, width: 290, height: 30 }
+  const style = { display: 'block', visibility: 'visible', opacity: '1' }
+  assert.equal(receiptBoundaryVisible(box, 390, 844, style), true)
+  for (const altered of [{ width: 0 }, { height: 0 }, { left: -5 }, { right: 400 }, { bottom: 900 }]) {
+    assert.equal(receiptBoundaryVisible({ ...box, ...altered }, 390, 844, style), false)
+  }
+  for (const altered of [{ display: 'none' }, { visibility: 'hidden' }, { opacity: '0' }]) {
+    assert.equal(receiptBoundaryVisible(box, 390, 844, { ...style, ...altered }), false)
+  }
+  assert.equal(receiptBoundaryVisible(null, 390, 844, style), false)
+})
 
 test('rendered harness follows current assisted Website and Ecommerce entry actions', () => {
   assert.match(renderedVerifierSource, /candidate\.textContent\.trim\(\) === 'Try sample request'/)

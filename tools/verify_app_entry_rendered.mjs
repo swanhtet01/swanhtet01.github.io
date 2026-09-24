@@ -538,6 +538,12 @@ async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlle
   }
 }
 
+export function receiptBoundaryVisible(box, width, height, style) {
+  return Boolean(box && box.width > 0 && box.height > 0
+    && box.top >= -1 && box.left >= -1 && box.bottom <= height + 1 && box.right <= width + 1
+    && style && style.display !== 'none' && style.visibility === 'visible' && Number(style.opacity) > 0)
+}
+
 async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   const started = await evalInPage(cdp, sessionId, `(() => {
     const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Try sample request');
@@ -595,7 +601,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
         notice,
         receiptPresent: Boolean(receipt),
         receiptBoundary: receiptBoundary?.textContent.trim() || '',
-        boundaryVisible: Boolean(box && box.top >= -1 && box.bottom <= window.innerHeight + 1),
+        boundaryVisible: (${receiptBoundaryVisible.toString()})(box, window.innerWidth, window.innerHeight, receiptBoundary ? getComputedStyle(receiptBoundary) : null),
         oldManagedHeadlineVisible: bodyText.includes('Request sent to Shop'),
         companyReceiptClaimVisible: receiptText.includes('Company Shop received this request.'),
         localStorageKeyCount: localStorage.length,
