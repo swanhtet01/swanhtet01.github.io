@@ -88,6 +88,21 @@ class V13CatalogTests(unittest.TestCase):
         self.assertEqual(len(report["checks"]), 33)
         self.assertEqual(report["evidence"]["schema"]["version"], 13)
 
+    def test_ecommerce_proof_missing_or_altered_fails_exact_catalog(self):
+        for change in ('missing', 'source', 'mode', 'configuration'):
+            snapshot = deepcopy(self.good)
+            row = next(r for r in snapshot['functions'] if r['function_name'] == 'ecommerce_review_entitled')
+            if change == 'missing':
+                snapshot['functions'].remove(row)
+            elif change == 'source':
+                row['function_source'] = 'select true'
+            elif change == 'mode':
+                row['security_definer'] = False
+            else:
+                row['function_config'] = ['search_path=public']
+            with self.subTest(change=change):
+                self.assertFalse(self.evaluate(snapshot)['ready'])
+
     def test_legacy_profile_stays_exact_and_cannot_accept_v13(self):
         self.assertTrue(audit.evaluate_snapshot(self.legacy_snapshot)["ready"])
         self.assertFalse(audit.evaluate_snapshot(self.good)["ready"])

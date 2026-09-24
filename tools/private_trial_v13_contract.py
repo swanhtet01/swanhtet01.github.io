@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20260924190304_ecommerce_review_entitlement_proof.sql": "84fdda564d5deb7003fd9c151dd1a1b64c21209fd64fd109062b25d0d3842fef",
     "20260817090000_private_trial_backend_v12_billing_rail.sql": "19cf4077c26336d74d3f5ea5ba4d60c20a2525604f4c8aa1673fd2b3b243a033",
     "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql": "784ba3a4fd29c61abebbc9b73eb37d0a68e40780c7d98d4b0b8953fee31b777f",
     "20260907024457_self_serve_durable_attempt_budget.sql": "94aa2c57d1d7e55ee844cb8c29b41dcad54093390d321c48f5caf9da67ef606f",
@@ -31,6 +32,7 @@ WEBSITE_FUNCTIONS = {
     "invalidate_website_reviews": ("", "trigger"),
     "website_review_can": ("capability text", "boolean"),
     "website_review_entitled": ("", "boolean"),
+    "ecommerce_review_entitled": ("", "boolean"),
     "website_review_json": ("value jsonb", "text"),
     "website_review_recipient_ready": ("recipient text", "boolean"),
 }
@@ -58,7 +60,7 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 CATALOG_PINS = {
     "extension_columns_exact": "0e0a5552e46d2367977e5cee97f28e274b1d8b79600c885276c791d9315e6773",
     "extension_constraints_exact": "60bb16c1e1111001200d1f5278e252ab793ad533c2541611dd4e84c3ef66c7f4",
-    "extension_functions_exact": "171553bc23647ada1a515303617ce047ca05c060152a9f789703773208032630",
+    "extension_functions_exact": "e4ed8842c88ea0cb5435bee73b961e19bbe688d1700ac600475b5deb0ff9fc0f",
     "extension_policies_exact": "8c6862f8c1739dd405198d142ab306ecee42ed551f6c19719a92abef7c0346ad",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
@@ -153,7 +155,7 @@ def extend_contract(base):
         if sha256(value.encode()).hexdigest() != expected:
             raise ValueError("v13_contract_migration_source_mismatch")
         sql[name] = value
-    billing = sql[next(iter(MIGRATION_PINS))]
+    billing = sql["20260817090000_private_trial_backend_v12_billing_rail.sql"]
     base.update(CONTRACT=CONTRACT, SCHEMA_VERSION=13)
     base["EXPECTED_TABLES"] |= TABLES
     base["TENANT_TABLES"] |= TABLES
