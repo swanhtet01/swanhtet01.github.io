@@ -19,7 +19,7 @@ for (const product of ['website', 'ecommerce']) {
     test(`${product}: ${name} reaches contact without loss or query disclosure`, () => {
       let destination
       let prevented = false
-      vm.runInNewContext(submit, { ...values, product, URLSearchParams,
+      vm.runInNewContext(submit, { ...values, product, URLSearchParams, setHandoffFailed() {},
         event: { preventDefault() { prevented = true } },
         window: { location: { assign(url) { destination = url } } },
       })
@@ -35,4 +35,27 @@ for (const product of ['website', 'ecommerce']) {
       assert.ok(goal.value.length <= 4000)
     })
   }
+}
+
+for (const product of ['website', 'ecommerce']) {
+  test(`${product}: blocked navigation keeps the brief and allows an exact retry`, () => {
+    const values = Object.freeze({ company: 'မြန်မာ Tea', description: 'Tea & snacks', reference: 'Public menu' })
+    const attempts = []
+    const failures = []
+    const context = { ...values, product, URLSearchParams,
+      setHandoffFailed: value => failures.push(value), event: { preventDefault() {} },
+      window: { location: { assign(url) {
+        attempts.push(url)
+        if (attempts.length === 1) throw new Error('Navigation blocked')
+      } } },
+    }
+    assert.doesNotThrow(() => vm.runInNewContext(`(() => {${submit}})()`, context))
+    assert.deepEqual(failures, [false, true])
+    assert.doesNotThrow(() => vm.runInNewContext(`(() => {${submit}})()`, context))
+    assert.deepEqual(failures, [false, true, false])
+    assert.equal(attempts.length, 2)
+    assert.equal(attempts[0], attempts[1])
+    for (const key of Object.keys(values)) assert.equal(context[key], values[key])
+    assert.match(component, /handoffFailed \? <small role="alert">Could not open contact/)
+  })
 }

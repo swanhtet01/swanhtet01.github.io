@@ -326,7 +326,7 @@ test('actual business brief handoff preserves Myanmar text and reference through
     const description = '  ' + 'မြန်မာ & + # ? '.repeat(180) + '  '
     const reference = ' https://example.invalid/catalog?q=tea&lang=my#items '
     let destination
-    runInNewContext(submit, { company, description, reference, product, URLSearchParams,
+    runInNewContext(submit, { company, description, reference, product, URLSearchParams, setHandoffFailed() {},
       event: { preventDefault() {} }, window: { location: { assign: value => { destination = value } } } })
     const url = new URL(destination)
     assert.equal(url.origin + url.pathname, 'https://supermega.dev/contact/')

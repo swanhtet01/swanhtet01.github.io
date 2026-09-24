@@ -21,6 +21,7 @@ export function BusinessBrief({ product, onOpenWorkspace }: { product: Product; 
     try { return readBusinessBrief(window.sessionStorage, product) } catch { return emptyBusinessBrief() }
   })
   const [draftUnavailable, setDraftUnavailable] = useState(false)
+  const [handoffFailed, setHandoffFailed] = useState(false)
   const { company, description, reference } = draft
   function updateDraft(patch: Partial<BusinessBriefDraft>) {
     const next = { ...draft, ...patch }
@@ -38,7 +39,8 @@ export function BusinessBrief({ product, onOpenWorkspace }: { product: Product; 
       const goal = `${description.trim()}${reference.trim() ? `\nExisting page or catalog: ${reference.trim()}` : ''}`
       const query = new URLSearchParams({ product, source: `${product}-brief` })
       const handoff = new URLSearchParams({ company: company.trim(), goal })
-      window.location.assign(`https://supermega.dev/contact/?${query}#${handoff}`)
+      setHandoffFailed(false)
+      try { window.location.assign(`https://supermega.dev/contact/?${query}#${handoff}`) } catch { setHandoffFailed(true) }
     }}>
       <label htmlFor={`${id}-company`}>Business name</label>
       <input id={`${id}-company`} autoComplete="organization" required maxLength={180} pattern=".*\S.*" value={company} onChange={event => updateDraft({ company: event.target.value })} />
@@ -47,6 +49,7 @@ export function BusinessBrief({ product, onOpenWorkspace }: { product: Product; 
       <label htmlFor={`${id}-reference`}>Existing page or catalog <span>optional</span></label>
       <input id={`${id}-reference`} maxLength={700} value={reference} onChange={event => updateDraft({ reference: event.target.value })} placeholder="Facebook page, website or public catalog" />
       <button type="submit" disabled={!company.trim() || !description.trim()}>Continue</button>
+      {handoffFailed ? <small role="alert">Could not open contact. Your details are still here. Try Continue again.</small> : null}
       {draftUnavailable ? <small role="status">This browser cannot keep your draft. Copy it before leaving this page.</small> : <small>Your draft stays in this tab for up to one hour.</small>}
       <small>Next: add your contact details and review before sending. No passwords or private customer data.</small>
     </form>
