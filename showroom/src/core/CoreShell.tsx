@@ -285,7 +285,8 @@ function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, ref
     return () => { active = false }
   }, [accessKey, enabled, selectedWorkspace])
 
-  if (!enabled || !selectedWorkspace) return localPortalAccess
+  if (!selectedWorkspace) return localPortalAccess
+  if (!enabled) return { status: 'checking', products: [], workspaceId: '' }
   if (resolved.key !== accessKey) return { status: 'checking', products: [], workspaceId: '' }
   return resolved.access
 }
