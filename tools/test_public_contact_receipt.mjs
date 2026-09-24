@@ -262,6 +262,8 @@ test('confirmed reset refreshes guidance and clears attached-summary fields for 
   state.fields.set('[name="proof_digest"]', { value: 'synthetic-old-summary' })
   await state.submit()
   assert.equal(state.resets(), 1)
+  assert.equal(state.fields.get('[data-contact-service]').open, true)
+  assert.equal(state.fields.get('[data-contact-service-summary]').textContent, 'Choose a service')
   assert.match(state.fields.get('[name="goal"]').placeholder, /help choose the right service/)
   assert.equal(state.fields.get('[name="proof_digest"]').value, '')
   assert.equal(state.calls.length, 1)
