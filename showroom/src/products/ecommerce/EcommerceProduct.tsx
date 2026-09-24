@@ -1105,7 +1105,14 @@ export function EcommerceProduct() {
     if (!currentIdentity
       || currentIdentity.workspaceId !== identity.workspaceId
       || currentIdentity.userId !== identity.userId) throw new Error('The company account changed. Reload before sending this request to Shop.')
+    const assertCurrentRequestIdentity = async () => {
+      const current = await currentManagedIdentity()
+      if (!current || current.workspaceId !== identity.workspaceId || current.userId !== identity.userId) {
+        throw new Error('The company account changed while preparing this request. Reopen checkout.')
+      }
+    }
     const bootstrap = await loadManagedBootstrap(identity)
+    await assertCurrentRequestIdentity()
     const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
     setManagedCanWrite(writeAllowed)
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
@@ -1125,6 +1132,7 @@ export function EcommerceProduct() {
       evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}`,
     }
     const next = await recordCommerceStorefrontRequest(view.inbox.state, request, proof)
+    await assertCurrentRequestIdentity()
     if (!next) throw new Error('The Ecommerce request no longer matches the current managed Shop catalog or storefront.')
     if (next === view.inbox.state && exactRequestIsRetained(next)) return
     const commandId = globalThis.crypto.randomUUID()
