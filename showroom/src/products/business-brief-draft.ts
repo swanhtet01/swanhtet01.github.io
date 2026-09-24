@@ -24,8 +24,9 @@ export function readBusinessBrief(storage: DraftStorage, product: BriefProduct, 
 
 export function saveBusinessBrief(storage: DraftStorage, product: BriefProduct, draft: BusinessBriefDraft, now = Date.now()): boolean {
   try {
-    if (!draft.company && !draft.description && !draft.reference) storage.removeItem(key(product))
-    else storage.setItem(key(product), JSON.stringify({ ...draft, savedAt: now }))
-    return true
+    const raw = !draft.company && !draft.description && !draft.reference ? null : JSON.stringify({ ...draft, savedAt: now })
+    if (raw === null) storage.removeItem(key(product))
+    else storage.setItem(key(product), raw)
+    return storage.getItem(key(product)) === raw
   } catch { return false }
 }

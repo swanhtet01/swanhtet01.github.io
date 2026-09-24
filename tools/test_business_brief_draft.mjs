@@ -51,3 +51,15 @@ test('failed replacement reports failure and preserves the last successfully sav
   assert.equal(saveBusinessBrief(unavailable, 'website', { ...draft, description: 'Unsaved edit' }, 2000), false)
   assert.deepEqual(readBusinessBrief(storage, 'website', 3000), draft)
 })
+
+
+test('silent writes and removals cannot claim a saved or cleared draft', () => {
+  const storage = memory()
+  assert.equal(saveBusinessBrief({ ...storage, setItem() {} }, 'website', draft, 1000), false)
+  assert.equal(saveBusinessBrief(storage, 'website', draft, 1000), true)
+  assert.equal(saveBusinessBrief({ ...storage, setItem() {} }, 'website', { ...draft, description: 'Changed' }, 2000), false)
+  assert.deepEqual(readBusinessBrief(storage, 'website', 2000), draft)
+  assert.equal(saveBusinessBrief({ ...storage, removeItem() {} }, 'website', emptyBusinessBrief(), 2000), false)
+  assert.deepEqual(readBusinessBrief(storage, 'website', 2000), draft)
+  assert.equal(saveBusinessBrief({ ...storage, getItem() { throw Error('readback blocked') } }, 'website', draft, 2000), false)
+})
