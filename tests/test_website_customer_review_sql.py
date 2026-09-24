@@ -929,6 +929,44 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             finally:
                 connection.rollback()
 
+    def test_catalog_assignment_storage_is_private_and_invalidates_on_source_save(self):
+        from pathlib import Path
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        from supermega_runtime.commerce_runtime import commerce_storefront_preview,commerce_storefront_preview_digest
+        source=catalog_state();source['storefrontConfiguration']=storefront_configuration(source)
+        root=Path(__file__).resolve().parents[1]
+        review_id=uuid4()
+        with pg._connect(self.admin_url) as connection:
+            try:
+                for name in ('ecommerce_review_projection_candidate.sql','ecommerce_review_storage_candidate.sql'):
+                    connection.execute((root/'tools'/name).read_text(encoding='utf-8'))
+                connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s",(WORKSPACE,RECIPIENT))
+                connection.execute("""insert into app_private.workspace_events
+                    (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,payload_json,result_json)
+                    values (%s,%s,%s,%s,'company','company.workspace.activated',%s,'human','{"products":["ecommerce"]}'::jsonb,'{}'::jsonb)""",(uuid4(),WORKSPACE,uuid4(),'a'*64,OWNER))
+                self.context(connection,OWNER)
+                connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'commerce',1,%s::jsonb,%s) on conflict(workspace_id,surface) do update set state_json=excluded.state_json,version=app_private.workspace_state.version+1",(WORKSPACE,json.dumps(source),OWNER))
+                version=connection.execute("select version from app_private.workspace_state where workspace_id=%s and surface='commerce'",(WORKSPACE,)).fetchone()[0]
+                connection.execute('set local role supermega_trial_backend')
+                connection.execute("""insert into app_private.ecommerce_customer_reviews
+                    (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,preview,preview_digest,expires_at)
+                    values (%s,%s,%s,%s,%s,%s::jsonb,%s,clock_timestamp()+interval '1 day')""",
+                    (review_id,WORKSPACE,RECIPIENT,OWNER,version,json.dumps(commerce_storefront_preview(source)),commerce_storefront_preview_digest(source)))
+                self.context(connection,RECIPIENT)
+                self.assertEqual(connection.execute('select preview from app_private.ecommerce_customer_reviews').fetchone()[0],commerce_storefront_preview(source))
+                self.assertEqual(connection.execute("select state_json from app_private.workspace_state where surface='commerce'").fetchall(),[])
+                self.context(connection,'unassigned')
+                self.assertEqual(connection.execute('select preview from app_private.ecommerce_customer_reviews').fetchall(),[])
+                self.context(connection,RECIPIENT,'rehearsal-b')
+                self.assertEqual(connection.execute('select preview from app_private.ecommerce_customer_reviews').fetchall(),[])
+                self.context(connection,OWNER)
+                connection.execute("update app_private.workspace_state set version=version+1 where workspace_id=%s and surface='commerce'",(WORKSPACE,))
+                self.assertEqual(connection.execute('select status from app_private.ecommerce_customer_reviews').fetchone()[0],'stale')
+                self.context(connection,RECIPIENT)
+                self.assertEqual(connection.execute('select preview from app_private.ecommerce_customer_reviews').fetchall(),[])
+            finally:
+                connection.rollback()
+
     def test_ecommerce_entitlement_is_private_and_product_specific(self):
         vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
                    ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),
