@@ -91,6 +91,41 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                     adapter.record_decision(actor,payload | {'note': 'Changed request'},kind=kind)
         with self.assertRaises(TrialValidationError):
             adapter.record_decision(actor,payload | {'extra': True},kind='feedback')
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from supermega_runtime.trial_runtime import create_trial_router
+        app = FastAPI()
+        principals = {'customer': actor, 'owner': TrialPrincipal(workspace, owner, 'human'),
+                      'agent': TrialPrincipal(workspace, recipient, 'agent')}
+        app.include_router(create_trial_router(store=adapter.store,
+            resolve_principal=lambda request: principals.get(request.headers.get('x-test-actor'))))
+        with TestClient(app) as client:
+            headers = {'x-test-actor': 'customer'}
+            base = '/api/trial/v1/ecommerce-reviews/' + payload['reviewId']
+            read = client.get(base + '/decisions', headers=headers)
+            self.assertEqual(read.status_code, 200)
+            self.assertEqual(read.json(), adapter.decisions(actor, payload['reviewId']))
+            self.assertEqual(read.headers['cache-control'], 'private, no-store')
+            retry = client.post(base + '/change-requests', headers=headers, json=payload)
+            self.assertEqual(retry.status_code, 200)
+            self.assertTrue(retry.json()['replayed'])
+            for suffix in ('?extra=1', '?after=a&after=b'):
+                self.assertEqual(client.get(base + '/decisions' + suffix, headers=headers).status_code, 422)
+            for invalid in (payload | {'extra': True}, payload | {'reviewId': str(uuid4())}):
+                self.assertEqual(client.post(base + '/change-requests', headers=headers, json=invalid).status_code, 422)
+            for role in ('owner', 'agent'):
+                denied = client.get(base + '/decisions', headers={'x-test-actor': role})
+                self.assertEqual(denied.status_code, 403)
+                self.assertEqual(denied.headers['cache-control'], 'private, no-store')
+            self.assertEqual(client.get(base + '/decisions').status_code, 401)
+            # A distinct review allows actual HTTP acceptance, not just replay.
+            acceptance = dict(commandId=str(uuid4()), reviewId=reviews[2], previewDigest=digest,
+                              decision='accept_preview_for_release_review')
+            accepted = client.post('/api/trial/v1/ecommerce-reviews/' + reviews[2] + '/acceptance',
+                                   headers=headers, json=acceptance)
+            self.assertEqual(accepted.status_code, 200)
+            self.assertTrue(accepted.json()['persisted'])
+            self.assertFalse(accepted.json()['replayed'])
         def insert(connection, review, kind, *, bad_digest=False, source_version=1):
             command = str(uuid4())
             note = 'စျေးနှုန်း ပြင်ပါ' if kind == 'feedback' else None
@@ -125,7 +160,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                 with self.assertRaises(self.db_error), connection.transaction(): insert(connection,review,kind)
             for sql in ["update app_private.ecommerce_customer_decisions set note='changed'", "delete from app_private.ecommerce_customer_decisions"]:
                 with self.assertRaises(self.db_error), connection.transaction(): connection.execute(sql)
-            self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],4)
+            self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],5)
             self.context(connection,recipient,workspace='other-company')
             self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],0)
         # Even a privileged maintenance role cannot silently rewrite history.
@@ -134,7 +169,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                 with self.assertRaises(self.db_error) as immutable, connection.transaction():
                     connection.execute(sql)
                 self.assertEqual(immutable.exception.sqlstate, '55000')
-            self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],4)
+            self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],5)
         with pg._connect(self.runtime_url) as connection:
             self.context(connection,recipient)
             for _ in range(51):

@@ -1139,6 +1139,32 @@ def create_trial_router(
             return adapter.preview(principal, review_id)
         return await ecommerce_review_request(request, operation)
 
+    @router.get("/ecommerce-reviews/{review_id}/decisions")
+    async def read_ecommerce_decisions(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            query = request.query_params
+            if set(query) - {"after"} or len(query.getlist("after")) > 1:
+                raise TrialValidationError("ecommerce_review_cursor_invalid")
+            return adapter.decisions(principal, review_id, after=query.get("after"))
+        return await ecommerce_review_request(request, operation)
+
+    async def write_ecommerce_decision(review_id: str, request: Request, kind: str) -> JSONResponse:
+        def operation(adapter, principal, body):
+            if (request.query_params or not isinstance(body, Mapping)
+                    or body.get("reviewId") != review_id):
+                raise TrialValidationError("ecommerce_review_request_invalid")
+            return adapter.record_decision(principal, body, kind=kind)
+        return await ecommerce_review_request(request, operation,
+            body_limit=16384 if kind == 'feedback' else 2048)
+
+    @router.post("/ecommerce-reviews/{review_id}/acceptance")
+    async def accept_ecommerce_review(review_id: str, request: Request) -> JSONResponse:
+        return await write_ecommerce_decision(review_id, request, 'acceptance')
+
+    @router.post("/ecommerce-reviews/{review_id}/change-requests")
+    async def request_ecommerce_changes(review_id: str, request: Request) -> JSONResponse:
+        return await write_ecommerce_decision(review_id, request, 'feedback')
+
     @router.post("/ecommerce-reviews/{review_id}/resolve-expired")
     async def resolve_expired_ecommerce_review(review_id: str, request: Request) -> JSONResponse:
         def operation(adapter, principal, body):
