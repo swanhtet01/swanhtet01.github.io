@@ -31,6 +31,7 @@ EXTRAS = (
     "20260915184728_website_customer_review_storage.sql",
     "20260915191528_website_review_entitlement_proof.sql",
     "20260918011500_website_customer_acceptance.sql",
+    "20260924190304_ecommerce_review_entitlement_proof.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
 PRODUCTS = ("commerce", "production", "website", "ecommerce")

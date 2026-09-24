@@ -26,6 +26,7 @@ REVIEW_MIGRATIONS = (
     "20260915184728_website_customer_review_storage.sql",
     "20260915191528_website_review_entitlement_proof.sql",
     "20260918011500_website_customer_acceptance.sql",
+    "20260924190304_ecommerce_review_entitlement_proof.sql",
 )
 WORKSPACE = "rehearsal-product"
 OWNER = "owner-product"
@@ -759,9 +760,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 finally:
                     connection.rollback()
 
-    def test_ecommerce_entitlement_candidate_is_private_and_product_specific(self):
-        from pathlib import Path
-        sql = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924190304_ecommerce_review_entitlement_proof.sql').read_text(encoding='utf-8')
+    def test_ecommerce_entitlement_is_private_and_product_specific(self):
         vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
                    ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),
                    ({'products':['website']}, False), ({'products':[]}, False),
@@ -770,7 +769,6 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         for payload, expected in vectors:
             with self.subTest(payload=payload), pg._connect(self.admin_url) as connection:
                 try:
-                    connection.execute(sql)
                     connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s", (WORKSPACE, RECIPIENT))
                     connection.execute("""insert into app_private.workspace_events
                         (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,payload_json,result_json)
@@ -793,9 +791,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                     connection.rollback()
 
     def test_ecommerce_runtime_refuses_altered_privileged_proof(self):
-        from pathlib import Path
         from psycopg.rows import dict_row
-        candidate = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924190304_ecommerce_review_entitlement_proof.sql').read_text(encoding='utf-8')
         changes = (
             "grant execute on function app_private.ecommerce_review_entitled() to public",
             "grant execute on function app_private.ecommerce_review_entitled() to anon",
@@ -809,7 +805,6 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         for change in changes:
             with self.subTest(change=change), pg._connect(self.admin_url) as connection:
                 try:
-                    connection.execute(candidate)
                     self.context(connection, RECIPIENT)
                     connection.execute('set local role supermega_trial_backend')
                     with connection.cursor(row_factory=dict_row) as cursor:
@@ -824,9 +819,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 finally:
                     connection.rollback()
 
-    def test_ecommerce_entitlement_candidate_rechecks_revocation_and_activation_precedence(self):
-        from pathlib import Path
-        sql = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924190304_ecommerce_review_entitlement_proof.sql').read_text(encoding='utf-8')
+    def test_ecommerce_entitlement_rechecks_revocation_and_activation_precedence(self):
         changes = (
             ("update app_private.workspace_access_controls set status='suspended' where workspace_id=%s", (WORKSPACE,)),
             ("update app_private.workspace_memberships set status='revoked' where workspace_id=%s and actor_id=%s", (WORKSPACE, RECIPIENT)),
@@ -837,7 +830,6 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         for change, parameters in changes:
             with self.subTest(change=change), pg._connect(self.admin_url) as connection:
                 try:
-                    connection.execute(sql)
                     connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s", (WORKSPACE, RECIPIENT))
                     for event_type, payload in (('company.workspace.activated', {'products':['ecommerce']}),
                                                 ('company.workspace.created', {'products':['shop']})):
