@@ -544,6 +544,20 @@ export function receiptBoundaryVisible(box, width, height, style) {
     && style && style.display !== 'none' && style.visibility === 'visible' && Number(style.opacity) > 0)
 }
 
+export function inspectBusinessBrief(document) {
+  const form = document.querySelector('.business-brief form')
+  const fields = form ? [...form.querySelectorAll('input, textarea')] : []
+  const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')
+  const editable = node => visible(node) && !node.disabled && !node.readOnly && node.tabIndex >= 0
+  const named = node => [...(node.labels || [])].some(label => label.textContent.trim())
+  const submit = form?.querySelector('button[type="submit"]')
+  return {
+    fieldsReady: fields.length === 3 && fields.every(node => editable(node) && named(node)),
+    essentialsRequired: fields.length === 3 && fields[0].required && fields[1].required && !fields[2].required,
+    emptyContinueBlocked: fields.every(node => node.value === '') && visible(submit) && submit.disabled && submit.textContent.trim() === 'Continue',
+  }
+}
+
 async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   const started = await evalInPage(cdp, sessionId, `(() => {
     const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Try sample request');
@@ -733,6 +747,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const shopCounter = testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
+    const briefControls = testCase.inspectBusinessBrief ? await evaluate(cdp, sessionId, `(${inspectBusinessBrief.toString()})(document)`) : null
     const rawShopProfitControl = testCase.exerciseShopProfitControl
       ? await exerciseShopProfitControl(cdp, sessionId, Boolean(testCase.mobile), testCase.sourceControlledFixture === true)
       : null
@@ -820,6 +835,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
     } : null
     const failures = [
+      ...(testCase.inspectBusinessBrief && (!briefControls || Object.values(briefControls).some(value => value !== true)) ? ['Business brief controls are not ready'] : []),
       ...(pairedFailure ? [pairedFailure] : []),
       ...(retirementFailure ? [retirementFailure] : []),
       ...(launcherFailure ? [launcherFailure] : []),
@@ -873,6 +889,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       layout: shopCounter,
       profitControl: shopProfitControl,
       claimBoundary: ecommerceClaimBoundary,
+      briefControls,
       screenshot,
       network: { mutatingRequestCount: mutatingRequests.length, mutatingRequests },
       runtime: { clean: errors.length === 0 && warnings.length === 0, errors: [...errors], warnings: [...warnings] },

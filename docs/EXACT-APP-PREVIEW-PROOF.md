@@ -95,6 +95,8 @@ Earlier 26-case reports remain historical evidence. The current validator requir
 | Ecommerce brief | 1280 x 900 | 390 x 844 | Default `/ecommerce/` shows the catalog brief and review boundaries; no submission or delivery acceptance is inferred |
 | Ecommerce | 1280 x 900 | 390 x 844 | Completed sample request remains visibly browser-local, with no managed Shop receipt claim |
 
+Website and Ecommerce brief cases also require three visible, labelled, editable fields, required business name and description, an optional reference, and a disabled Continue button for the empty brief. This is a read-only control check, not form submission or customer delivery acceptance.
+
 Every case also requires meaningful content, the exact route and query set, no horizontal
 overflow, no framework/runtime error or console/log warning, no mutating browser
 request, and one exclusive PNG screenshot. Both Shop flows retain their

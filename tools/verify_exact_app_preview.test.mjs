@@ -332,6 +332,7 @@ function rawCase(spec, index) {
     layout: spec.surface === 'shop' ? { ok: true, aboveFold: true, accessibility: { ok: true } } : null,
     profitControl,
     claimBoundary: spec.surface === 'ecommerce' ? { ok: true } : null,
+    briefControls: ['website', 'ecommerce_brief'].includes(spec.surface) ? { fieldsReady: true, essentialsRequired: true, emptyContinueBlocked: true } : null,
     screenshot: {
       file: spec.screenshot,
       bytes: payload.byteLength,
@@ -1003,4 +1004,17 @@ test('Ecommerce default brief has separate desktop and mobile entry cases', asyn
   assert.deepEqual(cases.map(spec => spec.width), [1280, 390])
   const source = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
   for (const text of expectedText({ surface: 'ecommerce_brief' })) assert.ok(source.includes(text), text)
+})
+
+
+test('brief proof refuses missing, disabled, unrequired or prematurely enabled controls', async () => {
+  for (const id of ['website_desktop', 'website_mobile', 'ecommerce_brief_desktop', 'ecommerce_brief_mobile']) {
+    for (const key of [null, 'fieldsReady', 'essentialsRequired', 'emptyContinueBlocked']) {
+      const cases = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
+      const target = cases.find(value => value.name === id)
+      if (key === null) delete target.briefControls
+      else target.briefControls[key] = false
+      await assert.rejects(() => reportFixture({ cases }), /brief_controls_invalid/)
+    }
+  }
 })

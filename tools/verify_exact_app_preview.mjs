@@ -603,6 +603,12 @@ function normalizeBrowserCase(value, spec, expectedOrigin, publicOrigin) {
   if (spec.surface === 'ecommerce' && value.claimBoundary?.ok !== true) {
     fail(`exact_app_preview_ecommerce_claim_invalid:${spec.id}`)
   }
+  let briefControls = null
+  if (spec.surface === 'website' || spec.surface === 'ecommerce_brief') {
+    exactKeys(value.briefControls, ['fieldsReady', 'essentialsRequired', 'emptyContinueBlocked'], `exact_app_preview_brief_controls_invalid:${spec.id}`)
+    if (Object.values(value.briefControls).some(flag => flag !== true)) fail(`exact_app_preview_brief_controls_invalid:${spec.id}`)
+    briefControls = { ...value.briefControls }
+  }
   const profitControl = normalizeShopProfitControl(value.profitControl, spec)
   let pairedTransition = null
   if (spec.surface === 'transition') {
@@ -644,6 +650,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin, publicOrigin) {
     viewport: { width: spec.width, height: spec.height, mobile: spec.mobile },
     bodyLength: value.bodyLength,
     primaryFlow,
+    briefControls,
     profitControl,
     retirement,
     pairedTransition,
@@ -659,7 +666,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin, publicOrigin) {
 
 function normalizeStoredCase(value, spec, expectedOrigin, publicOrigin) {
   exactKeys(value, [
-    'id', 'surface', 'route', 'renderedOrigin', 'renderedHash', 'resolvedPath', 'viewport', 'bodyLength', 'primaryFlow',
+    'id', 'surface', 'route', 'renderedOrigin', 'renderedHash', 'resolvedPath', 'viewport', 'bodyLength', 'primaryFlow', 'briefControls',
     'profitControl', 'retirement', 'pairedTransition', 'screenshot', 'browserContextIsolated', 'noHorizontalOverflow', 'runtimeClean', 'runtimeWarningCount',
     'mutatingRequestCount', 'passed',
   ], `exact_app_preview_stored_case_shape_invalid:${spec.id}`)
@@ -674,6 +681,7 @@ function normalizeStoredCase(value, spec, expectedOrigin, publicOrigin) {
     bodyLength: value.bodyLength,
     layout: spec.surface === 'shop' ? { ok: true, aboveFold: true, accessibility: { ok: true } } : null,
     profitControl: value.profitControl,
+    briefControls: value.briefControls,
     rendered: { retirement: value.retirement, pairedTransition: value.pairedTransition },
     claimBoundary: spec.surface === 'ecommerce' ? { ok: true } : null,
     screenshot: value.screenshot,
@@ -1055,6 +1063,7 @@ function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {
     expectedPath: expectedPath(spec),
     expectedPathLabel: spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.expectedPath || spec.route,
     expectedText: expectedText(spec, publicHomepageExpectedText),
+    inspectBusinessBrief: spec.surface === 'website' || spec.surface === 'ecommerce_brief',
     exerciseShopCounter: spec.surface === 'shop',
     exerciseShopProfitControl: spec.surface === 'shop_profit_control',
     sourceControlledFixture: spec.surface === 'shop_profit_control',
