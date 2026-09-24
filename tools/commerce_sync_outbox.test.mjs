@@ -452,3 +452,17 @@ test('confirmation retry refuses multiple pending commands', () => withOutbox(as
   assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(baseState))
   assert.equal((await readLocalCommerceSyncIntents()).length, 2)
 }))
+
+
+test('retry rechecks pending command after waiting for the workspace lock', () => withOutbox(async () => {
+  const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]])
+  const staged = await stageLocalCommerceSyncIntent(stageInput())
+  const locks = { request: async (_name, _options, callback) => {
+    await abandonLocalCommerceSyncIntent(staged.intent.commandId)
+    return callback()
+  } }
+  await assert.rejects(() => recoverLocalCommerceSyncOutbox(storage, locks, staged.intent), /does not match/)
+  assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(baseState))
+  const settled = await acknowledgeLocalCommerceSyncIntent(staged.intent.commandId)
+  assert.equal(settled.receipt.status, 'abandoned')
+}))

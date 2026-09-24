@@ -365,14 +365,14 @@ export async function recoverLocalCommerceSyncOutbox(
   expected?: Pick<CommerceSyncIntent, 'commandId' | 'eventType' | 'evidence' | 'candidateRaw'>,
 ): Promise<CommerceSyncStatus> {
   if (!storage || !lockManager?.request) throw new Error('Safe Shop recovery storage and write locking are unavailable.')
-  const pending = await readLocalCommerceSyncIntents()
-  if (expected && (pending.length !== 1 || pending[0].commandId !== expected.commandId
-    || pending[0].eventType !== expected.eventType || pending[0].candidateRaw !== expected.candidateRaw
-    || (['actionId', 'actor', 'capturedAt', 'reason', 'evidenceReference'] as const).some(key => pending[0].evidence[key] !== expected.evidence[key]))) {
-    throw new Error('Saved Shop recovery does not match this confirmation. Reload to review the current records.')
-  }
-  if (!pending.length) return { status: 'ready', pendingCount: 0, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: '' }
+  if (!expected && !(await readLocalCommerceSyncIntents()).length) return { status: 'ready', pendingCount: 0, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: '' }
   return lockManager.request(COMMERCE_LOCK, { mode: 'exclusive' }, async () => {
+    const pending = await readLocalCommerceSyncIntents()
+    if (expected && (pending.length !== 1 || pending[0].commandId !== expected.commandId
+      || pending[0].eventType !== expected.eventType || pending[0].candidateRaw !== expected.candidateRaw
+      || (['actionId', 'actor', 'capturedAt', 'reason', 'evidenceReference'] as const).some(key => pending[0].evidence[key] !== expected.evidence[key]))) {
+      throw new Error('Saved Shop recovery does not match this confirmation. Reload to review the current records.')
+    }
     let recoveredCount = 0
     let replayedCount = 0
     let conflictCount = 0
