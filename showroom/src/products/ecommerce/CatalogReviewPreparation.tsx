@@ -21,7 +21,11 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
   }, [workspaceId, actorId])
   async function identity() {
     const who = await currentManagedIdentity()
-    if (!who || who.workspaceId !== workspaceId || who.userId !== actorId) throw Error('Account changed')
+    if (!who || who.workspaceId !== workspaceId || who.userId !== actorId) {
+      epoch.current++; setSource(null); setRecipients(null); setSelected(''); setPending(null); setReceipt(null)
+      setMessage('Your account changed. Reopen this workspace to continue.')
+      throw Error('Account changed')
+    }
     return who
   }
   async function current(who: ManagedIdentity, started: number) {
