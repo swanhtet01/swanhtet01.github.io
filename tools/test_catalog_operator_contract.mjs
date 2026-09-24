@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { verifyCatalogPreparation, verifyCatalogRecipients } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
+import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
 import { storefrontPreviewDigest, STOREFRONT_PREVIEW_SCHEMA } from '../showroom/src/products/ecommerce/storefront-model.ts'
 import { COMMERCE_WORKSPACE_SCHEMA } from '../showroom/src/core/commerce-workspace.ts'
 const id = n => `11111111-1111-4111-8111-${String(n).padStart(12,'0')}`
@@ -30,4 +30,27 @@ test('saved preparation verifies exact catalog digest and forbids write claims',
     await assert.rejects(verifyCatalogPreparation({...input,...patch}))
   const changed=structuredClone(input);changed.preview.items[0].unitPriceMmk++
   await assert.rejects(verifyCatalogPreparation(changed))
+})
+
+test('preparation receipt binds request, exact microsecond expiry and saved source', () => {
+  const command={reviewId:id(1),recipientGrantId:id(2),expectedVersion:4,contentRevision:2,
+    previewDigest:'sha256:'+'a'.repeat(64),readAt:'2026-09-25T00:00:00.123456Z',expiresAt:'2026-09-26T00:00:00.123456Z'}
+  const receipt={reviewId:id(1),sourceVersion:4,contentRevision:2,previewDigest:command.previewDigest,
+    preparedAt:'2026-09-25T00:00:01+00:00',expiresAt:command.expiresAt,status:'prepared_preview',persisted:true,replayed:false,
+    publicationAuthorized:false,deploymentAuthorized:false}
+  assert.equal(verifyCatalogPreparationReceipt(receipt,command).reviewId,id(1))
+  assert.equal(verifyCatalogPreparationReceipt({...receipt,replayed:true,expiresAt:'2026-09-26T00:00:00.123456+00:00'},command).replayed,true)
+  for(const patch of [{reviewId:id(3)},{sourceVersion:5},{contentRevision:3},{previewDigest:'sha256:'+'b'.repeat(64)},
+    {preparedAt:'2026-09-25T00:00:00.123455Z'},{preparedAt:command.expiresAt},
+    {expiresAt:'2026-09-26T00:00:00.123457Z'},{persisted:false},{replayed:'yes'},
+    {publicationAuthorized:true},{deploymentAuthorized:true},{recipientActorId:'private'}])
+    assert.throws(()=>verifyCatalogPreparationReceipt({...receipt,...patch},command))
+  const late='2026-10-26T00:00:00Z'
+  assert.throws(()=>verifyCatalogPreparationReceipt({...receipt,expiresAt:late},{...command,expiresAt:late}))
+})
+test('withdrawal receipt cannot confirm another review or publication', () => {
+  const receipt={reviewId:id(1),status:'revoked',persisted:true,replayed:false,publicationAuthorized:false,deploymentAuthorized:false}
+  assert.equal(verifyCatalogWithdrawal(receipt,id(1)).status,'revoked')
+  for(const patch of [{reviewId:id(2)},{status:'active'},{persisted:false},{replayed:1},{publicationAuthorized:true},{deploymentAuthorized:true},{extra:1}])
+    assert.throws(()=>verifyCatalogWithdrawal({...receipt,...patch},id(1)))
 })

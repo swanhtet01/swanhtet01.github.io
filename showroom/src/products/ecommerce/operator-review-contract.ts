@@ -33,3 +33,36 @@ export function verifyCatalogRecipients(value: unknown, after?: string): Catalog
   if (root.nextAfter !== null && (root.recipients.length !== 50 || root.nextAfter !== previous)) return invalid()
   return structuredClone(root) as CatalogRecipients
 }
+
+export type CatalogPreparationCommand = {
+  reviewId: string; recipientGrantId: string; expectedVersion: number; expiresAt: string
+  contentRevision: number; previewDigest: string; readAt: string
+}
+export type CatalogPreparationReceipt = {
+  reviewId: string; sourceVersion: number; contentRevision: number; preparedAt: string; expiresAt: string
+  previewDigest: string; status: 'prepared_preview'; persisted: true; replayed: boolean
+  publicationAuthorized: false; deploymentAuthorized: false
+}
+function instant(value: unknown): bigint {
+  if (!time(value)) return invalid()
+  const fraction = value.match(/\.(\d{1,6})/)?.[1] ?? ''
+  return BigInt(Date.parse(value)) * 1000n + BigInt(fraction.padEnd(6, '0').slice(3))
+}
+export function verifyCatalogPreparationReceipt(value: unknown, command: CatalogPreparationCommand): CatalogPreparationReceipt {
+  const row = exact(value, ['reviewId', 'sourceVersion', 'contentRevision', 'preparedAt', 'expiresAt', 'previewDigest', 'status', 'persisted', 'replayed', 'publicationAuthorized', 'deploymentAuthorized'])
+  if (!uuid(command.reviewId) || !uuid(command.recipientGrantId) || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1
+    || !Number.isSafeInteger(command.contentRevision) || command.contentRevision < 0 || !/^sha256:[0-9a-f]{64}$/.test(command.previewDigest)
+    || row.reviewId !== command.reviewId || row.sourceVersion !== command.expectedVersion || row.contentRevision !== command.contentRevision
+    || row.previewDigest !== command.previewDigest || row.status !== 'prepared_preview' || row.persisted !== true
+    || typeof row.replayed !== 'boolean' || row.publicationAuthorized !== false || row.deploymentAuthorized !== false) return invalid()
+  const prepared = instant(row.preparedAt), expiry = instant(row.expiresAt)
+  if (expiry !== instant(command.expiresAt) || prepared < instant(command.readAt) || prepared >= expiry
+    || expiry - prepared > 604800000000n) return invalid()
+  return structuredClone(row) as CatalogPreparationReceipt
+}
+export function verifyCatalogWithdrawal(value: unknown, reviewId: string) {
+  const row = exact(value, ['reviewId', 'status', 'persisted', 'replayed', 'publicationAuthorized', 'deploymentAuthorized'])
+  if (!uuid(reviewId) || row.reviewId !== reviewId || row.status !== 'revoked' || row.persisted !== true
+    || typeof row.replayed !== 'boolean' || row.publicationAuthorized !== false || row.deploymentAuthorized !== false) return invalid()
+  return { reviewId, status: 'revoked' as const, replayed: row.replayed }
+}
