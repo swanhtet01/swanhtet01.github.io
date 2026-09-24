@@ -363,7 +363,7 @@ function mockFetch() {
     if (path === '/api/trial/v1/workspaces') return auth.includes('owner-token')
       ? json({ contract: 'supermega.managed_workspace_directory.v1', status: 'ready', workspaces: [{ workspace_id: 'workspace-owner', label: 'Owner company', access: 'owner' }], external_writes_performed: false, secret_values_exposed: false })
       : json({ contract: 'supermega.managed_workspace_directory.v1', status: 'ready', workspaces: [{ workspace_id: 'workspace-other', label: 'Other company', access: 'owner' }], external_writes_performed: false, secret_values_exposed: false })
-    if (path === '/api/trial/v1/bootstrap' && auth.includes('owner-token')) return json({ identity: { workspace_id: 'workspace-owner', actor_id: 'owner-actor', actor_kind: 'human' }, readiness: { status: 'ready', backend: 'postgres', read_ready: true, write_ready: true, checks: { database_ready: true, role_ready: true, schema_ready: true, auth_ready: true, membership_ready: true, audit_ready: true, write_enabled: true }, capabilities: ['commerce.write', 'website.write'], productEntitlements: ['commerce', 'website'] }, states: { commerce: {}, website: {} }, approvals: [] })
+    if (path === '/api/trial/v1/bootstrap' && auth.includes('owner-token')) return json({ identity: { workspace_id: 'workspace-owner', actor_id: 'owner-actor', actor_kind: 'human' }, readiness: { status: 'ready', backend: 'postgres', read_ready: true, write_ready: true, checks: { database_ready: true, role_ready: true, schema_ready: true, auth_ready: true, membership_ready: true, audit_ready: true, write_enabled: true }, capabilities: ['commerce.write', 'website.write'], productEntitlements: ['commerce', 'website', 'ecommerce'] }, states: { commerce: {}, website: {} }, approvals: [] })
     if (path === '/api/trial/v1/bootstrap') return json({ detail: { code: 'trial_membership_required' } }, 403)
     if (path === '/api/trial/v1/product-acceptance' && init.method === 'POST') {
       const body = JSON.parse(init.body)
@@ -388,7 +388,7 @@ async function selfTest() {
   const fetchImpl = mockFetch()
   const portalInput = {
     appBaseUrl: 'http://127.0.0.1:4173', allowHttp: true, expectedCommit: 'a'.repeat(40),
-    expectedProducts: 'shop,website', expectedWorkspaceId: 'workspace-owner', expectedOwnerId: 'owner-actor',
+    expectedProducts: 'shop,website,ecommerce', expectedWorkspaceId: 'workspace-owner', expectedOwnerId: 'owner-actor',
     ownerToken: 'owner-token-1234567890', deniedToken: 'denied-token-123456789',
     capturedAt: '2026-08-22T00:00:00.000Z',
   }
@@ -411,8 +411,16 @@ async function selfTest() {
     prerequisitePortalArtifactDigest: sha256(JSON.stringify(prerequisitePortalEvidence)),
   }
   const evidence = await verifyHostedProductAcceptance({ ...input, fetchImpl })
-  assert(evidence.status === 'passed' && evidence.summary.productCount === 2 && evidence.summary.newlyWritten === 2, 'self_test_positive_failed')
+  assert(evidence.status === 'passed' && evidence.summary.productCount === 3 && evidence.summary.newlyWritten === 3, 'self_test_positive_failed')
   assert(evidence.products.every((entry) => entry.ownerReadbackPassed && entry.crossTenantDenied && entry.replayPassed), 'self_test_product_proof_failed')
+  const shop = evidence.products.find(entry => entry.product === 'commerce')
+  const ecommerce = evidence.products.find(entry => entry.product === 'ecommerce')
+  assert(shop && ecommerce && shop.surface === 'commerce' && ecommerce.surface === 'commerce'
+    && shop.probeId !== ecommerce.probeId, 'self_test_shared_surface_product_identity_lost')
+  const repeated = await verifyHostedProductAcceptance({ ...input, fetchImpl })
+  assert(repeated.summary.newlyWritten === 0 && repeated.summary.idempotentExisting === 3
+    && repeated.products.every((entry, index) => entry.probeId === evidence.products[index].probeId),
+    'self_test_repeat_created_new_acceptance')
   const rendered = JSON.stringify(evidence)
   for (const forbidden of [input.ownerToken, input.deniedToken, input.expectedWorkspaceId, input.expectedOwnerId, input.ownerApprovalId]) {
     assert(!rendered.includes(forbidden), 'self_test_sensitive_value_persisted')
@@ -435,7 +443,7 @@ async function selfTest() {
     changedPortalDenied = String(error?.message || '').startsWith('prerequisite_portal_changed:')
   }
   assert(changedPortalDenied, 'self_test_changed_prerequisite_portal_accepted')
-  console.log(JSON.stringify({ ok: true, contract: `${CONTRACT}.self_test`, checks: 10 }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: `${CONTRACT}.self_test`, checks: 12 }, null, 2))
 }
 
 async function main() {
