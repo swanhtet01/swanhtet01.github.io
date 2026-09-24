@@ -47,7 +47,7 @@ const SECRET_PATTERN = /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-
 const PRIVATE_PATH_PATTERN = /(?:[A-Z]:\\Users\\|\/Users\/|\/home\/|OneDrive - )/iu
 const CREDENTIAL_URL_PATTERN = /https?:\/\/[^/\s:@]+:[^/\s@]+@/iu
 const PNG_SIGNATURE = Object.freeze([137, 80, 78, 71, 13, 10, 26, 10])
-const PUBLIC_HOME_EXPLORE_LABEL = 'Explore all products'
+const PUBLIC_HOME_EXPLORE_LABEL = 'Find your business tool'
 const RETIRED_PUBLIC_HOME_EXPECTED_TEXT = Object.freeze([
   'Pick one product and try the working sample.',
   'Choose a product',
@@ -119,7 +119,7 @@ function occursExactlyOnce(source, fragment) {
 export function derivePublicHomepageExpectedText({ manifest, generatorSource }) {
   if (!isRecord(manifest) || !isRecord(manifest.company)
     || !Array.isArray(manifest.customerProducts)) fail('exact_app_preview_public_manifest_invalid')
-  const headline = exactPublicClaim(
+  exactPublicClaim(
     manifest.company.headline,
     'exact_app_preview_public_headline_invalid',
   )
@@ -127,7 +127,7 @@ export function derivePublicHomepageExpectedText({ manifest, generatorSource }) 
   if (shopProducts.length !== 1 || !isRecord(shopProducts[0].primaryCta)) {
     fail('exact_app_preview_public_shop_action_invalid')
   }
-  const shopActionLabel = exactPublicClaim(
+  exactPublicClaim(
     shopProducts[0].primaryCta.label,
     'exact_app_preview_public_shop_action_invalid',
   )
@@ -141,15 +141,14 @@ export function derivePublicHomepageExpectedText({ manifest, generatorSource }) 
   const requiredGeneratorBindings = [
     'function shopProfitControlAction()',
     'const SHOP_PROFIT_CONTROL_ACTION = shopProfitControlAction()',
-    '${escapeHtml(manifest.company.headline)}',
-    '${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.href)}',
-    '${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.label)}',
-    `href="#products">${PUBLIC_HOME_EXPLORE_LABEL}</a>`,
+    '<h1>Your business.<br>A clearer day.</h1>',
+    `href="#products">${PUBLIC_HOME_EXPLORE_LABEL} <span aria-hidden="true">↗</span></a>`,
+    'href="https://app.supermega.dev/?choose=1">Open app</a>',
   ]
   if (requiredGeneratorBindings.some((fragment) => !occursExactlyOnce(generatorSource, fragment))) {
     fail('exact_app_preview_public_generator_binding_drift')
   }
-  const expected = [headline, shopActionLabel, PUBLIC_HOME_EXPLORE_LABEL]
+  const expected = ['Your business.', 'A clearer day.', PUBLIC_HOME_EXPLORE_LABEL, 'Open app']
   if (RETIRED_PUBLIC_HOME_EXPECTED_TEXT.some((retired) => (
     generatorSource.includes(retired) || expected.some((value) => value.includes(retired))
   ))) fail('exact_app_preview_public_retired_copy_present')
