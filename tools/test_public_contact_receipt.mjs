@@ -67,7 +67,7 @@ function harness(responses, search = '', hash = '') {
       } }
     },
   })
-  form.querySelector('[name="goal"]').value = 'Please build my business website'
+  if (!hash) form.querySelector('[name="goal"]').value = 'Please build my business website'
   return { fields, headings, calls, timers, windowEvents, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
 
@@ -313,5 +313,38 @@ test('ambiguous and rejected responses retain brief and reuse the exact retry ke
     assert.equal(state.calls[0].headers['x-idempotency-key'], state.calls[1].headers['x-idempotency-key'])
     assert.equal(state.calls[0].body, state.calls[1].body)
     assert.ok(state.calls.every(call => call.url === '/api/contact-submissions'))
+  }
+})
+
+
+test('actual business brief handoff preserves Myanmar text and reference through contact retry', async () => {
+  const source = readFileSync('showroom/src/products/AssistedDeliveryScope.tsx', 'utf8')
+  const submit = source.match(/<form onSubmit=\{event => \{([\s\S]*?)\n    \}\}>/)?.[1]
+  assert.ok(submit, 'actual business brief submit handler found')
+  for (const product of ['website', 'ecommerce']) {
+    const company = '  မြန်မာ ဆိုင် & Co  '
+    const description = '  ' + 'မြန်မာ & + # ? '.repeat(180) + '  '
+    const reference = ' https://example.invalid/catalog?q=tea&lang=my#items '
+    let destination
+    runInNewContext(submit, { company, description, reference, product, URLSearchParams,
+      event: { preventDefault() {} }, window: { location: { assign: value => { destination = value } } } })
+    const url = new URL(destination)
+    assert.equal(url.origin + url.pathname, 'https://supermega.dev/contact/')
+    assert.equal(url.searchParams.get('company'), null, 'business details stay out of query parameters')
+    const goal = description.trim() + '\nExisting page or catalog: ' + reference.trim()
+    assert.ok(goal.length < 4000)
+    const state = harness([new Error('synthetic lost response'), { body: receipt }], url.search, url.hash)
+    assert.equal(state.calls.length, 0)
+    assert.equal(state.fields.get('[name="company"]').value, company.trim())
+    assert.equal(state.fields.get('[name="goal"]').value, goal)
+    assert.equal(state.fields.get('[name="product"]').value, product)
+    await state.submit()
+    const payload = JSON.parse(state.calls[0].body)
+    assert.equal(payload.company, company.trim())
+    assert.equal(payload.goal, goal)
+    assert.equal(payload.product, product)
+    await state.submit()
+    assert.equal(state.calls[1].body, state.calls[0].body)
+    assert.equal(state.resets(), 1)
   }
 })
