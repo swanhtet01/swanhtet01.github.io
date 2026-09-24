@@ -98,3 +98,51 @@ test('wrong approval and tampered preparation fail before local installation', a
     await rm(fixture.parent, { recursive: true, force: true })
   }
 })
+
+
+test('prepared Website and Ecommerce reject lost writes and recover with one exact installation', async () => {
+  const fixture = await preparedFixture({ presetId: 'service-business', products: ['commerce', 'website', 'ecommerce'] })
+  const previous = new Map(['localStorage', 'navigator'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]))
+  try {
+    const commerce = await import('../showroom/src/core/commerce-workspace.ts')
+    const website = await import('../showroom/src/products/website/website-model.ts')
+    const installer = await import('../showroom/src/core/local-client-import.ts')
+    for (const fault of ['throw', 'drop']) {
+      const values = new Map([[commerce.COMMERCE_KEY, JSON.stringify(commerce.createEmptyCommerce())], [website.WEBSITE_STORAGE_KEY, JSON.stringify(website.createInitialWorkspace())]])
+      let failing = false, attempts = 0
+      const storage = {
+        getItem: key => values.get(key) ?? null,
+        setItem: (key, value) => { if (failing) { attempts++; if (fault === 'throw') throw new Error('synthetic quota'); return } values.set(key, value) },
+        removeItem: key => values.delete(key),
+      }
+      Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage })
+      Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks: { request: async (_name, _options, callback) => callback() } } })
+      const apply = product => installer.applyPreparedLocalClientDemoProduct(fixture.preparation, product, fixture.preparation.review.confirmation)
+      await apply('commerce')
+      for (const product of ['website', 'ecommerce']) {
+        const before = [...values]
+        failing = true
+        attempts = 0
+        await assert.rejects(apply(product))
+        assert.ok(attempts > 0, product + ' reached the failing write')
+        assert.deepEqual([...values], before, product + ' preserved saved records')
+        failing = false
+        const recovered = await apply(product)
+        const count = fixture.preparation.products.find(entry => entry.product === product).rowCount
+        assert.equal(recovered.created, count)
+        assert.equal(recovered.alreadyPresent, 0)
+        const saved = [...values]
+        const replay = await apply(product)
+        assert.equal(replay.created, 0)
+        assert.equal(replay.alreadyPresent, count)
+        assert.deepEqual([...values], saved)
+      }
+    }
+  } finally {
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor)
+      else delete globalThis[name]
+    }
+    await rm(fixture.parent, { recursive: true, force: true })
+  }
+})
