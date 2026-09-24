@@ -662,6 +662,7 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
 export function ProductHomePage() {
   const portalAccess = useContext(ManagedPortalAccessContext)
   const managedPortal = portalAccess.status === 'ready'
+  const emptyCompany = managedPortal && !customerProducts.some(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
   const [localProductSetups, setLocalProductSetups] = useState<Record<SetupProductId, { startedAt?: string; workspace: string } | null> | null>(null)
   const [activeSetupIds, setActiveSetupIds] = useState<SetupProductId[]>([])
   const [setupLoadFailed, setSetupLoadFailed] = useState(false)
@@ -701,7 +702,7 @@ export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
       {managedPortal
-        ? <PageHeading copy="Only assigned products are shown." eyebrow="Company portal" title="Company products" />
+        ? emptyCompany ? null : <PageHeading copy="Only assigned products are shown." eyebrow="Company portal" title="Company products" />
         : <PageHeading copy="Choose a tool to get started. Your saved work stays on this device." eyebrow="SuperMega" title="Your business tools" />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
@@ -714,7 +715,7 @@ export function ProductHomePage() {
           <Link to="/login">Switch company</Link>
         </div>
       </section> : null}
-      {managedPortal && !customerProducts.some(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
+      {emptyCompany
         ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Request setup</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
         : null}
       {!managedPortal && productSetups && !anyStarted ? (
@@ -724,7 +725,7 @@ export function ProductHomePage() {
       ) : nextSetupStep ? (
         <p className="platform-start-nudge"><strong>Your saved work stays here.</strong> For another product, <a className="platform-start-link" href={`https://supermega.dev/contact/?product=${signupProductSlug(nextSetupStep[0])}&source=assisted-app-entry`}>request {nextSetupStep[1]} setup</a>. SuperMega prepares it for your review.</p>
       ) : null}
-      <nav aria-label="Choose product" className="product-track-grid">
+      {!emptyCompany ? <nav aria-label="Choose product" className="product-track-grid">
         {customerProducts.filter(([name]) => managedPortal
           ? managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name])
           : activeSetupIds.includes(PRODUCT_SETUP_KEY[name]) || Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]))
@@ -748,10 +749,10 @@ export function ProductHomePage() {
               <strong className="product-track-open">{!managedPortal && !activeSetupIds.includes(setupKey) ? 'Continue saved workspace' : firstAction} <span aria-hidden="true">→</span></strong>
             </Link>
         })}
-      </nav>
-      {managedPortal ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
+      </nav> : null}
+      {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
       {!managedPortal && anyStarted ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
-      <p className="product-home-note">{managedPortal ? 'Your company controls access to each product.' : <>Need this set up for your business? <a href="https://supermega.dev/contact/?product=guide&amp;source=assisted-app-entry">Ask SuperMega</a>. Samples are not live business accounts.</>}</p>
+      {!emptyCompany ? <p className="product-home-note">{managedPortal ? 'Your company controls access to each product.' : <>Need this set up for your business? <a href="https://supermega.dev/contact/?product=guide&amp;source=assisted-app-entry">Ask SuperMega</a>. Samples are not live business accounts.</>}</p> : null}
     </div>
   )
 }
