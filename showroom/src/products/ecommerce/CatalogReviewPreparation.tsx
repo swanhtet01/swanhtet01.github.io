@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { currentManagedIdentity, sameManagedIdentity, loadManagedEcommercePreparation, loadManagedEcommerceRecipients, prepareManagedEcommerceReview, withdrawManagedEcommerceReview, type ManagedIdentity } from '../../core/managed-trial'
-import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, readCatalogCommand, retainCatalogCommand, clearCatalogCommand, type CatalogPreparation, type CatalogRecipients, type CatalogPreparationCommand, type CatalogPreparationReceipt } from './operator-review-contract'
+import { currentManagedIdentity, sameManagedIdentity, loadManagedEcommercePreparation, loadManagedEcommerceRecipients, prepareManagedEcommerceReview, withdrawManagedEcommerceReview, reconcileManagedEcommerceReview, type ManagedIdentity } from '../../core/managed-trial'
+import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, verifyCatalogReconciliation, readCatalogCommand, retainCatalogCommand, clearCatalogCommand, type CatalogPreparation, type CatalogRecipients, type CatalogPreparationCommand, type CatalogPreparationReceipt } from './operator-review-contract'
 import { PreparedCatalog } from './PreparedCatalog'
 
 export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId: string; actorId: string }) {
@@ -95,6 +95,41 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
     } catch { if (started === epoch.current) setMessage('Preparation is unconfirmed. Reopen and retry the same request.') }
     finally { lock.current = false; setBusy(false) }
   }
+  async function reconcile() {
+    const displayed = pending ?? receipt
+    if (lock.current || !displayed) return
+    lock.current = true; setBusy(true)
+    const started = epoch.current
+    try {
+      const who = await identity()
+      const stored = readCatalogCommand(window.sessionStorage, key)
+      const envelope = savedReview()
+      const command = stored ?? envelope?.command
+      if (!command || command === 'unavailable' || command.reviewId !== displayed.reviewId) throw Error('Review changed')
+      const result = verifyCatalogReconciliation(await reconcileManagedEcommerceReview(command.reviewId, who), command)
+      if (!await current(who, started)) return
+      if (result.status === 'active') {
+        const { readAt: _readAt, ...assignment } = result
+        const saved = verifyCatalogPreparationReceipt({ ...assignment, status: 'prepared_preview', persisted: true, replayed: true }, command)
+        retainCatalogCommand(window.sessionStorage, key, command)
+        window.sessionStorage.setItem(key + ':receipt', JSON.stringify({ command, receipt: saved }))
+        const retained = savedReview()
+        if (!retained) throw Error('Receipt missing')
+        verifyCatalogPreparationReceipt(retained.receipt, command)
+        setReceipt(saved); setPending(null); setSource(null); setRecipients(null)
+        setMessage('Review found. Customer access is checked when the link opens.')
+      } else {
+        if (stored !== null) clearCatalogCommand(window.sessionStorage, key, command)
+        if (envelope) {
+          window.sessionStorage.removeItem(key + ':receipt')
+          if (window.sessionStorage.getItem(key + ':receipt') !== null) throw Error('Receipt retained')
+        }
+        setReceipt(null); setPending(null); setSource(null); setRecipients(null)
+        setMessage('This review is inactive. Open the saved catalog to prepare a new review.')
+      }
+    } catch { if (started === epoch.current) setMessage('Review status is unconfirmed. Your saved request is retained; check again.') }
+    finally { lock.current = false; setBusy(false) }
+  }
   async function withdraw() {
     if (lock.current || !receipt) return
     lock.current = true; setBusy(true)
@@ -126,6 +161,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
       {recipients.nextAfter && !pending ? <button type="button" disabled={busy} onClick={() => void open(recipients.nextAfter!)}>More customers</button> : null}
     </> : null}
     {!receipt && (pending || (source && recipients)) ? <button type="button" disabled={busy || (!pending && !selected)} onClick={() => void prepare()}>{pending ? 'Retry same request' : 'Prepare review'}</button> : null}
+    {pending || receipt ? <button type="button" disabled={busy} onClick={() => void reconcile()}>Check review status</button> : null}
     {receipt ? <><p>Customer review link: <a href={`/ecommerce/review/${receipt.reviewId}`}>Open private review</a></p><button type="button" disabled={busy} onClick={() => void withdraw()}>Withdraw review</button></> : null}
   </section>
 }

@@ -22,6 +22,13 @@ function harness() {
   if(name==='../../core/managed-trial')return {
    currentManagedIdentity:async()=>h.who,sameManagedIdentity:(a,b)=>a.workspaceId===b.workspaceId&&a.userId===b.userId,
    loadManagedEcommercePreparation:async()=>{h.sourceReads=(h.sourceReads??0)+1;if(h.readFail)throw Error('unavailable');return {}},loadManagedEcommerceRecipients:async()=>{h.recipientReads=(h.recipientReads??0)+1;if(h.readFail)throw Error('unavailable');return {recipients:[{grantId:id,label:'Customer'}],nextAfter:null}},
+   reconcileManagedEcommerceReview:async reviewId=>{
+    h.checks=(h.checks??0)+1;if(h.checkWait)await h.checkWait;if(h.checkFail)throw Error('unconfirmed')
+    const values=[...h.storage.values()].map(JSON.parse),command=values.find(v=>v.reviewId)??values.find(v=>v.command)?.command
+    return {reviewId,sourceVersion:command.expectedVersion,contentRevision:command.contentRevision,previewDigest:command.previewDigest,
+     preparedAt:command.readAt,expiresAt:command.expiresAt,readAt:h.checkStatus==='expired'?command.expiresAt:new Date().toISOString(),
+     status:h.checkStatus??'active',publicationAuthorized:false,deploymentAuthorized:false}
+   },
    withdrawManagedEcommerceReview:async reviewId=>{h.withdrawals.push(reviewId);if(h.withdrawWait)await h.withdrawWait;if(h.withdrawFail)throw Error('uncertain');return {reviewId,status:'revoked',persisted:true,replayed:false,publicationAuthorized:false,deploymentAuthorized:false}},
    prepareManagedEcommerceReview:async payload=>{h.writes.push(payload);if(h.wait)await h.wait;if(h.fail)throw Error('uncertain');return {reviewId:payload.reviewId,sourceVersion:payload.expectedVersion,contentRevision:0,previewDigest:prepared.previewDigest,preparedAt:new Date().toISOString(),expiresAt:payload.expiresAt,status:'prepared_preview',persisted:true,replayed:h.writes.length>1,publicationAuthorized:false,deploymentAuthorized:false}}
   }
@@ -89,4 +96,36 @@ test('retained request can reopen and retry without catalog or recipient reads',
  assert.equal(h.sourceReads,1);assert.equal(h.recipientReads,1)
  h.fail=false;h.click('Retry same request');await flush()
  assert.deepEqual(h.writes[1],request);assert.ok(h.slots[4]);assert.equal(h.storage.size,2)
+})
+
+
+test('status check recovers active uncertain review without another prepare',async()=>{
+ const h=harness();h.click('Open saved catalog');await flush();h.fail=true;h.click('Prepare review');await flush()
+ h.click('Check review status');h.click('Check review status');await flush()
+ assert.equal(h.checks,1);assert.equal(h.writes.length,1);assert.ok(h.slots[4]);assert.equal(h.storage.size,2)
+})
+test('only verified inactive reviews clear retained state',async()=>{
+ for(const status of ['stale','revoked','expired','missing']){
+  const h=harness();h.click('Open saved catalog');await flush();h.fail=true;h.click('Prepare review');await flush()
+  h.checkStatus=status;h.click('Check review status');await flush()
+  assert.equal(h.storage.size,status==='missing'?1:0);assert.equal(h.writes.length,1)
+ }
+ const h=harness();h.click('Open saved catalog');await flush();h.fail=true;h.click('Prepare review');await flush()
+ h.checkFail=true;h.click('Check review status');await flush();assert.equal(h.storage.size,1)
+})
+test('focus and account changes during reconciliation preserve retry metadata',async()=>{
+ for(const change of ['focus','account']){
+  const h=harness();h.click('Open saved catalog');await flush();h.fail=true;h.click('Prepare review');await flush()
+  let release;h.checkWait=new Promise(resolve=>{release=resolve});h.checkStatus='revoked';h.click('Check review status');await flush()
+  if(change==='focus')h.listeners.get('focus')();else h.who={workspaceId:'other',userId:'other'}
+  release();await flush();assert.equal(h.storage.size,1);assert.equal(h.slots[4],null)
+ }
+})
+test('inactive receipt cleanup can reopen after either removal fails',async()=>{
+ for(const receiptFailure of [false,true]){
+  const h=harness();h.click('Open saved catalog');await flush();h.click('Prepare review');await flush()
+  h.checkStatus='stale';h.removeDenied=key=>key.endsWith(':receipt')===receiptFailure;h.click('Check review status');await flush()
+  assert.ok(h.storage.size>0);h.listeners.get('focus')();h.click('Open saved catalog');await flush();assert.ok(h.slots[4])
+  h.removeDenied=null;h.click('Check review status');await flush();assert.equal(h.storage.size,0);assert.equal(h.writes.length,1)
+ }
 })
