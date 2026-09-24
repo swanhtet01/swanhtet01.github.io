@@ -1319,12 +1319,13 @@ export function SettingsPage() {
       }))
     }
     setNotice(origin === 'loaded'
-      ? `${blueprint.products.length}-product setup loaded. Client records, product packs, and progress were not changed; prepare the data again on this device.`
+      ? `${blueprint.products.length}-product setup loaded. Review and prepare data on this device.`
       : `${blueprint.products.length}-product demo kit ready.${shopPackNotice}${plantPackNotice}${websitePackNotice} Prepare data or open a product.`)
   }
 
   async function loadDemoKit(file: File | null) {
-    if (!file) return
+    if (!file || preparedInstallRunning.current) return
+    preparedInstallRunning.current = true
     try {
       if (file.size < 1 || file.size > CLIENT_DEMO_KIT_MAX_BYTES) throw new Error('Choose a SuperMega setup kit smaller than 128 KB.')
       const kit = restoreClientDemoKit(JSON.parse(await file.text()))
@@ -1332,11 +1333,14 @@ export function SettingsPage() {
       await installDemoBlueprint(kit.blueprint, 'loaded')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The setup kit could not be loaded.')
+    } finally {
+      preparedInstallRunning.current = false
     }
   }
 
   async function loadPreparedClientDemo(file: File | null) {
-    if (!file) return
+    if (!file || preparedInstallRunning.current) return
+    preparedInstallRunning.current = true
     setPreparedNotice('Verifying the private package...')
     try {
       if (file.size < 1 || file.size > CLIENT_DEMO_PREPARATION_MAX_BYTES) throw new Error('Choose a private SuperMega package smaller than 5 MB.')
@@ -1346,17 +1350,20 @@ export function SettingsPage() {
       setPreparedArtifact(artifact)
       setPreparedConfirmation('')
       setPreparedBlockedProduct(null)
-      setPreparedNotice(`${artifact.products.length}-product private package verified. Review it, then approve one serial installation.`)
+      setPreparedNotice(`${artifact.products.length}-product private package verified. Review and approve to install.`)
     } catch (error) {
       setPreparedArtifact(null)
       setPreparedConfirmation('')
       setPreparedBlockedProduct(null)
       setPreparedNotice(error instanceof Error ? error.message : 'The private package could not be loaded.')
+    } finally {
+      preparedInstallRunning.current = false
     }
   }
 
   async function prepareClientFiles(files: readonly File[]) {
-    if (!files.length || !demoKitReadiness?.kit) return
+    if (!files.length || !demoKitReadiness?.kit || preparedInstallRunning.current) return
+    preparedInstallRunning.current = true
     setPreparingClientFiles(true)
     setPreparedArtifact(null)
     setPreparedConfirmation('')
@@ -1382,6 +1389,7 @@ export function SettingsPage() {
     } catch (error) {
       setPreparedNotice(error instanceof Error ? error.message : 'The selected client files could not be prepared.')
     } finally {
+      preparedInstallRunning.current = false
       setPreparingClientFiles(false)
     }
   }
@@ -1445,6 +1453,8 @@ export function SettingsPage() {
   }
 
   async function createDemoKit() {
+    if (preparedInstallRunning.current) return
+    preparedInstallRunning.current = true
     try {
       const blueprint = buildClientDemoBlueprint({
         workspace: setup.workspace,
@@ -1457,6 +1467,8 @@ export function SettingsPage() {
       await installDemoBlueprint(blueprint, 'created')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The client demo kit could not be prepared.')
+    } finally {
+      preparedInstallRunning.current = false
     }
   }
 

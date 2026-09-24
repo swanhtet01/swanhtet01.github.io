@@ -195,3 +195,41 @@ test('actual Settings installer refuses overlapping starts before module loading
   await run()
   assert.equal(running.current, false, 'failed attempt also releases the guard')
 })
+
+
+test('Settings package operations exclude each other while file reading is pending', async () => {
+  const source = await readFile(new URL('../showroom/src/core/SettingsPage.tsx', import.meta.url), 'utf8')
+  const extract = name => {
+    const start = source.indexOf('  async function ' + name + '(')
+    const end = source.indexOf('\n  }', start) + 4
+    assert.ok(start > 0 && end > start)
+    return source.slice(start, end).replaceAll(': File | null', '').replace(': readonly File[]', '').replace(': SetupProductId | null', '').replace(': string[]', '').replace(': ClientDemoPreparationSource[]', '').replace('new Set<ClientSolutionId>()', 'new Set()')
+  }
+  const names = ['loadDemoKit', 'loadPreparedClientDemo', 'prepareClientFiles', 'createDemoKit', 'installPreparedProducts']
+  let finish, reads = 0
+  const pending = new Promise(resolve => { finish = resolve })
+  const running = { current: false }
+  const context = { preparedInstallRunning: running, preparedArtifact: {}, preparedBusyProduct: null, managedIdentity: null, preparedApprovalReady: true,
+    demoKitReadiness: { kit: {} }, CLIENT_DEMO_KIT_MAX_BYTES: 100,
+    restoreClientDemoKit: () => null, setNotice() {},
+  }
+  const handlers = runInNewContext(names.map(extract).join('\n') + '; ({' + names.join(',') + '})', context)
+  const file = { size: 2, text: () => { reads++; return pending } }
+  const first = handlers.loadDemoKit(file)
+  assert.equal(running.current, true)
+  await handlers.loadDemoKit(file)
+  await handlers.loadPreparedClientDemo(file)
+  await handlers.prepareClientFiles([file])
+  await handlers.createDemoKit()
+  await handlers.installPreparedProducts()
+  assert.equal(reads, 1)
+  finish('{}')
+  await first
+  assert.equal(running.current, false, 'validation failure releases shared guard')
+  await handlers.loadDemoKit(file)
+  assert.equal(reads, 2)
+  for (const name of names) {
+    assert.match(extract(name), /preparedInstallRunning.current = true/)
+    assert.match(extract(name), /finally \{\s+preparedInstallRunning.current = false/)
+  }
+})
