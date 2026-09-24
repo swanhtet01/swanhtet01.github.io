@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { emptyBusinessBrief, readBusinessBrief, saveBusinessBrief, type BusinessBriefDraft } from './business-brief-draft'
 import { templatesFor } from '../core/product-setup'
 import './assisted-delivery-scope.css'
 
@@ -52,9 +53,16 @@ export function AssistedDeliveryScope({ product }: { product: Product }) {
 
 export function BusinessBrief({ product, onOpenWorkspace }: { product: Product; onOpenWorkspace: () => void }) {
   const id = useId()
-  const [company, setCompany] = useState('')
-  const [description, setDescription] = useState('')
-  const [reference, setReference] = useState('')
+  const [draft, setDraft] = useState(() => {
+    try { return readBusinessBrief(window.sessionStorage, product) } catch { return emptyBusinessBrief() }
+  })
+  const [draftUnavailable, setDraftUnavailable] = useState(false)
+  const { company, description, reference } = draft
+  function updateDraft(patch: Partial<BusinessBriefDraft>) {
+    const next = { ...draft, ...patch }
+    setDraft(next)
+    try { setDraftUnavailable(!saveBusinessBrief(window.sessionStorage, product, next)) } catch { setDraftUnavailable(true) }
+  }
   return <section className="business-brief" aria-labelledby={`${id}-title`}>
     <header>
       <span className="business-brief-kicker">{product === 'website' ? 'Website' : 'Ecommerce'}</span>
@@ -69,12 +77,13 @@ export function BusinessBrief({ product, onOpenWorkspace }: { product: Product; 
       window.location.assign(`https://supermega.dev/contact/?${query}#${handoff}`)
     }}>
       <label htmlFor={`${id}-company`}>Business name</label>
-      <input id={`${id}-company`} autoComplete="organization" required maxLength={180} pattern=".*\S.*" value={company} onChange={event => setCompany(event.target.value)} />
+      <input id={`${id}-company`} autoComplete="organization" required maxLength={180} pattern=".*\S.*" value={company} onChange={event => updateDraft({ company: event.target.value })} />
       <label htmlFor={`${id}-description`}>{product === 'website' ? 'What does your business offer?' : 'What do you sell?'}</label>
-      <textarea id={`${id}-description`} required maxLength={3000} rows={4} value={description} onChange={event => setDescription(event.target.value)} placeholder={product === 'website' ? 'Services, location and how customers reach you.' : 'A few products and prices are enough to start.'} />
+      <textarea id={`${id}-description`} required maxLength={3000} rows={4} value={description} onChange={event => updateDraft({ description: event.target.value })} placeholder={product === 'website' ? 'Services, location and how customers reach you.' : 'A few products and prices are enough to start.'} />
       <label htmlFor={`${id}-reference`}>Existing page or catalog <span>optional</span></label>
-      <input id={`${id}-reference`} maxLength={700} value={reference} onChange={event => setReference(event.target.value)} placeholder="Facebook page, website or public catalog" />
+      <input id={`${id}-reference`} maxLength={700} value={reference} onChange={event => updateDraft({ reference: event.target.value })} placeholder="Facebook page, website or public catalog" />
       <button type="submit" disabled={!company.trim() || !description.trim()}>Continue</button>
+      {draftUnavailable ? <small role="status">This browser cannot keep your draft. Copy it before leaving this page.</small> : <small>Your draft stays in this tab for up to one hour.</small>}
       <small>Next: add your contact details and review before sending. No passwords or private customer data.</small>
     </form>
     <footer><span>Scope and price agreed before work begins.</span><button type="button" onClick={onOpenWorkspace}>Open existing workspace</button></footer>
