@@ -4161,3 +4161,36 @@ export async function loadManagedEcommerceReview(reviewId: string, expectedIdent
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}`,
     { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
 }
+
+export async function loadManagedEcommerceRecipients(expectedIdentity: ManagedIdentity, after?: string) {
+  if (after !== undefined && (after.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(after))) {
+    throw new ManagedTrialError('The customer page is invalid.', { code: 'ecommerce_review_invalid' })
+  }
+  return authorizedRequest<unknown>('/api/trial/v1/ecommerce-review-recipients' + (after ? `?after=${after}` : ''),
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function prepareManagedEcommerceReview(
+  payload: { reviewId: string; recipientGrantId: string; expectedVersion: number; expiresAt: string }, expectedIdentity: ManagedIdentity,
+) {
+  for (const id of [payload.reviewId, payload.recipientGrantId]) {
+    if (id.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      throw new ManagedTrialError('The selected customer review is invalid.', { code: 'ecommerce_review_invalid' })
+    }
+  }
+  return authorizedRequest<unknown>('/api/trial/v1/ecommerce-reviews',
+    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function withdrawManagedEcommerceReview(reviewId: string, expectedIdentity: ManagedIdentity) {
+  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/withdraw`,
+    { method: 'POST', body: JSON.stringify({}), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}
+
+export async function loadManagedEcommercePreparation(expectedIdentity: ManagedIdentity) {
+  return authorizedRequest<unknown>('/api/trial/v1/ecommerce-review-preparation',
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}

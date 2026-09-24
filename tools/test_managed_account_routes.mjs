@@ -1,3 +1,4 @@
+import { MANAGED_WORKSPACE_STORAGE_KEY } from '../showroom/src/core/managed-workspace-selection.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -173,13 +174,14 @@ async function withAuth(run, configured = true) {
     } },
     fetch: async (url, init = {}) => {
       calls.push(['fetch', url, init])
-      assert.equal(init.method ?? 'GET', 'GET', 'signup must never provision a workspace')
+      assert.equal(init.method ?? 'GET', state.allowedPostPath === url ? 'POST' : 'GET', 'only an explicitly selected synthetic request may write')
       if (state.fetch) return state.fetch(url, init)
       if (url === '/api/health') return response(state.health)
       if (url === '/api/trial/v1/workspaces') return response(state.directory)
       throw new Error(`Forbidden network ${url}`)
     },
   }
+  replacements.localStorage = replacements.window.localStorage
   const originals = new Map(Object.keys(replacements).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   for (const [key, value] of Object.entries(replacements)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
   try {
@@ -723,5 +725,48 @@ test('actual form fails closed when policy changes after display and does not au
     assert.equal(state.calls.some(([name]) => name === 'signUp'), false)
     assert.equal(input(login(mod, state), 'Password').props.value, '')
     assert.match(content(login(mod, state)), change === 'closed' ? /signup is not open/ : /terms changed/)
+  })
+})
+
+test('Ecommerce operator transport binds identity, no-store and exact endpoint payloads', async () => {
+  await withAuth(async (mod, state) => {
+    state.session = { ...fixedSession }
+    state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'synthetic-company')
+    const identity = await mod.currentManagedIdentity()
+    assert.ok(identity)
+    state.fetch = async () => response({ synthetic: true })
+    const id = '11111111-1111-4111-8111-111111111111'
+    const payload = { reviewId: id, recipientGrantId: id, expectedVersion: 1, expiresAt: '2099-01-01T00:00:00Z' }
+    for (const [invoke, path, body] of [
+      [() => mod.loadManagedEcommercePreparation(identity), '/api/trial/v1/ecommerce-review-preparation'],
+      [() => mod.loadManagedEcommerceRecipients(identity, id), '/api/trial/v1/ecommerce-review-recipients?after='+id],
+      [() => mod.prepareManagedEcommerceReview(payload, identity), '/api/trial/v1/ecommerce-reviews', payload],
+      [() => mod.withdrawManagedEcommerceReview(id, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/withdraw', {}],
+    ]) {
+      state.calls.length = 0; state.allowedPostPath = body ? path : null
+      assert.deepEqual(await invoke(), { synthetic: true })
+      const calls = state.calls.filter(([name]) => name === 'fetch')
+      assert.equal(calls.length, 1)
+      assert.equal(calls[0][1], path)
+      const init = calls[0][2]
+      assert.equal(init.cache, 'no-store'); assert.equal(init.redirect, 'error'); assert.equal(init.credentials, 'omit')
+      assert.equal(init.headers.get('x-supermega-workspace-id'), 'synthetic-company')
+      if (body) assert.deepEqual(JSON.parse(init.body), body)
+    }
+    state.calls.length = 0
+    state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'different-company')
+    await assert.rejects(mod.loadManagedEcommercePreparation(identity))
+    assert.equal(state.calls.some(([name]) => name === 'fetch'), false)
+  })
+})
+
+test('Ecommerce invalid identifiers fail before provider or network access', async () => {
+  await withAuth(async (mod, state) => {
+    for (const bad of ['', '../other', '11111111-1111-4111-8111-111111111111\n']) {
+      await assert.rejects(mod.loadManagedEcommerceRecipients({}, bad))
+      await assert.rejects(mod.withdrawManagedEcommerceReview(bad, {}))
+      await assert.rejects(mod.prepareManagedEcommerceReview({reviewId:bad,recipientGrantId:bad}, {}))
+    }
+    assert.deepEqual(state.calls, [])
   })
 })
