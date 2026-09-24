@@ -513,7 +513,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         <summary>Packages</summary>
         <div>
           {spaMembershipPackages.filter(p => !legacyBooking && schedule.services.some(s => s.id === p.serviceId && s.active) && commerce.items?.some(item => item.sku === p.sku) && !schedule.packageDefinitions?.some(d => d.purchaseSku === p.sku)).map(p => <button className="core-button compact" disabled={disabled} key={p.sku} onClick={() => setupPackage(p.sku)} type="button">Set up {p.label}</button>)}
-          {packagePurchases.map(p => <div key={`${p.orderId}:${p.lineIndex}`}><span>{p.client} · {p.label} · {p.sessions} sessions</span><button className="core-button compact" disabled={disabled} onClick={() => allocatePackage(p.orderId, p.lineIndex)} type="button">Add sessions</button></div>)}
+          {packagePurchases.map(p => <div key={`${p.orderId}:${p.lineIndex}`}><span>{p.client} · {p.label} · {p.sessions} sessions<small style={{ display: 'block', overflowWrap: 'anywhere' }}>Order {p.orderId} · Item {p.lineIndex + 1}</small></span><button className="core-button compact" disabled={disabled} onClick={() => allocatePackage(p.orderId, p.lineIndex)} type="button">Add sessions</button></div>)}
           {!packagePurchases.length ? <p>{legacyBooking ? 'Review older booking resources below to use packages.' : 'Paid purchases appear here.'}</p> : null}
         </div>
       </details> : null}
