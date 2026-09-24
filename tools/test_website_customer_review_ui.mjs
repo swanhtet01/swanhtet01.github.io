@@ -284,3 +284,46 @@ test('actual change and acceptance handlers reject late success after access cha
     if (change === 'refresh') assert.equal(messages.length, 1, 'stale epoch cannot overwrite refresh message')
   }
 })
+
+test('actual acceptance keeps an uncertain request for exact retry after a mismatched receipt', async () => {
+  const { verifyCustomerAcceptanceAcknowledgement } = await import('../showroom/src/products/website/customer-review-contract.ts')
+  const ast = ts.createSourceFile('review.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  let fn
+  function visit(node) { if (ts.isFunctionDeclaration(node) && node.name?.text === 'acceptRevision') fn = node; ts.forEachChild(node, visit) }
+  visit(ast); assert.ok(fn)
+  for (const mismatch of ['commandId', 'reviewId', 'previewDigest', 'contentRevision', 'persisted']) {
+    const requests = [], messages = [], decisions = [], uncertain = []
+    const review = { reviewId: 'synthetic-review', contentRevision: 3, previewDigest: 'synthetic-digest', expiresAt: new Date(Date.now() + 60000).toISOString() }
+    let faulty = true, uuids = 0
+    const noop = () => {}
+    const context = { review, reviewId: review.reviewId, actor, confirmed: true, busy: false, note: '',
+      decision: { status: 'pending_review' }, pending: { current: null }, pendingAcceptance: { current: null }, inFlight: { current: false },
+      access: createReviewAccessBoundary(async () => actor, same), sameManagedIdentity: same,
+      crypto: { randomUUID: () => { uuids++; return 'synthetic-command' } },
+      setBusy: noop, setActor: noop, setReview: noop, setMessage: value => messages.push(value),
+      setDecision: value => decisions.push(value), setAcceptanceUnconfirmed: value => uncertain.push(value),
+      verifyCustomerAcceptanceAcknowledgement,
+      sendManagedWebsiteAcceptance: async payload => {
+        requests.push(payload)
+        const receipt = { ...payload, contentRevision: review.contentRevision, acceptedAt: new Date().toISOString(), status: 'accepted_for_operator_release_review', persisted: true, replayed: !faulty, publicationAuthorized: false, deploymentAuthorized: false }
+        delete receipt.decision
+        if (faulty) receipt[mismatch] = mismatch === 'persisted' ? false : mismatch === 'contentRevision' ? 4 : 'wrong'
+        return receipt
+      },
+    }
+    const js = ts.transpileModule(fn.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    const run = vm.runInNewContext(`${js}; acceptRevision`, context)
+    await run()
+    assert.equal(decisions.length, 0, mismatch)
+    assert.match(messages.at(-1), /could not confirm acceptance/)
+    assert.equal(uncertain.at(-1), true)
+    assert.ok(context.pendingAcceptance.current)
+    faulty = false
+    await run()
+    assert.equal(requests[0], requests[1], 'retry must reuse the exact pending payload')
+    assert.equal(uuids, 1)
+    assert.equal(decisions[0].status, 'accepted_for_operator_release_review')
+    assert.equal(context.pendingAcceptance.current, null)
+    assert.equal(uncertain.at(-1), false)
+  }
+})
