@@ -16,7 +16,7 @@ for (const product of ['website', 'ecommerce']) {
   test(`${product}: one business-brief entry without implementation choices`, () => {
     const html = renderToStaticMarkup(React.createElement(AssistedDeliveryScope, { product }))
     assert.equal((html.match(/<a /g) ?? []).length, 1)
-    assert.ok(html.includes(`href="/${product}/"`))
+    assert.ok(html.includes(`href="/${product}/${product === 'ecommerce' ? '?setup=1' : ''}"`))
     assert.doesNotMatch(html, /<select|<button|<ol|target=|workspace=|template=/)
     assert.match(html, /<details><summary>Before we start<\/summary>/)
     assert.ok(html.includes('Publishing needs your approval.'))

@@ -42,14 +42,15 @@ test('assisted catalog setup stays available in both local views and preserves t
       assert.equal(vm.runInNewContext(expression, {...ready,workspaceView,...blocked}), false)
     }
   }
-  assert.match(product, /product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer"/)
+  assert.ok(product.includes('href="/ecommerce/?setup=1"'))
+  assert.ok(product.includes("search.delete('setup')"))
   assert.match(product, /Requests stay on this device and are not live orders/)
   assert.match(product, /: ecommerceTodayHeadline\}/)
 })
 
 test('fresh assisted entry yields to retained work, carts, attention and editor state', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
-  const expression = product.match(/const assistedCatalogEntry = ([\s\S]*?)\n\s*return \(/)?.[1]
+  const expression = product.match(/const assistedCatalogEntry = ([\s\S]*?)\n\s*if \(/)?.[1]
   assert.ok(expression)
   const ready = { showAssistedCatalogSetup: true, workspaceView: 'preview', savedDraft: null, ecommerceTodayAction: 'Try sample request', ecommerceTodayState: 'ready', ecommerceTodayCartUnits: 0 }
   assert.equal(vm.runInNewContext(expression, ready), true)

@@ -1821,10 +1821,11 @@ export function EcommerceProduct() {
     && !savedDraft && ecommerceTodayAction === 'Try sample request'
     && ecommerceTodayState === 'ready' && !ecommerceTodayCartUnits
 
-  if (assistedCatalogEntry && !workspaceOpened && new URLSearchParams(location.search).get('workspace') !== '1') {
+  if ((showAssistedCatalogSetup && new URLSearchParams(location.search).get('setup') === '1') || (assistedCatalogEntry && !workspaceOpened && new URLSearchParams(location.search).get('workspace') !== '1')) {
     return <BusinessBrief product="ecommerce" onOpenWorkspace={() => {
       setWorkspaceOpened(true)
       const search = new URLSearchParams(location.search)
+      search.delete('setup')
       search.set('workspace', '1')
       navigate({ pathname: location.pathname, search: search.toString() }, { replace: true })
     }} />
@@ -1839,7 +1840,7 @@ export function EcommerceProduct() {
           <h1>Ecommerce</h1>
           <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Browse a sample catalog. Requests stay on this device and are not live orders.'}</p>
         </div>
-        {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
+        {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Request catalog setup</a> : null}
       </header>
 
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-density={ecommerceTodayGuided ? 'guided' : 'compact'} data-state={ecommerceTodayState}>
