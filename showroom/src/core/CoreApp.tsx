@@ -1365,7 +1365,6 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
       ? `${industryPack.firstWorkflow} ${industryPack.name} sample items are loaded.`
       : `Your existing items were kept. The ${industryPack.name} appointment schedule is separate.`
     : ''
-  const spaPilotActive = industryPack?.id === 'spa'
 
   return <section aria-label="Sales counter" className="shop-counter-surface">
     <div className="shop-counter-grid">
@@ -1379,12 +1378,6 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
               ? <p className="shop-pack-context"><span>{packContext}</span></p>
               : industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}
             <nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link>{localDemoStatus ? <Link className="shop-counter-local-link" data-risk={localDemoStatus === 'records-at-risk' ? 'true' : undefined} to="/settings/#controls">{localDemoStatus === 'records-at-risk' ? 'Local demo · records at risk' : 'Local demo · on this device'}</Link> : null}</nav>
-            {spaPilotActive ? <div aria-label="Spa pilot first sale path" className="shop-spa-pilot-strip">
-              <span><strong>Sell package</strong><small>Cash, KBZPay, WavePay, AYA Pay, or MMQR</small></span>
-              <span><strong>Book treatment</strong><small>Use the schedule before the guest arrives</small></span>
-              <span><strong>Reject bad redemption</strong><small>Refuse duplicate or invalid package use</small></span>
-              <span><strong>Close day + reload</strong><small>Count cash, payments, open orders, and stock</small></span>
-            </div> : null}
           </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>

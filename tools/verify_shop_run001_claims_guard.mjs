@@ -219,11 +219,9 @@ requireSnippet(onboardingText, 'Choose your trade to start with a matching catal
 requireSnippet(onboardingText, 'Creates local sample records, then opens the first task.', files.onboarding)
 check(!onboardingText.includes('Shop pilot proof rule'), 'operator_pilot_rules_must_not_crowd_customer_setup')
 
-requireSnippet(coreAppText, 'Spa pilot first sale', files.coreApp)
-requireSnippet(coreAppText, 'Sell package', files.coreApp)
-requireSnippet(coreAppText, 'Book treatment', files.coreApp)
-requireSnippet(coreAppText, 'Reject bad redemption', files.coreApp)
-requireSnippet(coreAppText, 'Close day + reload', files.coreApp)
+check(!coreAppText.includes('Spa pilot first sale path') && !coreAppText.includes('Reject bad redemption'), 'internal_pilot_checklist_must_not_crowd_sales_counter')
+requireSnippet(coreAppText, 'Open schedule', files.coreApp)
+requireSnippet(coreAppText, "['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR']", files.coreApp)
 
 requireSnippet(ownerPacketText, 'prove one useful operating workflow before any managed activation', files.ownerPacket)
 requireSnippet(ownerPacketText, 'It does not send a message, accept payment, move stock, post accounting, deploy software, activate production, or write hosted data.', files.ownerPacket)
