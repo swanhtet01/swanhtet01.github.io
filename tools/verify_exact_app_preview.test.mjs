@@ -469,7 +469,7 @@ test('requires one exact generation or validation argument set', () => {
   )
 })
 
-test('builds and validates the exact twenty-six-case technical preview proof', async () => {
+test('builds and validates the exact twenty-eight-case technical preview proof', async () => {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'site-manifest.json'), 'utf8'))
   const generatorSource = await readFile(join(repoRoot, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
   const proofGuide = await readFile(join(repoRoot, 'docs', 'EXACT-APP-PREVIEW-PROOF.md'), 'utf8')
@@ -481,9 +481,9 @@ test('builds and validates the exact twenty-six-case technical preview proof', a
   assert.equal(proofGuide.split(profitControlGuideRow).length - 1, 1)
   assert.match(proofGuide, /The Shop Profit Control cases do not edit browser storage\./)
   assert.match(proofGuide, /`Review payments` links to\s+`\/shop\/\?tab=orders#shop-order-queue`/)
-  assert.match(proofGuide, /all twenty-six\s+screenshots/)
-  assert.match(proofGuide, /before and after the twenty-six browser cases/)
-  assert.match(proofGuide, /all twenty-six PNG files, including both Shop Counter and\s+Shop Profit Control/)
+  assert.match(proofGuide, /all twenty-eight\s+screenshots/)
+  assert.match(proofGuide, /before and after the twenty-eight browser cases/)
+  assert.match(proofGuide, /all twenty-eight PNG files, including both Shop Counter and\s+Shop Profit Control/)
   assert.doesNotMatch(proofGuide, /all ten|ten browser cases/)
   assert.match(renderedHarnessSource, /event\.type === 'warning' \|\| event\.type === 'warn'/)
   assert.match(renderedHarnessSource, /event\.entry\?\.level === 'warning'/)
@@ -568,8 +568,8 @@ test('builds and validates the exact twenty-six-case technical preview proof', a
     screenshotPayloads: screenshotPayloads(),
   })
   assert.equal(report.contract, EXACT_APP_PREVIEW_CONTRACT)
-  assert.equal(report.cases.length, 26)
-  assert.deepEqual(report.cases.filter(entry => entry.surface === 'website').map(entry => entry.primaryFlow), ['business_brief_entry_visible', 'business_brief_entry_visible'])
+  assert.equal(report.cases.length, 28)
+  assert.deepEqual(report.cases.filter(entry => (entry.surface === 'website' || entry.surface === 'ecommerce_brief')).map(entry => entry.primaryFlow), Array(4).fill('business_brief_entry_visible'))
   assert.deepEqual(report.cases.map((entry) => entry.id), EXACT_APP_PREVIEW_CASE_MATRIX.map((entry) => entry.id))
   assert.equal(report.cases.every((entry) => entry.mutatingRequestCount === 0), true)
   assert.equal(report.cases.every((entry) => entry.browserContextIsolated === true), true)
@@ -585,7 +585,7 @@ test('builds and validates the exact twenty-six-case technical preview proof', a
   assert.equal(Object.hasOwn(report.controls, 'providerWritesPerformed'), false)
   assert.equal(Object.hasOwn(report.controls, 'databaseConnectionsPerformed'), false)
   assert.equal(validation.technicalRenderedPreviewPassed, true)
-  assert.equal(validation.screenshots.length, 26)
+  assert.equal(validation.screenshots.length, 28)
   assert.equal(validation.exactPreviewAccepted, false)
 })
 
@@ -993,4 +993,14 @@ test('binds no-browser CLI validation to the actual clean verifier checkout and 
     await rm(dirtyMarker, { force: true })
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+
+test('Ecommerce default brief has separate desktop and mobile entry cases', async () => {
+  const cases = EXACT_APP_PREVIEW_CASE_MATRIX.filter(spec => spec.surface === 'ecommerce_brief')
+  assert.equal(cases.length, 2)
+  assert.ok(cases.every(spec => spec.route === '/ecommerce/'))
+  assert.deepEqual(cases.map(spec => spec.width), [1280, 390])
+  const source = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
+  for (const text of expectedText({ surface: 'ecommerce_brief' })) assert.ok(source.includes(text), text)
 })

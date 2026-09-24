@@ -72,6 +72,8 @@ export const EXACT_APP_PREVIEW_CASE_MATRIX = Object.freeze([
   ...RETIRED_PRODUCT_CASES.map(spec => Object.freeze({ ...spec, surface: 'retired_plant', screenshot: `${spec.id}.png` })),
   { id: 'website_desktop', surface: 'website', route: '/website/', width: 1280, height: 900, mobile: false, screenshot: 'website-working-sample-desktop-1280x900.png' },
   { id: 'website_mobile', surface: 'website', route: '/website/', width: 390, height: 844, mobile: true, screenshot: 'website-working-sample-mobile-390x844.png' },
+  { id: 'ecommerce_brief_desktop', surface: 'ecommerce_brief', route: '/ecommerce/', width: 1280, height: 900, mobile: false, screenshot: 'ecommerce-brief-desktop-1280x900.png' },
+  { id: 'ecommerce_brief_mobile', surface: 'ecommerce_brief', route: '/ecommerce/', width: 390, height: 844, mobile: true, screenshot: 'ecommerce-brief-mobile-390x844.png' },
   { id: 'ecommerce_desktop', surface: 'ecommerce', route: '/ecommerce/?workspace=1', width: 1280, height: 900, mobile: false, screenshot: 'ecommerce-local-request-desktop-1280x900.png' },
   { id: 'ecommerce_mobile', surface: 'ecommerce', route: '/ecommerce/?workspace=1', width: 390, height: 844, mobile: true, screenshot: 'ecommerce-local-request-mobile-390x844.png' },
 ])
@@ -629,7 +631,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin, publicOrigin) {
       ? 'browser_local_request_boundary_visible'
       : spec.surface === 'retired_plant'
         ? 'retired_entry_redirect_and_retained_data_verified'
-        : spec.surface === 'website'
+        : (spec.surface === 'website' || spec.surface === 'ecommerce_brief')
           ? 'business_brief_entry_visible'
           : 'product_entry_visible'
   return {
@@ -1037,6 +1039,7 @@ export function expectedText(spec, publicHomepageExpectedText) {
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.boundary,
   ]
   if (spec.surface === 'retired_plant') return ['Shop', 'Website', 'Ecommerce']
+  if (spec.surface === 'ecommerce_brief') return ['Ecommerce', 'Your products, ready to browse.', 'Business name', 'What do you sell?', 'Existing page or catalog', 'Continue', 'Next: add your contact details and review before sending. No passwords or private customer data.', 'Scope and price agreed before work begins.', 'Open existing workspace']
   if (spec.surface === 'website') return ['Website', 'Your business, online.', 'Business name', 'What does your business offer?', 'Existing page or catalog', 'Continue', 'Next: add your contact details and review before sending. No passwords or private customer data.', 'Scope and price agreed before work begins.', 'Open existing workspace']
   return ['Ecommerce', 'Sample store', 'Browse a sample catalog. Requests stay on this device and are not live orders.', 'Request catalog setup', 'Try sample request']
 }

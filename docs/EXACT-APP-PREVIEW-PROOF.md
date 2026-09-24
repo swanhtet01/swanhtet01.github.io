@@ -10,7 +10,7 @@ an accepted proof tool can inspect a sealed candidate without changing it.
 It does not deploy, promote, roll back, create a pull request, write provider
 state, contact a customer, capture payment, move stock, or activate managed
 persistence. It deliberately reports `exactPreviewAccepted:false` and
-`releaseAuthorized:false`; an independent person must still inspect all twenty-six
+`releaseAuthorized:false`; an independent person must still inspect all twenty-eight
 screenshots and record the separate release decision.
 
 Keep these screenshots internal. They contain synthetic product/customer
@@ -89,7 +89,8 @@ the narrow sentinel boundary, not recovery of every possible historical dataset.
 | Shop Counter | 1280 x 900 | 390 x 844 | Exact `/shop/?template=mini-mart` checkout, payment, total, open-order choice, and review action are above fold |
 | Shop Profit Control | 1280 x 900 | 390 x 844 | Exact `/shop/?tab=today` renders the untouched source-owned fresh Shop seed as `attention` / `3 open`, led by `payment_pending` (`Reconcile pending payments`) with its exact payment-review action and target, objective closure, and read-only boundary |
 | Retired Plant entries (seven routes) | 1280 x 900 | 390 x 844 | Direct, legacy, demo and settings aliases redirect to the exact active chooser; no Plant tool/action is visible; four retained storage keys remain unchanged before and after capture |
-| Website | 1280 x 900 | 390 x 844 | Local working sample visibly says nothing was deployed |
+| Website | 1280 x 900 | 390 x 844 | Default business brief shows essential inputs, review-before-sending and scope/price boundaries |
+| Ecommerce brief | 1280 x 900 | 390 x 844 | Default `/ecommerce/` shows the catalog brief and review boundaries; no submission or delivery acceptance is inferred |
 | Ecommerce | 1280 x 900 | 390 x 844 | Completed sample request remains visibly browser-local, with no managed Shop receipt claim |
 
 Every case also requires meaningful content, the exact route and query set, no horizontal
@@ -123,7 +124,7 @@ npm.cmd run app:preview:rendered:verify -- `
 The operations receipt supplies both preview origins. There is intentionally
 no free-form origin flag, so the rendered proof cannot silently diverge from
 the already validated release/health/header/rollback evidence. Immediately
-before and after the twenty-six browser cases, the tool performs fresh GET-only,
+before and after the twenty-eight browser cases, the tool performs fresh GET-only,
 manual-redirect `/__release.json` probes on both origins and requires the
 exact target commit and expected service identity. A redirect or alias commit
 change fails closed.
@@ -152,7 +153,7 @@ both tool files to recompute their byte counts and SHA-256 digests.
 
 The report proves a bounded technical browser run; its digests are integrity
 metadata, not identity or proof that a person inspected the images. A reviewer
-must visually inspect all twenty-six PNG files, including both Shop Counter and
+must visually inspect all twenty-eight PNG files, including both Shop Counter and
 Shop Profit Control at desktop and mobile sizes, for clipping, hierarchy, truthful
 claims, and the intended product job. Only a separately reviewed acceptance
 artifact may advance the exact-preview gate. Production release still requires
