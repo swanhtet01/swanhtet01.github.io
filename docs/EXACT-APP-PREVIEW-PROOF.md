@@ -77,10 +77,12 @@ changed routes, or renamed screenshots fail closed.
 
 Version 1 reports are historical only and are rejected by this consumer. No
 relabelled or upgraded report substitutes for a fresh version 2 capture.
-The 26-case matrix contains ten active-surface cases, two public-to-app transitions and fourteen retirement
+The 28-case matrix contains twelve active-surface cases, two public-to-app transitions and fourteen retirement
 cases. Retirement uses isolated synthetic storage sentinels, not customer data;
 only the preservation result is retained, never raw local records. This proves
 the narrow sentinel boundary, not recovery of every possible historical dataset.
+
+Earlier 26-case reports remain historical evidence. The current validator requires the current matrix and exact verifier source binding; an older report must not be relabeled or extended by hand. Generate fresh evidence against the approved immutable pair.
 
 | Surface | Desktop | Mobile | Required technical boundary |
 | --- | --- | --- | --- |
