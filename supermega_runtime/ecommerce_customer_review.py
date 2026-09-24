@@ -7,6 +7,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from collections.abc import Mapping
+import re
 from .commerce_runtime import commerce_storefront_preview, commerce_storefront_preview_digest
 from .trial_store import TrialValidationError, _principal_auth_ready
 
@@ -48,7 +49,14 @@ def prepare_catalog_review(state, *, principal, readiness, review_id, recipient_
         expiresAt=expiry.isoformat(), contentRevision=state['storefrontConfiguration']['revision'],
         preview=preview, previewDigest=commerce_storefront_preview_digest(state), sourceVersion=source_version, status='active')
 
-def catalog_review_projection(review, state, *, principal, readiness, source_version, now=None):
+def _authorized_assignment(review, *, principal, readiness, source_version, now):
+    """Server-retained assignment only, never a client-supplied review object.
+
+    The store must hold the ecommerce-review advisory transaction lock and read
+    status after acquiring it. Source invalidation uses the same lock; no raw
+    commerce state or broader reviewer permissions are needed for a decision.
+    This validates assignment metadata, not arbitrary preview authenticity.
+    """
     actor = access(principal, readiness)
     if type(source_version) is not int or not 1 <= source_version <= 9_007_199_254_740_991: fail()
     if (not isinstance(review, Mapping) or set(review) != FIELDS or review['contract'] != CONTRACT
@@ -61,22 +69,31 @@ def catalog_review_projection(review, state, *, principal, readiness, source_ver
         or review['preparedBy'] != review['preparedBy'].strip()): fail()
     prepared, expiry, current = stamp(review['preparedAt']), stamp(review['expiresAt']), stamp(datetime.now(timezone.utc) if now is None else now)
     if not prepared <= current < expiry or expiry > prepared + timedelta(days=7): fail()
+    if (type(review['contentRevision']) is not int or not 0 <= review['contentRevision'] <= 9_007_199_254_740_991
+        or not isinstance(review['previewDigest'], str)
+        or re.fullmatch(r'sha256:[0-9a-f]{64}', review['previewDigest']) is None): fail()
+    return review
+
+
+def catalog_review_projection(review, state, *, principal, readiness, source_version, now=None):
+    _authorized_assignment(review, principal=principal, readiness=readiness,
+        source_version=source_version, now=now)
     preview = commerce_storefront_preview(state)
     if (type(review['contentRevision']) is not int or review['contentRevision'] != state['storefrontConfiguration']['revision']
         or review['preview'] != preview or review['previewDigest'] != commerce_storefront_preview_digest(state)): fail()
     return {key: deepcopy(review[key]) for key in ('reviewId','contentRevision','previewDigest','preview','expiresAt')} | dict(status='prepared_preview', publicationAuthorized=False, deploymentAuthorized=False)
 
 
-def build_catalog_acceptance(review, state, payload, *, principal, readiness, source_version, now=None):
+def build_catalog_acceptance(review, payload, *, principal, readiness, source_version, now=None):
     """Build a candidate only; the guarded store must persist and enforce replay.
 
-    Caller must lock the source and assignment and reject retained change requests.
+    Caller must lock and read the retained assignment, then reject retained change requests.
     Customer consent to a revision never authorizes publication or deployment.
     """
     from hashlib import sha256
     import json
     current = stamp(datetime.now(timezone.utc) if now is None else now)
-    projected = catalog_review_projection(review, state, principal=principal,
+    projected = _authorized_assignment(review, principal=principal,
         readiness=readiness, source_version=source_version, now=current)
     if not readiness.write_ready: fail()
     if (not isinstance(payload, Mapping)
@@ -97,7 +114,7 @@ def build_catalog_acceptance(review, state, payload, *, principal, readiness, so
         publicationAuthorized=False, deploymentAuthorized=False)
 
 
-def build_catalog_change_request(review, state, payload, *, principal, readiness, source_version, now=None):
+def build_catalog_change_request(review, payload, *, principal, readiness, source_version, now=None):
     """Build unsaved feedback; persistence must enforce access and command replay.
 
     A reused command with a different fingerprint is a conflict, never an update.
@@ -107,7 +124,7 @@ def build_catalog_change_request(review, state, payload, *, principal, readiness
     import json
     from .website_customer_review import _text
     current = stamp(datetime.now(timezone.utc) if now is None else now)
-    projected = catalog_review_projection(review, state, principal=principal,
+    projected = _authorized_assignment(review, principal=principal,
         readiness=readiness, source_version=source_version, now=current)
     if not readiness.write_ready: fail()
     if (not isinstance(payload, Mapping)

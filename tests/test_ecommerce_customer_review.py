@@ -1,5 +1,6 @@
 """Synthetic private catalog domain tests; no provider access."""
 import unittest
+from unittest.mock import patch
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from supermega_runtime.ecommerce_customer_review import prepare_catalog_review, catalog_review_projection, build_catalog_acceptance, build_catalog_change_request
@@ -20,7 +21,7 @@ class CatalogReviewTests(unittest.TestCase):
             reviewId=self.review['reviewId'], previewDigest=self.review['previewDigest'],
             decision='accept_preview_for_release_review')
         def accept(data=payload, **overrides):
-            return build_catalog_acceptance(self.review, self.state, data, **(dict(
+            return build_catalog_acceptance(self.review, data, **(dict(
                 principal=self.actor, readiness=self.ready, source_version=1, now=self.now) | overrides))
         result = accept()
         self.assertFalse(result['persisted'])
@@ -43,12 +44,29 @@ class CatalogReviewTests(unittest.TestCase):
         self.assertEqual(set(result),{'reviewId','contentRevision','previewDigest','preview','expiresAt','status','publicationAuthorized','deploymentAuthorized'})
         result['preview']['items'][0]['name']='Changed'
         self.assertNotEqual(self.review['preview']['items'][0]['name'],'Changed')
+    def test_decisions_use_retained_assignment_without_private_source_access(self):
+        common = dict(commandId='33333333-3333-4333-8333-333333333333',
+            reviewId=self.review['reviewId'], previewDigest=self.review['previewDigest'])
+        for build, payload in [(build_catalog_acceptance, common | {'decision': 'accept_preview_for_release_review'}),
+                               (build_catalog_change_request, common | {'note': 'Correct the price'})]:
+            def invoke(review):
+                return build(review, payload, principal=self.actor, readiness=self.ready,
+                             source_version=1, now=self.now)
+            with patch('supermega_runtime.ecommerce_customer_review.commerce_storefront_preview', side_effect=AssertionError('private source read')):
+                self.assertFalse(invoke(self.review)['persisted'])
+            for key, value in [('status', 'stale'), ('status', 'revoked'),
+                               ('contentRevision', True), ('contentRevision', -1),
+                               ('previewDigest', 'sha256:'+'G'*64),
+                               ('preparedAt', (self.now+timedelta(seconds=1)).isoformat()),
+                               ('expiresAt', self.now.isoformat())]:
+                with self.subTest(builder=build.__name__, key=key, value=value), self.assertRaises(TrialValidationError):
+                    invoke(self.review | {key: value})
     def test_feedback_binds_exact_note_and_revision_without_claiming_delivery(self):
         payload = dict(commandId='33333333-3333-4333-8333-333333333333',
             reviewId=self.review['reviewId'], previewDigest=self.review['previewDigest'],
             note='လက်ဖက်ရည်\nPlease correct the price.')
         def feedback(data=payload, **overrides):
-            return build_catalog_change_request(self.review, self.state, data, **(dict(
+            return build_catalog_change_request(self.review, data, **(dict(
                 principal=self.actor, readiness=self.ready, source_version=1, now=self.now) | overrides))
         result = feedback()
         self.assertEqual(result['note'], payload['note'])
