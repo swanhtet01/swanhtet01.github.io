@@ -14,11 +14,12 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
   jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 const id = '11111111-1111-4111-8111-111111111111'
 const review = { reviewId: id, contentRevision: 1, previewDigest: 'sha256:' + 'a'.repeat(64), preview: { name: 'Synthetic catalog' }, expiresAt: '2099-01-01T00:00:00Z' }
-function harness({ identity = { actor: 'customer' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false } = {}) {
+function harness({ identity = { actor: 'customer' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false, uncertainWrite = false, writeWait = null } = {}) {
   const states = [], effects = [], listeners = new Map(), timers = new Map()
-  let index = 0, reads = 0, calls = 0, timerId = 0
+  let index = 0, reads = 0, calls = 0, timerId = 0, savedItem = null
+  const writes = []
   const exports = {}
-  vm.runInNewContext(compiled + '; exports.Content = CatalogReviewContent;', { exports,
+  vm.runInNewContext(compiled + '; exports.Content = CatalogReviewContent;', { exports, crypto: globalThis.crypto,
     window: { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name),
       setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id }, clearTimeout: id => timers.delete(id) },
     require: name => {
@@ -38,8 +39,16 @@ function harness({ identity = { actor: 'customer' }, changed = false, denied = f
           if (decisionWait) await decisionWait
           return { reviewId: invalidDecision ? 'other' : id, contentRevision: 1, previewDigest: review.previewDigest,
             sourceVersion: 1, nextAfter: null, publicationAuthorized: false, deploymentAuthorized: false,
-            decisions: decisionKind ? [{ commandId: id, kind: decisionKind, note: decisionKind === 'feedback' ? 'Change price' : null,
+            decisions: savedItem ? [savedItem] : decisionKind ? [{ commandId: id, kind: decisionKind, note: decisionKind === 'feedback' ? 'Change price' : null,
               createdAt: '2026-01-01T00:00:00Z' }] : [] }
+        },
+        sendManagedEcommerceDecision: async payload => {
+          writes.push(structuredClone(payload))
+          if (writeWait) await writeWait
+          savedItem = { commandId: payload.commandId, kind: payload.decision ? 'acceptance' : 'feedback',
+            note: payload.note ?? null, createdAt: '2026-01-01T00:00:00Z' }
+          if (uncertainWrite && writes.length === 1) throw Error('response lost')
+          return { persisted: true }
         },
         loadManagedEcommerceReview: async (reviewId, actor) => {
           calls++; assert.equal(reviewId, id); assert.equal(actor, identity)
@@ -51,14 +60,25 @@ function harness({ identity = { actor: 'customer' }, changed = false, denied = f
     },
   })
   const render = () => { index = 0; effects.length = 0; return renderToStaticMarkup(React.createElement(exports.Content, { reviewId: id })) }
-  return { states, effects, listeners, timers, render, calls: () => calls }
+  const tree = () => { index = 0; effects.length = 0; return exports.Content({ reviewId: id }) }
+  const find = (node, predicate) => {
+    if (!node || typeof node !== 'object') return null
+    if (predicate(node)) return node
+    for (const child of [node.props?.children].flat(Infinity)) { const found = find(child, predicate); if (found) return found }
+    return null
+  }
+  return { states, effects, listeners, timers, render, writes, calls: () => calls,
+    control: label => find(tree(), node => node.type === 'button' && node.props.children === label),
+    field: () => find(tree(), node => node.type === 'textarea'),
+    form: () => find(tree(), node => node.type === 'form') }
+
 }
 const flush = () => new Promise(resolve => setImmediate(resolve))
 test('assigned preview appears only after identity recheck, then clears synchronously on focus', async () => {
   const h = harness(); assert.match(h.render(), /Opening/)
   const cleanup = h.effects[0](); await flush()
   assert.match(h.render(), /Synthetic catalog/)
-  assert.doesNotMatch(h.render(), /<button|<a /)
+  assert.match(h.render(), /Accept catalog|Request changes/)
   h.listeners.get('focus')(); assert.equal(h.states[0], null)
   cleanup(); assert.equal(h.listeners.size, 0)
 })
@@ -126,4 +146,25 @@ test('invalid or late decision pages cannot expose a review or saved status', as
   const h = harness({ decisionWait, decisionKind: 'acceptance' }); h.render(); const cleanup = h.effects[0](); await flush()
   h.listeners.get('focus')(); release(); await flush()
   assert.doesNotMatch(h.render(), /Synthetic catalog|Catalog accepted/); cleanup()
+})
+
+
+test('acceptance blocks duplicate clicks and waits for verified saved readback', async () => {
+  let release; const writeWait = new Promise(resolve => { release = resolve })
+  const h = harness({ writeWait }); h.render(); const cleanup = h.effects[0](); await flush()
+  const click = h.control('Accept catalog').props.onClick
+  click(); click(); await flush(); assert.equal(h.writes.length, 1)
+  assert.match(h.render(), /Saving/); assert.doesNotMatch(h.render(), /Catalog accepted/)
+  release(); await flush(); assert.match(h.render(), /Catalog accepted/); cleanup()
+})
+
+test('uncertain feedback retry preserves command ID and note', async () => {
+  const h = harness({ uncertainWrite: true }); h.render(); const cleanup = h.effects[0](); await flush()
+  h.control('Request changes').props.onClick()
+  h.field().props.onChange({ target: { value: 'Change price' } })
+  h.form().props.onSubmit({ preventDefault() {} }); await flush()
+  assert.match(h.render(), /Retry response/); assert.doesNotMatch(h.render(), /Accept catalog/)
+  h.control('Retry response').props.onClick(); await flush()
+  assert.equal(h.writes.length, 2); assert.deepEqual(h.writes[0], h.writes[1])
+  assert.equal(h.writes[0].note, 'Change price'); assert.match(h.render(), /Changes requested/); cleanup()
 })

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { currentManagedIdentity, loadManagedEcommerceReview, loadManagedEcommerceDecisions, sameManagedIdentity } from '../../core/managed-trial'
+import { currentManagedIdentity, loadManagedEcommerceReview, loadManagedEcommerceDecisions, sendManagedEcommerceDecision, sameManagedIdentity, type ManagedIdentity, type EcommerceReviewDecision } from '../../core/managed-trial'
 import { customerEcommerceReviewLoginPath } from '../../core/account-routes'
 import { createReviewAccessBoundary } from '../website/customer-review-access'
 import { verifyPreparedCatalogReview, verifyCatalogDecisionPage, type PreparedCatalogReview, type CatalogDecisionPage } from './prepared-catalog-review'
@@ -19,6 +19,43 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   const [access] = useState(() => createReviewAccessBoundary(currentManagedIdentity, sameManagedIdentity))
 
   const [decisions, setDecisions] = useState<CatalogDecisionPage | null>(null)
+  const [note, setNote] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState('')
+  const [command] = useState(() => ({ busy: false, identity: null as ManagedIdentity | null,
+    pending: null as { payload: EcommerceReviewDecision; identity: ManagedIdentity } | null }))
+
+  async function submit(kind: 'acceptance' | 'feedback') {
+    if (command.busy || !review || !decisions || decisions.decisions.length || !command.identity) return
+    const epoch = access.capture()
+    const identity = command.identity
+    if (!command.pending) {
+      if (kind === 'feedback' && (!note.trim() || [...note.trim()].length > 2000)) return
+      command.pending = { identity, payload: { reviewId, commandId: crypto.randomUUID(), previewDigest: review.previewDigest,
+        ...(kind === 'acceptance' ? { decision: 'accept_preview_for_release_review' as const } : { note: note.trim() }) } }
+    }
+    const pending = command.pending
+    command.busy = true; setSaving(true); setSaveMessage('')
+    try {
+      if (!sameManagedIdentity(identity, pending.identity)
+        || !await access.commit(epoch, identity, review.expiresAt, () => {})) throw Error('access changed')
+      await sendManagedEcommerceDecision(pending.payload, pending.identity)
+      const saved = verifyCatalogDecisionPage(await loadManagedEcommerceDecisions(reviewId, identity), review)
+      const retained = saved.decisions.find(item => item.commandId === pending.payload.commandId)
+      if (!retained || (pending.payload.decision ? retained.kind !== 'acceptance'
+        : retained.kind !== 'feedback' || retained.note !== pending.payload.note)) throw Error('unconfirmed')
+      await access.commit(epoch, identity, review.expiresAt, () => {
+        setDecisions(saved); command.pending = null; setNote(''); setEditing(false)
+      })
+    } catch {
+      if (access.isCurrent(epoch)) setSaveMessage('Could not confirm your response. Retry to check and send the same response.')
+    } finally {
+      command.busy = false
+      setSaving(false)
+    }
+  }
+
 
   useEffect(() => {
     let active = true
@@ -33,7 +70,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         const saved = verifyCatalogDecisionPage(await loadManagedEcommerceDecisions(reviewId, identity), verified)
         if (!active || !access.isCurrent(epoch)) return
         const accepted = await access.commit(epoch, identity, verified.expiresAt, () => {
-          setDecisions(saved); setReview(verified)
+          command.identity = identity; setDecisions(saved); setReview(verified)
         })
         if (!accepted && access.isCurrent(epoch)) setMessage('Your access changed. Sign in and reopen this review.')
       } catch {
@@ -49,7 +86,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     window.addEventListener('storage', refresh)
     window.addEventListener('focus', refresh)
     return () => { active = false; access.invalidate(); window.removeEventListener('storage', refresh); window.removeEventListener('focus', refresh) }
-  }, [reviewId, attempt, access])
+  }, [reviewId, attempt, access, command])
 
   useEffect(() => {
     if (!review) return
@@ -66,6 +103,20 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         <h2>{decisions.decisions[0].kind === 'acceptance' ? 'Catalog accepted' : 'Changes requested'}</h2>
         <p>{decisions.decisions[0].kind === 'acceptance'
           ? 'SuperMega will review it before publishing.' : 'SuperMega will prepare an updated review.'}</p>
+      </section> : decisions ? <section className="prepared-catalog" aria-busy={saving}>
+        {command.pending ? <>
+          <p role="status">{saveMessage || 'Your response is being saved.'}</p>
+          <button type="button" disabled={saving} onClick={() => void submit('acceptance')}>{saving ? 'Saving…' : 'Retry response'}</button>
+        </> : editing ? <form onSubmit={event => { event.preventDefault(); void submit('feedback') }}>
+          <label htmlFor="catalog-changes">What needs changing?</label>
+          <textarea id="catalog-changes" value={note} maxLength={2000} required onChange={event => setNote(event.target.value)} />
+          <button type="submit" disabled={saving || !note.trim()}>Send changes</button>
+          <button type="button" onClick={() => setEditing(false)}>Cancel</button>
+        </form> : <>
+          <button type="button" onClick={() => void submit('acceptance')}>Accept catalog</button>
+          <button type="button" onClick={() => setEditing(true)}>Request changes</button>
+          <p>Acceptance sends this catalog to SuperMega for a publishing review.</p>
+        </>}
       </section> : null}
     </> : <section className="prepared-catalog">
       <h1>Your catalog</h1><p role="status">{message}</p>
