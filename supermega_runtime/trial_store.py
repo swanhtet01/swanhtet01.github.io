@@ -4385,31 +4385,39 @@ class PostgresTrialStore:
         products = activation_product_entitlements(payload)
         if products:
             return products
-        # Review-only members cannot read company events. A separately installed
-        # private boolean proof may supply ONLY Website, never event contents or
-        # a capability. Verify its complete privileged-code identity before use.
-        cursor.execute("""select p.prosrc as source, p.prosecdef as definer,
-            p.provolatile as volatility, p.proconfig as config, l.lanname as language,
-            p.prorettype='boolean'::regtype as boolean_result,
-            (r.rolsuper or r.rolbypassrls) and r.rolname <> current_user as trusted_owner,
-            not has_function_privilege('anon',p.oid,'EXECUTE')
-              and not has_function_privilege('authenticated',p.oid,'EXECUTE')
-              and not has_function_privilege('service_role',p.oid,'EXECUTE') as private_execute
-            from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-            join pg_roles r on r.oid=p.proowner join pg_language l on l.oid=p.prolang
-            where n.nspname='app_private' and p.proname='website_review_entitled' and p.pronargs=0""")
-        proof = cursor.fetchone()
-        if not isinstance(proof, Mapping) or not proof.get("source"):
-            return ()
-        if (proof.get("definer") is not True or proof.get("volatility") != "s"
-                or proof.get("language") != "sql" or proof.get("boolean_result") is not True
-                or proof.get("trusted_owner") is not True or proof.get("private_execute") is not True
-                or tuple(proof.get("config") or ()) != ("search_path=pg_catalog, app_private",)
-                or sha256(_normalize_sql_source(proof["source"]).encode()).hexdigest()
-                != "c6c8000c5abf562fc347e432562a14e2142f154eadd02802883b7fece05422b3"):
-            raise TrialNotReadyError(("website_review_entitlement_proof",))
-        cursor.execute("select app_private.website_review_entitled() as entitled")
-        return ("website",) if (cursor.fetchone() or {}).get("entitled") is True else ()
+        # Review-only members cannot read company events. Each optional private
+        # proof supplies only its product, never event contents or capabilities.
+        # Identifiers below are fixed code constants, never caller input.
+        proofs = (
+            ("website", "website_review_entitled", "c6c8000c5abf562fc347e432562a14e2142f154eadd02802883b7fece05422b3"),
+            ("ecommerce", "ecommerce_review_entitled", "517968351e00b192674e9de6762534afd15d65e74fa06778720514818e86ecca"),
+        )
+        entitled_products = []
+        for product, function, expected_digest in proofs:
+            cursor.execute("""select p.prosrc as source, p.prosecdef as definer,
+                p.provolatile as volatility, p.proconfig as config, l.lanname as language,
+                p.prorettype='boolean'::regtype as boolean_result,
+                (r.rolsuper or r.rolbypassrls) and r.rolname <> current_user as trusted_owner,
+                not has_function_privilege('anon',p.oid,'EXECUTE')
+                  and not has_function_privilege('authenticated',p.oid,'EXECUTE')
+                  and not has_function_privilege('service_role',p.oid,'EXECUTE') as private_execute
+                from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+                join pg_roles r on r.oid=p.proowner join pg_language l on l.oid=p.prolang
+                where n.nspname='app_private' and p.proname=%s and p.pronargs=0""", (function,))
+            proof = cursor.fetchone()
+            if not isinstance(proof, Mapping) or not proof.get("source"):
+                continue
+            if (proof.get("definer") is not True or proof.get("volatility") != "s"
+                    or proof.get("language") != "sql" or proof.get("boolean_result") is not True
+                    or proof.get("trusted_owner") is not True or proof.get("private_execute") is not True
+                    or tuple(proof.get("config") or ()) != ("search_path=pg_catalog, app_private",)
+                    or sha256(_normalize_sql_source(proof["source"]).encode()).hexdigest()
+                    != expected_digest):
+                raise TrialNotReadyError((f"{product}_review_entitlement_proof",))
+            cursor.execute(f"select app_private.{function}() as entitled")
+            if (cursor.fetchone() or {}).get("entitled") is True:
+                entitled_products.append(product)
+        return tuple(entitled_products)
 
     @staticmethod
     def _premium_unlocked(cursor: Any, workspace_id: str) -> bool:

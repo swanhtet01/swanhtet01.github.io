@@ -195,7 +195,7 @@ class ActivationProductEntitlementTests(unittest.TestCase):
             def execute(self, *_args):
                 pass
             def fetchone(self):
-                return next(self.rows)
+                return next(self.rows, None)
 
         self.assertEqual(PostgresTrialStore._product_entitlements(Cursor(valid), "workspace-a"), ("website",))
         self.assertEqual(PostgresTrialStore._product_entitlements(Cursor(valid, False), "workspace-a"), ())
@@ -205,6 +205,36 @@ class ActivationProductEntitlementTests(unittest.TestCase):
         for change in changes:
             with self.subTest(change=change), self.assertRaises(TrialNotReadyError):
                 PostgresTrialStore._product_entitlements(Cursor(valid | change), "workspace-a")
+
+
+    def test_catalog_proof_is_optional_exact_and_combines_in_product_order(self):
+        root = Path(__file__).resolve().parents[1]
+        def proof(path):
+            return dict(source=(root / path).read_text(encoding='utf-8').split('$$')[1],
+                        definer=True, volatility='s', language='sql', boolean_result=True,
+                        trusted_owner=True, private_execute=True, config=['search_path=pg_catalog, app_private'])
+        website = proof('supabase/migrations/20260915191528_website_review_entitlement_proof.sql')
+        ecommerce = proof('tools/ecommerce_review_entitlement_candidate.sql')
+        class Cursor:
+            def __init__(self, rows):
+                self.rows = iter(rows)
+                self.calls = []
+            def execute(self, sql, params=()):
+                self.calls.append((sql, params))
+            def fetchone(self):
+                return next(self.rows, None)
+        for rows, expected in (([None,None,None], ()),
+                               ([None,None,ecommerce,{'entitled':True}], ('ecommerce',)),
+                               ([None,None,ecommerce,{'entitled':False}], ()),
+                               ([None,website,{'entitled':True},ecommerce,{'entitled':True}], ('website','ecommerce'))):
+            self.assertEqual(PostgresTrialStore._product_entitlements(Cursor(rows), 'company'), expected)
+        for change in ({'source':'select true'}, {'trusted_owner':False}, {'private_execute':False},
+                       {'config':['search_path=public']}, {'definer':False}, {'boolean_result':False},
+                       {'language':'plpgsql'}, {'volatility':'v'}):
+            cursor = Cursor([None,None,ecommerce|change])
+            with self.subTest(change=change), self.assertRaises(TrialNotReadyError):
+                PostgresTrialStore._product_entitlements(cursor, 'company')
+            self.assertFalse(any('select app_private.ecommerce_review_entitled()' in sql for sql,_ in cursor.calls))
 
 
 if __name__ == "__main__":

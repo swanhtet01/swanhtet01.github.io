@@ -779,6 +779,9 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                     connection.execute('set local role supermega_trial_backend')
                     self.context(connection, RECIPIENT)
                     self.assertEqual(connection.execute('select app_private.ecommerce_review_entitled()').fetchone()[0], expected)
+                    from psycopg.rows import dict_row
+                    with connection.cursor(row_factory=dict_row) as cursor:
+                        self.assertEqual(PostgresTrialStore._product_entitlements(cursor, WORKSPACE), ('ecommerce',) if expected else ())
                     self.assertEqual(connection.execute("select payload_json from app_private.workspace_events where surface='company'").fetchall(), [])
                     for role in ('anon','authenticated','service_role'):
                         self.assertFalse(connection.execute("select has_function_privilege(%s,'app_private.ecommerce_review_entitled()','execute')", (role,)).fetchone()[0])
