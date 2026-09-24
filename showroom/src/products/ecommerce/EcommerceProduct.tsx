@@ -272,6 +272,10 @@ function initialEcommerceState() {
   }
 }
 
+function StatusRows({ rows }: { rows: readonly (readonly string[])[] }) {
+  return <>{rows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</>
+}
+
 const CatalogReviewPreparation = lazy(() => import('./CatalogReviewPreparation').then(module => ({ default: module.CatalogReviewPreparation })))
 
 export function EcommerceProduct() {
@@ -1875,7 +1879,7 @@ export function EcommerceProduct() {
         </div>
         {ecommerceTodayGuided ? (
           <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
-            {ecommerceTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            <StatusRows rows={ecommerceTodayMetrics} />
           </div>
         ) : null}
         <div className="ecommerce-today-source" role="status">
@@ -1886,6 +1890,7 @@ export function EcommerceProduct() {
 
       <details className="ecommerce-business-controls">
         <summary><span><strong>Extra order tools</strong></span></summary>
+        <p>Prepare and review here. Confirm orders in Shop; send customer messages separately.</p>
         <div className="ecommerce-business-controls-content">
       <section aria-label="Order workspace" className="ecommerce-ai-desk">
         <div>
@@ -1902,10 +1907,10 @@ export function EcommerceProduct() {
                   : 'Use the sample cart to review the customer path. Nothing reaches Shop until confirmation.'}</p>
         </div>
         <div className="ecommerce-ai-desk-queue">
-          {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={aiDeskRows} />
         </div>
         <div className="ecommerce-ai-agent-queue" aria-label="Ecommerce next step" role="group">
-          {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={aiAgentQueueRows} />
         </div>
         <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Open next step</button>
       </section>
@@ -1914,7 +1919,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Import customer orders</span>
           <h2>{orderImportStage}</h2>
-          <p>Check CSV, Viber, LINE, WeChat, email, and form orders against the saved Shop catalog so Shop gets one clean order list. Nothing is sent, charged, delivered, refunded, or saved to Shop until a manager reviews it.</p>
+          <p>Check imported orders against your catalog. A manager reviews them before saving to Shop.</p>
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
@@ -1924,10 +1929,10 @@ export function EcommerceProduct() {
             <summary><span>Review an order batch</span><small>Upload CSV or paste channel orders only when needed.</small></summary>
             <div aria-label="Order batch review workspace" className="ecommerce-order-import-workspace-body">
               <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">
-                {orderIntakeGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+                <StatusRows rows={orderIntakeGuideRows} />
               </div>
               <div aria-label="Order repair checklist" className="ecommerce-order-repair-checklist">
-                {orderRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+                <StatusRows rows={orderRepairRows} />
               </div>
               <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
               <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
@@ -1943,7 +1948,7 @@ export function EcommerceProduct() {
           </details>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {orderImportRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={orderImportRows} />
         </div>
       </section>
 
@@ -1954,14 +1959,14 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Request inbox</span>
           <h2>{requestInboxStage}</h2>
-          <p>Filter customer requests by stock risk, quote expiry, QR payment review, and delivery mode so the manager opens the right Shop order first. Nothing is sent, charged, delivered, refunded, or saved to Shop from this screen.</p>
+          <p>Find requests needing attention, then open them in Shop.</p>
           <div className="ecommerce-request-filter" role="group" aria-label="Request inbox filter">
             {requestInboxFilterButtons.map(([value, label]) => <button aria-pressed={requestInboxFilter === value} key={value} onClick={() => setRequestInboxFilter(value)} type="button">{label}</button>)}
           </div>
           <button className="text-link" disabled={!requestInboxNextRequest} onClick={openFilteredRequestInShop} type="button">Open filtered request</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {requestInboxRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={requestInboxRows} />
         </div>
         <p className="ecommerce-request-inbox-summary" role="status">{requestInboxNextSummary}</p>
       </section>
@@ -1970,11 +1975,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Order lifecycle</span>
           <h2>{orderOpsPriority}</h2>
-          <p>One Shop-owned record now follows each Ecommerce request through review, fulfilment, payment, cancellation, refund, and return. This view reads the lifecycle; Shop confirms every change.</p>
+          <p>Track each order through payment, delivery and returns. Confirm changes in Shop.</p>
           <button className="text-link" disabled={!managedOrderTimeline.some((entry) => entry.order)} onClick={() => navigate('/shop/?tab=orders')} type="button">Open Shop order queue</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {orderOpsRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={orderOpsRows} />
         </div>
       </section>
 
@@ -1982,10 +1987,10 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Ordering readiness</span>
           <h2>{orderingReadinessStage}</h2>
-          <p>Check products, prices, quote readiness, Shop review queue, and safety mode before a customer request moves forward. The manager reviews important changes before they are saved.</p>
+          <p>Check products, prices and requests before accepting orders.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {orderingReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={orderingReadinessRows} />
         </div>
       </section>
 
@@ -1993,11 +1998,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Store launch checklist</span>
           <h2>{managedStoreActivationStage}</h2>
-          <p>Package products, prices, checkout controls, manual payment review, delivery templates, and Shop review queue for go-live review. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or go-live action runs from this file.</p>
+          <p>Download a checklist for launch review. Downloading does not publish your store.</p>
           <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download go-live file</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
-          {managedStoreActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={managedStoreActivationRows} />
         </div>
       </section>
 
@@ -2005,10 +2010,10 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Fulfilment review</span>
           <h2>{fulfillmentHandoffStage}</h2>
-          <p>Review the exact customer order across source evidence, stock availability, payment review, pickup or delivery, reply draft, and Shop queue ownership. Nothing is sent, charged, booked, refunded, moved, or saved until a manager reviews it.</p>
+          <p>Check stock, payment and delivery for the selected order.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-fulfillment-handoff-rows">
-          {fulfillmentHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={fulfillmentHandoffRows} />
         </div>
       </section>
 
@@ -2016,10 +2021,10 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Order lifecycle</span>
           <h2>One path from cart to return</h2>
-          <p>Follow capture, pricing, available-to-promise, fulfilment, and returns from the same Shop-controlled source. No charge, message, refund, or stock write starts here.</p>
+          <p>Review the order from cart to return. Confirm changes in Shop.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {lifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={lifecycleRows} />
         </div>
       </section>
 
@@ -2027,10 +2032,10 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Payment and delivery controls</span>
           <h2>{paymentDeliveryStage}</h2>
-          <p>Review pickup, local delivery, manual QR payment, quote expiry, and Shop confirmation from the same checkout request. No card charge, wallet debit, driver booking, customer message, or settlement write runs here.</p>
+          <p>Check payment, pickup or delivery before Shop confirmation.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {paymentDeliveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={paymentDeliveryRows} />
         </div>
       </section>
 
@@ -2038,11 +2043,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Delivery fee review</span>
           <h2>{deliveryFeeStage}</h2>
-          <p>Prepare a local delivery zone, fee, rider assignment, and payment review from the customer request. No rider booking, fee charge, customer message, payment capture, stock move, refund, or Shop write runs here.</p>
+          <p>Draft the delivery area, fee and rider details for review.</p>
           <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryFeeReview} type="button">Prepare delivery review</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {deliveryFeeRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={deliveryFeeRows} />
         </div>
         {deliveryReviewDraft ? <p className="ecommerce-delivery-review-draft" role="status">{deliveryReviewDraft}</p> : null}
       </section>
@@ -2051,11 +2056,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Delivery-area templates</span>
           <h2>{deliveryAreaTemplateStage}</h2>
-          <p>Build reusable area, fee, rider, payment, and cut-off templates from repeated delivery requests. No saved template, customer message, rider booking, fee charge, settlement write, stock move, or Shop write runs here.</p>
+          <p>Draft reusable delivery areas and fees. Review before saving.</p>
           <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryAreaTemplate} type="button">Prepare area template</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {deliveryAreaTemplateRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={deliveryAreaTemplateRows} />
         </div>
         {deliveryAreaTemplateDraft ? <p className="ecommerce-delivery-template-draft" role="status">{deliveryAreaTemplateDraft}</p> : null}
       </section>
@@ -2064,11 +2069,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Quote recovery</span>
           <h2>{quoteRecoveryStage}</h2>
-          <p>Prepare stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source. No customer message, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <p>Review expired quotes and older requests before following up.</p>
           <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareQuoteRecovery} type="button">Prepare quote recovery</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {quoteRecoveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={quoteRecoveryRows} />
         </div>
       </section>
 
@@ -2076,11 +2081,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Customer follow-up</span>
           <h2>{customerFollowUpStage}</h2>
-          <p>Prepare the next reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status. No SMS, email, Viber, WhatsApp, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <p>Draft an update from the current order status. Nothing is sent.</p>
           <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareCustomerFollowUpDraft} type="button">Prepare follow-up draft</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {customerFollowUpRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={customerFollowUpRows} />
         </div>
         {customerFollowUpDraft ? <p className="ecommerce-follow-up-draft" role="status">{customerFollowUpDraft}</p> : null}
       </section>
@@ -2089,14 +2094,14 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Channel reply templates</span>
           <h2>{channelReplyStage}</h2>
-          <p>Prepare reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence. No message send, clipboard copy, discount, payment, delivery booking, refund, stock move, or Shop write runs here.</p>
+          <p>Draft a reply for the selected channel. Review it before sending.</p>
           <div className="ecommerce-request-filter" role="group" aria-label="Reply channel template">
             {replyChannelButtons.map(([value, label]) => <button aria-pressed={replyChannelTemplate === value} key={value} onClick={() => setReplyChannelTemplate(value)} type="button">{label}</button>)}
           </div>
           <button className="text-link" disabled={catalogHydrating || (!customerFollowUpRequest && !buyingReady)} onClick={prepareChannelReplyTemplate} type="button">Prepare reply template</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {channelReplyRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={channelReplyRows} />
         </div>
         {channelReplyDraft ? <p className="ecommerce-channel-reply-draft" role="status">{channelReplyDraft}</p> : null}
       </section>
