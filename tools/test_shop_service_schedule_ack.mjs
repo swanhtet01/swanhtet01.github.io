@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 import vm from 'node:vm'
 const require = createRequire(resolve('showroom/package.json'))
 const { transformSync } = require('esbuild')
-const source = readFileSync('showroom/src/core/ShopServiceSchedule.tsx', 'utf8')
+const source = readFileSync('showroom/src/core/ShopServiceSchedule.tsx', 'utf8').replace(/\r\n/g, '\n')
 const start = source.indexOf('  async function isCurrentScheduleIdentity(')
 const end = source.indexOf('  function proof(', start)
 assert.ok(start > 0 && end > start)
@@ -167,3 +167,38 @@ for (const handler of ['createService', 'createResource']) {
   }
 }
 console.log('Service/resource forms retain input until acknowledged save; selections update only after success')
+
+const loadStart = source.indexOf('  useEffect(() => {\n    let active = true')
+const loadEnd = source.indexOf('\n  // Used only where', loadStart)
+assert.ok(loadStart > 0 && loadEnd > loadStart)
+const loadCode = transformSync(source.slice(loadStart, loadEnd), { loader: 'ts' }).code
+for (const mode of ['cache-rejected', 'account-changed', 'unmounted']) {
+  let finish, cleanup
+  const pending = new Promise(resolve => { finish = resolve })
+  const updates = []
+  const context = {
+    useEffect: callback => { cleanup = callback() },
+    currentManagedIdentity: async () => ({ workspaceId: 'qa', userId: 'qa-user' }),
+    managedIdentityRef: { current: null }, managedVersionRef: { current: null },
+    loadManagedServiceSchedule: () => pending,
+    isCurrentScheduleIdentity: async () => mode !== 'account-changed',
+    setManagedConnected: () => {}, setManagedPrivacyOwner: value => updates.push(['owner', value]),
+    setSchedule: value => updates.push(['schedule', value]), setRetentionDraft: () => {},
+    persistLocal: () => { throw new Error('Device cache rejected') },
+    setNotice: value => updates.push(['notice', value]), setManagedLoading: () => {},
+  }
+  vm.createContext(context); vm.runInContext(loadCode, context)
+  await new Promise(resolve => setImmediate(resolve))
+  if (mode === 'unmounted') cleanup()
+  finish({ version: 8, privacyOwner: true, schedule: { revision: 4, privacyPolicy: {} } })
+  await new Promise(resolve => setImmediate(resolve))
+  if (mode === 'cache-rejected') {
+    assert.equal(context.managedVersionRef.current, 8)
+    assert.equal(updates.filter(([kind]) => kind === 'schedule').length, 1)
+    assert.deepEqual(updates.filter(([kind]) => kind === 'notice'), [['notice', 'Company schedule loaded.']])
+  } else {
+    assert.equal(context.managedVersionRef.current, null)
+    assert.equal(updates.length, 0, 'late load must not install schedule or privacy authority')
+  }
+}
+console.log('Managed initial load: cache failure preserves server success; switched/unmounted responses ignored')

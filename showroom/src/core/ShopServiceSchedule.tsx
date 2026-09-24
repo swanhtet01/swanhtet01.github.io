@@ -146,7 +146,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       if (managed.schedule) {
         setSchedule(managed.schedule)
         setRetentionDraft(managed.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
-        window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(managed.schedule))
+        try { persistLocal(managed.schedule) } catch { /* Loading the managed copy does not require a device cache. */ }
         setNotice('Company schedule loaded.')
       } else {
         setNotice('Company schedule ready.')
