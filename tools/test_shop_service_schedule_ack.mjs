@@ -114,3 +114,31 @@ for (const handler of ['commit', 'commitPrivacy']) {
   }
 }
 console.log('Commit/privacy late response and conflict readback: 8 identity scenarios passed')
+
+const setupStart = source.indexOf('  async function createService(')
+const setupEnd = source.indexOf('  if (!schedule || !projection)', setupStart)
+assert.ok(setupStart > 0 && setupEnd > setupStart)
+const setupCode = transformSync(source.slice(setupStart, setupEnd), { loader: 'ts' }).code
+for (const handler of ['createService', 'createResource']) {
+  for (const saved of [false, true]) {
+    const updates = []
+    let finish
+    const pending = new Promise(resolve => { finish = resolve })
+    const context = { schedule: { industryPackId: 'spa' },
+      serviceDraft: { name: 'QA service', durationMinutes: '60', priceMmk: '1000' },
+      resourceDraft: { name: 'QA room', kind: 'room' }, bookingDraft: {}, proof: () => ({}),
+      registerShopService: () => ({ services: [{ id: 'qa-service' }] }),
+      registerShopServiceResource: () => ({ resources: [{ id: 'qa-room' }] }),
+      commit: () => pending, setNotice: () => {},
+      setBookingDraft: fn => updates.push(['booking', fn({})]),
+      setServiceDraft: value => updates.push(['service', value]),
+      setResourceDraft: value => updates.push(['resource', value]) }
+    vm.createContext(context); vm.runInContext(setupCode, context)
+    const outcome = context[handler]({ preventDefault() {} })
+    assert.equal(updates.length, 0, 'pending save retains form and selection')
+    finish(saved); await outcome
+    assert.equal(updates.length, saved ? 2 : 0, 'failed save retains form and selection')
+    if (saved) assert.equal(updates[0][1][handler === 'createService' ? 'serviceId' : 'roomId'], handler === 'createService' ? 'qa-service' : 'qa-room')
+  }
+}
+console.log('Service/resource forms retain input until acknowledged save; selections update only after success')

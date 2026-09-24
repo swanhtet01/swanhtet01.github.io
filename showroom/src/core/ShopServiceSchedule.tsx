@@ -439,12 +439,12 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     catch (error) { setNotice(error instanceof Error ? error.message : 'Allocation failed.') }
   }
 
-  function createService(event: FormEvent) {
+  async function createService(event: FormEvent) {
     event.preventDefault()
     if (!schedule) return
     try {
       const next = registerShopService(schedule, { name: serviceDraft.name, durationMinutes: Number(serviceDraft.durationMinutes), priceMmk: Number(serviceDraft.priceMmk) }, proof('Added from Shop schedule setup.'))
-      commit(next, 'Service added to schedule setup.')
+      if (!await commit(next, 'Service added to schedule setup.')) return
       const serviceId = next.services.at(-1)?.id ?? bookingDraft.serviceId
       setBookingDraft((current) => ({ ...current, serviceId }))
       setServiceDraft({ name: '', durationMinutes: '60', priceMmk: '' })
@@ -453,12 +453,12 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     }
   }
 
-  function createResource(event: FormEvent) {
+  async function createResource(event: FormEvent) {
     event.preventDefault()
     if (!schedule) return
     try {
       const next = registerShopServiceResource(schedule, resourceDraft, proof('Added from Shop schedule setup.'))
-      commit(next, 'Staff or resource added to schedule setup.')
+      if (!await commit(next, 'Staff or resource added to schedule setup.')) return
       const resourceId = next.resources.at(-1)?.id ?? bookingDraft.resourceId
       setBookingDraft((current) => schedule.industryPackId === 'spa' && resourceDraft.kind === 'room'
         ? { ...current, roomId: resourceId }
