@@ -27,7 +27,8 @@ export function WorkspaceStatusPanel() {
   const attention = report.entries.filter((entry) => entry.severity !== 'ready').slice(0, MAX_SHOWN)
   if (!attention.length) return null
   return (
-    <section aria-label="Items across products needing attention" className="wsp-panel">
+    <details className="wsp-panel compact-disclosure">
+      <summary>Saved sample tasks ({attention.length})</summary>
       <ul className="wsp-list">
         {attention.map((entry) => (
           <li key={entry.id}>
@@ -42,6 +43,6 @@ export function WorkspaceStatusPanel() {
           </li>
         ))}
       </ul>
-    </section>
+    </details>
   )
 }
