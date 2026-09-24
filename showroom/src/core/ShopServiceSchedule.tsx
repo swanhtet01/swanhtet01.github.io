@@ -141,7 +141,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       setManagedConnected(true)
       setScheduleState(null)
       const managed = await loadManagedServiceSchedule(identity)
-      if (!active || !await isCurrentScheduleIdentity(identity)) return
+      if (!active) return
+      if (!await isCurrentScheduleIdentity(identity)) {
+        if (active) setNotice('Account changed. Reload to open the current company schedule.')
+        return
+      }
       managedVersionRef.current = managed.version
       setManagedPrivacyOwner(Boolean(managed.privacyOwner))
       if (managed.schedule) {
@@ -473,7 +477,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   }
 
   if (managedLoading) return <section className="core-panel shop-service-schedule" id="shop-service-schedule"><p role="status">Loading schedule…</p></section>
-  if (!schedule || !projection) return <section className="core-panel shop-service-schedule" id="shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Schedule</span><h2>Schedule unavailable</h2></div></div><p className="form-notice" role="alert">{notice}</p></section>
+  if (!schedule || !projection) return <section className="core-panel shop-service-schedule" id="shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Schedule</span><h2>Schedule unavailable</h2></div></div><p className="form-notice" role="alert">{notice}</p>{managedConnected && managedVersionRef.current !== null ? <Link className="core-button compact" to="/settings/?product=shop">Open company setup</Link> : null}</section>
 
   const legacyBooking = schedule.industryPackId === 'spa' ? schedule.bookings.find(b => b.resourceId) : undefined
   const serviceById = new Map(schedule.services.map((service) => [service.id, service]))

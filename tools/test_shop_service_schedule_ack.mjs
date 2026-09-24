@@ -208,7 +208,9 @@ for (const mode of ['cache-rejected', 'load-rejected', 'empty-company', 'account
     assert.ok(updates.some(([kind, text]) => kind === 'notice' && text.includes('onboarding')))
   } else {
     assert.equal(context.managedVersionRef.current, null)
-    assert.equal(updates.length, 0, 'late load must not install schedule or privacy authority')
+    assert.equal(updates.filter(([kind]) => kind !== 'notice').length, 0, 'late load must not install schedule or privacy authority')
+    if (mode === 'account-changed') assert.ok(updates.some(([kind, text]) => kind === 'notice' && text.includes('Account changed')))
+    else assert.equal(updates.length, 0)
   }
 }
 console.log('Managed initial load: cache failure preserves server success; switched/unmounted responses ignored')
