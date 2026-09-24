@@ -740,6 +740,7 @@ test('Ecommerce operator transport binds identity, no-store and exact endpoint p
     for (const [invoke, path, body] of [
       [() => mod.loadManagedEcommercePreparation(identity), '/api/trial/v1/ecommerce-review-preparation'],
       [() => mod.reconcileManagedEcommerceReview(id, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/reconciliation'],
+      [() => mod.resolveExpiredManagedEcommerceReview(id, payload.expiresAt, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/resolve-expired', { expiresAt: payload.expiresAt }],
       [() => mod.loadManagedEcommerceRecipients(identity, id), '/api/trial/v1/ecommerce-review-recipients?after='+id],
       [() => mod.prepareManagedEcommerceReview(payload, identity), '/api/trial/v1/ecommerce-reviews', payload],
       [() => mod.withdrawManagedEcommerceReview(id, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/withdraw', {}],
@@ -767,6 +768,8 @@ test('Ecommerce invalid identifiers fail before provider or network access', asy
       await assert.rejects(mod.loadManagedEcommerceRecipients({}, bad))
       await assert.rejects(mod.withdrawManagedEcommerceReview(bad, {}))
       await assert.rejects(mod.reconcileManagedEcommerceReview(bad, {}))
+      await assert.rejects(mod.resolveExpiredManagedEcommerceReview(bad, '2026-09-25T00:00:00Z', {}))
+      await assert.rejects(mod.resolveExpiredManagedEcommerceReview('11111111-1111-4111-8111-111111111111', bad, {}))
       await assert.rejects(mod.prepareManagedEcommerceReview({reviewId:bad,recipientGrantId:bad}, {}))
     }
     assert.deepEqual(state.calls, [])

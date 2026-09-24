@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { verifyCatalogReconciliation, verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, readCatalogCommand, retainCatalogCommand, clearCatalogCommand } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
+import { verifyCatalogExpiredAbsence, verifyCatalogReconciliation, verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, readCatalogCommand, retainCatalogCommand, clearCatalogCommand } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
 import { storefrontPreviewDigest, STOREFRONT_PREVIEW_SCHEMA } from '../showroom/src/products/ecommerce/storefront-model.ts'
 import { COMMERCE_WORKSPACE_SCHEMA } from '../showroom/src/core/commerce-workspace.ts'
 const id = n => `11111111-1111-4111-8111-${String(n).padStart(12,'0')}`
@@ -86,4 +86,19 @@ test('reconciliation binds retained assignment and distinguishes inactive from u
   {readAt:'2026-09-25T00:00:00Z'},{readAt:command.expiresAt},{publicationAuthorized:true},{deploymentAuthorized:true},{recipientActorId:'private'}])
   assert.throws(()=>verifyCatalogReconciliation({...row,...patch},command))
  for(const missing of [null,{}, {status:'not_found'}])assert.throws(()=>verifyCatalogReconciliation(missing,command))
+})
+
+
+test('expired absence proves only the original request expiry after server time',()=>{
+ const command={reviewId:id(1),recipientGrantId:id(2),expectedVersion:4,contentRevision:2,
+  previewDigest:'sha256:'+'a'.repeat(64),readAt:'2026-09-25T00:00:00Z',expiresAt:'2026-09-26T00:00:00.123456Z'}
+ const row={reviewId:id(1),status:'absent_expired',expiresAt:command.expiresAt,readAt:command.expiresAt,
+  publicationAuthorized:false,deploymentAuthorized:false}
+ assert.equal(verifyCatalogExpiredAbsence(row,command).status,'absent_expired')
+ assert.equal(verifyCatalogExpiredAbsence({...row,expiresAt:'2026-09-26T00:00:00.123456+00:00'},command).reviewId,id(1))
+ for(const patch of [{reviewId:id(2)},{status:'missing'},{expiresAt:'2026-09-26T00:00:00.123455Z'},
+  {readAt:'2026-09-26T00:00:00.123455Z'},{readAt:'bad'},{publicationAuthorized:true},{deploymentAuthorized:true},{extra:1}])
+  assert.throws(()=>verifyCatalogExpiredAbsence({...row,...patch},command))
+ for(const patch of [{reviewId:'bad'},{expiresAt:'bad'},{expectedVersion:0},{recipientGrantId:'bad'},{previewDigest:'bad'}])
+  assert.throws(()=>verifyCatalogExpiredAbsence(row,{...command,...patch}))
 })

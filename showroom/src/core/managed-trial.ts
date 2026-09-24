@@ -4202,3 +4202,12 @@ export async function loadManagedEcommercePreparation(expectedIdentity: ManagedI
   return authorizedRequest<unknown>('/api/trial/v1/ecommerce-review-preparation',
     { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
 }
+
+export async function resolveExpiredManagedEcommerceReview(reviewId: string, expiresAt: string, expectedIdentity: ManagedIdentity) {
+  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt) || !Number.isFinite(Date.parse(expiresAt))) {
+    throw new ManagedTrialError('This saved review request is invalid.', { code: 'ecommerce_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/resolve-expired`,
+    { method: 'POST', body: JSON.stringify({ expiresAt }), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+}

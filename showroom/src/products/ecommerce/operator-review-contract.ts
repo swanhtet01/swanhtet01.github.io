@@ -108,3 +108,14 @@ export function verifyCatalogReconciliation(value: unknown, command: CatalogPrep
     || (status === 'expired' && read < expiry)) return invalid()
   return structuredClone(row) as CatalogReconciliation
 }
+
+
+export function verifyCatalogExpiredAbsence(value: unknown, command: CatalogPreparationCommand) {
+  const retained = readCatalogCommand({ getItem: () => JSON.stringify(command) }, 'request')
+  if (!retained || retained === 'unavailable') return invalid()
+  const row = exact(value, ['reviewId', 'status', 'expiresAt', 'readAt', 'publicationAuthorized', 'deploymentAuthorized'])
+  if (row.reviewId !== retained.reviewId || row.status !== 'absent_expired'
+    || row.publicationAuthorized !== false || row.deploymentAuthorized !== false
+    || instant(row.expiresAt) !== instant(retained.expiresAt) || instant(row.readAt) < instant(retained.expiresAt)) return invalid()
+  return { reviewId: retained.reviewId, status: 'absent_expired' as const }
+}
