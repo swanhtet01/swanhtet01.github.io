@@ -217,3 +217,33 @@ test('UI persists checkout identity before commerce and only offers recorded-ord
   assert.ok(source.includes('await tickets.settled()'))
   assert.ok(source.includes('return tickets.checkpoint(orderId)'))
 })
+
+
+test('actual Counter review callback retries only its secured unchanged checkout', async () => {
+  const source = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  const start = source.indexOf('beforeCommit: async (orderId) => {')
+  const end = source.indexOf('\n      },', start)
+  const callback = source.slice(start + 'beforeCommit: '.length, end) + '\n}'
+  const create = new Function('tickets', 'persistLocalDraft', 'reviewedRevision', "let securedCheckoutId = ''; return (" + callback + ')')
+  let raw = JSON.stringify(saved())
+  const storage = { getItem: key => key === COUNTER_TICKETS_KEY ? raw : null, setItem: (_key, value) => { raw = value } }
+  const locks = { request: async (_name, _options, callback) => callback() }
+  const session = createCounterTicketSession(storage, locks)
+  const reviewedRevision = session.getSnapshot().state.revision
+  const beforeCommit = create(session, true, reviewedRevision)
+  assert.equal(await beforeCommit('ORD-RETRY'), true)
+  const secured = raw
+  assert.equal(await beforeCommit('ORD-RETRY'), true)
+  assert.equal(raw, secured, 'retry does not begin a second checkout')
+  assert.equal(await beforeCommit('ORD-OTHER'), false)
+  const unrelatedReview = create(session, true, reviewedRevision)
+  assert.equal(await unrelatedReview('ORD-RETRY'), false, 'another review cannot adopt the checkout')
+  session.dispatch({ kind: 'resolve_checkout', orderId: 'ORD-RETRY' })
+  await session.settled()
+  assert.equal(await beforeCommit('ORD-RETRY'), false, 'resolved checkout cannot be reused')
+  const changed = createCounterTicketSession(null, null)
+  changed.dispatch({ kind: 'save', basket: input })
+  const stale = create(changed, false, changed.getSnapshot().state.revision)
+  changed.dispatch({ kind: 'save', basket: { ...input, customer: 'Changed' } })
+  assert.equal(await stale('ORD-STALE'), false)
+})

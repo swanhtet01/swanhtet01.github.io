@@ -1329,15 +1329,22 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
     if (!lines.length || disabled || catalogChanged || recoveryPaused || !tickets.checkpoint()) return
     const reviewedRevision = tickets.getSnapshot().state.revision
+    let securedCheckoutId = ''
     onReview({
       lines: lines.map((line) => ({ sku: line.item.sku, quantity: line.quantity })),
       customer: customer.trim(),
       payment,
       outcome: effectiveOutcome,
       beforeCommit: async (orderId) => {
+        if (securedCheckoutId) {
+          return orderId === securedCheckoutId
+            && tickets.getSnapshot().state.revision === reviewedRevision + 1
+            && tickets.checkpoint(orderId)
+        }
         if (!tickets.checkpoint() || tickets.getSnapshot().state.revision !== reviewedRevision) return false
         if (!persistLocalDraft) return true
         if (!tickets.dispatch({ kind: 'begin_checkout', orderId })) return false
+        securedCheckoutId = orderId
         await tickets.settled()
         return tickets.checkpoint(orderId)
       },
