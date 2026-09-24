@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { currentManagedIdentity, sameManagedIdentity, loadManagedEcommercePreparation, loadManagedEcommerceRecipients, prepareManagedEcommerceReview, type ManagedIdentity } from '../../core/managed-trial'
-import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, readCatalogCommand, retainCatalogCommand, clearCatalogCommand, type CatalogPreparation, type CatalogRecipients, type CatalogPreparationCommand, type CatalogPreparationReceipt } from './operator-review-contract'
+import { currentManagedIdentity, sameManagedIdentity, loadManagedEcommercePreparation, loadManagedEcommerceRecipients, prepareManagedEcommerceReview, withdrawManagedEcommerceReview, type ManagedIdentity } from '../../core/managed-trial'
+import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, readCatalogCommand, retainCatalogCommand, clearCatalogCommand, type CatalogPreparation, type CatalogRecipients, type CatalogPreparationCommand, type CatalogPreparationReceipt } from './operator-review-contract'
 import { PreparedCatalog } from './PreparedCatalog'
 
 export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId: string; actorId: string }) {
@@ -40,6 +40,15 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
       const who = await identity()
       const retained = readCatalogCommand(window.sessionStorage, key)
       if (retained === 'unavailable') throw Error('Pending review is unavailable')
+      const previous = window.sessionStorage.getItem(key + ':receipt')
+      if (previous !== null) {
+        if (!retained || previous.length > 2048) throw Error('Review receipt is unavailable')
+        const saved = verifyCatalogPreparationReceipt(JSON.parse(previous), retained)
+        if (!await current(who, started)) return
+        setReceipt(saved); setPending(null); setSource(null); setRecipients(null)
+        setMessage('Last confirmed review. Customer access is checked when the link opens.')
+        return
+      }
       const prepared = await verifyCatalogPreparation(await loadManagedEcommercePreparation(who))
       const choices = verifyCatalogRecipients(await loadManagedEcommerceRecipients(who, after), after)
       if (!await current(who, started)) return
@@ -62,9 +71,30 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
       const { reviewId, recipientGrantId, expectedVersion, expiresAt } = command
       const saved = verifyCatalogPreparationReceipt(await prepareManagedEcommerceReview({ reviewId, recipientGrantId, expectedVersion, expiresAt }, who), command)
       if (!await current(who, started)) return
-      clearCatalogCommand(window.sessionStorage, key, command)
+      window.sessionStorage.setItem(key + ':receipt', JSON.stringify(saved))
+      verifyCatalogPreparationReceipt(JSON.parse(window.sessionStorage.getItem(key + ':receipt') ?? 'null'), command)
       setPending(null); setReceipt(saved); setMessage('Private review prepared. Nothing has been sent or published.')
     } catch { if (started === epoch.current) setMessage('Preparation is unconfirmed. Reopen and retry the same request.') }
+    finally { lock.current = false; setBusy(false) }
+  }
+  async function withdraw() {
+    if (lock.current || !receipt) return
+    lock.current = true; setBusy(true)
+    const started = epoch.current
+    try {
+      const who = await identity()
+      const command = readCatalogCommand(window.sessionStorage, key)
+      if (!command || command === 'unavailable' || command.reviewId !== receipt.reviewId) throw Error('Review changed')
+      verifyCatalogWithdrawal(await withdrawManagedEcommerceReview(receipt.reviewId, who), receipt.reviewId)
+      if (!await current(who, started)) return
+      // Keep command until the receipt removal is confirmed; partial cleanup
+      // must block a new preparation instead of forgetting an uncertain result.
+      window.sessionStorage.removeItem(key + ':receipt')
+      if (window.sessionStorage.getItem(key + ':receipt') !== null) throw Error('Receipt retained')
+      clearCatalogCommand(window.sessionStorage, key, command)
+      setReceipt(null); setPending(null); setSource(null); setRecipients(null)
+      setMessage('Review withdrawn. The customer link no longer opens this review.')
+    } catch { if (started === epoch.current) setMessage('Withdrawal is unconfirmed. Retry withdrawal for this review.') }
     finally { lock.current = false; setBusy(false) }
   }
   return <section aria-label="Prepare customer catalog" aria-busy={busy}>
@@ -78,6 +108,6 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
       {recipients.nextAfter && !pending ? <button type="button" disabled={busy} onClick={() => void open(recipients.nextAfter!)}>More customers</button> : null}
       <button type="button" disabled={busy || (!pending && !selected)} onClick={() => void prepare()}>{pending ? 'Retry same request' : 'Prepare review'}</button>
     </> : null}
-    {receipt ? <p>Customer review link: <a href={`/ecommerce/review/${receipt.reviewId}`}>Open private review</a></p> : null}
+    {receipt ? <><p>Customer review link: <a href={`/ecommerce/review/${receipt.reviewId}`}>Open private review</a></p><button type="button" disabled={busy} onClick={() => void withdraw()}>Withdraw review</button></> : null}
   </section>
 }
