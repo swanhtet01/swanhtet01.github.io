@@ -95,3 +95,32 @@ def build_catalog_acceptance(review, state, payload, *, principal, readiness, so
     return identity | dict(commandFingerprint=fingerprint, acceptedAt=current.isoformat(),
         status='accepted_for_operator_release_review', persisted=False,
         publicationAuthorized=False, deploymentAuthorized=False)
+
+
+def build_catalog_change_request(review, state, payload, *, principal, readiness, source_version, now=None):
+    """Build unsaved feedback; persistence must enforce access and command replay.
+
+    A reused command with a different fingerprint is a conflict, never an update.
+    The store must reject new feedback after acceptance of this exact review.
+    """
+    from hashlib import sha256
+    import json
+    from .website_customer_review import _text
+    current = stamp(datetime.now(timezone.utc) if now is None else now)
+    projected = catalog_review_projection(review, state, principal=principal,
+        readiness=readiness, source_version=source_version, now=current)
+    if not readiness.write_ready: fail()
+    if (not isinstance(payload, Mapping)
+        or set(payload) != {'commandId', 'reviewId', 'previewDigest', 'note'}
+        or payload['reviewId'] != projected['reviewId']
+        or payload['previewDigest'] != projected['previewDigest']): fail()
+    actor = principal.normalized()
+    identity = dict(contract='supermega.ecommerce.customer-feedback.v1',
+        workspaceId=actor.workspace_id, actorId=actor.actor_id,
+        commandId=uuid(payload['commandId']), reviewId=projected['reviewId'],
+        previewDigest=projected['previewDigest'], contentRevision=projected['contentRevision'],
+        sourceVersion=source_version, note=_text(payload['note'], 2000))
+    fingerprint = 'sha256:' + sha256(json.dumps(identity, sort_keys=True,
+        separators=(',', ':'), ensure_ascii=True).encode()).hexdigest()
+    return identity | dict(commandFingerprint=fingerprint, createdAt=current.isoformat(),
+        persisted=False, publicationAuthorized=False, deploymentAuthorized=False)

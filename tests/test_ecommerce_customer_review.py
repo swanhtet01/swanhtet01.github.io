@@ -2,7 +2,7 @@
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from supermega_runtime.ecommerce_customer_review import prepare_catalog_review, catalog_review_projection, build_catalog_acceptance
+from supermega_runtime.ecommerce_customer_review import prepare_catalog_review, catalog_review_projection, build_catalog_acceptance, build_catalog_change_request
 from supermega_runtime.trial_store import TrialPrincipal, TrialReadiness, TrialValidationError
 from tests.test_commerce_runtime import catalog_state, storefront_configuration
 
@@ -43,6 +43,32 @@ class CatalogReviewTests(unittest.TestCase):
         self.assertEqual(set(result),{'reviewId','contentRevision','previewDigest','preview','expiresAt','status','publicationAuthorized','deploymentAuthorized'})
         result['preview']['items'][0]['name']='Changed'
         self.assertNotEqual(self.review['preview']['items'][0]['name'],'Changed')
+    def test_feedback_binds_exact_note_and_revision_without_claiming_delivery(self):
+        payload = dict(commandId='33333333-3333-4333-8333-333333333333',
+            reviewId=self.review['reviewId'], previewDigest=self.review['previewDigest'],
+            note='လက်ဖက်ရည်\nPlease correct the price.')
+        def feedback(data=payload, **overrides):
+            return build_catalog_change_request(self.review, self.state, data, **(dict(
+                principal=self.actor, readiness=self.ready, source_version=1, now=self.now) | overrides))
+        result = feedback()
+        self.assertEqual(result['note'], payload['note'])
+        self.assertFalse(result['persisted'])
+        self.assertFalse(result['publicationAuthorized'])
+        self.assertFalse(result['deploymentAuthorized'])
+        self.assertEqual(result['commandFingerprint'], feedback(now=self.now+timedelta(seconds=1))['commandFingerprint'])
+        self.assertNotEqual(result['commandFingerprint'], feedback(payload | {'note': 'Different change'})['commandFingerprint'])
+        self.assertEqual(len(feedback(payload | {'note': 'က'*2000})['note']), 2000)
+        for note in ['', ' ', ' padded ', 'က'*2001, '\x00bad', '\ud800', None, 1]:
+            with self.subTest(note_type=type(note).__name__), self.assertRaises(TrialValidationError):
+                feedback(payload | {'note': note})
+        for data in [payload | {'previewDigest': 'stale'}, payload | {'reviewId': 'other'},
+                     payload | {'commandId': 'invalid'}, payload | {'decision': 'publish'}]:
+            with self.assertRaises(TrialValidationError): feedback(data)
+        for overrides in [dict(source_version=2), dict(now=self.now+timedelta(days=1)),
+                          dict(readiness=replace(self.ready, write_enabled=False)),
+                          dict(principal=replace(self.actor, actor_id='other')),
+                          dict(readiness=replace(self.ready, product_entitlements=()))]:
+            with self.assertRaises(TrialValidationError): feedback(**overrides)
     def test_identity_capability_and_entitlement(self):
         for change in [dict(principal=replace(self.actor,workspace_id='other')),dict(principal=replace(self.actor,actor_id='other')),dict(principal=replace(self.actor,actor_kind='agent')),dict(readiness=replace(self.ready,capabilities=frozenset({'commerce.read'}))),dict(readiness=replace(self.ready,product_entitlements=())),dict(readiness=replace(self.ready,auth_ready=False))]:
             with self.subTest(change=list(change)),self.assertRaises(TrialValidationError):self.project(**change)
