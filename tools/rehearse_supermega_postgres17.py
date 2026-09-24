@@ -1985,16 +1985,39 @@ def _exercise_managed_product_journeys(
         command_number += 1
         command_id = f"10000000-0000-4000-8000-{command_number:012d}"
         try:
-            result = store.apply_command(
-                principal,
-                command_id=command_id,
-                surface=surface,
-                event_type=event_type,
-                expected_version=expected_version,
-                payload={"state": state, "evidence": evidence},
-                related_surfaces=related_surfaces,
-                state_precondition=state_precondition,
-            )
+            def submit() -> Any:
+                return store.apply_command(
+                    principal,
+                    command_id=command_id,
+                    surface=surface,
+                    event_type=event_type,
+                    expected_version=expected_version,
+                    payload={"state": state, "evidence": evidence},
+                    related_surfaces=related_surfaces,
+                    state_precondition=state_precondition,
+                )
+
+            if event_type == "commerce.website_intake.converted":
+                from concurrent.futures import ThreadPoolExecutor
+                from threading import Barrier
+
+                gate = Barrier(2, timeout=10)
+
+                def competing_submit() -> Any:
+                    gate.wait()
+                    return submit()
+
+                with ThreadPoolExecutor(max_workers=2) as callers:
+                    first = callers.submit(competing_submit)
+                    second = callers.submit(competing_submit)
+                    results = [first.result(timeout=20), second.result(timeout=20)]
+                if sorted(row.idempotent_replay for row in results) != [False, True]:
+                    raise RehearsalFailure("managed_concurrent_replay_count_invalid")
+                if results[0].state != results[1].state or results[0].version != results[1].version:
+                    raise RehearsalFailure("managed_concurrent_replay_result_changed")
+                result = next(row for row in results if not row.idempotent_replay)
+            else:
+                result = submit()
         except Exception as exc:
             safe_event = event_type.replace(".", "_")
             raise RehearsalFailure(
