@@ -565,8 +565,8 @@ export function EcommerceBuyingWorkspace({
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
   const recoveredCheckoutNotice = latestRequest
     ? Date.parse(latestRequest.quote.expiresAt) > quoteClock
-      ? `${latestRequest.id} recovered on this device. It remains waiting for Shop review.`
-      : `${latestRequest.id} was recovered, but its quote expired. Review a new total.`
+      ? 'Saved request restored. Awaiting Shop review.'
+      : 'Quote expired. Review a new total.'
     : ''
   const checkoutNotice = latestRequestConfirmed && latestRequestOrder
     ? `${latestRequest?.id} is confirmed as ${latestRequestOrder.id}. ${latestRequestEntry?.paymentStatus === 'reconciled' ? 'Payment is reconciled in Shop.' : 'Payment still needs Shop reconciliation.'}`
