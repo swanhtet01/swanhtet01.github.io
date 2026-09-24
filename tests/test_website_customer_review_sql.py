@@ -761,7 +761,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
 
     def test_ecommerce_entitlement_candidate_is_private_and_product_specific(self):
         from pathlib import Path
-        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_entitlement_candidate.sql').read_text(encoding='utf-8')
+        sql = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924190304_ecommerce_review_entitlement_proof.sql').read_text(encoding='utf-8')
         vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
                    ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),
                    ({'products':['website']}, False), ({'products':[]}, False),
@@ -795,7 +795,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
     def test_ecommerce_runtime_refuses_altered_privileged_proof(self):
         from pathlib import Path
         from psycopg.rows import dict_row
-        candidate = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_entitlement_candidate.sql').read_text(encoding='utf-8')
+        candidate = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924190304_ecommerce_review_entitlement_proof.sql').read_text(encoding='utf-8')
         changes = (
             "grant execute on function app_private.ecommerce_review_entitled() to public",
             "grant execute on function app_private.ecommerce_review_entitled() to anon",
@@ -826,7 +826,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
 
     def test_ecommerce_entitlement_candidate_rechecks_revocation_and_activation_precedence(self):
         from pathlib import Path
-        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_entitlement_candidate.sql').read_text(encoding='utf-8')
+        sql = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924190304_ecommerce_review_entitlement_proof.sql').read_text(encoding='utf-8')
         changes = (
             ("update app_private.workspace_access_controls set status='suspended' where workspace_id=%s", (WORKSPACE,)),
             ("update app_private.workspace_memberships set status='revoked' where workspace_id=%s and actor_id=%s", (WORKSPACE, RECIPIENT)),

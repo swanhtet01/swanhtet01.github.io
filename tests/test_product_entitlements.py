@@ -214,7 +214,7 @@ class ActivationProductEntitlementTests(unittest.TestCase):
                         definer=True, volatility='s', language='sql', boolean_result=True,
                         trusted_owner=True, private_execute=True, config=['search_path=pg_catalog, app_private'])
         website = proof('supabase/migrations/20260915191528_website_review_entitlement_proof.sql')
-        ecommerce = proof('tools/ecommerce_review_entitlement_candidate.sql')
+        ecommerce = proof('supabase/migrations/20260924190304_ecommerce_review_entitlement_proof.sql')
         class Cursor:
             def __init__(self, rows):
                 self.rows = iter(rows)

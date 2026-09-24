@@ -1,4 +1,4 @@
--- LOCAL REHEARSAL CANDIDATE ONLY; not registered or applied as a migration.
+-- Optional private proof; no membership, API route or publishing authority is granted.
 -- Boolean-only activation proof for review-only recipients. No event payload,
 -- workspace directory or additional membership capability is returned.
 create function app_private.ecommerce_review_entitled() returns boolean
