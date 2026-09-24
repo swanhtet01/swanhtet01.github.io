@@ -141,7 +141,7 @@ for (const handler of ['commit', 'commitPrivacy']) {
 console.log('Commit/privacy late response and conflict readback: 8 identity scenarios passed')
 
 const setupStart = source.indexOf('  async function createService(')
-const setupEnd = source.indexOf('  if (!schedule || !projection)', setupStart)
+const setupEnd = source.indexOf('  if (managedLoading) return', setupStart)
 assert.ok(setupStart > 0 && setupEnd > setupStart)
 const setupCode = transformSync(source.slice(setupStart, setupEnd), { loader: 'ts' }).code
 for (const handler of ['createService', 'createResource']) {
@@ -172,9 +172,9 @@ const loadStart = source.indexOf('  useEffect(() => {\n    let active = true')
 const loadEnd = source.indexOf('\n  // Used only where', loadStart)
 assert.ok(loadStart > 0 && loadEnd > loadStart)
 const loadCode = transformSync(source.slice(loadStart, loadEnd), { loader: 'ts' }).code
-for (const mode of ['cache-rejected', 'empty-company', 'account-changed', 'unmounted']) {
-  let finish, cleanup
-  const pending = new Promise(resolve => { finish = resolve })
+for (const mode of ['cache-rejected', 'load-rejected', 'empty-company', 'account-changed', 'unmounted']) {
+  let finish, reject, cleanup
+  const pending = new Promise((resolve, fail) => { finish = resolve; reject = fail })
   const updates = []
   const context = {
     useEffect: callback => { cleanup = callback() },
@@ -189,13 +189,20 @@ for (const mode of ['cache-rejected', 'empty-company', 'account-changed', 'unmou
   }
   vm.createContext(context); vm.runInContext(loadCode, context)
   await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(updates, [['schedule', null]], 'managed load must first hide unrelated device bookings')
+  updates.length = 0
   if (mode === 'unmounted') cleanup()
-  finish({ version: 8, privacyOwner: true, schedule: mode === 'empty-company' ? null : { revision: 4, privacyPolicy: {} } })
+  if (mode === 'load-rejected') reject(new Error('Synthetic server failure'))
+  else finish({ version: 8, privacyOwner: true, schedule: mode === 'empty-company' ? null : { revision: 4, privacyPolicy: {} } })
   await new Promise(resolve => setImmediate(resolve))
   if (mode === 'cache-rejected') {
     assert.equal(context.managedVersionRef.current, 8)
     assert.equal(updates.filter(([kind]) => kind === 'schedule').length, 1)
     assert.deepEqual(updates.filter(([kind]) => kind === 'notice'), [['notice', 'Company schedule loaded.']])
+  } else if (mode === 'load-rejected') {
+    assert.equal(context.managedVersionRef.current, null)
+    assert.deepEqual(updates.filter(([kind]) => kind === 'schedule'), [['schedule', null]])
+    assert.ok(updates.some(([kind, text]) => kind === 'notice' && text.includes('Reload')))
   } else if (mode === 'empty-company') {
     assert.deepEqual(updates.filter(([kind]) => kind === 'schedule'), [['schedule', null]], 'empty company must not retain device bookings')
     assert.ok(updates.some(([kind, text]) => kind === 'notice' && text.includes('onboarding')))

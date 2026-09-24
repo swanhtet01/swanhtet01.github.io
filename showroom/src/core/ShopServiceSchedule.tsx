@@ -139,6 +139,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       if (!active || !identity) return
       managedIdentityRef.current = identity
       setManagedConnected(true)
+      setScheduleState(null)
       const managed = await loadManagedServiceSchedule(identity)
       if (!active || !await isCurrentScheduleIdentity(identity)) return
       managedVersionRef.current = managed.version
@@ -153,7 +154,10 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         setNotice('Set up your company schedule in onboarding, then reload.')
       }
     }).catch((error) => {
-      if (active) setNotice(error instanceof Error ? `${error.message} The schedule remains available on this device.` : 'Company schedule unavailable. Device copy available.')
+      if (active) {
+        setScheduleState(null)
+        setNotice(error instanceof Error ? `${error.message} Reload to try again.` : 'Schedule unavailable. Reload to try again.')
+      }
     }).finally(() => {
       if (active) setManagedLoading(false)
     })
@@ -468,7 +472,8 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     }
   }
 
-  if (!schedule || !projection) return <section className="core-panel shop-service-schedule" id="shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Schedule</span><h2>Schedule needs recovery</h2></div></div><p className="form-notice" role="alert">{notice}</p></section>
+  if (managedLoading) return <section className="core-panel shop-service-schedule" id="shop-service-schedule"><p role="status">Loading schedule…</p></section>
+  if (!schedule || !projection) return <section className="core-panel shop-service-schedule" id="shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Schedule</span><h2>Schedule unavailable</h2></div></div><p className="form-notice" role="alert">{notice}</p></section>
 
   const legacyBooking = schedule.industryPackId === 'spa' ? schedule.bookings.find(b => b.resourceId) : undefined
   const serviceById = new Map(schedule.services.map((service) => [service.id, service]))
