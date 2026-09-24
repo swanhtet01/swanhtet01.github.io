@@ -23,6 +23,7 @@ import {
   registerShopServiceResource,
   scheduleShopServiceBooking,
   shopScheduleVocabulary,
+  shopBookingResourceIds,
   shopServiceSaleSku,
   setShopServiceClientRetention,
   shopServiceClientAnonymizationReadiness,
@@ -91,7 +92,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   }
   const [notice, setNotice] = useState(initial.error)
   const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)
-  const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', appointmentUpdates: 'declined' as 'allowed' | 'declined', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
+  const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', appointmentUpdates: 'declined' as 'allowed' | 'declined', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', roomId: '', startsAt: nextLocalStart(), note: '' })
   const [serviceDraft, setServiceDraft] = useState({ name: '', durationMinutes: '60', priceMmk: '' })
   const [resourceDraft, setResourceDraft] = useState({ name: '', kind: 'staff' as 'staff' | 'room' | 'equipment' })
   const [retentionDraft, setRetentionDraft] = useState(initial.schedule?.privacyPolicy.clientRetentionDays?.toString() ?? '')
@@ -356,7 +357,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     try {
       const startsAt = new Date(bookingDraft.startsAt)
       if (!Number.isFinite(startsAt.getTime())) throw new Error(`Choose a valid ${vocabulary.singular} date and time.`)
-      const next = scheduleShopServiceBooking(schedule, { ...bookingDraft, startsAt: startsAt.toISOString() }, proof(`Scheduled from the Shop ${vocabulary.singular} workspace.`))
+      const next = scheduleShopServiceBooking(schedule, { ...bookingDraft, resourceIds: schedule.industryPackId === 'spa' ? [bookingDraft.resourceId, bookingDraft.roomId] : [bookingDraft.resourceId], startsAt: startsAt.toISOString() }, proof(`Scheduled from the Shop ${vocabulary.singular} workspace.`))
       commit(next, `${capitalizedSingular} held. Confirm it after checking the customer and resource.`)
       setBookingDraft((current) => ({ ...current, customerName: '', contact: '', startsAt: nextLocalStart(), note: '' }))
     } catch (error) {
@@ -421,7 +422,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       const next = registerShopServiceResource(schedule, resourceDraft, proof('Added from Shop schedule setup.'))
       commit(next, 'Staff or resource added to schedule setup.')
       const resourceId = next.resources.at(-1)?.id ?? bookingDraft.resourceId
-      setBookingDraft((current) => ({ ...current, resourceId }))
+      setBookingDraft((current) => schedule.industryPackId === 'spa' && resourceDraft.kind === 'room'
+        ? { ...current, roomId: resourceId }
+        : schedule.industryPackId === 'spa' && resourceDraft.kind === 'equipment'
+          ? current
+          : { ...current, resourceId })
       setResourceDraft({ name: '', kind: 'staff' })
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The resource could not be added.')
@@ -464,7 +469,8 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         <label>Contact or client reference *<input disabled={disabled} list="spa-client-contacts" maxLength={160} onChange={(event) => { const contact = event.target.value; const client = schedule.clients.find((candidate) => !candidate.anonymizedAt && candidate.contact === contact); setBookingDraft((current) => ({ ...current, contact, customerName: client?.name ?? current.customerName, appointmentUpdates: client?.appointmentUpdates === 'allowed' ? 'allowed' : 'declined' })) }} placeholder="Phone or walk-in reference" required value={bookingDraft.contact} /><small>Required to distinguish client records. Use a non-contact reference when updates are off.</small><datalist id="spa-client-contacts">{schedule.clients.filter((client) => !client.anonymizedAt).map((client) => <option key={client.id} value={client.contact}>{client.name}</option>)}</datalist></label>
         <label>Customer updates<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, appointmentUpdates: event.target.value as 'allowed' | 'declined' }))} value={bookingDraft.appointmentUpdates}><option value="declined">No messages</option><option value="allowed">Customer allowed updates</option></select></label>
         <label>Service<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, serviceId: event.target.value }))} required value={bookingDraft.serviceId}>{schedule.services.filter((service) => service.active).map((service) => <option key={service.id} value={service.id}>{service.nameMy ? `${service.name} · ${service.nameMy}` : service.name} · {service.durationMinutes} min · {formatMmk(service.priceMmk)}</option>)}</select></label>
-        <label>Staff, room, or equipment<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, resourceId: event.target.value }))} required value={bookingDraft.resourceId}>{schedule.resources.filter((resource) => resource.active).map((resource) => <option key={resource.id} value={resource.id}>{resource.nameMy ? `${resource.name} · ${resource.nameMy}` : resource.name} · {resource.kind}</option>)}</select></label>
+        <label>{schedule.industryPackId === 'spa' ? 'Staff' : 'Staff, room, or equipment'}<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, resourceId: event.target.value }))} required value={bookingDraft.resourceId}>{schedule.resources.filter((resource) => resource.active && (schedule.industryPackId !== 'spa' || resource.kind === 'staff')).map((resource) => <option key={resource.id} value={resource.id}>{resource.nameMy ? `${resource.name} · ${resource.nameMy}` : resource.name} · {resource.kind}</option>)}</select></label>
+        {schedule.industryPackId === 'spa' ? <label>Room<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, roomId: event.target.value }))} required value={bookingDraft.roomId}><option value="">Choose a room</option>{schedule.resources.filter((resource) => resource.active && resource.kind === 'room').map((resource) => <option key={resource.id} value={resource.id}>{resource.nameMy ? `${resource.name} · ${resource.nameMy}` : resource.name}</option>)}</select></label> : null}
         <label>Starts<input disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, startsAt: event.target.value }))} required type="datetime-local" value={bookingDraft.startsAt} /></label>
         <label>Note<input disabled={disabled} maxLength={300} onChange={(event) => setBookingDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Optional request" value={bookingDraft.note} /></label>
         <button className="core-button primary" disabled={disabled} type="submit">{vocabulary.holdAction}</button>
@@ -473,7 +479,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         <div className="panel-head"><div><span className="core-eyebrow">Agenda</span><h3>{projection.upcoming.length ? `Next ${vocabulary.plural.toLowerCase()}` : agenda.length ? `Today's ${vocabulary.plural.toLowerCase()}` : `No upcoming ${vocabulary.plural.toLowerCase()}`}</h3></div></div>
         {agenda.length ? agenda.slice(0, 12).map((booking) => {
           const service = serviceById.get(booking.serviceId)
-          const resource = resourceById.get(booking.resourceId)
+          const resource = { name: shopBookingResourceIds(booking).map((id) => resourceById.get(id)?.name ?? id).join(' · ') }
           const saleSku = shopServiceSaleSku(schedule.industryPackId, booking.serviceId)
           const membership = membershipByBookingId.get(booking.id)
           return <article key={booking.id}>

@@ -82,7 +82,8 @@ export type ShopServiceBooking = {
   contact: string
   appointmentUpdates: ShopServiceAppointmentUpdates
   serviceId: string
-  resourceId: string
+  resourceId?: string
+  resourceIds?: string[]
   startsAt: string
   endsAt: string
   status: ShopServiceBookingStatus
@@ -362,6 +363,18 @@ export function createShopServiceSchedule(industryPackId: ShopIndustryPackId = '
   }
 }
 
+export function shopBookingResourceIds(booking: { resourceId?: string; resourceIds?: string[] }): string[] {
+  if (booking.resourceIds !== undefined) {
+    if (booking.resourceId !== undefined || !Array.isArray(booking.resourceIds)
+      || booking.resourceIds.length < 1 || booking.resourceIds.length > 10
+      || booking.resourceIds.some((id) => typeof id !== 'string' || !id.trim())
+      || new Set(booking.resourceIds).size !== booking.resourceIds.length) throw new Error('Choose distinct booking resources.')
+    return booking.resourceIds
+  }
+  if (typeof booking.resourceId !== 'string' || !booking.resourceId.trim()) throw new Error('Choose a booking resource.')
+  return [booking.resourceId]
+}
+
 export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   if (!state || state.schema !== SHOP_SERVICE_SCHEDULE_SCHEMA) throw new Error('Unsupported Shop service schedule.')
   shopIndustryPack(state.industryPackId)
@@ -438,7 +451,14 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
     if (!['allowed', 'declined', 'not_recorded'].includes(booking.appointmentUpdates)) throw new Error(`Booking ${id} appointment-update choice is invalid.`)
     if (booking.customerName !== client.name || booking.contact !== client.contact || booking.appointmentUpdates !== client.appointmentUpdates) throw new Error(`Booking ${id} client details are stale.`)
     if (!serviceIds.has(booking.serviceId)) throw new Error(`Booking ${id} references an unknown service.`)
-    if (!resourceIds.has(booking.resourceId)) throw new Error(`Booking ${id} references an unknown resource.`)
+    const assignedIds = shopBookingResourceIds(booking)
+    if (assignedIds.some((resourceId) => !resourceIds.has(resourceId)
+      || !state.resources.find((resource) => resource.id === resourceId)?.active)) throw new Error(`Booking ${id} references an unknown or inactive resource.`)
+    if (booking.resourceIds && state.industryPackId === 'spa') {
+      const kinds = assignedIds.map((resourceId) => state.resources.find((resource) => resource.id === resourceId)?.kind)
+      if (kinds.length < 2 || kinds[0] !== 'staff' || kinds[1] !== 'room'
+        || kinds.slice(2).some((kind) => kind !== 'equipment')) throw new Error('Choose staff and a room, then optional equipment.')
+    }
     const startsAt = validIso(booking.startsAt, 'Booking start')
     const endsAt = validIso(booking.endsAt, 'Booking end')
     if (endsAt <= startsAt) throw new Error(`Booking ${id} must end after it starts.`)
@@ -452,7 +472,7 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
     for (let right = left + 1; right < blocking.length; right += 1) {
       const first = blocking[left]
       const second = blocking[right]
-      if (first.resourceId === second.resourceId
+      if (shopBookingResourceIds(first).some((id) => shopBookingResourceIds(second).includes(id))
         && Date.parse(first.startsAt) < Date.parse(second.endsAt)
         && Date.parse(second.startsAt) < Date.parse(first.endsAt)) throw new Error(`Bookings ${first.id} and ${second.id} overlap.`)
     }
@@ -515,7 +535,8 @@ export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
   contact: string
   appointmentUpdates: Exclude<ShopServiceAppointmentUpdates, 'not_recorded'>
   serviceId: string
-  resourceId: string
+  resourceId?: string
+  resourceIds?: string[]
   startsAt: string
   note?: string
 }, proof: ShopServiceScheduleProof) {
@@ -523,15 +544,16 @@ export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
   const evidence = proofRecord(proof)
   const service = state.services.find((candidate) => candidate.id === input.serviceId && candidate.active)
   if (!service) throw new Error('Choose an active service.')
-  const resource = state.resources.find((candidate) => candidate.id === input.resourceId && candidate.active)
-  if (!resource) throw new Error('Choose active staff, room, or equipment.')
+  const assignedIds = shopBookingResourceIds(input.resourceIds ? { resourceIds: input.resourceIds } : input)
+  const resources = assignedIds.map((id) => state.resources.find((candidate) => candidate.id === id && candidate.active))
+  if (resources.some((resource) => !resource)) throw new Error('Choose active staff, room, or equipment.')
   const startsAt = validIso(input.startsAt, 'Booking start')
   const endsAt = startsAt + service.durationMinutes * 60_000
-  const conflict = state.bookings.find((booking) => booking.resourceId === resource.id
+  const conflict = state.bookings.find((booking) => shopBookingResourceIds(booking).some((id) => assignedIds.includes(id))
     && booking.status !== 'cancelled'
     && startsAt < Date.parse(booking.endsAt)
     && Date.parse(booking.startsAt) < endsAt)
-  if (conflict) throw new Error(`${resource.name} is already booked during that time.`)
+  if (conflict) throw new Error('A selected resource is already booked during that time.')
   const revision = state.revision + 1
   if (!['allowed', 'declined'].includes(input.appointmentUpdates)) throw new Error('Choose whether the customer allows appointment updates.')
   const customerName = boundedText(input.customerName, 'Customer name')
@@ -566,7 +588,7 @@ export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
     contact: client.contact,
     appointmentUpdates: client.appointmentUpdates,
     serviceId: service.id,
-    resourceId: resource.id,
+    ...(input.resourceIds ? { resourceIds: [...assignedIds] } : { resourceId: assignedIds[0] }),
     startsAt: new Date(startsAt).toISOString(),
     endsAt: new Date(endsAt).toISOString(),
     status: 'held',
