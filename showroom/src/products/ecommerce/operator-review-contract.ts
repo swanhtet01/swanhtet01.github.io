@@ -93,3 +93,18 @@ export function clearCatalogCommand(storage: Storage, key: string, command: Cata
   storage.removeItem(key)
   if (readCatalogCommand(storage, key) !== null) throw new Error('Pending review could not be cleared')
 }
+
+
+export type CatalogReconciliation = Omit<CatalogPreparationReceipt, 'status' | 'persisted' | 'replayed'> & {
+  status: 'active' | 'stale' | 'revoked' | 'expired'; readAt: string
+}
+export function verifyCatalogReconciliation(value: unknown, command: CatalogPreparationCommand): CatalogReconciliation {
+  const row = exact(value, ['reviewId', 'sourceVersion', 'contentRevision', 'preparedAt', 'expiresAt', 'previewDigest', 'status', 'readAt', 'publicationAuthorized', 'deploymentAuthorized'])
+  if (typeof row.status !== 'string' || !['active', 'stale', 'revoked', 'expired'].includes(row.status)) return invalid()
+  const { readAt, status, ...assignment } = row
+  verifyCatalogPreparationReceipt({ ...assignment, status: 'prepared_preview', persisted: true, replayed: true }, command)
+  const read = instant(readAt), expiry = instant(row.expiresAt)
+  if (read < instant(row.preparedAt) || (status === 'active' && read >= expiry)
+    || (status === 'expired' && read < expiry)) return invalid()
+  return structuredClone(row) as CatalogReconciliation
+}

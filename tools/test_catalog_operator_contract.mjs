@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, readCatalogCommand, retainCatalogCommand, clearCatalogCommand } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
+import { verifyCatalogReconciliation, verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, readCatalogCommand, retainCatalogCommand, clearCatalogCommand } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
 import { storefrontPreviewDigest, STOREFRONT_PREVIEW_SCHEMA } from '../showroom/src/products/ecommerce/storefront-model.ts'
 import { COMMERCE_WORKSPACE_SCHEMA } from '../showroom/src/core/commerce-workspace.ts'
 const id = n => `11111111-1111-4111-8111-${String(n).padStart(12,'0')}`
@@ -70,4 +70,20 @@ test('uncertain preparation retains one exact command and refuses storage confli
   const denied={getItem:()=>{throw Error('denied')},setItem:()=>{throw Error('denied')}}
   assert.equal(readCatalogCommand(denied,'key'),'unavailable')
   assert.throws(()=>retainCatalogCommand(denied,'key',command))
+})
+
+
+test('reconciliation binds retained assignment and distinguishes inactive from uncertain',()=>{
+ const command={reviewId:id(1),recipientGrantId:id(2),expectedVersion:4,contentRevision:2,
+  previewDigest:'sha256:'+'a'.repeat(64),readAt:'2026-09-25T00:00:00Z',expiresAt:'2026-09-26T00:00:00.123456Z'}
+ const row={reviewId:id(1),sourceVersion:4,contentRevision:2,previewDigest:command.previewDigest,
+  preparedAt:'2026-09-25T00:00:01Z',expiresAt:command.expiresAt,readAt:'2026-09-25T01:00:00Z',status:'active',publicationAuthorized:false,deploymentAuthorized:false}
+ for(const status of ['active','stale','revoked']) assert.equal(verifyCatalogReconciliation({...row,status},command).status,status)
+ assert.equal(verifyCatalogReconciliation({...row,status:'expired',readAt:command.expiresAt},command).status,'expired')
+ const result=verifyCatalogReconciliation(row,command);result.status='revoked';assert.equal(row.status,'active')
+ for(const patch of [{status:'missing'},{status:'expired'},{status:['active']},{status:null},{reviewId:id(3)},{sourceVersion:5},
+  {contentRevision:3},{previewDigest:'sha256:'+'b'.repeat(64)},{expiresAt:'2026-09-26T00:00:00.123455Z'},
+  {readAt:'2026-09-25T00:00:00Z'},{readAt:command.expiresAt},{publicationAuthorized:true},{deploymentAuthorized:true},{recipientActorId:'private'}])
+  assert.throws(()=>verifyCatalogReconciliation({...row,...patch},command))
+ for(const missing of [null,{}, {status:'not_found'}])assert.throws(()=>verifyCatalogReconciliation(missing,command))
 })
