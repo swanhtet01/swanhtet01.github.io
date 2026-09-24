@@ -1,4 +1,4 @@
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
 import { readSessionCart, readSessionCartSnapshot, saveSessionCart } from './cart-session'
@@ -271,6 +271,8 @@ function initialEcommerceState() {
     merchandising: null,
   }
 }
+
+const CatalogReviewPreparation = lazy(() => import('./CatalogReviewPreparation').then(module => ({ default: module.CatalogReviewPreparation })))
 
 export function EcommerceProduct() {
   const [workspaceOpened, setWorkspaceOpened] = useState(false)
@@ -1842,6 +1844,13 @@ export function EcommerceProduct() {
 
   return (
     <div className="workspace-screen ecommerce-product">
+      {managedIdentity && managedCanWrite ? <details className="compact-disclosure">
+        <summary>Customer catalog review</summary>
+        <Suspense fallback={<p role="status">Opening review tools…</p>}>
+          <CatalogReviewPreparation key={JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId])}
+            workspaceId={managedIdentity.workspaceId} actorId={managedIdentity.userId} />
+        </Suspense>
+      </details> : null}
       {cartSessionUnavailable ? <p role="status">This browser cannot keep your cart after a refresh.</p> : null}
       <header className="ecommerce-heading">
         <div>

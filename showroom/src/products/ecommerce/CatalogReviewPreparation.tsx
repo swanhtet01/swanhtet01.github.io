@@ -32,6 +32,16 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
     const latest = await identity()
     return started === epoch.current && sameManagedIdentity(who, latest)
   }
+  function savedReview() {
+    const raw = window.sessionStorage.getItem(key + ':receipt')
+    if (raw === null) return null
+    if (raw.length > 3072) throw Error('Review receipt is unavailable')
+    const envelope = JSON.parse(raw)
+    if (!envelope || Object.keys(envelope).sort().join('|') !== 'command|receipt') throw Error('Review receipt changed')
+    const command = readCatalogCommand({ getItem: () => JSON.stringify(envelope.command) }, key)
+    if (!command || command === 'unavailable') throw Error('Review command is unavailable')
+    return { command, receipt: verifyCatalogPreparationReceipt(envelope.receipt, command) }
+  }
   async function open(after?: string) {
     if (lock.current) return
     lock.current = true; setBusy(true)
@@ -40,10 +50,10 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
       const who = await identity()
       const retained = readCatalogCommand(window.sessionStorage, key)
       if (retained === 'unavailable') throw Error('Pending review is unavailable')
-      const previous = window.sessionStorage.getItem(key + ':receipt')
-      if (previous !== null) {
-        if (!retained || previous.length > 2048) throw Error('Review receipt is unavailable')
-        const saved = verifyCatalogPreparationReceipt(JSON.parse(previous), retained)
+      const previous = savedReview()
+      if (previous) {
+        if (retained) verifyCatalogPreparationReceipt(previous.receipt, retained)
+        const saved = previous.receipt
         if (!await current(who, started)) return
         setReceipt(saved); setPending(null); setSource(null); setRecipients(null)
         setMessage('Last confirmed review. Customer access is checked when the link opens.')
@@ -71,8 +81,10 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
       const { reviewId, recipientGrantId, expectedVersion, expiresAt } = command
       const saved = verifyCatalogPreparationReceipt(await prepareManagedEcommerceReview({ reviewId, recipientGrantId, expectedVersion, expiresAt }, who), command)
       if (!await current(who, started)) return
-      window.sessionStorage.setItem(key + ':receipt', JSON.stringify(saved))
-      verifyCatalogPreparationReceipt(JSON.parse(window.sessionStorage.getItem(key + ':receipt') ?? 'null'), command)
+      window.sessionStorage.setItem(key + ':receipt', JSON.stringify({ command, receipt: saved }))
+      const persisted = savedReview()
+      if (!persisted) throw Error('Receipt missing')
+      verifyCatalogPreparationReceipt(persisted.receipt, command)
       setPending(null); setReceipt(saved); setMessage('Private review prepared. Nothing has been sent or published.')
     } catch { if (started === epoch.current) setMessage('Preparation is unconfirmed. Reopen and retry the same request.') }
     finally { lock.current = false; setBusy(false) }
@@ -83,15 +95,15 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
     const started = epoch.current
     try {
       const who = await identity()
-      const command = readCatalogCommand(window.sessionStorage, key)
+      const stored = readCatalogCommand(window.sessionStorage, key)
+      const command = stored ?? savedReview()?.command
       if (!command || command === 'unavailable' || command.reviewId !== receipt.reviewId) throw Error('Review changed')
       verifyCatalogWithdrawal(await withdrawManagedEcommerceReview(receipt.reviewId, who), receipt.reviewId)
       if (!await current(who, started)) return
-      // Keep command until the receipt removal is confirmed; partial cleanup
-      // must block a new preparation instead of forgetting an uncertain result.
+      // The receipt envelope retains the command if cleanup stops halfway.
+      if (stored !== null) clearCatalogCommand(window.sessionStorage, key, command)
       window.sessionStorage.removeItem(key + ':receipt')
       if (window.sessionStorage.getItem(key + ':receipt') !== null) throw Error('Receipt retained')
-      clearCatalogCommand(window.sessionStorage, key, command)
       setReceipt(null); setPending(null); setSource(null); setRecipients(null)
       setMessage('Review withdrawn. The customer link no longer opens this review.')
     } catch { if (started === epoch.current) setMessage('Withdrawal is unconfirmed. Retry withdrawal for this review.') }

@@ -12,7 +12,7 @@ const id='11111111-1111-4111-8111-111111111111'
 const prepared={sourceVersion:1,contentRevision:0,previewDigest:'sha256:'+'a'.repeat(64),readAt:new Date(Date.now()-1000).toISOString(),preview:{}}
 function harness() {
  const h={slots:[],cursor:0,effects:[],listeners:new Map(),storage:new Map(),writes:[],withdrawals:[],who:{workspaceId:'workspace',userId:'owner'},denied:false,fail:false}
- const storage={getItem:key=>{if(h.denied)throw Error('denied');return h.storage.get(key)??null},setItem:(key,value)=>{if(h.denied)throw Error('denied');h.storage.set(key,value)},removeItem:key=>h.storage.delete(key)}
+ const storage={getItem:key=>{if(h.denied)throw Error('denied');return h.storage.get(key)??null},setItem:(key,value)=>{if(h.denied)throw Error('denied');h.storage.set(key,value)},removeItem:key=>{if(h.removeDenied?.(key))throw Error('remove denied');h.storage.delete(key)}}
  const exports={}
  vm.runInNewContext(compiled,{exports,crypto:{randomUUID:()=>id},window:{sessionStorage:storage,addEventListener:(n,f)=>h.listeners.set(n,f),removeEventListener:n=>h.listeners.delete(n)},require:name=>{
   if(name==='react')return {useState:initial=>{const i=h.cursor++;if(!(i in h.slots))h.slots[i]=typeof initial==='function'?initial():initial;return[h.slots[i],v=>{h.slots[i]=typeof v==='function'?v(h.slots[i]):v}]},useRef:initial=>{const i=h.cursor++;return h.slots[i]??(h.slots[i]={current:initial})},useEffect:fn=>h.effects.push(fn)}
@@ -67,4 +67,15 @@ test('confirmed review reopens without another preparation and withdrawal retrie
  h.withdrawFail=false;let release;h.withdrawWait=new Promise(resolve=>{release=resolve})
  h.click('Withdraw review');h.click('Withdraw review');await flush();assert.equal(h.withdrawals.length,2)
  release();await flush();assert.equal(h.storage.size,0);assert.equal(h.slots[4],null)
+})
+
+test('partial withdrawal cleanup remains recoverable after reopening',async()=>{
+ for(const receiptFailure of [false,true]) {
+  const h=harness();h.click('Open saved catalog');await flush();h.click('Prepare review');await flush()
+  h.removeDenied=key=>key.endsWith(':receipt')===receiptFailure
+  h.click('Withdraw review');await flush();assert.ok(h.storage.size>0)
+  h.listeners.get('focus')();h.click('Open saved catalog');await flush();assert.ok(h.slots[4])
+  h.removeDenied=null;h.click('Withdraw review');await flush()
+  assert.equal(h.storage.size,0);assert.equal(h.writes.length,1)
+ }
 })
