@@ -312,6 +312,52 @@ class CatalogReviewSqlTests(unittest.TestCase):
                 self.assertEqual(client.post(path,headers=owner_headers,json=invalid).status_code,422)
             self.assertEqual(client.post(path+'?x=1',headers=owner_headers,json=body).status_code,422)
 
+        def wait_for_review_lock():
+            pid=started.get(timeout=5)
+            with pg._connect(self.admin_url,autocommit=True) as observer:
+                deadline=time.monotonic()+5
+                while time.monotonic()<deadline:
+                    row=observer.execute("select wait_event_type='Lock' and wait_event='advisory' from pg_stat_activity where pid=%s",(pid,)).fetchone()
+                    if row and row[0]: return
+                    time.sleep(0.02)
+            self.fail('request did not reach the shared review advisory lock')
+        waiting_writer=EcommerceCustomerReviewStore(ObservedStore(self.runtime_url,reducer=lambda *args:{},write_enabled=True))
+        delayed_args=args|dict(review_id=str(uuid4()),expires_at=(datetime.now(timezone.utc)+timedelta(seconds=2)).isoformat())
+        with pg._connect(self.runtime_url) as blocker:
+            self.context(blocker,OWNER)
+            blocker.execute("select pg_advisory_xact_lock(hashtextextended('ecommerce-review:' || %s,0))",(WORKSPACE,))
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                delayed=pool.submit(waiting_writer.prepare,operator,**delayed_args)
+                try:
+                    wait_for_review_lock()
+                    time.sleep(max(0,(datetime.fromisoformat(delayed_args['expires_at'])-datetime.now(timezone.utc)).total_seconds())+0.05)
+                    blocker.commit()
+                    with self.assertRaisesRegex(TrialValidationError,'ecommerce_review_expiry_invalid'):
+                        delayed.result(timeout=10)
+                finally: blocker.rollback()
+        self.assertEqual(adapter.resolve_expired(operator,delayed_args['review_id'],expires_at=delayed_args['expires_at'])['status'],'absent_expired')
+
+        # An insert valid before expiry remains uncommitted while resolution waits.
+        # After commit the READ COMMITTED lookup must see it, even after expiry.
+        inflight_id=str(uuid4())
+        inflight_expiry=datetime.now(timezone.utc)+timedelta(seconds=2)
+        with self.transaction(OWNER) as blocker:
+            blocker.execute("""insert into app_private.ecommerce_customer_reviews
+                (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,preview,preview_digest,expires_at)
+                values (%s,%s,%s,%s,%s,%s::jsonb,%s,%s)""",
+                (inflight_id,WORKSPACE,RECIPIENT,OWNER,version,json.dumps(commerce_storefront_preview(source)),
+                 commerce_storefront_preview_digest(source),inflight_expiry))
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                resolving=pool.submit(waiting_adapter.resolve_expired,operator,inflight_id,expires_at=inflight_expiry.isoformat())
+                try:
+                    wait_for_review_lock()
+                    time.sleep(max(0,(inflight_expiry-datetime.now(timezone.utc)).total_seconds())+0.05)
+                    blocker.commit()
+                    with self.assertRaisesRegex(TrialValidationError,'ecommerce_review_assignment_exists'):
+                        resolving.result(timeout=10)
+                finally: blocker.rollback()
+        self.assertEqual(adapter.reconcile(operator,inflight_id)['status'],'expired')
+
         stale_args=args|dict(review_id=str(uuid4()))
         writer.prepare(operator,**stale_args)
         with self.transaction() as connection:
