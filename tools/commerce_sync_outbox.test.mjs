@@ -310,12 +310,22 @@ test('crash recovery replays the pending change onto the exact matching base wor
 test('crash recovery after the workspace write but before acknowledgement does not duplicate it', () => withOutbox(async () => {
   const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(candidateState)]])
   await stageLocalCommerceSyncIntent(stageInput())
+  let writes = 0
+  storage.setItem = () => { writes += 1; throw new Error('Ledger must not be rewritten after a confirmed save') }
   const status = await recoverLocalCommerceSyncOutbox(storage, serialLocks())
   assert.equal(status.status, 'ready')
   assert.equal(status.recoveredCount, 1)
   assert.equal(status.replayedCount, 0)
+  assert.equal(writes, 0)
   assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(candidateState))
   assert.equal((await readLocalCommerceSyncIntents()).length, 0)
+  const receipt = await acknowledgeLocalCommerceSyncIntent('CMD-OUTBOX-1')
+  assert.equal(receipt.replayed, true)
+  assert.equal(receipt.receipt.recovered, true)
+  const again = await recoverLocalCommerceSyncOutbox(storage, serialLocks())
+  assert.equal(again.status, 'ready')
+  assert.equal(again.recoveredCount, 0)
+  assert.equal(writes, 0)
 }))
 
 test('recovery never overwrites a diverged workspace and keeps the intent pending', () => withOutbox(async () => {
