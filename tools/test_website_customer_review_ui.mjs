@@ -244,3 +244,43 @@ test('current identity can commit; expiry and identity errors fail closed', asyn
   assert.equal(await boundary.commit(epoch, actor, expiry, () => { writes++ }), false)
   assert.equal(writes, 1)
 })
+
+test('actual change and acceptance handlers reject late success after access changes', async () => {
+  const ast = ts.createSourceFile('review.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  for (const name of ['submit', 'acceptRevision']) for (const change of ['signout', 'user', 'company', 'refresh', 'unchanged']) {
+    let fn
+    function visit(node) { if (ts.isFunctionDeclaration(node) && node.name?.text === name) fn = node; ts.forEachChild(node, visit) }
+    visit(ast); assert.ok(fn)
+    const response = deferred(), messages = [], decisions = []
+    let identity = actor
+    const access = createReviewAccessBoundary(async () => identity, same)
+    access.invalidate()
+    const noop = () => {}
+    const context = {
+      review: { expiresAt: new Date(Date.now() + 60000).toISOString(), previewDigest: 'synthetic-digest' },
+      reviewId: 'synthetic-review', actor, busy: false, confirmed: true,
+      note: name === 'submit' ? 'Synthetic changes' : '', decision: { status: 'pending_review' },
+      pending: { current: null }, pendingAcceptance: { current: null }, inFlight: { current: false },
+      access, sameManagedIdentity: same, crypto: { randomUUID: () => 'synthetic-command' },
+      setBusy: noop, setUnconfirmed: noop, setAcceptanceUnconfirmed: noop, setNote: noop, setActor: noop, setReview: noop,
+      setMessage: value => messages.push(value), setDecision: value => decisions.push(value),
+      sendManagedWebsiteReviewChanges: () => response.promise, sendManagedWebsiteAcceptance: () => response.promise,
+      verifyCustomerChangeAcknowledgement: noop,
+      verifyCustomerAcceptanceAcknowledgement: () => ({ status: 'accepted_for_operator_release_review' }),
+    }
+    const js = ts.transpileModule(fn.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    const run = vm.runInNewContext(`${js}; ${name}`, context)
+    const saving = run({ preventDefault() {} })
+    assert.equal(context.inFlight.current, true)
+    if (change === 'refresh') access.invalidate()
+    if (change === 'signout') identity = null
+    if (change === 'user') identity = { ...actor, userId: 'other' }
+    if (change === 'company') identity = { ...actor, workspaceId: 'other' }
+    response.resolve({})
+    await saving
+    assert.equal(context.inFlight.current, false)
+    assert.equal(decisions.length, change === 'unchanged' ? 1 : 0, `${name}/${change}`)
+    assert.equal(messages.some(message => /is saved/.test(message)), change === 'unchanged', `${name}/${change}`)
+    if (change === 'refresh') assert.equal(messages.length, 1, 'stale epoch cannot overwrite refresh message')
+  }
+})
