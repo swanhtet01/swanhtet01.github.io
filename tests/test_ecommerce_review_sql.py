@@ -113,3 +113,22 @@ class CatalogReviewSqlTests(unittest.TestCase):
         with self.transaction(RECIPIENT) as connection:
             self.assertEqual(connection.execute('select preview from app_private.ecommerce_customer_reviews').fetchall(),[])
 
+        from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
+        from supermega_runtime.trial_store import PostgresTrialStore,TrialPrincipal,TrialPermissionDenied,TrialNotReadyError
+        review_id=uuid4()
+        with self.transaction(OWNER) as connection:
+            version=connection.execute("select version from app_private.workspace_state where workspace_id=%s and surface='commerce'",(WORKSPACE,)).fetchone()[0]
+            connection.execute("""insert into app_private.ecommerce_customer_reviews
+                (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,preview,preview_digest,expires_at)
+                values (%s,%s,%s,%s,%s,%s::jsonb,%s,clock_timestamp()+interval '1 day')""",
+                (review_id,WORKSPACE,RECIPIENT,OWNER,version,json.dumps(commerce_storefront_preview(source)),commerce_storefront_preview_digest(source)))
+            connection.commit()
+        adapter=EcommerceCustomerReviewStore(PostgresTrialStore(self.runtime_url,reducer=lambda *args:{},write_enabled=False))
+        actor=TrialPrincipal(WORKSPACE,RECIPIENT,'human')
+        packet=adapter.preview(actor,str(review_id))
+        self.assertEqual(packet['preview'],commerce_storefront_preview(source))
+        self.assertEqual(set(packet),{'reviewId','contentRevision','preview','previewDigest','expiresAt','status','publicationAuthorized','deploymentAuthorized'})
+        with self.assertRaises(TrialPermissionDenied): adapter.preview(actor,str(uuid4()))
+        with pg._connect(self.admin_url) as connection:
+            connection.execute('grant execute on function app_private.ecommerce_review_recipient_ready(text) to public')
+        with self.assertRaises(TrialNotReadyError): adapter.preview(actor,str(review_id))
