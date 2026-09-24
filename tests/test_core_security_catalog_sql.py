@@ -11,6 +11,11 @@ from supermega_runtime.trial_store import PostgresTrialStore, TrialNotReadyError
 class CoreSecurityCatalogSqlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Schema-dependent trigger contracts are initialized at import time.
+        # Require an explicit process configuration, never patch only the version.
+        from supermega_runtime.trial_store import TRIAL_SCHEMA_VERSION
+        if TRIAL_SCHEMA_VERSION != 13:
+            raise RuntimeError('Run this v13 fixture with SUPERMEGA_TRIAL_SCHEMA_VERSION=13')
         cls.bin = pg._default_postgres_bin()
         cls.environment = pg._clean_environment(cls.bin)
         cls.disposable = pg._disposable_workspace()
