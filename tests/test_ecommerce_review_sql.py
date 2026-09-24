@@ -332,6 +332,46 @@ class CatalogEnrollmentSqlTests(unittest.TestCase):
         with self.assertRaises(TrialPermissionDenied):
             adapter.prepare(writer,review_id=str(uuid4()),recipient_grant_id=str(uuid4()),
                 expected_version=1,expires_at=(now+timedelta(hours=1)).isoformat())
+        fake_grant=str(uuid4())
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("""insert into app_private.workspace_events
+                (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,
+                 expected_version,resulting_version,payload_json,result_json)
+                select %s,workspace_id,%s,command_fingerprint,surface,event_type,actor_id,actor_kind,
+                    expected_version,resulting_version,payload_json,result_json
+                from app_private.workspace_events where workspace_id=%s and command_id=%s""",
+                (fake_grant,fake_grant,workspace,plan['grantId']))
+        self.assertEqual(adapter.list_recipients(writer),choices)
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from supermega_runtime.trial_runtime import create_trial_router
+        app=FastAPI()
+        principals={'operator':writer,'customer':customer}
+        app.include_router(create_trial_router(store=store,
+            resolve_principal=lambda request:principals.get(request.headers.get('x-test-actor'))))
+        headers={'x-test-actor':'operator'}
+        list_url='/api/trial/v1/ecommerce-review-recipients'
+        prepare_url='/api/trial/v1/ecommerce-reviews'
+        payload=dict(reviewId=str(uuid4()),recipientGrantId=plan['grantId'],expectedVersion=1,
+            expiresAt=(now+timedelta(hours=1)).isoformat())
+        with TestClient(app) as client:
+            listed=client.get(list_url,headers=headers)
+            self.assertEqual(listed.status_code,200,listed.text)
+            self.assertEqual(listed.json(),choices)
+            self.assertEqual(listed.headers['cache-control'],'private, no-store')
+            self.assertEqual(client.get(list_url).status_code,401)
+            self.assertEqual(client.get(list_url,headers={'x-test-actor':'customer'}).status_code,403)
+            for query in ('?after=bad','?after=','?workspaceId=other',
+                          '?after='+plan['grantId']+'&after='+plan['grantId']):
+                self.assertEqual(client.get(list_url+query,headers=headers).status_code,422)
+            self.assertEqual(client.post(prepare_url,headers=headers,
+                json=dict(payload,recipientGrantId=fake_grant)).status_code,403)
+            for invalid in (dict(payload,recipientActorId=recipient),dict(payload,workspaceId=workspace)):
+                self.assertEqual(client.post(prepare_url,headers=headers,json=invalid).status_code,422)
+            prepared=client.post(prepare_url,headers=headers,json=payload)
+            self.assertEqual(prepared.status_code,200,prepared.text)
+            self.assertTrue(prepared.json()['persisted'])
+            self.assertTrue(client.post(prepare_url,headers=headers,json=payload).json()['replayed'])
         review = adapter.prepare(writer, review_id=str(uuid4()),recipient_grant_id=plan['grantId'],
             expected_version=1,expires_at=(now+timedelta(hours=1)).isoformat())
         self.assertEqual(adapter.preview(customer,review['reviewId'])['previewDigest'],review['previewDigest'])
