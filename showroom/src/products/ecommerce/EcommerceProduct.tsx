@@ -1732,7 +1732,9 @@ export function EcommerceProduct() {
           ? 'Shop owns fulfilment for this order. The storefront stays ready for the next customer.'
           : managedIdentity
             ? 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
-            : 'Add one sample item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.'
+            : ecommerceTodayCartUnits
+              ? 'Review your sample request. No live order will be placed.'
+              : 'Add an item to try checkout. No live order will be placed.'
   const ecommerceTodayAction = importNeeded
     ? 'Connect products'
     : storefrontSetupRequired
@@ -1867,7 +1869,7 @@ export function EcommerceProduct() {
       </section>
 
       <details className="ecommerce-business-controls">
-        <summary><span><strong>Extra order tools</strong><small>Use only when importing orders, checking delivery, or preparing launch</small></span><b>Extra</b></summary>
+        <summary><span><strong>Extra order tools</strong></span></summary>
         <div className="ecommerce-business-controls-content">
       <section aria-label="Order workspace" className="ecommerce-ai-desk">
         <div>
