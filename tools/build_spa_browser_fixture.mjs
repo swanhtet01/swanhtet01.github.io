@@ -13,7 +13,7 @@ original=tests.apply_event
 samples={}
 def capture(*a,**k):
  r=original(*a,**k); s=r.get('serviceSchedule',{})
- if s.get('revision') in (7,8) and len(s.get('packageLedger',[]))==2: samples.setdefault(str(s['revision']),deepcopy(r))
+ if s.get('revision') == 4 or (s.get('revision') in (7,8) and len(s.get('packageLedger',[]))==2): samples.setdefault(str(s['revision']),deepcopy(r))
  return r
 with patch.object(tests,'apply_event',capture):
  tests.CommerceRuntimeTests('test_service_schedule_is_versioned_inside_commerce_and_fails_closed').test_service_schedule_is_versioned_inside_commerce_and_fails_closed()
@@ -21,7 +21,8 @@ print(json.dumps(samples))
 `], { encoding:'utf8' })
 if(result.status !== 0) throw new Error(result.stderr)
 const samples = JSON.parse(result.stdout)
-const fixture = samples['7']
+const mode = process.argv.includes('--setup') ? 'setup' : 'redeem'
+const fixture = samples[mode === 'setup' ? '4' : '7']
 const at = samples['8'].serviceSchedule.events.at(-1).happenedAt
 const out = resolve('showroom/dist/__qa-spa')
 mkdirSync(out,{recursive:true})
