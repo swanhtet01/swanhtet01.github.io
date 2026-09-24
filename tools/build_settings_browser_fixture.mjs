@@ -19,6 +19,7 @@ window.fetch=async()=>{throw Error('Fixture network denied')};
 const root=createRoot(document.getElementById('root'));
 async function cleanup(){root.unmount();for(const db of connections)db.close();await Promise.all([...names].map(name=>new Promise((resolve,reject)=>{const r=nativeIDB.deleteDatabase(name);r.onsuccess=resolve;r.onerror=reject;r.onblocked=()=>reject(Error('Synthetic cleanup blocked'))})));document.body.textContent='Synthetic databases removed';}
 
+const cleanupButton=document.createElement('button');cleanupButton.textContent='Clean synthetic databases';cleanupButton.onclick=()=>void cleanup();document.body.prepend(cleanupButton);
 let releaseRead;
 function report(text){document.getElementById('evidence').textContent=text}
 async function load(label,kind,delayed=false){
@@ -41,8 +42,8 @@ root.render(<><p>Isolated actual Settings. Synthetic memory and databases only. 
 <button onClick={()=>void load('B','kit')}>Load synthetic setup B</button>
 <button onClick={()=>void load('B','package',true)}>Hold package B read</button>
 <button onClick={()=>{releaseRead?.();releaseRead=null;report('Synthetic file read released')}}>Release file read</button>
-<button onClick={()=>void cleanup()}>Clean synthetic databases</button><output id="evidence"/>
-<MemoryRouter initialEntries={['/settings/']}><Routes><Route element={<Outlet context={{status:'demo'}}/>}><Route path="settings/" element={<SettingsPage/>}/></Route></Routes></MemoryRouter></>);
+<output id="evidence"/>
+<MemoryRouter initialEntries={['/settings/']}><Routes><Route element={<Outlet context={{status:'demo',serviceStatus:'demo',operatingMode:'isolated_demo',enterpriseDbReady:false,authReady:false,auditReady:false,writesReady:false,coverageScore:0,requirements:[],activationSteps:[],evidencePlan:[],activationManifest:null,importProvisioning:null}}/>}><Route path="settings/" element={<SettingsPage/>}/></Route></Routes></MemoryRouter></>);
 ` }, jsx:'automatic',bundle:true,format:'esm',target:'es2022',define:{'import.meta.env':'{}'},outfile:resolve(out,'fixture.js') })
 writeFileSync(resolve(out,'index.html'),`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="connect-src 'none'; form-action 'none'"><title>Isolated Settings acceptance</title><link rel="stylesheet" href="fixture.css"><div id="root"></div><script type="module" src="fixture.js"></script>`)
 console.log('Built /__qa-settings/. Clean synthetic databases before leaving; remove three assets after review.')
