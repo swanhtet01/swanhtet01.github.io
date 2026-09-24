@@ -8848,6 +8848,34 @@ class CommerceRuntimeTests(unittest.TestCase):
                 }
             ],
         }
+        legacy_schedule = deepcopy(schedule)
+        legacy_booking = legacy_schedule["bookings"][0]
+        legacy_booking["resourceId"] = legacy_booking.pop("resourceIds")[0]
+        legacy_state = {**current, "serviceSchedule": legacy_schedule}
+        validate_commerce_state(legacy_state)
+        assigned_schedule = deepcopy(schedule)
+        assigned_schedule["revision"] = 2
+        assigned_schedule["bookings"][0]["updatedAt"] = "2026-07-29T04:05:00.000Z"
+        assignment_reason = "Assign the reviewed staff and room to the legacy booking."
+        assigned_schedule["events"].append({
+            "revision": 2, "type": "booking_resources_assigned",
+            "subjectId": "booking-0001", "actor": "operator-1",
+            "reason": assignment_reason, "happenedAt": "2026-07-29T04:05:00.000Z",
+        })
+        assignment_proof = {
+            "actionId": "ACT-SERVICE-SCHEDULE-R2", "actor": "operator-1",
+            "reason": assignment_reason, "capturedAt": "2026-07-29T04:05:00.000Z",
+            "evidenceReference": "SHOP-SERVICE-SCHEDULE:R2",
+        }
+        assigned_state = apply_event(legacy_state, "commerce.service_schedule.saved",
+            {**current, "serviceSchedule": assigned_schedule}, assignment_proof)
+        self.assertEqual(assigned_state["serviceSchedule"], assigned_schedule)
+        forged_assignment = deepcopy(assigned_schedule)
+        forged_assignment["bookings"][0]["note"] = "Unrelated hidden edit"
+        with self.assertRaises(TrialValidationError):
+            apply_event(legacy_state, "commerce.service_schedule.saved",
+                {**current, "serviceSchedule": forged_assignment}, assignment_proof)
+
         clean_schedule = deepcopy(schedule)
         clean_schedule["revision"] = 0
         clean_schedule["clients"] = []
