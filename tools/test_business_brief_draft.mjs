@@ -31,3 +31,23 @@ test('blocked storage returns a usable empty draft and reports save failure', ()
   assert.deepEqual(readBusinessBrief(storage, 'website'), emptyBusinessBrief())
   assert.equal(saveBusinessBrief(storage, 'website', draft), false)
 })
+
+test('returning to each product restores its own brief until the exact expiry boundary', () => {
+  const storage = memory()
+  const ecommerce = { company: 'QA catalog', description: 'Three products', reference: 'Public catalog' }
+  saveBusinessBrief(storage, 'website', draft, 1000)
+  saveBusinessBrief(storage, 'ecommerce', ecommerce, 2000)
+  assert.deepEqual(readBusinessBrief(storage, 'website', 3600999), draft)
+  assert.deepEqual(readBusinessBrief(storage, 'website', 3601000), emptyBusinessBrief())
+  assert.deepEqual(readBusinessBrief(storage, 'ecommerce', 3601000), ecommerce)
+  assert.equal(storage.data.has('supermega.business-brief.website.v1'), false)
+  assert.deepEqual(readBusinessBrief(storage, 'ecommerce', 3602000), emptyBusinessBrief())
+})
+
+test('failed replacement reports failure and preserves the last successfully saved brief', () => {
+  const storage = memory()
+  saveBusinessBrief(storage, 'website', draft, 1000)
+  const unavailable = { ...storage, setItem() { throw Error('quota') } }
+  assert.equal(saveBusinessBrief(unavailable, 'website', { ...draft, description: 'Unsaved edit' }, 2000), false)
+  assert.deepEqual(readBusinessBrief(storage, 'website', 3000), draft)
+})
