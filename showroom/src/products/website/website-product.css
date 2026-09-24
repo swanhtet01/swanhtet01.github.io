@@ -3587,8 +3587,7 @@
    website island and the owner-content preview surfaces; floors the preview
    hero (was .95/-.055em, which clips Burmese diacritics in the owner's own
    headline). */
-.website-product { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif; }
-.website-preview-site, .storefront-preview { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif; }
+.website-product, .website-preview-site, .storefront-preview { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif; }
 .website-product :lang(my), .website-product [lang="my"] { line-height: 1.65; letter-spacing: 0; }
 .preview-hero > h1 { line-height: 1.3; letter-spacing: 0; }
 
@@ -3597,9 +3596,7 @@
 .website-today-metrics small, .website-lead-counts small { font-size: var(--font-size-xs); }
 .website-today-metrics strong { font-size: var(--font-size-display); }
 .website-today-priority p, .website-lead-inbox p { font-size: var(--font-size-base); }
-.website-today-source { font-size: var(--font-size-sm); }
-.website-lead-list article small { font-size: var(--font-size-sm); }
-.website-lead-capture-form label, .website-lead-review-controls label { font-size: var(--font-size-sm); }
+.website-today-source, .website-lead-list article small, .website-lead-capture-form label, .website-lead-review-controls label { font-size: var(--font-size-sm); }
 .website-business-controls > summary small, .website-start-tools > summary small, .website-start-tools > summary b { font-size: var(--font-size-xs); }
 
 /* Design phase 1: un-trap the editor scroll on phones — mirrors the
