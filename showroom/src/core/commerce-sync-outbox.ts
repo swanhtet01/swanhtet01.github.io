@@ -341,8 +341,9 @@ export function acknowledgeLocalCommerceSyncIntent(commandId: string, recovered 
   return settleIntent(commandId, 'local_applied', recovered)
 }
 
-export function abandonLocalCommerceSyncIntent(commandId: string) {
-  return settleIntent(commandId, 'abandoned', false)
+export async function abandonLocalCommerceSyncIntent(commandId: string, lockManager: CommerceSyncLockManager | undefined = globalThis.navigator?.locks as CommerceSyncLockManager | undefined) {
+  if (!lockManager?.request) throw new Error('Safe Shop discard requires workspace write locking.')
+  return lockManager.request(COMMERCE_LOCK, { mode: 'exclusive' }, () => settleIntent(commandId, 'abandoned', false))
 }
 
 export async function readLocalCommerceSyncIntents() {

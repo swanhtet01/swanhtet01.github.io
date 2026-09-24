@@ -277,7 +277,7 @@ test('acknowledgement settles the intent into a durable idempotent receipt', () 
 
 test('abandonment records an abandoned receipt that later settlement cannot flip', () => withOutbox(async () => {
   await stageLocalCommerceSyncIntent(stageInput())
-  const abandoned = await abandonLocalCommerceSyncIntent('CMD-OUTBOX-1')
+  const abandoned = await abandonLocalCommerceSyncIntent('CMD-OUTBOX-1', serialLocks())
   assert.equal(abandoned.replayed, false)
   assert.equal(abandoned.receipt.status, 'abandoned')
   assert.equal((await readLocalCommerceSyncIntents()).length, 0)
@@ -458,11 +458,33 @@ test('retry rechecks pending command after waiting for the workspace lock', () =
   const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]])
   const staged = await stageLocalCommerceSyncIntent(stageInput())
   const locks = { request: async (_name, _options, callback) => {
-    await abandonLocalCommerceSyncIntent(staged.intent.commandId)
+    await abandonLocalCommerceSyncIntent(staged.intent.commandId, serialLocks())
     return callback()
   } }
   await assert.rejects(() => recoverLocalCommerceSyncOutbox(storage, locks, staged.intent), /does not match/)
   assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(baseState))
   const settled = await acknowledgeLocalCommerceSyncIntent(staged.intent.commandId)
   assert.equal(settled.receipt.status, 'abandoned')
+}))
+
+
+test('discard waits behind recovery on the same workspace lock', () => withOutbox(async () => {
+  const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]])
+  const staged = await stageLocalCommerceSyncIntent(stageInput())
+  const locks = serialLocks()
+  let release
+  const held = locks.request('held', {}, () => new Promise(resolve => { release = resolve }))
+  await Promise.resolve()
+  const recovery = recoverLocalCommerceSyncOutbox(storage, locks, staged.intent)
+  const discard = abandonLocalCommerceSyncIntent(staged.intent.commandId, locks)
+  const outcomes = Promise.allSettled([recovery, discard])
+  assert.equal(locks.requests, 3, 'discard must queue behind recovery')
+  release()
+  await held
+  const [recovered, discarded] = await outcomes
+  assert.equal(recovered.status, 'fulfilled')
+  assert.equal(discarded.status, 'fulfilled')
+  assert.equal(discarded.value.receipt.status, 'local_applied')
+  assert.equal(discarded.value.replayed, true)
+  assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(candidateState))
 }))
