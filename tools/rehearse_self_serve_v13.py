@@ -414,7 +414,7 @@ def run(expected_head):
         "legacyProductionValidator": {"ready": False, "failedChecks": legacy["failed_checks"]},
         "currentDatabaseValidator": {"contract": current["contract"], "ready": True,
             "checks": current["checks"], "restoreChecks": restored_catalog["checks"]},
-        "remainingGates": ["migration_manifest_reconciliation",
+        "remainingGates": ["hosted_migration_history_reconciliation",
             "hosted_auth_and_rls", "provider_pooler_storage_backup_restore", "owner_release_acceptance"],
         "controls": {"releaseAuthorized": False, "hostedActivationProven": False,
             "providerWritesPerformed": False, "realAccountCreated": False, "realPaymentConfirmed": False}}
