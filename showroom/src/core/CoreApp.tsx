@@ -1024,12 +1024,9 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   const isCounterConfirmation = action.presentation === 'counter'
   const isCounterSettlement = isCounterConfirmation && action.kind === 'order_settle'
   const isPaymentReconciliation = action.kind === 'payment_reconcile'
-  // A frozen command proof normally blocks Cancel and Escape on purpose: the managed write may
-  // already have landed, so walking away could leave the operator believing nothing happened.
-  // That reasoning only holds while the outcome is unknown. Once a submit has come back with an
-  // error the outcome IS known -- nothing was applied -- and keeping the only exit as "Retry same
-  // confirmation" traps the operator in a dialog whose retry reuses the same frozen timestamp and
-  // therefore fails identically. Reloading the app was the sole escape. Let them dismiss it.
+  // Keep the dialog locked during an unresolved submission. After an error, allow
+  // recovery without trapping the operator. An error alone does not prove that a
+  // managed write never landed; retry must retain the original command proof.
   const confirmationLocked = Boolean(action.confirmation) && !error
 
   async function submit(event: FormEvent) {
@@ -1073,7 +1070,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
       {error
         ? <div className="form-notice" data-action-gate="error" data-tone="error" role="alert">
           <p>{ownerFacingActionError(error)}</p>
-          {action.confirmation ? <p>This confirmation keeps its original time stamp, so retrying it will refuse the same way. Cancel and start the change again.</p> : null}
+          {action.confirmation ? <p>Retry keeps the same confirmation. If the result is uncertain, check your records before starting again.</p> : null}
           <details className="action-error-detail"><summary>Technical detail</summary><code data-action-gate="error-detail">{error}</code></details>
         </div>
         : action.confirmation ? <p className="form-notice" role="status">This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.</p> : null}
