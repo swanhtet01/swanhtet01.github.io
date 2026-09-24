@@ -3204,87 +3204,90 @@ export async function validateManagedClientImport(
 }
 
 export async function loadManagedWebsiteRecipients(expectedIdentity: ManagedIdentity, after?: string) {
-  if (after !== undefined && (after.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(after))) {
+  if (after !== undefined && (after.length !== 36 || !managedReviewUuid.test(after))) {
     throw new ManagedTrialError('The customer page is invalid.', { code: 'website_review_invalid' })
   }
   return authorizedRequest<unknown>('/api/trial/v1/website-review-recipients' + (after ? `?after=${after}` : ''),
-    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { ...privateReviewRequest }, true, expectedIdentity)
 }
 
 export async function prepareManagedWebsiteReview(
   payload: { reviewId: string; recipientGrantId: string; expectedVersion: number; expiresAt: string }, expectedIdentity: ManagedIdentity,
 ) {
   for (const id of [payload.reviewId, payload.recipientGrantId]) {
-    if (id.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+    if (id.length !== 36 || !managedReviewUuid.test(id)) {
       throw new ManagedTrialError('The selected customer review is invalid.', { code: 'website_review_invalid' })
     }
   }
   return authorizedRequest<unknown>('/api/trial/v1/website-reviews',
-    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { method: 'POST', body: JSON.stringify(payload), ...privateReviewRequest }, true, expectedIdentity)
 }
 
 export async function withdrawManagedWebsiteReview(reviewId: string, expectedIdentity: ManagedIdentity) {
-  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+  if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)) {
     throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}/withdraw`,
-    { method: 'POST', body: JSON.stringify({}), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { method: 'POST', body: JSON.stringify({}), ...privateReviewRequest }, true, expectedIdentity)
 }
 
 export async function loadManagedWebsitePreparation(expectedIdentity: ManagedIdentity) {
   return authorizedRequest<unknown>('/api/trial/v1/website-review-preparation',
-    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { ...privateReviewRequest }, true, expectedIdentity)
 }
 
 export async function loadManagedWebsiteReviewStaffPage(expectedIdentity: ManagedIdentity, reviewId?: string, after?: string) {
   for (const value of [reviewId, after]) {
     if (value !== undefined && (value.length !== 36 || !/^[0-9a-f-]{36}$/.test(value)
-      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value))) {
+      || !managedReviewUuid.test(value))) {
       throw new ManagedTrialError('The review page is invalid.', { code: 'website_review_invalid' })
     }
   }
   const path = '/api/trial/v1/website-reviews' + (reviewId ? `/${reviewId}/change-requests` : '')
   return authorizedRequest<unknown>(path + (after ? `?after=${after}` : ''),
-    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { ...privateReviewRequest }, true, expectedIdentity)
 }
 
+const managedReviewUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const privateReviewRequest = { cache: 'no-store', redirect: 'error', credentials: 'omit' } as const
+
 export async function loadManagedWebsiteReview(reviewId: string, expectedIdentity: ManagedIdentity) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+  if (!managedReviewUuid.test(reviewId)) {
     throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}`,
-    { cache: 'no-store', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
+    { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
 export async function sendManagedWebsiteReviewChanges(
   payload: { reviewId: string; commandId: string; previewDigest: string; note: string },
   expectedIdentity: ManagedIdentity,
 ) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.reviewId)) {
+  if (!managedReviewUuid.test(payload.reviewId)) {
     throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${payload.reviewId}/change-requests`,
-    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error', credentials: 'omit' },
+    { method: 'POST', body: JSON.stringify(payload), ...privateReviewRequest },
     true, expectedIdentity)
 }
 
 export async function loadManagedWebsiteAcceptance(reviewId: string, expectedIdentity: ManagedIdentity) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+  if (!managedReviewUuid.test(reviewId)) {
     throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}/acceptance`,
-    { cache: 'no-store', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
+    { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
 export async function sendManagedWebsiteAcceptance(
   payload: { reviewId: string; commandId: string; previewDigest: string; decision: 'accept_preview_for_release_review' },
   expectedIdentity: ManagedIdentity,
 ) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.reviewId)) {
+  if (!managedReviewUuid.test(payload.reviewId)) {
     throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${payload.reviewId}/acceptance`,
-    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error', credentials: 'omit' },
+    { method: 'POST', body: JSON.stringify(payload), ...privateReviewRequest },
     true, expectedIdentity)
 }
 
@@ -4171,21 +4174,21 @@ export async function decideManagedApproval(
 }
 
 export async function loadManagedEcommerceReview(reviewId: string, expectedIdentity: ManagedIdentity) {
-  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+  if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)) {
     throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}`,
-    { cache: 'no-store', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
+    { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
 export async function loadManagedEcommerceDecisions(reviewId: string, expectedIdentity: ManagedIdentity, after?: string) {
   for (const id of [reviewId, ...(after === undefined ? [] : [after])]) {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+    if (!managedReviewUuid.test(id)) {
       throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
     }
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/decisions${after ? `?after=${after}` : ''}`,
-    { cache: 'no-store', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
+    { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
 export type EcommerceReviewDecision = { reviewId: string; commandId: string; previewDigest: string } & (
@@ -4194,7 +4197,7 @@ export type EcommerceReviewDecision = { reviewId: string; commandId: string; pre
 
 export async function sendManagedEcommerceDecision(payload: EcommerceReviewDecision, expectedIdentity: ManagedIdentity) {
   for (const id of [payload.reviewId, payload.commandId]) {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+    if (!managedReviewUuid.test(id)) {
       throw new ManagedTrialError('This review command is invalid.', { code: 'ecommerce_review_invalid' })
     }
   }
@@ -4206,51 +4209,51 @@ export async function sendManagedEcommerceDecision(payload: EcommerceReviewDecis
 }
 
 export async function loadManagedEcommerceRecipients(expectedIdentity: ManagedIdentity, after?: string) {
-  if (after !== undefined && (after.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(after))) {
+  if (after !== undefined && (after.length !== 36 || !managedReviewUuid.test(after))) {
     throw new ManagedTrialError('The customer page is invalid.', { code: 'ecommerce_review_invalid' })
   }
   return authorizedRequest<unknown>('/api/trial/v1/ecommerce-review-recipients' + (after ? `?after=${after}` : ''),
-    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { ...privateReviewRequest }, true, expectedIdentity)
 }
 
 export async function prepareManagedEcommerceReview(
   payload: { reviewId: string; recipientGrantId: string; expectedVersion: number; expiresAt: string }, expectedIdentity: ManagedIdentity,
 ) {
   for (const id of [payload.reviewId, payload.recipientGrantId]) {
-    if (id.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+    if (id.length !== 36 || !managedReviewUuid.test(id)) {
       throw new ManagedTrialError('The selected customer review is invalid.', { code: 'ecommerce_review_invalid' })
     }
   }
   return authorizedRequest<unknown>('/api/trial/v1/ecommerce-reviews',
-    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { method: 'POST', body: JSON.stringify(payload), ...privateReviewRequest }, true, expectedIdentity)
 }
 
 export async function withdrawManagedEcommerceReview(reviewId: string, expectedIdentity: ManagedIdentity) {
-  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+  if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)) {
     throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/withdraw`,
-    { method: 'POST', body: JSON.stringify({}), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { method: 'POST', body: JSON.stringify({}), ...privateReviewRequest }, true, expectedIdentity)
 }
 
 export async function reconcileManagedEcommerceReview(reviewId: string, expectedIdentity: ManagedIdentity) {
-  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+  if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)) {
     throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/reconciliation`,
-    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { ...privateReviewRequest }, true, expectedIdentity)
 }
 
 export async function loadManagedEcommercePreparation(expectedIdentity: ManagedIdentity) {
   return authorizedRequest<unknown>('/api/trial/v1/ecommerce-review-preparation',
-    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { ...privateReviewRequest }, true, expectedIdentity)
 }
 
 export async function resolveExpiredManagedEcommerceReview(reviewId: string, expiresAt: string, expectedIdentity: ManagedIdentity) {
-  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)
+  if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt) || !Number.isFinite(Date.parse(expiresAt))) {
     throw new ManagedTrialError('This saved review request is invalid.', { code: 'ecommerce_review_invalid' })
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/resolve-expired`,
-    { method: 'POST', body: JSON.stringify({ expiresAt }), cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
+    { method: 'POST', body: JSON.stringify({ expiresAt }), ...privateReviewRequest }, true, expectedIdentity)
 }
