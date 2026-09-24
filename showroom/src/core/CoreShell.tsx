@@ -14,6 +14,7 @@ import {
   resolveManagedProductRoute,
 } from './managed-product-access'
 import { currentManagedWorkspace } from './managed-workspace-selection'
+import { watchManagedSessionStorage } from './managed-session-invalidation'
 import { readManagedSignupPolicy, type ManagedSignupPolicy } from './managed-signup-policy'
 import type { SetupProductId } from './product-setup'
 
@@ -437,6 +438,8 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export function CoreLayout() {
+  const [sessionChanged, setSessionChanged] = useState(false)
+  useEffect(() => watchManagedSessionStorage(window, () => setSessionChanged(true)), [])
   const location = useLocation()
   const runtime = useRuntimeHealth()
   const [theme, setTheme] = useState<InterfaceTheme>(initialInterfaceTheme)
@@ -548,6 +551,8 @@ export function CoreLayout() {
 
   const toggleTheme = () => setTheme((current) => current === 'dark' ? 'light' : 'dark')
   const themeLabel = theme === 'dark' ? 'Use light theme' : 'Use dark theme'
+
+  if (sessionChanged) return <PortalAccessPanel title="Account changed in another tab" copy="Reload to verify the current account. Saved records are unchanged; unsaved edits may need to be entered again." action={<button className="core-button primary" onClick={() => window.location.reload()} type="button">Reload workspace</button>} />
 
   return (
     <div className={`core-shell theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
