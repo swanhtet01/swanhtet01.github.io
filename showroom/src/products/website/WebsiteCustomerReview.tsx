@@ -148,7 +148,9 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
       {!opening && <p>Use the account assigned by SuperMega and the latest review link. If it still will not open, reply to the person who sent it and ask them to check your access or send a fresh review. You do not need to create another company or start a trial. Never share your password or sign-in code.</p>}
     </section>}
     {review && <>
-      <section aria-labelledby="customer-review-guide-title" className="customer-review-guide">
+      <details className="customer-review-details">
+        <summary>How to review your website</summary>
+        <section aria-labelledby="customer-review-guide-title" className="customer-review-guide">
         <div><span className="core-eyebrow">Private review</span><h2 id="customer-review-guide-title">Review in 3 steps</h2></div>
         <ol>
           <li><strong>Open each prepared page</strong><span>{review.preview.pages.length} {review.preview.pages.length === 1 ? 'page' : 'pages'} ready</span></li>
@@ -157,6 +159,7 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
         </ol>
         <p>Acceptance records your decision for this exact revision. SuperMega handles the separate release review and publishing. Nothing is published from this screen.</p>
       </section>
+      </details>
       <PreparedWebsitePage review={review} pageId={pageId} onPageChange={setPageId} />
       {decision?.status === 'accepted_for_operator_release_review' ? <section className="customer-review-feedback"><h2>Acceptance saved</h2><p>Revision {review.contentRevision} is accepted for SuperMega’s release review, not published. Contact SuperMega if you need another revision.</p></section> : <>
         {decision?.status === 'pending_review' && <section className="customer-review-feedback" aria-labelledby="website-accept-title">
