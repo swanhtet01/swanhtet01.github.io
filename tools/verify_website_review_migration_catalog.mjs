@@ -43,7 +43,7 @@ const expected = {
   relations: '3c44055e324575be93a05084d9ee02fc71a43cc00c482ef55f3b52c1228bb7a8',
   columns: '25369a7f720e9d382f9fcd52c62f93017183b2f2b77e6add1f17d202292077de',
   policies: '94e6ba31279e8fbf1a51b8534ec76524856c89eab1ed900ed1ac4a13afd920ba',
-  functions: '43363d70f1d95f0f5eae86a5787c835f13424bdd4268e17e11308685224b5b37',
+  functions: '4dcf4b8951331ec6daf23e49b347ac813218b117742290bfec4e08f8cd9f6b70',
   triggers: '84436c5251aeaffca50ec335499803ded93f84cb49f023dac890a64f80cee742',
   constraints: 'aa3867fd2063efbe6009f9a696399806576ebb5d093046792fa93f6063747102',
   indexes: 'a78adb1cdfc7a5a8904166eff3df39d71689e141df2a69af06d9d7eb5930e051',
@@ -66,7 +66,32 @@ export async function verifyWebsiteReviewMigrationCatalog(database, requireCheck
   const { rows } = await database.query(`select
     app_private.website_review_can('website.review') is not true as capability_denied,
     app_private.website_review_recipient_ready('unassigned') is not true as recipient_denied,
-    app_private.website_review_entitled() is not true as entitlement_denied`)
+    app_private.website_review_entitled() is not true as entitlement_denied,
+    app_private.ecommerce_review_entitled() is not true as catalog_entitlement_denied`)
   requireCheck('Website review unbound identity fails closed',
-    rows[0].capability_denied && rows[0].recipient_denied && rows[0].entitlement_denied)
+    rows[0].capability_denied && rows[0].recipient_denied && rows[0].entitlement_denied && rows[0].catalog_entitlement_denied)
+}
+
+
+export async function verifyCatalogEntitlementMutations(database, requireCheck) {
+  const { rows } = await database.query(websiteReviewCatalogQueries.functions)
+  const previous = rows.filter(row => row.proname !== 'ecommerce_review_entitled')
+  requireCheck('Ecommerce proof leaves every prior private function unchanged',
+    createHash('sha256').update(JSON.stringify(previous)).digest('hex') === '43363d70f1d95f0f5eae86a5787c835f13424bdd4268e17e11308685224b5b37')
+  for (const [name, sql] of [
+    ['public execute', 'grant execute on function app_private.ecommerce_review_entitled() to public'],
+    ['changed source', 'create or replace function app_private.ecommerce_review_entitled() returns boolean language sql stable security definer set search_path=pg_catalog,app_private as $$ select true $$'],
+    ['missing proof', 'drop function app_private.ecommerce_review_entitled()'],
+  ]) {
+    await database.exec('begin')
+    try {
+      await database.exec(sql)
+      const actual = await websiteReviewCatalogDigests(database)
+      requireCheck(`Ecommerce proof catalog rejects ${name}`, actual.functions !== expected.functions)
+    } finally {
+      await database.exec('rollback')
+    }
+  }
+  requireCheck('Ecommerce proof mutation checks restore the catalog',
+    (await websiteReviewCatalogDigests(database)).functions === expected.functions)
 }

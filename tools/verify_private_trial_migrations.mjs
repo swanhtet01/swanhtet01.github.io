@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 import { PGlite } from '@electric-sql/pglite'
 import { verifySelfServeAttemptBudget } from './verify_self_serve_attempt_budget.mjs'
-import { verifyWebsiteReviewMigrationCatalog } from './verify_website_review_migration_catalog.mjs'
+import { verifyWebsiteReviewMigrationCatalog, verifyCatalogEntitlementMutations } from './verify_website_review_migration_catalog.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const migrationDirectory = resolve(root, 'supabase', 'migrations')
@@ -34,6 +34,7 @@ const expectedMigrations = [
   '20260915184728_website_customer_review_storage.sql',
   '20260915191528_website_review_entitlement_proof.sql',
   '20260918011500_website_customer_acceptance.sql',
+  '20260924190304_ecommerce_review_entitlement_proof.sql',
 ]
 // Verify the original private catalog before all Website-review extensions, then
 // verify the complete extended catalog. Adding an extension must not shift the
@@ -882,6 +883,7 @@ requireCheck(
 await verifySelfServeAttemptBudget(database, requireCheck)
 await applyMigrations(database, expectedMigrations.slice(websiteReviewStart))
 await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
+await verifyCatalogEntitlementMutations(database, requireCheck)
 
 const unsafeRoleDatabase = new PGlite()
 await unsafeRoleDatabase.waitReady
