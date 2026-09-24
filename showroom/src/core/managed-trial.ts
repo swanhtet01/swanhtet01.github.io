@@ -2430,7 +2430,7 @@ const MANAGED_CAPABILITY_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/
 export function managedBootstrapHasCapability(
   bootstrap: unknown,
   expectedIdentity: ManagedIdentity,
-  capability: 'commerce.write' | 'production.write' | 'website.write',
+  capability: 'commerce.write' | 'production.write' | 'website.write' | 'company.write' | 'approvals.decide',
 ): boolean {
   const verified = assertManagedBootstrapIdentity(bootstrap, expectedIdentity)
   const capabilities = verified.readiness.capabilities

@@ -272,6 +272,10 @@ function initialEcommerceState() {
   }
 }
 
+function canDeliverCatalogReviews(bootstrap: Parameters<typeof managedBootstrapHasCapability>[0], identity: ManagedIdentity) {
+  return (['commerce.write', 'company.write', 'approvals.decide'] as const).every(capability => managedBootstrapHasCapability(bootstrap, identity, capability))
+}
+
 function StatusRows({ rows }: { rows: readonly (readonly string[])[] }) {
   return <>{rows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</>
 }
@@ -288,6 +292,7 @@ export function EcommerceProduct() {
   const [catalogHydrating, setCatalogHydrating] = useState(true)
   const [managedIdentity, setManagedIdentity] = useState<ManagedIdentity | null>(null)
   const [managedCanWrite, setManagedCanWrite] = useState(false)
+  const [managedCanDeliverReviews, setManagedCanDeliverReviews] = useState(false)
   const [managedInbox, setManagedInbox] = useState<ManagedInboxContext | null>(null)
   const [savedDraft, setSavedDraft] = useState<SavedStorefrontState | null>(null)
   const [draftReadStatus, setDraftReadStatus] = useState<StorefrontDraftReadResult['status']>('empty')
@@ -356,6 +361,7 @@ export function EcommerceProduct() {
           throw new Error('The company account changed while loading. Reload to open the current company.')
         }
         setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'))
+        setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
         const view = resolveManagedStorefront(
           identity,
           requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
@@ -392,6 +398,7 @@ export function EcommerceProduct() {
         if (!current) return
         setManagedInbox(null)
         setManagedCanWrite(false)
+        setManagedCanDeliverReviews(false)
         setCatalog({
           source: 'unavailable',
           items: [],
@@ -824,6 +831,7 @@ export function EcommerceProduct() {
     const bootstrap = await loadManagedBootstrap(identity)
     const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
     setManagedCanWrite(writeAllowed)
+    setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
     const view = resolveManagedStorefront(
       identity,
@@ -1128,6 +1136,7 @@ export function EcommerceProduct() {
     await assertCurrentRequestIdentity()
     const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
     setManagedCanWrite(writeAllowed)
+    setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
     const view = resolveManagedStorefront(identity, requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'))
     if (!view?.saved) throw new Error('Save the managed storefront before sending a customer request to Shop.')
@@ -1848,7 +1857,7 @@ export function EcommerceProduct() {
 
   return (
     <div className="workspace-screen ecommerce-product">
-      {managedIdentity && managedCanWrite ? <details className="compact-disclosure">
+      {managedIdentity && managedCanDeliverReviews ? <details className="compact-disclosure">
         <summary>Customer catalog review</summary>
         <Suspense fallback={<p role="status">Opening review tools…</p>}>
           <CatalogReviewPreparation key={JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId])}
