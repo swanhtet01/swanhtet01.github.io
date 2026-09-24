@@ -792,6 +792,38 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 finally:
                     connection.rollback()
 
+    def test_ecommerce_runtime_refuses_altered_privileged_proof(self):
+        from pathlib import Path
+        from psycopg.rows import dict_row
+        candidate = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_entitlement_candidate.sql').read_text(encoding='utf-8')
+        changes = (
+            "grant execute on function app_private.ecommerce_review_entitled() to public",
+            "grant execute on function app_private.ecommerce_review_entitled() to anon",
+            "grant execute on function app_private.ecommerce_review_entitled() to authenticated",
+            "grant execute on function app_private.ecommerce_review_entitled() to service_role",
+            "alter function app_private.ecommerce_review_entitled() security invoker",
+            "alter function app_private.ecommerce_review_entitled() volatile",
+            "alter function app_private.ecommerce_review_entitled() set search_path=public",
+            "create or replace function app_private.ecommerce_review_entitled() returns boolean language sql stable security definer set search_path=pg_catalog,app_private as $$ select true $$",
+        )
+        for change in changes:
+            with self.subTest(change=change), pg._connect(self.admin_url) as connection:
+                try:
+                    connection.execute(candidate)
+                    self.context(connection, RECIPIENT)
+                    connection.execute('set local role supermega_trial_backend')
+                    with connection.cursor(row_factory=dict_row) as cursor:
+                        # Existing Website entitlement is preserved with the
+                        # installed, valid, false Ecommerce proof.
+                        self.assertEqual(PostgresTrialStore._product_entitlements(cursor, WORKSPACE), ('website',))
+                    connection.execute('reset role')
+                    connection.execute(change)
+                    connection.execute('set local role supermega_trial_backend')
+                    with connection.cursor(row_factory=dict_row) as cursor, self.assertRaises(TrialNotReadyError):
+                        PostgresTrialStore._product_entitlements(cursor, WORKSPACE)
+                finally:
+                    connection.rollback()
+
     def test_ecommerce_entitlement_candidate_rechecks_revocation_and_activation_precedence(self):
         from pathlib import Path
         sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_entitlement_candidate.sql').read_text(encoding='utf-8')
