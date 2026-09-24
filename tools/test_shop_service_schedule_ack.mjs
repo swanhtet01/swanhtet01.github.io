@@ -6,15 +6,17 @@ import vm from 'node:vm'
 const require = createRequire(resolve('showroom/package.json'))
 const { transformSync } = require('esbuild')
 const source = readFileSync('showroom/src/core/ShopServiceSchedule.tsx', 'utf8')
-const start = source.indexOf('  async function commit(')
+const start = source.indexOf('  async function isCurrentScheduleIdentity(')
 const end = source.indexOf('  function proof(', start)
 assert.ok(start > 0 && end > start)
 const code = transformSync(source.slice(start, end), { loader: 'ts' }).code
-for (const mode of ['pending-success', 'rejected', 'busy', 'unready']) {
+for (const mode of ['pending-success', 'rejected', 'busy', 'unready', 'switched', 'signed-out', 'unmounted']) {
   const calls = []
   let resolveSave, rejectSave
   const pending = new Promise((resolve, reject) => { resolveSave = resolve; rejectSave = reject })
+  let currentIdentity = { workspaceId: 'qa', userId: 'qa-user' }
   const context = {
+    currentManagedIdentity: async () => currentIdentity,
     managedIdentityRef: { current: { workspaceId: 'qa', userId: 'qa-user' } },
     managedVersionRef: { current: mode === 'unready' ? null : 1 },
     managedSaveBusyRef: { current: mode === 'busy' },
@@ -37,16 +39,21 @@ for (const mode of ['pending-success', 'rejected', 'busy', 'unready']) {
     assert.equal(await outcome, false)
     continue
   }
+  await new Promise(resolve => setImmediate(resolve))
+  if (mode === 'switched') currentIdentity = { workspaceId: 'other', userId: 'other-user' }
+  if (mode === 'signed-out') currentIdentity = null
+  if (mode === 'unmounted') context.managedIdentityRef.current = null
+  const accepted = mode === 'pending-success'
   if (mode === 'rejected') rejectSave(new Error('Rejected by server'))
   else resolveSave({ version: 2, schedule: { revision: 2 } })
-  assert.equal(await outcome, mode !== 'rejected')
+  assert.equal(await outcome, accepted)
   const writes = calls.filter(([kind]) => ['schedule', 'persist'].includes(kind))
-  assert.equal(writes.length, mode === 'rejected' ? 0 : 2)
-  assert.equal(context.managedVersionRef.current, mode === 'rejected' ? 1 : 2)
+  assert.equal(writes.length, accepted ? 2 : 0)
+  assert.equal(context.managedVersionRef.current, accepted ? 2 : 1)
   assert.equal(context.managedSaveBusyRef.current, false)
   if (mode === 'rejected') assert.ok(calls.some(([kind, text]) => kind === 'notice' && text.includes('not confirmed')))
 }
-console.log('Managed schedule acknowledgement: 4 handler scenarios passed')
+console.log('Managed schedule acknowledgement: 7 handler scenarios passed')
 
 const formStart = source.indexOf('  async function createBooking(')
 const formEnd = source.indexOf('  function advanceBooking(', formStart)

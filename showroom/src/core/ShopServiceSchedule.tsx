@@ -140,7 +140,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       managedIdentityRef.current = identity
       setManagedConnected(true)
       const managed = await loadManagedServiceSchedule(identity)
-      if (!active) return
+      if (!active || !await isCurrentScheduleIdentity(identity)) return
       managedVersionRef.current = managed.version
       setManagedPrivacyOwner(Boolean(managed.privacyOwner))
       if (managed.schedule) {
@@ -156,13 +156,20 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     }).finally(() => {
       if (active) setManagedLoading(false)
     })
-    return () => { active = false }
+    return () => { active = false; managedIdentityRef.current = null }
   }, [])
 
   // Used only where a managed server copy is already authoritative and a failed
   // local write is survivable. Owner-originated changes go through commit().
   function persistLocal(next: ShopServiceSchedule) {
     window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
+  }
+
+  async function isCurrentScheduleIdentity(identity: ManagedIdentity) {
+    try {
+      const current = await currentManagedIdentity()
+      return managedIdentityRef.current === identity && current?.workspaceId === identity.workspaceId && current?.userId === identity.userId
+    } catch { return false }
   }
 
   async function commit(next: ShopServiceSchedule, message: string) {
@@ -204,12 +211,19 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     }
     managedSaveBusyRef.current = true
     setManagedSaving(true)
+    if (!await isCurrentScheduleIdentity(identity)) {
+      managedSaveBusyRef.current = false
+      setManagedSaving(false)
+      setNotice('Account changed. Reload the schedule before saving.')
+      return false
+    }
     return saveManagedServiceSchedule({
       commandId: crypto.randomUUID(),
       expectedVersion,
       identity,
       schedule: next,
-    }).then((saved) => {
+    }).then(async (saved) => {
+      if (!await isCurrentScheduleIdentity(identity)) return false
       managedVersionRef.current = saved.version
       if (saved.schedule) {
         setSchedule(saved.schedule)
@@ -218,9 +232,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       setNotice(`${message} Shared company schedule saved.`)
       return true
     }).catch(async (error) => {
+      if (!await isCurrentScheduleIdentity(identity)) return false
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
           const current = await loadManagedServiceSchedule(identity)
+          if (!await isCurrentScheduleIdentity(identity)) return false
           managedVersionRef.current = current.version
           if (current.schedule) {
             setSchedule(current.schedule)
@@ -264,12 +280,14 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     managedSaveBusyRef.current = true
     setManagedSaving(true)
     try {
+      if (!await isCurrentScheduleIdentity(identity)) return false
       const saved = await saveManagedServiceSchedule({
         commandId: crypto.randomUUID(),
         expectedVersion,
         identity,
         schedule: next,
       })
+      if (!await isCurrentScheduleIdentity(identity)) return false
       managedVersionRef.current = saved.version
       if (saved.schedule) {
         setSchedule(saved.schedule)
@@ -279,9 +297,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       setNotice(`${message} Shared company schedule saved.`)
       return true
     } catch (error) {
+      if (!await isCurrentScheduleIdentity(identity)) return false
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
           const current = await loadManagedServiceSchedule(identity)
+          if (!await isCurrentScheduleIdentity(identity)) return false
           managedVersionRef.current = current.version
           setManagedPrivacyOwner(Boolean(current.privacyOwner))
           if (current.schedule) {
