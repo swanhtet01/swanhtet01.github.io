@@ -59,8 +59,8 @@ const FULL_CASE_MATRIX = Object.freeze([
     width: spec.width, height: spec.height, path: spec.expectedPath,
     screenshot: `${spec.id}.png`, semantics: 'retired-product' })),
   { name: 'demo website opens explicit website route', route: '/?demo=website', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/website/', screenshot: null },
-  { name: 'desktop Website shows the local preview boundary', route: '/website/', viewport: '1280x900', width: 1280, height: 900, path: '/website/', screenshot: 'website-working-sample-desktop-1280x900.png' },
-  { name: 'mobile Website shows the local preview boundary', route: '/website/', viewport: '390x844 mobile', width: 390, height: 844, path: '/website/', screenshot: 'website-working-sample-mobile-390x844.png' },
+  { name: 'desktop Website shows the local preview boundary', route: '/website/?workspace=1', viewport: '1280x900', width: 1280, height: 900, path: '/website/?workspace=1', screenshot: 'website-working-sample-desktop-1280x900.png' },
+  { name: 'mobile Website shows the local preview boundary', route: '/website/?workspace=1', viewport: '390x844 mobile', width: 390, height: 844, path: '/website/?workspace=1', screenshot: 'website-working-sample-mobile-390x844.png' },
   { name: 'demo ecommerce opens explicit ecommerce route', route: '/?demo=ecommerce', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/ecommerce/', screenshot: null },
   {
     name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',

@@ -12,7 +12,7 @@ const renderedVerifierSource = await readFile(new URL('./verify_app_entry_render
 test('rendered harness follows current assisted Website and Ecommerce entry actions', () => {
   assert.match(renderedVerifierSource, /candidate\.textContent\.trim\(\) === 'Try sample request'/)
   assert.match(renderedVerifierSource, /'Let SuperMega prepare your website'/)
-  assert.match(renderedVerifierSource, /'Request Website setup'/)
+  assert.match(renderedVerifierSource, /'Tell us about your business'/)
   assert.match(renderedVerifierSource, /'Requesting setup does not publish this preview, connect a domain or approve a release\.'/)
   assert.doesNotMatch(renderedVerifierSource, /'Start sample order'/)
   assert.doesNotMatch(renderedVerifierSource, /'The working sample stays unchanged until you choose Customize demo\.'/)
@@ -259,16 +259,16 @@ function fullCaseMatrixFixture() {
     },
     {
       name: 'desktop Website shows the local preview boundary',
-      route: '/website/',
+      route: '/website/?workspace=1',
       viewport: '1280x900',
-      path: '/website/',
+      path: '/website/?workspace=1',
       screenshot: { file: 'website-working-sample-desktop-1280x900.png' },
     },
     {
       name: 'mobile Website shows the local preview boundary',
-      route: '/website/',
+      route: '/website/?workspace=1',
       viewport: '390x844 mobile',
-      path: '/website/',
+      path: '/website/?workspace=1',
       screenshot: { file: 'website-working-sample-mobile-390x844.png' },
     },
     {
@@ -368,9 +368,10 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
     readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
     readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8'),
   ])
+  const assistedBrief = await readFile(join(rootDir, 'showroom', 'src', 'products', 'AssistedDeliveryScope.tsx'), 'utf8')
   const sourceBoundText = [
     [websiteProduct, 'Let SuperMega prepare your website'],
-    [websiteProduct, 'Request Website setup'],
+    [assistedBrief, 'Tell us about your business'],
     [websiteProduct, 'Saved on this device'],
     [websiteProduct, 'Requesting setup does not publish this preview, connect a domain or approve a release.'],
     [ecommerceProduct, 'Sample request saved locally'],
