@@ -3204,11 +3204,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const commerceStuckRecoveryPanel = managedIdentity || !(commerceSync.status === 'conflict' || commerceSync.status === 'unavailable')
     ? null
     : <details className="evidence-disclosure commerce-stuck-recovery" open>
-      <summary><span>Unsent Shop change is holding the till</span><strong>{commerceSync.status === 'conflict' ? 'Conflict' : 'Recovery unavailable'}</strong></summary>
-      <p className="panel-copy">A change from an interrupted session was saved for recovery but never applied to the record, so Shop has paused new entries. Reload Shop to try recovering it again. If it cannot be recovered, discard it below: that removes only this unsent change, and everything already saved to the Shop record stays exactly as it is.</p>
-      {commerceStuckRecovery.loading ? <p className="form-notice">Reading the unsent change on this device.</p> : null}
+      <summary><span>Review interrupted Shop change</span><strong>{commerceSync.status === 'conflict' ? 'Conflict' : 'Recovery unavailable'}</strong></summary>
+      <p className="panel-copy">Reload to recover this change. Discard checks saved records first: an already-saved change is reconciled; otherwise its recovery request is removed. Saved Shop records are not changed.</p>
+      {commerceStuckRecovery.loading ? <p className="form-notice">Reading recovery details.</p> : null}
       {commerceStuckRecovery.loadError
-        ? <p className="form-notice" data-tone="error">{commerceStuckRecovery.loadError} Nothing is offered for discard while the unsent change cannot be read, so no record can be thrown away unseen.</p>
+        ? <p className="form-notice" data-tone="error">{commerceStuckRecovery.loadError} Discard is unavailable until recovery details can be read.</p>
         : null}
       {commerceStuckRecovery.intents.length
         ? <div className="stuck-change-list">{commerceStuckRecovery.intents.map((intent) => <article key={intent.commandId}>
@@ -3220,7 +3220,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             disabled={Boolean(commerceStuckRecovery.discarding)}
             onClick={() => { void discardStuckCommerceChange(intent.commandId) }}
             type="button"
-          >{commerceStuckRecovery.discarding === intent.commandId ? 'Discarding' : 'Discard this unsent change'}</button>
+          >{commerceStuckRecovery.discarding === intent.commandId ? 'Discarding' : 'Resolve or discard'}</button>
         </article>)}</div>
         : null}
       {!commerceStuckRecovery.loading && !commerceStuckRecovery.loadError && !commerceStuckRecovery.intents.length
