@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import test from 'node:test'
 import { createReviewAccessBoundary } from '../showroom/src/products/website/customer-review-access.ts'
+import { verifyCatalogDecisionPage } from '../showroom/src/products/ecommerce/prepared-catalog-review.ts'
 import { customerEcommerceReviewLoginPath } from '../showroom/src/core/account-routes.ts'
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
 const ts = require('typescript'), React = require('react')
@@ -12,8 +13,8 @@ const source = readFileSync(new URL('../showroom/src/products/ecommerce/Ecommerc
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS,
   jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 const id = '11111111-1111-4111-8111-111111111111'
-const review = { preview: { name: 'Synthetic catalog' }, expiresAt: '2099-01-01T00:00:00Z' }
-function harness({ identity = { actor: 'customer' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt } = {}) {
+const review = { reviewId: id, contentRevision: 1, previewDigest: 'sha256:' + 'a'.repeat(64), preview: { name: 'Synthetic catalog' }, expiresAt: '2099-01-01T00:00:00Z' }
+function harness({ identity = { actor: 'customer' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false } = {}) {
   const states = [], effects = [], listeners = new Map(), timers = new Map()
   let index = 0, reads = 0, calls = 0, timerId = 0
   const exports = {}
@@ -28,11 +29,18 @@ function harness({ identity = { actor: 'customer' }, changed = false, denied = f
       if (name === 'react-router') return { Link: p => React.createElement('a', { href: p.to }, p.children) }
       if (name === '../../core/account-routes') return { customerEcommerceReviewLoginPath }
       if (name === '../website/customer-review-access') return { createReviewAccessBoundary }
-      if (name === './prepared-catalog-review') return { verifyPreparedCatalogReview: async value => value }
+      if (name === './prepared-catalog-review') return { verifyPreparedCatalogReview: async value => value, verifyCatalogDecisionPage }
       if (name === './PreparedCatalog') return { PreparedCatalog: () => React.createElement('section', null, 'Synthetic catalog') }
       if (name === '../../core/managed-trial') return {
         currentManagedIdentity: async () => ++reads > 1 && changed ? { actor: 'other' } : identity,
         sameManagedIdentity: (a, b) => a.actor === b.actor,
+        loadManagedEcommerceDecisions: async () => {
+          if (decisionWait) await decisionWait
+          return { reviewId: invalidDecision ? 'other' : id, contentRevision: 1, previewDigest: review.previewDigest,
+            sourceVersion: 1, nextAfter: null, publicationAuthorized: false, deploymentAuthorized: false,
+            decisions: decisionKind ? [{ commandId: id, kind: decisionKind, note: decisionKind === 'feedback' ? 'Change price' : null,
+              createdAt: '2026-01-01T00:00:00Z' }] : [] }
+        },
         loadManagedEcommerceReview: async (reviewId, actor) => {
           calls++; assert.equal(reviewId, id); assert.equal(actor, identity)
           if (wait) await wait
@@ -45,7 +53,7 @@ function harness({ identity = { actor: 'customer' }, changed = false, denied = f
   const render = () => { index = 0; effects.length = 0; return renderToStaticMarkup(React.createElement(exports.Content, { reviewId: id })) }
   return { states, effects, listeners, timers, render, calls: () => calls }
 }
-const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve() }
+const flush = () => new Promise(resolve => setImmediate(resolve))
 test('assigned preview appears only after identity recheck, then clears synchronously on focus', async () => {
   const h = harness(); assert.match(h.render(), /Opening/)
   const cleanup = h.effects[0](); await flush()
@@ -98,4 +106,24 @@ test('a review expiring during its response never becomes visible', async () => 
   h.render(); const cleanup = h.effects[0](); await flush()
   assert.equal(h.states[0], null); assert.equal(h.states[2], false)
   assert.doesNotMatch(h.render(), /Synthetic catalog/); cleanup()
+})
+
+
+test('saved acceptance and feedback reopen as short non-publication status', async () => {
+  for (const decisionKind of ['acceptance', 'feedback']) {
+    const h = harness({ decisionKind }); h.render(); const cleanup = h.effects[0](); await flush()
+    assert.match(h.render(), decisionKind === 'acceptance' ? /Catalog accepted/ : /Changes requested/)
+    assert.doesNotMatch(h.render(), /<button|<a /)
+    h.listeners.get('storage')(); assert.doesNotMatch(h.render(), /Catalog accepted|Changes requested/)
+    cleanup()
+  }
+})
+
+test('invalid or late decision pages cannot expose a review or saved status', async () => {
+  const invalid = harness({ invalidDecision: true }); invalid.render(); invalid.effects[0](); await flush()
+  assert.doesNotMatch(invalid.render(), /Synthetic catalog|Catalog accepted/)
+  let release; const decisionWait = new Promise(resolve => { release = resolve })
+  const h = harness({ decisionWait, decisionKind: 'acceptance' }); h.render(); const cleanup = h.effects[0](); await flush()
+  h.listeners.get('focus')(); release(); await flush()
+  assert.doesNotMatch(h.render(), /Synthetic catalog|Catalog accepted/); cleanup()
 })

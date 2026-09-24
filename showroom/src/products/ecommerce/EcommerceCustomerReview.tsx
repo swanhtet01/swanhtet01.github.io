@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { currentManagedIdentity, loadManagedEcommerceReview, sameManagedIdentity } from '../../core/managed-trial'
+import { currentManagedIdentity, loadManagedEcommerceReview, loadManagedEcommerceDecisions, sameManagedIdentity } from '../../core/managed-trial'
 import { customerEcommerceReviewLoginPath } from '../../core/account-routes'
 import { createReviewAccessBoundary } from '../website/customer-review-access'
-import { verifyPreparedCatalogReview, type PreparedCatalogReview } from './prepared-catalog-review'
+import { verifyPreparedCatalogReview, verifyCatalogDecisionPage, type PreparedCatalogReview, type CatalogDecisionPage } from './prepared-catalog-review'
 import { PreparedCatalog } from './PreparedCatalog'
 
 export default function EcommerceCustomerReview() {
@@ -18,6 +18,8 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   const [attempt, setAttempt] = useState(0)
   const [access] = useState(() => createReviewAccessBoundary(currentManagedIdentity, sameManagedIdentity))
 
+  const [decisions, setDecisions] = useState<CatalogDecisionPage | null>(null)
+
   useEffect(() => {
     let active = true
     const epoch = access.invalidate()
@@ -28,7 +30,11 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         if (!identity) { setMessage('Sign in with the account assigned to this review.'); return }
         const verified = await verifyPreparedCatalogReview(await loadManagedEcommerceReview(reviewId, identity), reviewId)
         if (!active || !access.isCurrent(epoch)) return
-        const accepted = await access.commit(epoch, identity, verified.expiresAt, () => setReview(verified))
+        const saved = verifyCatalogDecisionPage(await loadManagedEcommerceDecisions(reviewId, identity), verified)
+        if (!active || !access.isCurrent(epoch)) return
+        const accepted = await access.commit(epoch, identity, verified.expiresAt, () => {
+          setDecisions(saved); setReview(verified)
+        })
         if (!accepted && access.isCurrent(epoch)) setMessage('Your access changed. Sign in and reopen this review.')
       } catch {
         if (active && access.isCurrent(epoch)) setMessage('Could not open this review. Try again. If it still does not open, ask SuperMega to check your access.')
@@ -38,7 +44,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     }
     void open()
     const refresh = () => {
-      access.invalidate(); setReview(null); setOpening(true); setMessage('Checking your access…'); setAttempt(value => value + 1)
+      access.invalidate(); setReview(null); setDecisions(null); setOpening(true); setMessage('Checking your access…'); setAttempt(value => value + 1)
     }
     window.addEventListener('storage', refresh)
     window.addEventListener('focus', refresh)
@@ -48,17 +54,24 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   useEffect(() => {
     if (!review) return
     const timer = window.setTimeout(() => {
-      access.invalidate(); setReview(null); setMessage('This review expired. Ask SuperMega for a fresh review.')
+      access.invalidate(); setReview(null); setDecisions(null); setMessage('This review expired. Ask SuperMega for a fresh review.')
     }, Math.max(0, Math.min(2147483647, Date.parse(review.expiresAt) - Date.now())))
     return () => window.clearTimeout(timer)
   }, [review, access])
 
   return <main className="catalog-review-page" aria-busy={opening}>
-    {review ? <PreparedCatalog preview={review.preview} /> : <section className="prepared-catalog">
+    {review ? <>
+      <PreparedCatalog preview={review.preview} />
+      {decisions?.decisions.length ? <section className="prepared-catalog" role="status">
+        <h2>{decisions.decisions[0].kind === 'acceptance' ? 'Catalog accepted' : 'Changes requested'}</h2>
+        <p>{decisions.decisions[0].kind === 'acceptance'
+          ? 'SuperMega will review it before publishing.' : 'SuperMega will prepare an updated review.'}</p>
+      </section> : null}
+    </> : <section className="prepared-catalog">
       <h1>Your catalog</h1><p role="status">{message}</p>
       {!opening ? <p><Link to={customerEcommerceReviewLoginPath(reviewId)}>Sign in</Link></p> : null}
       <button type="button" disabled={opening} onClick={() => {
-        access.invalidate(); setReview(null); setOpening(true); setAttempt(value => value + 1)
+        access.invalidate(); setReview(null); setDecisions(null); setOpening(true); setAttempt(value => value + 1)
       }}>{opening ? 'Opening…' : 'Try again'}</button>
     </section>}
   </main>
