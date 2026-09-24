@@ -2,7 +2,7 @@
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from supermega_runtime.ecommerce_customer_review import prepare_catalog_review, catalog_review_projection
+from supermega_runtime.ecommerce_customer_review import prepare_catalog_review, catalog_review_projection, build_catalog_acceptance
 from supermega_runtime.trial_store import TrialPrincipal, TrialReadiness, TrialValidationError
 from tests.test_commerce_runtime import catalog_state, storefront_configuration
 
@@ -15,6 +15,29 @@ class CatalogReviewTests(unittest.TestCase):
         self.review = prepare_catalog_review(self.state,principal=self.actor,readiness=replace(self.ready,capabilities=frozenset({'commerce.write'})),review_id='11111111-1111-4111-8111-111111111111',recipient_actor_id=self.actor.actor_id,expires_at=(self.now+timedelta(days=1)).isoformat(),now=self.now,source_version=1)
     def project(self, **kwargs):
         return catalog_review_projection(self.review,self.state,**(dict(principal=self.actor,readiness=self.ready,now=self.now,source_version=1)|kwargs))
+    def test_acceptance_is_exact_revision_candidate_not_publication(self):
+        payload = dict(commandId='33333333-3333-4333-8333-333333333333',
+            reviewId=self.review['reviewId'], previewDigest=self.review['previewDigest'],
+            decision='accept_preview_for_release_review')
+        def accept(data=payload, **overrides):
+            return build_catalog_acceptance(self.review, self.state, data, **(dict(
+                principal=self.actor, readiness=self.ready, source_version=1, now=self.now) | overrides))
+        result = accept()
+        self.assertFalse(result['persisted'])
+        self.assertFalse(result['publicationAuthorized'])
+        self.assertFalse(result['deploymentAuthorized'])
+        self.assertEqual(result['sourceVersion'], 1)
+        self.assertEqual(result['commandFingerprint'], accept(now=self.now+timedelta(seconds=1))['commandFingerprint'])
+        self.assertNotEqual(result['commandFingerprint'], accept(payload | {'commandId': '44444444-4444-4444-8444-444444444444'})['commandFingerprint'])
+        for data in [payload | {'decision': 'publish'}, payload | {'previewDigest': 'stale'},
+                     payload | {'reviewId': 'other'}, payload | {'extra': True},
+                     payload | {'commandId': 'bad'}]:
+            with self.subTest(data=data), self.assertRaises(TrialValidationError): accept(data)
+        for overrides in [dict(source_version=2), dict(now=self.now+timedelta(days=1)),
+                          dict(readiness=replace(self.ready, write_enabled=False)),
+                          dict(principal=replace(self.actor, workspace_id='other')),
+                          dict(principal=replace(self.actor, actor_id='other'))]:
+            with self.subTest(overrides=overrides), self.assertRaises(TrialValidationError): accept(**overrides)
     def test_public_projection_and_copy(self):
         result=self.project()
         self.assertEqual(set(result),{'reviewId','contentRevision','previewDigest','preview','expiresAt','status','publicationAuthorized','deploymentAuthorized'})

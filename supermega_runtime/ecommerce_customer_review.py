@@ -65,3 +65,33 @@ def catalog_review_projection(review, state, *, principal, readiness, source_ver
     if (type(review['contentRevision']) is not int or review['contentRevision'] != state['storefrontConfiguration']['revision']
         or review['preview'] != preview or review['previewDigest'] != commerce_storefront_preview_digest(state)): fail()
     return {key: deepcopy(review[key]) for key in ('reviewId','contentRevision','previewDigest','preview','expiresAt')} | dict(status='prepared_preview', publicationAuthorized=False, deploymentAuthorized=False)
+
+
+def build_catalog_acceptance(review, state, payload, *, principal, readiness, source_version, now=None):
+    """Build a candidate only; the guarded store must persist and enforce replay.
+
+    Caller must lock the source and assignment and reject retained change requests.
+    Customer consent to a revision never authorizes publication or deployment.
+    """
+    from hashlib import sha256
+    import json
+    current = stamp(datetime.now(timezone.utc) if now is None else now)
+    projected = catalog_review_projection(review, state, principal=principal,
+        readiness=readiness, source_version=source_version, now=current)
+    if not readiness.write_ready: fail()
+    if (not isinstance(payload, Mapping)
+        or set(payload) != {'commandId', 'reviewId', 'previewDigest', 'decision'}
+        or payload['reviewId'] != projected['reviewId']
+        or payload['previewDigest'] != projected['previewDigest']
+        or payload['decision'] != 'accept_preview_for_release_review'): fail()
+    actor = principal.normalized()
+    identity = dict(contract='supermega.ecommerce.customer-acceptance.v1',
+        workspaceId=actor.workspace_id, actorId=actor.actor_id,
+        commandId=uuid(payload['commandId']), reviewId=projected['reviewId'],
+        previewDigest=projected['previewDigest'], contentRevision=projected['contentRevision'],
+        sourceVersion=source_version, decision=payload['decision'])
+    fingerprint = 'sha256:' + sha256(json.dumps(identity, sort_keys=True,
+        separators=(',', ':'), ensure_ascii=True).encode()).hexdigest()
+    return identity | dict(commandFingerprint=fingerprint, acceptedAt=current.isoformat(),
+        status='accepted_for_operator_release_review', persisted=False,
+        publicationAuthorized=False, deploymentAuthorized=False)
