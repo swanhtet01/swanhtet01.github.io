@@ -285,6 +285,17 @@ const appVerifierSelfTest = spawnSync(
   [resolve(root, 'tools/verify_app_release_live.mjs'), '--self-test'],
   { encoding: 'utf8' },
 )
+const releaseTransportTests = spawnSync(
+  process.execPath,
+  ['--test', '--test-concurrency=1',
+    resolve(root, 'tools/verify_coordinated_release_transport.test.mjs'),
+    resolve(root, 'tools/verify_release_transport.test.mjs')],
+  { cwd: root, encoding: 'utf8', timeout: 30000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024 },
+)
+requireContract('offline release transport regression suites pass', releaseTransportTests.status === 0)
+if (releaseTransportTests.status !== 0) {
+  console.error(String(releaseTransportTests.stderr || releaseTransportTests.stdout || releaseTransportTests.error || 'Transport tests failed').slice(-4000))
+}
 const canonicalPythonBundle = await verifyCanonicalPythonBundle()
 
 requireContract('canonical app project id', workflow.includes('APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'))
