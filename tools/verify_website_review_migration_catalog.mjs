@@ -50,13 +50,13 @@ const beforeStorage = {
 }
 
 const expected = {
-  relations: '3427a6d85a736a354342080900cda6a039b97e645850ade6429c5d2d627fceb1',
-  columns: 'dff463cb508c7378c8ffa3a27dba4ba206117ff27157803164cd9e21b37b8d74',
-  policies: '91c695d8e0c310a692c5dbad85c6cf4ab8ff8a5c5f4890c6f046c61fcda8dc0f',
-  functions: '6c920825cd524f3c88b6b1935a5e14b1fb4612579dc3565a3a07469b99a36907',
-  triggers: 'df5ab58e3f56562c0d01afad71930d83cac3d06d903c1c4a8600bb4be26f9fd0',
-  constraints: 'da88fc264debcda6f09a8bf309bc37560044b723c1b723b6e97569a438ecbe3e',
-  indexes: '2d30e8775e2390eb8a4139ddfcd13cd58011f334d8dcb2d8e142a08ab6a10dcc',
+  relations: 'eda32b4d361d290bbe8ed74b32a9f7f05848d42597b3e62df6a4d86ba9d35d55',
+  columns: 'cf99eee45bafb9dca0b9f7fc8335b64faf3fc7d4b29a4719d02ffa5ebc1e5e9b',
+  policies: 'bdf2b6f137777fa673306166c0f6d28c0ba79eac1faf84300bf7ae6acd684df0',
+  functions: 'fabdb1987b7348fb24dc91bdb19c463a305552fda7a97d48660c2eb867c99d54',
+  triggers: '8f423ef55794c3a5b8062011d8696064aff095f3f2c0093992f10c804bf8a707',
+  constraints: 'e94c55ae5cc8565ddf5a3e44b098adfda6ac7461a8f42e423b9a5b318ab72b95',
+  indexes: '29e59aeef5344125b73cb6e6ba9a4f938cce2bf1b7501f6b9fd9d892276db382',
 }
 
 export async function websiteReviewCatalogDigests(database) {
@@ -73,11 +73,11 @@ export async function verifyWebsiteReviewMigrationCatalog(database, requireCheck
   for (const [name, digest] of Object.entries(expected)) {
     requireCheck(`Website review complete private catalog: ${name}`, actual[name] === digest)
   }
-  const storageFunctions = ['ecommerce_review_text_length','ecommerce_review_projection','ecommerce_review_preview_digest','ecommerce_review_operator_entitled','ecommerce_review_recipient_ready','guard_ecommerce_review','invalidate_ecommerce_reviews']
+  const storageFunctions = ['ecommerce_review_text_length','ecommerce_review_projection','ecommerce_review_preview_digest','ecommerce_review_operator_entitled','ecommerce_review_recipient_ready','guard_ecommerce_review','invalidate_ecommerce_reviews','guard_ecommerce_decision']
   for (const [name, sql] of Object.entries(websiteReviewCatalogQueries)) {
     const { rows } = await database.query(sql)
-    const previous = rows.filter(row => row.relname !== 'ecommerce_customer_reviews'
-      && row.tablename !== 'ecommerce_customer_reviews'
+    const previous = rows.filter(row => !['ecommerce_customer_reviews', 'ecommerce_customer_decisions'].includes(row.relname)
+      && !['ecommerce_customer_reviews', 'ecommerce_customer_decisions'].includes(row.tablename)
       && row.tgname !== 'ecommerce_reviews_invalidate'
       && !storageFunctions.includes(row.proname))
     requireCheck(`Catalog storage preserves previous ${name}`,
@@ -95,7 +95,7 @@ export async function verifyWebsiteReviewMigrationCatalog(database, requireCheck
 
 export async function verifyCatalogEntitlementMutations(database, requireCheck) {
   const { rows } = await database.query(websiteReviewCatalogQueries.functions)
-  const previous = rows.filter(row => !['ecommerce_review_entitled','ecommerce_review_text_length','ecommerce_review_projection','ecommerce_review_preview_digest','ecommerce_review_operator_entitled','ecommerce_review_recipient_ready','guard_ecommerce_review','invalidate_ecommerce_reviews'].includes(row.proname))
+  const previous = rows.filter(row => !['ecommerce_review_entitled','ecommerce_review_text_length','ecommerce_review_projection','ecommerce_review_preview_digest','ecommerce_review_operator_entitled','ecommerce_review_recipient_ready','guard_ecommerce_review','invalidate_ecommerce_reviews','guard_ecommerce_decision'].includes(row.proname))
   requireCheck('Ecommerce proof leaves every prior private function unchanged',
     createHash('sha256').update(JSON.stringify(previous)).digest('hex') === '43363d70f1d95f0f5eae86a5787c835f13424bdd4268e17e11308685224b5b37')
   for (const [name, sql] of [
@@ -118,6 +118,11 @@ export async function verifyCatalogEntitlementMutations(database, requireCheck) 
 
 export async function verifyCatalogStorageMutations(database, requireCheck) {
   for (const [category, sql] of [
+    ['relations', 'alter table app_private.ecommerce_customer_decisions disable row level security'],
+    ['policies', 'drop policy ecommerce_decisions_insert on app_private.ecommerce_customer_decisions'],
+    ['triggers', 'alter table app_private.ecommerce_customer_decisions disable trigger ecommerce_decision_guard'],
+    ['relations', 'grant select on app_private.ecommerce_customer_decisions to authenticated'],
+    ['functions', 'alter function app_private.guard_ecommerce_decision() security definer'],
     ['relations', 'alter table app_private.ecommerce_customer_reviews disable row level security'],
     ['policies', 'drop policy ecommerce_reviews_read on app_private.ecommerce_customer_reviews'],
     ['triggers', 'alter table app_private.workspace_state disable trigger ecommerce_reviews_invalidate'],
