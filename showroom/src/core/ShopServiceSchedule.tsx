@@ -406,14 +406,14 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
 
   function setupPackage(sku: string) {
     if (!schedule) return
-    try { commit(defineSpaMembershipPackage(schedule, commerce, sku, proof('Set up a supported service package.')), 'Package ready.') }
+    try { commit(defineSpaMembershipPackage(schedule, commerce, sku, proof('Set up package.')), 'Package ready.') }
     catch (error) { setNotice(error instanceof Error ? error.message : 'Package setup failed.') }
   }
 
   function allocatePackage(orderId: string, lineIndex: number) {
     if (!schedule) return
-    try { commit(allocateSpaMembershipPackage(schedule, commerce, orderId, lineIndex, proof('Allocated sessions from a reviewed paid purchase.')), 'Package sessions added.') }
-    catch (error) { setNotice(error instanceof Error ? error.message : 'Package allocation failed.') }
+    try { commit(allocateSpaMembershipPackage(schedule, commerce, orderId, lineIndex, proof('Allocate paid sessions.')), 'Sessions added.') }
+    catch (error) { setNotice(error instanceof Error ? error.message : 'Allocation failed.') }
   }
 
   function createService(event: FormEvent) {
@@ -491,7 +491,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         <div>
           {spaMembershipPackages.filter(p => commerce.items?.some(item => item.sku === p.sku) && !schedule.packageDefinitions?.some(d => d.purchaseSku === p.sku)).map(p => <button className="core-button compact" disabled={disabled} key={p.sku} onClick={() => setupPackage(p.sku)} type="button">Set up {p.label}</button>)}
           {packagePurchases.map(p => <div key={`${p.orderId}:${p.lineIndex}`}><span>{p.client} · {p.label} · {p.sessions} sessions</span><button className="core-button compact" disabled={disabled} onClick={() => allocatePackage(p.orderId, p.lineIndex)} type="button">Add sessions</button></div>)}
-          {!packagePurchases.length ? <p>Completed, paid package purchases appear here.</p> : null}
+          {!packagePurchases.length ? <p>Paid purchases appear here.</p> : null}
         </div>
       </details> : null}
       <form className="service-booking-form" onSubmit={createBooking}>

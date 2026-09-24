@@ -73,7 +73,7 @@ export function spaMembershipBalances(
   validateShopServiceSchedule(schedule)
   if (schedule.industryPackId !== 'spa') return []
   const asOf = asOfValue === undefined ? Number.POSITIVE_INFINITY : exactIso(asOfValue)
-  if (asOf === null) throw new Error('Membership balance time must be an exact ISO timestamp.')
+  if (asOf === null) throw new Error('Invalid package balance time.')
   if (schedule.packageLedger) {
     const ledgerTime = asOfValue === undefined ? Date.now() : asOf
     return schedule.packageLedger.filter(entry => Date.parse(entry.issuedAt) <= ledgerTime).map(entry => {
@@ -164,18 +164,18 @@ export function redeemSpaMembershipSession(
   proof: ShopServiceScheduleProof,
 ) {
   validateShopServiceSchedule(schedule)
-  if (schedule.industryPackId !== 'spa') throw new Error('Membership packages are available only in the Spa pack.')
+  if (schedule.industryPackId !== 'spa') throw new Error('Packages require the Spa pack.')
   const actor = bounded(proof.actor, 'Membership actor', 120)
   const reason = bounded(proof.reason, 'Membership reason', 240)
   const happenedAtValue = exactIso(proof.happenedAt)
-  if (happenedAtValue === null) throw new Error('Membership evidence time must be an exact ISO timestamp.')
+  if (happenedAtValue === null) throw new Error('Invalid package evidence time.')
   const booking = schedule.bookings.find((candidate) => candidate.id === bookingId)
-  if (!booking || booking.status !== 'completed') throw new Error('Complete the appointment before using a package session.')
-  if (happenedAtValue < Date.parse(booking.updatedAt)) throw new Error('Package use cannot predate appointment completion.')
+  if (!booking || booking.status !== 'completed') throw new Error('Complete the appointment first.')
+  if (happenedAtValue < Date.parse(booking.updatedAt)) throw new Error('Complete the appointment before redeeming.')
   if (schedule.packageLedger?.some(entry => entry.evidence.some(e => e.bookingId === bookingId))) return schedule
   if (schedule.events.some((event) => event.type === 'package_redeemed' && event.subjectId === bookingId)) return schedule
   const balance = availableSpaMembershipForBooking(commerce, schedule, bookingId, proof.happenedAt)
-  if (!balance) throw new Error('No paid package session is available for this customer and treatment.')
+  if (!balance) throw new Error('No eligible paid session is available.')
   const revision = schedule.revision + 1
   if (balance.entitlementId && schedule.packageLedger) {
     const event = { revision, type: 'package_redeemed' as const, subjectId: balance.entitlementId, actor, reason, happenedAt: proof.happenedAt }
@@ -206,8 +206,8 @@ export function redeemSpaMembershipSession(
 function packageWriteBase(schedule: ShopServiceSchedule, proof: ShopServiceScheduleProof) {
   validateShopServiceSchedule(schedule)
   if (schedule.industryPackId !== 'spa') throw new Error('Packages require a Spa schedule.')
-  if (schedule.bookings.some(b => !b.resourceIds)) throw new Error('Review staff and room assignments on older appointments before setting up packages.')
-  if (exactIso(proof.happenedAt) === null) throw new Error('Package evidence time is invalid.')
+  if (schedule.bookings.some(b => !b.resourceIds)) throw new Error('Assign staff and rooms to older appointments first.')
+  if (exactIso(proof.happenedAt) === null) throw new Error('Invalid package time.')
   return { ...schedule, packageDefinitions: schedule.packageDefinitions ?? [], packageLedger: schedule.packageLedger ?? [],
     revision: schedule.revision + 1 }
 }
@@ -215,9 +215,9 @@ function packageWriteBase(schedule: ShopServiceSchedule, proof: ShopServiceSched
 export function defineSpaMembershipPackage(schedule: ShopServiceSchedule, commerce: SpaMembershipCommerceView, sku: string, proof: ShopServiceScheduleProof) {
   const next = packageWriteBase(schedule, proof)
   const template = spaMembershipPackages.find(p => p.sku === sku)
-  if (!template || !commerce.items?.some(item => item.sku === sku)) throw new Error('The package must be in the current catalog.')
-  if (next.packageDefinitions.some(d => d.purchaseSku === sku)) throw new Error('This package is already set up.')
-  if (!schedule.services.some(s => s.id === template.serviceId && s.active)) throw new Error('The package treatment must be active.')
+  if (!template || !commerce.items?.some(item => item.sku === sku)) throw new Error('Package is missing from the catalog.')
+  if (next.packageDefinitions.some(d => d.purchaseSku === sku)) throw new Error('Package already set up.')
+  if (!schedule.services.some(s => s.id === template.serviceId && s.active)) throw new Error('Activate the package treatment first.')
   const definition = { id: `package-${String(next.revision).padStart(4, '0')}`, label: template.label, purchaseSku: sku,
     eligibleServiceIds: [template.serviceId], sessionsPerPurchase: template.sessions, active: true }
   return validateShopServiceSchedule({ ...next, packageDefinitions: [...next.packageDefinitions, definition],
@@ -235,8 +235,8 @@ export function allocateSpaMembershipPackage(schedule: ShopServiceSchedule, comm
     || !order.paymentReconciledAt || !(Date.parse(order.paymentReconciledAt) <= at)
     || !order.completion || !(Date.parse(order.completion.capturedAt) <= at)
     || !schedule.clients.some(c => c.id === order.customer && !c.anonymizedAt)
-    || !Number.isSafeInteger(line.quantity) || line.quantity < 1 || !Number.isSafeInteger(line.unitPriceMmk) || (line.unitPriceMmk ?? 0) < 1) throw new Error('Choose a completed, paid package purchase for an active client.')
-  if (next.packageLedger.some(e => e.sourceOrderId === orderId && e.sourceOrderLineIndex === lineIndex)) throw new Error('This purchase is already allocated.')
+    || !Number.isSafeInteger(line.quantity) || line.quantity < 1 || !Number.isSafeInteger(line.unitPriceMmk) || (line.unitPriceMmk ?? 0) < 1) throw new Error('Choose a paid package for an active client.')
+  if (next.packageLedger.some(e => e.sourceOrderId === orderId && e.sourceOrderLineIndex === lineIndex)) throw new Error('Purchase already allocated.')
   const id = `package-entitlement-${String(next.revision).padStart(4, '0')}`
   const evidence = { revision: next.revision, type: 'package_allocated' as const, actor: bounded(proof.actor, 'Package actor', 120), reason: bounded(proof.reason, 'Package reason', 240), happenedAt: proof.happenedAt }
   const sessions = line.quantity * definition.sessionsPerPurchase
