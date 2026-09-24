@@ -22,5 +22,5 @@
 .business-brief button:disabled { opacity: .45; cursor: default; }
 .business-brief small { color: #687971; font-size: .78rem; line-height: 1.5; }
 .business-brief footer { border-top: 1px solid #dce5df; margin-top: 2rem; padding-top: 1.25rem; display: grid; gap: 1rem; font-size: .8rem; color: #687971; }
-.business-brief footer button { justify-self: start; border: 0; padding: .5rem 0; background: transparent; color: #244f41; text-decoration: underline; text-underline-offset: 4px; }
+.business-brief footer button { min-height: 44px; justify-self: start; border: 0; padding: .5rem 0; background: transparent; color: #244f41; text-decoration: underline; text-underline-offset: 4px; }
 .business-brief :is(input, textarea, button):focus-visible { outline: 3px solid #43977e; outline-offset: 3px; }
