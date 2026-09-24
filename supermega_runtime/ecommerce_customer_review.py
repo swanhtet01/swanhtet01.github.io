@@ -108,7 +108,7 @@ def build_catalog_acceptance(review, payload, *, principal, readiness, source_ve
         previewDigest=projected['previewDigest'], contentRevision=projected['contentRevision'],
         sourceVersion=source_version, decision=payload['decision'])
     fingerprint = 'sha256:' + sha256(json.dumps(identity, sort_keys=True,
-        separators=(',', ':'), ensure_ascii=True).encode()).hexdigest()
+        separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
     return identity | dict(commandFingerprint=fingerprint, acceptedAt=current.isoformat(),
         status='accepted_for_operator_release_review', persisted=False,
         publicationAuthorized=False, deploymentAuthorized=False)
@@ -138,6 +138,6 @@ def build_catalog_change_request(review, payload, *, principal, readiness, sourc
         previewDigest=projected['previewDigest'], contentRevision=projected['contentRevision'],
         sourceVersion=source_version, note=_text(payload['note'], 2000))
     fingerprint = 'sha256:' + sha256(json.dumps(identity, sort_keys=True,
-        separators=(',', ':'), ensure_ascii=True).encode()).hexdigest()
+        separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
     return identity | dict(commandFingerprint=fingerprint, createdAt=current.isoformat(),
         persisted=False, publicationAuthorized=False, deploymentAuthorized=False)
