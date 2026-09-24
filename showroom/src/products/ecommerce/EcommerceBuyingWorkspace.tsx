@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { SavedRequestReceipt } from './SavedRequestReceipt'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -174,6 +174,11 @@ export function EcommerceBuyingWorkspace({
   const [open, setOpen] = useState(false)
   const [quoteBusy, setQuoteBusy] = useState(false)
   const quoteInFlight = useRef(false)
+  const checkoutEpoch = useRef(0)
+  useLayoutEffect(() => {
+    checkoutEpoch.current += 1
+    return () => { checkoutEpoch.current += 1 }
+  }, [scope, sourcePreviewDigest])
   const [handoffBusy, setHandoffBusy] = useState(false)
   const handoffInFlight = useRef(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
@@ -1132,12 +1137,15 @@ export function EcommerceBuyingWorkspace({
       setNotice('Secure checkout identity is unavailable. Nothing was recorded.')
       return
     }
+    const epoch = checkoutEpoch.current
+    const stillCurrent = () => checkoutEpoch.current === epoch
     quoteInFlight.current = true
     setQuoteBusy(true)
     setNotice('')
     try {
       const quotedAt = new Date()
       const pim = await buildEcommercePimProjection(scope, sourcePreviewDigest, preview)
+      if (!stillCurrent()) return
       const retained = activeBuyingState.requests[0]
       const retainedMatches = Boolean(onRecordManagedRequest
         && retained
@@ -1161,7 +1169,9 @@ export function EcommerceBuyingWorkspace({
         && cartMatchesRequest(cart, retained))
       if (retainedMatches && retained && onRecordManagedRequest) {
         setManagedConfirmation('')
-        setManagedConfirmation(await confirmManagedRequest(retained, onRecordManagedRequest))
+        const confirmation = await confirmManagedRequest(retained, onRecordManagedRequest)
+        if (!stillCurrent()) return
+        setManagedConfirmation(confirmation)
         onCartChange([])
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
@@ -1191,15 +1201,22 @@ export function EcommerceBuyingWorkspace({
         quotedAt: quotedAt.toISOString(),
         expiresAt: new Date(quotedAt.getTime() + 15 * 60 * 1000).toISOString(),
       })
+      if (!stillCurrent()) return
       emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'quote.captured', ts: Date.now() })
       const request = await buildEcommerceOrderRequestV2(quote, sourceStorefront)
+      if (!stillCurrent()) return
       const saved = await saveEcommerceOrderRequestV2(scope, request, activeBuyingState.headDigest)
+      if (!stillCurrent()) return
       setBuyingState(saved)
       setRecoveryRead({ scope, status: 'ready', issue: '' })
       emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'order.request.submitted', ts: Date.now() })
       setFreshQuoteId('')
       setManagedConfirmation('')
-      if (onRecordManagedRequest) setManagedConfirmation(await confirmManagedRequest(request, onRecordManagedRequest))
+      if (onRecordManagedRequest) {
+        const confirmation = await confirmManagedRequest(request, onRecordManagedRequest)
+        if (!stillCurrent()) return
+        setManagedConfirmation(confirmation)
+      }
       onCartChange([])
       try {
         recordBehaviorSignal(window.localStorage, {
@@ -1217,10 +1234,10 @@ export function EcommerceBuyingWorkspace({
         ? 'This order request is in the Company Shop inbox and local recovery. No order, stock, message, or charge changed.'
         : 'This sample order request is saved on this device for Shop review. No order, stock, message, or charge changed.')
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Checkout review failed closed.')
+      if (stillCurrent()) setNotice(error instanceof Error ? error.message : 'Checkout review failed closed.')
     } finally {
       quoteInFlight.current = false
-      setQuoteBusy(false)
+      if (stillCurrent()) setQuoteBusy(false)
     }
   }
 

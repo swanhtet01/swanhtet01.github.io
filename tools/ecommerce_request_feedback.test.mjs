@@ -9,7 +9,7 @@ const end = source.indexOf('\n  async function openOperatorReview', start)
 assert.ok(start >= 0 && end > start)
 const handler = source.slice(start, end).replace('event: FormEvent<HTMLFormElement>', 'event')
 
-async function run({ managed = false, failure = '', duplicate = false } = {}) {
+async function run({ managed = false, failure = '', duplicate = false, invalidateAt = '' } = {}) {
   const result = { saved: 0, delivered: 0, notice: '', fresh: '', busy: false, cartClears: 0 }
   const window = { location: { pathname: '/ecommerce/', search: '' } }
   Object.defineProperty(window, 'localStorage', { get() {
@@ -17,7 +17,7 @@ async function run({ managed = false, failure = '', duplicate = false } = {}) {
     return {}
   } })
   const context = {
-    window, Error, disabled: false, quoteBusy: false, quoteInFlight: { current: false }, recoveryBlocked: false,
+    window, Error, disabled: false, quoteBusy: false, quoteInFlight: { current: false }, checkoutEpoch: { current: 1 }, recoveryBlocked: false,
     cart: [{ sku: 'SYNTHETIC' }], paymentPolicyReady: true,
     crypto: { randomUUID: () => 'synthetic' }, scope: 'local', sourcePreviewDigest: 'digest', preview: {},
     sourceStorefront: null, activeBuyingState: { requests: [], headDigest: 'head' },
@@ -28,7 +28,7 @@ async function run({ managed = false, failure = '', duplicate = false } = {}) {
     buildEcommerceOrderRequestV2: async () => ({ id: 'REQUEST' }),
     saveEcommerceOrderRequestV2: async () => {
       if (failure === 'save') throw new Error('save unconfirmed')
-      result.saved++; return {}
+      result.saved++; if (invalidateAt === 'save') context.checkoutEpoch.current++; return {}
     },
     onCartChange: lines => { assert.equal(lines.length, 0); result.cartClears++ },
     setBuyingState() {}, setRecoveryRead() {}, emitMetric() {},
@@ -36,6 +36,7 @@ async function run({ managed = false, failure = '', duplicate = false } = {}) {
     onRecordManagedRequest: managed ? async () => {
       if (failure === 'delivery') throw new Error('delivery unconfirmed')
       result.delivered++
+      if (invalidateAt === 'delivery') context.checkoutEpoch.current++
     } : undefined,
     confirmManagedRequest: async (request, callback) => { await callback(request); return 'confirmed' },
     recordBehaviorSignal() { if (failure === 'behavior') throw new Error('optional behavior failed') },
@@ -140,4 +141,12 @@ test('saved receipt remains current with an empty cart only for the matching req
   assert.equal(evaluate({ freshQuoteId: '' }), false)
   assert.equal(evaluate({ scope: 'other' }), false)
   assert.equal(evaluate({ sourcePreviewDigest: 'changed' }), false)
+})
+
+for (const invalidateAt of ['save', 'delivery']) test(`replaced checkout ignores late ${invalidateAt} completion`, async () => {
+  const result = await run({ managed: true, invalidateAt })
+  assert.equal(result.cartClears, 0)
+  assert.equal(result.fresh, '')
+  assert.equal(result.delivered, invalidateAt === 'save' ? 0 : 1)
+  assert.doesNotMatch(result.notice, /Company Shop inbox|saved on this device/)
 })

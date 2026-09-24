@@ -2329,6 +2329,7 @@ export function EcommerceProduct() {
 
           {buyingReady && previewResult.preview && digest && activeCommerceState ? (
             <EcommerceBuyingWorkspace
+              key={cartScope}
               cart={buyingCart}
               commerceState={activeCommerceState}
               currentCatalog={catalog.items}
