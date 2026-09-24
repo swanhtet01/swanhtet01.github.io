@@ -72,8 +72,8 @@ export const EXACT_APP_PREVIEW_CASE_MATRIX = Object.freeze([
   ...RETIRED_PRODUCT_CASES.map(spec => Object.freeze({ ...spec, surface: 'retired_plant', screenshot: `${spec.id}.png` })),
   { id: 'website_desktop', surface: 'website', route: '/website/', width: 1280, height: 900, mobile: false, screenshot: 'website-working-sample-desktop-1280x900.png' },
   { id: 'website_mobile', surface: 'website', route: '/website/', width: 390, height: 844, mobile: true, screenshot: 'website-working-sample-mobile-390x844.png' },
-  { id: 'ecommerce_desktop', surface: 'ecommerce', route: '/ecommerce/', width: 1280, height: 900, mobile: false, screenshot: 'ecommerce-local-request-desktop-1280x900.png' },
-  { id: 'ecommerce_mobile', surface: 'ecommerce', route: '/ecommerce/', width: 390, height: 844, mobile: true, screenshot: 'ecommerce-local-request-mobile-390x844.png' },
+  { id: 'ecommerce_desktop', surface: 'ecommerce', route: '/ecommerce/?workspace=1', width: 1280, height: 900, mobile: false, screenshot: 'ecommerce-local-request-desktop-1280x900.png' },
+  { id: 'ecommerce_mobile', surface: 'ecommerce', route: '/ecommerce/?workspace=1', width: 390, height: 844, mobile: true, screenshot: 'ecommerce-local-request-mobile-390x844.png' },
 ])
 
 export const SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION = Object.freeze({
@@ -1038,7 +1038,7 @@ export function expectedText(spec, publicHomepageExpectedText) {
   ]
   if (spec.surface === 'retired_plant') return ['Shop', 'Website', 'Ecommerce']
   if (spec.surface === 'website') return ['Website', 'Your business, online.', 'Business name', 'What does your business offer?', 'Existing page or catalog', 'Continue', 'Next: add your contact details and review before sending. No passwords or private customer data.', 'Scope and price agreed before work begins.', 'Open existing workspace']
-  return ['Ecommerce', 'Let SuperMega prepare your catalog', 'Request catalog setup', 'Try sample request']
+  return ['Ecommerce', 'Sample store', 'Browse a sample catalog. Requests stay on this device and are not live orders.', 'Request catalog setup', 'Try sample request']
 }
 
 function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {

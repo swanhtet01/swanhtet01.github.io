@@ -71,6 +71,16 @@ test('Website default preview requires the business brief and review boundaries'
   assert.ok(!needles.includes('Nothing has been deployed.'))
 })
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
+test('Ecommerce checkout proof explicitly opens the workspace and requires local-only copy', async () => {
+  const cases = EXACT_APP_PREVIEW_CASE_MATRIX.filter(spec => spec.surface === 'ecommerce')
+  assert.equal(cases.length, 2)
+  assert.ok(cases.every(spec => spec.route === '/ecommerce/?workspace=1'))
+  const source = await readFile(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
+  const needles = expectedText({ surface: 'ecommerce' })
+  for (const needle of needles) assert.ok(source.includes(needle))
+  assert.ok(needles.includes('Browse a sample catalog. Requests stay on this device and are not live orders.'))
+  assert.ok(needles.includes('Try sample request'))
+})
 const reportGeneratedAt = '2026-08-28T12:05:00.000Z'
 const expectedCommit = 'a'.repeat(40)
 const previousCommit = 'b'.repeat(40)
