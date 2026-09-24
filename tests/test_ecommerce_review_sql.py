@@ -20,15 +20,11 @@ class CatalogReviewSqlTests(unittest.TestCase):
     transaction = fixture.WebsiteReviewSqlTests.transaction
 
     def test_preparation_and_source_save_serialize_in_both_orders(self):
-        # Committed candidate setup belongs only to this isolated disposable cluster.
-        from pathlib import Path
+        # Committed test data belongs only to this isolated disposable cluster.
         from tests.test_commerce_runtime import catalog_state, storefront_configuration
         from supermega_runtime.commerce_runtime import commerce_storefront_preview,commerce_storefront_preview_digest
         source=catalog_state();source['storefrontConfiguration']=storefront_configuration(source)
-        root=Path(__file__).resolve().parents[1]
         with pg._connect(self.admin_url) as connection:
-            for name in ('20260924194557_ecommerce_customer_review_storage.sql',):
-                connection.execute((root/'supabase/migrations'/name).read_text(encoding='utf-8'))
             connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s",(WORKSPACE,RECIPIENT))
             connection.execute("""insert into app_private.workspace_events
                 (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,payload_json,result_json)
