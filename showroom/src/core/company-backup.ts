@@ -1,6 +1,6 @@
 import { isLocalWorkspaceKey } from './local-workspace-storage.ts'
-import { COMMERCE_KEY, COMMERCE_LOCK } from './commerce-workspace.ts'
-import { PRODUCTION_KEY, PRODUCTION_LOCK } from './production-workspace.ts'
+import { COMMERCE_LOCK } from './commerce-workspace.ts'
+import { PRODUCTION_LOCK } from './production-workspace.ts'
 
 // Same shape as commerce-workspace.ts / production-workspace.ts define locally for their own
 // lockManager parameters. Restore must take the same locks those modules take around a
@@ -519,26 +519,13 @@ export async function inspectEncryptedCompanyBackup(input: string, passphrase: s
   }
 }
 
-function lockNameForRestoreKey(key: string): string | null {
-  if (key === COMMERCE_KEY) return COMMERCE_LOCK
-  if (key === PRODUCTION_KEY) return PRODUCTION_LOCK
-  return null
-}
-
 function writeRestoreValue(storage: CompanyStorage, key: string, value: string | null): void {
   if (value === null) storage.removeItem(key)
   else storage.setItem(key, value)
 }
 
-async function restoreValues(storage: CompanyStorage, values: Map<string, string | null>, lockManager: BackupLockManager | undefined): Promise<void> {
-  for (const [key, value] of values) {
-    const lockName = lockNameForRestoreKey(key)
-    if (lockName && lockManager?.request) {
-      await lockManager.request(lockName, { mode: 'exclusive' }, () => writeRestoreValue(storage, key, value))
-    } else {
-      writeRestoreValue(storage, key, value)
-    }
-  }
+function restoreValues(storage: CompanyStorage, values: Map<string, string | null>): void {
+  for (const [key, value] of values) writeRestoreValue(storage, key, value)
 }
 
 function valuesMatch(storage: CompanyStorage, values: Map<string, string | null>): boolean {
@@ -601,32 +588,40 @@ export async function restoreCompanyBackup(
   if (snapshotDigest !== inspection.snapshotDigest || snapshot.records.length !== inspection.recordCount) {
     throw backupError('The inspected backup changed before restore. Inspect it again.')
   }
-  // The write is driven by the same plan the panel previews. A key can only be removed here if it
-  // was named in plan.deleting, so "shown" and "deleted" are one set rather than two that agree.
-  const plan = planCompanyRestore(storage, inspection)
-  const incoming = new Map(snapshot.records.map((record) => [record.key, record.value]))
-  const removing = new Set(plan.deleting)
-  const affectedKeys = [...plan.replacing, ...plan.adding, ...plan.unchanged, ...plan.deleting].sort()
-  const previous = new Map(affectedKeys.map((key) => [key, storage.getItem(key)]))
-  const target = new Map(affectedKeys.map((key) => [key, removing.has(key) ? null : incoming.get(key) ?? null]))
-  try {
-    await restoreValues(storage, target, lockManager)
-    if (!valuesMatch(storage, target)) throw backupError('The browser did not confirm every restored record.')
-  } catch (error) {
+  const restore = (): CompanyRestoreResult => {
+    // The write is driven by the same plan the panel previews. A key can only be removed here if it
+    // was named in plan.deleting, so "shown" and "deleted" are one set rather than two that agree.
+    const plan = planCompanyRestore(storage, inspection)
+    const incoming = new Map(snapshot.records.map((record) => [record.key, record.value]))
+    const removing = new Set(plan.deleting)
+    const affectedKeys = [...plan.replacing, ...plan.adding, ...plan.unchanged, ...plan.deleting].sort()
+    const previous = new Map(affectedKeys.map((key) => [key, storage.getItem(key)]))
+    const target = new Map(affectedKeys.map((key) => [key, removing.has(key) ? null : incoming.get(key) ?? null]))
     try {
-      await restoreValues(storage, previous, lockManager)
-      if (!valuesMatch(storage, previous)) throw backupError('Rollback verification failed.')
-    } catch {
-      throw backupError('Restore failed and the previous local state could not be verified. Stop using this browser and keep the backup file.')
+      restoreValues(storage, target)
+      if (!valuesMatch(storage, target)) throw backupError('The browser did not confirm every restored record.')
+    } catch (error) {
+      try {
+        restoreValues(storage, previous)
+        if (!valuesMatch(storage, previous)) throw backupError('Rollback verification failed.')
+      } catch {
+        throw backupError('Restore failed and the previous local state could not be verified. Stop using this browser and keep the backup file.')
+      }
+      throw backupError(`Restore failed; the previous company state was restored. ${error instanceof Error ? error.message : ''}`.trim())
     }
-    throw backupError(`Restore failed; the previous company state was restored. ${error instanceof Error ? error.message : ''}`.trim())
+    return {
+      restoredCount: plan.replacing.length + plan.adding.length + plan.unchanged.length,
+      removedCount: plan.deleting.length,
+      snapshotDigest,
+      authRecordsRestored: false,
+      managedWorkspaceRecordsRestored: false,
+      externalWritesPerformed: false,
+    }
   }
-  return {
-    restoredCount: plan.replacing.length + plan.adding.length + plan.unchanged.length,
-    removedCount: plan.deleting.length,
-    snapshotDigest,
-    authRecordsRestored: false,
-    managedWorkspaceRecordsRestored: false,
-    externalWritesPerformed: false,
+  // Match local backup restore lock order and hold through snapshot and rollback.
+  if (lockManager?.request) {
+    return lockManager.request(COMMERCE_LOCK, { mode: 'exclusive' }, () =>
+      lockManager.request(PRODUCTION_LOCK, { mode: 'exclusive' }, async () => restore()))
   }
+  return restore()
 }

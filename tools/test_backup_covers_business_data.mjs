@@ -121,7 +121,36 @@ const seededKeys = Object.keys(seed)
 
 const { json } = await createEncryptedCompanyBackup(storage, 'guard-passphrase-0123456789', new Date('2026-08-11T03:00:00.000Z'))
 const inspection = await inspectEncryptedCompanyBackup(json, 'guard-passphrase-0123456789')
-await restoreCompanyBackup(storage, inspection)
+const heldRestoreLocks = new Set()
+const unlockedRestoreOperations = []
+const originalStorageMethods = {}
+for (const operation of ['getItem', 'setItem', 'removeItem']) {
+  originalStorageMethods[operation] = storage[operation]
+  storage[operation] = (...args) => {
+    if (!heldRestoreLocks.has('supermega-commerce-workspace-v2') || !heldRestoreLocks.has('supermega-production-workspace-v2')) unlockedRestoreOperations.push(operation)
+    return originalStorageMethods[operation](...args)
+  }
+}
+const restoreLocks = {
+  async request(name, options, run) {
+    assert.ok(!heldRestoreLocks.has(name))
+    heldRestoreLocks.add(name)
+    try { return await run() } finally { heldRestoreLocks.delete(name) }
+  },
+}
+await restoreCompanyBackup(storage, inspection, restoreLocks)
+const beforeFailedRestore = Object.fromEntries(seededKeys.map(key => [key, originalStorageMethods.getItem(key)]))
+const guardedSetItem = storage.setItem
+let failOnce = true
+storage.setItem = (...args) => {
+  if (failOnce) { failOnce = false; throw new Error('synthetic_write_failure') }
+  return guardedSetItem(...args)
+}
+await assert.rejects(restoreCompanyBackup(storage, inspection, restoreLocks), /previous company state was restored/)
+assert.deepEqual(Object.fromEntries(seededKeys.map(key => [key, originalStorageMethods.getItem(key)])), beforeFailedRestore)
+assert.deepEqual(unlockedRestoreOperations, [], 'encrypted restore must lock before snapshot and through verification')
+assert.equal(heldRestoreLocks.size, 0)
+Object.assign(storage, originalStorageMethods)
 
 const destroyed = seededKeys.filter((key) => storage.getItem(key) === null)
 const unexpected = destroyed.filter((key) => (
