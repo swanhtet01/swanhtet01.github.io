@@ -27,8 +27,8 @@ class CatalogReviewSqlTests(unittest.TestCase):
         source=catalog_state();source['storefrontConfiguration']=storefront_configuration(source)
         root=Path(__file__).resolve().parents[1]
         with pg._connect(self.admin_url) as connection:
-            for name in ('ecommerce_review_projection_candidate.sql','ecommerce_review_storage_candidate.sql'):
-                connection.execute((root/'tools'/name).read_text(encoding='utf-8'))
+            for name in ('20260924194557_ecommerce_customer_review_storage.sql',):
+                connection.execute((root/'supabase/migrations'/name).read_text(encoding='utf-8'))
             connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s",(WORKSPACE,RECIPIENT))
             connection.execute("""insert into app_private.workspace_events
                 (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,payload_json,result_json)

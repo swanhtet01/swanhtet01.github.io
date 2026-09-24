@@ -772,7 +772,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         # Extra private facts must not leak even if a future state adds fields.
         source['items'][0]['privateCost'] = 777
         source['privateCustomer'] = 'PRIVATE_TEST_DATA'
-        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        sql = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924194557_ecommerce_customer_review_storage.sql').read_text(encoding='utf-8')
         with pg._connect(self.admin_url) as connection:
             try:
                 connection.execute(sql)
@@ -801,7 +801,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         source = catalog_state()
         source['items'][0]['name'] = '\u1006\u102d\u102f\u1004\u103a "Tea" \\ local'
         source['items'].append(dict(sku='SKU-2',name='Coffee',variant='Small',onHand=0,reorderAt=0,price=500))
-        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        sql = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924194557_ecommerce_customer_review_storage.sql').read_text(encoding='utf-8')
         with pg._connect(self.admin_url) as connection:
             try:
                 connection.execute(sql)
@@ -824,7 +824,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         from supermega_runtime.commerce_runtime import commerce_storefront_preview, commerce_storefront_preview_digest
         source = catalog_state()
         source['storefrontConfiguration'] = storefront_configuration(source)
-        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        sql = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924194557_ecommerce_customer_review_storage.sql').read_text(encoding='utf-8')
         with pg._connect(self.admin_url) as connection:
             try:
                 connection.execute(sql)
@@ -856,7 +856,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         from pathlib import Path
         from tests.test_commerce_runtime import catalog_state, storefront_configuration
         from supermega_runtime.commerce_runtime import commerce_catalog_digest
-        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        sql = (Path(__file__).resolve().parents[1] / 'supabase/migrations/20260924194557_ecommerce_customer_review_storage.sql').read_text(encoding='utf-8')
         with pg._connect(self.admin_url) as connection:
             try:
                 connection.execute(sql)
@@ -882,7 +882,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         from supermega_runtime.commerce_runtime import commerce_catalog_digest
         base = catalog_state()
         base['storefrontConfiguration'] = storefront_configuration(base,merchandising=[dict(sku='SKU-1',featured=False,collection='Local',displayName='',note='')])
-        sql=(Path(__file__).resolve().parents[1]/'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        sql=(Path(__file__).resolve().parents[1]/'supabase/migrations/20260924194557_ecommerce_customer_review_storage.sql').read_text(encoding='utf-8')
         with pg._connect(self.admin_url) as connection:
             try:
                 connection.execute(sql)
@@ -905,7 +905,7 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         from pathlib import Path
         from tests.test_commerce_runtime import catalog_state, storefront_configuration
         from supermega_runtime.commerce_runtime import commerce_catalog_digest
-        sql=(Path(__file__).resolve().parents[1]/'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        sql=(Path(__file__).resolve().parents[1]/'supabase/migrations/20260924194557_ecommerce_customer_review_storage.sql').read_text(encoding='utf-8')
         with pg._connect(self.admin_url) as connection:
             try:
                 connection.execute(sql)
@@ -938,8 +938,8 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         review_id=uuid4()
         with pg._connect(self.admin_url) as connection:
             try:
-                for name in ('ecommerce_review_projection_candidate.sql','ecommerce_review_storage_candidate.sql'):
-                    connection.execute((root/'tools'/name).read_text(encoding='utf-8'))
+                for name in ('20260924194557_ecommerce_customer_review_storage.sql',):
+                    connection.execute((root/'supabase/migrations'/name).read_text(encoding='utf-8'))
                 connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s",(WORKSPACE,RECIPIENT))
                 connection.execute("""insert into app_private.workspace_events
                     (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,payload_json,result_json)
