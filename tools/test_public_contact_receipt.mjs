@@ -348,3 +348,22 @@ test('actual business brief handoff preserves Myanmar text and reference through
     assert.equal(state.resets(), 1)
   }
 })
+
+
+test('confirmed handoff resets entry guidance only when no later edits remain', async () => {
+  for (const edited of [false, true]) {
+    const state = harness([new Error('lost response'), { body: receipt }], '?product=website', '#company=Example&goal=Prepare%20our%20website')
+    const originalHeading = state.headings.get('[data-contact-heading]').textContent
+    await state.submit()
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, originalHeading)
+    if (edited) state.fields.get('[name="goal"]').value = 'Later unsent brief'
+    await state.submit()
+    assert.equal(state.calls[0].body, state.calls[1].body)
+    assert.equal(state.resets(), edited ? 0 : 1)
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, edited ? originalHeading : 'Tell us what your business needs.')
+    assert.equal(state.headings.get('[data-contact-copy-heading]').textContent, edited ? 'Your brief is ready to review.' : 'We set it up. You review.')
+    if (edited) assert.equal(state.fields.get('[name="goal"]').value, 'Later unsent brief')
+    else assert.equal(state.fields.get('button[type="submit"]').textContent, 'Request setup')
+    assert.match(state.fields.get('[data-form-status]').textContent, /Request received: LEAD-/)
+  }
+})
