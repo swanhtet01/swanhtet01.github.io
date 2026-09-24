@@ -9431,6 +9431,37 @@ class CommerceRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             validate_commerce_state({**package_saved, "serviceSchedule": duplicate_redemption})
 
+        cross_package_redemption = deepcopy(redemption_schedule)
+        cross_package_redemption["revision"] = 9
+        second_package = cross_package_redemption["packageLedger"][1]
+        second_package.update({
+            "remainingSessions": 4,
+            "version": 2,
+            "evidence": [
+                *second_package["evidence"],
+                deepcopy(duplicate_redemption["packageLedger"][0]["evidence"][-1]),
+            ],
+        })
+        cross_package_redemption["events"].append({
+            **duplicate_redemption["events"][-1],
+            "subjectId": second_package["id"],
+        })
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state({**package_saved, "serviceSchedule": cross_package_redemption})
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                package_saved,
+                "commerce.service_schedule.saved",
+                {**package_saved, "serviceSchedule": cross_package_redemption},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R9",
+                    "capturedAt": "2026-07-29T05:34:00.000Z",
+                    "actor": "operator-1",
+                    "reason": "Invalid duplicate redemption.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R9",
+                },
+            )
+
         for expired_at in (
             entitlement["expiresAt"],
             "2027-07-29T05:32:00.001Z",

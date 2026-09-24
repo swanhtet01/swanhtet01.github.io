@@ -1373,6 +1373,7 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
 
     package_entitlement_ids: list[str] = []
     package_source_lines: list[str] = []
+    all_redemption_booking_ids: list[str] = []
     package_evidence_bindings: list[tuple[int, str, dict[str, Any]]] = []
     for index, candidate in enumerate(package_ledger):
         field = f"commerce state.serviceSchedule.packageLedger[{index}]"
@@ -1512,6 +1513,7 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
                 ):
                     raise TrialValidationError(f"{evidence_field} redemption evidence is invalid.")
                 redemption_booking_ids.append(booking_id)
+                all_redemption_booking_ids.append(booking_id)
             package_evidence_bindings.append(
                 (
                     evidence_revision,
@@ -1531,6 +1533,10 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             raise TrialValidationError(f"{field} remaining session evidence is inconsistent.")
     _unique(package_entitlement_ids, "commerce state.serviceSchedule package entitlement ID")
     _unique(package_source_lines, "commerce state.serviceSchedule package source order line")
+    _unique(
+        all_redemption_booking_ids,
+        "commerce state.serviceSchedule package redemption booking ID",
+    )
     _unique(
         [str(binding[0]) for binding in package_evidence_bindings],
         "commerce state.serviceSchedule package evidence revision",
