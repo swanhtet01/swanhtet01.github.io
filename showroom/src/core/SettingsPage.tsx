@@ -364,6 +364,7 @@ export function SettingsPage() {
   const [preparedInstalled, setPreparedInstalled] = useState<Record<string, string>>({})
   const [preparedBusyProduct, setPreparedBusyProduct] = useState<SetupProductId | null>(null)
   const [preparedInstallStep, setPreparedInstallStep] = useState('')
+  const preparedInstallRunning = useRef(false)
   const [preparedNotice, setPreparedNotice] = useState('')
   const [preparedBlockedProduct, setPreparedBlockedProduct] = useState<SetupProductId | null>(null)
   const [ecommerceActivationPacketText, setEcommerceActivationPacketText] = useState('')
@@ -1387,7 +1388,8 @@ export function SettingsPage() {
 
   async function installPreparedProducts() {
     const artifact = preparedArtifact
-    if (!artifact || preparedBusyProduct || managedIdentity || !preparedApprovalReady) return
+    if (!artifact || preparedInstallRunning.current || preparedBusyProduct || managedIdentity || !preparedApprovalReady) return
+    preparedInstallRunning.current = true
     const installedBeforeRun = preparedAppliedProducts
     let activeProduct: SetupProductId | null = null
     setPreparedBlockedProduct(null)
@@ -1436,6 +1438,7 @@ export function SettingsPage() {
       setPreparedBlockedProduct(activeProduct)
       setPreparedNotice(`Stopped${activeProduct ? ` at ${productDisplayName(activeProduct)}` : ''}: ${detail} Products already installed are preserved; fix the issue and run the remaining installation again.`)
     } finally {
+      preparedInstallRunning.current = false
       setPreparedBusyProduct(null)
       setPreparedInstallStep('')
     }

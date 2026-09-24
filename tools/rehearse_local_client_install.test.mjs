@@ -164,3 +164,34 @@ test('prepared installer UI binds installed status to the exact package, not gen
   assert.match(source, /const applied = preparedAppliedProducts.has\(product.product\)/)
   assert.match(source, /await applyPreparedLocalClientDemoProduct\(artifact, product, preparedConfirmation\)\s+setPreparedInstalled\(\(current\) => \(\{ \.\.\.current, \[product\]: artifact.bundleDigest \}\)\)/)
 })
+
+
+test('actual Settings installer refuses overlapping starts before module loading completes', async () => {
+  const source = await readFile(new URL('../showroom/src/core/SettingsPage.tsx', import.meta.url), 'utf8')
+  const start = source.indexOf('  async function installPreparedProducts()')
+  const end = source.indexOf('  async function createDemoKit()', start)
+  assert.ok(start > 0 && end > start)
+  const handler = source.slice(start, end).replace(': SetupProductId | null', '').replace(': string[]', '').replace("import('./local-client-import')", 'loadInstaller()')
+  let finish, loads = 0
+  const pending = new Promise(resolve => { finish = resolve })
+  const running = { current: false }
+  const context = {
+    preparedArtifact: {}, preparedBusyProduct: null, managedIdentity: null, preparedApprovalReady: true,
+    preparedAppliedProducts: new Set(), preparedInstallRunning: running,
+    setPreparedBlockedProduct() {}, setPreparedNotice() {}, setPreparedBusyProduct() {}, setPreparedInstallStep() {},
+    loadInstaller: () => { loads++; return pending },
+  }
+  const run = runInNewContext(handler + '; installPreparedProducts', context)
+  const first = run()
+  assert.equal(running.current, true)
+  await run()
+  assert.equal(loads, 1)
+  finish({ preparedLocalClientDemoInstallOrder: async () => [] })
+  await first
+  assert.equal(running.current, false)
+  await run()
+  assert.equal(loads, 2, 'completed attempt releases the guard')
+  context.loadInstaller = async () => { throw new Error('synthetic import failure') }
+  await run()
+  assert.equal(running.current, false, 'failed attempt also releases the guard')
+})
