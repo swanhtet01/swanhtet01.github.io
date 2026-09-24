@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20260924194557_ecommerce_customer_review_storage.sql": "4bb3eb40ec26854bda021d3c2e19ba34bb0657272933f6bfd5ee8f6da6974b46",
     "20260924190304_ecommerce_review_entitlement_proof.sql": "84fdda564d5deb7003fd9c151dd1a1b64c21209fd64fd109062b25d0d3842fef",
     "20260817090000_private_trial_backend_v12_billing_rail.sql": "19cf4077c26336d74d3f5ea5ba4d60c20a2525604f4c8aa1673fd2b3b243a033",
     "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql": "784ba3a4fd29c61abebbc9b73eb37d0a68e40780c7d98d4b0b8953fee31b777f",
@@ -22,9 +23,16 @@ MIGRATION_PINS = {
     "20260915191528_website_review_entitlement_proof.sql": "75755426b58dfe01b6efde4bd3480e2defdf5556c3e9d1352bc96c48587adf62",
     "20260918011500_website_customer_acceptance.sql": "2ffe0304564175d9682af8525873c348d1a3638c87671d16c682e5414a2347b1",
 }
-TABLES = frozenset({"billing_invoices", "billing_events", "billing_entitlements",
+TABLES = frozenset({"ecommerce_customer_reviews", "billing_invoices", "billing_events", "billing_entitlements",
                     "self_serve_attempt_budgets", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances"})
 WEBSITE_FUNCTIONS = {
+    "ecommerce_review_text_length": ("value text", "bigint"),
+    "ecommerce_review_projection": ("source jsonb", "jsonb"),
+    "ecommerce_review_preview_digest": ("source jsonb", "text"),
+    "ecommerce_review_operator_entitled": ("", "boolean"),
+    "ecommerce_review_recipient_ready": ("recipient text", "boolean"),
+    "guard_ecommerce_review": ("", "trigger"),
+    "invalidate_ecommerce_reviews": ("", "trigger"),
     "guard_website_acceptance": ("", "trigger"),
     "guard_website_feedback_after_acceptance": ("", "trigger"),
     "guard_website_feedback": ("", "trigger"),
@@ -46,6 +54,10 @@ FUNCTIONS = {
     "mark_self_serve_claim_conflict": ("admitted_at timestamp with time zone", "boolean"),
 }
 WEBSITE_POLICIES = {
+    "ecommerce_reviews_read": ("ecommerce_customer_reviews", "SELECT", "da4c3b46a9403105ddaf8ed66ea4ec8fa35648f51ec170fa0300dd51f8d8303e", None),
+    "ecommerce_reviews_insert": ("ecommerce_customer_reviews", "INSERT", None, "37991bc21b558e0c1783ab3b07a5c36e92a2ae6ddccd23a00d9c1cba61cc4928"),
+    "ecommerce_reviews_update": ("ecommerce_customer_reviews", "UPDATE", "a58f2f95c57380135dd9c2a0e24defc7a276c12f74a7a742fda2648bf38041e5", "a58f2f95c57380135dd9c2a0e24defc7a276c12f74a7a742fda2648bf38041e5"),
+
     "website_acceptance_insert": ("website_customer_acceptances", "INSERT", None, "2b9ba696100e896e4f0ed4e46ef53ad83ad8828f8ea201ec1fc3a91be287f84e"),
     "website_acceptance_read": ("website_customer_acceptances", "SELECT", "aa4e62ec5c29d1c54a81615cf224f208cc795c541a4f9102ac5bff7bf9c29b86", None),
     "website_feedback_insert": ("website_customer_feedback", "INSERT", None, "c93ef7773593e0ed96f436fab247931dc3cf5ca1f59575833a4b879b068168b6"),
@@ -58,10 +70,10 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 # Exact PostgreSQL 17 output from the pinned migrations, with all row keys retained.
 # Source-derived, synthetic catalog evidence only. Unknown/extra/missing rows fail.
 CATALOG_PINS = {
-    "extension_columns_exact": "0e0a5552e46d2367977e5cee97f28e274b1d8b79600c885276c791d9315e6773",
-    "extension_constraints_exact": "60bb16c1e1111001200d1f5278e252ab793ad533c2541611dd4e84c3ef66c7f4",
-    "extension_functions_exact": "e4ed8842c88ea0cb5435bee73b961e19bbe688d1700ac600475b5deb0ff9fc0f",
-    "extension_policies_exact": "8c6862f8c1739dd405198d142ab306ecee42ed551f6c19719a92abef7c0346ad",
+    "extension_columns_exact": "8bae66a62bf0d1a8e9548816a4a4bf202d650fa396676605d464261aac5f4055",
+    "extension_constraints_exact": "7bab87257f6baf0d7791cf15fc779a6194201d58a800c598c0d94b51121822e8",
+    "extension_functions_exact": "9ca590145ccf925b9d779abd20c97a030d08250ba2e6dff6a7154f0e12d919c3",
+    "extension_policies_exact": "dc5e1a516547e66dba677edef2c1a5df4656d3f57f633f941f4856b65279403c",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
                "self_serve_attempt_budget_actor_only": "b5ae50fbc65c43344b8d3f3938f7b8a26414ae3bbb1781b6e35bf609c954f82c"}
@@ -206,6 +218,13 @@ def extend_contract(base):
         ("function", "app_private.reserve_self_serve_attempt()", 0),
         ("function", "app_private.mark_self_serve_claim_conflict(admitted_at timestamp with time zone)", 0),
     })
+    for trigger, function, table, mask in (
+        ('ecommerce_review_guard','guard_ecommerce_review','ecommerce_customer_reviews',31),
+        ('ecommerce_reviews_invalidate','invalidate_ecommerce_reviews','workspace_state',25),
+    ):
+        body = re.findall(r'create function app_private\.'+function+r'\(\).*?as \$\$(.*?)\$\$;', sql['20260924194557_ecommerce_customer_review_storage.sql'], re.S)
+        if len(body)!=1: raise ValueError('catalog_review_trigger_source_missing')
+        base['EXPECTED_TRIGGERS'][trigger]=dict(table=table,function=function,trigger_type=mask,function_source=body[0])
     website = sql["20260915184728_website_customer_review_storage.sql"]
     for name, table, function, kind in (
         ("website_review_guard", "website_customer_reviews", "guard_website_review", 31),
@@ -223,6 +242,9 @@ def extend_contract(base):
         base["EXPECTED_TRIGGERS"][name] = dict(table=table, function=function,
                                               trigger_type=kind, function_source=bodies[0])
     for name, table, keys, unique, primary, constraint in (
+        ("ecommerce_customer_reviews_pkey", "ecommerce_customer_reviews", ("review_id",), True, True, "p"),
+        ("ecommerce_reviews_recipient_idx", "ecommerce_customer_reviews", ("workspace_id", "recipient_actor_id", "review_id"), False, False, None),
+        ("ecommerce_reviews_active_idx", "ecommerce_customer_reviews", ("workspace_id",), False, False, None),
         ("website_customer_acceptances_pkey", "website_customer_acceptances", ("workspace_id", "actor_id", "command_id"), True, True, "p"),
         ("website_customer_acceptances_workspace_id_review_id_key", "website_customer_acceptances", ("workspace_id", "review_id"), True, False, "u"),
         ("website_customer_feedback_pkey", "website_customer_feedback", ("workspace_id", "actor_id", "command_id"), True, True, "p"),
@@ -234,6 +256,7 @@ def extend_contract(base):
     ):
         base["EXPECTED_INDEX_CONTRACT"][name] = dict(table=table, keys=keys, options=(0,) * len(keys),
                                                    unique=unique, primary=primary, constraint=constraint)
+    base["EXPECTED_INDEX_CONTRACT"]["ecommerce_reviews_active_idx"]["predicate_expression"] = "(status = 'active'::text)"
     base["EXPECTED_INDEX_CONTRACT"]["website_customer_reviews_active_idx"]["predicate_expression"] = "(status = 'active'::text)"
     base["EXPECTED_INDEXES"] = frozenset(base["EXPECTED_INDEX_CONTRACT"])
     for name, (table, command, qual, check) in WEBSITE_POLICIES.items():
@@ -242,13 +265,13 @@ def extend_contract(base):
     base["EXPECTED_NON_OWNER_ACL"] |= frozenset(
         [("function", name, role, "EXECUTE", False) for name in WEBSITE_FUNCTIONS]
         + [("table", table, role, privilege, False)
-           for table, privileges in (("website_customer_reviews", ("SELECT", "INSERT", "UPDATE")),
+           for table, privileges in (("ecommerce_customer_reviews", ("SELECT", "INSERT", "UPDATE")), ("website_customer_reviews", ("SELECT", "INSERT", "UPDATE")),
                                      ("website_customer_feedback", ("SELECT", "INSERT")),
                                      ("website_customer_acceptances", ("SELECT", "INSERT")))
            for privilege in privileges])
     base["EXPECTED_BACKEND_ACL_DEPENDENCIES"] |= frozenset(
         [("function", f"app_private.{name}({signature[0]})", 0) for name, signature in WEBSITE_FUNCTIONS.items()]
         + [("relation", f"app_private.{table}", 0)
-           for table in ("website_customer_reviews", "website_customer_feedback", "website_customer_acceptances")])
+           for table in ("ecommerce_customer_reviews", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances")])
     base.update(collect_extensions=collect_extensions, extension_checks=extension_checks)
     return base

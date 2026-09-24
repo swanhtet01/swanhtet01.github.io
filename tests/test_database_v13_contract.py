@@ -188,10 +188,10 @@ class V13CatalogTests(unittest.TestCase):
                     chosen[changed_field] += " OR true"
                     self.assertFalse(self.evaluate(damaged)["ready"])
 
-    def test_website_catalog_rows_cannot_be_omitted_duplicated_or_changed(self):
+    def test_review_catalog_rows_cannot_be_omitted_duplicated_or_changed(self):
         for key in ("functions", "policies", "indexes", "triggers", "acl_entries", "backend_acl_dependencies"):
             for index, row in enumerate(self.good[key]):
-                if 'website' not in str(row):
+                if not any(product in str(row) for product in ('website', 'ecommerce')):
                     continue
                 for operation in ("remove", "duplicate"):
                     with self.subTest(surface=key, index=index, operation=operation):
@@ -223,6 +223,14 @@ class V13CatalogTests(unittest.TestCase):
     def test_actual_database_privilege_and_rls_drift_is_rejected_and_restored(self):
         pg = proof.pg
         cases = (
+            ("alter table app_private.ecommerce_customer_reviews no force row level security",
+             "alter table app_private.ecommerce_customer_reviews force row level security"),
+            ("grant delete on app_private.ecommerce_customer_reviews to supermega_trial_backend",
+             "revoke delete on app_private.ecommerce_customer_reviews from supermega_trial_backend"),
+            ("grant select on app_private.ecommerce_customer_reviews to authenticated",
+             "revoke select on app_private.ecommerce_customer_reviews from authenticated"),
+            ("alter table app_private.workspace_state disable trigger ecommerce_reviews_invalidate",
+             "alter table app_private.workspace_state enable trigger ecommerce_reviews_invalidate"),
             ("alter table app_private.website_customer_acceptances no force row level security",
              "alter table app_private.website_customer_acceptances force row level security"),
             ("grant update on app_private.website_customer_acceptances to supermega_trial_backend",
