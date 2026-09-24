@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -906,4 +907,25 @@ test('contact workspace rejects missing essentials and review gates before creat
   } finally {
     await rm(parent, { recursive: true, force: true })
   }
+})
+
+
+test('contact intake refuses template labels before creating a workspace or accepting a rehashed packet', async () => {
+  const source = await fixture()
+  try {
+    const event = contactEvent()
+    const template = buildClientContactReviewTemplate(event)
+    for (const field of ['workspace', 'implementationOwner']) {
+      for (const label of [template[field], '  ' + template[field].toLowerCase() + '  ']) {
+        const review = contactReview({ event, overrides: { [field]: label } })
+        const directory = resolve(source.directory, 'unreviewed-contact')
+        await assert.rejects(initializeClientWorkspaceFromContact({ directory, event, review }), /client_contact_(workspace|owner)_invalid/)
+        assert.equal(existsSync(directory), false)
+        const { digest, ...body } = buildClientContactIntake(event, contactReview({ event }))
+        body.client[field] = label.trim()
+        const packet = { ...body, digest: 'sha256:' + createHash('sha256').update(JSON.stringify(body)).digest('hex') }
+        assert.throws(() => verifyClientContactIntake(packet), /client_contact_intake_invalid/)
+      }
+    }
+  } finally { await rm(source.directory, { recursive: true, force: true }) }
 })

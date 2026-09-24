@@ -144,6 +144,12 @@ function boundedPrivateText(value, code, maximum, { optional = false, singleLine
   return normalized
 }
 
+function reviewedContactLabel(value, code, maximum) {
+  const label = boundedPrivateText(value, code, maximum, { singleLine: true })
+  if (/^REPLACE WITH\b/i.test(label)) fail(code)
+  return label
+}
+
 function canonicalContactProducts(values) {
   if (!Array.isArray(values) || values.length < 1 || values.length > PRODUCT_ORDER.length) fail('client_contact_products_invalid')
   const mapped = values.map((value) => CONTACT_PRODUCT[String(value || '').trim().toLowerCase()]).filter((value) => value && value !== 'guide')
@@ -199,8 +205,8 @@ export function buildClientContactIntake(event, review) {
   if (!reviewedAt || Date.parse(reviewedAt) < Date.parse(contact.submittedAt)) fail('client_contact_review_time_invalid')
   if (review.companyReviewed !== true || review.goalReviewed !== true || review.privateWorkspaceApproved !== true) fail('client_contact_review_approval_required')
 
-  const workspace = boundedPrivateText(review.workspace, 'client_contact_workspace_invalid', 60, { singleLine: true })
-  const implementationOwner = boundedPrivateText(review.implementationOwner, 'client_contact_owner_invalid', 80, { singleLine: true })
+  const workspace = reviewedContactLabel(review.workspace, 'client_contact_workspace_invalid', 60)
+  const implementationOwner = reviewedContactLabel(review.implementationOwner, 'client_contact_owner_invalid', 80)
   const presetId = boundedPrivateText(review.presetId, 'client_contact_preset_invalid', 60, { singleLine: true })
   if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(presetId)) fail('client_contact_preset_invalid')
   const products = canonicalContactProducts(review.products)
@@ -272,8 +278,8 @@ export function verifyClientContactIntake(value) {
     || Date.parse(value.review.reviewedAt) < Date.parse(value.source.submittedAt)
     || !CONTACT_PRODUCT[value.client.requestedProduct]
     || typeof value.digest !== 'string') fail('client_contact_intake_invalid')
-  boundedPrivateText(value.client.workspace, 'client_contact_intake_invalid', 60, { singleLine: true })
-  boundedPrivateText(value.client.implementationOwner, 'client_contact_intake_invalid', 80, { singleLine: true })
+  reviewedContactLabel(value.client.workspace, 'client_contact_intake_invalid', 60)
+  reviewedContactLabel(value.client.implementationOwner, 'client_contact_intake_invalid', 80)
   boundedPrivateText(value.client.presetId, 'client_contact_intake_invalid', 60, { singleLine: true })
   boundedPrivateText(value.request.goal, 'client_contact_intake_invalid', 4_000)
   boundedPrivateText(value.request.requestedTemplate, 'client_contact_intake_invalid', 120, { optional: true, singleLine: true })
