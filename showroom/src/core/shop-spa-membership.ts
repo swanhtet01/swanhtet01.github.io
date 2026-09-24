@@ -26,6 +26,9 @@ export type SpaMembershipCommerceView = {
 }
 
 export type SpaMembershipBalance = {
+  clientId?: string
+  entitlementId?: string
+  eligibleServiceIds?: string[]
   customer: string
   packageSku: SpaMembershipPackage['sku']
   label: string
@@ -58,6 +61,20 @@ export function spaMembershipBalances(
   if (schedule.industryPackId !== 'spa') return []
   const asOf = asOfValue === undefined ? Number.POSITIVE_INFINITY : exactIso(asOfValue)
   if (asOf === null) throw new Error('Membership balance time must be an exact ISO timestamp.')
+  if (schedule.packageLedger) {
+    const ledgerTime = asOfValue === undefined ? Date.now() : asOf
+    return schedule.packageLedger.filter(entry => Date.parse(entry.issuedAt) <= ledgerTime).map(entry => {
+      const definition = schedule.packageDefinitions!.find(d => d.id === entry.definitionId)!
+      const client = schedule.clients.find(c => c.id === entry.clientId)!
+      return {
+        customer: client.name, clientId: entry.clientId, entitlementId: entry.id,
+        packageSku: definition.purchaseSku as SpaMembershipPackage['sku'], label: definition.label,
+        serviceId: definition.eligibleServiceIds[0], eligibleServiceIds: definition.eligibleServiceIds,
+        purchased: entry.allocatedSessions, redeemed: entry.allocatedSessions - entry.remainingSessions,
+        remaining: definition.active && !client.anonymizedAt && Date.parse(entry.expiresAt) > ledgerTime ? entry.remainingSessions : 0,
+      }
+    })
+  }
   const purchases = new Map<string, number>()
   for (const order of commerce.orders) {
     const paidAt = order.paymentReconciledAt ? exactIso(order.paymentReconciledAt) : null
@@ -107,10 +124,11 @@ export function availableSpaMembershipForBooking(
   validateShopServiceSchedule(schedule)
   const booking = schedule.bookings.find((candidate) => candidate.id === bookingId)
   if (!booking || booking.status !== 'completed') return null
+  if (schedule.packageLedger?.some(entry => entry.evidence.some(e => e.bookingId === bookingId))) return null
   if (schedule.events.some((event) => event.type === 'package_redeemed' && event.subjectId === bookingId)) return null
   return spaMembershipBalances(commerce, schedule, asOfValue).find((balance) => (
-    balance.customer === booking.customerName.trim()
-    && balance.serviceId === booking.serviceId
+    (balance.clientId ? balance.clientId === booking.clientId : balance.customer === booking.customerName.trim())
+    && (balance.eligibleServiceIds ? balance.eligibleServiceIds.includes(booking.serviceId) : balance.serviceId === booking.serviceId)
     && balance.remaining > 0
   )) ?? null
 }
@@ -130,10 +148,23 @@ export function redeemSpaMembershipSession(
   const booking = schedule.bookings.find((candidate) => candidate.id === bookingId)
   if (!booking || booking.status !== 'completed') throw new Error('Complete the appointment before using a package session.')
   if (happenedAtValue < Date.parse(booking.updatedAt)) throw new Error('Package use cannot predate appointment completion.')
+  if (schedule.packageLedger?.some(entry => entry.evidence.some(e => e.bookingId === bookingId))) return schedule
   if (schedule.events.some((event) => event.type === 'package_redeemed' && event.subjectId === bookingId)) return schedule
   const balance = availableSpaMembershipForBooking(commerce, schedule, bookingId, proof.happenedAt)
   if (!balance) throw new Error('No paid package session is available for this customer and treatment.')
   const revision = schedule.revision + 1
+  if (balance.entitlementId && schedule.packageLedger) {
+    const event = { revision, type: 'package_redeemed' as const, subjectId: balance.entitlementId, actor, reason, happenedAt: proof.happenedAt }
+    return validateShopServiceSchedule({
+      ...schedule, revision,
+      packageLedger: schedule.packageLedger.map(entry => entry.id !== balance.entitlementId ? entry : {
+        ...entry, remainingSessions: entry.remainingSessions - 1,
+        status: entry.remainingSessions === 1 ? 'exhausted' : 'active', version: entry.version + 1,
+        evidence: [...entry.evidence, { revision, type: 'package_redeemed', actor, reason, happenedAt: proof.happenedAt, bookingId }],
+      }),
+      events: [...schedule.events, event],
+    })
+  }
   return validateShopServiceSchedule({
     ...schedule,
     revision,

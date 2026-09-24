@@ -1,3 +1,4 @@
+import { validateServicePackages, type ServicePackageDefinition, type ServicePackageEntitlement } from './shop-service-packages.ts'
 export const SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v4' as const
 export const SHOP_SERVICE_SCHEDULE_STORAGE_KEY = 'supermega.shop.service-schedule.v1'
 const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v1' as const
@@ -94,7 +95,7 @@ export type ShopServiceBooking = {
 
 export type ShopServiceScheduleEvent = {
   revision: number
-  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'package_redeemed' | 'client_retention_set' | 'client_exported' | 'client_anonymized'
+  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'package_definition_saved' | 'package_allocated' | 'package_redeemed' | 'client_retention_set' | 'client_exported' | 'client_anonymized'
   subjectId: string
   actor: string
   reason: string
@@ -110,6 +111,8 @@ export type ShopServiceSchedule = {
   privacyPolicy: ShopServicePrivacyPolicy
   clients: ShopServiceClient[]
   bookings: ShopServiceBooking[]
+  packageDefinitions?: ServicePackageDefinition[]
+  packageLedger?: ServicePackageEntitlement[]
   events: ShopServiceScheduleEvent[]
 }
 
@@ -480,9 +483,11 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   if (state.events.length !== state.revision) throw new Error('Shop service schedule evidence is incomplete.')
   state.events.forEach((event, index) => {
     if (event.revision !== index + 1) throw new Error('Shop service schedule evidence revisions are not continuous.')
-    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'package_redeemed', 'client_retention_set', 'client_exported', 'client_anonymized'].includes(event.type)) throw new Error('Shop service schedule evidence type is unsupported.')
+    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'package_definition_saved', 'package_allocated', 'package_redeemed', 'client_retention_set', 'client_exported', 'client_anonymized'].includes(event.type)) throw new Error('Shop service schedule evidence type is unsupported.')
     boundedText(event.subjectId, 'Evidence subject', 80)
-    if (event.type === 'package_redeemed' && !state.bookings.some((booking) => booking.id === event.subjectId && booking.status === 'completed')) throw new Error('Package redemption must reference a completed booking.')
+    if (event.type === 'package_definition_saved' && !state.packageDefinitions?.some(d => d.id === event.subjectId)) throw new Error('Unknown package definition.')
+    if (event.type === 'package_allocated' && !state.packageLedger?.some(e => e.id === event.subjectId)) throw new Error('Unknown package entitlement.')
+    if (event.type === 'package_redeemed' && !state.packageLedger?.some(entry => entry.id === event.subjectId) && !(!state.packageDefinitions?.length && !state.packageLedger?.length && state.bookings.some((booking) => booking.id === event.subjectId && booking.status === 'completed'))) throw new Error('Package redemption must reference its entitlement or a legacy completed booking.')
     boundedText(event.actor, 'Evidence actor', 120)
     boundedText(event.reason, 'Evidence reason', 240)
     validIso(event.happenedAt, 'Evidence time')
@@ -490,6 +495,7 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
     if (event.type === 'client_exported' && !/^sha256:[a-f0-9]{64}$/.test(event.subjectId)) throw new Error('Client export evidence digest is invalid.')
     if (event.type === 'client_retention_set' && !/^retention-(?:[3-9]\d|[1-9]\d{2,3})-days$/.test(event.subjectId)) throw new Error('Client retention evidence is invalid.')
   })
+  validateServicePackages(state)
   return state
 }
 
