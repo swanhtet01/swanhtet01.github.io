@@ -316,7 +316,7 @@ for (const retiredToken of [
 }
 for (const product of publicProducts) {
   if (home.includes(`href="${product.appRoute}"`)) fail('direct_product_route_remains_primary', { product: product.id })
-  if (!home.includes(`href="/${product.id}/">Explore ${product.name} `)) fail('landing_route_link_missing', { product: product.id })
+  if (!home.includes(`href="/${product.id}/">Explore ${product.name}</a>`)) fail('landing_route_link_missing', { product: product.id })
 }
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })

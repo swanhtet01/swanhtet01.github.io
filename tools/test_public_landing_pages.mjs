@@ -225,7 +225,7 @@ for (const page of landingPages) {
     check(!home.includes(`href="${page.route}"`) && !home.includes(`?product=${product.id}`), `home_retired_acquisition_absent:${product.id}`)
     continue
   }
-  check(home.includes(`href="${page.route}">Explore ${product.name} `), `home_links_landing:${page.route}`)
+  check(home.includes(`href="${page.route}">Explore ${product.name}</a>`), `home_links_landing:${page.route}`)
   check(readStatic(page.file).includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`), `product_page_keeps_guided_cta:${product.id}`)
 }
 
