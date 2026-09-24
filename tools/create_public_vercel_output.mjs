@@ -883,12 +883,17 @@ async function parseBody(req) {
     if (Buffer.byteLength(JSON.stringify(req.body), 'utf8') > 131072) throw new Error('request_too_large')
     return req.body
   }
-  let raw = typeof req.body === 'string' ? req.body : ''
+  let raw = typeof req.body === 'string' ? req.body : Buffer.isBuffer(req.body) ? req.body.toString('utf8') : ''
+  if (Buffer.byteLength(raw, 'utf8') > 131072) throw new Error('request_too_large')
   if (!raw) {
+    const chunks = []; let bytes = 0
     for await (const chunk of req) {
-      raw += chunk
-      if (raw.length > 131072) throw new Error('request_too_large')
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      bytes += buffer.length
+      if (bytes > 131072) throw new Error('request_too_large')
+      chunks.push(buffer)
     }
+    raw = Buffer.concat(chunks).toString('utf8')
   }
   const type = text(req.headers?.['content-type'], 120).toLowerCase()
   if (type.includes('application/json')) return JSON.parse(raw || '{}')
@@ -1301,7 +1306,7 @@ module.exports = async function handler(req, res) {
   }
   if (method !== 'POST') { send(res, 405, { status: 'error', reason: 'method_not_allowed' }); return }
   let payload
-  try { payload = await parseBody(req) } catch { send(res, 400, { status: 'error', reason: 'invalid_request' }); return }
+  try { payload = await parseBody(req); if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('invalid_request') } catch { send(res, 400, { status: 'error', reason: 'invalid_request' }); return }
   if (text(payload.website, 120)) { send(res, 202, { status: 'ready' }); return }
   if (!sameOrigin(req)) { send(res, 403, { status: 'error', reason: 'origin_not_allowed' }); return }
   let safe

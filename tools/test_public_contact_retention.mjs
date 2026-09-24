@@ -21,6 +21,20 @@ try {
   process.env.TELEGRAM_CHAT_ID = 'synthetic'
   let calls = 0
   globalThis.fetch = async () => { calls++; throw new Error('network must not be used') }
+  const invalidBodies = ['null', '[]', '42', JSON.stringify('text'), ' '.repeat(131073), JSON.stringify({ goal: 'က'.repeat(50000) })]
+  for (const candidate of invalidBodies) {
+    const res = { setHeader() {}, end(value) { this.body = JSON.parse(value) } }
+    await fresh()({ method: 'POST', body: candidate, headers: { 'content-type': 'application/json' } }, res)
+    assert.equal(res.statusCode, 400)
+    assert.equal(res.body.reason, 'invalid_request')
+  }
+  const streamed = { method: 'POST', headers: { 'content-type': 'application/json' },
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ goal: 'က'.repeat(50000) })) } }
+  const rejectedStream = { setHeader() {}, end(value) { this.body = JSON.parse(value) } }
+  await fresh()(streamed, rejectedStream)
+  assert.equal(rejectedStream.statusCode, 400)
+  assert.equal(rejectedStream.body.reason, 'invalid_request')
+  assert.equal(calls, 0, 'invalid bodies must not reach storage or notifications')
   for (const partial of ['missing', 'url', 'key']) {
     delete process.env.SUPABASE_URL
     delete process.env.SUPABASE_SERVICE_ROLE_KEY
