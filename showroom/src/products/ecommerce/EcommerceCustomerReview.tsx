@@ -31,7 +31,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         const accepted = await access.commit(epoch, identity, verified.expiresAt, () => setReview(verified))
         if (!accepted && access.isCurrent(epoch)) setMessage('Your access changed. Sign in and reopen this review.')
       } catch {
-        if (active && access.isCurrent(epoch)) setMessage('This review is unavailable. Ask SuperMega for a current review.')
+        if (active && access.isCurrent(epoch)) setMessage('Could not open this review. Try again. If it still does not open, ask SuperMega to check your access.')
       } finally {
         if (active && access.isCurrent(epoch)) setOpening(false)
       }

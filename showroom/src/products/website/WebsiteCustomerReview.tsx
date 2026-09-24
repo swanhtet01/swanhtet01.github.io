@@ -67,7 +67,7 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
           setMessage('Your review access changed. Sign in and reopen the review.')
         }
       } catch {
-        if (active && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('This review is unavailable, expired, or not assigned to this account. Ask SuperMega for a current review.') }
+        if (active && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('Could not open this review. Try again. If it still does not open, ask SuperMega to check your access.') }
       } finally {
         if (active && access.isCurrent(epoch)) setOpening(false)
       }
