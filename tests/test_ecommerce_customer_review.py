@@ -31,3 +31,30 @@ class CatalogReviewTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):self.project(now=self.now+timedelta(days=1))
         self.state['items'][0]['price']+=1
         with self.assertRaises(TrialValidationError):self.project()
+
+    def test_preparation_rejects_invalid_clock_recipient_and_lifetime(self):
+        args=dict(principal=self.actor,readiness=replace(self.ready,capabilities=frozenset({'commerce.write'})),review_id=self.review['reviewId'],recipient_actor_id=self.actor.actor_id,expires_at=self.now+timedelta(days=1),now=self.now)
+        invalid=[dict(now=value) for value in (0,False,'',datetime(2026,9,25))]
+        invalid += [dict(expires_at=value) for value in (self.now,self.now-timedelta(seconds=1),self.now+timedelta(days=7,seconds=1),'invalid')]
+        invalid += [dict(recipient_actor_id=value) for value in ('',None,'not-a-uuid')]
+        invalid += [dict(review_id='invalid'),dict(readiness=self.ready),dict(readiness=replace(args['readiness'],write_enabled=False))]
+        for change in invalid:
+            with self.subTest(change=change),self.assertRaises(TrialValidationError):
+                prepare_catalog_review(self.state,**(args|change))
+        valid=prepare_catalog_review(self.state,**(args|dict(expires_at=self.now+timedelta(days=7))))
+        self.assertEqual(valid['expiresAt'],(self.now+timedelta(days=7)).isoformat())
+
+    def test_projection_rejects_malformed_assignment_and_clock(self):
+        invalid=[None,[],{},self.review|{'extra':'private'}]
+        invalid += [self.review|{key:value} for key,value in [
+            ('preparedAt',self.now),('expiresAt',self.now+timedelta(days=1)),
+            ('preparedAt',(self.now+timedelta(seconds=1)).isoformat()),
+            ('expiresAt',(self.now+timedelta(days=7,seconds=1)).isoformat()),
+            ('preparedBy',None),('preparedBy',''),('preparedBy',' padded '),
+            ('reviewId','invalid'),('contentRevision',True),('preview',{}),
+        ]]
+        for review in invalid:
+            with self.subTest(review_type=type(review).__name__),self.assertRaises(TrialValidationError):
+                catalog_review_projection(review,self.state,principal=self.actor,readiness=self.ready,now=self.now)
+        for clock in (0,False,'',datetime(2026,9,25)):
+            with self.subTest(clock=clock),self.assertRaises(TrialValidationError):self.project(now=clock)

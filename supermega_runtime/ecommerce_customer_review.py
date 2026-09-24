@@ -39,7 +39,7 @@ def access(principal, readiness, *, preparing=False):
 
 def prepare_catalog_review(state, *, principal, readiness, review_id, recipient_actor_id, expires_at, now=None):
     actor = access(principal, readiness, preparing=True)
-    prepared = stamp(now or datetime.now(timezone.utc)); expiry = stamp(expires_at)
+    prepared = stamp(datetime.now(timezone.utc) if now is None else now); expiry = stamp(expires_at)
     if not prepared < expiry <= prepared + timedelta(days=7): fail()
     preview = commerce_storefront_preview(state)
     return dict(contract=CONTRACT, reviewId=uuid(review_id), workspaceId=actor.workspace_id,
@@ -53,7 +53,10 @@ def catalog_review_projection(review, state, *, principal, readiness, now=None):
         or review['workspaceId'] != actor.workspace_id or review['recipientActorId'] != actor.actor_id
         or review['status'] != 'active'): fail()
     uuid(review['reviewId']); uuid(review['recipientActorId'])
-    prepared, expiry, current = stamp(review['preparedAt']), stamp(review['expiresAt']), stamp(now or datetime.now(timezone.utc))
+    if (not isinstance(review['preparedAt'], str) or not isinstance(review['expiresAt'], str)
+        or not isinstance(review['preparedBy'], str) or not review['preparedBy']
+        or review['preparedBy'] != review['preparedBy'].strip()): fail()
+    prepared, expiry, current = stamp(review['preparedAt']), stamp(review['expiresAt']), stamp(datetime.now(timezone.utc) if now is None else now)
     if not prepared <= current < expiry or expiry > prepared + timedelta(days=7): fail()
     preview = commerce_storefront_preview(state)
     if (type(review['contentRevision']) is not int or review['contentRevision'] != state['storefrontConfiguration']['revision']
