@@ -1711,9 +1711,9 @@ export function EcommerceProduct() {
           ? `${ecommercePaymentAttentionCount} payment${ecommercePaymentAttentionCount === 1 ? '' : 's'} need confirmation`
           : pendingManagedRequests.length
             ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
-            : customerRequestState === 'waiting_shop_review'
+            : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
               ? ecommerceWaitingHeadline
-            : ecommerceActiveOrderCount
+            : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
               ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
               : ecommerceTodayCartUnits
                 ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'} ready for checkout`
@@ -1726,9 +1726,9 @@ export function EcommerceProduct() {
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
-        : customerRequestState === 'waiting_shop_review'
+        : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
           ? ecommerceWaitingSummary
-        : ecommerceActiveOrderCount
+        : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
           ? 'Shop owns fulfilment for this order. The storefront stays ready for the next customer.'
           : managedIdentity
             ? 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
@@ -1743,9 +1743,9 @@ export function EcommerceProduct() {
           ? 'Fix order import'
           : pendingManagedRequests.length
             ? 'Review orders in Shop'
-            : customerRequestState === 'waiting_shop_review'
+            : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
               ? 'View request receipt'
-            : ecommerceActiveOrderCount
+            : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
               ? 'Open Shop'
             : ecommerceTodayCartUnits
               ? 'Review checkout'
@@ -1754,7 +1754,7 @@ export function EcommerceProduct() {
                 : 'Try sample request'
   const ecommerceTodayMetrics = [
     ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Sample ready'],
-    ['2. Cart', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
+    ['2. Cart', ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['3. Shop', pendingManagedRequests.length
       ? `${pendingManagedRequests.length} to review`
       : customerRequestState === 'waiting_shop_review'
@@ -1789,11 +1789,11 @@ export function EcommerceProduct() {
       navigate('/shop/?tab=orders&source=ecommerce')
       return
     }
-    if (customerRequestState === 'waiting_shop_review') {
+    if (customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits) {
       focusCurrentRequestReceipt()
       return
     }
-    if (ecommerceActiveOrderCount) {
+    if (ecommerceActiveOrderCount && !ecommerceTodayCartUnits) {
       navigate('/shop/?tab=orders')
       return
     }
