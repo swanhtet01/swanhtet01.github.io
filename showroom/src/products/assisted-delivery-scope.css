@@ -9,18 +9,20 @@
 .ecommerce-today[data-density] .ecommerce-today-priority:has(> .assisted-delivery-scope) { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; align-items: start; }
 .ecommerce-today[data-density] .ecommerce-today-priority:has(> .assisted-delivery-scope) > :is(.core-eyebrow, h2, p, details, section, div) { grid-area: auto; max-width: 100%; }
 
-.business-brief { width: min(100%, 620px); margin: clamp(1rem, 5vw, 5rem) auto; padding: 0 1.25rem 3rem; box-sizing: border-box; color: #193c34; }
-.business-brief-kicker { font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; color: #52766b; }
+.business-brief { width: min(100%, 620px); margin: clamp(1rem, 5vw, 5rem) auto; padding: 0 1.25rem 3rem; box-sizing: border-box; color: var(--core-ink); }
+.business-brief-kicker { font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; }
 .business-brief h1 { font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.08; letter-spacing: -.045em; margin: 1rem 0; font-weight: 600; }
-.business-brief header p { color: #62746e; line-height: 1.6; margin-bottom: 2.5rem; }
+.business-brief header p { line-height: 1.6; margin-bottom: 2.5rem; }
 .business-brief form { display: grid; gap: .65rem; }
 .business-brief label { margin-top: .85rem; font-size: .9rem; font-weight: 600; }
-.business-brief label span { font-weight: 400; color: #687971; margin-left: .5rem; }
-.business-brief :is(input, textarea) { width: 100%; box-sizing: border-box; min-height: 48px; padding: .9rem 1rem; border: 1px solid #cbd8d1; background: #fff; color: #193c34; border-radius: 10px; font: inherit; resize: vertical; }
+.business-brief label span { font-weight: 400; margin-left: .5rem; }
+.business-brief :is(input, textarea) { width: 100%; box-sizing: border-box; min-height: 48px; padding: .9rem 1rem; border: 1px solid var(--core-field-line); background: var(--core-panel); color: inherit; border-radius: 10px; font: inherit; resize: vertical; }
 .business-brief button { font: inherit; cursor: pointer; }
-.business-brief button[type=submit] { margin-top: 1rem; padding: 1rem; border: 0; border-radius: 10px; background: #164c3e; color: white; font-weight: 600; min-height: 48px; }
+.business-brief button[type=submit] { margin-top: 1rem; padding: 1rem; border: 0; border-radius: 10px; background: var(--core-green); color: var(--core-on-accent); font-weight: 600; min-height: 48px; }
 .business-brief button:disabled { opacity: .45; cursor: default; }
-.business-brief small { color: #687971; font-size: .78rem; line-height: 1.5; }
-.business-brief footer { border-top: 1px solid #dce5df; margin-top: 2rem; padding-top: 1.25rem; display: grid; gap: 1rem; font-size: .8rem; color: #687971; }
-.business-brief footer button { min-height: 44px; justify-self: start; border: 0; padding: .5rem 0; background: transparent; color: #244f41; text-decoration: underline; text-underline-offset: 4px; }
-.business-brief :is(input, textarea, button):focus-visible { outline: 3px solid #43977e; outline-offset: 3px; }
+.business-brief small { font-size: .78rem; line-height: 1.5; }
+.business-brief footer { border-top: 1px solid var(--core-line); margin-top: 2rem; padding-top: 1.25rem; display: grid; gap: 1rem; font-size: .8rem; }
+.business-brief footer button { min-height: 44px; justify-self: start; border: 0; padding: .5rem 0; background: transparent; color: var(--core-ink); text-decoration: underline; }
+.business-brief :is(input, textarea, button):focus-visible { outline: 3px solid var(--core-green); outline-offset: 3px; }
+
+.business-brief :is(.business-brief-kicker, header p, label span, small, footer) { color: var(--core-muted); }
