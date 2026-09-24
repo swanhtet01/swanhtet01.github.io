@@ -586,7 +586,7 @@ export function CoreLayout() {
                       : requestedProduct && !managedProductAllowed
                         ? managedRouteDecision.kind === 'redirect'
                           ? <Navigate replace to={managedRouteDecision.path} />
-                      : <PortalAccessPanel copy="No active product. Ask the owner to assign one." title="No products" />
+                      : <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Request setup</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
                         : <Outlet context={runtime} />}
               </RouteErrorBoundary>
             </ManagedPortalAccessContext.Provider>
@@ -710,7 +710,7 @@ export function ProductHomePage() {
         </div>
       </section> : null}
       {managedPortal && !customerProducts.some(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
-        ? <PortalAccessPanel copy="No active product. Ask the owner to assign one." title="No products" />
+        ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Request setup</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
         : null}
       {!managedPortal && productSetups && !anyStarted ? (
         <section aria-label="Setup by SuperMega" className="platform-start-nudge">

@@ -1490,7 +1490,7 @@ if (!managedTrialSource.includes('export function managedProductsFromBootstrap('
   || !coreShellSource.includes('resolveManagedProductHome({')
   || !coreShellSource.includes('if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null')
   || !coreShellSource.includes('!managedPortal && anyStarted ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null')
-  || !coreShellSource.includes('title="No products"')) fail('managed_product_portal_isolation_missing')
+  || !coreShellSource.includes('title="No products yet"')) fail('managed_product_portal_isolation_missing')
 if (!managedTrialStoreRuntime.includes('"capabilities": sorted(self.capabilities)')
   || !managedTrialSource.includes('export function managedBootstrapHasCapability(')
   || !managedTrialSource.includes('if (capabilities === undefined) return false')
