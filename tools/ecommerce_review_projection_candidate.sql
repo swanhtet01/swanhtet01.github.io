@@ -46,3 +46,47 @@ begin
 end;
 $$;
 revoke all on function app_private.ecommerce_review_projection(jsonb) from public,anon,authenticated,service_role;
+
+-- Fixed field order and compact JSON match the existing Python/TS preview digest.
+-- Input is always the projection above, never arbitrary caller-supplied JSON.
+create function app_private.ecommerce_review_preview_digest(source jsonb) returns text
+language plpgsql immutable security invoker set search_path=pg_catalog,app_private as $$
+declare
+  preview jsonb := app_private.ecommerce_review_projection(source);
+  encoded text := '{';
+  item jsonb;
+  field text;
+  first_item boolean := true;
+  first_field boolean;
+begin
+  foreach field in array array['schema','mode','sourceCatalogSchema','storeName','summary','currency'] loop
+    if encoded <> '{' then encoded := encoded || ','; end if;
+    encoded := encoded || to_json(field)::text || ':' || coalesce((preview->field)::text,'null');
+  end loop;
+  encoded := encoded || ',"items":[';
+  for item in select value from jsonb_array_elements(preview->'items') loop
+    if not first_item then encoded := encoded || ','; end if;
+    first_item := false;
+    encoded := encoded || '{';
+    first_field := true;
+    foreach field in array array['sku','name','variant','unitPriceMmk','availability'] loop
+      if not first_field then encoded := encoded || ','; end if;
+      first_field := false;
+      encoded := encoded || to_json(field)::text || ':' || coalesce((item->field)::text,'null');
+    end loop;
+    if item ? 'merchandising' then
+      encoded := encoded || ',"merchandising":{';
+      first_field := true;
+      foreach field in array array['featured','collection','displayName','note'] loop
+        if not first_field then encoded := encoded || ','; end if;
+        first_field := false;
+        encoded := encoded || to_json(field)::text || ':' || coalesce((item->'merchandising'->field)::text,'null');
+      end loop;
+      encoded := encoded || '}';
+    end if;
+    encoded := encoded || '}';
+  end loop;
+  return 'sha256:' || encode(sha256(convert_to(encoded || ']}','UTF8')),'hex');
+end;
+$$;
+revoke all on function app_private.ecommerce_review_preview_digest(jsonb) from public,anon,authenticated,service_role;

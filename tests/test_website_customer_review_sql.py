@@ -794,6 +794,30 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             finally:
                 connection.rollback()
 
+    def test_sql_catalog_digest_matches_python_unicode_and_optional_fields(self):
+        from pathlib import Path
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        from supermega_runtime.commerce_runtime import commerce_storefront_preview_digest
+        source = catalog_state()
+        source['items'][0]['name'] = '\u1006\u102d\u102f\u1004\u103a "Tea" \\ local'
+        source['items'].append(dict(sku='SKU-2',name='Coffee',variant='Small',onHand=0,reorderAt=0,price=500))
+        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        with pg._connect(self.admin_url) as connection:
+            try:
+                connection.execute(sql)
+                digests = []
+                for merch in (None, [dict(sku=sku,featured=sku=='SKU-1',collection='Local',displayName=name,note='Line one\nLine two') for sku,name in [('SKU-1','Tea'),('SKU-2','Coffee')]]):
+                    source['storefrontConfiguration'] = storefront_configuration(source,selected_skus=['SKU-1','SKU-2'],merchandising=merch)
+                    expected = commerce_storefront_preview_digest(source)
+                    actual = connection.execute('select app_private.ecommerce_review_preview_digest(%s::jsonb)',(json.dumps(source),)).fetchone()[0]
+                    self.assertEqual(actual,expected)
+                    digests.append(actual)
+                self.assertNotEqual(*digests)
+                for role in ('anon','authenticated','service_role'):
+                    self.assertFalse(connection.execute("select has_function_privilege(%s,'app_private.ecommerce_review_preview_digest(jsonb)','execute')",(role,)).fetchone()[0])
+            finally:
+                connection.rollback()
+
     def test_ecommerce_entitlement_is_private_and_product_specific(self):
         vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
                    ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),
