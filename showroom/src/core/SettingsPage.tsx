@@ -2072,7 +2072,7 @@ export function SettingsPage() {
                   <p className="capability-control-note">Shared controls: {capabilityPlan.sharedControls.join(' · ')}. Every capability must be verified before it is presented as available.</p>
                 </div>
               </details> : null}
-                {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.outcome}</span></li>)}</ol> : <p className="form-notice">This demo has one standalone product.</p>}
+                {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.from === 'website' && integration.to === 'ecommerce' ? 'Website presents the business; Ecommerce lets customers browse products and send requests.' : integration.outcome}</span></li>)}</ol> : <p className="form-notice">This demo has one standalone product.</p>}
               </details>
               <details className="compact-disclosure client-preparation-handoff">
                 <summary><span>Use client data</span><small>One local step</small></summary>
