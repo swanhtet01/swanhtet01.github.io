@@ -315,7 +315,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       </div>
       <div className="shop-today-actions">
         <Link className="core-button primary" to={nextTo}>Open next step</Link>
-        {catalogReady ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
+        {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
       </div>
     </section>
 
@@ -326,8 +326,8 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       </article>)}
     </section>
 
-    <details aria-label="Shop profit control" className="shop-today-workspaces shop-profit-control" data-state={profitControl.state} open>
-      <summary><span><strong>Profit control</strong><small>Current leak → accountable owner → objective closure</small></span><b>{profitControl.criticalPriorityCount ? `${profitControl.criticalPriorityCount} critical · ${profitControl.openPriorityCount} open` : profitControl.openPriorityCount ? `${profitControl.openPriorityCount} open` : 'Controlled'}</b></summary>
+    <details aria-label="Shop profit control" className="shop-today-workspaces shop-profit-control" data-state={profitControl.state} open={profitControl.criticalPriorityCount > 0}>
+      <summary><span><strong>Profit control</strong><small>Issues to review</small></span><b>{profitControl.criticalPriorityCount ? `${profitControl.criticalPriorityCount} critical · ${profitControl.openPriorityCount} open` : profitControl.openPriorityCount ? `${profitControl.openPriorityCount} open` : 'Controlled'}</b></summary>
       <div className="shop-today-module-grid">
         {profitControl.priorities.map((priority) => <Link data-priority-id={priority.id} data-tone={priority.severity === 'critical' || priority.severity === 'attention' ? 'attention' : 'ready'} key={priority.id} to={priority.target}>
           <span>
@@ -344,6 +344,8 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       <p className="panel-note">Read-only projection from the current Shop record. A card clears only when its source metric changes; this panel does not contact anyone, move money or stock, or write a completion claim.</p>
     </details>
 
+    <details className="shop-today-workspaces">
+      <summary><span><strong>Profit and batch details</strong><small>Costs, margins and production estimates</small></span><b>{marginControl.costCoverage.state === 'complete' ? 'Costs reviewed' : 'Costs incomplete'}</b></summary>
     <section aria-label="Shop cost coverage and margin at risk" className="shop-margin-control" id="shop-cost-coverage">
       <header>
         <div>
@@ -415,6 +417,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
     </section>}
 
     <ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />
+    </details>
 
     <details aria-label="Optional Shop walkthroughs" className="shop-today-workspaces">
       <summary><span><strong>Optional walkthroughs</strong><small>Synthetic examples, separate from your Shop records</small></span><b>2 demos</b></summary>
