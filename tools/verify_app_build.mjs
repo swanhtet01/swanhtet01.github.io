@@ -5567,7 +5567,7 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || !settingsPageSource.includes('preparedArtifact.products.map((product)')
   || !settingsPageSource.includes('Shop installs before Ecommerce.')
   || !settingsPageSource.includes('Install remaining ${preparedRemainingCount}')
-  || !settingsPageSource.includes('Products already installed are preserved; fix the issue and run the remaining installation again.')
+  || !settingsPageSource.includes('Installed products are preserved. Fix the issue and retry.')
   || !settingsPageSource.includes('Existing work needs a decision')
   || !settingsPageSource.includes('aria-label="Blocked installation recovery"')
   || !settingsPageSource.includes('Review existing work')

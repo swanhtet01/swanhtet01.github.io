@@ -1259,6 +1259,11 @@ export function SettingsPage() {
   }
 
   async function installDemoBlueprint(blueprint: ClientDemoBlueprint, origin: 'created' | 'loaded') {
+    setPreparedArtifact(null)
+    setPreparedConfirmation('')
+    setPreparedInstalled({})
+    setPreparedBlockedProduct(null)
+    setPreparedNotice('')
     let shopPackNotice = ''
     if (origin === 'created' && blueprint.products.some((product) => product.product === 'commerce')) {
       try {
@@ -1405,7 +1410,7 @@ export function SettingsPage() {
       const { applyPreparedLocalClientDemoProduct, preparedLocalClientDemoInstallOrder } = await import('./local-client-import')
       const installOrder = (await preparedLocalClientDemoInstallOrder(artifact)).filter((product) => !installedBeforeRun.has(product))
       if (!installOrder.length) {
-        setPreparedNotice('All products in this private package are already installed and current.')
+        setPreparedNotice('This package is installed locally.')
         return
       }
       const summaries: string[] = []
@@ -1444,7 +1449,7 @@ export function SettingsPage() {
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'The product could not be installed.'
       setPreparedBlockedProduct(activeProduct)
-      setPreparedNotice(`Stopped${activeProduct ? ` at ${productDisplayName(activeProduct)}` : ''}: ${detail} Products already installed are preserved; fix the issue and run the remaining installation again.`)
+      setPreparedNotice(`Stopped${activeProduct ? ` at ${productDisplayName(activeProduct)}` : ''}: ${detail} Installed products are preserved. Fix the issue and retry.`)
     } finally {
       preparedInstallRunning.current = false
       setPreparedBusyProduct(null)

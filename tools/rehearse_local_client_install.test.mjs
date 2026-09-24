@@ -233,3 +233,26 @@ test('Settings package operations exclude each other while file reading is pendi
     assert.match(extract(name), /finally \{\s+preparedInstallRunning.current = false/)
   }
 })
+
+
+test('switching a setup clears previous package approval and progress before setup work', async () => {
+  const source = await readFile(new URL('../showroom/src/core/SettingsPage.tsx', import.meta.url), 'utf8')
+  const start = source.indexOf("  async function installDemoBlueprint(")
+  const body = source.indexOf(' {', start) + 2
+  const end = source.indexOf('    let shopPackNotice', body)
+  assert.ok(start > 0 && body > start && end > body)
+  const state = { artifact: 'old', confirmation: 'approved old', installed: { website: 'old' }, blocked: 'website', notice: 'old installed' }
+  runInNewContext(source.slice(body, end), {
+    setPreparedArtifact: value => { state.artifact = value },
+    setPreparedConfirmation: value => { state.confirmation = value },
+    setPreparedInstalled: value => { state.installed = value },
+    setPreparedBlockedProduct: value => { state.blocked = value },
+    setPreparedNotice: value => { state.notice = value },
+  })
+  assert.equal(state.artifact, null)
+  assert.equal(state.confirmation, '')
+  assert.equal(Object.keys(state.installed).length, 0)
+  assert.equal(state.blocked, null)
+  assert.equal(state.notice, '')
+  assert.match(source, /await installDemoBlueprint\(clientDemoPreparationBlueprint\(artifact\), 'loaded'\)\s+setPreparedArtifact\(artifact\)\s+setPreparedConfirmation\(''\)/)
+})
