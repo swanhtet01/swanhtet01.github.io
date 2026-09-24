@@ -11,7 +11,7 @@ from .commerce_runtime import commerce_storefront_preview, commerce_storefront_p
 from .trial_store import TrialValidationError, _principal_auth_ready
 
 CONTRACT = 'supermega.ecommerce.customer-review.v1'
-FIELDS = {'contract','reviewId','workspaceId','recipientActorId','preparedBy','preparedAt','expiresAt','contentRevision','preview','previewDigest','status'}
+FIELDS = {'contract','reviewId','workspaceId','recipientActorId','preparedBy','preparedAt','expiresAt','contentRevision','sourceVersion','preview','previewDigest','status'}
 
 def fail():
     raise TrialValidationError('ecommerce_review_unavailable')
@@ -37,21 +37,24 @@ def access(principal, readiness, *, preparing=False):
         or capability not in readiness.capabilities or 'ecommerce' not in (readiness.product_entitlements or ())): fail()
     return actor
 
-def prepare_catalog_review(state, *, principal, readiness, review_id, recipient_actor_id, expires_at, now=None):
+def prepare_catalog_review(state, *, principal, readiness, review_id, recipient_actor_id, expires_at, source_version, now=None):
     actor = access(principal, readiness, preparing=True)
+    if type(source_version) is not int or not 1 <= source_version <= 9_007_199_254_740_991: fail()
     prepared = stamp(datetime.now(timezone.utc) if now is None else now); expiry = stamp(expires_at)
     if not prepared < expiry <= prepared + timedelta(days=7): fail()
     preview = commerce_storefront_preview(state)
     return dict(contract=CONTRACT, reviewId=uuid(review_id), workspaceId=actor.workspace_id,
         recipientActorId=uuid(recipient_actor_id), preparedBy=actor.actor_id, preparedAt=prepared.isoformat(),
         expiresAt=expiry.isoformat(), contentRevision=state['storefrontConfiguration']['revision'],
-        preview=preview, previewDigest=commerce_storefront_preview_digest(state), status='active')
+        preview=preview, previewDigest=commerce_storefront_preview_digest(state), sourceVersion=source_version, status='active')
 
-def catalog_review_projection(review, state, *, principal, readiness, now=None):
+def catalog_review_projection(review, state, *, principal, readiness, source_version, now=None):
     actor = access(principal, readiness)
+    if type(source_version) is not int or not 1 <= source_version <= 9_007_199_254_740_991: fail()
     if (not isinstance(review, Mapping) or set(review) != FIELDS or review['contract'] != CONTRACT
         or review['workspaceId'] != actor.workspace_id or review['recipientActorId'] != actor.actor_id
-        or review['status'] != 'active'): fail()
+        or review['status'] != 'active' or type(review['sourceVersion']) is not int
+        or review['sourceVersion'] != source_version): fail()
     uuid(review['reviewId']); uuid(review['recipientActorId'])
     if (not isinstance(review['preparedAt'], str) or not isinstance(review['expiresAt'], str)
         or not isinstance(review['preparedBy'], str) or not review['preparedBy']

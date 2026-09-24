@@ -12,9 +12,9 @@ class CatalogReviewTests(unittest.TestCase):
         self.actor = TrialPrincipal('company', '22222222-2222-4222-8222-222222222222', actor_kind='human')
         self.ready = TrialReadiness(backend='synthetic',database_ready=True,role_ready=True,schema_ready=True,auth_ready=True,membership_ready=True,audit_ready=True,write_enabled=True,capabilities=frozenset({'ecommerce.review'}),product_entitlements=('ecommerce',))
         self.state = catalog_state(); self.state['storefrontConfiguration'] = storefront_configuration(self.state)
-        self.review = prepare_catalog_review(self.state,principal=self.actor,readiness=replace(self.ready,capabilities=frozenset({'commerce.write'})),review_id='11111111-1111-4111-8111-111111111111',recipient_actor_id=self.actor.actor_id,expires_at=(self.now+timedelta(days=1)).isoformat(),now=self.now)
+        self.review = prepare_catalog_review(self.state,principal=self.actor,readiness=replace(self.ready,capabilities=frozenset({'commerce.write'})),review_id='11111111-1111-4111-8111-111111111111',recipient_actor_id=self.actor.actor_id,expires_at=(self.now+timedelta(days=1)).isoformat(),now=self.now,source_version=1)
     def project(self, **kwargs):
-        return catalog_review_projection(self.review,self.state,**(dict(principal=self.actor,readiness=self.ready,now=self.now)|kwargs))
+        return catalog_review_projection(self.review,self.state,**(dict(principal=self.actor,readiness=self.ready,now=self.now,source_version=1)|kwargs))
     def test_public_projection_and_copy(self):
         result=self.project()
         self.assertEqual(set(result),{'reviewId','contentRevision','previewDigest','preview','expiresAt','status','publicationAuthorized','deploymentAuthorized'})
@@ -33,7 +33,7 @@ class CatalogReviewTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):self.project()
 
     def test_preparation_rejects_invalid_clock_recipient_and_lifetime(self):
-        args=dict(principal=self.actor,readiness=replace(self.ready,capabilities=frozenset({'commerce.write'})),review_id=self.review['reviewId'],recipient_actor_id=self.actor.actor_id,expires_at=self.now+timedelta(days=1),now=self.now)
+        args=dict(principal=self.actor,readiness=replace(self.ready,capabilities=frozenset({'commerce.write'})),review_id=self.review['reviewId'],recipient_actor_id=self.actor.actor_id,expires_at=self.now+timedelta(days=1),now=self.now,source_version=1)
         invalid=[dict(now=value) for value in (0,False,'',datetime(2026,9,25))]
         invalid += [dict(expires_at=value) for value in (self.now,self.now-timedelta(seconds=1),self.now+timedelta(days=7,seconds=1),'invalid')]
         invalid += [dict(recipient_actor_id=value) for value in ('',None,'not-a-uuid')]
@@ -55,6 +55,20 @@ class CatalogReviewTests(unittest.TestCase):
         ]]
         for review in invalid:
             with self.subTest(review_type=type(review).__name__),self.assertRaises(TrialValidationError):
-                catalog_review_projection(review,self.state,principal=self.actor,readiness=self.ready,now=self.now)
+                catalog_review_projection(review,self.state,principal=self.actor,readiness=self.ready,now=self.now,source_version=1)
         for clock in (0,False,'',datetime(2026,9,25)):
             with self.subTest(clock=clock),self.assertRaises(TrialValidationError):self.project(now=clock)
+
+    def test_saved_source_version_prevents_reusing_identical_catalog_after_edit(self):
+        self.assertEqual(self.review['sourceVersion'], 1)
+        for version in (2, 0, -1, True, 1.0, '1', 9_007_199_254_740_992):
+            with self.subTest(version=version), self.assertRaises(TrialValidationError):
+                self.project(source_version=version)
+        for version in (0, -1, True, 1.0, '1', 9_007_199_254_740_992):
+            with self.subTest(prepare_version=version), self.assertRaises(TrialValidationError):
+                prepare_catalog_review(self.state, principal=self.actor,
+                    readiness=replace(self.ready, capabilities=frozenset({'commerce.write'})),
+                    review_id=self.review['reviewId'], recipient_actor_id=self.actor.actor_id,
+                    expires_at=self.now+timedelta(days=1), now=self.now, source_version=version)
+        self.review['sourceVersion'] = True
+        with self.assertRaises(TrialValidationError): self.project()

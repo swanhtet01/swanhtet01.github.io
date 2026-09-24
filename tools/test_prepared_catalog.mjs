@@ -69,7 +69,7 @@ fixture.state['storefrontConfiguration'] = storefront_configuration(fixture.stat
 fixture.review = prepare_catalog_review(fixture.state, principal=fixture.actor,
     readiness=replace(fixture.ready, capabilities=frozenset({'commerce.write'})),
     review_id=fixture.review['reviewId'], recipient_actor_id=fixture.actor.actor_id,
-    expires_at=fixture.now + timedelta(days=1), now=fixture.now)
+    expires_at=fixture.now + timedelta(days=1), now=fixture.now, source_version=1)
 print(json.dumps(fixture.project(), ensure_ascii=True))
 `
   const packet = JSON.parse(execFileSync('python', ['-c', script], {
