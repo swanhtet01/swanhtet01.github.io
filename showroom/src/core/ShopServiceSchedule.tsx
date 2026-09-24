@@ -12,6 +12,7 @@ import {
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   advanceShopServiceBooking,
+  assignLegacyBookingResources,
   anonymizeShopServiceClient,
   cancelShopServiceBooking,
   mutateShopServiceSchedule,
@@ -147,12 +148,12 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         setSchedule(managed.schedule)
         setRetentionDraft(managed.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
         window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(managed.schedule))
-        setNotice('Schedule loaded from this company account.')
+        setNotice('Company schedule loaded.')
       } else {
-        setNotice('The managed schedule is ready. Your next change will create the shared schedule.')
+        setNotice('Company schedule ready.')
       }
     }).catch((error) => {
-      if (active) setNotice(error instanceof Error ? `${error.message} The schedule remains available on this device.` : 'The managed schedule is unavailable; this device remains available.')
+      if (active) setNotice(error instanceof Error ? `${error.message} The schedule remains available on this device.` : 'Company schedule unavailable. Device copy available.')
     }).finally(() => {
       if (active) setManagedLoading(false)
     })
@@ -206,7 +207,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       return false
     }
     if (managedSaveBusyRef.current) {
-      setNotice(`Wait for the current company ${vocabulary.singular} change to finish.`)
+      setNotice(`Wait for the current save.`)
       return false
     }
     managedSaveBusyRef.current = true
@@ -242,13 +243,13 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
             setSchedule(current.schedule)
             try { persistLocal(current.schedule) } catch { /* The managed copy remains authoritative. */ }
           }
-          setNotice(`Another user changed ${vocabulary.plural.toLowerCase()} first. The current shared schedule was reloaded; review and try again.`)
+          setNotice(`Schedule changed. Latest copy loaded; review and retry.`)
           return false
         } catch {
           // Fall through to the recoverable local warning.
         }
       }
-      setNotice(`${error instanceof Error ? error.message : 'Managed save failed.'} The change is not confirmed. Reload the shared schedule before trying again.`)
+      setNotice(`${error instanceof Error ? error.message : 'Managed save failed.'} Save unconfirmed. Reload before retrying.`)
       return false
     }).finally(() => {
       managedSaveBusyRef.current = false
@@ -274,7 +275,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     }
     const expectedVersion = managedVersionRef.current
     if (expectedVersion === null || managedSaveBusyRef.current) {
-      setNotice(`Wait for the current company ${vocabulary.singular} change to finish.`)
+      setNotice(`Wait for the current save.`)
       return false
     }
     managedSaveBusyRef.current = true
@@ -309,7 +310,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
             setRetentionDraft(current.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
             try { persistLocal(current.schedule) } catch { /* The managed copy remains authoritative. */ }
           }
-          setNotice(`Another user changed ${vocabulary.plural.toLowerCase()} first. The current shared schedule was reloaded; review and try again.`)
+          setNotice(`Schedule changed. Latest copy loaded; review and retry.`)
           return false
         } catch {
           // Fall through to a fail-closed warning.
@@ -326,7 +327,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   async function downloadClientList() {
     if (!schedule || (managedConnected && !managedPrivacyOwner)) return
     if (!globalThis.crypto?.subtle) {
-      setNotice('Secure export evidence is unavailable in this browser. No file was downloaded.')
+      setNotice('Export evidence unavailable. Nothing downloaded.')
       return
     }
     try {
@@ -334,14 +335,14 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       const bytes = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(csv)))
       const digest = `sha256:${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`
       const next = recordShopServiceClientExport(schedule, digest, proof('Owner downloaded the privacy-minimal client list.'))
-      if (!await commitPrivacy(next, 'Client export receipt recorded.')) return
+      if (!await commitPrivacy(next, 'Export recorded.')) return
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
       link.download = 'spa-clients.csv'
       link.click()
       URL.revokeObjectURL(url)
-      setNotice('Client list downloaded with an attributable receipt. Notes and payment details were excluded.')
+      setNotice('Client list downloaded; notes and payments excluded.')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The client export was not created.')
     }
@@ -472,6 +473,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
 
   if (!schedule || !projection) return <section className="core-panel shop-service-schedule" id="shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Schedule</span><h2>Schedule needs recovery</h2></div></div><p className="form-notice" role="alert">{notice}</p></section>
 
+  const legacyBooking = schedule.industryPackId === 'spa' ? schedule.bookings.find(b => b.resourceId) : undefined
   const serviceById = new Map(schedule.services.map((service) => [service.id, service]))
   const resourceById = new Map(schedule.resources.map((resource) => [resource.id, resource]))
   // A guided sample seeds its bookings at fixed times of day, so setting up
@@ -516,10 +518,25 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
           {!packagePurchases.length ? <p>Paid purchases appear here.</p> : null}
         </div>
       </details> : null}
+      {legacyBooking ? <details className="compact-disclosure">
+        <summary>Review older booking resources</summary>
+        <form key={legacyBooking.id} onSubmit={event => {
+          event.preventDefault()
+          const data = new FormData(event.currentTarget)
+          const ids = ['staff', 'room'].map(kind => String(data.get(kind)))
+          if (schedule.resources.find(r => r.id === legacyBooking.resourceId)?.kind === 'equipment') ids.push(legacyBooking.resourceId!)
+          try { void commit(assignLegacyBookingResources(schedule, legacyBooking.id, ids, proof('Reviewed older resource assignments.')), 'Resources saved.') }
+          catch (error) { setNotice(error instanceof Error ? error.message : 'Assignment failed.') }
+        }}>
+          <p>{legacyBooking.customerName} · {new Date(legacyBooking.startsAt).toLocaleString()}</p>
+          {['staff', 'room'].map(kind => <label key={kind}>{kind === 'staff' ? 'Staff' : 'Room'}<select name={kind} required disabled={disabled} defaultValue=""><option value="">Choose</option>{schedule.resources.filter(r => r.active && r.kind === kind).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>)}
+          <button className="core-button compact" disabled={disabled} type="submit">Save resources</button>
+        </form>
+      </details> : null}
       <form className="service-booking-form" onSubmit={createBooking}>
-        <div><span className="core-eyebrow">New {vocabulary.singular}</span><h3>{vocabulary.holdAction}</h3><p>Shop blocks overlapping bookings for the same staff member, room, or equipment.</p></div>
+        <div><span className="core-eyebrow">New {vocabulary.singular}</span><h3>{vocabulary.holdAction}</h3><p>Overlapping resources are blocked.</p></div>
         <label>Customer<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer name" required value={bookingDraft.customerName} /></label>
-        <label>Contact or client reference *<input disabled={disabled} list="spa-client-contacts" maxLength={160} onChange={(event) => { const contact = event.target.value; const client = schedule.clients.find((candidate) => !candidate.anonymizedAt && candidate.contact === contact); setBookingDraft((current) => ({ ...current, contact, customerName: client?.name ?? current.customerName, appointmentUpdates: client?.appointmentUpdates === 'allowed' ? 'allowed' : 'declined' })) }} placeholder="Phone or walk-in reference" required value={bookingDraft.contact} /><small>Required to distinguish client records. Use a non-contact reference when updates are off.</small><datalist id="spa-client-contacts">{schedule.clients.filter((client) => !client.anonymizedAt).map((client) => <option key={client.id} value={client.contact}>{client.name}</option>)}</datalist></label>
+        <label>Contact or client reference *<input disabled={disabled} list="spa-client-contacts" maxLength={160} onChange={(event) => { const contact = event.target.value; const client = schedule.clients.find((candidate) => !candidate.anonymizedAt && candidate.contact === contact); setBookingDraft((current) => ({ ...current, contact, customerName: client?.name ?? current.customerName, appointmentUpdates: client?.appointmentUpdates === 'allowed' ? 'allowed' : 'declined' })) }} placeholder="Phone or walk-in reference" required value={bookingDraft.contact} /><small>Use a reference instead of a phone when updates are off.</small><datalist id="spa-client-contacts">{schedule.clients.filter((client) => !client.anonymizedAt).map((client) => <option key={client.id} value={client.contact}>{client.name}</option>)}</datalist></label>
         <label>Customer updates<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, appointmentUpdates: event.target.value as 'allowed' | 'declined' }))} value={bookingDraft.appointmentUpdates}><option value="declined">No messages</option><option value="allowed">Customer allowed updates</option></select></label>
         <label>Service<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, serviceId: event.target.value }))} required value={bookingDraft.serviceId}>{schedule.services.filter((service) => service.active).map((service) => <option key={service.id} value={service.id}>{service.nameMy ? `${service.name} · ${service.nameMy}` : service.name} · {service.durationMinutes} min · {formatMmk(service.priceMmk)}</option>)}</select></label>
         <label>{schedule.industryPackId === 'spa' ? 'Staff' : 'Staff, room, or equipment'}<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, resourceId: event.target.value }))} required value={bookingDraft.resourceId}>{schedule.resources.filter((resource) => resource.active && (schedule.industryPackId !== 'spa' || resource.kind === 'staff')).map((resource) => <option key={resource.id} value={resource.id}>{resource.nameMy ? `${resource.name} · ${resource.nameMy}` : resource.name} · {resource.kind}</option>)}</select></label>
@@ -545,16 +562,16 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       {schedule.clients.length ? <details className="compact-disclosure service-client-privacy">
         <summary><span>Clients and privacy</span><small>{schedule.clients.length} minimal records</small></summary>
         <div>
-          <p>Name, contact, customer-update choice, and visit counts only. Notes and financial records are excluded from export.</p>
+          <p>Exports omit notes and financial records.</p>
           {canManageClientPrivacy ? <>
             <form className="service-privacy-policy" onSubmit={saveClientRetention}>
               <label>Keep identifiable records after the last activity<select disabled={disabled} onChange={(event) => setRetentionDraft(event.target.value)} required value={retentionDraft}><option value="">Choose an owner-approved period</option><option value="365">1 year</option><option value="730">2 years</option><option value="1095">3 years</option><option value="1825">5 years</option></select></label>
               <button className="core-button compact" disabled={disabled || !retentionDraft} type="submit">Save retention rule</button>
             </form>
-            <div className="service-privacy-actions"><button className="core-button compact" disabled={disabled} onClick={() => void downloadClientList()} type="button">Download client list</button><small>The export receipt is saved before the file is created.</small></div>
+            <div className="service-privacy-actions"><button className="core-button compact" disabled={disabled} onClick={() => void downloadClientList()} type="button">Download client list</button><small>Export receipt saved first.</small></div>
             <div className="service-client-list">{clientPrivacyRows.map(({ client, readiness }) => <article key={client.id}><div><strong>{client.name}</strong><small>{client.anonymizedAt ? `Anonymized ${new Date(client.anonymizedAt).toLocaleDateString()}` : `${client.contact} · ${client.appointmentUpdates === 'allowed' ? 'Updates allowed' : 'No messages'}`}</small></div><div><small>{readiness.reason}</small>{!client.anonymizedAt ? <button className="text-link" disabled={disabled || !readiness.allowed} onClick={() => setAnonymizeReviewClientId(client.id)} type="button">Review anonymization</button> : null}</div></article>)}</div>
             {anonymizeReviewClient ? <div className="service-privacy-review" role="alert"><strong>Review permanent anonymization</strong><p>Remove {anonymizeReviewClient.name}'s contact, update choice, and visit notes. Closed financial orders remain unchanged.</p><div><button className="core-button compact danger" disabled={disabled} onClick={() => void confirmClientAnonymization()} type="button">Confirm anonymization</button><button className="text-link" disabled={disabled} onClick={() => setAnonymizeReviewClientId('')} type="button">Cancel</button></div></div> : null}
-          </> : <p className="panel-note">Only a company owner can set retention, export clients, or approve anonymization.</p>}
+          </> : <p className="panel-note">Owners manage retention, exports and anonymization.</p>}
         </div>
       </details> : null}
       <details className="compact-disclosure service-schedule-setup">
@@ -564,7 +581,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
           <form onSubmit={createResource}><strong>Add staff or resource</strong><label>Name<input disabled={disabled} maxLength={160} onChange={(event) => setResourceDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name or Room 2" required value={resourceDraft.name} /></label><label>Type<select disabled={disabled} onChange={(event) => setResourceDraft((current) => ({ ...current, kind: event.target.value as typeof resourceDraft.kind }))} value={resourceDraft.kind}><option value="staff">Staff</option><option value="room">Room</option><option value="equipment">Equipment</option></select></label><button className="core-button" disabled={disabled} type="submit">Add resource</button></form>
         </div>
       </details>
-      <p className="form-notice" aria-live="polite">{notice || (managedConnected ? `${vocabulary.plural} persist in this company account. Customer messages, calendar sync, and payment remain separate human-approved actions.` : `${vocabulary.plural} persist on this device. Sign in to share them with a company account.`)}</p>
+      <p className="form-notice" aria-live="polite">{notice || (managedConnected ? `${vocabulary.plural} saved to your company. Messages, calendars and payments need separate approval.` : `${vocabulary.plural} saved on this device. Sign in to share.`)}</p>
     </div>
   </details>
 }
