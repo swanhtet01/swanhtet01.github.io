@@ -14,6 +14,7 @@ declare
   matches bigint;
   catalog_json text;
   field text;
+  trim_chars text := chr(9)||chr(10)||chr(11)||chr(12)||chr(13)||chr(32)||chr(160)||chr(5760)||chr(8192)||chr(8193)||chr(8194)||chr(8195)||chr(8196)||chr(8197)||chr(8198)||chr(8199)||chr(8200)||chr(8201)||chr(8202)||chr(8232)||chr(8233)||chr(8239)||chr(8287)||chr(12288)||chr(65279);
 begin
   if jsonb_typeof(configuration) is distinct from 'object'
     or jsonb_typeof(configuration->'selectedSkus') is distinct from 'array'
@@ -22,7 +23,8 @@ begin
   end if;
   foreach field in array array['storeName','summary'] loop
     if jsonb_typeof(configuration->field) is distinct from 'string'
-      or length(btrim(configuration->>field)) = 0
+      or length(btrim(configuration->>field,trim_chars)) = 0
+      or configuration->>field <> btrim(configuration->>field,trim_chars)
       or length(configuration->>field) > (case when field='storeName' then 60 else 180 end) then
       raise exception using errcode='22023',message='ecommerce_review_text_invalid';
     end if;
@@ -43,6 +45,15 @@ begin
     or (select count(*) <> count(distinct value) from jsonb_array_elements(configuration->'selectedSkus')) then
     raise exception using errcode='22023',message='ecommerce_review_selection_invalid';
   end if;
+  if configuration ? 'merchandising' then
+    if jsonb_typeof(configuration->'merchandising') is distinct from 'array' then
+      raise exception using errcode='22023',message='ecommerce_review_merchandising_invalid';
+    end if;
+    if (select jsonb_agg(m->'sku' order by ordinal) from jsonb_array_elements(configuration->'merchandising') with ordinality rows(m,ordinal))
+      is distinct from configuration->'selectedSkus' then
+      raise exception using errcode='22023',message='ecommerce_review_merchandising_invalid';
+    end if;
+  end if;
   for selected in select value from jsonb_array_elements(configuration->'selectedSkus') loop
     select count(*) into matches from jsonb_array_elements(source->'items') i where i->'sku'=selected;
     if jsonb_typeof(selected) <> 'string' or matches <> 1 then
@@ -51,11 +62,19 @@ begin
     select value into item from jsonb_array_elements(source->'items') where value->'sku'=selected;
     foreach field in array array['sku','name'] loop
       if jsonb_typeof(item->field) is distinct from 'string'
-        or length(btrim(item->>field)) = 0
+        or length(btrim(item->>field,trim_chars)) = 0
+        or item->>field <> btrim(item->>field,trim_chars)
         or length(item->>field) > (case when field='sku' then 80 else 180 end) then
         raise exception using errcode='22023',message='ecommerce_review_text_invalid';
       end if;
     end loop;
+    if item ? 'variant' and item->'variant' <> 'null'::jsonb then
+      if jsonb_typeof(item->'variant') is distinct from 'string'
+        or length(item->>'variant') not between 1 and 180
+        or item->>'variant' <> btrim(item->>'variant',trim_chars) then
+        raise exception using errcode='22023',message='ecommerce_review_variant_invalid';
+      end if;
+    end if;
     foreach field in array array['price','onHand'] loop
       if jsonb_typeof(item->field) is distinct from 'number' then
         raise exception using errcode='22023',message='ecommerce_review_number_invalid';
@@ -74,6 +93,17 @@ begin
       'unitPriceMmk',item->'price','availability',case when (item->>'onHand')::numeric > 0 then 'available' else 'sold_out' end);
     if matches = 1 then
       select value into merch from jsonb_array_elements(configuration->'merchandising') where value->'sku'=selected;
+      if jsonb_typeof(merch->'featured') is distinct from 'boolean' then
+        raise exception using errcode='22023',message='ecommerce_review_merchandising_invalid';
+      end if;
+      foreach field in array array['collection','displayName','note'] loop
+        if jsonb_typeof(merch->field) is distinct from 'string'
+          or merch->>field <> btrim(merch->>field,trim_chars)
+          or (field='collection' and length(merch->>field)=0)
+          or length(merch->>field) > (case field when 'collection' then 120 when 'displayName' then 180 else 300 end) then
+          raise exception using errcode='22023',message='ecommerce_review_merchandising_invalid';
+        end if;
+      end loop;
       projected := projected || jsonb_build_object('merchandising',jsonb_build_object(
         'featured',merch->'featured','collection',merch->'collection','displayName',merch->'displayName','note',merch->'note'));
     end if;

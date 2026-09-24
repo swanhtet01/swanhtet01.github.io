@@ -876,6 +876,31 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             finally:
                 connection.rollback()
 
+    def test_sql_catalog_variant_and_merchandising_validation(self):
+        from pathlib import Path
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        from supermega_runtime.commerce_runtime import commerce_catalog_digest
+        base = catalog_state()
+        base['storefrontConfiguration'] = storefront_configuration(base,merchandising=[dict(sku='SKU-1',featured=False,collection='Local',displayName='',note='')])
+        sql=(Path(__file__).resolve().parents[1]/'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        with pg._connect(self.admin_url) as connection:
+            try:
+                connection.execute(sql)
+                connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(base),))
+                changes=[('variant',v) for v in (False,'',' padded','x'*181)]
+                changes += [('featured','yes'),('collection',''),('displayName',None),('note','x'*301),('note',' padded'),('coverage',[]),('coverage',None),('sku','other')]
+                for field,value in changes:
+                    source=deepcopy(base)
+                    if field=='variant': source['items'][0][field]=value
+                    elif field=='coverage': source['storefrontConfiguration']['merchandising']=value
+                    else: source['storefrontConfiguration']['merchandising'][0][field]=value
+                    source['storefrontConfiguration']['shopCatalogDigest']=commerce_catalog_digest(source)
+                    with self.subTest(field=field),self.assertRaises(self.db_error):
+                        with connection.transaction():
+                            connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(source),))
+            finally:
+                connection.rollback()
+
     def test_ecommerce_entitlement_is_private_and_product_specific(self):
         vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
                    ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),
