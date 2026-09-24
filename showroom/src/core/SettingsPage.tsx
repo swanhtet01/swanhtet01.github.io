@@ -361,6 +361,7 @@ export function SettingsPage() {
   const [preparedArtifact, setPreparedArtifact] = useState<ClientDemoPreparationArtifact | null>(null)
   const [preparingClientFiles, setPreparingClientFiles] = useState(false)
   const [preparedConfirmation, setPreparedConfirmation] = useState('')
+  const [preparedInstalled, setPreparedInstalled] = useState<Record<string, string>>({})
   const [preparedBusyProduct, setPreparedBusyProduct] = useState<SetupProductId | null>(null)
   const [preparedInstallStep, setPreparedInstallStep] = useState('')
   const [preparedNotice, setPreparedNotice] = useState('')
@@ -498,7 +499,7 @@ export function SettingsPage() {
   const capabilityPlanHref = capabilityPlan ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(capabilityPlan, null, 2))}` : ''
   const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
   const preparedApprovalReady = Boolean(preparedArtifact && clientDemoPreparationConfirmationMatches(preparedArtifact, preparedConfirmation))
-  const preparedAppliedProducts = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
+  const preparedAppliedProducts = new Set(Object.keys(preparedInstalled).filter((product) => preparedInstalled[product] === preparedArtifact?.bundleDigest))
   const preparedRemainingCount = preparedArtifact?.products.filter((product) => !preparedAppliedProducts.has(product.product)).length ?? 0
   const preparedBlockedEntry = preparedBlockedProduct
     ? preparedArtifact?.products.find((product) => product.product === preparedBlockedProduct) ?? null
@@ -1387,7 +1388,7 @@ export function SettingsPage() {
   async function installPreparedProducts() {
     const artifact = preparedArtifact
     if (!artifact || preparedBusyProduct || managedIdentity || !preparedApprovalReady) return
-    const installedBeforeRun = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
+    const installedBeforeRun = preparedAppliedProducts
     let activeProduct: SetupProductId | null = null
     setPreparedBlockedProduct(null)
     try {
@@ -1404,6 +1405,7 @@ export function SettingsPage() {
         setPreparedInstallStep(`Installing ${index + 1} of ${installOrder.length}: ${productDisplayName(product)}`)
         setPreparedNotice(`Rechecking and installing ${productDisplayName(product)} locally...`)
         const installed = await applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)
+        setPreparedInstalled((current) => ({ ...current, [product]: artifact.bundleDigest }))
         let packNotice = ''
         if (product === 'commerce') {
           try {
@@ -2101,7 +2103,7 @@ export function SettingsPage() {
                   {managedIdentity ? <p className="form-notice">Disconnect the managed account to use this browser-local installer. Managed imports keep their separate server validation and approval flow.</p> : null}
                   <div className="settings-step-actions"><span>{preparedRemainingCount ? `${preparedRemainingCount} product${preparedRemainingCount === 1 ? '' : 's'} remaining · Shop installs before Ecommerce.` : 'All package products are installed.'}</span><button className="core-button primary" disabled={!preparedApprovalReady || Boolean(preparedBusyProduct) || Boolean(managedIdentity) || preparedRemainingCount === 0} onClick={() => void installPreparedProducts()} type="button">{preparedBusyProduct ? preparedInstallStep : `Install remaining ${preparedRemainingCount}`}</button></div>
                   <div aria-label="Install prepared products" className="demo-solution-grid">{preparedArtifact.products.map((product) => {
-                    const applied = demoWorkspace?.products.find((entry) => entry.product === product.product)?.status === 'applied'
+                    const applied = preparedAppliedProducts.has(product.product)
                     const busy = preparedBusyProduct === product.product
                     const blocked = preparedBlockedProduct === product.product
                     return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? `Installed locally · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'sample data'}` : blocked ? 'Existing work needs a decision' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}`}</small></div>{applied || blocked ? <Link className="core-button" to={product.demoPath}>{blocked ? 'Review existing work' : bi('Open')}</Link> : null}</section>

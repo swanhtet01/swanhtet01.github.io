@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -145,4 +146,21 @@ test('prepared Website and Ecommerce reject lost writes and recover with one exa
     }
     await rm(fixture.parent, { recursive: true, force: true })
   }
+})
+
+
+test('prepared installer UI binds installed status to the exact package, not general demo progress', async () => {
+  const source = await readFile(new URL('../showroom/src/core/SettingsPage.tsx', import.meta.url), 'utf8')
+  const expression = source.split('\n').find(line => line.includes('const preparedAppliedProducts ='))
+  assert.ok(expression)
+  const evaluate = (preparedArtifact, preparedInstalled = {}) => [...runInNewContext(expression + '; preparedAppliedProducts', {
+    preparedArtifact, preparedInstalled, demoWorkspace: { products: [{ product: 'website', status: 'applied' }] },
+  })]
+  assert.deepEqual(evaluate({ bundleDigest: 'new' }), [])
+  assert.deepEqual(evaluate({ bundleDigest: 'new' }, { website: 'old' }), [])
+  assert.deepEqual(evaluate({ bundleDigest: 'new' }, { website: 'new', ecommerce: 'old' }), ['website'])
+  assert.deepEqual(evaluate(null, { website: 'new' }), [])
+  assert.match(source, /const installedBeforeRun = preparedAppliedProducts/)
+  assert.match(source, /const applied = preparedAppliedProducts.has\(product.product\)/)
+  assert.match(source, /await applyPreparedLocalClientDemoProduct\(artifact, product, preparedConfirmation\)\s+setPreparedInstalled\(\(current\) => \(\{ \.\.\.current, \[product\]: artifact.bundleDigest \}\)\)/)
 })
