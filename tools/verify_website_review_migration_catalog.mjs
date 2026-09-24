@@ -39,7 +39,7 @@ export const websiteReviewCatalogQueries = {
     order by c.relname,i.relname`,
 }
 
-const expected = {
+const beforeStorage = {
   relations: '3c44055e324575be93a05084d9ee02fc71a43cc00c482ef55f3b52c1228bb7a8',
   columns: '25369a7f720e9d382f9fcd52c62f93017183b2f2b77e6add1f17d202292077de',
   policies: '94e6ba31279e8fbf1a51b8534ec76524856c89eab1ed900ed1ac4a13afd920ba',
@@ -47,6 +47,16 @@ const expected = {
   triggers: '84436c5251aeaffca50ec335499803ded93f84cb49f023dac890a64f80cee742',
   constraints: 'aa3867fd2063efbe6009f9a696399806576ebb5d093046792fa93f6063747102',
   indexes: 'a78adb1cdfc7a5a8904166eff3df39d71689e141df2a69af06d9d7eb5930e051',
+}
+
+const expected = {
+  relations: '3427a6d85a736a354342080900cda6a039b97e645850ade6429c5d2d627fceb1',
+  columns: 'dff463cb508c7378c8ffa3a27dba4ba206117ff27157803164cd9e21b37b8d74',
+  policies: '91c695d8e0c310a692c5dbad85c6cf4ab8ff8a5c5f4890c6f046c61fcda8dc0f',
+  functions: '6c920825cd524f3c88b6b1935a5e14b1fb4612579dc3565a3a07469b99a36907',
+  triggers: 'df5ab58e3f56562c0d01afad71930d83cac3d06d903c1c4a8600bb4be26f9fd0',
+  constraints: 'da88fc264debcda6f09a8bf309bc37560044b723c1b723b6e97569a438ecbe3e',
+  indexes: '2d30e8775e2390eb8a4139ddfcd13cd58011f334d8dcb2d8e142a08ab6a10dcc',
 }
 
 export async function websiteReviewCatalogDigests(database) {
@@ -63,6 +73,16 @@ export async function verifyWebsiteReviewMigrationCatalog(database, requireCheck
   for (const [name, digest] of Object.entries(expected)) {
     requireCheck(`Website review complete private catalog: ${name}`, actual[name] === digest)
   }
+  const storageFunctions = ['ecommerce_review_text_length','ecommerce_review_projection','ecommerce_review_preview_digest','ecommerce_review_operator_entitled','ecommerce_review_recipient_ready','guard_ecommerce_review','invalidate_ecommerce_reviews']
+  for (const [name, sql] of Object.entries(websiteReviewCatalogQueries)) {
+    const { rows } = await database.query(sql)
+    const previous = rows.filter(row => row.relname !== 'ecommerce_customer_reviews'
+      && row.tablename !== 'ecommerce_customer_reviews'
+      && row.tgname !== 'ecommerce_reviews_invalidate'
+      && !storageFunctions.includes(row.proname))
+    requireCheck(`Catalog storage preserves previous ${name}`,
+      createHash('sha256').update(JSON.stringify(previous)).digest('hex') === beforeStorage[name])
+  }
   const { rows } = await database.query(`select
     app_private.website_review_can('website.review') is not true as capability_denied,
     app_private.website_review_recipient_ready('unassigned') is not true as recipient_denied,
@@ -75,13 +95,13 @@ export async function verifyWebsiteReviewMigrationCatalog(database, requireCheck
 
 export async function verifyCatalogEntitlementMutations(database, requireCheck) {
   const { rows } = await database.query(websiteReviewCatalogQueries.functions)
-  const previous = rows.filter(row => row.proname !== 'ecommerce_review_entitled')
+  const previous = rows.filter(row => !['ecommerce_review_entitled','ecommerce_review_text_length','ecommerce_review_projection','ecommerce_review_preview_digest','ecommerce_review_operator_entitled','ecommerce_review_recipient_ready','guard_ecommerce_review','invalidate_ecommerce_reviews'].includes(row.proname))
   requireCheck('Ecommerce proof leaves every prior private function unchanged',
     createHash('sha256').update(JSON.stringify(previous)).digest('hex') === '43363d70f1d95f0f5eae86a5787c835f13424bdd4268e17e11308685224b5b37')
   for (const [name, sql] of [
     ['public execute', 'grant execute on function app_private.ecommerce_review_entitled() to public'],
     ['changed source', 'create or replace function app_private.ecommerce_review_entitled() returns boolean language sql stable security definer set search_path=pg_catalog,app_private as $$ select true $$'],
-    ['missing proof', 'drop function app_private.ecommerce_review_entitled()'],
+    ['renamed proof', 'alter function app_private.ecommerce_review_entitled() rename to unexpected_review_proof'],
   ]) {
     await database.exec('begin')
     try {
@@ -94,4 +114,19 @@ export async function verifyCatalogEntitlementMutations(database, requireCheck) 
   }
   requireCheck('Ecommerce proof mutation checks restore the catalog',
     (await websiteReviewCatalogDigests(database)).functions === expected.functions)
+}
+
+export async function verifyCatalogStorageMutations(database, requireCheck) {
+  for (const [category, sql] of [
+    ['relations', 'alter table app_private.ecommerce_customer_reviews disable row level security'],
+    ['policies', 'drop policy ecommerce_reviews_read on app_private.ecommerce_customer_reviews'],
+    ['triggers', 'alter table app_private.workspace_state disable trigger ecommerce_reviews_invalidate'],
+    ['relations', 'grant select on app_private.ecommerce_customer_reviews to authenticated'],
+  ]) {
+    await database.exec('begin')
+    try {
+      await database.exec(sql)
+      requireCheck(`Catalog storage rejects ${sql}`, (await websiteReviewCatalogDigests(database))[category] !== expected[category])
+    } finally { await database.exec('rollback') }
+  }
 }
