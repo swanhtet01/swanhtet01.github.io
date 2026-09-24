@@ -254,3 +254,38 @@ test('optional login trial prefill tolerates denied browser storage', () => {
   assert.match(source, /useState\(\(\) => savedTrial\(\)\?\.claimCode/)
   assert.match(source, /useState\(\(\) => savedTrial\(\)\?\.businessName/)
 })
+
+const shellSource = readFileSync(new URL('../showroom/src/core/CoreShell.tsx', import.meta.url), 'utf8')
+const shellAst = ts.createSourceFile('shell.tsx', shellSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+test('shell remembered product tolerates denied storage and retains valid routing hints', () => {
+  const context = { window: Object.defineProperty({}, 'localStorage', { get() { throw new Error('SecurityError') } }), LAST_PRODUCT_KEY: 'synthetic', isClientSolutionId: value => ['commerce', 'production', 'website', 'ecommerce'].includes(value) }
+  const read = handler('readLastProduct', context, shellAst)
+  assert.equal(read(), null)
+  context.window = { localStorage: { getItem: () => 'website' } }
+  assert.equal(read(), 'website')
+  context.window.localStorage.getItem = () => 'invalid'
+  assert.equal(read(), null)
+})
+test('actual shell navigation effect survives denied storage and optional history failure', () => {
+  let effect
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(shellAst) === 'useEffect' && node.arguments[0]?.getText(shellAst).includes('recordBehaviorSignal(')) effect = node.arguments[0]
+    ts.forEachChild(node, visit)
+  }
+  visit(shellAst)
+  assert.ok(effect)
+  const js = ts.transpileModule(`const run = ${effect.getText(shellAst)}; run;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  const calls = []
+  const context = { location: { pathname: '/login', search: '?private=synthetic', hash: '#synthetic' }, sensitiveAccountRoute: true, routeProduct: null, settingsProduct: null, customerSettingsRoute: false, internalBuilderRoute: false, window: Object.defineProperty({}, 'localStorage', { get() { throw new Error('SecurityError') } }), recordBehaviorSignal: (storage, signal) => calls.push(signal), rememberLastProduct() {}, productDisplayName: value => value }
+  const run = vm.runInNewContext(js, context)
+  assert.doesNotThrow(run)
+  assert.equal(calls.length, 0)
+  context.window = { localStorage: {} }
+  run()
+  assert.equal(calls[0].route, '/login')
+  context.recordBehaviorSignal = () => { throw new Error('optional write failed') }
+  assert.doesNotThrow(run)
+  context.routeProduct = 'commerce'
+  context.rememberLastProduct = () => { throw new Error('optional memory failed') }
+  assert.doesNotThrow(run)
+})

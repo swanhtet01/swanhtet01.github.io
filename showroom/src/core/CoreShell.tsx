@@ -113,9 +113,9 @@ function isClientSolutionId(value: unknown): value is ClientSolutionId {
   return value === 'commerce' || value === 'production' || value === 'website' || value === 'ecommerce'
 }
 
-function readLastProduct(storage: Pick<Storage, 'getItem'>): ClientSolutionId | null {
+function readLastProduct(): ClientSolutionId | null {
   try {
-    const product = storage.getItem(LAST_PRODUCT_KEY)
+    const product = window.localStorage.getItem(LAST_PRODUCT_KEY)
     return isClientSolutionId(product) ? product : null
   } catch {
     return null
@@ -515,29 +515,33 @@ export function CoreLayout() {
     if (location.pathname.startsWith('/vision/')) return
     const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}${location.hash}`
     const product = routeProduct ?? settingsProduct ?? 'unknown'
-    if (routeProduct) rememberLastProduct(window.localStorage, routeProduct)
-    recordBehaviorSignal(window.localStorage, {
-      event: location.pathname === '/'
-        ? 'home_opened'
-        : customerSettingsRoute
-          ? (settingsProduct ? 'setup_opened' : 'settings_opened')
+    try {
+      if (routeProduct) rememberLastProduct(window.localStorage, routeProduct)
+      recordBehaviorSignal(window.localStorage, {
+        event: location.pathname === '/'
+          ? 'home_opened'
+          : customerSettingsRoute
+            ? (settingsProduct ? 'setup_opened' : 'settings_opened')
+            : routeProduct
+              ? 'product_opened'
+              : 'settings_opened',
+        product,
+        route,
+        detail: sensitiveAccountRoute
+          ? 'Company account access viewed.'
           : routeProduct
-            ? 'product_opened'
-            : 'settings_opened',
-      product,
-      route,
-      detail: sensitiveAccountRoute
-        ? 'Company account access viewed.'
-        : routeProduct
-          ? `${productDisplayName(routeProduct)} product viewed.`
-          : internalBuilderRoute
-            ? 'Internal client builder viewed.'
-            : settingsProduct
-              ? `${productDisplayName(settingsProduct)} onboarding viewed.`
-              : customerSettingsRoute
-                ? 'Recovery and activation controls viewed.'
-                : 'Product launcher viewed.',
-    })
+            ? `${productDisplayName(routeProduct)} product viewed.`
+            : internalBuilderRoute
+              ? 'Internal client builder viewed.'
+              : settingsProduct
+                ? `${productDisplayName(settingsProduct)} onboarding viewed.`
+                : customerSettingsRoute
+                  ? 'Recovery and activation controls viewed.'
+                  : 'Product launcher viewed.',
+      })
+    } catch {
+      // Optional navigation history must not prevent account or product access.
+    }
   }, [customerSettingsRoute, internalBuilderRoute, location.hash, location.pathname, location.search, routeProduct, sensitiveAccountRoute, settingsProduct])
 
   useEffect(() => {
@@ -635,7 +639,7 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
   const route = productDemoPath(params.get('demo'))
   const choosingProduct = params.get('choose') === '1'
   const lastProduct = !route && !choosingProduct && typeof window !== 'undefined'
-    ? readLastProduct(window.localStorage)
+    ? readLastProduct()
     : null
   if (portalAccess.status === 'checking') {
     return <PortalAccessPanel copy="Checking products." title="Opening…" />

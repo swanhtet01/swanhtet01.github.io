@@ -1457,7 +1457,7 @@ if (!coreShellSource.includes("const LAST_PRODUCT_KEY = 'supermega.last-product.
   || !coreShellSource.includes('return isClientSolutionId(product) ? product : null')
   || !coreShellSource.includes('storage.setItem(LAST_PRODUCT_KEY, product)')
   || !coreShellSource.includes("const choosingProduct = params.get('choose') === '1'")
-  || !coreShellSource.includes('? readLastProduct(window.localStorage)')
+  || !coreShellSource.includes('? readLastProduct()')
   || !coreShellSource.includes('return route ? <Navigate replace to={route} /> : <ProductHomePage />')
   || coreShellSource.includes('DEFAULT_ENTRY_PRODUCT')
   || coreShellSource.includes('managedProductPath(lastProduct')
