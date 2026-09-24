@@ -496,6 +496,9 @@ async function walk(directory) {
   return files
 }
 
+const qaFixtureDirectory = resolve(dist, '__qa-spa')
+if (await exists(qaFixtureDirectory) && (await walk(qaFixtureDirectory)).length) fail('synthetic_spa_fixture_in_release')
+
 const rootPage = resolve(dist, 'index.html')
 const fallbackPage = resolve(dist, '404.html')
 if (!await exists(rootPage)) fail('missing_route:/')
