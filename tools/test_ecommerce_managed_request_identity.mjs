@@ -64,3 +64,29 @@ for (const loseResponse of [false, true]) for (const switchAccount of [false, tr
     assert.equal(applied, switchAccount ? 3 : 5, 'late old-account results must not replace active UI')
   })
 }
+
+for (const recovery of ['missing', 'different', 'duplicate']) {
+  test(`lost response cannot confirm ${recovery} recovered request`, async () => {
+    const identity = { workspaceId: 'a', userId: 'operator' }
+    const request = { id: 'ECR-test', idempotencyKey: 'key', createdAt: 'now', sourcePreviewDigest: 'digest' }
+    const initial = { items: [] }
+    const recovered = { items: [], requests: recovery === 'missing' ? [] : recovery === 'duplicate' ? [request, request] : [{ ...request, sourcePreviewDigest: 'other' }] }
+    let writes = 0, applied = 0
+    const context = {
+      managedIdentity: identity, managedCanWrite: true, crypto: { randomUUID: () => 'command' },
+      currentManagedIdentity: async () => identity, loadManagedBootstrap: async () => ({}),
+      managedBootstrapHasCapability: () => true,
+      setManagedCanWrite: () => { applied++ }, setManagedInbox: () => { applied++ }, setCatalog: () => { applied++ },
+      requireManagedSurfaceState: () => writes ? recovered : initial,
+      resolveManagedStorefront: (_identity, state) => ({ saved: true, inbox: { state, version: writes ? 2 : 1 } }),
+      recordCommerceStorefrontRequest: async () => ({ items: [], requests: [request] }),
+      commerceStorefrontRequests: state => state.requests ?? [],
+      commerceStorefrontRequestEquals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+      saveManagedCommerceCommand: async () => { writes++; throw Error('response lost') },
+    }
+    const handler = runInNewContext(code + '\nrecordManagedBuyingRequest', context)
+    await assert.rejects(handler(request), /response lost/)
+    assert.equal(writes, 1, 'recovery must never resubmit a command')
+    assert.equal(applied, 3, 'unconfirmed readback must not replace the initial UI')
+  })
+}
