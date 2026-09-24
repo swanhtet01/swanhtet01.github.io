@@ -8,7 +8,7 @@ import {
   readLocalShopBusinessTemplateId,
 } from '../../core/product-onboarding-runtime'
 import { ContentWorkspace } from './ContentWorkspace'
-import { AssistedDeliveryScope } from '../AssistedDeliveryScope'
+import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
@@ -152,6 +152,7 @@ function formatRecoveryDate(value: string) {
 }
 
 export function WebsiteProduct() {
+  const [workspaceOpened, setWorkspaceOpened] = useState(false)
   const location = useLocation()
   const {
     workspace,
@@ -1142,6 +1143,8 @@ export function WebsiteProduct() {
       setNotice(error instanceof Error ? error.message : 'The Website inquiry decision is invalid.')
     }
   }
+
+  if (canRequestWebsiteSetup && !workspaceOpened) return <BusinessBrief product="website" onOpenWorkspace={() => setWorkspaceOpened(true)} />
 
   return (
     <div className="website-product">

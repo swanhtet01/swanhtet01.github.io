@@ -1,6 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { AssistedDeliveryScope } from '../AssistedDeliveryScope'
+import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
 import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -272,6 +272,7 @@ function initialEcommerceState() {
 }
 
 export function EcommerceProduct() {
+  const [workspaceOpened, setWorkspaceOpened] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const [initialState] = useState(initialEcommerceState)
@@ -1786,6 +1787,8 @@ export function EcommerceProduct() {
   const assistedCatalogEntry = showAssistedCatalogSetup && workspaceView === 'preview'
     && !savedDraft && ecommerceTodayAction === 'Try sample request'
     && ecommerceTodayState === 'ready' && !ecommerceTodayCartUnits
+
+  if (showAssistedCatalogSetup && workspaceView === 'preview' && !workspaceOpened) return <BusinessBrief product="ecommerce" onOpenWorkspace={() => setWorkspaceOpened(true)} />
 
   return (
     <div className="workspace-screen ecommerce-product">

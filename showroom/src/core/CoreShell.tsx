@@ -596,7 +596,7 @@ export function CoreLayout() {
               the entire shell — the exact blank page the boundary exists to prevent, reached
               by a different door. It is secondary furniture, so its own boundary is enough:
               the route content beside it keeps working. */}
-          {routeProduct && managedProductAllowed ? <RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary> : null}
+          {routeProduct && managedProductAllowed ? <details className="product-tools-disclosure"><summary>Workspace tools</summary><RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary></details> : null}
         </main>
       </div>
     </div>
