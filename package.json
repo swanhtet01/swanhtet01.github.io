@@ -641,7 +641,7 @@
     "onboarding:pairing:verify": "node tools/test_industry_pack_sample_pairing.mjs",
     "signup:trial:verify": "node tools/test_signup_trial.mjs",
     "signup:account:verify": "node tools/test_signup_account.mjs",
-    "account:routes:verify": "node tools/test_managed_account_routes.mjs",
+    "account:routes:verify": "node tools/test_managed_account_routes.mjs && node --test --test-concurrency=1 tools/managed_login_request_guard.test.mjs tools/test_website_review_login_return.mjs",
     "backup:coverage:verify": "node tools/test_backup_covers_business_data.mjs",
     "storefront:rank:verify": "node tools/test_storefront_merchandising_rank.mjs",
     "capability:tiers:verify": "node tools/test_capability_tiers.mjs",
