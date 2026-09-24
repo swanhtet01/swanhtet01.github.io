@@ -21,7 +21,7 @@ function harness() {
   if(name==='./operator-review-contract')return {...contract,verifyCatalogPreparation:async()=>prepared,verifyCatalogRecipients:value=>value}
   if(name==='../../core/managed-trial')return {
    currentManagedIdentity:async()=>h.who,sameManagedIdentity:(a,b)=>a.workspaceId===b.workspaceId&&a.userId===b.userId,
-   loadManagedEcommercePreparation:async()=>({}),loadManagedEcommerceRecipients:async()=>({recipients:[{grantId:id,label:'Customer'}],nextAfter:null}),
+   loadManagedEcommercePreparation:async()=>{h.sourceReads=(h.sourceReads??0)+1;if(h.readFail)throw Error('unavailable');return {}},loadManagedEcommerceRecipients:async()=>{h.recipientReads=(h.recipientReads??0)+1;if(h.readFail)throw Error('unavailable');return {recipients:[{grantId:id,label:'Customer'}],nextAfter:null}},
    withdrawManagedEcommerceReview:async reviewId=>{h.withdrawals.push(reviewId);if(h.withdrawWait)await h.withdrawWait;if(h.withdrawFail)throw Error('uncertain');return {reviewId,status:'revoked',persisted:true,replayed:false,publicationAuthorized:false,deploymentAuthorized:false}},
    prepareManagedEcommerceReview:async payload=>{h.writes.push(payload);if(h.wait)await h.wait;if(h.fail)throw Error('uncertain');return {reviewId:payload.reviewId,sourceVersion:payload.expectedVersion,contentRevision:0,previewDigest:prepared.previewDigest,preparedAt:new Date().toISOString(),expiresAt:payload.expiresAt,status:'prepared_preview',persisted:true,replayed:h.writes.length>1,publicationAuthorized:false,deploymentAuthorized:false}}
   }
@@ -78,4 +78,15 @@ test('partial withdrawal cleanup remains recoverable after reopening',async()=>{
   h.removeDenied=null;h.click('Withdraw review');await flush()
   assert.equal(h.storage.size,0);assert.equal(h.writes.length,1)
  }
+})
+
+
+test('retained request can reopen and retry without catalog or recipient reads',async()=>{
+ const h=harness();h.click('Open saved catalog');await flush();h.fail=true
+ h.click('Prepare review');await flush();const request=h.writes[0]
+ h.listeners.get('focus')();h.readFail=true;h.click('Open saved catalog');await flush()
+ assert.equal(h.slots[0],null);assert.equal(h.slots[1],null);assert.ok(h.slots[3])
+ assert.equal(h.sourceReads,1);assert.equal(h.recipientReads,1)
+ h.fail=false;h.click('Retry same request');await flush()
+ assert.deepEqual(h.writes[1],request);assert.ok(h.slots[4]);assert.equal(h.storage.size,2)
 })

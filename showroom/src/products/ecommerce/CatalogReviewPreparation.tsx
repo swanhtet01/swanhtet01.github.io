@@ -59,6 +59,12 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
         setMessage('Last confirmed review. Customer access is checked when the link opens.')
         return
       }
+      if (retained) {
+        if (!await current(who, started)) return
+        setPending(retained); setSource(null); setRecipients(null); setSelected('')
+        setMessage('A previous request needs confirmation. Retry the same request.')
+        return
+      }
       const prepared = await verifyCatalogPreparation(await loadManagedEcommercePreparation(who))
       const choices = verifyCatalogRecipients(await loadManagedEcommerceRecipients(who, after), after)
       if (!await current(who, started)) return
@@ -68,13 +74,13 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
     finally { lock.current = false; setBusy(false) }
   }
   async function prepare() {
-    if (lock.current || !source || (!pending && !selected)) return
+    if (lock.current || (!pending && (!source || !selected))) return
     lock.current = true; setBusy(true)
     const started = epoch.current
     try {
       const who = await identity()
-      const command = pending ?? { reviewId: crypto.randomUUID(), recipientGrantId: selected, expectedVersion: source.sourceVersion,
-        expiresAt: new Date(Date.now() + 86400000).toISOString(), contentRevision: source.contentRevision, previewDigest: source.previewDigest, readAt: source.readAt }
+      const command = pending ?? { reviewId: crypto.randomUUID(), recipientGrantId: selected, expectedVersion: source!.sourceVersion,
+        expiresAt: new Date(Date.now() + 86400000).toISOString(), contentRevision: source!.contentRevision, previewDigest: source!.previewDigest, readAt: source!.readAt }
       retainCatalogCommand(window.sessionStorage, key, command)
       if (!await current(who, started)) return
       setPending(command)
@@ -118,8 +124,8 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
         {recipients.recipients.map(row => <option key={row.grantId} value={row.grantId}>{row.label}</option>)}
       </select></label>
       {recipients.nextAfter && !pending ? <button type="button" disabled={busy} onClick={() => void open(recipients.nextAfter!)}>More customers</button> : null}
-      <button type="button" disabled={busy || (!pending && !selected)} onClick={() => void prepare()}>{pending ? 'Retry same request' : 'Prepare review'}</button>
     </> : null}
+    {!receipt && (pending || (source && recipients)) ? <button type="button" disabled={busy || (!pending && !selected)} onClick={() => void prepare()}>{pending ? 'Retry same request' : 'Prepare review'}</button> : null}
     {receipt ? <><p>Customer review link: <a href={`/ecommerce/review/${receipt.reviewId}`}>Open private review</a></p><button type="button" disabled={busy} onClick={() => void withdraw()}>Withdraw review</button></> : null}
   </section>
 }
