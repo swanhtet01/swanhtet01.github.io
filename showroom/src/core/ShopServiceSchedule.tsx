@@ -32,6 +32,9 @@ import {
   type ShopServiceSchedule,
 } from './shop-service-scheduling'
 import {
+  allocateSpaMembershipPackage,
+  defineSpaMembershipPackage,
+  spaMembershipPackages,
   availableSpaMembershipForBooking,
   redeemSpaMembershipSession,
   spaMembershipBalances,
@@ -401,6 +404,18 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     }
   }
 
+  function setupPackage(sku: string) {
+    if (!schedule) return
+    try { commit(defineSpaMembershipPackage(schedule, commerce, sku, proof('Set up a supported service package.')), 'Package ready.') }
+    catch (error) { setNotice(error instanceof Error ? error.message : 'Package setup failed.') }
+  }
+
+  function allocatePackage(orderId: string, lineIndex: number) {
+    if (!schedule) return
+    try { commit(allocateSpaMembershipPackage(schedule, commerce, orderId, lineIndex, proof('Allocated sessions from a reviewed paid purchase.')), 'Package sessions added.') }
+    catch (error) { setNotice(error instanceof Error ? error.message : 'Package allocation failed.') }
+  }
+
   function createService(event: FormEvent) {
     event.preventDefault()
     if (!schedule) return
@@ -448,6 +463,14 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     client,
     readiness: shopServiceClientAnonymizationReadiness(schedule, client.id, settledSources),
   }))
+  const packagePurchases = commerce.orders.flatMap(order => (order.lines ?? []).flatMap((line, index) => {
+    const client = schedule.clients.find(c => c.id === order.customer && !c.anonymizedAt)
+    const definition = schedule.packageDefinitions?.find(d => d.purchaseSku === line.sku && d.active)
+    return order.id && client && definition && order.status === 'completed' && order.paymentStatus === 'reconciled'
+      && order.refundStatus === 'none' && order.paymentReconciledAt && order.completion
+      && !schedule.packageLedger?.some(e => e.sourceOrderId === order.id && e.sourceOrderLineIndex === index)
+      ? [{ orderId: order.id, lineIndex: index, client: client.name, label: definition.label, sessions: line.quantity * definition.sessionsPerPurchase }] : []
+  }))
   const anonymizeReviewClient = schedule.clients.find((client) => client.id === anonymizeReviewClientId) ?? null
   return <details className="core-panel shop-service-schedule" id="shop-service-schedule" onToggle={(event) => setWorkspaceOpen(event.currentTarget.open)} open={workspaceOpen} ref={schedulePanelRef}>
     <summary><span><small>{vocabulary.plural}</small><strong>{projection.today.length ? `${projection.today.length} today` : 'Schedule services'}</strong></span><span>{projection.awaitingArrival} waiting · {projection.inService} in service</span></summary>
@@ -463,6 +486,14 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         <span><small>Sessions left</small><strong>{membershipBalances.reduce((total, balance) => total + balance.remaining, 0)}</strong></span>
         <span><small>Sessions used</small><strong>{membershipBalances.reduce((total, balance) => total + balance.redeemed, 0)}</strong></span>
       </div> : null}
+      {schedule.industryPackId === 'spa' ? <details className="compact-disclosure">
+        <summary>Packages</summary>
+        <div>
+          {spaMembershipPackages.filter(p => commerce.items?.some(item => item.sku === p.sku) && !schedule.packageDefinitions?.some(d => d.purchaseSku === p.sku)).map(p => <button className="core-button compact" disabled={disabled} key={p.sku} onClick={() => setupPackage(p.sku)} type="button">Set up {p.label}</button>)}
+          {packagePurchases.map(p => <div key={`${p.orderId}:${p.lineIndex}`}><span>{p.client} · {p.label} · {p.sessions} sessions</span><button className="core-button compact" disabled={disabled} onClick={() => allocatePackage(p.orderId, p.lineIndex)} type="button">Add sessions</button></div>)}
+          {!packagePurchases.length ? <p>Completed, paid package purchases appear here.</p> : null}
+        </div>
+      </details> : null}
       <form className="service-booking-form" onSubmit={createBooking}>
         <div><span className="core-eyebrow">New {vocabulary.singular}</span><h3>{vocabulary.holdAction}</h3><p>Shop blocks overlapping bookings for the same staff member, room, or equipment.</p></div>
         <label>Customer<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer name" required value={bookingDraft.customerName} /></label>

@@ -25,6 +25,7 @@ export type SpaMembershipOrderView = {
 }
 
 export type SpaMembershipCommerceView = {
+  items?: readonly { sku: string }[]
   orders: readonly SpaMembershipOrderView[]
 }
 
@@ -200,4 +201,47 @@ export function redeemSpaMembershipSession(
       happenedAt: proof.happenedAt,
     }],
   })
+}
+
+function packageWriteBase(schedule: ShopServiceSchedule, proof: ShopServiceScheduleProof) {
+  validateShopServiceSchedule(schedule)
+  if (schedule.industryPackId !== 'spa') throw new Error('Packages require a Spa schedule.')
+  if (schedule.bookings.some(b => !b.resourceIds)) throw new Error('Review staff and room assignments on older appointments before setting up packages.')
+  if (exactIso(proof.happenedAt) === null) throw new Error('Package evidence time is invalid.')
+  return { ...schedule, packageDefinitions: schedule.packageDefinitions ?? [], packageLedger: schedule.packageLedger ?? [],
+    revision: schedule.revision + 1 }
+}
+
+export function defineSpaMembershipPackage(schedule: ShopServiceSchedule, commerce: SpaMembershipCommerceView, sku: string, proof: ShopServiceScheduleProof) {
+  const next = packageWriteBase(schedule, proof)
+  const template = spaMembershipPackages.find(p => p.sku === sku)
+  if (!template || !commerce.items?.some(item => item.sku === sku)) throw new Error('The package must be in the current catalog.')
+  if (next.packageDefinitions.some(d => d.purchaseSku === sku)) throw new Error('This package is already set up.')
+  if (!schedule.services.some(s => s.id === template.serviceId && s.active)) throw new Error('The package treatment must be active.')
+  const definition = { id: `package-${String(next.revision).padStart(4, '0')}`, label: template.label, purchaseSku: sku,
+    eligibleServiceIds: [template.serviceId], sessionsPerPurchase: template.sessions, active: true }
+  return validateShopServiceSchedule({ ...next, packageDefinitions: [...next.packageDefinitions, definition],
+    events: [...schedule.events, { revision: next.revision, type: 'package_definition_saved', subjectId: definition.id,
+      actor: bounded(proof.actor, 'Package actor', 120), reason: bounded(proof.reason, 'Package reason', 240), happenedAt: proof.happenedAt }] })
+}
+
+export function allocateSpaMembershipPackage(schedule: ShopServiceSchedule, commerce: SpaMembershipCommerceView, orderId: string, lineIndex: number, proof: ShopServiceScheduleProof) {
+  const next = packageWriteBase(schedule, proof)
+  const order = commerce.orders.find(o => o.id === orderId)
+  const line = Number.isSafeInteger(lineIndex) && lineIndex >= 0 ? order?.lines?.[lineIndex] : undefined
+  const definition = next.packageDefinitions.find(d => d.purchaseSku === line?.sku && d.active)
+  const at = Date.parse(proof.happenedAt)
+  if (!order || !line || !definition || order.status !== 'completed' || order.paymentStatus !== 'reconciled' || order.refundStatus !== 'none'
+    || !order.paymentReconciledAt || !(Date.parse(order.paymentReconciledAt) <= at)
+    || !order.completion || !(Date.parse(order.completion.capturedAt) <= at)
+    || !schedule.clients.some(c => c.id === order.customer && !c.anonymizedAt)
+    || !Number.isSafeInteger(line.quantity) || line.quantity < 1 || !Number.isSafeInteger(line.unitPriceMmk) || (line.unitPriceMmk ?? 0) < 1) throw new Error('Choose a completed, paid package purchase for an active client.')
+  if (next.packageLedger.some(e => e.sourceOrderId === orderId && e.sourceOrderLineIndex === lineIndex)) throw new Error('This purchase is already allocated.')
+  const id = `package-entitlement-${String(next.revision).padStart(4, '0')}`
+  const evidence = { revision: next.revision, type: 'package_allocated' as const, actor: bounded(proof.actor, 'Package actor', 120), reason: bounded(proof.reason, 'Package reason', 240), happenedAt: proof.happenedAt }
+  const sessions = line.quantity * definition.sessionsPerPurchase
+  return validateShopServiceSchedule({ ...next, packageLedger: [...next.packageLedger, { id, clientId: order.customer, definitionId: definition.id,
+    sourceOrderId: orderId, sourceOrderLineIndex: lineIndex, sourceOrderDigest: packageOrderDigest(order), purchasePriceMmk: line.unitPriceMmk!,
+    allocatedSessions: sessions, remainingSessions: sessions, issuedAt: proof.happenedAt, expiresAt: new Date(at + 365 * 86400000).toISOString(),
+    status: 'active', version: 1, evidence: [evidence] }], events: [...schedule.events, { ...evidence, subjectId: id }] })
 }

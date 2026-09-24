@@ -22,7 +22,7 @@ def capture(*args, **kwargs):
     result = original(*args, **kwargs)
     schedule = result.get('serviceSchedule', {})
     revision = schedule.get('revision')
-    if revision in (7,8) and len(schedule.get('packageLedger', [])) == 2:
+    if revision == 4 or (revision in (7,8) and len(schedule.get('packageLedger', [])) == 2):
         samples.setdefault(str(revision), deepcopy(result))
     return result
 with patch.object(tests, 'apply_event', capture):
@@ -65,3 +65,24 @@ print(json.dumps(r['serviceSchedule']))
 `, { before, next })
 assert.deepEqual(result, next)
 console.log('Package ledger: runtime fixture read, client-ID balance, exact redemption parity, replay, expiry, tamper rejection and rename continuity passed')
+
+let setupState = fixtures['4']
+const defined = model.defineSpaMembershipPackage(setupState.serviceSchedule, setupState, 'SPA-PACK-MASSAGE-5', proof)
+for (const [field, value] of [['refundStatus', 'requested'], ['paymentStatus', 'pending'], ['customer', 'client-missing']]) {
+  const invalid = structuredClone(setupState); invalid.orders[0][field] = value
+  assert.throws(() => model.allocateSpaMembershipPackage(defined, invalid, invalid.orders[0].id, 0, proof), undefined, field)
+}
+const allocated = model.allocateSpaMembershipPackage(defined, setupState, setupState.orders[0].id, 0, proof)
+assert.throws(() => model.allocateSpaMembershipPackage(allocated, setupState, setupState.orders[0].id, 0, proof), /already allocated/)
+assert.throws(() => model.defineSpaMembershipPackage(defined, setupState, 'SPA-PACK-MASSAGE-5', proof), /already set up/)
+for (const nextSchedule of [defined, allocated]) {
+  setupState = python(`
+import json,sys
+from tests.test_commerce_runtime import apply_event
+p=json.load(sys.stdin); e=p['next']['events'][-1]; r=e['revision']
+result=apply_event(p['before'], 'commerce.service_schedule.saved', {**p['before'], 'serviceSchedule':p['next']}, {'actionId':f'ACT-SERVICE-SCHEDULE-R{r}', 'capturedAt':e['happenedAt'], 'actor':e['actor'], 'reason':e['reason'], 'evidenceReference':f'SHOP-SERVICE-SCHEDULE:R{r}'})
+print(json.dumps(result))
+`, { before: setupState, next: nextSchedule })
+  assert.deepEqual(setupState.serviceSchedule, nextSchedule)
+}
+console.log('Generated package setup and purchase allocation accepted by runtime; duplicate setup/allocation rejected')
