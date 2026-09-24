@@ -165,7 +165,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
   }
 
-  function commit(next: ShopServiceSchedule, message: string) {
+  async function commit(next: ShopServiceSchedule, message: string) {
     const identity = managedIdentityRef.current
     const expectedVersion = managedVersionRef.current
     if (!identity) {
@@ -173,11 +173,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       setSchedule(next)
       // The book is written under an exclusive lock, validated, and read back, so
       // a quota or private-mode rejection can no longer look like a saved booking.
-      void mutateShopServiceSchedule(planShopServiceScheduleWrite(baseRevision, next))
+      return mutateShopServiceSchedule(planShopServiceScheduleWrite(baseRevision, next))
         .then((result) => {
           if (result.ok) {
             setNotice(message)
-            return
+            return true
           }
           // The refused change already advanced the on-screen book, so put the
           // stored truth back. Without this the guard only survives ONE
@@ -191,20 +191,20 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
             // showing a stale book is better than showing none.
           }
           setNotice(`${result.error} The schedule below was reloaded from this device.`)
+          return false
         })
-      return
     }
     if (expectedVersion === null) {
       setNotice("The shared schedule is not ready. Reload before saving.")
-      return
+      return false
     }
     if (managedSaveBusyRef.current) {
       setNotice(`Wait for the current company ${vocabulary.singular} change to finish.`)
-      return
+      return false
     }
     managedSaveBusyRef.current = true
     setManagedSaving(true)
-    void saveManagedServiceSchedule({
+    return saveManagedServiceSchedule({
       commandId: crypto.randomUUID(),
       expectedVersion,
       identity,
@@ -216,6 +216,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         try { persistLocal(saved.schedule) } catch { /* The managed copy remains authoritative. */ }
       }
       setNotice(`${message} Shared company schedule saved.`)
+      return true
     }).catch(async (error) => {
       if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
         try {
@@ -226,12 +227,13 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
             try { persistLocal(current.schedule) } catch { /* The managed copy remains authoritative. */ }
           }
           setNotice(`Another user changed ${vocabulary.plural.toLowerCase()} first. The current shared schedule was reloaded; review and try again.`)
-          return
+          return false
         } catch {
           // Fall through to the recoverable local warning.
         }
       }
       setNotice(`${error instanceof Error ? error.message : 'Managed save failed.'} The change is not confirmed. Reload the shared schedule before trying again.`)
+      return false
     }).finally(() => {
       managedSaveBusyRef.current = false
       setManagedSaving(false)
@@ -354,14 +356,14 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     }
   }
 
-  function createBooking(event: FormEvent) {
+  async function createBooking(event: FormEvent) {
     event.preventDefault()
     if (!schedule) return
     try {
       const startsAt = new Date(bookingDraft.startsAt)
       if (!Number.isFinite(startsAt.getTime())) throw new Error(`Choose a valid ${vocabulary.singular} date and time.`)
       const next = scheduleShopServiceBooking(schedule, { ...bookingDraft, resourceIds: schedule.industryPackId === 'spa' ? [bookingDraft.resourceId, bookingDraft.roomId] : [bookingDraft.resourceId], startsAt: startsAt.toISOString() }, proof(`Scheduled from the Shop ${vocabulary.singular} workspace.`))
-      commit(next, `${capitalizedSingular} held. Confirm it after checking the customer and resource.`)
+      if (!await commit(next, `${capitalizedSingular} held. Confirm it after checking the customer and resource.`)) return
       setBookingDraft((current) => ({ ...current, customerName: '', contact: '', startsAt: nextLocalStart(), note: '' }))
     } catch (error) {
       setNotice(error instanceof Error ? error.message : `The ${vocabulary.singular} could not be scheduled.`)

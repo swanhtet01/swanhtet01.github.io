@@ -6,7 +6,7 @@ import vm from 'node:vm'
 const require = createRequire(resolve('showroom/package.json'))
 const { transformSync } = require('esbuild')
 const source = readFileSync('showroom/src/core/ShopServiceSchedule.tsx', 'utf8')
-const start = source.indexOf('  function commit(')
+const start = source.indexOf('  async function commit(')
 const end = source.indexOf('  function proof(', start)
 assert.ok(start > 0 && end > start)
 const code = transformSync(source.slice(start, end), { loader: 'ts' }).code
@@ -30,15 +30,16 @@ for (const mode of ['pending-success', 'rejected', 'busy', 'unready']) {
   }
   vm.createContext(context)
   vm.runInContext(code, context)
-  context.commit({ revision: 2 }, 'Appointment saved.')
+  const outcome = context.commit({ revision: 2 }, 'Appointment saved.')
   assert.equal(calls.filter(([kind]) => ['schedule', 'persist'].includes(kind)).length, 0)
   if (mode === 'busy' || mode === 'unready') {
     assert.equal(calls.filter(([kind]) => kind === 'request').length, 0)
+    assert.equal(await outcome, false)
     continue
   }
   if (mode === 'rejected') rejectSave(new Error('Rejected by server'))
   else resolveSave({ version: 2, schedule: { revision: 2 } })
-  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(await outcome, mode !== 'rejected')
   const writes = calls.filter(([kind]) => ['schedule', 'persist'].includes(kind))
   assert.equal(writes.length, mode === 'rejected' ? 0 : 2)
   assert.equal(context.managedVersionRef.current, mode === 'rejected' ? 1 : 2)
@@ -46,3 +47,22 @@ for (const mode of ['pending-success', 'rejected', 'busy', 'unready']) {
   if (mode === 'rejected') assert.ok(calls.some(([kind, text]) => kind === 'notice' && text.includes('not confirmed')))
 }
 console.log('Managed schedule acknowledgement: 4 handler scenarios passed')
+
+const formStart = source.indexOf('  async function createBooking(')
+const formEnd = source.indexOf('  function advanceBooking(', formStart)
+assert.ok(formStart > 0 && formEnd > formStart)
+const formCode = transformSync(source.slice(formStart, formEnd), { loader: 'ts' }).code
+for (const saved of [false, true]) {
+  let clears = 0, finish
+  const pending = new Promise(resolve => { finish = resolve })
+  const context = { schedule: {}, bookingDraft: { startsAt: '2026-09-25T03:00', customerName: 'QA', contact: 'qa-ref' },
+    vocabulary: { singular: 'appointment' }, capitalizedSingular: 'Appointment', proof: () => ({}),
+    scheduleShopServiceBooking: () => ({ revision: 1 }), commit: () => pending,
+    setBookingDraft: () => { clears++ }, setNotice: () => {}, nextLocalStart: () => '' }
+  vm.createContext(context); vm.runInContext(formCode, context)
+  const outcome = context.createBooking({ preventDefault() {} })
+  assert.equal(clears, 0)
+  finish(saved); await outcome
+  assert.equal(clears, saved ? 1 : 0)
+}
+console.log('Booking form: pending/rejected details retained; acknowledged save clears once')
