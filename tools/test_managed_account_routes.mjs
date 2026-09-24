@@ -800,3 +800,29 @@ test('sign-in distinguishes unavailable service and rate limits without exposing
     })
   }
 })
+
+
+test('company discovery transport failures preserve the signed-in session and give safe retry advice', async () => {
+  for (const phase of ['request', 'body']) {
+    await withAuth(async (mod, state) => {
+      state.session = { ...fixedSession }
+      const currentSession = state.session
+      state.fetch = async (_url, init) => {
+        assert.equal(init.redirect, 'error')
+        assert.ok(init.signal instanceof AbortSignal)
+        const fail = () => { throw new Error('PRIVATE_TRANSPORT_DETAIL') }
+        if (phase === 'request') fail()
+        return { ok: true, json: async () => fail() }
+      }
+      await assert.rejects(mod.discoverManagedWorkspacesForCurrentSession(), error => {
+        assert.equal(error.code, 'workspace_directory_unavailable')
+        assert.match(error.message, /company list could not be loaded/)
+        assert.ok(!error.message.includes('PRIVATE_TRANSPORT_DETAIL'))
+        return true
+      })
+      assert.equal(state.session, currentSession)
+      assert.equal(state.calls.some(([name]) => name === 'signOut'), false)
+      assert.equal(state.calls.some(([name]) => name === 'storage-write'), false)
+    })
+  }
+})

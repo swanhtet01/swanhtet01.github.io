@@ -2860,24 +2860,33 @@ export function beginManagedAccountSetup(): Promise<ManagedAccountSetup> {
 }
 
 async function discoverManagedWorkspaces(session: Session): Promise<ManagedWorkspaceSignIn> {
-  const response = await fetch('/api/trial/v1/workspaces', {
-    headers: withTraceHeaders(new Headers({
-      accept: 'application/json',
-      authorization: `Bearer ${session.access_token}`,
-    })),
-  })
-  if (!response.ok) throw await parseError(response)
-  const workspaces = parseWorkspaceDirectory(await response.json())
-  // Zero companies is a STATE, not an error: since the 2026-08-12 self-serve
-  // decision the signed-in user IS the prospective owner, and this is exactly
-  // the moment they activate with their trial claim code. Throwing here (and
-  // the former wrappers' sign-out-on-error) used to log the user out at the one point
-  // the activation UI needs their session. completeManagedWorkspaceSignIn still
-  // fail-closes independently, so an empty directory can never open a company.
-  return {
-    userId: session.user.id,
-    email: session.user.email ?? 'Named user',
-    workspaces,
+  try {
+    const response = await fetch('/api/trial/v1/workspaces', {
+      redirect: 'error',
+      signal: AbortSignal.timeout(8000),
+      headers: withTraceHeaders(new Headers({
+        accept: 'application/json',
+        authorization: `Bearer ${session.access_token}`,
+      })),
+    })
+    if (!response.ok) throw await parseError(response)
+    const workspaces = parseWorkspaceDirectory(await response.json())
+    // Zero companies is a STATE, not an error: since the 2026-08-12 self-serve
+    // decision the signed-in user IS the prospective owner, and this is exactly
+    // the moment they activate with their trial claim code. Throwing here (and
+    // the former wrappers' sign-out-on-error) used to log the user out at the one point
+    // the activation UI needs their session. completeManagedWorkspaceSignIn still
+    // fail-closes independently, so an empty directory can never open a company.
+    return {
+      userId: session.user.id,
+      email: session.user.email ?? 'Named user',
+      workspaces,
+    }
+  } catch (error) {
+    if (error instanceof ManagedTrialError) throw error
+    throw new ManagedTrialError('Your company list could not be loaded. Check your connection and try again.', {
+      code: 'workspace_directory_unavailable',
+    })
   }
 }
 
