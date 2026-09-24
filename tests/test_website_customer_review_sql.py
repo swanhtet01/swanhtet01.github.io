@@ -759,6 +759,36 @@ class WebsiteReviewSqlTests(unittest.TestCase):
                 finally:
                     connection.rollback()
 
+    def test_ecommerce_entitlement_candidate_is_private_and_product_specific(self):
+        from pathlib import Path
+        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_entitlement_candidate.sql').read_text(encoding='utf-8')
+        vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
+                   ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),
+                   ({'products':['website']}, False), ({'products':[]}, False),
+                   ({'products':['ecommerce','shop']}, False), ({'products':['ecommerce','ecommerce']}, False),
+                   ({'products':['ecommerce','unknown']}, False), ({'products':'ecommerce'}, False))
+        for payload, expected in vectors:
+            with self.subTest(payload=payload), pg._connect(self.admin_url) as connection:
+                try:
+                    connection.execute(sql)
+                    connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s", (WORKSPACE, RECIPIENT))
+                    connection.execute("""insert into app_private.workspace_events
+                        (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,payload_json,result_json)
+                        values (%s,%s,%s,%s,'company','company.workspace.activated',%s,'human',%s::jsonb,'{}'::jsonb)""",
+                        (uuid4(), WORKSPACE, uuid4(), 'a'*64, OWNER, json.dumps(payload)))
+                    connection.execute('set local role supermega_trial_backend')
+                    self.context(connection, RECIPIENT)
+                    self.assertEqual(connection.execute('select app_private.ecommerce_review_entitled()').fetchone()[0], expected)
+                    self.assertEqual(connection.execute("select payload_json from app_private.workspace_events where surface='company'").fetchall(), [])
+                    for role in ('anon','authenticated','service_role'):
+                        self.assertFalse(connection.execute("select has_function_privilege(%s,'app_private.ecommerce_review_entitled()','execute')", (role,)).fetchone()[0])
+                    self.context(connection, OWNER)
+                    self.assertFalse(connection.execute('select app_private.ecommerce_review_entitled()').fetchone()[0])
+                    self.context(connection, RECIPIENT, 'rehearsal-b')
+                    self.assertFalse(connection.execute('select app_private.ecommerce_review_entitled()').fetchone()[0])
+                finally:
+                    connection.rollback()
+
     def test_reviewer_entitlement_proves_boolean_without_company_event_access(self):
         with self.transaction(RECIPIENT) as connection:
             self.assertEqual(connection.execute("select payload_json from app_private.workspace_events where surface='company'").fetchall(), [])
