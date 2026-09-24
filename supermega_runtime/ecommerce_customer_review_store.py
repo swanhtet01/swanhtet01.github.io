@@ -1,7 +1,11 @@
-"""Private read-only catalog adapter. No HTTP route, grant or preparation API."""
+"""Private catalog review adapter. No HTTP route, grant or publication authority."""
 from copy import deepcopy
+from contextlib import contextmanager
+from datetime import timedelta
+import json
+from .commerce_runtime import commerce_storefront_preview, commerce_storefront_preview_digest
 from hashlib import sha256
-from .ecommerce_customer_review import uuid
+from .ecommerce_customer_review import uuid, stamp
 from .trial_store import TrialPermissionDenied, TrialNotReadyError, TrialValidationError
 
 # Reviewed local candidate bodies, LF-normalized and outer-trimmed only.
@@ -46,20 +50,29 @@ class EcommerceCustomerReviewStore:
     def __init__(self,store):
         self.store=store
 
-    def preview(self,principal,review_id):
-        review_id=uuid(review_id)
+    @contextmanager
+    def _transaction(self,principal,*,write=False,lock_source=False):
+        capability='commerce.write' if write else 'ecommerce.review'
         actor=principal.normalized()
-        if actor.actor_kind!='human': raise TrialPermissionDenied('ecommerce.review')
-        with self.store._guarded_cursor(actor,write=False,capability='ecommerce.review') as (cursor,_):
+        if actor.actor_kind!='human': raise TrialPermissionDenied(capability)
+        with self.store._guarded_cursor(actor,write=write,capability=capability) as (cursor,_):
             _assert_storage(cursor)
             cursor.execute("select current_setting('transaction_isolation') as isolation")
             if cursor.fetchone()['isolation']!='read committed':
                 raise TrialValidationError('ecommerce_review_requires_read_committed')
+            if lock_source:
+                cursor.execute("select version from app_private.workspace_state where workspace_id=%s and surface='commerce' for update",(actor.workspace_id,))
+                if cursor.fetchone() is None: raise TrialValidationError('ecommerce_review_source_missing')
             cursor.execute("select pg_advisory_xact_lock(hashtextextended('ecommerce-review:' || %s,0))",(actor.workspace_id,))
             self.store._assert_active_identity_session(cursor,actor)
-            if ('ecommerce.review' not in self.store._load_membership(cursor,actor)
+            if (capability not in self.store._load_membership(cursor,actor)
                 or 'ecommerce' not in self.store._product_entitlements(cursor,actor.workspace_id)):
-                raise TrialPermissionDenied('ecommerce.review')
+                raise TrialPermissionDenied(capability)
+            yield cursor,actor
+
+    def preview(self,principal,review_id):
+        review_id=uuid(review_id)
+        with self._transaction(principal) as (cursor,actor):
             cursor.execute("""select review_id,content_revision,preview,preview_digest,expires_at
                 from app_private.ecommerce_customer_reviews
                 where workspace_id=%s and recipient_actor_id=%s and review_id=%s and status='active'
@@ -71,4 +84,53 @@ class EcommerceCustomerReviewStore:
                         preview=deepcopy(row['preview']),previewDigest=row['preview_digest'],
                         expiresAt=row['expires_at'].isoformat(),status='prepared_preview',
                         publicationAuthorized=False,deploymentAuthorized=False)
+        return result
+
+    def prepare(self,principal,*,review_id,recipient_actor_id,expected_version,expires_at):
+        review_id,recipient=uuid(review_id),uuid(recipient_actor_id)
+        expiry=stamp(expires_at)
+        if type(expected_version) is not int or not 1<=expected_version<=9_007_199_254_740_991:
+            raise TrialValidationError('ecommerce_review_source_stale')
+        with self._transaction(principal,write=True,lock_source=True) as (cursor,actor):
+            cursor.execute('select clock_timestamp() as now')
+            now=cursor.fetchone()['now']
+            if not now<expiry<=now+timedelta(days=7): raise TrialValidationError('ecommerce_review_expiry_invalid')
+            cursor.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='commerce'",(actor.workspace_id,))
+            source=cursor.fetchone()
+            if source is None or source['version']!=expected_version: raise TrialValidationError('ecommerce_review_source_stale')
+            preview=commerce_storefront_preview(source['state_json'])
+            digest=commerce_storefront_preview_digest(source['state_json'])
+            cursor.execute('select app_private.ecommerce_review_recipient_ready(%s) as ready',(recipient,))
+            if cursor.fetchone()['ready'] is not True: raise TrialPermissionDenied('ecommerce.review')
+            cursor.execute('select recipient_actor_id,prepared_by,source_version,preview_digest,expires_at,status from app_private.ecommerce_customer_reviews where workspace_id=%s and review_id=%s',(actor.workspace_id,review_id))
+            prior=cursor.fetchone()
+            if prior is not None:
+                if (prior['recipient_actor_id']!=recipient or prior['prepared_by']!=actor.actor_id
+                    or prior['source_version']!=expected_version or prior['preview_digest']!=digest
+                    or prior['expires_at']!=expiry or prior['status']!='active'):
+                    raise TrialValidationError('ecommerce_review_prepare_conflict')
+            else:
+                cursor.execute("""insert into app_private.ecommerce_customer_reviews
+                    (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,preview,preview_digest,expires_at)
+                    values (%s,%s,%s,%s,%s,%s::jsonb,%s,%s)""",
+                    (review_id,actor.workspace_id,recipient,actor.actor_id,expected_version,json.dumps(preview,ensure_ascii=False),digest,expiry))
+            cursor.execute("select prepared_at,content_revision from app_private.ecommerce_customer_reviews where workspace_id=%s and review_id=%s and status='active' and expires_at>clock_timestamp()",(actor.workspace_id,review_id))
+            retained=cursor.fetchone()
+            if retained is None: raise TrialValidationError('ecommerce_review_expired')
+            result=dict(reviewId=review_id,sourceVersion=expected_version,contentRevision=retained['content_revision'],
+                preparedAt=retained['prepared_at'].isoformat(),expiresAt=expiry.isoformat(),previewDigest=digest,
+                status='prepared_preview',persisted=True,replayed=prior is not None,publicationAuthorized=False,deploymentAuthorized=False)
+        return result
+
+    def revoke(self,principal,review_id):
+        review_id=uuid(review_id)
+        with self._transaction(principal,write=True) as (cursor,actor):
+            cursor.execute('select status from app_private.ecommerce_customer_reviews where workspace_id=%s and review_id=%s',(actor.workspace_id,review_id))
+            prior=cursor.fetchone()
+            if prior is None: raise TrialPermissionDenied('commerce.write')
+            replay=prior['status']=='revoked'
+            if not replay:
+                cursor.execute("update app_private.ecommerce_customer_reviews set status='revoked' where workspace_id=%s and review_id=%s returning status",(actor.workspace_id,review_id))
+                if (cursor.fetchone() or {}).get('status')!='revoked': raise TrialValidationError('ecommerce_review_revoke_failed')
+            result=dict(reviewId=review_id,status='revoked',persisted=True,replayed=replay,publicationAuthorized=False,deploymentAuthorized=False)
         return result

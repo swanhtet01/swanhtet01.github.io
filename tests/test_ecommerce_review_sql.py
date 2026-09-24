@@ -129,6 +129,23 @@ class CatalogReviewSqlTests(unittest.TestCase):
         self.assertEqual(packet['preview'],commerce_storefront_preview(source))
         self.assertEqual(set(packet),{'reviewId','contentRevision','preview','previewDigest','expiresAt','status','publicationAuthorized','deploymentAuthorized'})
         with self.assertRaises(TrialPermissionDenied): adapter.preview(actor,str(uuid4()))
+        from datetime import datetime,timedelta,timezone
+        from supermega_runtime.trial_store import TrialValidationError
+        operator=TrialPrincipal(WORKSPACE,OWNER,'human')
+        writer=EcommerceCustomerReviewStore(PostgresTrialStore(self.runtime_url,reducer=lambda *args:{},write_enabled=True))
+        args=dict(review_id=str(uuid4()),recipient_actor_id=RECIPIENT,expected_version=version,
+                  expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+        created=writer.prepare(operator,**args)
+        replay=writer.prepare(operator,**args)
+        self.assertTrue(created['persisted']);self.assertFalse(created['replayed']);self.assertTrue(replay['replayed'])
+        self.assertEqual(created['preparedAt'],replay['preparedAt'])
+        self.assertEqual(adapter.preview(actor,args['review_id'])['previewDigest'],created['previewDigest'])
+        with self.assertRaises(TrialValidationError): writer.prepare(operator,**(args|dict(expires_at=(datetime.now(timezone.utc)+timedelta(days=2)).isoformat())))
+        with self.assertRaises(TrialPermissionDenied): writer.revoke(actor,args['review_id'])
+        self.assertFalse(writer.revoke(operator,args['review_id'])['replayed'])
+        self.assertTrue(writer.revoke(operator,args['review_id'])['replayed'])
+        with self.assertRaises(TrialPermissionDenied): adapter.preview(actor,args['review_id'])
+        with self.assertRaises(TrialValidationError): writer.prepare(operator,**args)
         class ObservedStore(PostgresTrialStore):
             def _connect(inner):
                 connection=super()._connect()
