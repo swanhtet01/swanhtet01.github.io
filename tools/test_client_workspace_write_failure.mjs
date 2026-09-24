@@ -20,7 +20,14 @@ test('interrupted initialization reports failure and retry preserves partial fil
       return originalOpen(path, flags, ...rest)
     }
     syncBuiltinESMExports()
-    await assert.rejects(initializeClientWorkspace({ directory, presetId: 'retail-network', products: ['commerce'] }), /client_workspace_init_write_failed/)
+    await assert.rejects(initializeClientWorkspace({ directory, presetId: 'retail-network', products: ['commerce'] }), error => {
+      assert.equal(error.code, 'client_workspace_init_write_failed')
+      assert.match(error.recovery, /Keep any partial files for review/)
+      assert.match(error.recovery, /new, unused destination/)
+      assert.match(error.recovery, /Do not use the partial workspace for delivery/)
+      assert.equal(error.recovery.includes(directory), false)
+      return true
+    })
     fs.open = originalOpen
     syncBuiltinESMExports()
     assert.equal(writes, 2)

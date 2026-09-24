@@ -102,6 +102,9 @@ class PreparationError extends Error {
   constructor(code) {
     super(code)
     this.code = code
+    if (code === 'client_workspace_init_write_failed') {
+      this.recovery = 'Creation did not finish. Keep any partial files for review. Check available disk space and write permissions, then retry with a new, unused destination. Do not use the partial workspace for delivery.'
+    }
   }
 }
 
@@ -1373,7 +1376,9 @@ async function main() {
     console.log(JSON.stringify(clientDemoPreparationSummary(artifact, output)))
   } catch (error) {
     const code = error instanceof PreparationError ? error.code : 'client_demo_preparation_failed'
-    console.error(JSON.stringify({ ok: false, contract: outputContract, error: code }))
+    console.error(JSON.stringify({ ok: false, contract: outputContract, error: code,
+      ...(error instanceof PreparationError && error.recovery ? { recovery: error.recovery } : {}),
+    }))
     process.exitCode = 1
   }
 }
