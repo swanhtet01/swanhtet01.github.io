@@ -44,7 +44,7 @@ STAFF_ACCESS_AUTHORIZATION_CONTRACT = "supermega.workspace_staff_access_authoriz
 STAFF_ACCESS_RECEIPT_CONTRACT = "supermega.workspace_staff_access_receipt.v1"
 STAFF_ACCESS_EVENT_CONTRACT = "supermega.workspace_staff_access_event.v1"
 STAFF_ACCESS_REVOCATION_RECEIPT_CONTRACT = "supermega.workspace_staff_access_revocation_receipt.v1"
-_ROLES = ("product-viewer", "product-operator", "workspace-manager", "website-reviewer")
+_ROLES = ("product-viewer", "product-operator", "workspace-manager", "website-reviewer", "ecommerce-reviewer")
 _PRODUCT_SURFACES = {
     "shop": "commerce",
     "ecommerce": "commerce",
@@ -74,6 +74,12 @@ def _role_capabilities(activation: Mapping[str, Any], role_id: str) -> list[str]
     if role_id not in _ROLES:
         raise ManagedStaffAccessError("Staff role is unsupported.")
     owner_capabilities = set(activation["ownerCapabilities"])
+    if role_id == "ecommerce-reviewer":
+        # Explicit owner-authorized customer review only; Shop activation alone
+        # cannot confer Ecommerce access despite the shared commerce surface.
+        if "ecommerce" not in _activation_products(activation) or "commerce.write" not in owner_capabilities:
+            raise ManagedStaffAccessError("Ecommerce reviewer access requires an activated Ecommerce owner.")
+        return ["ecommerce.review"]
     if role_id == "website-reviewer":
         # An explicit delegation role, not a subset of the owner's editing role:
         # customer decisions must not be relabeled operator decisions. Never
@@ -163,7 +169,8 @@ def compile_staff_access_plan(
         "memberActorId": member_id,
         "memberLabel": member_name,
         "roleId": role,
-        "products": ["website"] if role == "website-reviewer" else _activation_products(activation),
+        "products": (["website"] if role == "website-reviewer" else ["ecommerce"]
+                     if role == "ecommerce-reviewer" else _activation_products(activation)),
         "capabilities": capabilities,
         "approval": {
             "approvalId": approval,

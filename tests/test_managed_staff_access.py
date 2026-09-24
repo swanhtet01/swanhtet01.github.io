@@ -51,6 +51,22 @@ def staff_plan(activation, role_id: str = "product-operator"):
 
 
 class ManagedStaffAccessPlanTests(unittest.TestCase):
+    def test_ecommerce_reviewer_requires_ecommerce_and_cannot_edit(self) -> None:
+        activation = activation_plan("ecommerce")
+        plan = staff_plan(activation, "ecommerce-reviewer")
+        self.assertEqual(plan["capabilities"], ["ecommerce.review"])
+        self.assertEqual(plan["products"], ["ecommerce"])
+        self.assertEqual(validate_staff_access_plan(plan, activation, now=NOW), plan)
+        for capabilities in (["commerce.read"], ["commerce.write"],
+                             ["ecommerce.review", "company.read"], ["ecommerce.review", "approvals.decide"]):
+            tampered = deepcopy(plan)
+            tampered["capabilities"] = capabilities
+            with self.subTest(capabilities=capabilities), self.assertRaises(ManagedStaffAccessError):
+                validate_staff_access_plan(tampered, activation, now=NOW)
+        for product in ("shop", "plant", "website"):
+            with self.subTest(product=product), self.assertRaises(ManagedStaffAccessError):
+                staff_plan(activation_plan(product), "ecommerce-reviewer")
+
     def test_website_reviewer_is_a_distinct_nonediting_delegation(self) -> None:
         activation = activation_plan("website")
         plan = staff_plan(activation, "website-reviewer")
@@ -71,7 +87,7 @@ class ManagedStaffAccessPlanTests(unittest.TestCase):
     def test_multi_product_reviewer_never_inherits_other_products(self) -> None:
         from tests.test_managed_activation import managed_trial_request_for, APPROVAL_ID, PROJECT_REF, RELEASE_COMMIT, ADMIN_CA_SHA256
         from supermega_runtime.managed_activation import compile_multi_product_activation_plan
-        requests = [managed_trial_request_for("shop"), managed_trial_request_for("website")]
+        requests = [managed_trial_request_for("shop"), managed_trial_request_for("website"), managed_trial_request_for("ecommerce")]
         activation = compile_multi_product_activation_plan(
             requests,
             workspace_id="mingalar-fresh-mart", owner_actor_id=OWNER_ID, approval_id=APPROVAL_ID,
@@ -81,6 +97,10 @@ class ManagedStaffAccessPlanTests(unittest.TestCase):
         self.assertEqual(plan["capabilities"], ["website.review"])
         self.assertEqual(plan["products"], ["website"])
         self.assertEqual(validate_staff_access_plan(plan, activation, now=NOW), plan)
+        ecommerce = staff_plan(activation, "ecommerce-reviewer")
+        self.assertEqual(ecommerce["capabilities"], ["ecommerce.review"])
+        self.assertEqual(ecommerce["products"], ["ecommerce"])
+        self.assertEqual(validate_staff_access_plan(ecommerce, activation, now=NOW), ecommerce)
 
     def test_roles_are_deterministic_and_never_inherit_owner_approval(self) -> None:
         activation = activation_plan()
