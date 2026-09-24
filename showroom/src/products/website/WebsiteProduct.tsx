@@ -1144,7 +1144,14 @@ export function WebsiteProduct() {
     }
   }
 
-  if (showAssistedWebsitePreview && !workspaceOpened) return <BusinessBrief product="website" onOpenWorkspace={() => setWorkspaceOpened(true)} />
+  if (showAssistedWebsitePreview && !workspaceOpened && searchParams.get('workspace') !== '1') {
+    return <BusinessBrief product="website" onOpenWorkspace={() => {
+      setWorkspaceOpened(true)
+      const next = new URLSearchParams(searchParams)
+      next.set('workspace', '1')
+      setSearchParams(next, { replace: true })
+    }} />
+  }
 
   return (
     <div className="website-product">
