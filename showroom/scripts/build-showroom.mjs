@@ -26,6 +26,7 @@ runNodeScript('TypeScript build', path.join(showroomRoot, 'node_modules', 'types
 // Node 24 can load the TypeScript config natively. Avoid Vite's runner IPC
 // transport here: under normal Ally contention its fixed 60-second invoke
 // timeout can fail before compilation even begins.
-runNodeScript('Vite build', path.join(showroomRoot, 'node_modules', 'vite', 'bin', 'vite.js'), ['build', '--configLoader', 'native'])
+const outputArgs = process.env.SUPERMEGA_BUILD_OUTPUT ? ['--outDir', path.resolve(process.env.SUPERMEGA_BUILD_OUTPUT)] : []
+runNodeScript('Vite build', path.join(showroomRoot, 'node_modules', 'vite', 'bin', 'vite.js'), ['build', '--configLoader', 'native', ...outputArgs])
 runNodeScript('Static route export', path.join(showroomRoot, 'scripts', 'prepare-static-routes.mjs'))
 runNodeScript('Offline precache seal', path.join(showroomRoot, 'scripts', 'seal-offline-precache.mjs'))

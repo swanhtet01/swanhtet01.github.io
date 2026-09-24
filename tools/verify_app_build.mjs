@@ -13,7 +13,7 @@ const readFile = async (...args) => {
 }
 
 const root = resolve(import.meta.dirname, '..')
-const dist = resolve(root, 'showroom', 'dist')
+const dist = resolve(process.env.SUPERMEGA_BUILD_OUTPUT || resolve(root, 'showroom', 'dist'))
 const failures = []
 let orderCompletionRuntimeChecks = 0
 let channelOrderRuntimeChecks = 0

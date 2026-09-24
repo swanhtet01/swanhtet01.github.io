@@ -45,7 +45,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const showroomRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const distDir = resolve(showroomRoot, 'dist')
+const distDir = resolve(process.env.SUPERMEGA_BUILD_OUTPUT || resolve(showroomRoot, 'dist'))
 const viteDir = resolve(distDir, '.vite')
 const manifestPath = resolve(viteDir, 'manifest.json')
 const swPath = resolve(distDir, 'sw.js')
