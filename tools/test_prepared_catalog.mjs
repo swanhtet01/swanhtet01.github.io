@@ -91,3 +91,25 @@ print(json.dumps(fixture.project(), ensure_ascii=True))
   await assert.rejects(verifyPreparedCatalogReview(packet, packet.reviewId, Date.parse(packet.expiresAt)))
   await assert.rejects(verifyPreparedCatalogReview(packet, '33333333-3333-4333-8333-333333333333', now))
 })
+
+
+test('saved catalog decisions bind the review and reject false acceptance or broken pagination', async () => {
+  const { verifyCatalogDecisionPage: verify } = await import('../showroom/src/products/ecommerce/prepared-catalog-review.ts')
+  const id = '11111111-1111-4111-8111-111111111111'
+  const review = { reviewId: id, contentRevision: 3, previewDigest: 'sha256:' + 'a'.repeat(64), expiresAt: '2026-09-26T00:00:00Z' }
+  const item = { commandId: id, kind: 'feedback', note: 'စျေးနှုန်း ပြင်ပါ', createdAt: '2026-09-25T00:00:00Z' }
+  const page = { ...review, sourceVersion: 1, decisions: [item], nextAfter: null, publicationAuthorized: false, deploymentAuthorized: false }
+  delete page.expiresAt
+  assert.deepEqual(verify(page, review), page)
+  const accepted = { ...page, decisions: [{ ...item, kind: 'acceptance', note: null }] }
+  assert.deepEqual(verify(accepted, review), accepted)
+  for (const patch of [{ reviewId: 'other' }, { contentRevision: 4 }, { previewDigest: 'wrong' }, { sourceVersion: 0 },
+    { publicationAuthorized: true }, { deploymentAuthorized: true }, { nextAfter: id }, { extra: true },
+    { decisions: [item, item] }, { decisions: [{ ...item, kind: 'acceptance' }] },
+    { decisions: [{ ...item, createdAt: review.expiresAt }] }, { decisions: [{ ...item, note: '' }] }]) {
+    assert.throws(() => verify({ ...page, ...patch }, review))
+  }
+  assert.throws(() => verify(page, review, id))
+  const copy = verify(page, review); copy.decisions[0].note = 'Changed'
+  assert.equal(page.decisions[0].note, item.note)
+})
