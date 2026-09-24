@@ -268,11 +268,33 @@ def exercise(admin_url, runtime_url, head):
             "acceptanceReviewId": accepted_review["reviewId"],
             "acceptancePreview": adapter.preview(recipient, accepted_review["reviewId"]),
             "acceptance": adapter.acceptance(recipient, accepted_review["reviewId"])}}
-    verify_website_review(runtime_url, retained)
+    from tests.test_commerce_runtime import catalog_state, storefront_configuration
+    from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
+    ecommerce = created[PRODUCTS.index("ecommerce")].workspace_id
+    catalog = catalog_state()
+    catalog["storefrontConfiguration"] = storefront_configuration(catalog)
+    with pg._connect(admin_url) as conn:
+        conn.execute("insert into app_private.workspace_memberships(workspace_id,actor_id,status,capabilities,actor_kind) values (%s,%s,'active',array['ecommerce.review'],'human')",
+                     (ecommerce, recipient_id))
+        conn.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'commerce',1,%s::jsonb,%s)",
+                     (ecommerce, json.dumps(catalog), actors[0]))
+    catalog_adapter = EcommerceCustomerReviewStore(store)
+    catalog_review = catalog_adapter.prepare(principal(ecommerce), review_id=str(uuid4()),
+        recipient_actor_id=recipient_id, expected_version=1,
+        expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+    require(catalog_review["persisted"] and not catalog_review["replayed"],
+            "ecommerce_review_not_retained")
+    catalog_recipient = TrialPrincipal(workspace_id=ecommerce, actor_id=recipient_id, actor_kind="human",
+        authenticated=True, session_id=recipient_session, identity_provider="supabase")
+    retained["ecommerce"] = {"workspace": ecommerce, "recipient": recipient_id,
+        "session": recipient_session, "reviewId": catalog_review["reviewId"],
+        "preview": catalog_adapter.preview(catalog_recipient, catalog_review["reviewId"])}
+    require(bool(retained["ecommerce"]["preview"]["preview"]["items"]), "ecommerce_preview_empty")
+    verify_customer_reviews(runtime_url, retained)
     return retained
 
 
-def verify_website_review(runtime_url, retained):
+def verify_customer_reviews(runtime_url, retained):
     """Read-only, nonempty runtime recovery proof; exact rows are also snapshot-bound."""
     from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
     from supermega_runtime.website_customer_review_store import WebsiteCustomerReviewStore
@@ -298,6 +320,18 @@ def verify_website_review(runtime_url, retained):
             and acceptance["status"] == "accepted_for_operator_release_review"
             and acceptance["publicationAuthorized"] is False and acceptance["deploymentAuthorized"] is False,
             "restored_website_acceptance_mismatch")
+
+
+    from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
+    ecommerce = retained["ecommerce"]
+    catalog_adapter = EcommerceCustomerReviewStore(PostgresTrialStore(runtime_url,
+        reducer=lambda *_: None, write_enabled=False))
+    recipient = TrialPrincipal(workspace_id=ecommerce["workspace"], actor_id=ecommerce["recipient"],
+        actor_kind="human", authenticated=True, session_id=ecommerce["session"], identity_provider="supabase")
+    catalog_preview = catalog_adapter.preview(recipient, ecommerce["reviewId"])
+    require(catalog_preview == ecommerce["preview"] and bool(catalog_preview["preview"]["items"])
+            and catalog_preview["publicationAuthorized"] is False
+            and catalog_preview["deploymentAuthorized"] is False, "restored_ecommerce_preview_mismatch")
 
 
 def run(expected_head):
@@ -351,7 +385,7 @@ def run(expected_head):
             pg._restore_database(postgres_bin=binary, admin_password=admin_secret,
                 port=port, backup_file=backup, environment=environment)
             require(snapshot(admin) == before, "restored_records_mismatch")
-            verify_website_review(runtime, retained)
+            verify_customer_reviews(runtime, retained)
             restored_catalog = audit_database(runtime, storage_audit_database_url=admin,
                                               schema_profile="v13-self-serve")
             require(restored_catalog["ready"] is True, "restored_v13_catalog_not_ready")

@@ -3842,7 +3842,7 @@ def _run_rehearsal(
             restored_snapshot = account_proof.snapshot(restore_admin_database_url)
             if restored_snapshot != private_snapshot:
                 raise RehearsalFailure("restored_private_rows_mismatch")
-            account_proof.verify_website_review(restored_runtime_url, retained)
+            account_proof.verify_customer_reviews(restored_runtime_url, retained)
             from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialRateLimited
             store = PostgresTrialStore(restored_runtime_url, reducer=lambda *_: None, write_enabled=True)
             identity = TrialPrincipal(workspace_id=retained["workspace"], actor_id=retained["actor"],
