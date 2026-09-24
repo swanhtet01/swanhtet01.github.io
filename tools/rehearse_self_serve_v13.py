@@ -294,7 +294,7 @@ def exercise(admin_url, runtime_url, head):
     return retained
 
 
-def verify_customer_reviews(runtime_url, retained):
+def verify_website_review(runtime_url, retained):
     """Read-only, nonempty runtime recovery proof; exact rows are also snapshot-bound."""
     from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
     from supermega_runtime.website_customer_review_store import WebsiteCustomerReviewStore
@@ -322,6 +322,11 @@ def verify_customer_reviews(runtime_url, retained):
             "restored_website_acceptance_mismatch")
 
 
+
+def verify_customer_reviews(runtime_url, retained):
+    """Verify both populated customer review products through restricted adapters."""
+    verify_website_review(runtime_url, retained)
+    from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
     from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
     ecommerce = retained["ecommerce"]
     catalog_adapter = EcommerceCustomerReviewStore(PostgresTrialStore(runtime_url,
