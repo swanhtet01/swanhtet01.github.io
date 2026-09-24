@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { after, test } from 'node:test'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, resolve } from 'node:path'
 import { preparePairedPreviewSources } from './prepare_paired_preview_sources.mjs'
@@ -77,4 +77,18 @@ test('wrong commit, existing output, nested output and dirty checkout fail close
   git(['config', '--unset', 'filter.synthetic.smudge'])
   writeFileSync(resolve(repository, 'untracked.txt'), 'synthetic\n')
   assert.throws(() => preparePairedPreviewSources({ repository, commit, output: resolve(fixtureRoot, 'dirty') }), /checkout_dirty/)
+})
+
+
+test('configured checkout filter is refused before output or worktree creation', () => {
+  const output = resolve(fixtureRoot, 'filter-refused')
+  const before = git(['worktree', 'list', '--porcelain'])
+  git(['config', 'filter.synthetic.process', 'synthetic-filter-must-never-run'])
+  try {
+    assert.throws(() => preparePairedPreviewSources({ repository, commit, output }), /checkout_filters_require_review/)
+    assert.equal(existsSync(output), false)
+    assert.equal(git(['worktree', 'list', '--porcelain']), before)
+  } finally {
+    git(['config', '--unset', 'filter.synthetic.process'])
+  }
 })
