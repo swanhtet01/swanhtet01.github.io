@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 const require = createRequire(resolve('showroom/package.json'))
 const { build } = require('esbuild')
 // Reuse the explicitly release-blocked fixture directory.
+const failWrites = process.argv.includes('--fail-writes')
 const out = resolve('showroom/dist/__qa-spa')
 mkdirSync(out, { recursive: true })
 await build({ stdin: { resolveDir: resolve('showroom'), loader: 'tsx', contents: `
@@ -12,7 +13,7 @@ import {EcommerceBuyingWorkspace} from './src/products/ecommerce/EcommerceBuying
 import {createSeedCommerce} from './src/core/commerce-workspace';
 import {buildStorefrontPreview,storefrontPreviewDigest} from './src/products/ecommerce/storefront-model';
 import './src/core/core-app.css'; import './src/products/ecommerce/ecommerce-product.css';
-const memory=()=>{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),clear:()=>m.clear(),key:i=>[...m.keys()][i]??null,get length(){return m.size}}};
+const memory=()=>{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>{if(${failWrites}) throw new Error('Synthetic storage rejection');m.set(k,String(v))},removeItem:k=>m.delete(k),clear:()=>m.clear(),key:i=>[...m.keys()][i]??null,get length(){return m.size}}};
 Object.defineProperty(window,'localStorage',{value:memory()});
 Object.defineProperty(window,'sessionStorage',{value:memory()});
 const commerce=createSeedCommerce();
