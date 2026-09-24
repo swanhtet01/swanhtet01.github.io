@@ -842,7 +842,7 @@ function canonicalManagedJson(value: unknown): string {
     return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalManagedJson(value[key])}`).join(',')}}`
   }
   const serialized = JSON.stringify(value)
-  if (serialized === undefined) throw new ManagedTrialError('Managed Owner Control digest input is invalid.', { code: 'managed_owner_control_digest_invalid' })
+  if (serialized === undefined) throw errorManagedOwnerControlDigestInvalid('Managed Owner Control digest input is invalid.')
   return serialized
 }
 
@@ -852,7 +852,7 @@ export async function assertManagedOwnerControlIntegrity(run: ManagedOwnerContro
   const expectedBaselineDigest = await sha256Text(canonicalManagedJson(baselineBasis))
   if (run.operatingBaseline.baselineDigest !== expectedBaselineDigest
     || run.operatingBaselineDigest !== expectedBaselineDigest) {
-    throw new ManagedTrialError('Managed Owner Control baseline digest is invalid.', { code: 'managed_owner_control_digest_invalid' })
+    throw errorManagedOwnerControlDigestInvalid('Managed Owner Control baseline digest is invalid.')
   }
   for (const item of run.items) {
     const expectedItemId = await sha256Text(canonicalManagedJson({
@@ -862,7 +862,7 @@ export async function assertManagedOwnerControlIntegrity(run: ManagedOwnerContro
       intent: item.intent,
     }))
     if (item.itemId !== expectedItemId) {
-      throw new ManagedTrialError('Managed Owner Control item digest is invalid.', { code: 'managed_owner_control_digest_invalid' })
+      throw errorManagedOwnerControlDigestInvalid('Managed Owner Control item digest is invalid.')
     }
   }
   const expectedRunDigest = await sha256Text(canonicalManagedJson({
@@ -882,7 +882,7 @@ export async function assertManagedOwnerControlIntegrity(run: ManagedOwnerContro
     workspaceId: run.workspaceId,
   }))
   if (run.runDigest !== expectedRunDigest) {
-    throw new ManagedTrialError('Managed Owner Control run digest is invalid.', { code: 'managed_owner_control_digest_invalid' })
+    throw errorManagedOwnerControlDigestInvalid('Managed Owner Control run digest is invalid.')
   }
   return run
 }
@@ -1144,28 +1144,20 @@ export function managedClientImportActivationContext(
     || record.surface !== 'commerce'
     || !Number.isSafeInteger(record.version)
     || record.version < 1) {
-    throw new ManagedTrialError('Create the managed Shop catalog before applying Ecommerce display details.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('Create the managed Shop catalog before applying Ecommerce display details.')
   }
   let priorState: CommerceState
   try {
     priorState = validateCommerceState(record.state)
   } catch {
-    throw new ManagedTrialError('The managed Shop catalog is not valid for an Ecommerce import.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The managed Shop catalog is not valid for an Ecommerce import.')
   }
   if (!priorState.storefrontConfiguration) {
-    throw new ManagedTrialError('Save the Ecommerce storefront name and summary before applying display details.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('Save the Ecommerce storefront name and summary before applying display details.')
   }
   const currentSkus = new Set(priorState.items.map((item) => item.sku))
   if (stagingPackage.rows.some((row) => !currentSkus.has(row.values.sku))) {
-    throw new ManagedTrialError('Every Ecommerce import SKU must exist in the current managed Shop catalog.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('Every Ecommerce import SKU must exist in the current managed Shop catalog.')
   }
   return { expectedVersion: record.version, priorState }
 }
@@ -1268,9 +1260,7 @@ export function assertManagedEcommerceOrderQueueValidation(
     })
   }
   if (response.identity_authority !== 'trusted_managed_identity') {
-    throw new ManagedTrialError('The managed Ecommerce queue check was not bound to trusted workspace identity.', {
-      code: 'managed_ecommerce_order_queue_identity_untrusted',
-    })
+    throw errorManagedEcommerceOrderQueueIdentityUntrusted('The managed Ecommerce queue check was not bound to trusted workspace identity.')
   }
   const validation = response.validation as Record<string, unknown>
   const expected = buildManagedEcommerceOrderQueueValidation(packet, expectedIdentity)
@@ -1308,9 +1298,7 @@ export function assertManagedEcommerceOrderQueueImportPlan(
     })
   }
   if (response.identity_authority !== 'trusted_managed_identity') {
-    throw new ManagedTrialError('The managed Ecommerce import plan was not bound to trusted workspace identity.', {
-      code: 'managed_ecommerce_order_queue_identity_untrusted',
-    })
+    throw errorManagedEcommerceOrderQueueIdentityUntrusted('The managed Ecommerce import plan was not bound to trusted workspace identity.')
   }
   const plan = response.plan as Record<string, unknown>
   const validation = buildManagedEcommerceOrderQueueValidation(packet, expectedIdentity)
@@ -1358,9 +1346,7 @@ export function assertManagedEcommerceOrderQueueApplyPreflight(
     })
   }
   if (response.identity_authority !== 'trusted_managed_identity') {
-    throw new ManagedTrialError('The managed Ecommerce apply preflight was not bound to trusted workspace identity.', {
-      code: 'managed_ecommerce_order_queue_identity_untrusted',
-    })
+    throw errorManagedEcommerceOrderQueueIdentityUntrusted('The managed Ecommerce apply preflight was not bound to trusted workspace identity.')
   }
   const preflight = response.preflight as Record<string, unknown>
   if (preflight.contract !== 'supermega.ecommerce.shop_queue_apply_preflight.v1'
@@ -1487,14 +1473,10 @@ export function assertManagedClientImportValidation(
     })
   }
   if (validation.workspace_id !== expectedIdentity.workspaceId) {
-    throw new ManagedTrialError('The company account returned a different identity.', {
-      code: 'managed_identity_changed',
-    })
+    throw errorManagedIdentityChanged('The company account returned a different identity.')
   }
   if (validation.package_digest !== expectedPackageDigest) {
-    throw new ManagedTrialError('The managed import receipt does not match the package that was sent.', {
-      code: 'managed_client_import_package_changed',
-    })
+    throw errorManagedClientImportPackageChanged('The managed import receipt does not match the package that was sent.')
   }
   return validation as unknown as ManagedClientImportValidation
 }
@@ -1607,9 +1589,7 @@ export function assertManagedShopImportState(
     || state.movements.length !== 0
     || state.closes.length !== 0
     || state.items.length !== stagingPackage.rows.length) {
-    throw new ManagedTrialError('The company account returned an invalid Shop import state.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The company account returned an invalid Shop import state.')
   }
   for (const [index, row] of stagingPackage.rows.entries()) {
     const item = state.items[index]
@@ -1630,9 +1610,7 @@ export function assertManagedShopImportState(
       || item.onHand !== expected.onHand
       || item.reorderAt !== expected.reorderAt
       || item.price !== expected.price) {
-      throw new ManagedTrialError('The managed Shop import does not match the checked rows.', {
-        code: 'managed_client_import_activation_invalid',
-      })
+      throw errorManagedClientImportActivationInvalid('The managed Shop import does not match the checked rows.')
     }
   }
   return state
@@ -1681,9 +1659,7 @@ export function assertManagedPlantImportState(
     || !isCanonicalManagedImportTimestamp(state.openingPlan.confirmedAt)
     || !Array.isArray(state.openingPlan.jobIds)
     || !Array.isArray(state.openingPlan.machineIds)) {
-    throw new ManagedTrialError('The company account returned an invalid Plant opening plan.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The company account returned an invalid Plant opening plan.')
   }
   const confirmedAt = state.openingPlan.confirmedAt as string
   for (const [index, row] of stagingPackage.rows.entries()) {
@@ -1705,20 +1681,14 @@ export function assertManagedPlantImportState(
       || job.priority !== 'normal'
       || job.dueAt !== dueAt
       || state.openingPlan.jobIds[index] !== row.values.jobCode) {
-      throw new ManagedTrialError('The managed Plant import does not match the checked jobs.', {
-        code: 'managed_client_import_activation_invalid',
-      })
+      throw errorManagedClientImportActivationInvalid('The managed Plant import does not match the checked jobs.')
     }
   }
   if (state.openingPlan.jobIds.length !== stagingPackage.rows.length) {
-    throw new ManagedTrialError('The managed Plant opening plan has mismatched job evidence.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The managed Plant opening plan has mismatched job evidence.')
   }
   if (state.openingPlan.machineIds.length !== 0) {
-    throw new ManagedTrialError('The managed Plant opening plan invented equipment records.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The managed Plant opening plan invented equipment records.')
   }
   return state
 }
@@ -1787,9 +1757,7 @@ export function assertManagedPlantEquipmentActivation(
     || !isRecord(response)
     || !isRecord(response.activation)
     || !isRecord(response.result)) {
-    throw new ManagedTrialError('The managed equipment activation is invalid.', {
-      code: 'managed_plant_equipment_activation_invalid',
-    })
+    throw errorManagedPlantEquipmentActivationInvalid('The managed equipment activation is invalid.')
   }
   const activation = response.activation
   const result = response.result
@@ -1807,9 +1775,7 @@ export function assertManagedPlantEquipmentActivation(
     || result.event_type !== 'production.equipment_master.imported'
     || result.version !== expectedVersion + 1
     || typeof result.idempotent_replay !== 'boolean') {
-    throw new ManagedTrialError('The managed equipment response does not match the reviewed package.', {
-      code: 'managed_plant_equipment_activation_invalid',
-    })
+    throw errorManagedPlantEquipmentActivationInvalid('The managed equipment response does not match the reviewed package.')
   }
   let accepted: ProductionState
   let previous: ProductionState
@@ -1817,9 +1783,7 @@ export function assertManagedPlantEquipmentActivation(
     accepted = validateProductionState(result.state)
     previous = validateProductionState(priorState)
   } catch {
-    throw new ManagedTrialError('The company account returned invalid Production equipment state.', {
-      code: 'managed_plant_equipment_activation_invalid',
-    })
+    throw errorManagedPlantEquipmentActivationInvalid('The company account returned invalid Production equipment state.')
   }
   const unchangedFields = ['schema', 'jobs', 'issues', 'machines', 'openingPlan', 'orderExecution', 'orderPortfolio'] as const
   const acceptedRecord = accepted as unknown as Record<string, unknown>
@@ -1844,9 +1808,7 @@ export function assertManagedPlantEquipmentActivation(
     || event.subjectId !== 'equipment-master'
     || event.summary !== `Imported ${equipmentPackage.rows.length} equipment master records`
     || !sameManagedClientImportState(event.equipmentIds, equipmentPackage.rows.map((row) => row.values.equipmentId))) {
-    throw new ManagedTrialError('The managed equipment import changed unrelated Production records.', {
-      code: 'managed_plant_equipment_activation_invalid',
-    })
+    throw errorManagedPlantEquipmentActivationInvalid('The managed equipment import changed unrelated Production records.')
   }
   for (const [index, row] of equipmentPackage.rows.entries()) {
     const asset = importedAssets[index]
@@ -1860,9 +1822,7 @@ export function assertManagedPlantEquipmentActivation(
       || asset.sourceActionId !== expectedActionId
       || asset.sourcePackageDigest !== validation.package_digest
       || asset.importedAt !== event.createdAt) {
-      throw new ManagedTrialError('The managed equipment records do not match the reviewed rows.', {
-        code: 'managed_plant_equipment_activation_invalid',
-      })
+      throw errorManagedPlantEquipmentActivationInvalid('The managed equipment records do not match the reviewed rows.')
     }
   }
   return response as unknown as ManagedPlantEquipmentActivationResult
@@ -1882,9 +1842,7 @@ export function assertManagedPlantEquipmentCommissioning(
     || !isRecord(response)
     || !isRecord(response.commissioning)
     || !isRecord(response.result)) {
-    throw new ManagedTrialError('The managed equipment commissioning response is invalid.', {
-      code: 'managed_plant_equipment_commissioning_invalid',
-    })
+    throw errorManagedPlantEquipmentCommissioningInvalid('The managed equipment commissioning response is invalid.')
   }
   const commissioningReceipt = response.commissioning
   const result = response.result
@@ -1903,9 +1861,7 @@ export function assertManagedPlantEquipmentCommissioning(
     || result.event_type !== 'production.equipment.commissioned'
     || result.version !== expectedVersion + 1
     || typeof result.idempotent_replay !== 'boolean') {
-    throw new ManagedTrialError('The managed commissioning receipt does not match the reviewed equipment.', {
-      code: 'managed_plant_equipment_commissioning_invalid',
-    })
+    throw errorManagedPlantEquipmentCommissioningInvalid('The managed commissioning receipt does not match the reviewed equipment.')
   }
   let accepted: ProductionState
   let previous: ProductionState
@@ -1913,9 +1869,7 @@ export function assertManagedPlantEquipmentCommissioning(
     accepted = validateProductionState(result.state)
     previous = validateProductionState(priorState)
   } catch {
-    throw new ManagedTrialError('The company account returned invalid commissioned equipment state.', {
-      code: 'managed_plant_equipment_commissioning_invalid',
-    })
+    throw errorManagedPlantEquipmentCommissioningInvalid('The company account returned invalid commissioned equipment state.')
   }
   const priorAsset = previous.equipmentMaster?.assets.find((asset) => asset.id === input.equipmentId)
   const acceptedAsset = accepted.equipmentMaster?.assets.find((asset) => asset.id === input.equipmentId)
@@ -1960,9 +1914,7 @@ export function assertManagedPlantEquipmentCommissioning(
     || acceptedAsset.commissioning.installedAt !== input.installedAt
     || acceptedAsset.commissioning.initialState !== input.initialState
     || acceptedAsset.commissioning.safetyBaselineReference !== input.safetyBaselineReference) {
-    throw new ManagedTrialError('The managed commissioning changed unrelated Production records.', {
-      code: 'managed_plant_equipment_commissioning_invalid',
-    })
+    throw errorManagedPlantEquipmentCommissioningInvalid('The managed commissioning changed unrelated Production records.')
   }
   return response as unknown as ManagedPlantEquipmentCommissioningResult
 }
@@ -1981,9 +1933,7 @@ export function assertManagedPlantEquipmentMaintenanceStrategy(
     || !isRecord(response)
     || !isRecord(response.maintenance_strategy)
     || !isRecord(response.result)) {
-    throw new ManagedTrialError('The managed maintenance strategy response is invalid.', {
-      code: 'managed_plant_equipment_maintenance_strategy_invalid',
-    })
+    throw errorManagedPlantEquipmentMaintenanceStrategyInvalid('The managed maintenance strategy response is invalid.')
   }
   const receipt = response.maintenance_strategy
   const result = response.result
@@ -2003,9 +1953,7 @@ export function assertManagedPlantEquipmentMaintenanceStrategy(
     || result.event_type !== 'production.equipment_maintenance_strategy.saved'
     || result.version !== expectedVersion + 1
     || typeof result.idempotent_replay !== 'boolean') {
-    throw new ManagedTrialError('The managed maintenance strategy receipt does not match the reviewed asset.', {
-      code: 'managed_plant_equipment_maintenance_strategy_invalid',
-    })
+    throw errorManagedPlantEquipmentMaintenanceStrategyInvalid('The managed maintenance strategy receipt does not match the reviewed asset.')
   }
   let accepted: ProductionState
   let previous: ProductionState
@@ -2013,9 +1961,7 @@ export function assertManagedPlantEquipmentMaintenanceStrategy(
     accepted = validateProductionState(result.state)
     previous = validateProductionState(priorState)
   } catch {
-    throw new ManagedTrialError('The company account returned an invalid maintenance strategy state.', {
-      code: 'managed_plant_equipment_maintenance_strategy_invalid',
-    })
+    throw errorManagedPlantEquipmentMaintenanceStrategyInvalid('The company account returned an invalid maintenance strategy state.')
   }
   const priorAsset = previous.equipmentMaster?.assets.find((asset) => asset.id === input.equipmentId)
   const acceptedAsset = accepted.equipmentMaster?.assets.find((asset) => asset.id === input.equipmentId)
@@ -2060,9 +2006,7 @@ export function assertManagedPlantEquipmentMaintenanceStrategy(
     || strategy.nextDueAt !== input.nextDueAt
     || strategy.procedureReference !== input.procedureReference
     || strategy.safetyBaselineReference !== input.safetyBaselineReference) {
-    throw new ManagedTrialError('The managed maintenance strategy changed unrelated Production records.', {
-      code: 'managed_plant_equipment_maintenance_strategy_invalid',
-    })
+    throw errorManagedPlantEquipmentMaintenanceStrategyInvalid('The managed maintenance strategy changed unrelated Production records.')
   }
   return response as unknown as ManagedPlantEquipmentMaintenanceStrategyResult
 }
@@ -2178,9 +2122,7 @@ export function assertManagedWebsiteImportState(
     || state.localPublishes.length !== 0
     || !Array.isArray(state.events)
     || state.events.length !== 0) {
-    throw new ManagedTrialError('The company account returned an invalid Website import state.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The company account returned an invalid Website import state.')
   }
   let serverTimestamp = ''
   for (const [index, row] of stagingPackage.rows.entries()) {
@@ -2220,9 +2162,7 @@ export function assertManagedWebsiteImportState(
       || page.seo.description !== ''
       || !isCanonicalManagedImportTimestamp(page.updatedAt)
       || (serverTimestamp && page.updatedAt !== serverTimestamp)) {
-      throw new ManagedTrialError('The managed Website import does not match the checked rows.', {
-        code: 'managed_client_import_activation_invalid',
-      })
+      throw errorManagedClientImportActivationInvalid('The managed Website import does not match the checked rows.')
     }
     serverTimestamp = page.updatedAt as string
   }
@@ -2237,9 +2177,7 @@ export async function assertManagedEcommerceImportState(
   expectedPackageDigest: string,
 ) {
   if (stagingPackage.product !== 'ecommerce') {
-    throw new ManagedTrialError('The Ecommerce import state has the wrong product boundary.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The Ecommerce import state has the wrong product boundary.')
   }
   let accepted: CommerceState
   let previous: CommerceState
@@ -2247,16 +2185,12 @@ export async function assertManagedEcommerceImportState(
     accepted = validateCommerceState(state)
     previous = validateCommerceState(priorState)
   } catch {
-    throw new ManagedTrialError('The company account returned an invalid Ecommerce import state.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The company account returned an invalid Ecommerce import state.')
   }
   const previousConfiguration = previous.storefrontConfiguration
   const acceptedConfiguration = accepted.storefrontConfiguration
   if (!previousConfiguration || !acceptedConfiguration) {
-    throw new ManagedTrialError('The managed Ecommerce import is missing its saved storefront identity.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The managed Ecommerce import is missing its saved storefront identity.')
   }
   const unchangedKeys = [
     'schema',
@@ -2273,9 +2207,7 @@ export async function assertManagedEcommerceImportState(
   const acceptedRecord = accepted as unknown as Record<string, unknown>
   const previousRecord = previous as unknown as Record<string, unknown>
   if (unchangedKeys.some((key) => JSON.stringify(acceptedRecord[key]) !== JSON.stringify(previousRecord[key]))) {
-    throw new ManagedTrialError('The managed Ecommerce receipt changed Shop records and was rejected.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The managed Ecommerce receipt changed Shop records and was rejected.')
   }
   let catalogDigest: string
   try {
@@ -2310,9 +2242,7 @@ export async function assertManagedEcommerceImportState(
     || saved.actor !== expectedIdentity.userId
     || saved.reason !== 'Apply the reviewed Ecommerce merchandising import.'
     || saved.evidenceReference !== `ECOMMERCE-STOREFRONT:${catalogDigest}:R${expectedRevision}`) {
-    throw new ManagedTrialError('The managed Ecommerce import does not match the reviewed display details.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The managed Ecommerce import does not match the reviewed display details.')
   }
   return state
 }
@@ -2332,9 +2262,7 @@ export async function assertManagedClientImportState(
   if (stagingPackage.product === 'ecommerce' && context?.expectedIdentity && context.priorState) {
     return assertManagedEcommerceImportState(state, context.priorState, stagingPackage, context.expectedIdentity, expectedPackageDigest)
   }
-  throw new ManagedTrialError('This managed import does not have an atomic product adapter.', {
-    code: 'managed_client_import_activation_invalid',
-  })
+  throw errorManagedClientImportActivationInvalid('This managed import does not have an atomic product adapter.')
 }
 
 export async function assertManagedClientImportActivation(
@@ -2359,9 +2287,7 @@ export async function assertManagedClientImportActivation(
     || !isRecord(response)
     || !isRecord(response.activation)
     || !isRecord(response.result)) {
-    throw new ManagedTrialError('The managed import activation is invalid.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The managed import activation is invalid.')
   }
   const activation = response.activation
   const result = response.result
@@ -2391,9 +2317,7 @@ export async function assertManagedClientImportActivation(
     || result.event_type !== adapter.eventType
     || result.version !== expectedVersion + 1
     || typeof result.idempotent_replay !== 'boolean') {
-    throw new ManagedTrialError('The managed import response does not match the reviewed package.', {
-      code: 'managed_client_import_activation_invalid',
-    })
+    throw errorManagedClientImportActivationInvalid('The managed import response does not match the reviewed package.')
   }
   await assertManagedClientImportState(result.state, stagingPackage, validation.package_digest, {
     expectedIdentity,
@@ -2411,16 +2335,12 @@ export function assertManagedBootstrapIdentity(
     || !isRecord(bootstrap.readiness)
     || !isRecord(bootstrap.states)
     || !Array.isArray(bootstrap.approvals)) {
-    throw new ManagedTrialError('The company account returned an invalid bootstrap response.', {
-      code: 'managed_bootstrap_invalid',
-    })
+    throw errorManagedBootstrapInvalid('The company account returned an invalid bootstrap response.')
   }
   if (bootstrap.identity.workspace_id !== expectedIdentity.workspaceId
     || bootstrap.identity.actor_id !== expectedIdentity.userId
     || bootstrap.identity.actor_kind !== 'human') {
-    throw new ManagedTrialError('The company account returned a different identity.', {
-      code: 'managed_identity_changed',
-    })
+    throw errorManagedIdentityChanged('The company account returned a different identity.')
   }
   return bootstrap as ManagedBootstrap
 }
@@ -2441,9 +2361,7 @@ export function managedBootstrapHasCapability(
     || capabilities.some((value) => typeof value !== 'string' || !MANAGED_CAPABILITY_PATTERN.test(value))
     || new Set(capabilities).size !== capabilities.length
     || JSON.stringify(capabilities) !== JSON.stringify([...capabilities].sort())) {
-    throw new ManagedTrialError('The company account returned invalid staff capabilities.', {
-      code: 'managed_bootstrap_invalid',
-    })
+    throw errorManagedBootstrapInvalid('The company account returned invalid staff capabilities.')
   }
   return capabilities.includes(capability)
 }
@@ -2460,9 +2378,7 @@ export function managedProductsFromBootstrap(
       || explicit.some((product) => !order.includes(product))
       || new Set(explicit).size !== explicit.length
       || JSON.stringify(explicit) !== JSON.stringify(order.filter((product) => explicit.includes(product)))) {
-      throw new ManagedTrialError('The company account returned invalid product entitlements.', {
-        code: 'managed_bootstrap_invalid',
-      })
+      throw errorManagedBootstrapInvalid('The company account returned invalid product entitlements.')
     }
     return explicit.filter((product) => {
       if (product === 'commerce' || product === 'ecommerce') return Boolean(verified.states.commerce)
@@ -2611,9 +2527,7 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
     || value.secret_values_exposed !== false
     || !Array.isArray(value.workspaces)
     || value.workspaces.length > 50) {
-    throw new ManagedTrialError('The company account directory returned an invalid response.', {
-      code: 'workspace_directory_invalid',
-    })
+    throw errorWorkspaceDirectoryInvalid('The company account directory returned an invalid response.')
   }
   const workspaces = value.workspaces.map((entry) => {
     if (!isRecord(entry)
@@ -2623,9 +2537,7 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
       || !entry.label.trim()
       || entry.label.length > 120
       || !['owner', 'operator', 'viewer'].includes(String(entry.access))) {
-      throw new ManagedTrialError('The company account directory returned an invalid company.', {
-        code: 'workspace_directory_invalid',
-      })
+      throw errorWorkspaceDirectoryInvalid('The company account directory returned an invalid company.')
     }
     return {
       workspaceId: entry.workspace_id,
@@ -2634,9 +2546,7 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
     }
   })
   if (new Set(workspaces.map((entry) => entry.workspaceId)).size !== workspaces.length) {
-    throw new ManagedTrialError('The company account directory returned duplicate companies.', {
-      code: 'workspace_directory_invalid',
-    })
+    throw errorWorkspaceDirectoryInvalid('The company account directory returned duplicate companies.')
   }
   return workspaces
 }
@@ -2706,7 +2616,7 @@ async function requestManagedSignup(input: CreateAccountInput | string, shownTer
     throw new ManagedTrialError('Read and accept the current terms before requesting an account.', { code: 'account_terms_required' })
   }
   const emailRedirectTo = managedAccountRedirectUrl('signup')
-  if (!managedTrialAuthConfigured()) throw new ManagedTrialError('Company signup is unavailable.', { code: 'auth_not_configured' })
+  if (!managedTrialAuthConfigured()) throw errorAuthNotConfigured('Company signup is unavailable.')
   if (signupRequestPending) throw new ManagedTrialError('An account request is already pending.', { code: 'account_request_pending' })
   signupRequestPending = true
   try {
@@ -2725,7 +2635,7 @@ async function requestManagedSignup(input: CreateAccountInput | string, shownTer
       throw new ManagedTrialError('The terms changed. Reload and read the current version before trying again.', { code: 'account_terms_changed' })
     }
     const supabase = await authClient()
-    if (!supabase) throw new ManagedTrialError('Company signup is unavailable.', { code: 'auth_not_configured' })
+    if (!supabase) throw errorAuthNotConfigured('Company signup is unavailable.')
     const current = await supabase.auth.getSession()
     if (current.error || current.data.session) {
       throw new ManagedTrialError('Sign out before requesting another account.', { code: 'auth_existing_session' })
@@ -2763,9 +2673,7 @@ export function resendManagedAccountConfirmation(email: string, shownTermsVersio
 export async function requestManagedPasswordRecovery(email: string) {
   const supabase = await authClient()
   if (!supabase) {
-    throw new ManagedTrialError('Managed password recovery is not configured in this app build.', {
-      code: 'auth_not_configured',
-    })
+    throw errorAuthNotConfigured('Managed password recovery is not configured in this app build.')
   }
   const { error } = await supabase.auth.resetPasswordForEmail(normalizeAuthEmail(email), {
     redirectTo: managedAccountRedirectUrl(),
@@ -2822,7 +2730,7 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
 
   forgetWorkspace()
   const supabase = await authClient()
-  if (!supabase) throw new ManagedTrialError('Managed account setup is unavailable.', { code: 'auth_not_configured' })
+  if (!supabase) throw errorAuthNotConfigured('Managed account setup is unavailable.')
   try {
     const { data, error } = code
       ? await supabase.auth.exchangeCodeForSession(code)
@@ -2893,7 +2801,7 @@ async function discoverManagedWorkspaces(session: Session): Promise<ManagedWorks
 export async function discoverManagedWorkspacesForCurrentSession(): Promise<ManagedWorkspaceSignIn> {
   const supabase = await authClient()
   if (!supabase) {
-    throw new ManagedTrialError('Managed sign-in is not configured in this app build.', { code: 'auth_not_configured' })
+    throw errorAuthNotConfigured('Managed sign-in is not configured in this app build.')
   }
   const { data, error } = await supabase.auth.getSession()
   if (error || !validNamedUserSession(data.session)) throw accountLinkError()
@@ -2908,9 +2816,7 @@ async function discoverForUnchangedSession(supabase: ManagedAuthClient, session:
   if (error || !validNamedUserSession(data.session)
     || data.session.user.id !== session.user.id
     || data.session.access_token !== session.access_token) {
-    throw new ManagedTrialError('The managed session changed. Sign in again.', {
-      code: 'managed_identity_changed',
-    })
+    throw errorManagedIdentityChanged('The managed session changed. Sign in again.')
   }
   return directory
 }
@@ -2923,9 +2829,7 @@ export async function completeManagedAccountPassword(password: string): Promise<
   }
   const supabase = await authClient()
   if (!supabase) {
-    throw new ManagedTrialError('Managed account setup is not configured in this app build.', {
-      code: 'auth_not_configured',
-    })
+    throw errorAuthNotConfigured('Managed account setup is not configured in this app build.')
   }
   const { data, error } = await supabase.auth.updateUser({ password })
   if (error || data.user.is_anonymous !== false) {
@@ -2940,7 +2844,7 @@ export async function completeManagedAccountPassword(password: string): Promise<
 export async function signInAndDiscoverManagedWorkspaces(email: string, password: string): Promise<ManagedWorkspaceSignIn> {
   const supabase = await authClient()
   if (!supabase) {
-    throw new ManagedTrialError('Managed sign-in is not configured in this app build.', { code: 'auth_not_configured' })
+    throw errorAuthNotConfigured('Managed sign-in is not configured in this app build.')
   }
   forgetWorkspace()
   const { data, error } = await supabase.auth.signInWithPassword({ email: normalizeAuthEmail(email), password })
@@ -2973,9 +2877,7 @@ export async function completeManagedWorkspaceSignIn(
   const supabase = await authClient()
   const { data, error } = await supabase?.auth.getSession() ?? { data: { session: null }, error: null }
   if (error || !data.session || data.session.user.id !== signIn.userId || data.session.user.is_anonymous !== false) {
-    throw new ManagedTrialError('The managed session changed. Sign in again.', {
-      code: 'managed_identity_changed',
-    })
+    throw errorManagedIdentityChanged('The managed session changed. Sign in again.')
   }
   rememberWorkspace(workspaceId)
   return identity(data.session, workspaceId)
@@ -3094,9 +2996,7 @@ export async function createSelfServeWorkspace(
 ): Promise<ManagedSelfServeWorkspace> {
   const supabase = await authClient()
   if (!supabase) {
-    throw new ManagedTrialError('Self-serve activation is not configured in this app build.', {
-      code: 'auth_not_configured',
-    })
+    throw errorAuthNotConfigured('Self-serve activation is not configured in this app build.')
   }
   const { data, error } = await supabase.auth.getSession()
   if (error || !validNamedUserSession(data.session)) {
@@ -3127,7 +3027,7 @@ async function parseError(response: Response) {
 
 async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
   const supabase = await authClient()
-  if (!supabase) throw new ManagedTrialError('Managed sign-in is not configured.', { code: 'auth_not_configured' })
+  if (!supabase) throw errorAuthNotConfigured('Managed sign-in is not configured.')
   const workspaceId = normalizeWorkspaceId(currentManagedWorkspace())
   let { data, error } = await supabase.auth.getSession()
   if (error || !data.session) throw new ManagedTrialError('Sign in to the company account first.', { code: 'auth_required' })
@@ -3140,15 +3040,11 @@ async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
     throw new ManagedTrialError('The managed session expired. Sign in again.', { code: 'auth_expired' })
   }
   if (currentManagedWorkspace() !== workspaceId) {
-    throw new ManagedTrialError('The company account changed during authentication.', {
-      code: 'managed_identity_changed',
-    })
+    throw errorManagedIdentityChanged('The company account changed during authentication.')
   }
   const resolvedIdentity = identity(data.session, workspaceId)
   if (expectedIdentity && !sameManagedIdentity(resolvedIdentity, expectedIdentity)) {
-    throw new ManagedTrialError('The company account changed during the request.', {
-      code: 'managed_identity_changed',
-    })
+    throw errorManagedIdentityChanged('The company account changed during the request.')
   }
   return { session: data.session, workspaceId }
 }
@@ -3205,7 +3101,7 @@ export async function validateManagedClientImport(
 
 export async function loadManagedWebsiteRecipients(expectedIdentity: ManagedIdentity, after?: string) {
   if (after !== undefined && (after.length !== 36 || !managedReviewUuid.test(after))) {
-    throw new ManagedTrialError('The customer page is invalid.', { code: 'website_review_invalid' })
+    throw errorWebsiteReviewInvalid('The customer page is invalid.')
   }
   return authorizedRequest<unknown>('/api/trial/v1/website-review-recipients' + (after ? `?after=${after}` : ''),
     { ...privateReviewRequest }, true, expectedIdentity)
@@ -3216,7 +3112,7 @@ export async function prepareManagedWebsiteReview(
 ) {
   for (const id of [payload.reviewId, payload.recipientGrantId]) {
     if (id.length !== 36 || !managedReviewUuid.test(id)) {
-      throw new ManagedTrialError('The selected customer review is invalid.', { code: 'website_review_invalid' })
+      throw errorWebsiteReviewInvalid('The selected customer review is invalid.')
     }
   }
   return authorizedRequest<unknown>('/api/trial/v1/website-reviews',
@@ -3225,7 +3121,7 @@ export async function prepareManagedWebsiteReview(
 
 export async function withdrawManagedWebsiteReview(reviewId: string, expectedIdentity: ManagedIdentity) {
   if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)) {
-    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+    throw errorWebsiteReviewInvalid('This review link is invalid.')
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}/withdraw`,
     { method: 'POST', body: JSON.stringify({}), ...privateReviewRequest }, true, expectedIdentity)
@@ -3240,7 +3136,7 @@ export async function loadManagedWebsiteReviewStaffPage(expectedIdentity: Manage
   for (const value of [reviewId, after]) {
     if (value !== undefined && (value.length !== 36 || !/^[0-9a-f-]{36}$/.test(value)
       || !managedReviewUuid.test(value))) {
-      throw new ManagedTrialError('The review page is invalid.', { code: 'website_review_invalid' })
+      throw errorWebsiteReviewInvalid('The review page is invalid.')
     }
   }
   const path = '/api/trial/v1/website-reviews' + (reviewId ? `/${reviewId}/change-requests` : '')
@@ -3253,7 +3149,7 @@ const privateReviewRequest = { cache: 'no-store', redirect: 'error', credentials
 
 export async function loadManagedWebsiteReview(reviewId: string, expectedIdentity: ManagedIdentity) {
   if (!managedReviewUuid.test(reviewId)) {
-    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+    throw errorWebsiteReviewInvalid('This review link is invalid.')
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}`,
     { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
@@ -3264,7 +3160,7 @@ export async function sendManagedWebsiteReviewChanges(
   expectedIdentity: ManagedIdentity,
 ) {
   if (!managedReviewUuid.test(payload.reviewId)) {
-    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+    throw errorWebsiteReviewInvalid('This review link is invalid.')
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${payload.reviewId}/change-requests`,
     { method: 'POST', body: JSON.stringify(payload), ...privateReviewRequest },
@@ -3273,7 +3169,7 @@ export async function sendManagedWebsiteReviewChanges(
 
 export async function loadManagedWebsiteAcceptance(reviewId: string, expectedIdentity: ManagedIdentity) {
   if (!managedReviewUuid.test(reviewId)) {
-    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+    throw errorWebsiteReviewInvalid('This review link is invalid.')
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${reviewId}/acceptance`,
     { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
@@ -3284,7 +3180,7 @@ export async function sendManagedWebsiteAcceptance(
   expectedIdentity: ManagedIdentity,
 ) {
   if (!managedReviewUuid.test(payload.reviewId)) {
-    throw new ManagedTrialError('This review link is invalid.', { code: 'website_review_invalid' })
+    throw errorWebsiteReviewInvalid('This review link is invalid.')
   }
   return authorizedRequest<unknown>(`/api/trial/v1/website-reviews/${payload.reviewId}/acceptance`,
     { method: 'POST', body: JSON.stringify(payload), ...privateReviewRequest },
@@ -3303,9 +3199,7 @@ export async function preflightManagedClientImport(request: {
   if (request.validation.workspace_id !== request.identity.workspaceId
     || request.validation.package_digest !== currentDigest
     || request.validation.product !== submittedPackage.product) {
-    throw new ManagedTrialError('The validated import changed before preflight.', {
-      code: 'managed_client_import_package_changed',
-    })
+    throw errorManagedClientImportPackageChanged('The validated import changed before preflight.')
   }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/imports/apply-preflight',
@@ -3425,9 +3319,7 @@ export async function applyManagedClientImport(request: {
     try {
       priorStateSnapshot = structuredClone(request.priorState)
     } catch {
-      throw new ManagedTrialError('The managed Shop state could not be retained for Ecommerce activation.', {
-        code: 'managed_client_import_activation_invalid',
-      })
+      throw errorManagedClientImportActivationInvalid('The managed Shop state could not be retained for Ecommerce activation.')
     }
   }
   const currentDigest = await sha256Text(body)
@@ -3455,25 +3347,19 @@ export async function applyManagedClientImport(request: {
     || request.preflight.preflight_digest !== expectedPreflightDigest
     || request.preflight.external_writes_performed !== false
     || !CLIENT_IMPORT_COMMAND_ID.test(request.commandId)) {
-    throw new ManagedTrialError('The validated import changed before activation.', {
-      code: 'managed_client_import_package_changed',
-    })
+    throw errorManagedClientImportPackageChanged('The validated import changed before activation.')
   }
   let submittedPriorState: CommerceState | undefined
   if (submittedPackage.product === 'ecommerce') {
     try {
       submittedPriorState = validateCommerceState(priorStateSnapshot)
     } catch {
-      throw new ManagedTrialError('The managed Shop state changed before Ecommerce activation.', {
-        code: 'managed_client_import_activation_invalid',
-      })
+      throw errorManagedClientImportActivationInvalid('The managed Shop state changed before Ecommerce activation.')
     }
     const currentSkus = new Set(submittedPriorState.items.map((item) => item.sku))
     if (!submittedPriorState.storefrontConfiguration
       || submittedPackage.rows.some((row) => !currentSkus.has(row.values.sku))) {
-      throw new ManagedTrialError('The managed Ecommerce prerequisites changed before activation.', {
-        code: 'managed_client_import_activation_invalid',
-      })
+      throw errorManagedClientImportActivationInvalid('The managed Ecommerce prerequisites changed before activation.')
     }
   }
   const response = await authorizedRequest<unknown>(
@@ -3517,9 +3403,7 @@ export async function applyManagedPlantEquipmentImport(request: {
   try {
     priorState = validateProductionState(structuredClone(request.priorState))
   } catch {
-    throw new ManagedTrialError('The Production workspace changed before equipment activation.', {
-      code: 'managed_plant_equipment_activation_invalid',
-    })
+    throw errorManagedPlantEquipmentActivationInvalid('The Production workspace changed before equipment activation.')
   }
   if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)
     || !Number.isSafeInteger(request.expectedVersion)
@@ -3568,9 +3452,7 @@ export async function commissionManagedPlantEquipment(request: {
   try {
     priorState = validateProductionState(structuredClone(request.priorState))
   } catch {
-    throw new ManagedTrialError('The Production workspace changed before commissioning.', {
-      code: 'managed_plant_equipment_commissioning_invalid',
-    })
+    throw errorManagedPlantEquipmentCommissioningInvalid('The Production workspace changed before commissioning.')
   }
   const installedAt = new Date(request.input.installedAt)
   const sourceAsset = priorState.equipmentMaster?.assets.find((asset) => asset.id === request.input.equipmentId)
@@ -3586,9 +3468,7 @@ export async function commissionManagedPlantEquipment(request: {
     || !request.input.safetyBaselineReference
     || request.input.safetyBaselineReference !== request.input.safetyBaselineReference.trim()
     || request.input.safetyBaselineReference.length > 240) {
-    throw new ManagedTrialError('The reviewed equipment commissioning request is invalid.', {
-      code: 'managed_plant_equipment_commissioning_invalid',
-    })
+    throw errorManagedPlantEquipmentCommissioningInvalid('The reviewed equipment commissioning request is invalid.')
   }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/production/equipment/commission',
@@ -3628,9 +3508,7 @@ export async function saveManagedPlantEquipmentMaintenanceStrategy(request: {
   try {
     priorState = validateProductionState(structuredClone(request.priorState))
   } catch {
-    throw new ManagedTrialError('The Production workspace changed before maintenance strategy review.', {
-      code: 'managed_plant_equipment_maintenance_strategy_invalid',
-    })
+    throw errorManagedPlantEquipmentMaintenanceStrategyInvalid('The Production workspace changed before maintenance strategy review.')
   }
   const sourceAsset = priorState.equipmentMaster?.assets.find((asset) => asset.id === request.input.equipmentId)
   const nextDueAt = new Date(request.input.nextDueAt)
@@ -3651,9 +3529,7 @@ export async function saveManagedPlantEquipmentMaintenanceStrategy(request: {
     || !Number.isFinite(nextDueAt.getTime())
     || nextDueAt.toISOString() !== request.input.nextDueAt
     || canonicalFields.some(([value, maximum]) => !value || value !== value.trim() || value.length > maximum)) {
-    throw new ManagedTrialError('The reviewed maintenance strategy request is invalid.', {
-      code: 'managed_plant_equipment_maintenance_strategy_invalid',
-    })
+    throw errorManagedPlantEquipmentMaintenanceStrategyInvalid('The reviewed maintenance strategy request is invalid.')
   }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/production/equipment/maintenance-strategy',
@@ -3925,9 +3801,7 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
     ? orders.find((candidate) => isRecord(candidate) && candidate.id === reservation.orderId)
     : null
   if (!isRecord(order)) {
-    throw new ManagedTrialError('The managed Shop order intent could not be isolated from the reviewed action.', {
-      code: 'managed_order_intent_invalid',
-    })
+    throw errorManagedOrderIntentInvalid('The managed Shop order intent could not be isolated from the reviewed action.')
   }
   const advancedFields = [
     'sourceRecordId', 'evidenceReference', 'promotionDecision', 'shippingDecision',
@@ -3949,24 +3823,18 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
     || typeof order.fulfilmentReference !== 'string'
     || typeof order.promisedAt !== 'string'
     || typeof order.createdAt !== 'string') {
-    throw new ManagedTrialError('The managed Shop order is missing required server-intent fields.', {
-      code: 'managed_order_intent_invalid',
-    })
+    throw errorManagedOrderIntentInvalid('The managed Shop order is missing required server-intent fields.')
   }
   let paymentTermsDays: 0 | 7 | 30 = 0
   if (order.paymentDueAt !== undefined) {
     if (typeof order.paymentDueAt !== 'string') {
-      throw new ManagedTrialError('The managed Shop payment term is invalid.', {
-        code: 'managed_order_intent_invalid',
-      })
+      throw errorManagedOrderIntentInvalid('The managed Shop payment term is invalid.')
     }
     const createdAt = Date.parse(order.createdAt)
     const paymentDueAt = Date.parse(order.paymentDueAt)
     const days = (paymentDueAt - createdAt) / 86_400_000
     if (days !== 7 && days !== 30) {
-      throw new ManagedTrialError('The managed Shop payment term is unsupported.', {
-        code: 'managed_order_intent_invalid',
-      })
+      throw errorManagedOrderIntentInvalid('The managed Shop payment term is unsupported.')
     }
     paymentTermsDays = days
   }
@@ -4055,14 +3923,10 @@ function managedProductionJobIntent(state: Record<string, unknown>, evidence: Ma
     ? jobs.find((candidate) => isRecord(candidate) && candidate.id === event.subjectId)
     : null
   if (!isRecord(job)) {
-    throw new ManagedTrialError('The managed Plant job intent could not be isolated from the reviewed action.', {
-      code: 'managed_production_job_intent_invalid',
-    })
+    throw errorManagedProductionJobIntentInvalid('The managed Plant job intent could not be isolated from the reviewed action.')
   }
   if (job.shopDemandSource !== undefined && !isRecord(job.shopDemandSource)) {
-    throw new ManagedTrialError('The managed Plant Shop-demand source is invalid.', {
-      code: 'managed_production_job_intent_invalid',
-    })
+    throw errorManagedProductionJobIntentInvalid('The managed Plant Shop-demand source is invalid.')
   }
   if (typeof job.id !== 'string'
     || typeof job.line !== 'string'
@@ -4073,9 +3937,7 @@ function managedProductionJobIntent(state: Record<string, unknown>, evidence: Ma
     || typeof job.owner !== 'string'
     || (job.priority !== 'urgent' && job.priority !== 'normal' && job.priority !== 'low')
     || typeof job.dueAt !== 'string') {
-    throw new ManagedTrialError('The managed Plant job is missing required server-intent fields.', {
-      code: 'managed_production_job_intent_invalid',
-    })
+    throw errorManagedProductionJobIntentInvalid('The managed Plant job is missing required server-intent fields.')
   }
   return {
     jobId: job.id,
@@ -4175,7 +4037,7 @@ export async function decideManagedApproval(
 
 export async function loadManagedEcommerceReview(reviewId: string, expectedIdentity: ManagedIdentity) {
   if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)) {
-    throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
+    throw errorEcommerceReviewInvalid('This review link is invalid.')
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}`,
     { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
@@ -4184,7 +4046,7 @@ export async function loadManagedEcommerceReview(reviewId: string, expectedIdent
 export async function loadManagedEcommerceDecisions(reviewId: string, expectedIdentity: ManagedIdentity, after?: string) {
   for (const id of [reviewId, ...(after === undefined ? [] : [after])]) {
     if (!managedReviewUuid.test(id)) {
-      throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
+      throw errorEcommerceReviewInvalid('This review link is invalid.')
     }
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/decisions${after ? `?after=${after}` : ''}`,
@@ -4198,7 +4060,7 @@ export type EcommerceReviewDecision = { reviewId: string; commandId: string; pre
 export async function sendManagedEcommerceDecision(payload: EcommerceReviewDecision, expectedIdentity: ManagedIdentity) {
   for (const id of [payload.reviewId, payload.commandId]) {
     if (!managedReviewUuid.test(id)) {
-      throw new ManagedTrialError('This review command is invalid.', { code: 'ecommerce_review_invalid' })
+      throw errorEcommerceReviewInvalid('This review command is invalid.')
     }
   }
   const route = payload.decision === 'accept_preview_for_release_review' ? 'acceptance' : 'change-requests'
@@ -4210,7 +4072,7 @@ export async function sendManagedEcommerceDecision(payload: EcommerceReviewDecis
 
 export async function loadManagedEcommerceRecipients(expectedIdentity: ManagedIdentity, after?: string) {
   if (after !== undefined && (after.length !== 36 || !managedReviewUuid.test(after))) {
-    throw new ManagedTrialError('The customer page is invalid.', { code: 'ecommerce_review_invalid' })
+    throw errorEcommerceReviewInvalid('The customer page is invalid.')
   }
   return authorizedRequest<unknown>('/api/trial/v1/ecommerce-review-recipients' + (after ? `?after=${after}` : ''),
     { ...privateReviewRequest }, true, expectedIdentity)
@@ -4221,7 +4083,7 @@ export async function prepareManagedEcommerceReview(
 ) {
   for (const id of [payload.reviewId, payload.recipientGrantId]) {
     if (id.length !== 36 || !managedReviewUuid.test(id)) {
-      throw new ManagedTrialError('The selected customer review is invalid.', { code: 'ecommerce_review_invalid' })
+      throw errorEcommerceReviewInvalid('The selected customer review is invalid.')
     }
   }
   return authorizedRequest<unknown>('/api/trial/v1/ecommerce-reviews',
@@ -4230,7 +4092,7 @@ export async function prepareManagedEcommerceReview(
 
 export async function withdrawManagedEcommerceReview(reviewId: string, expectedIdentity: ManagedIdentity) {
   if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)) {
-    throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
+    throw errorEcommerceReviewInvalid('This review link is invalid.')
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/withdraw`,
     { method: 'POST', body: JSON.stringify({}), ...privateReviewRequest }, true, expectedIdentity)
@@ -4238,7 +4100,7 @@ export async function withdrawManagedEcommerceReview(reviewId: string, expectedI
 
 export async function reconcileManagedEcommerceReview(reviewId: string, expectedIdentity: ManagedIdentity) {
   if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)) {
-    throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
+    throw errorEcommerceReviewInvalid('This review link is invalid.')
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/reconciliation`,
     { ...privateReviewRequest }, true, expectedIdentity)
@@ -4252,8 +4114,28 @@ export async function loadManagedEcommercePreparation(expectedIdentity: ManagedI
 export async function resolveExpiredManagedEcommerceReview(reviewId: string, expiresAt: string, expectedIdentity: ManagedIdentity) {
   if (reviewId.length !== 36 || !managedReviewUuid.test(reviewId)
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt) || !Number.isFinite(Date.parse(expiresAt))) {
-    throw new ManagedTrialError('This saved review request is invalid.', { code: 'ecommerce_review_invalid' })
+    throw errorEcommerceReviewInvalid('This saved review request is invalid.')
   }
   return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/resolve-expired`,
     { method: 'POST', body: JSON.stringify({ expiresAt }), ...privateReviewRequest }, true, expectedIdentity)
 }
+
+// Reuse stable error codes while preserving each call site message and typed error.
+function codedManagedError(code: string) {
+  return (message: string) => new ManagedTrialError(message, { code })
+}
+const errorManagedOwnerControlDigestInvalid = codedManagedError('managed_owner_control_digest_invalid')
+const errorManagedClientImportActivationInvalid = codedManagedError('managed_client_import_activation_invalid')
+const errorManagedEcommerceOrderQueueIdentityUntrusted = codedManagedError('managed_ecommerce_order_queue_identity_untrusted')
+const errorManagedIdentityChanged = codedManagedError('managed_identity_changed')
+const errorManagedClientImportPackageChanged = codedManagedError('managed_client_import_package_changed')
+const errorManagedPlantEquipmentActivationInvalid = codedManagedError('managed_plant_equipment_activation_invalid')
+const errorManagedPlantEquipmentCommissioningInvalid = codedManagedError('managed_plant_equipment_commissioning_invalid')
+const errorManagedPlantEquipmentMaintenanceStrategyInvalid = codedManagedError('managed_plant_equipment_maintenance_strategy_invalid')
+const errorManagedBootstrapInvalid = codedManagedError('managed_bootstrap_invalid')
+const errorWorkspaceDirectoryInvalid = codedManagedError('workspace_directory_invalid')
+const errorAuthNotConfigured = codedManagedError('auth_not_configured')
+const errorWebsiteReviewInvalid = codedManagedError('website_review_invalid')
+const errorManagedOrderIntentInvalid = codedManagedError('managed_order_intent_invalid')
+const errorManagedProductionJobIntentInvalid = codedManagedError('managed_production_job_intent_invalid')
+const errorEcommerceReviewInvalid = codedManagedError('ecommerce_review_invalid')
