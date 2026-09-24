@@ -30,7 +30,7 @@ function harness(responses, search = '', hash = '') {
   let timerId = 0
   const form = {
     querySelector(selector) {
-      if (!fields.has(selector)) fields.set(selector, { value: selector === '[name="product"]' ? 'guide' : '', selectedOptions: [], addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
+      if (!fields.has(selector)) fields.set(selector, { open: true, value: selector === '[name="product"]' ? 'guide' : '', selectedOptions: [], addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
       return fields.get(selector)
     },
     addEventListener(name, callback) { if (name === 'submit') handler = callback },
@@ -70,6 +70,22 @@ function harness(responses, search = '', hash = '') {
   if (!hash) form.querySelector('[name="goal"]').value = 'Please build my business website'
   return { fields, headings, calls, timers, windowEvents, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
+
+test('complete assisted briefs collapse the editable service choice only', () => {
+  assert.match(html, /data-contact-service open/)
+  for (const product of ['website', 'ecommerce']) {
+    const state = harness([], `?product=${product}&source=${product}-brief`, '#company=Example&goal=Prepare%20our%20site')
+    assert.equal(state.fields.get('[data-contact-service]').open, false)
+    assert.equal(state.fields.get('[data-contact-service-summary]').textContent.toLowerCase(), product)
+    state.changeProduct('shop')
+    assert.equal(state.fields.get('[data-contact-service-summary]').textContent, 'Shop')
+    assert.equal(state.fields.get('[name="goal"]').value, 'Prepare our site')
+    assert.equal(state.calls.length, 0)
+  }
+  for (const [search, hash] of [['', ''], ['?product=website', '#company=Example&goal=Prepare'], ['?product=website&source=website-brief', '#company=Example']]) {
+    assert.equal(harness([], search, hash).fields.get('[data-contact-service]').open, true)
+  }
+})
 
 test('prefilled brief does not claim that customer setup is complete', () => {
   const state = harness([], '?product=website', '#company=Example&goal=Prepare%20our%20website')
