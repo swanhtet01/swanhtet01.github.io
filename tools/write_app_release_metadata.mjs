@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
+import { APP_DESCRIPTION } from './app_metadata.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 'utf8'))
@@ -25,7 +26,7 @@ const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" rol
 const webmanifest = {
   name: manifest.brand.name,
   short_name: manifest.brand.name,
-  description: manifest.company.supporting,
+  description: APP_DESCRIPTION,
   start_url: '/',
   display: 'standalone',
   background_color: manifest.brand.colors.background,

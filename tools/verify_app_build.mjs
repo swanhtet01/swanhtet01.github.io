@@ -2,6 +2,7 @@ import { readdir, readFile as readRawFile, stat } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { APP_DESCRIPTION } from './app_metadata.mjs'
 import { brotliCompressSync, constants as zlibConstants } from 'node:zlib'
 
 import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
@@ -536,7 +537,7 @@ else {
   const webmanifest = JSON.parse(await readFile(manifestPath, 'utf8'))
   if (webmanifest.name !== manifest.brand.name
     || webmanifest.short_name !== manifest.brand.name
-    || webmanifest.description !== manifest.company.supporting
+    || webmanifest.description !== APP_DESCRIPTION
     || webmanifest.icons?.[0]?.src !== '/favicon.svg') fail('wrong_app_webmanifest')
   // Design phase 2 item 8: the vector favicon alone does not satisfy Chrome/Android
   // installability (wants a raster PNG at 192/512) and iOS "Add to Home Screen" does
@@ -552,9 +553,13 @@ else {
 if (!indexSource.includes('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />')
   || !await exists(resolve(dist, 'apple-touch-icon.png'))) fail('missing_apple_touch_icon')
 if (!indexSource.includes('<title>SuperMega</title>')
-  || !indexSource.includes(manifest.company.supporting)
+  || !indexSource.includes(APP_DESCRIPTION)
   || indexSource.includes('SuperMega Company OS')
   || indexSource.includes('Run Product, Commerce, and Production')) fail('stale_app_metadata')
+for (const metadataTag of ['name="description"', 'property="og:description"', 'name="twitter:description"']) {
+  const expected = `<meta ${metadataTag} content="${APP_DESCRIPTION}" />`
+  if (!indexSource.includes(expected) || !(await readFile(rootPage, 'utf8')).includes(expected)) fail('app_description_metadata_drift')
+}
 // The app is served under `script-src 'self'` with no hash and no nonce, from both the
 // vercel.json response header and index.html's own meta tag. An inline <script> under that
 // policy is REFUSED -- it does not warn, it simply never runs. The service-worker registration
