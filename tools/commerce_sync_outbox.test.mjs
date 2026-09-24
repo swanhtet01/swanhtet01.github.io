@@ -411,3 +411,34 @@ test('a blocked database open closes the connection it still receives', async ()
     restore()
   }
 })
+
+
+test('confirmation retry recovers only its exact pending command', () => withOutbox(async () => {
+  const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]])
+  const locks = serialLocks()
+  const staged = await stageLocalCommerceSyncIntent(stageInput())
+  const expected = { ...staged.intent }
+  for (const mismatch of [
+    { commandId: 'OTHER' }, { eventType: 'commerce.order.created' },
+    { candidateRaw: canonicalRaw(divergedState) },
+    ...['actionId', 'actor', 'capturedAt', 'reason', 'evidenceReference'].map(key => ({ evidence: { ...expected.evidence, [key]: 'different' } })),
+  ]) {
+    await assert.rejects(() => recoverLocalCommerceSyncOutbox(storage, locks, { ...expected, ...mismatch }), /does not match/)
+    assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(baseState))
+    assert.equal((await readLocalCommerceSyncIntents()).length, 1)
+  }
+  const result = await recoverLocalCommerceSyncOutbox(storage, locks, expected)
+  assert.equal(result.status, 'ready')
+  assert.equal(result.replayedCount, 1)
+  assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(candidateState))
+  await assert.rejects(() => recoverLocalCommerceSyncOutbox(storage, locks, expected), /does not match/)
+}))
+
+test('confirmation retry refuses multiple pending commands', () => withOutbox(async () => {
+  const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]])
+  const first = await stageLocalCommerceSyncIntent(stageInput())
+  await stageLocalCommerceSyncIntent(stageInput({ commandId: 'CMD-SECOND', evidence: proof({ actionId: 'ACT-SECOND' }) }))
+  await assert.rejects(() => recoverLocalCommerceSyncOutbox(storage, serialLocks(), first.intent), /does not match/)
+  assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(baseState))
+  assert.equal((await readLocalCommerceSyncIntents()).length, 2)
+}))
