@@ -2816,6 +2816,7 @@ input, select, textarea { border-color: var(--core-field-line); }
    Pulling it inside the box keeps keyboard focus visible on all four tabs.
    ========================================================================== */
 @media (max-width: 840px) {
+  .commerce-screen > .product-task-tabs { display: none; }
   .mobile-nav.mobile-task-nav { grid-template-columns: repeat(4,minmax(0,1fr)); }
   .mobile-nav.mobile-task-nav.has-switch { grid-template-columns: repeat(5,minmax(0,1fr)); }
   .mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }

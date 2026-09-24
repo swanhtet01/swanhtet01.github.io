@@ -192,17 +192,17 @@ function checkDecision(decision, label) {
   check(d.reason.includes('4'), 'low-stock: reason includes count')
 }
 
-// 20. low stock singular SKU
+// 20. low stock singular item
 {
   const d = decideShopNextAction(baseline({ lowStockCount: 1 }))
-  check(d.reason.includes('1 SKU '), 'low-stock singular: "1 SKU "')
-  check(!d.reason.includes('1 SKUs'), 'low-stock singular: no plural')
+  check(d.reason.includes('1 item is '), 'low-stock singular: "1 item is "')
+  check(!d.reason.includes('1 items'), 'low-stock singular: no plural')
 }
 
-// 21. low stock plural SKUs
+// 21. low stock plural items
 {
   const d = decideShopNextAction(baseline({ lowStockCount: 2 }))
-  check(d.reason.includes('2 SKUs'), 'low-stock plural: "2 SKUs"')
+  check(d.reason.includes('2 items are'), 'low-stock plural: "2 items are"')
 }
 
 // 22. low stock beats !inventoryReady (priority test)

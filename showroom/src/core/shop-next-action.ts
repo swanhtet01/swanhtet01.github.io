@@ -82,7 +82,7 @@ export function decideShopNextAction(input: ShopNextActionInput): ShopNextAction
     nextAction: 'Open reorder queue',
     ownerGate: 'Confirm supplier reference, expected arrival, and quantity.',
     path: '/shop/?tab=inventory',
-    reason: `${input.lowStockCount} SKU${input.lowStockCount === 1 ? '' : 's'} are at or below reorder level.`,
+    reason: `${input.lowStockCount} item${input.lowStockCount === 1 ? ' is' : 's are'} running low.`,
     stage: 'Reorder low stock',
     track: 'Inventory',
   }
@@ -91,7 +91,7 @@ export function decideShopNextAction(input: ShopNextActionInput): ShopNextAction
     nextAction: 'Open inventory setup',
     ownerGate: 'Enable the inventory foundation before location-level stock control.',
     path: '/shop/?tab=inventory',
-    reason: 'Stock can move from simple on-hand counts to location, lot, ATP, reservation, and count evidence.',
+    reason: 'Add where you keep stock so you can track quantities at each location.',
     stage: 'Set up stock foundation',
     track: 'Inventory',
   }
@@ -100,7 +100,7 @@ export function decideShopNextAction(input: ShopNextActionInput): ShopNextAction
     nextAction: 'Open counter',
     ownerGate: 'Confirm each sale before stock or cash records change.',
     path: '/shop/?tab=counter',
-    reason: 'Orders, inventory, purchase orders, and stock foundation are ready for front-counter work.',
+    reason: 'You’re ready to record the next sale.',
     stage: 'Open counter sales',
     track: 'Counter',
   }
