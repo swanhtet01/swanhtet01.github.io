@@ -155,7 +155,7 @@ export function ManagedAccountPage() {
 
   if (recoveryRequest) {
     return <div className="workspace-screen managed-login-screen">
-      <PageHeading eyebrow="Company account" title="Recover your account." copy="Enter your work email to request a secure password link." />
+      <PageHeading eyebrow="Company account" title="Recover your account." copy={managedReady ? 'Enter your work email to request a secure password link.' : ''} />
       {!managedReady ? <ManagedUnavailable productIntent={productIntent} search={location.search} /> : sent ? <section className="managed-login-panel" aria-label="Recovery link requested">
         <div><span className="core-eyebrow">Check your inbox</span><h2>Recovery requested.</h2><p>{notice}</p></div>
         <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/login', productIntent, location.search)}>Back to sign in</Link><button className="core-button account-link-button" onClick={() => { setSent(false); setNotice('') }} type="button">Try another email</button></div>

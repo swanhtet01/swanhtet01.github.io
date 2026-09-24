@@ -75,10 +75,11 @@ test('unavailable recovery preserves private review context without sample or ac
   const source = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
   for (const pathname of ['/account/recovery', '/account/setup']) for (const reviewing of [true, false]) {
-    const exports = {}, links = []
+    const exports = {}, links = [], headings = []
     const jsx = (type, props) => {
       if (typeof type === 'function') return type(props)
       if (type === 'a') links.push(props)
+      if (type === 'heading') headings.push(props)
       return { type, props }
     }
     const dependencies = {
@@ -89,6 +90,7 @@ test('unavailable recovery preserves private review context without sample or ac
     }
     runInNewContext(compiled, { exports, URLSearchParams, require: name => { assert.ok(name in dependencies, name); return dependencies[name] } })
     exports.ManagedAccountPage()
+    if (pathname === '/account/recovery') assert.equal(headings[0].copy, '')
     if (reviewing) {
       assert.equal(links.length, 1)
       assert.equal(links[0].to, `/login?product=website&review=${id}`)
