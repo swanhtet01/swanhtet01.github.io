@@ -412,3 +412,51 @@ class CatalogEnrollmentSqlTests(unittest.TestCase):
         with self.assertRaises(TrialPermissionDenied):
             adapter.prepare(writer,review_id=str(uuid4()),recipient_grant_id=plan['grantId'],
                 expected_version=1,expires_at=(now+timedelta(hours=1)).isoformat())
+
+
+        # Real approved enrollments exercise the SQL limit/cursor boundary, not
+        # fabricated event rows or a mocked recipient directory.
+        enrolled={}
+        for index in range(51):
+            member, member_session=str(uuid4()),str(uuid4())
+            with pg._connect(self.admin_url) as connection:
+                connection.execute('insert into auth.users values (%s,false)',(member,))
+                connection.execute('insert into auth.sessions(id,user_id) values (%s,%s)',(member_session,member))
+            at=datetime.now(timezone.utc)
+            candidate=compile_staff_access_plan(activation,member_actor_id=member,
+                member_label=f'Synthetic reviewer {index:02}',role_id='ecommerce-reviewer',
+                approval_id=str(uuid4()),approved_at=_timestamp_text(at),
+                expires_at=_timestamp_text(at+timedelta(hours=1)),now=at)
+            provisioner.authorize(candidate,activation,verified_owner_actor_id=OWNER_ID,
+                verified_owner_session_id=OWNER_SESSION_ID,decision_note='Disposable pagination fixture.')
+            provisioner.apply(candidate,activation)
+            enrolled[candidate['grantId']]=candidate
+        expected=sorted(enrolled)
+        with TestClient(app) as client:
+            first=client.get(list_url,headers=headers)
+            self.assertEqual(first.status_code,200,first.text)
+            first=first.json()
+            self.assertEqual([row['grantId'] for row in first['recipients']],expected[:50])
+            self.assertEqual(first['nextAfter'],expected[49])
+            second=client.get(list_url+'?after='+first['nextAfter'],headers=headers)
+            self.assertEqual(second.status_code,200,second.text)
+            second=second.json()
+            self.assertEqual([row['grantId'] for row in second['recipients']],expected[50:])
+            self.assertIsNone(second['nextAfter'])
+            for row in first['recipients']+second['recipients']:
+                self.assertEqual(set(row),{'grantId','label'})
+            self.assertFalse(first['accessGranted']);self.assertFalse(second['accessGranted'])
+            # An already-seen cursor stays usable after that member is revoked.
+            provisioner.revoke(enrolled[expected[49]],activation,**args)
+            after_cursor=client.get(list_url+'?after='+first['nextAfter'],headers=headers).json()
+            self.assertEqual(after_cursor,second)
+            # A member removed after listing cannot be used for preparation.
+            provisioner.revoke(enrolled[expected[50]],activation,**args)
+            final=client.get(list_url+'?after='+first['nextAfter'],headers=headers).json()
+            self.assertEqual(final['recipients'],[]);self.assertIsNone(final['nextAfter'])
+            denied=client.post(prepare_url,headers=headers,json=dict(payload,
+                reviewId=str(uuid4()),recipientGrantId=expected[50]))
+            self.assertEqual(denied.status_code,403)
+            fresh=client.get(list_url,headers=headers).json()
+            self.assertEqual([row['grantId'] for row in fresh['recipients']],expected[:49])
+            self.assertIsNone(fresh['nextAfter'])
