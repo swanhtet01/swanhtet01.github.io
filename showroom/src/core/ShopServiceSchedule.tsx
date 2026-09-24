@@ -177,20 +177,17 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     const expectedVersion = managedVersionRef.current
     if (!identity) {
       const baseRevision = schedule?.revision ?? null
-      setSchedule(next)
       // The book is written under an exclusive lock, validated, and read back, so
       // a quota or private-mode rejection can no longer look like a saved booking.
       return mutateShopServiceSchedule(planShopServiceScheduleWrite(baseRevision, next))
         .then((result) => {
           if (result.ok) {
+            setSchedule(next)
             setNotice(message)
             return true
           }
-          // The refused change already advanced the on-screen book, so put the
-          // stored truth back. Without this the guard only survives ONE
-          // collision: the phantom revision would match storage by coincidence on
-          // the next change, and that change would overwrite the other tab's book
-          // exactly as if no guard existed.
+          // Refresh after a collision without showing an unconfirmed revision.
+          // Keeping the current form mounted also preserves failed-save inputs.
           try {
             setSchedule(readShopServiceSchedule(window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)))
           } catch {

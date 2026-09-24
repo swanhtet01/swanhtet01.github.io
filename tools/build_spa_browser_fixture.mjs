@@ -22,9 +22,24 @@ print(json.dumps(samples))
 if(result.status !== 0) throw new Error(result.stderr)
 const samples = JSON.parse(result.stdout)
 const failWrites = process.argv.includes('--fail-writes')
-const mode = process.argv.includes('--setup') ? 'setup' : 'redeem'
+const mode = process.argv.includes('--legacy') ? 'legacy' : process.argv.includes('--setup') ? 'setup' : 'redeem'
 const fixture = samples[mode === 'setup' ? '4' : '7']
-const at = samples['8'].serviceSchedule.events.at(-1).happenedAt
+let at = samples['8'].serviceSchedule.events.at(-1).happenedAt
+if (mode === 'legacy') {
+ const bundle = await build({entryPoints:['showroom/src/core/shop-service-scheduling.ts'],bundle:true,platform:'node',format:'esm',write:false})
+ const model = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
+ at = '2026-09-24T03:00:00.000Z'
+ const proof = {actor:'Synthetic QA',reason:'Legacy equipment browser fixture',happenedAt:at}
+ const initial = model.createShopServiceSchedule('spa')
+ const equipped = model.registerShopServiceResource(initial,{name:'Synthetic massage equipment',kind:'equipment'},proof)
+ fixture.serviceSchedule = model.scheduleShopServiceBooking(equipped,{
+  customerName:'Synthetic legacy customer',contact:'qa-legacy-reference',appointmentUpdates:'declined',
+  serviceId:equipped.services[0].id,resourceId:equipped.resources.at(-1).id,
+  startsAt:'2026-09-25T03:00:00.000Z',note:'Preserve this booking history',
+ },proof)
+ const validation = spawnSync('python',['-X','utf8','-c','import json,sys; from supermega_runtime.commerce_runtime import _validate_service_schedule; _validate_service_schedule(json.load(sys.stdin))'],{input:JSON.stringify(fixture.serviceSchedule),encoding:'utf8'})
+ if(validation.status !== 0) throw new Error(validation.stderr)
+}
 const out = resolve('showroom/dist/__qa-spa')
 mkdirSync(out,{recursive:true})
 await build({stdin:{resolveDir:resolve('showroom'),loader:'tsx',contents:`

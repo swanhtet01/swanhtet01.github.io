@@ -55,6 +55,31 @@ for (const mode of ['pending-success', 'rejected', 'busy', 'unready', 'switched'
 }
 console.log('Managed schedule acknowledgement: 7 handler scenarios passed')
 
+for (const accepted of [false, true]) {
+  const updates = []
+  let finish
+  const pending = new Promise(resolve => { finish = resolve })
+  const stored = { revision: 1 }
+  const proposed = { revision: 2 }
+  const context = {
+    managedIdentityRef: { current: null }, managedVersionRef: { current: null },
+    schedule: stored, setSchedule: value => updates.push(value), setNotice: () => {},
+    planShopServiceScheduleWrite: (revision, next) => ({ revision, next }),
+    mutateShopServiceSchedule: () => pending,
+    readShopServiceSchedule: () => stored,
+    SHOP_SERVICE_SCHEDULE_STORAGE_KEY: 'qa',
+    window: { localStorage: { getItem: () => '{}' } },
+  }
+  vm.createContext(context)
+  vm.runInContext(code, context)
+  const outcome = context.commit(proposed, 'Saved.')
+  assert.equal(updates.length, 0, 'Pending local save must keep the current form mounted')
+  finish({ ok: accepted, error: 'Synthetic rejection' })
+  assert.equal(await outcome, accepted)
+  assert.deepEqual(updates, [accepted ? proposed : stored])
+}
+console.log('Local schedule waits for storage acknowledgement and reloads stored truth on rejection')
+
 const formStart = source.indexOf('  async function createBooking(')
 const formEnd = source.indexOf('  function advanceBooking(', formStart)
 assert.ok(formStart > 0 && formEnd > formStart)
