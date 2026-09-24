@@ -111,6 +111,7 @@ export async function rehearseLocalClientInstall(preparation, founderConfirmatio
       .filter((key) => key !== sentinelKey)
       .sort()
     invariant(installedStorageKeys.length === order.length, 'local_client_install_storage_scope_invalid')
+    const installedSnapshot = JSON.stringify(storage.entries().sort(([left], [right]) => left.localeCompare(right)))
     for (const product of order) {
       replayResults.push(await installer.applyPreparedLocalClientDemoProduct(
         preparation,
@@ -118,6 +119,10 @@ export async function rehearseLocalClientInstall(preparation, founderConfirmatio
         founderConfirmation,
       ))
     }
+    invariant(
+      JSON.stringify(storage.entries().sort(([left], [right]) => left.localeCompare(right))) === installedSnapshot,
+      'local_client_install_replay_changed_saved_records',
+    )
     preparation.products.forEach((product, index) => {
       invariant(
         installResults[index]?.product === product.product
