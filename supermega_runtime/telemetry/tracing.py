@@ -121,6 +121,7 @@ class RedactingSpanProcessor:
 
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import Event, ReadableSpan
+        from opentelemetry.sdk.util.instrumentation import InstrumentationScope
         from opentelemetry.trace import Link, SpanContext, Status
 
         def safe_context(context: Any) -> Any:
@@ -171,7 +172,9 @@ class RedactingSpanProcessor:
             status=Status(status_code=span.status.status_code),
             start_time=span.start_time,
             end_time=span.end_time,
-            instrumentation_scope=getattr(span, "instrumentation_scope", None),
+            # Module names, versions, schema URLs and scope attributes are
+            # caller-controlled too; keep one fixed export identity.
+            instrumentation_scope=InstrumentationScope(SERVICE_NAME),
         )
 
 

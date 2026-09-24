@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import Event, ReadableSpan
+from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import Link, SpanContext, Status, StatusCode, TraceFlags, TraceState
 
 from supermega_runtime.telemetry.tracing import RedactingSpanProcessor
@@ -36,6 +37,28 @@ def sample_span():
 
 
 class SpanProcessorTests(unittest.TestCase):
+    def test_instrumentation_metadata_cannot_bypass_export_scrubbing(self):
+        scope = InstrumentationScope(
+            "private-module", version="private-version",
+            schema_url="https://example.invalid/private-schema",
+            attributes={"customer.note": "private-note"},
+        )
+        original = ReadableSpan(
+            name="shop.order.confirm",
+            context=SpanContext(1, 2, False, TraceFlags(1)),
+            instrumentation_scope=scope, start_time=1, end_time=3,
+        )
+        exporter = RecordingExporter()
+        RedactingSpanProcessor(exporter).on_end(original)
+        self.assertEqual(len(exporter.spans), 1)
+        safe = exporter.spans[0].instrumentation_scope
+        self.assertEqual(safe.name, "supermega-runtime")
+        self.assertFalse(safe.version)
+        self.assertFalse(safe.schema_url)
+        self.assertFalse(safe.attributes)
+        self.assertEqual(original.instrumentation_scope, scope)
+        self.assertEqual(original.instrumentation_scope.attributes["customer.note"], "private-note")
+
     def test_resource_metadata_cannot_bypass_export_scrubbing(self):
         original = ReadableSpan(
             name="shop.order.confirm",
