@@ -51,3 +51,12 @@ test('unchanged identity returns parsed data with at most one authentication ret
   await assert.rejects(denied.request(), /request_failed/)
   assert.deepEqual(denied.counts(), { fetches: 2, refreshes: 1 })
 })
+
+test('authentication retry retains the original company and never resends after a switch', async () => {
+  const run = harness([() => {
+    run.change()
+    return { status: 401 }
+  }])
+  await assert.rejects(run.request(), /managed_identity_changed/)
+  assert.deepEqual(run.counts(), { fetches: 1, refreshes: 1 })
+})
