@@ -1139,6 +1139,14 @@ def create_trial_router(
             return adapter.preview(principal, review_id)
         return await ecommerce_review_request(request, operation)
 
+    @router.get("/ecommerce-reviews/{review_id}/reconciliation")
+    async def reconcile_ecommerce_review(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            if request.query_params:
+                raise TrialValidationError("ecommerce_review_request_invalid")
+            return adapter.reconcile(principal, review_id)
+        return await ecommerce_review_request(request, operation)
+
     @router.post("/ecommerce-reviews/{review_id}/withdraw")
     async def withdraw_ecommerce_review(review_id: str, request: Request) -> JSONResponse:
         def operation(adapter, principal, body):

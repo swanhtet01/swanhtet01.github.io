@@ -87,6 +87,25 @@ class EcommerceCustomerReviewStore:
                 publicationAuthorized=False,deploymentAuthorized=False)
         return result
 
+    def reconcile(self,principal,review_id):
+        """Read only the caller's retained assignment; absence stays uncertain."""
+        review_id=uuid(review_id)
+        with self._transaction(principal,capability='commerce.write') as (cursor,actor):
+            cursor.execute("""select source_version,content_revision,preview_digest,prepared_at,
+                    expires_at,status,clock_timestamp() as read_at
+                from app_private.ecommerce_customer_reviews
+                where workspace_id=%s and prepared_by=%s and review_id=%s""",
+                (actor.workspace_id,actor.actor_id,review_id))
+            row=cursor.fetchone()
+            if row is None: raise TrialPermissionDenied('commerce.write')
+            status=row['status']
+            if status=='active' and row['expires_at']<=row['read_at']: status='expired'
+            result=dict(reviewId=review_id,status=status,sourceVersion=row['source_version'],
+                contentRevision=row['content_revision'],previewDigest=row['preview_digest'],
+                preparedAt=row['prepared_at'].isoformat(),expiresAt=row['expires_at'].isoformat(),
+                readAt=row['read_at'].isoformat(),publicationAuthorized=False,deploymentAuthorized=False)
+        return result
+
     def preview(self,principal,review_id):
         review_id=uuid(review_id)
         with self._transaction(principal) as (cursor,actor):
