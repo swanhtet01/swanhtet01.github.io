@@ -172,8 +172,9 @@ const loadStart = source.indexOf('  useEffect(() => {\n    let active = true')
 const loadEnd = source.indexOf('\n  // Used only where', loadStart)
 assert.ok(loadStart > 0 && loadEnd > loadStart)
 const loadCode = transformSync(source.slice(loadStart, loadEnd), { loader: 'ts' }).code
-for (const mode of ['cache-rejected', 'load-rejected', 'empty-company', 'account-changed', 'unmounted']) {
-  let finish, reject, cleanup
+for (const mode of ['cache-rejected', 'load-rejected', 'empty-company', 'account-changed', 'unmounted', 'unmounted-during-recheck']) {
+  let finish, reject, cleanup, finishRecheck
+  const recheck = new Promise(resolve => { finishRecheck = resolve })
   const pending = new Promise((resolve, fail) => { finish = resolve; reject = fail })
   const updates = []
   const context = {
@@ -181,7 +182,7 @@ for (const mode of ['cache-rejected', 'load-rejected', 'empty-company', 'account
     currentManagedIdentity: async () => ({ workspaceId: 'qa', userId: 'qa-user' }),
     managedIdentityRef: { current: null }, managedVersionRef: { current: null },
     loadManagedServiceSchedule: () => pending,
-    isCurrentScheduleIdentity: async () => mode !== 'account-changed',
+    isCurrentScheduleIdentity: async () => mode === 'unmounted-during-recheck' ? recheck : mode !== 'account-changed',
     setManagedConnected: () => {}, setManagedPrivacyOwner: value => updates.push(['owner', value]),
     setSchedule: value => updates.push(['schedule', value]), setScheduleState: value => updates.push(['schedule', value]), setRetentionDraft: () => {},
     persistLocal: () => { throw new Error('Device cache rejected') },
@@ -195,6 +196,11 @@ for (const mode of ['cache-rejected', 'load-rejected', 'empty-company', 'account
   if (mode === 'load-rejected') reject(new Error('Synthetic server failure'))
   else finish({ version: 8, privacyOwner: true, schedule: mode === 'empty-company' ? null : { revision: 4, privacyPolicy: {} } })
   await new Promise(resolve => setImmediate(resolve))
+  if (mode === 'unmounted-during-recheck') {
+    cleanup()
+    finishRecheck(true)
+    await new Promise(resolve => setImmediate(resolve))
+  }
   if (mode === 'cache-rejected') {
     assert.equal(context.managedVersionRef.current, 8)
     assert.equal(updates.filter(([kind]) => kind === 'schedule').length, 1)

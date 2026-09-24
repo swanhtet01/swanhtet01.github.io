@@ -146,6 +146,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         if (active) setNotice('Account changed. Reload to open the current company schedule.')
         return
       }
+      if (!active) return
       managedVersionRef.current = managed.version
       setManagedPrivacyOwner(Boolean(managed.privacyOwner))
       if (managed.schedule) {
