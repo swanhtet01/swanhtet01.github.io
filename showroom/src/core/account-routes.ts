@@ -25,7 +25,7 @@ export function managedAccountRequestUrl(value: string | null) {
 
 export function managedAccountPath(path: '/login' | '/account/recovery', value: string | null, search = '') {
   const reviewPath = managedLoginReviewPath(search)
-  if (reviewPath) return `${path}?product=website&review=${reviewPath.split('/').at(-1)}`
+  if (reviewPath) return `${path}?product=${reviewPath.split('/')[1]}&review=${reviewPath.split('/').at(-1)}`
   const product = accountProductSlug(value)
   return product ? `${path}?product=${encodeURIComponent(product)}` : path
 }
@@ -42,9 +42,13 @@ function canonicalReviewId(value: string | null) {
 }
 
 export function managedLoginReviewPath(search: string) {
-  const values = new URLSearchParams(search).getAll('review')
+  const query = new URLSearchParams(search)
+  const products = query.getAll('product')
+  if (products.length > 1 || (products.length === 1 && !['website', 'ecommerce'].includes(products[0]))) return null
+  const product = products[0] ?? 'website'
+  const values = query.getAll('review')
   const review = values.length === 1 ? canonicalReviewId(values[0]) : null
-  return review ? `/website/review/${review}` : null
+  return review ? `/${product}/review/${review}` : null
 }
 
 export function customerWebsiteReviewLoginPath(reviewId: string) {
@@ -57,4 +61,9 @@ export function alternateManagedWorkspaceId(
   currentWorkspaceId: string,
 ) {
   return workspaces.find((workspace) => workspace.workspaceId !== currentWorkspaceId)?.workspaceId ?? ''
+}
+
+export function customerEcommerceReviewLoginPath(reviewId: string) {
+  const review = canonicalReviewId(reviewId)
+  return review ? `/login?product=ecommerce&review=${review}` : '/login?product=ecommerce'
 }

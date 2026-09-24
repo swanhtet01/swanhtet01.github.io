@@ -2660,7 +2660,10 @@ function managedAccountRedirectUrl(purpose: 'recovery' | 'signup' = 'recovery') 
   const redirect = new URL('/account/setup', origin)
   redirect.searchParams.set('mode', purpose)
   const reviewPath = purpose === 'recovery' ? managedLoginReviewPath(window.location.search) : null
-  if (reviewPath) redirect.searchParams.set('review', reviewPath.split('/').at(-1)!)
+  if (reviewPath) {
+    redirect.searchParams.set('review', reviewPath.split('/').at(-1)!)
+    if (reviewPath.startsWith('/ecommerce/')) redirect.searchParams.set('product', 'ecommerce')
+  }
   return redirect.toString()
 }
 
@@ -2788,8 +2791,9 @@ async function initializeManagedAccountSetup(): Promise<ManagedAccountSetup> {
   const query = new URLSearchParams(rawQuery)
   const fragment = new URLSearchParams(rawFragment)
   const purpose = accountPurpose(query.get('mode'), fragment.get('type'))
-  const queryAllowed = exactAuthParameters(query, ['code', 'mode', 'review', 'error', 'error_code', 'error_description'])
+  const queryAllowed = exactAuthParameters(query, ['code', 'mode', 'review', 'product', 'error', 'error_code', 'error_description'])
     && (!query.has('review') || (purpose === 'recovery' && managedLoginReviewPath(rawQuery) !== null))
+    && (!query.has('product') || (query.has('review') && query.get('product') === 'ecommerce'))
   const fragmentAllowed = exactAuthParameters(fragment, ['access_token', 'refresh_token', 'expires_at', 'expires_in', 'token_type', 'type', 'error', 'error_code', 'error_description'])
   const code = query.get('code') ?? ''
   const accessToken = fragment.get('access_token') ?? ''
@@ -4148,4 +4152,12 @@ export async function decideManagedApproval(
     expectedIdentity,
   )
   return response.approval
+}
+
+export async function loadManagedEcommerceReview(reviewId: string, expectedIdentity: ManagedIdentity) {
+  if (reviewId.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(reviewId)) {
+    throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}`,
+    { cache: 'no-store', redirect: 'error', credentials: 'omit' }, true, expectedIdentity)
 }

@@ -4,7 +4,7 @@ import test from 'node:test'
 import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
 import * as routes from '../showroom/src/core/account-routes.ts'
-import { customerWebsiteReviewLoginPath, managedLoginReviewPath } from '../showroom/src/core/account-routes.ts'
+import { customerWebsiteReviewLoginPath, customerEcommerceReviewLoginPath, managedAccountPath, managedLoginReviewPath } from '../showroom/src/core/account-routes.ts'
 
 const id = '11111111-1111-4111-8111-111111111111'
 test('review login round-trip retains only the canonical review ID', () => {
@@ -97,4 +97,16 @@ test('unavailable recovery preserves private review context without sample or ac
       assert.ok(links.some(link => link.href === routes.managedAccountRequestUrl('shop')))
     }
   }
+})
+
+test('Ecommerce review sign-in retains only the canonical product and review', () => {
+  const link = customerEcommerceReviewLoginPath(id)
+  assert.equal(link, `/login?product=ecommerce&review=${id}`)
+  const search = link.slice(link.indexOf('?'))
+  assert.equal(managedLoginReviewPath(search), `/ecommerce/review/${id}`)
+  assert.equal(managedAccountPath('/account/recovery', 'website', search), `/account/recovery?product=ecommerce&review=${id}`)
+  for (const product of ['shop', 'https://example.invalid', 'ecommerce&product=website']) {
+    assert.equal(managedLoginReviewPath(`?product=${product}&review=${id}`), null)
+  }
+  assert.equal(customerEcommerceReviewLoginPath(id+'\n'), '/login?product=ecommerce')
 })

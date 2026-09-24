@@ -280,12 +280,12 @@ export function ManagedLoginPage() {
 
   return (
     <div className={`workspace-screen managed-login-screen${creatingAccount ? ' signup-entry-screen' : ''}`}>
-      <PageHeading eyebrow={reviewReturnPath ? 'Private Website review' : 'Company account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Open your company.'} copy={reviewReturnPath ? 'Use the account SuperMega assigned to this review. No trial or company setup is needed.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : 'Sign in once. SuperMega finds the companies assigned to you.'} />
-      {reviewReturnPath ? <p className="form-notice" role="status">After sign-in, you will return to your prepared Website review. Only its assigned account can open it.</p> : null}
+      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Company account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Open your company.'} copy={reviewReturnPath ? 'Use the account SuperMega assigned to this review. No trial or company setup is needed.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : 'Sign in once. SuperMega finds the companies assigned to you.'} />
+      {reviewReturnPath ? <p className="form-notice" role="status">After sign-in, you will return to your prepared review. Only its assigned account can open it.</p> : null}
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
-          <Link className="core-button primary" to={portalEntryPath}>{reviewReturnPath ? 'Return to Website review' : bi('Open company')}</Link>
+          <Link className="core-button primary" to={portalEntryPath}>{reviewReturnPath ? 'Return to review' : bi('Open company')}</Link>
           <button className="core-button" disabled={busy} onClick={() => void chooseAnotherCompany()} type="button">{busy ? 'Checking...' : 'Switch company'}</button>
           <button className="account-inline-link account-link-button" disabled={busy} onClick={() => void signOut()} type="button">Sign out</button>
         </div>
