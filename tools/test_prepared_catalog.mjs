@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import vm from 'node:vm'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { validateStorefrontPreview, STOREFRONT_PREVIEW_SCHEMA } from '../showroom/src/products/ecommerce/storefront-model.ts'
 import { COMMERCE_WORKSPACE_SCHEMA } from '../showroom/src/core/commerce-workspace.ts'
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
@@ -47,4 +49,45 @@ test('prepared review binds exact identity, revision, expiry and catalog digest'
   }
   await assert.rejects(verifyPreparedCatalogReview(packet, id + '\n', now))
   await assert.rejects(verifyPreparedCatalogReview(packet, id, NaN))
+})
+
+
+test('Python private review projection validates and renders in the browser contract', async () => {
+  // Synthetic state only: production preparation/projection code, no DB or provider.
+  const script = `
+import json
+from dataclasses import replace
+from datetime import timedelta
+from tests.test_ecommerce_customer_review import CatalogReviewTests
+from tests.test_commerce_runtime import storefront_configuration
+from supermega_runtime.ecommerce_customer_review import prepare_catalog_review
+fixture = CatalogReviewTests()
+fixture.setUp()
+fixture.state['items'][0]['name'] = '\u101c\u1000\u103a\u1016\u1000\u103a <tea>'
+fixture.state['items'][0]['price'] = 12500
+fixture.state['storefrontConfiguration'] = storefront_configuration(fixture.state, store_name='\u1006\u102d\u102f\u1004\u103a', revision=3)
+fixture.review = prepare_catalog_review(fixture.state, principal=fixture.actor,
+    readiness=replace(fixture.ready, capabilities=frozenset({'commerce.write'})),
+    review_id=fixture.review['reviewId'], recipient_actor_id=fixture.actor.actor_id,
+    expires_at=fixture.now + timedelta(days=1), now=fixture.now)
+print(json.dumps(fixture.project(), ensure_ascii=True))
+`
+  const packet = JSON.parse(execFileSync('python', ['-c', script], {
+    cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', timeout: 15000,
+  }))
+  const { verifyPreparedCatalogReview } = await import('../showroom/src/products/ecommerce/prepared-catalog-review.ts')
+  const now = Date.parse('2026-09-25T00:00:00Z')
+  const verified = await verifyPreparedCatalogReview(packet, packet.reviewId, now)
+  assert.equal(verified.contentRevision, 3)
+  assert.equal(verified.preview.storeName, 'ဆိုင်')
+  assert.equal(verified.preview.items[0].unitPriceMmk, 12500)
+  const html = render(verified.preview)
+  assert.ok(html.includes('&lt;tea&gt;'))
+  assert.ok(html.includes('12,500 MMK'))
+  assert.doesNotMatch(html, /<(?:a|button|input|form|img|script|iframe)\b/)
+  const changed = structuredClone(packet)
+  changed.preview.items[0].unitPriceMmk++
+  await assert.rejects(verifyPreparedCatalogReview(changed, packet.reviewId, now))
+  await assert.rejects(verifyPreparedCatalogReview(packet, packet.reviewId, Date.parse(packet.expiresAt)))
+  await assert.rejects(verifyPreparedCatalogReview(packet, '33333333-3333-4333-8333-333333333333', now))
 })
