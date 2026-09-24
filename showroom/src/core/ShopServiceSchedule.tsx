@@ -162,32 +162,38 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   }
 
   function commit(next: ShopServiceSchedule, message: string) {
-    const baseRevision = schedule?.revision ?? null
-    setSchedule(next)
-    // The book is written under an exclusive lock, validated, and read back, so
-    // a quota or private-mode rejection can no longer look like a saved booking.
-    void mutateShopServiceSchedule(planShopServiceScheduleWrite(baseRevision, next))
-      .then((result) => {
-        if (result.ok) {
-          setNotice(message)
-          return
-        }
-        // The refused change already advanced the on-screen book, so put the
-        // stored truth back. Without this the guard only survives ONE
-        // collision: the phantom revision would match storage by coincidence on
-        // the next change, and that change would overwrite the other tab's book
-        // exactly as if no guard existed.
-        try {
-          setSchedule(readShopServiceSchedule(window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)))
-        } catch {
-          // Storage is unreadable; the notice already tells them to reload, and
-          // showing a stale book is better than showing none.
-        }
-        setNotice(`${result.error} The schedule below was reloaded from this device.`)
-      })
     const identity = managedIdentityRef.current
     const expectedVersion = managedVersionRef.current
-    if (!identity || expectedVersion === null) return
+    if (!identity) {
+      const baseRevision = schedule?.revision ?? null
+      setSchedule(next)
+      // The book is written under an exclusive lock, validated, and read back, so
+      // a quota or private-mode rejection can no longer look like a saved booking.
+      void mutateShopServiceSchedule(planShopServiceScheduleWrite(baseRevision, next))
+        .then((result) => {
+          if (result.ok) {
+            setNotice(message)
+            return
+          }
+          // The refused change already advanced the on-screen book, so put the
+          // stored truth back. Without this the guard only survives ONE
+          // collision: the phantom revision would match storage by coincidence on
+          // the next change, and that change would overwrite the other tab's book
+          // exactly as if no guard existed.
+          try {
+            setSchedule(readShopServiceSchedule(window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)))
+          } catch {
+            // Storage is unreadable; the notice already tells them to reload, and
+            // showing a stale book is better than showing none.
+          }
+          setNotice(`${result.error} The schedule below was reloaded from this device.`)
+        })
+      return
+    }
+    if (expectedVersion === null) {
+      setNotice("The shared schedule is not ready. Reload before saving.")
+      return
+    }
     if (managedSaveBusyRef.current) {
       setNotice(`Wait for the current company ${vocabulary.singular} change to finish.`)
       return
@@ -221,7 +227,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
           // Fall through to the recoverable local warning.
         }
       }
-      setNotice(`${error instanceof Error ? error.message : 'Managed save failed.'} This device retained the change; reconnect and try again before another operator edits the schedule.`)
+      setNotice(`${error instanceof Error ? error.message : 'Managed save failed.'} The change is not confirmed. Reload the shared schedule before trying again.`)
     }).finally(() => {
       managedSaveBusyRef.current = false
       setManagedSaving(false)
