@@ -4178,6 +4178,33 @@ export async function loadManagedEcommerceReview(reviewId: string, expectedIdent
     { cache: 'no-store', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
+export async function loadManagedEcommerceDecisions(reviewId: string, expectedIdentity: ManagedIdentity, after?: string) {
+  for (const id of [reviewId, ...(after === undefined ? [] : [after])]) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      throw new ManagedTrialError('This review link is invalid.', { code: 'ecommerce_review_invalid' })
+    }
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/decisions${after ? `?after=${after}` : ''}`,
+    { cache: 'no-store', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
+}
+
+export type EcommerceReviewDecision = { reviewId: string; commandId: string; previewDigest: string } & (
+  { decision: 'accept_preview_for_release_review'; note?: never } | { note: string; decision?: never }
+)
+
+export async function sendManagedEcommerceDecision(payload: EcommerceReviewDecision, expectedIdentity: ManagedIdentity) {
+  for (const id of [payload.reviewId, payload.commandId]) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      throw new ManagedTrialError('This review command is invalid.', { code: 'ecommerce_review_invalid' })
+    }
+  }
+  const route = payload.decision === 'accept_preview_for_release_review' ? 'acceptance' : 'change-requests'
+  // The caller retains this exact command after uncertainty; transport never invents a retry ID.
+  return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${payload.reviewId}/${route}`,
+    { method: 'POST', body: JSON.stringify(payload), cache: 'no-store', redirect: 'error',
+      credentials: 'omit', signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
+}
+
 export async function loadManagedEcommerceRecipients(expectedIdentity: ManagedIdentity, after?: string) {
   if (after !== undefined && (after.length !== 36 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(after))) {
     throw new ManagedTrialError('The customer page is invalid.', { code: 'ecommerce_review_invalid' })

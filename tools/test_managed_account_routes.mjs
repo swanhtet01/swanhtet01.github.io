@@ -803,7 +803,7 @@ test('sign-in distinguishes unavailable service and rate limits without exposing
 
 
 test('customer review reads bound stalled requests and bodies without retrying or clearing identity', async () => {
-  for (const method of ['loadManagedWebsiteReview', 'loadManagedWebsiteAcceptance', 'loadManagedEcommerceReview']) {
+  for (const method of ['loadManagedWebsiteReview', 'loadManagedWebsiteAcceptance', 'loadManagedEcommerceReview', 'loadManagedEcommerceDecisions']) {
     for (const phase of ['request', 'body']) await withAuth(async (mod, state) => {
       state.session = { ...fixedSession }
       state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'synthetic-company')
@@ -854,4 +854,31 @@ test('company discovery transport failures preserve the signed-in session and gi
       assert.equal(state.calls.some(([name]) => name === 'storage-write'), false)
     })
   }
+})
+
+
+test('Ecommerce decision transport keeps exact commands and does not retry uncertain writes', async () => {
+  for (const kind of ['acceptance', 'change-requests']) await withAuth(async (mod, state) => {
+    state.session = { ...fixedSession }
+    state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'synthetic-company')
+    const identity = await mod.currentManagedIdentity()
+    const id = '11111111-1111-4111-8111-111111111111'
+    const payload = { reviewId: id, commandId: id, previewDigest: 'sha256:' + 'a'.repeat(64),
+      ...(kind === 'acceptance' ? { decision: 'accept_preview_for_release_review' } : { note: 'Change the price' }) }
+    state.fetch = async (url, init) => {
+      assert.ok(String(url).endsWith(`/ecommerce-reviews/${id}/${kind}`))
+      assert.deepEqual(JSON.parse(init.body), payload)
+      assert.equal(init.method, 'POST')
+      assert.equal(init.cache, 'no-store')
+      assert.equal(init.redirect, 'error')
+      assert.equal(init.credentials, 'omit')
+      assert.ok(init.signal instanceof AbortSignal)
+      throw new Error('uncertain transport')
+    }
+    await assert.rejects(mod.sendManagedEcommerceDecision(payload, identity))
+    assert.equal(state.calls.filter(([name]) => name === 'fetch').length, 1)
+    assert.deepEqual(await mod.currentManagedIdentity(), identity)
+    await assert.rejects(mod.sendManagedEcommerceDecision({ ...payload, commandId: '../invalid' }, identity))
+    assert.equal(state.calls.filter(([name]) => name === 'fetch').length, 1)
+  })
 })
