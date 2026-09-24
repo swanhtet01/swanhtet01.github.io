@@ -3211,7 +3211,40 @@ def _exercise_runtime(
                 )
                 if cursor.fetchone() is not None:
                     raise RehearsalFailure("stale_writer_accepted")
-                checks["optimistic_concurrency"] = True
+
+        # Two independent connections contend for the same expected version.
+        # This checks SQL compare-and-swap, not the complete HTTP command path.
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+
+        gate = Barrier(2, timeout=10)
+
+        def competing_write() -> bool:
+            with _connect(runtime_database_url) as contender:
+                with contender.transaction():
+                    with contender.cursor() as cursor:
+                        _set_identity(cursor)
+                        cursor.execute("set local statement_timeout = '10s'")
+                        gate.wait()
+                        cursor.execute(
+                            """
+                            update app_private.workspace_state
+                            set version = 3, state_json = '{"orders": 3}'::jsonb
+                            where workspace_id = 'rehearsal-a'
+                              and surface = 'commerce' and version = 2
+                            returning version
+                            """
+                        )
+                        return cursor.fetchone() == (3,)
+
+        with ThreadPoolExecutor(max_workers=2) as writers:
+            first = writers.submit(competing_write)
+            second = writers.submit(competing_write)
+            outcomes = [first.result(timeout=20), second.result(timeout=20)]
+        if sorted(outcomes) != [False, True]:
+            raise RehearsalFailure("competing_stale_writer_accepted")
+        checks["optimistic_concurrency"] = True
+
 
         with runtime.transaction():
             with runtime.cursor() as cursor:
