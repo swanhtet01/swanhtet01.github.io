@@ -59,11 +59,14 @@ test('protected release probes bind credentials to the exact pair and reject red
 })
 
 const operationsGeneratedAt = '2026-08-28T12:00:00.000Z'
-test('Website preview expects the assisted delivery boundary rather than the retired builder', async () => {
+test('Website default preview requires the business brief and review boundaries', async () => {
   const needles = expectedText({ surface: 'website' })
-  const source = await readFile(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
+  const source = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
   for (const needle of needles) assert.ok(source.includes(needle), `Website source missing ${needle}`)
-  assert.ok(needles.includes('Requesting setup does not publish this preview, connect a domain or approve a release.'))
+  assert.ok(needles.includes('Scope and price agreed before work begins.'))
+  assert.ok(needles.includes('What does your business offer?'))
+  assert.ok(needles.includes('Open existing workspace'))
+  assert.ok(!needles.includes('Request Website setup'))
   assert.ok(!needles.includes('Make this website yours'))
   assert.ok(!needles.includes('Nothing has been deployed.'))
 })

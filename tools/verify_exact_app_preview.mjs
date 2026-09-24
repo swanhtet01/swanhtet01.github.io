@@ -1038,7 +1038,7 @@ export function expectedText(spec, publicHomepageExpectedText) {
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.boundary,
   ]
   if (spec.surface === 'retired_plant') return ['Shop', 'Website', 'Ecommerce']
-  if (spec.surface === 'website') return ['Website', 'Let SuperMega prepare your website', 'Request Website setup', 'Saved on this device', 'Requesting setup does not publish this preview, connect a domain or approve a release.']
+  if (spec.surface === 'website') return ['Website', 'Your business, online.', 'Business name', 'What does your business offer?', 'Existing page or catalog', 'Continue', 'Next: add your contact details and review before sending. No passwords or private customer data.', 'Scope and price agreed before work begins.', 'Open existing workspace']
   return ['Ecommerce', 'Let SuperMega prepare your catalog', 'Request catalog setup', 'Try sample request']
 }
 
