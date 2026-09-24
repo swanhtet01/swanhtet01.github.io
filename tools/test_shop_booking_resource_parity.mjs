@@ -25,6 +25,31 @@ assert.throws(() => model.scheduleShopServiceBooking(withRoom, { ...input, resou
 const legacy = model.scheduleShopServiceBooking(initial, { ...input, resourceIds: undefined, resourceId: staff }, proof)
 assert.equal(model.readShopServiceSchedule(JSON.stringify(legacy)).bookings[0].resourceId, staff)
 assert.deepEqual(model.readShopServiceSchedule(JSON.stringify(next)).bookings[0].resourceIds, [staff, room])
-const python = spawnSync('python', ['-c', 'import json,sys; from supermega_runtime.commerce_runtime import _validate_service_schedule; _validate_service_schedule(json.load(sys.stdin)); print("runtime accepted frontend schedule")'], { input: JSON.stringify(next), encoding: 'utf8' })
+const mixed = model.scheduleShopServiceBooking(legacy, { ...input, startsAt: '2026-09-26T03:00:00.000Z' }, proof)
+const advanced = model.advanceShopServiceBooking(mixed, mixed.bookings[1].id, proof)
+const cancelled = model.cancelShopServiceBooking(advanced, advanced.bookings[0].id, proof)
+const pythonCode = `
+import json,sys
+from supermega_runtime.commerce_runtime import _validate_service_schedule
+from tests.test_commerce_runtime import catalog_state, apply_event
+payload = json.load(sys.stdin)
+base = catalog_state()
+base['serviceSchedule'] = payload['initial']
+def save(before, schedule):
+    event = schedule['events'][-1]
+    return apply_event(before, 'commerce.service_schedule.saved', {**before, 'serviceSchedule': schedule}, {
+        'actionId': 'ACT-SERVICE-SCHEDULE-R' + str(event['revision']),
+        'capturedAt': event['happenedAt'], 'actor': event['actor'],
+        'reason': event['reason'], 'evidenceReference': 'SHOP-SERVICE-SCHEDULE:R' + str(event['revision']),
+    })
+save(base, payload['next'])
+legacy = save(base, payload['legacy'])
+mixed = save(legacy, payload['mixed'])
+advanced = save(mixed, payload['advanced'])
+final = save(advanced, payload['cancelled'])
+_validate_service_schedule(final['serviceSchedule'])
+print('Five frontend-generated transitions accepted by runtime')
+`
+const python = spawnSync('python', ['-X', 'utf8', '-c', pythonCode], { input: JSON.stringify({ initial, next, legacy, mixed, advanced, cancelled }), encoding: 'utf8' })
 assert.equal(python.status, 0, python.stderr)
-console.log('Booking resources: canonical shape, ordering, duplicates, overlap, legacy reload and Python parity passed')
+console.log('Booking resources: shape, ordering, overlap, reload and five runtime save transitions passed')
