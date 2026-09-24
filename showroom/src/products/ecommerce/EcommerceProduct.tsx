@@ -342,6 +342,13 @@ export function EcommerceProduct() {
         setManagedIdentity(identity)
         const bootstrap = await loadManagedBootstrap(identity)
         if (!current) return
+        const confirmedIdentity = await currentManagedIdentity()
+        if (!current) return
+        if (!confirmedIdentity
+          || confirmedIdentity.workspaceId !== identity.workspaceId
+          || confirmedIdentity.userId !== identity.userId) {
+          throw new Error('The company account changed while loading. Reload to open the current company.')
+        }
         setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'))
         const view = resolveManagedStorefront(
           identity,
