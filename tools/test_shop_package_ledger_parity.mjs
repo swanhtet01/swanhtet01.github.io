@@ -107,3 +107,15 @@ assert.equal(projectButtons(schedule).get(bookingId)?.entitlementId, balance.ent
 assert.equal(projectButtons(renamed).get(bookingId)?.entitlementId, balance.entitlementId)
 assert.equal(projectButtons(next).has(bookingId), false, 'redeemed visit has no action even when another package has sessions')
 console.log('Actual schedule UI projection: eligible and renamed clients match; already-redeemed visits have no package action')
+
+const sameName = structuredClone(schedule)
+const entitledClient = sameName.clients.find(c => c.id === balance.clientId)
+const otherClient = { ...entitledClient, id: 'client-9999', contact: 'synthetic-other-client' }
+sameName.clients.push(otherClient)
+const otherBooking = sameName.bookings.find(b => b.id === bookingId)
+otherBooking.clientId = otherClient.id
+otherBooking.contact = otherClient.contact
+model.validateShopServiceSchedule(sameName)
+assert.equal(projectButtons(sameName).has(bookingId), false, 'a matching display name cannot borrow another client package')
+assert.throws(() => model.redeemSpaMembershipSession(sameName, before, bookingId, proof), undefined, 'save also rejects the same-name client')
+console.log('Same-name clients: UI action and redemption both reject another client entitlement')
