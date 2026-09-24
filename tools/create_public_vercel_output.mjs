@@ -578,7 +578,7 @@ const SHOP_TRADES = validateShopBusinessTemplates().map((template) => ({
 }))
 
 function tradeTemplatesHtml() {
-  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Open Shop already set up for your business.</h2><p>Each one opens Sell with a real catalog, sample sales and a live order in your browser. Nothing to install and no account required.</p></div><div class="trade-grid">${SHOP_TRADES.map(({ id, name, note }) => `<a class="trade-card" href="https://app.supermega.dev/shop/?template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
+  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Try a sample for your trade.</h2><p>Explore sample products, sales and orders in your browser. No account needed.</p></div><div class="trade-grid">${SHOP_TRADES.map(({ id, name, note }) => `<a class="trade-card" href="https://app.supermega.dev/shop/?template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
 }
 
 function customerProductContract(id) {
@@ -812,7 +812,7 @@ const notFoundHtml = documentHtml({
   title: 'Page not found | SuperMega',
   description: 'The requested SuperMega route does not exist.',
   robots: 'noindex,nofollow',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">404 / route retired</span><h1>That page is no longer part of SuperMega.</h1><p class="lede">The public product is now one focused page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Find Shop, Website and Ecommerce on the home page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
 })
 
 const healthFunction = `'use strict'
