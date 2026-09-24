@@ -26,6 +26,10 @@ import {
 } from './managed-trial'
 import { readTrialSignup, trialSignupProductChoice } from './signup-trial'
 
+function savedTrial() {
+  try { return readTrialSignup(window.localStorage) } catch { return null }
+}
+
 export function ManagedLoginPage() {
   const runtime = useOutletContext<RuntimeHealth>()
   const location = useLocation()
@@ -40,8 +44,8 @@ export function ManagedLoginPage() {
   const [directory, setDirectory] = useState<ManagedWorkspaceSignIn | null>(null)
   const [existingIdentity, setExistingIdentity] = useState<ManagedIdentity | null>(null)
   const [activating, setActivating] = useState(false)
-  const [claimCode, setClaimCode] = useState(() => readTrialSignup(window.localStorage)?.claimCode ?? '')
-  const [businessName, setBusinessName] = useState(() => readTrialSignup(window.localStorage)?.businessName ?? '')
+  const [claimCode, setClaimCode] = useState(() => savedTrial()?.claimCode ?? '')
+  const [businessName, setBusinessName] = useState(() => savedTrial()?.businessName ?? '')
   const [notice, setNotice] = useState('')
   const [noticeTone, setNoticeTone] = useState<'quiet' | 'error'>('quiet')
   // Design phase 2 item 11: the notice was a single paragraph disconnected from any

@@ -239,3 +239,18 @@ for (const failedStage of ['membership', 'bootstrap']) {
     assert.deepEqual(calls, failedStage === 'membership' ? [] : ['bootstrap'])
   })
 }
+
+
+test('optional login trial prefill tolerates denied browser storage', () => {
+  const deniedWindow = Object.defineProperty({}, 'localStorage', { get() { throw new Error('SecurityError') } })
+  let reads = 0
+  const read = () => { reads++; return { claimCode: 'synthetic', businessName: 'Synthetic' } }
+  assert.equal(handler('savedTrial', { window: deniedWindow, readTrialSignup: read })(), null)
+  assert.equal(reads, 0)
+  assert.equal(handler('savedTrial', { window: { localStorage: {} }, readTrialSignup() { throw new Error('read denied') } })(), null)
+  const saved = handler('savedTrial', { window: { localStorage: {} }, readTrialSignup: read })()
+  assert.equal(saved.claimCode, 'synthetic')
+  assert.equal(saved.businessName, 'Synthetic')
+  assert.match(source, /useState\(\(\) => savedTrial\(\)\?\.claimCode/)
+  assert.match(source, /useState\(\(\) => savedTrial\(\)\?\.businessName/)
+})
