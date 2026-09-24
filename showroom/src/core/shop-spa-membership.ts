@@ -225,17 +225,26 @@ export function defineSpaMembershipPackage(schedule: ShopServiceSchedule, commer
       actor: bounded(proof.actor, 'Package actor', 120), reason: bounded(proof.reason, 'Package reason', 240), happenedAt: proof.happenedAt }] })
 }
 
-export function allocateSpaMembershipPackage(schedule: ShopServiceSchedule, commerce: SpaMembershipCommerceView, orderId: string, lineIndex: number, proof: ShopServiceScheduleProof) {
-  const next = packageWriteBase(schedule, proof)
+export function eligibleSpaPackagePurchase(schedule: ShopServiceSchedule, commerce: SpaMembershipCommerceView, orderId: string, lineIndex: number, asOf = new Date().toISOString()) {
+  if (schedule.industryPackId !== 'spa' || schedule.bookings.some(b => !b.resourceIds)) return null
   const order = commerce.orders.find(o => o.id === orderId)
   const line = Number.isSafeInteger(lineIndex) && lineIndex >= 0 ? order?.lines?.[lineIndex] : undefined
-  const definition = next.packageDefinitions.find(d => d.purchaseSku === line?.sku && d.active)
-  const at = Date.parse(proof.happenedAt)
+  const definition = schedule.packageDefinitions?.find(d => d.purchaseSku === line?.sku && d.active)
+  const at = Date.parse(asOf)
   if (!order || !line || !definition || order.status !== 'completed' || order.paymentStatus !== 'reconciled' || order.refundStatus !== 'none'
     || !order.paymentReconciledAt || !(Date.parse(order.paymentReconciledAt) <= at)
     || !order.completion || !(Date.parse(order.completion.capturedAt) <= at)
     || !schedule.clients.some(c => c.id === order.customer && !c.anonymizedAt)
-    || !Number.isSafeInteger(line.quantity) || line.quantity < 1 || !Number.isSafeInteger(line.unitPriceMmk) || (line.unitPriceMmk ?? 0) < 1) throw new Error('Choose a paid package for an active client.')
+    || !Number.isSafeInteger(line.quantity) || line.quantity < 1 || !Number.isSafeInteger(line.unitPriceMmk) || (line.unitPriceMmk ?? 0) < 1) return null
+  return { order, line, definition }
+}
+
+export function allocateSpaMembershipPackage(schedule: ShopServiceSchedule, commerce: SpaMembershipCommerceView, orderId: string, lineIndex: number, proof: ShopServiceScheduleProof) {
+  const next = packageWriteBase(schedule, proof)
+  const purchase = eligibleSpaPackagePurchase(schedule, commerce, orderId, lineIndex, proof.happenedAt)
+  if (!purchase) throw new Error('Choose a paid package for an active client.')
+  const { order, line, definition } = purchase
+  const at = Date.parse(proof.happenedAt)
   if (next.packageLedger.some(e => e.sourceOrderId === orderId && e.sourceOrderLineIndex === lineIndex)) throw new Error('Purchase already allocated.')
   const id = `package-entitlement-${String(next.revision).padStart(4, '0')}`
   const evidence = { revision: next.revision, type: 'package_allocated' as const, actor: bounded(proof.actor, 'Package actor', 120), reason: bounded(proof.reason, 'Package reason', 240), happenedAt: proof.happenedAt }

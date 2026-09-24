@@ -34,6 +34,7 @@ import {
 } from './shop-service-scheduling'
 import {
   allocateSpaMembershipPackage,
+  eligibleSpaPackagePurchase,
   defineSpaMembershipPackage,
   spaMembershipPackages,
   availableSpaMembershipForBooking,
@@ -487,9 +488,9 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   }))
   const packagePurchases = commerce.orders.flatMap(order => (order.lines ?? []).flatMap((line, index) => {
     const client = schedule.clients.find(c => c.id === order.customer && !c.anonymizedAt)
-    const definition = schedule.packageDefinitions?.find(d => d.purchaseSku === line.sku && d.active)
-    return order.id && client && definition && order.status === 'completed' && order.paymentStatus === 'reconciled'
-      && order.refundStatus === 'none' && order.paymentReconciledAt && order.completion
+    const purchase = order.id ? eligibleSpaPackagePurchase(schedule, commerce, order.id, index) : null
+    const definition = purchase?.definition
+    return order.id && client && definition
       && !schedule.packageLedger?.some(e => e.sourceOrderId === order.id && e.sourceOrderLineIndex === index)
       ? [{ orderId: order.id, lineIndex: index, client: client.name, label: definition.label, sessions: line.quantity * definition.sessionsPerPurchase }] : []
   }))

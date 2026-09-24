@@ -119,3 +119,18 @@ model.validateShopServiceSchedule(sameName)
 assert.equal(projectButtons(sameName).has(bookingId), false, 'a matching display name cannot borrow another client package')
 assert.throws(() => model.redeemSpaMembershipSession(sameName, before, bookingId, proof), undefined, 'save also rejects the same-name client')
 console.log('Same-name clients: UI action and redemption both reject another client entitlement')
+
+const purchaseSource = fixtures['4']
+const purchaseId = purchaseSource.orders[0].id
+assert.ok(model.eligibleSpaPackagePurchase(defined, purchaseSource, purchaseId, 0, proof.happenedAt))
+for (const field of ['paymentReconciledAt', 'completion', 'quantity', 'unitPriceMmk']) {
+  const invalid = structuredClone(purchaseSource)
+  const order = invalid.orders[0]
+  const future = new Date(Date.parse(proof.happenedAt) + 86400000).toISOString()
+  if (field === 'paymentReconciledAt') order.paymentReconciledAt = future
+  else if (field === 'completion') order.completion.capturedAt = future
+  else order.lines[0][field] = 0
+  assert.equal(model.eligibleSpaPackagePurchase(defined, invalid, purchaseId, 0, proof.happenedAt), null, field)
+  assert.throws(() => model.allocateSpaMembershipPackage(defined, invalid, purchaseId, 0, proof), undefined, field)
+}
+console.log('Purchase eligibility and allocation agree on future payment/completion and invalid quantity/price')
