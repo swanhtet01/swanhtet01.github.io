@@ -28,8 +28,16 @@ assert.deepEqual(model.readShopServiceSchedule(JSON.stringify(next)).bookings[0]
 const mixed = model.scheduleShopServiceBooking(legacy, { ...input, startsAt: '2026-09-26T03:00:00.000Z' }, proof)
 const advanced = model.advanceShopServiceBooking(mixed, mixed.bookings[1].id, proof)
 const cancelled = model.cancelShopServiceBooking(advanced, advanced.bookings[0].id, proof)
+const migrated = model.assignLegacyBookingResources(legacy, legacy.bookings[0].id, [staff, room], proof)
+assert.equal('resourceId' in migrated.bookings[0], false)
+assert.equal(migrated.bookings[0].id, legacy.bookings[0].id)
+assert.deepEqual(migrated.events.slice(0, -1), legacy.events)
+assert.throws(() => model.assignLegacyBookingResources(migrated, migrated.bookings[0].id, [staff, room], proof))
+assert.throws(() => model.assignLegacyBookingResources(legacy, legacy.bookings[0].id, [staff], proof))
 const pythonCode = `
 import json,sys
+from copy import deepcopy
+from supermega_runtime.trial_store import TrialValidationError
 from supermega_runtime.commerce_runtime import _validate_service_schedule
 from tests.test_commerce_runtime import catalog_state, apply_event
 payload = json.load(sys.stdin)
@@ -44,12 +52,22 @@ def save(before, schedule):
     })
 save(base, payload['next'])
 legacy = save(base, payload['legacy'])
+save(legacy, payload['migrated'])
+for field, value in [('note', 'unrelated edit'), ('status', 'confirmed')]:
+    tampered = deepcopy(payload['migrated'])
+    tampered['bookings'][0][field] = value
+    try:
+        save(legacy, tampered)
+    except TrialValidationError:
+        pass
+    else:
+        raise AssertionError('resource migration allowed unrelated ' + field)
 mixed = save(legacy, payload['mixed'])
 advanced = save(mixed, payload['advanced'])
 final = save(advanced, payload['cancelled'])
 _validate_service_schedule(final['serviceSchedule'])
 print('Five frontend-generated transitions accepted by runtime')
 `
-const python = spawnSync('python', ['-X', 'utf8', '-c', pythonCode], { input: JSON.stringify({ initial, next, legacy, mixed, advanced, cancelled }), encoding: 'utf8' })
+const python = spawnSync('python', ['-X', 'utf8', '-c', pythonCode], { input: JSON.stringify({ initial, next, legacy, mixed, advanced, cancelled, migrated }), encoding: 'utf8' })
 assert.equal(python.status, 0, python.stderr)
-console.log('Booking resources: shape, ordering, overlap, reload and five runtime save transitions passed')
+console.log('Booking resources: shape, ordering, overlap, reload and six runtime save transitions including explicit legacy assignment passed')

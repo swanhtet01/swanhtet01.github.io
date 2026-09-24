@@ -234,6 +234,7 @@ _SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
         "booking_scheduled",
         "booking_advanced",
         "booking_cancelled",
+        "booking_resources_assigned",
         "package_definition_saved",
         "package_allocated",
         "package_redeemed",
@@ -11083,6 +11084,25 @@ def _validate_service_schedule_saved(
             and after["resources"] == before["resources"]
             and after["privacyPolicy"] == before["privacyPolicy"]
             and after["clients"] == expected_clients
+        )
+    elif event_type == "booking_resources_assigned":
+        prior = next((b for b in before["bookings"] if b["id"] == latest["subjectId"]), None)
+        updated = next((b for b in after["bookings"] if b["id"] == latest["subjectId"]), None)
+        raw_prior = next((b for b in current["serviceSchedule"]["bookings"] if b["id"] == latest["subjectId"]), None)
+        raw_updated = next((b for b in raw_after["bookings"] if b["id"] == latest["subjectId"]), None)
+        expected = {**prior, "resourceIds": updated["resourceIds"], "updatedAt": latest["happenedAt"]} if prior and updated else None
+        valid_change = (
+            prior is not None and updated is not None and raw_prior is not None and raw_updated is not None
+            and "resourceId" in raw_prior and "resourceIds" not in raw_prior
+            and "resourceIds" in raw_updated and "resourceId" not in raw_updated
+            and datetime.fromisoformat(latest["happenedAt"].replace("Z", "+00:00"))
+            >= datetime.fromisoformat(prior["updatedAt"].replace("Z", "+00:00"))
+            and updated == expected
+            and after["bookings"] == [expected if b["id"] == latest["subjectId"] else b for b in before["bookings"]]
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+            and after["privacyPolicy"] == before["privacyPolicy"]
+            and after["clients"] == before["clients"]
         )
     elif event_type == "package_definition_saved":
         definition = (

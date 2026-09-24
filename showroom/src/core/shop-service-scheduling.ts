@@ -95,7 +95,7 @@ export type ShopServiceBooking = {
 
 export type ShopServiceScheduleEvent = {
   revision: number
-  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'package_definition_saved' | 'package_allocated' | 'package_redeemed' | 'client_retention_set' | 'client_exported' | 'client_anonymized'
+  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'booking_resources_assigned' | 'package_definition_saved' | 'package_allocated' | 'package_redeemed' | 'client_retention_set' | 'client_exported' | 'client_anonymized'
   subjectId: string
   actor: string
   reason: string
@@ -483,7 +483,7 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   if (state.events.length !== state.revision) throw new Error('Shop service schedule evidence is incomplete.')
   state.events.forEach((event, index) => {
     if (event.revision !== index + 1) throw new Error('Shop service schedule evidence revisions are not continuous.')
-    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'package_definition_saved', 'package_allocated', 'package_redeemed', 'client_retention_set', 'client_exported', 'client_anonymized'].includes(event.type)) throw new Error('Shop service schedule evidence type is unsupported.')
+    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'booking_resources_assigned', 'package_definition_saved', 'package_allocated', 'package_redeemed', 'client_retention_set', 'client_exported', 'client_anonymized'].includes(event.type)) throw new Error('Shop service schedule evidence type is unsupported.')
     boundedText(event.subjectId, 'Evidence subject', 80)
     if (event.type === 'package_definition_saved' && !state.packageDefinitions?.some(d => d.id === event.subjectId)) throw new Error('Unknown package definition.')
     if (event.type === 'package_allocated' && !state.packageLedger?.some(e => e.id === event.subjectId)) throw new Error('Unknown package entitlement.')
@@ -610,6 +610,18 @@ export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
     : candidate)
   const next = appendEvent({ ...state, clients, bookings: [...synchronizedBookings, booking] }, { type: 'booking_scheduled', subjectId: booking.id, ...evidence })
   return validateShopServiceSchedule(next)
+}
+
+export function assignLegacyBookingResources(state: ShopServiceSchedule, bookingId: string, resourceIds: string[], proof: ShopServiceScheduleProof) {
+  validateShopServiceSchedule(state)
+  const evidence = proofRecord(proof)
+  const booking = state.bookings.find(b => b.id === bookingId)
+  if (!booking?.resourceId || booking.resourceIds) throw new Error('Choose an older appointment.')
+  if (Date.parse(evidence.happenedAt) < Date.parse(booking.updatedAt)) throw new Error('Assignment cannot predate the appointment update.')
+  const replacement = { ...booking, resourceIds: [...resourceIds], updatedAt: evidence.happenedAt }
+  delete replacement.resourceId
+  return validateShopServiceSchedule(appendEvent({ ...state, bookings: state.bookings.map(b => b.id === bookingId ? replacement : b) },
+    { type: 'booking_resources_assigned', subjectId: bookingId, ...evidence }))
 }
 
 export function advanceShopServiceBooking(state: ShopServiceSchedule, bookingId: string, proof: ShopServiceScheduleProof) {
