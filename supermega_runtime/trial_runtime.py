@@ -96,6 +96,7 @@ from supermega_runtime.trial_store import (
 )
 from supermega_runtime.website_runtime import WEBSITE_HUMAN_EVENTS, validate_website_snapshot_source
 from supermega_runtime.website_customer_review_store import WebsiteCustomerReviewStore
+from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
 
 
 TRIAL_API_PREFIX = "/api/trial/v1"
@@ -1082,6 +1083,50 @@ def create_trial_router(
     """
 
     router = APIRouter(prefix=TRIAL_API_PREFIX, tags=["private-trial"])
+
+    async def ecommerce_review_request(request: Request, operation: Callable, *, body_limit: int | None = None) -> JSONResponse:
+        # Private prepared content and feedback never enter a shared HTTP cache.
+        headers = {"Cache-Control": "private, no-store", "Pragma": "no-cache"}
+        try:
+            principal = _resolve_principal(request, resolve_principal)
+            if principal.actor_kind != "human":
+                raise _error(403, "ecommerce_review_human_required")
+            if not isinstance(store, PostgresTrialStore):
+                raise _error(503, "ecommerce_review_storage_unavailable")
+            body = await _bounded_json_body(request, maximum_bytes=body_limit) if body_limit is not None else None
+            adapter = EcommerceCustomerReviewStore(store)
+            result = await run_in_threadpool(_invoke, lambda: operation(adapter, principal, body))
+            return JSONResponse(result, headers=headers)
+        except HTTPException as exc:
+            exc.headers = {**(exc.headers or {}), **headers}
+            raise
+
+    @router.post("/ecommerce-reviews")
+    async def prepare_ecommerce_review(request: Request) -> JSONResponse:
+        def operation(adapter, principal, body):
+            if request.query_params or not isinstance(body, Mapping) or set(body) != {
+                    "reviewId", "recipientActorId", "expectedVersion", "expiresAt"}:
+                raise TrialValidationError("ecommerce_review_request_invalid")
+            return adapter.prepare(principal, review_id=body["reviewId"],
+                recipient_actor_id=body["recipientActorId"], expected_version=body["expectedVersion"],
+                expires_at=body["expiresAt"])
+        return await ecommerce_review_request(request, operation, body_limit=2048)
+
+    @router.get("/ecommerce-reviews/{review_id}")
+    async def read_ecommerce_review(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            if request.query_params:
+                raise TrialValidationError("ecommerce_review_request_invalid")
+            return adapter.preview(principal, review_id)
+        return await ecommerce_review_request(request, operation)
+
+    @router.post("/ecommerce-reviews/{review_id}/withdraw")
+    async def withdraw_ecommerce_review(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, body):
+            if request.query_params or body != {}:
+                raise TrialValidationError("ecommerce_review_request_invalid")
+            return adapter.revoke(principal, review_id)
+        return await ecommerce_review_request(request, operation, body_limit=128)
 
     async def website_review_request(request: Request, operation: Callable, *, body_limit: int | None = None) -> JSONResponse:
         # Private prepared content and feedback never enter a shared HTTP cache.

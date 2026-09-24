@@ -208,6 +208,46 @@ class CatalogReviewSqlTests(unittest.TestCase):
         self.assertEqual(adapter.preview(managed_actor,str(review_id))['reviewId'],str(review_id))
         assert_revoked_during_wait(managed_actor,'delete from auth.sessions where id=%s',(session,),TrialNotReadyError)
         with self.assertRaises(TrialNotReadyError): adapter.preview(managed_actor,str(review_id))
+        from datetime import datetime, timedelta, timezone
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from supermega_runtime.trial_runtime import create_trial_router
+        principals = {'operator': TrialPrincipal(WORKSPACE, OWNER, 'human'),
+                      'customer': actor, 'other': TrialPrincipal('other-workspace', RECIPIENT, 'human'),
+                      'agent': TrialPrincipal(WORKSPACE, OWNER, 'agent')}
+        app = FastAPI()
+        app.include_router(create_trial_router(store=PostgresTrialStore(self.runtime_url,
+            reducer=lambda *_: None, write_enabled=True),
+            resolve_principal=lambda request: principals.get(request.headers.get('x-test-actor'))))
+        with pg._connect(self.admin_url) as connection:
+            http_version = connection.execute("select version from app_private.workspace_state where workspace_id=%s and surface='commerce'", (WORKSPACE,)).fetchone()[0]
+        body = dict(reviewId=str(uuid4()), recipientActorId=RECIPIENT, expectedVersion=http_version,
+                    expiresAt=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+        base = '/api/trial/v1/ecommerce-reviews'
+        url = base + '/' + body['reviewId']
+        owner_headers = {'x-test-actor': 'operator'}
+        customer_headers = {'x-test-actor': 'customer'}
+        with TestClient(app) as client:
+            for headers, status in (({}, 401), ({'x-test-actor': 'agent'}, 403), (customer_headers, 403)):
+                response = client.post(base, json=body, headers=headers)
+                self.assertEqual(response.status_code, status)
+                self.assertEqual(response.headers['cache-control'], 'private, no-store')
+            for invalid in (dict(body, workspaceId=WORKSPACE), dict(body, expectedVersion=True), {}):
+                self.assertEqual(client.post(base, json=invalid, headers=owner_headers).status_code, 422)
+            prepared = client.post(base, json=body, headers=owner_headers)
+            self.assertEqual(prepared.status_code, 200, prepared.text)
+            self.assertTrue(prepared.json()['persisted'])
+            self.assertTrue(client.post(base, json=body, headers=owner_headers).json()['replayed'])
+            preview = client.get(url, headers=customer_headers)
+            self.assertEqual(preview.status_code, 200, preview.text)
+            self.assertEqual(preview.json(), adapter.preview(actor, body['reviewId']))
+            self.assertEqual(preview.headers['cache-control'], 'private, no-store')
+            self.assertEqual(client.get(url, headers={'x-test-actor': 'other'}).status_code, 403)
+            self.assertEqual(client.get(url+'?workspaceId=other', headers=customer_headers).status_code, 422)
+            self.assertEqual(client.post(url+'/withdraw', json={}, headers=customer_headers).status_code, 403)
+            self.assertEqual(client.post(url+'/withdraw', json={'actorId': OWNER}, headers=owner_headers).status_code, 422)
+            self.assertEqual(client.post(url+'/withdraw', json={}, headers=owner_headers).status_code, 200)
+            self.assertEqual(client.get(url, headers=customer_headers).status_code, 403)
         with pg._connect(self.admin_url) as connection:
             connection.execute('grant execute on function app_private.ecommerce_review_recipient_ready(text) to public')
         with self.assertRaises(TrialNotReadyError): adapter.preview(actor,str(review_id))
