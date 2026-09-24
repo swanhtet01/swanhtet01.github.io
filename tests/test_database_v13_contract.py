@@ -79,7 +79,7 @@ class V13CatalogTests(unittest.TestCase):
         report = self.evaluate(self.good)
         diagnostics = {"failed": report["failed_checks"],
             "extensionPins": current.observed_extension_digests(self.good),
-            "policyPins": {r["policy_name"]: audit._catalog_expression_fingerprint(r["qual"])
+            "policyPins": {r["policy_name"]: {"qual": audit._catalog_expression_fingerprint(r["qual"]), "check": audit._catalog_expression_fingerprint(r["with_check"])}
                            for r in self.good["policies"] if r["policy_name"] in current.POLICIES},
             "newDependencies": [r for r in self.good["backend_acl_dependencies"]
                                 if any(v in r["object_name"] for v in ("billing", "self_serve"))]}
@@ -101,6 +101,21 @@ class V13CatalogTests(unittest.TestCase):
             else:
                 row['function_config'] = ['search_path=public']
             with self.subTest(change=change):
+                self.assertFalse(self.evaluate(snapshot)['ready'])
+
+    def test_decision_metadata_tampering_is_rejected(self):
+        cases = (
+            ('policies', 'policy_name', 'ecommerce_decisions_insert', 'with_check', 'true'),
+            ('functions', 'function_name', 'guard_ecommerce_decision', 'function_source', 'begin return new; end'),
+            ('extension_constraints', 'table_name', 'ecommerce_customer_decisions', 'validated', False),
+            ('extension_columns', 'table_name', 'ecommerce_customer_decisions', 'not_null', False),
+        )
+        for collection, key, value, field, changed in cases:
+            with self.subTest(collection=collection):
+                snapshot = deepcopy(self.good)
+                row = next(r for r in snapshot[collection] if r[key] == value)
+                self.assertNotEqual(row[field], changed)
+                row[field] = changed
                 self.assertFalse(self.evaluate(snapshot)['ready'])
 
     def test_legacy_profile_stays_exact_and_cannot_accept_v13(self):

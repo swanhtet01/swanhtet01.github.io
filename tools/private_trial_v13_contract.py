@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20260924231714_ecommerce_customer_decisions.sql": "c14f514daddca921f1c1ea2dbad3c7504d2142bc8b0bbbef0da48eb7104069c7",
     "20260924194557_ecommerce_customer_review_storage.sql": "4bb3eb40ec26854bda021d3c2e19ba34bb0657272933f6bfd5ee8f6da6974b46",
     "20260924190304_ecommerce_review_entitlement_proof.sql": "84fdda564d5deb7003fd9c151dd1a1b64c21209fd64fd109062b25d0d3842fef",
     "20260817090000_private_trial_backend_v12_billing_rail.sql": "19cf4077c26336d74d3f5ea5ba4d60c20a2525604f4c8aa1673fd2b3b243a033",
@@ -23,9 +24,10 @@ MIGRATION_PINS = {
     "20260915191528_website_review_entitlement_proof.sql": "75755426b58dfe01b6efde4bd3480e2defdf5556c3e9d1352bc96c48587adf62",
     "20260918011500_website_customer_acceptance.sql": "2ffe0304564175d9682af8525873c348d1a3638c87671d16c682e5414a2347b1",
 }
-TABLES = frozenset({"ecommerce_customer_reviews", "billing_invoices", "billing_events", "billing_entitlements",
+TABLES = frozenset({"ecommerce_customer_decisions", "ecommerce_customer_reviews", "billing_invoices", "billing_events", "billing_entitlements",
                     "self_serve_attempt_budgets", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances"})
 WEBSITE_FUNCTIONS = {
+    "guard_ecommerce_decision": ("", "trigger"),
     "ecommerce_review_text_length": ("value text", "bigint"),
     "ecommerce_review_projection": ("source jsonb", "jsonb"),
     "ecommerce_review_preview_digest": ("source jsonb", "text"),
@@ -54,6 +56,8 @@ FUNCTIONS = {
     "mark_self_serve_claim_conflict": ("admitted_at timestamp with time zone", "boolean"),
 }
 WEBSITE_POLICIES = {
+    "ecommerce_decisions_read": ("ecommerce_customer_decisions", "SELECT", "d5412641e31efceb903b3569ba4d284c5938af9a8fa0858d8105d4950da7d216", None),
+    "ecommerce_decisions_insert": ("ecommerce_customer_decisions", "INSERT", None, "a416e3e7d6f9d78a400a4a9def2448594d08c5c46e38288b4621cb5efec5e7f8"),
     "ecommerce_reviews_read": ("ecommerce_customer_reviews", "SELECT", "da4c3b46a9403105ddaf8ed66ea4ec8fa35648f51ec170fa0300dd51f8d8303e", None),
     "ecommerce_reviews_insert": ("ecommerce_customer_reviews", "INSERT", None, "37991bc21b558e0c1783ab3b07a5c36e92a2ae6ddccd23a00d9c1cba61cc4928"),
     "ecommerce_reviews_update": ("ecommerce_customer_reviews", "UPDATE", "a58f2f95c57380135dd9c2a0e24defc7a276c12f74a7a742fda2648bf38041e5", "a58f2f95c57380135dd9c2a0e24defc7a276c12f74a7a742fda2648bf38041e5"),
@@ -70,10 +74,10 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 # Exact PostgreSQL 17 output from the pinned migrations, with all row keys retained.
 # Source-derived, synthetic catalog evidence only. Unknown/extra/missing rows fail.
 CATALOG_PINS = {
-    "extension_columns_exact": "8bae66a62bf0d1a8e9548816a4a4bf202d650fa396676605d464261aac5f4055",
-    "extension_constraints_exact": "7bab87257f6baf0d7791cf15fc779a6194201d58a800c598c0d94b51121822e8",
-    "extension_functions_exact": "9ca590145ccf925b9d779abd20c97a030d08250ba2e6dff6a7154f0e12d919c3",
-    "extension_policies_exact": "dc5e1a516547e66dba677edef2c1a5df4656d3f57f633f941f4856b65279403c",
+    "extension_columns_exact": "263730f2611d82cffec18b53d2c15a692d3613830e0707f434c5df2d9024d05c",
+    "extension_constraints_exact": "6480dfb4c310398fefb446aaa59187990a976bde623d25364a8ea25d7577e3b1",
+    "extension_functions_exact": "97562ea0ea0fa18f9cdac35e309b92b588d17909e9967df7005e66ee92bd4619",
+    "extension_policies_exact": "93fea93d76323b2e6555f3bc2c3536ec8a3eacc2a1905871fa15d14002310f69",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
                "self_serve_attempt_budget_actor_only": "b5ae50fbc65c43344b8d3f3938f7b8a26414ae3bbb1781b6e35bf609c954f82c"}
@@ -225,6 +229,16 @@ def extend_contract(base):
         body = re.findall(r'create function app_private\.'+function+r'\(\).*?as \$\$(.*?)\$\$;', sql['20260924194557_ecommerce_customer_review_storage.sql'], re.S)
         if len(body)!=1: raise ValueError('catalog_review_trigger_source_missing')
         base['EXPECTED_TRIGGERS'][trigger]=dict(table=table,function=function,trigger_type=mask,function_source=body[0])
+    body = re.findall(r'create function app_private.guard_ecommerce_decision\(\).*?as \$\$(.*?)\$\$;', sql['20260924231714_ecommerce_customer_decisions.sql'], re.S)
+    if len(body) != 1: raise ValueError('catalog_decision_trigger_source_missing')
+    base['EXPECTED_TRIGGERS']['ecommerce_decision_guard'] = dict(table='ecommerce_customer_decisions', function='guard_ecommerce_decision', trigger_type=31, function_source=body[0])
+    for index, keys, unique, primary, constraint in (
+        ('ecommerce_customer_decisions_pkey', ('workspace_id', 'actor_id', 'command_id'), True, True, 'p'),
+        ('ecommerce_decisions_review_idx', ('workspace_id', 'review_id'), False, False, None),
+        ('ecommerce_decisions_acceptance_idx', ('workspace_id', 'review_id'), True, False, None),
+    ):
+        base['EXPECTED_INDEX_CONTRACT'][index] = dict(table='ecommerce_customer_decisions', keys=keys, options=(0,)*len(keys), unique=unique, primary=primary, constraint=constraint)
+    base['EXPECTED_INDEX_CONTRACT']['ecommerce_decisions_acceptance_idx']['predicate_expression'] = "(kind = 'acceptance'::text)"
     website = sql["20260915184728_website_customer_review_storage.sql"]
     for name, table, function, kind in (
         ("website_review_guard", "website_customer_reviews", "guard_website_review", 31),
@@ -265,13 +279,13 @@ def extend_contract(base):
     base["EXPECTED_NON_OWNER_ACL"] |= frozenset(
         [("function", name, role, "EXECUTE", False) for name in WEBSITE_FUNCTIONS]
         + [("table", table, role, privilege, False)
-           for table, privileges in (("ecommerce_customer_reviews", ("SELECT", "INSERT", "UPDATE")), ("website_customer_reviews", ("SELECT", "INSERT", "UPDATE")),
+           for table, privileges in (("ecommerce_customer_decisions", ("SELECT", "INSERT")), ("ecommerce_customer_reviews", ("SELECT", "INSERT", "UPDATE")), ("website_customer_reviews", ("SELECT", "INSERT", "UPDATE")),
                                      ("website_customer_feedback", ("SELECT", "INSERT")),
                                      ("website_customer_acceptances", ("SELECT", "INSERT")))
            for privilege in privileges])
     base["EXPECTED_BACKEND_ACL_DEPENDENCIES"] |= frozenset(
         [("function", f"app_private.{name}({signature[0]})", 0) for name, signature in WEBSITE_FUNCTIONS.items()]
         + [("relation", f"app_private.{table}", 0)
-           for table in ("ecommerce_customer_reviews", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances")])
+           for table in ("ecommerce_customer_decisions", "ecommerce_customer_reviews", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances")])
     base.update(collect_extensions=collect_extensions, extension_checks=extension_checks)
     return base
