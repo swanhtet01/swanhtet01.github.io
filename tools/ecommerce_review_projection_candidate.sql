@@ -13,11 +13,23 @@ declare
   items jsonb := '[]'::jsonb;
   matches bigint;
   catalog_json text;
+  field text;
 begin
   if jsonb_typeof(configuration) is distinct from 'object'
     or jsonb_typeof(configuration->'selectedSkus') is distinct from 'array'
     or jsonb_typeof(source->'items') is distinct from 'array' then
     raise exception using errcode='22023',message='ecommerce_review_source_invalid';
+  end if;
+  foreach field in array array['storeName','summary'] loop
+    if jsonb_typeof(configuration->field) is distinct from 'string'
+      or length(btrim(configuration->>field)) = 0
+      or length(configuration->>field) > (case when field='storeName' then 60 else 180 end) then
+      raise exception using errcode='22023',message='ecommerce_review_text_invalid';
+    end if;
+  end loop;
+  if configuration->'selectedSkus' is distinct from
+    (select jsonb_agg(value order by value#>>'{}' collate "C") from jsonb_array_elements(configuration->'selectedSkus')) then
+    raise exception using errcode='22023',message='ecommerce_review_selection_invalid';
   end if;
   select '[' || coalesce(string_agg('[' || coalesce((i->'sku')::text,'null') || ',' ||
     coalesce((i->'name')::text,'null') || ',' || coalesce((i->'variant')::text,'null') || ',' ||
@@ -37,6 +49,23 @@ begin
       raise exception using errcode='22023',message='ecommerce_review_item_invalid';
     end if;
     select value into item from jsonb_array_elements(source->'items') where value->'sku'=selected;
+    foreach field in array array['sku','name'] loop
+      if jsonb_typeof(item->field) is distinct from 'string'
+        or length(btrim(item->>field)) = 0
+        or length(item->>field) > (case when field='sku' then 80 else 180 end) then
+        raise exception using errcode='22023',message='ecommerce_review_text_invalid';
+      end if;
+    end loop;
+    foreach field in array array['price','onHand'] loop
+      if jsonb_typeof(item->field) is distinct from 'number' then
+        raise exception using errcode='22023',message='ecommerce_review_number_invalid';
+      end if;
+      if (item->>field)::numeric <> trunc((item->>field)::numeric)
+        or (item->>field)::numeric < (case when field='price' then 1 else 0 end)
+        or (item->>field)::numeric > 9007199254740991 then
+        raise exception using errcode='22023',message='ecommerce_review_number_invalid';
+      end if;
+    end loop;
     select count(*) into matches from jsonb_array_elements(coalesce(configuration->'merchandising','[]'::jsonb)) m where m->'sku'=selected;
     if matches > 1 then
       raise exception using errcode='22023',message='ecommerce_review_merchandising_invalid';

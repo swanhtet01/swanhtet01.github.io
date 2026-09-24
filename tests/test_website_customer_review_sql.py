@@ -852,6 +852,30 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             finally:
                 connection.rollback()
 
+    def test_sql_catalog_projection_rejects_invalid_public_facts(self):
+        from pathlib import Path
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        from supermega_runtime.commerce_runtime import commerce_catalog_digest
+        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        with pg._connect(self.admin_url) as connection:
+            try:
+                connection.execute(sql)
+                for field,value in [('price',0),('price',-1),('price',1.5),('price','100'),('price',True),('price',9007199254740992),('onHand',None),('onHand',-1),('onHand',1.5),('name',''),('name',None)]:
+                    source=catalog_state()
+                    source['items'][0][field]=value
+                    source['storefrontConfiguration']=storefront_configuration(source,digest=commerce_catalog_digest(source))
+                    with self.subTest(field=field,value=value),self.assertRaises(self.db_error):
+                        with connection.transaction():
+                            connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(source),))
+                source=catalog_state()
+                source['items'].append(dict(sku='SKU-2',name='Tea',onHand=1,reorderAt=0,price=500))
+                source['storefrontConfiguration']=storefront_configuration(source,selected_skus=['SKU-2','SKU-1'])
+                with self.assertRaises(self.db_error):
+                    with connection.transaction():
+                        connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(source),))
+            finally:
+                connection.rollback()
+
     def test_ecommerce_entitlement_is_private_and_product_specific(self):
         vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
                    ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),
