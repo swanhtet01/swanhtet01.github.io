@@ -289,3 +289,34 @@ test('actual shell navigation effect survives denied storage and optional histor
   context.rememberLastProduct = () => { throw new Error('optional memory failed') }
   assert.doesNotThrow(run)
 })
+
+test('actual recovery completion retains review destination for zero, one and multiple companies', async () => {
+  const { managedAccountPath, managedLoginReviewPath } = await import('../showroom/src/core/account-routes.ts')
+  const review = '11111111-1111-4111-8111-111111111111'
+  for (const count of [0, 1, 2]) {
+    const { context, passwords } = fixture()
+    const navigation = [], checks = []
+    const signIn = { email: 'synthetic@example.invalid', workspaces: Array.from({ length: count }, (_, i) => ({ workspaceId: `company-${i}` })) }
+    Object.assign(context, {
+      setup: { purpose: 'recovery' }, confirmation: context.password, setConfirmation() {},
+      location: { search: `?mode=recovery&review=${review}` }, productIntent: null,
+      portalEntryPath: managedLoginReviewPath(`?review=${review}`), managedAccountPath,
+      completeManagedAccountPassword: async () => signIn,
+      setDirectory: value => { context.directory = value }, setWorkspaceId: value => { context.workspaceId = value },
+      completeManagedWorkspaceSignIn: async (directory, selected) => { assert.equal(directory, signIn); assert.ok(directory.workspaces.some(w => w.workspaceId === selected)); checks.push('membership'); return { workspaceId: selected } },
+      loadManagedBootstrap: async () => { checks.push('bootstrap') }, navigate: path => navigation.push(path),
+    })
+    context.openWorkspace = handler('openWorkspace', context, accountAst)
+    await handler('savePassword', context, accountAst)(event)
+    if (count > 1) {
+      assert.deepEqual(navigation, [])
+      assert.deepEqual(checks, [])
+      context.workspaceId = 'company-1'
+      await handler('chooseWorkspace', context, accountAst)(event)
+    }
+    assert.deepEqual(navigation, [count === 0 ? `/login?product=website&review=${review}` : `/website/review/${review}`])
+    assert.deepEqual(checks, count === 0 ? [] : ['membership', 'bootstrap'])
+    assert.equal(passwords.at(-1), '')
+    assert.equal(context.accountRequestPending.current, false)
+  }
+})
