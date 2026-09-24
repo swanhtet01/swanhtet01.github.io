@@ -259,12 +259,12 @@ async function get(path, attempts = 7) {
         const body = execFileSync(executable, executableArgs, {
           encoding: 'utf8',
           env: cliEnv,
-          maxBuffer: 8 * 1024 * 1024,
+          maxBuffer: 8 * 1024 * 1024, timeout: 15000, killSignal: 'SIGKILL',
           stdio: ['ignore', 'pipe', 'pipe'],
         })
         return { response: null, body }
       }
-      const response = await fetch(`${baseUrl}${path}`, { headers: { accept: path.endsWith('.json') ? 'application/json' : 'text/html' }, redirect: 'follow', signal: AbortSignal.timeout(15000) })
+      const response = await fetch(`${baseUrl}${path}`, { headers: { accept: path.endsWith('.json') ? 'application/json' : 'text/html' }, redirect: 'error', signal: AbortSignal.timeout(15000) })
       if (!response.ok) throw new Error(`${path}:${response.status}`)
       return { response, body: await response.text() }
     } catch (error) {
@@ -816,7 +816,7 @@ if (protectedPreview) {
     deploymentOutput = execFileSync(executable, executableArgs, {
       encoding: 'utf8',
       env: cliEnv,
-      maxBuffer: 8 * 1024 * 1024,
+      maxBuffer: 8 * 1024 * 1024, timeout: 15000, killSignal: 'SIGKILL',
       stdio: ['ignore', 'pipe', 'pipe'],
     })
   } catch (error) {

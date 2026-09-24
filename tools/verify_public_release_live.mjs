@@ -49,7 +49,7 @@ function url(path, origin = baseUrl) {
 
 async function request(path, options = {}) {
   return fetch(url(path, options.origin), {
-    redirect: options.redirect || 'follow',
+    redirect: options.redirect || 'error',
     cache: 'no-store',
     headers: {
       accept: options.accept || 'text/html,application/json',

@@ -40,7 +40,7 @@ function get(path) {
       return execFileSync(executable, executableArgs, {
         encoding: 'utf8',
         env: cliEnv,
-        maxBuffer: 8 * 1024 * 1024,
+        maxBuffer: 8 * 1024 * 1024, timeout: 15000, killSignal: 'SIGKILL',
         stdio: ['ignore', 'pipe', 'pipe'],
       })
     } catch (error) {
@@ -90,7 +90,7 @@ try {
   deploymentOutput = execFileSync(inspectExecutable, inspectExecutableArgs, {
     encoding: 'utf8',
     env: cliEnv,
-    maxBuffer: 8 * 1024 * 1024,
+    maxBuffer: 8 * 1024 * 1024, timeout: 15000, killSignal: 'SIGKILL',
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 } catch (error) {
@@ -105,7 +105,7 @@ if (policy.app) {
   let appDeployment
   try {
     appDeployment = JSON.parse(execFileSync(inspectExecutable, appArgs, {
-      encoding: 'utf8', env: cliEnv, maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8', env: cliEnv, maxBuffer: 8 * 1024 * 1024, timeout: 15000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'],
     }))
   } catch (error) { throw new Error(`protected_preview_app_inspect_failed:${describeFailure(error)}`) }
   validatePreviewDeployment(appDeployment, policy.app)
