@@ -142,6 +142,10 @@ export function ManagedAccountPage() {
     try {
       await openWorkspace(directory, workspaceId)
     } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'managed_identity_changed') {
+        navigate(managedAccountPath('/login', productIntent, location.search), { replace: true })
+        return
+      }
       setNotice(error instanceof Error ? error.message : 'The company could not be opened.')
     } finally {
       accountRequestPending.current = false

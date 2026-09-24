@@ -356,3 +356,35 @@ test('temporary company-opening failure preserves selection for a deliberate ret
   assert.equal(context.workspaceId, 'one')
   assert.equal(context.accountRequestPending.current, false)
 })
+
+
+test('recovery company chooser sends a changed session to sign-in with its review context', async () => {
+  const { managedAccountPath } = await import('../showroom/src/core/account-routes.ts')
+  const review = '11111111-1111-4111-8111-111111111111'
+  for (const product of ['website', 'ecommerce']) {
+    const { context } = fixture()
+    const navigation = []
+    const search = `?mode=recovery&product=${product}&review=${review}`
+    Object.assign(context, { directory: { workspaces: [{ workspaceId: 'one' }] }, workspaceId: 'one',
+      productIntent: product, location: { search }, managedAccountPath,
+      navigate: (path, options) => navigation.push({ path, replace: options.replace }),
+      openWorkspace: async () => { throw { code: 'managed_identity_changed' } },
+    })
+    await handler('chooseWorkspace', context, accountAst)(event)
+    assert.deepEqual(navigation, [{ path: managedAccountPath('/login', product, search), replace: true }])
+    assert.ok(navigation[0].path.includes(review))
+    assert.equal(context.accountRequestPending.current, false)
+  }
+})
+
+test('recovery chooser keeps temporary failures available for retry without redirecting', async () => {
+  const { context } = fixture()
+  const notices = []
+  Object.assign(context, { directory: { workspaces: [{ workspaceId: 'one' }] }, workspaceId: 'one',
+    setNotice: text => notices.push(text), navigate: () => assert.fail('must not redirect'),
+    openWorkspace: async () => { throw { code: 'http_503' } },
+  })
+  await handler('chooseWorkspace', context, accountAst)(event)
+  assert.match(notices.at(-1), /could not be opened/)
+  assert.equal(context.accountRequestPending.current, false)
+})
