@@ -505,16 +505,16 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
         <span><small>Staff / rooms</small><strong>{projection.activeResources}</strong></span>
       </div>
       {schedule.industryPackId === 'spa' && membershipBalances.length ? <div className="service-schedule-summary" aria-label="Prepaid package summary">
-        <span><small>Package customers</small><strong>{new Set(membershipBalances.map((balance) => balance.customer)).size}</strong></span>
+        <span><small>Package customers</small><strong>{new Set(membershipBalances.map((balance) => balance.clientId ?? balance.customer)).size}</strong></span>
         <span><small>Sessions left</small><strong>{membershipBalances.reduce((total, balance) => total + balance.remaining, 0)}</strong></span>
         <span><small>Sessions used</small><strong>{membershipBalances.reduce((total, balance) => total + balance.redeemed, 0)}</strong></span>
       </div> : null}
       {schedule.industryPackId === 'spa' ? <details className="compact-disclosure">
         <summary>Packages</summary>
         <div>
-          {spaMembershipPackages.filter(p => commerce.items?.some(item => item.sku === p.sku) && !schedule.packageDefinitions?.some(d => d.purchaseSku === p.sku)).map(p => <button className="core-button compact" disabled={disabled} key={p.sku} onClick={() => setupPackage(p.sku)} type="button">Set up {p.label}</button>)}
+          {spaMembershipPackages.filter(p => !legacyBooking && schedule.services.some(s => s.id === p.serviceId && s.active) && commerce.items?.some(item => item.sku === p.sku) && !schedule.packageDefinitions?.some(d => d.purchaseSku === p.sku)).map(p => <button className="core-button compact" disabled={disabled} key={p.sku} onClick={() => setupPackage(p.sku)} type="button">Set up {p.label}</button>)}
           {packagePurchases.map(p => <div key={`${p.orderId}:${p.lineIndex}`}><span>{p.client} · {p.label} · {p.sessions} sessions</span><button className="core-button compact" disabled={disabled} onClick={() => allocatePackage(p.orderId, p.lineIndex)} type="button">Add sessions</button></div>)}
-          {!packagePurchases.length ? <p>Paid purchases appear here.</p> : null}
+          {!packagePurchases.length ? <p>{legacyBooking ? 'Review older booking resources below to use packages.' : 'Paid purchases appear here.'}</p> : null}
         </div>
       </details> : null}
       {legacyBooking ? <details className="compact-disclosure">

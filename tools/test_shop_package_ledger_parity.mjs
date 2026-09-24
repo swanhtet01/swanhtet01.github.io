@@ -134,3 +134,16 @@ for (const field of ['paymentReconciledAt', 'completion', 'quantity', 'unitPrice
   assert.throws(() => model.allocateSpaMembershipPackage(defined, invalid, purchaseId, 0, proof), undefined, field)
 }
 console.log('Purchase eligibility and allocation agree on future payment/completion and invalid quantity/price')
+
+const setupFilter = ui.match(/spaMembershipPackages\.filter\(p => ([^\n]+?)\)\.map\(p =>/)?.[1]
+assert.ok(setupFilter)
+const template = model.spaMembershipPackages[0]
+for (const legacyBooking of [null, { id: 'legacy' }]) {
+  for (const active of [false, true]) {
+    const visible = vm.runInNewContext(setupFilter, { p: template, legacyBooking,
+      schedule: { services: [{ id: template.serviceId, active }], packageDefinitions: [] },
+      commerce: { items: [{ sku: template.sku }] } })
+    assert.equal(visible, !legacyBooking && active)
+  }
+}
+console.log('Actual setup filter hides unavailable treatments and unresolved older booking resources')
