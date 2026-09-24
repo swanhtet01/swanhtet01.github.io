@@ -145,29 +145,6 @@
   flex-direction: column;
 }
 
-.ecommerce-assisted-intake {
-  width: min(100%, 36.875rem);
-  border: .0625rem solid color-mix(in srgb, var(--core-line) 80%, transparent);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--core-panel) 72%, transparent);
-  color: var(--core-muted);
-  font-size: var(--font-size-sm);
-}
-
-.ecommerce-assisted-intake > summary {
-  min-height: 2.75rem;
-  display: flex;
-  align-items: center;
-  padding: .5rem .75rem;
-  color: var(--core-ink);
-  cursor: pointer;
-  font-weight: var(--font-weight-bold);
-}
-
-.ecommerce-assisted-intake > p { margin: 0; padding: 0 .75rem .625rem; }
-.ecommerce-assisted-intake > p + p { padding-top: .125rem; }
-.ecommerce-assisted-intake > summary:focus-visible { outline: .125rem solid var(--core-green); outline-offset: .125rem; }
-
 .ecommerce-today-priority {
   min-width: 0;
   display: grid;
@@ -899,57 +876,6 @@
   overflow-wrap: anywhere;
 }
 
-.ecommerce-product-autopilot {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.2fr) auto;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(11, 116, 94, .22);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(11, 116, 94, .05);
-}
-
-.ecommerce-product-autopilot > div:first-child {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.ecommerce-product-autopilot strong {
-  font-size: 0.8125rem;
-}
-
-.ecommerce-product-autopilot small {
-  color: #66746b;
-  font-size: 0.6875rem;
-  line-height: 1.35;
-}
-
-.ecommerce-product-autopilot-rows {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.ecommerce-product-autopilot-rows span {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-  border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 8px;
-  padding: 7px;
-  background: rgba(255, 255, 255, .72);
-}
-
-.ecommerce-product-autopilot-rows b {
-  overflow: hidden;
-  color: #17261f;
-  font-size: 0.75rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .ecommerce-merchandising-status {
   min-height: 48px;
   display: flex;
@@ -1091,10 +1017,6 @@
 
 .ecommerce-request-lab {
   scroll-margin-top: 16px;
-}
-
-.ecommerce-request-body form > .core-button {
-  min-height: 48px;
 }
 
 .ecommerce-request-receipt > .status-pill.bounded {
@@ -1329,7 +1251,6 @@
   line-height: 1.35;
 }
 
-.ecommerce-quote-confirm,
 .ecommerce-quote-receipt > .core-button,
 .ecommerce-quote-receipt > small {
   grid-column: 1 / -1;
@@ -1755,18 +1676,6 @@
     width: 100%;
   }
 
-  .ecommerce-product-autopilot {
-    grid-template-columns: 1fr;
-  }
-
-  .ecommerce-product-autopilot-rows {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .ecommerce-product-autopilot .core-button {
-    width: 100%;
-  }
-
   .ecommerce-preview-gate {
     align-items: stretch;
     flex-direction: column;
@@ -1779,14 +1688,6 @@
   .ecommerce-request-lab > summary {
     align-items: flex-start;
     padding-block: 10px;
-  }
-
-  .ecommerce-request-body {
-    padding: 10px;
-  }
-
-  .ecommerce-request-body form > .core-button {
-    width: 100%;
   }
 
   .ecommerce-buying-body {
