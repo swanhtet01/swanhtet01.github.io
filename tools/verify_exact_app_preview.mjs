@@ -630,7 +630,7 @@ function normalizeBrowserCase(value, spec, expectedOrigin, publicOrigin) {
       : spec.surface === 'retired_plant'
         ? 'retired_entry_redirect_and_retained_data_verified'
         : spec.surface === 'website'
-          ? 'local_not_deployed_boundary_visible'
+          ? 'business_brief_entry_visible'
           : 'product_entry_visible'
   return {
     id: spec.id,

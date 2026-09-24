@@ -569,6 +569,7 @@ test('builds and validates the exact twenty-six-case technical preview proof', a
   })
   assert.equal(report.contract, EXACT_APP_PREVIEW_CONTRACT)
   assert.equal(report.cases.length, 26)
+  assert.deepEqual(report.cases.filter(entry => entry.surface === 'website').map(entry => entry.primaryFlow), ['business_brief_entry_visible', 'business_brief_entry_visible'])
   assert.deepEqual(report.cases.map((entry) => entry.id), EXACT_APP_PREVIEW_CASE_MATRIX.map((entry) => entry.id))
   assert.equal(report.cases.every((entry) => entry.mutatingRequestCount === 0), true)
   assert.equal(report.cases.every((entry) => entry.browserContextIsolated === true), true)
