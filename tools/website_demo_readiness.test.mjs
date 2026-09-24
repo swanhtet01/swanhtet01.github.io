@@ -61,14 +61,14 @@ function contentChecks(workspace) {
   return readinessChecks(workspace).filter((check) => CONTENT_CHECK_IDS.includes(check.id))
 }
 
-test('assisted Website entry stays local-only and defers to recovery and edit states', () => {
+test('assisted Website entry stays local-only and defers to recovery and edit states', async () => {
   assert.match(websiteProductSource, /const canRequestWebsiteSetup = storageMode !== 'managed'/)
   assert.match(websiteProductSource, /const showAssistedWebsitePreview = canRequestWebsiteSetup && surface === 'preview'/)
   assert.match(websiteProductSource, /!storageIssue && !canRepairLocalStorage && !pendingRestoredDraft/)
   assert.match(websiteProductSource, /!hasUnsavedChanges && !starterSetupActive/)
   const safeLink = 'href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>'
   assert.equal(websiteProductSource.split(safeLink).length - 1, 1, 'operator workspace retains the direct setup route')
-  assert.equal(websiteProductSource.split('<AssistedDeliveryScope product="website" />').length - 1, 1, 'customer preview uses the template-aware request component')
+  assert.equal(websiteProductSource.split('<AssistedDeliveryScope product="website" />').length - 1, 1, 'customer preview uses the business-brief entry component')
   assert.match(websiteProductSource, /canRequestWebsiteSetup && surface === 'work' \? <a/)
   const expression = websiteProductSource.match(/const canRequestWebsiteSetup = ([\s\S]*?)\n\s*const showAssistedWebsitePreview/)?.[1]
   assert.ok(expression)
@@ -79,12 +79,10 @@ test('assisted Website entry stays local-only and defers to recovery and edit st
       assert.equal(runInNewContext(expression, {...ready, surface, ...blocked}), false)
     }
   }
-  assert.match(websiteProductSource, /You do not need to edit the site yourself\./)
-  assert.match(websiteProductSource, /Tell us your business name, best contact, and where public material can be reviewed/)
-  assert.match(websiteProductSource, /A Facebook page, public menu, or short description is enough to start/)
-  assert.match(websiteProductSource, /Keep passwords and private customer data out/)
-  assert.match(websiteProductSource, /SuperMega prepares the page plan, starter copy, responsive layout, and first reviewable preview/)
-  assert.match(websiteProductSource, /You review one preview; domain connection and publishing stay separate/)
+  assert.doesNotMatch(websiteProductSource, /website-assisted-intake|What to send/)
+  const brief = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
+  assert.match(brief, /No passwords or private customer data/)
+  assert.match(brief, /Publishing needs your approval/)
   assert.match(websiteProductSource, /disabled=\{portalViewOnly\} onClick=\{runWebsiteAutopilot\}/)
 })
 
@@ -115,7 +113,7 @@ test('expanded checks explain failures without inviting assisted customers to pu
   const panel = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))
   assert.match(panel, /hasUnsavedChanges \? \([\s\S]*Save or discard your draft[\s\S]*\) : failingContentChecks.length > 0 \? /)
   assert.match(panel, /failingContentChecks\.map\(\(check\) => <li key=\{check.id\}><strong>\{check.label\}<\/strong><p>\{check.detail\}<\/p><\/li>\)/)
-  assert.match(panel, /showAssistedWebsitePreview \? <p>You do not need to fix these yourself\./)
+  assert.match(panel, /showAssistedWebsitePreview \? <p>Need help with these checks\? Request Website setup\./)
   assert.match(panel, /Nothing is published automatically\./)
   assert.doesNotMatch(panel, /dangerouslySetInnerHTML|onClick=|<button|<a\s/)
   assert.match(websiteProductCss, /\.website-check-guidance \{[^}]*overflow-wrap: anywhere;/)

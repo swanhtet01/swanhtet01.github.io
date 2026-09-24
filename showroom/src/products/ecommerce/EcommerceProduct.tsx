@@ -1847,13 +1847,8 @@ export function EcommerceProduct() {
         <div className="ecommerce-today-priority">
           <span className="core-eyebrow">Start here</span>
           <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Let SuperMega prepare your catalog' : ecommerceTodayHeadline}</h2>
-          <p>{assistedCatalogEntry ? 'Share your products and prices. We prepare a preview for you to review. Setup requests do not publish a store, take payments or change stock.' : ecommerceTodaySummary}</p>
+          <p>{assistedCatalogEntry ? 'Share your products and prices. Review your catalog before launch.' : ecommerceTodaySummary}</p>
           {assistedCatalogEntry ? <>
-            <details className="ecommerce-assisted-intake">
-              <summary>What to send · about 2 minutes</summary>
-              <p><strong>Tell us what you sell and where a public menu or catalog can be reviewed.</strong> A short list of key products and prices is enough to start. After scope confirmation, SuperMega provides a safe transfer method for any private spreadsheet or POS export.</p>
-              <p>We organise your catalog and prepare the customer view. You review it before launch.</p>
-            </details>
             <AssistedDeliveryScope product="ecommerce" />
             <div className="form-actions ecommerce-service-actions">
               <button className="core-button secondary" onClick={runOrderAutopilot} type="button">Try sample request</button>

@@ -57,7 +57,7 @@ test('assisted help appears only for saved failures; clear states do not invent 
     const clear = render({ showAssistedWebsitePreview: assisted })
     assert.doesNotMatch(clear, /Needs attention|Request Website setup above|Save or discard/)
     const failed = render({ failingContentChecks: failures, showAssistedWebsitePreview: assisted })
-    assert.equal(failed.includes('You do not need to fix these yourself.'), assisted)
+    assert.equal(failed.includes('Need help with these checks? Request Website setup.'), assisted)
     assert.equal(failed.includes('Nothing is published automatically.'), assisted)
   }
 })

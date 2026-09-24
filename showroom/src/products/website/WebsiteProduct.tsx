@@ -1222,13 +1222,6 @@ export function WebsiteProduct() {
               <p>{showAssistedWebsitePreview ? 'Share your business details. We prepare the pages for you to review.' : websiteAgentReason}</p>
               {showAssistedWebsitePreview ? (
                 <>
-                  <details className="website-today-checks website-assisted-intake">
-                    <summary>What to send · about 2 minutes</summary>
-                    <div className="website-check-guidance">
-                      <p><strong>Tell us your business name, best contact, and where public material can be reviewed.</strong> A Facebook page, public menu, or short description is enough to start. Keep passwords and private customer data out.</p>
-                      <p>We agree the scope and prepare a preview. Domain connection and publishing are separate steps.</p>
-                    </div>
-                  </details>
                   <AssistedDeliveryScope product="website" />
                 </>
               ) : (
