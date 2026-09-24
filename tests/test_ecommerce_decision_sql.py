@@ -26,7 +26,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
         workspace, owner, recipient = fixture.WORKSPACE, fixture.OWNER, fixture.RECIPIENT
         source = catalog_state(); source['storefrontConfiguration'] = storefront_configuration(source)
         digest = commerce_storefront_preview_digest(source)
-        reviews = [str(uuid4()), str(uuid4()), str(uuid4())]
+        reviews = [str(uuid4()) for _ in range(5)]
         with pg._connect(self.admin_url) as connection:
             connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s", (workspace,recipient))
             connection.execute("""insert into app_private.workspace_events
@@ -41,6 +41,22 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                   (review_id,workspace_id,recipient_actor_id,prepared_by,source_version,preview,preview_digest,expires_at)
                   values (%s,%s,%s,%s,1,%s::jsonb,%s,clock_timestamp()+interval '1 day')""",
                   (review,workspace,recipient,owner,json.dumps(commerce_storefront_preview(source)),digest))
+        from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
+        from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialValidationError
+        adapter = EcommerceCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=True))
+        actor = TrialPrincipal(workspace, recipient, 'human')
+        for review_id, kind in [(reviews[3], 'acceptance'), (reviews[4], 'feedback')]:
+            payload = dict(commandId=str(uuid4()), reviewId=review_id, previewDigest=digest)
+            payload.update(dict(decision='accept_preview_for_release_review') if kind=='acceptance' else dict(note='စျေးနှုန်း ပြင်ပါ'))
+            first = adapter.record_decision(actor,payload,kind=kind)
+            replay = adapter.record_decision(actor,payload,kind=kind)
+            self.assertTrue(first['persisted']); self.assertFalse(first['replayed'])
+            self.assertEqual(replay, first | {'replayed': True})
+            if kind=='feedback':
+                with self.assertRaises(TrialValidationError):
+                    adapter.record_decision(actor,payload | {'note': 'Changed request'},kind=kind)
+        with self.assertRaises(TrialValidationError):
+            adapter.record_decision(actor,payload | {'extra': True},kind='feedback')
         def insert(connection, review, kind, *, bad_digest=False, source_version=1):
             command = str(uuid4())
             note = 'စျေးနှုန်း ပြင်ပါ' if kind == 'feedback' else None
@@ -75,7 +91,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                 with self.assertRaises(self.db_error), connection.transaction(): insert(connection,review,kind)
             for sql in ["update app_private.ecommerce_customer_decisions set note='changed'", "delete from app_private.ecommerce_customer_decisions"]:
                 with self.assertRaises(self.db_error), connection.transaction(): connection.execute(sql)
-            self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],2)
+            self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],4)
             self.context(connection,recipient,workspace='other-company')
             self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],0)
         # Even a privileged maintenance role cannot silently rewrite history.
@@ -84,7 +100,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                 with self.assertRaises(self.db_error) as immutable, connection.transaction():
                     connection.execute(sql)
                 self.assertEqual(immutable.exception.sqlstate, '55000')
-            self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],2)
+            self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_decisions').fetchone()[0],4)
         with pg._connect(self.runtime_url) as connection:
             self.context(connection,owner)
             connection.execute("update app_private.workspace_state set version=version+1 where workspace_id=%s and surface='commerce'", (workspace,))
@@ -92,6 +108,8 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             with self.assertRaises(self.db_error) as stale, connection.transaction():
                 insert(connection,reviews[1],'feedback')
             self.assertEqual(stale.exception.sqlstate, '42501')
+        with self.assertRaises(TrialValidationError):
+            adapter.record_decision(actor,payload,kind='feedback')
         with pg._connect(self.admin_url) as connection:
             for role in ('anon','authenticated','service_role'):
                 self.assertFalse(connection.execute("select has_table_privilege(%s,'app_private.ecommerce_customer_decisions','SELECT,INSERT,UPDATE,DELETE')",(role,)).fetchone()[0])

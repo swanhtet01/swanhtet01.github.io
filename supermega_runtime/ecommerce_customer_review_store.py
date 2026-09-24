@@ -240,3 +240,60 @@ class EcommerceCustomerReviewStore:
                 if (cursor.fetchone() or {}).get('status')!='revoked': raise TrialValidationError('ecommerce_review_revoke_failed')
             result=dict(reviewId=review_id,status='revoked',persisted=True,replayed=replay,publicationAuthorized=False,deploymentAuthorized=False)
         return result
+
+
+    def record_decision(self, principal, payload, *, kind):
+        """Commit an exact customer command; no route or publication authority.
+
+        Current assignment/access are checked before any retained command lookup.
+        An expired or revoked assignment cannot be used to replay a receipt.
+        """
+        from .ecommerce_customer_review import CONTRACT, build_catalog_acceptance, build_catalog_change_request
+        from .trial_store import TrialReadiness
+        if kind not in ('acceptance', 'feedback') or not isinstance(payload, dict):
+            raise TrialValidationError('ecommerce_decision_payload_invalid')
+        review_id = uuid(payload.get('reviewId'))
+        with self._transaction(principal, write=True, capability='ecommerce.review') as (cursor, actor):
+            cursor.execute("""select *,clock_timestamp() as checked_at
+                from app_private.ecommerce_customer_reviews
+                where workspace_id=%s and recipient_actor_id=%s and review_id=%s""",
+                (actor.workspace_id, actor.actor_id, review_id))
+            row = cursor.fetchone()
+            if row is None: raise TrialPermissionDenied('ecommerce.review')
+            assignment = dict(contract=CONTRACT, reviewId=str(row['review_id']), workspaceId=row['workspace_id'],
+                recipientActorId=row['recipient_actor_id'], preparedBy=row['prepared_by'],
+                preparedAt=row['prepared_at'].isoformat(), expiresAt=row['expires_at'].isoformat(),
+                sourceVersion=row['source_version'], contentRevision=row['content_revision'],
+                preview=row['preview'], previewDigest=row['preview_digest'], status=row['status'])
+            # These flags are established by the guarded transaction and its
+            # post-lock membership/session/entitlement recheck, not caller input.
+            verified = TrialReadiness(backend='postgres', database_ready=True, role_ready=True,
+                schema_ready=True, auth_ready=True, membership_ready=True, audit_ready=True,
+                write_enabled=True, capabilities=frozenset({'ecommerce.review'}), product_entitlements=('ecommerce',))
+            build = build_catalog_acceptance if kind == 'acceptance' else build_catalog_change_request
+            candidate = build(assignment, payload, principal=actor, readiness=verified,
+                source_version=row['source_version'], now=row['checked_at'])
+            params = (actor.workspace_id, actor.actor_id, candidate['commandId'])
+            query = """select review_id,source_version,content_revision,preview_digest,command_fingerprint,kind,note,created_at
+                from app_private.ecommerce_customer_decisions where workspace_id=%s and actor_id=%s and command_id=%s"""
+            cursor.execute(query, params)
+            retained = cursor.fetchone()
+            replayed = retained is not None
+            if retained is None:
+                cursor.execute("""insert into app_private.ecommerce_customer_decisions
+                    (workspace_id,actor_id,command_id,review_id,source_version,content_revision,preview_digest,command_fingerprint,kind,note)
+                    values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (*params, review_id, candidate['sourceVersion'], candidate['contentRevision'],
+                     candidate['previewDigest'], candidate['commandFingerprint'], kind, candidate.get('note')))
+                cursor.execute(query, params)
+                retained = cursor.fetchone()
+            if (retained is None or str(retained['review_id']) != review_id
+                or retained['source_version'] != candidate['sourceVersion']
+                or retained['content_revision'] != candidate['contentRevision']
+                or retained['preview_digest'] != candidate['previewDigest']
+                or retained['command_fingerprint'] != candidate['commandFingerprint']
+                or retained['kind'] != kind or retained['note'] != candidate.get('note')):
+                raise TrialValidationError('ecommerce_decision_command_conflict')
+            result = candidate | dict(persisted=True, replayed=replayed)
+            result['acceptedAt' if kind == 'acceptance' else 'createdAt'] = retained['created_at'].isoformat()
+        return result
