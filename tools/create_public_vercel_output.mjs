@@ -259,7 +259,7 @@ const sharedStyle = `
   .trial-proof-summary h3 { margin-top: 8px; }
   .trial-proof-summary > p { font-size: 14px; }
   .trial-proof-metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1px; margin: 22px 0 0; background: var(--line); }
-  .trial-proof-metrics div { min-width: 0; padding: 14px; background: var(--background); }
+  .trial-proof-metrics div { min-width: 0; padding: 14px; background: var(--panel-solid); }
   .trial-proof-metrics dt { color: var(--quiet); font-size: 11px; font-weight: 700; text-transform: uppercase; }
   .trial-proof-metrics dd { margin: 4px 0 0; color: var(--ink); font-size: 18px; font-weight: 800; }
   .direct-links { display: grid; margin-top: 34px; border-top: 1px solid var(--line); }
@@ -408,7 +408,7 @@ const sharedStyle = `
   @media (min-width: 761px) { .detail-disclosure > summary { display: none; } details.detail-disclosure:not([open]) > .disclosure-body { display: block; } .detail-disclosure { margin-top: 0; border-top: 0; } .product-disclosure .disclosure-body { padding-top: 16px; } }
   @media (max-width: 760px) { .hero { gap: 28px; padding-top: 28px; padding-bottom: 32px; } .hero-note { display: none; } .section { padding: 32px 0; } .section-head { margin-bottom: 18px; } .section-head p { font-size: 16px; } .workspace-bar { min-height: 44px; } .system-preview-body { padding: 14px 16px; } .system-row { min-height: 44px; } .system-boundary { margin-top: 14px; } .compact-solution > p { min-height: 0; } .closing-strip { padding: 22px; } }
   @media (max-width: 420px) { .compact-solution { padding: 18px; } .first-loop-list li { grid-template-columns: 28px minmax(0,1fr); padding: 10px 11px; font-size: 13px; } }
-  @media (max-width: 520px) { .compact-solutions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } .compact-solution { min-height: 250px; padding: 16px; } .compact-solution h3 { margin-top: 12px; font-size: 22px; } .compact-solution > p { font-size: 11px; line-height: 1.45; } .compact-solution .card-index { min-height: 28px; font-size: 8px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { font-size: 12px; } }
+  @media (max-width: 520px) { .compact-solutions { grid-template-columns: 1fr; gap: 14px; } .compact-solution { min-height: 0; padding: 22px; } .compact-solution h3 { margin-top: 16px; font-size: 28px; } .compact-solution > p { font-size: 16px; line-height: 1.65; } .compact-solution .myanmar-label { line-height: 1.9; } .compact-solution .card-index { font-size: 11px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { margin-top: 16px; font-size: 14px; } }
   @media (max-width: 760px) { .offer-model-grid { grid-template-columns: 1fr; } .offer-model-lane { padding: 24px 0; } .offer-model-lane + .offer-model-lane { border-top: 1px solid var(--line-strong); border-left: 0; padding-left: 0; } .offer-model-action { align-items: stretch; flex-direction: column; } .offer-model-action .button { width: 100%; } }
 `
 
