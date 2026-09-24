@@ -52,7 +52,7 @@ if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') 
 const website = manifest.customerProducts?.find((product) => product.id === 'website')
 if (website?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || website?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
-  || website?.headline !== 'Build a simple company website from a brief.') fail('website_download_trial_contract_drift')
+  || website?.headline !== 'Make your business easy to find.') fail('website_download_trial_contract_drift')
 const ecommerce = manifest.customerProducts?.find((product) => product.id === 'ecommerce')
 if (ecommerce?.views?.join(',') !== 'Storefront,Cart and quote,Request receipt,Shop review,Returns'
   || !ecommerce?.workflow?.includes('Review a 15-minute whole-MMK quote')
@@ -261,9 +261,9 @@ if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
-const expectedHomeDescription = manifest.company.supporting.split(' It does not replace a POS')[0]
+const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Explore free samples or get help setting up the tools your business needs.'
 if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
-if (homePage.title !== 'Shop Profit Control for Myanmar operators | SuperMega') fail('home_manifest_title_drift')
+if (homePage.title !== 'SuperMega | Business tools for Myanmar') fail('home_manifest_title_drift')
 if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
 for (const staleToken of [
   '<title>SuperMega | Four products</title>',
@@ -278,49 +278,30 @@ if (shop?.primaryCta?.label !== 'Open Shop Profit Control'
   || shop?.primaryCta?.url !== 'https://app.supermega.dev/shop/?tab=today') fail('shop_profit_control_action_drift')
 const shopProfitControlAnchor = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
 for (const token of [
-  'Less setup.<br>More time for your business.',
-  manifest.company.headline,
-  manifest.company.supporting,
-  'POS-independent',
-  'Read-only local record',
-  'No payment or stock write',
-  shopProfitControlAnchor,
-  'role="group" aria-label="Core capabilities"',
-  '--quiet: #5f6c64;',
-  '@media (max-width: 520px)',
-  '.compact-solution .module-tags { display: none; }',
+  'Your business.<br>A clearer day.',
+  'For businesses in Myanmar',
+  'lang="my"',
+  'Myanmar Text',
   'min-height: 44px',
-  'href="#products">Explore all products</a>',
+  'class="button primary" href="#products"',
+  'href="https://app.supermega.dev/?choose=1"',
   'id="products"',
-  '>Products<',
-  'Start with Shop Profit Control, then choose a connected workflow.',
-  manifest.company.statement,
+  'Start with one useful tool.',
   'id="model" aria-label="How SuperMega prepares your business tools"',
-  'Your business. Our setup work.',
-  'Tell us the job',
-  'Review a prepared result',
-  'Prepare for daily use',
-  'We confirm scope, price and timing',
-  'A sample or submitted brief is not a live business account.',
+  'We agree scope, price and timing.',
+  'Samples are free and stored on your device. Business setup is agreed separately.',
   'href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a>',
   'id="trust"',
   'aria-label="Security boundary"',
-  'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
+  'You review before anything is published, sent or charged.',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
-if (countOccurrences(home, shopProfitControlAnchor) !== 1) fail('homepage_shop_profit_control_action_count_wrong')
 for (const product of publicProducts) {
-  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
-  const guidedSampleAnchor = `href="${guidedSampleRoute}">${guidedSampleLabel}</a>`
-  if (countOccurrences(home, guidedSampleAnchor) !== 1) fail('guided_product_action_count_wrong', { product: product.id })
-  if (!home.includes(product.headline)) fail('product_headline_missing', { product: product.id })
-  for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
-    if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
-  }
+  if (countOccurrences(home, `id="${product.id}"`) !== 1) fail('homepage_product_card_count_wrong', { product: product.id })
+  const landing = pages.get(`/${product.id}/`)?.html || ''
+  if (!landing.includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`)) fail('guided_product_action_missing', { product: product.id })
 }
-if (countOccurrences(home, '>Start free sample</a>') !== publicProducts.filter((product) => product.id !== 'shop').length) fail('guided_product_cta_count_wrong')
 if ((home.match(/>Request assisted setup<\/a>/g) || []).length !== 1) fail('assisted_setup_cta_count_wrong')
 if (home.includes('Start guided trial') || home.includes('aria-label="Templates"')) fail('retired_public_setup_copy_returned')
 for (const retiredToken of [
@@ -335,7 +316,7 @@ for (const retiredToken of [
 }
 for (const product of publicProducts) {
   if (home.includes(`href="${product.appRoute}"`)) fail('direct_product_route_remains_primary', { product: product.id })
-  if (!home.includes(`href="/${product.id}/">${product.name} overview</a>`)) fail('landing_route_link_missing', { product: product.id })
+  if (!home.includes(`href="/${product.id}/">Explore ${product.name} `)) fail('landing_route_link_missing', { product: product.id })
 }
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
@@ -344,8 +325,8 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// Four shared-shell links, two hero actions, two links per product card, and one
-// managed-pilot action form the complete homepage navigation surface.
+// Four shared-shell links, two hero actions, one overview and one card link per
+// product, and one assisted setup action form the homepage navigation surface.
 const expectedHomeLinkCount = 4 + 2 + (publicProducts.length * 2) + 1
 if ((home.match(/<a\b/g) || []).length !== expectedHomeLinkCount) fail('homepage_link_surface_drift', { expected: expectedHomeLinkCount })
 
@@ -374,10 +355,12 @@ for (const product of publicProducts) {
     `The ${launchModules.length} core workflows above`,
     'Separate client portal',
     'No automatic send or payment',
-    'No account or model call required',
+    'No account needed',
     'aria-label="Security boundary"',
-    'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
-    'Free product. Managed intelligence.',
+    'You review before anything is published, sent or charged.',
+    'Ready to make it yours?',
+    'Samples stay on this device. They do not publish, send orders or take payments.',
+    '<details class="frame product-details"><summary>',
     'Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.',
   ]) {
     if (!landing.includes(token)) fail('landing_page_contract_missing', { route: landingRoute, token })
@@ -396,7 +379,7 @@ for (const product of publicProducts) {
     }
   }
   if (product.id === 'ecommerce') {
-    for (const token of ['current local Shop workspace', 'browser-local catalog', 'request, not an order', 'no payment is taken', 'no stock is reserved or moved', 'Shop remains the price and stock record']) {
+    for (const token of ['current Shop workspace', 'browser-local catalog', 'request, not an order', 'no payment is taken', 'no stock is reserved or moved', 'Shop remains the price and stock record']) {
       if (!landing.toLowerCase().includes(token.toLowerCase())) fail('ecommerce_local_boundary_missing', { token })
     }
     for (const token of ['Storefront from real stock', 'Create a Shop-connected ordering page.', 'Send the reviewed request into Shop.']) {

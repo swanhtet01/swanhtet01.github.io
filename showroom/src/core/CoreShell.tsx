@@ -617,9 +617,9 @@ const STEP_SUGGESTIONS: ReadonlyArray<[SetupProductId, string, string]> = [
 ]
 
 const customerProducts = [
-  ['Shop', 'Sales, orders, stock, close.', 'Complete a sample sale', '/shop/'],
-  ['Website', 'Pages, leads, preview.', 'Preview a business website', '/website/'],
-  ['Ecommerce', 'Storefront to Shop handoff.', 'Save a sample request on this device', '/ecommerce/'],
+  ['Shop', 'Sales, stock and your daily totals.', 'Open Shop', '/shop/'],
+  ['Website', 'Your services, photos and contact details.', 'Open Website', '/website/'],
+  ['Ecommerce', 'A product catalog and customer requests.', 'Open Ecommerce', '/ecommerce/'],
 ] as const
 
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
@@ -697,7 +697,7 @@ export function ProductHomePage() {
     <div className="workspace-screen product-home-screen">
       {managedPortal
         ? <PageHeading copy="Only assigned products are shown." eyebrow="Company portal" title="Company products" />
-        : <PageHeading copy="We set it up. You approve the result and run your business." eyebrow="Products" title="Switch product" />}
+        : <PageHeading copy="Choose a tool to get started. Your saved work stays on this device." eyebrow="SuperMega" title="Your business tools" />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
           <span>Active company</span>
@@ -714,10 +714,7 @@ export function ProductHomePage() {
         : null}
       {!managedPortal && productSetups && !anyStarted ? (
         <section aria-label="Setup by SuperMega" className="platform-start-nudge">
-          <strong>Tell us what your business needs.</strong>
-          <p>We prepare your Website or Ecommerce catalog for review, or configure Shop for your daily sales. You do not need to learn a builder.</p>
-          <a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=assisted-app-entry">Request setup by SuperMega</a>
-          <p>Want to look around first? The sample workspaces below are optional. They are not a live customer setup.</p>
+          <div><strong>Try a sample</strong><p>No account needed. Sample records stay on this device.</p></div><Link className="core-button" to="/login">Company sign in</Link>
         </section>
       ) : nextSetupStep ? (
         <p className="platform-start-nudge"><strong>Your saved work stays here.</strong> For another product, <a className="platform-start-link" href={`https://supermega.dev/contact/?product=${signupProductSlug(nextSetupStep[0])}&source=assisted-app-entry`}>request {nextSetupStep[1]} setup</a>. SuperMega prepares it for your review.</p>
@@ -738,7 +735,7 @@ export function ProductHomePage() {
           return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
               <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
               <span className="product-track-copy">
-                <small>{!managedPortal && !activeSetupIds.includes(setupKey) ? 'Retained workspace' : 'First action'}</small>
+                <small>{!managedPortal && !activeSetupIds.includes(setupKey) ? 'Retained workspace' : managedPortal ? 'Company product' : workspaceName ? 'Saved on this device' : 'Sample workspace'}</small>
                 <h2>{name}</h2>
                 <p>{outcome}</p>
                 {workspaceName ? <span className="product-track-workspace">Continue saved workspace: {workspaceName}</span> : null}
@@ -749,7 +746,7 @@ export function ProductHomePage() {
       </nav>
       {managedPortal ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
       {!managedPortal && anyStarted ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
-      <p className="product-home-note">{managedPortal ? 'Separate workspaces, roles, and access per product.' : 'Samples stay separate.'}</p>
+      <p className="product-home-note">{managedPortal ? 'Your company controls access to each product.' : <>Need this set up for your business? <a href="https://supermega.dev/contact/?product=guide&amp;source=assisted-app-entry">Ask SuperMega</a>. Samples are not live business accounts.</>}</p>
     </div>
   )
 }

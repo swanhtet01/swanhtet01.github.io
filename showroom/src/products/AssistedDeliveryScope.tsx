@@ -24,7 +24,7 @@ export function AssistedDeliveryScope({ product }: { product: Product }) {
   const selected = templates.find(item => item.id === selection)
   return <section className="assisted-delivery-scope" aria-label="Choose your setup outcome">
     <a className="assisted-delivery-request" href={deliverySetupLink(product, selection)} target="_blank" rel="noopener noreferrer">{product === 'website' ? 'Request Website setup' : 'Request catalog setup'}<span className="sr-only"> (opens in a new tab)</span></a>
-    <small>Nothing is sent until you submit it. Your saved workspace stays unchanged.</small>
+    <small>Nothing is sent until you submit it. Saved work is unchanged.</small>
     <details className="assisted-delivery-options">
       <summary>{selected ? `Starting point: ${selected.name}` : 'Choose a starting point · optional'}</summary>
       <label htmlFor={id}>What should this do for your business?</label>
@@ -33,7 +33,7 @@ export function AssistedDeliveryScope({ product }: { product: Product }) {
         {templates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}
       </select>
       <div aria-live="polite">
-        <p>{selected ? selected.outcome : 'SuperMega can recommend one. You do not need to choose a template or build the site yourself.'}</p>
+        <p>{selected ? selected.outcome : 'Not sure? We can help you choose.'}</p>
         {selected && <div className="assisted-delivery-outline">
           <strong>How we prepare this with you</strong>
           <ol>{selected.workflow.map(step => <li key={step}>{step}</li>)}</ol>
@@ -44,7 +44,7 @@ export function AssistedDeliveryScope({ product }: { product: Product }) {
     <details>
       <summary>What happens next</summary>
       {selected && <p><strong>Useful starting material:</strong> choose whichever you already have: {selected.entryPoints.join(', ')}. You do not need to prepare all of these. Share public material first; private files use a separate safe transfer.</p>}
-      <p>Your selection fills the request form. We confirm scope, price and timing, prepare the preview and handle setup. Publishing, domains, payment and stock actions are not enabled here.</p>
+      <p>Your selection fills a request form. We agree scope, price and timing before setup. This does not publish, connect a domain, take payment or change stock.</p>
     </details>
   </section>
 }

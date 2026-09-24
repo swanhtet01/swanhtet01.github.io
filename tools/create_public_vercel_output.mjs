@@ -132,7 +132,7 @@ const sharedStyle = `
   }
   * { box-sizing: border-box; }
   html { min-width: 320px; scroll-behavior: smooth; background: var(--bg); }
-  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
+  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Myanmar Text", "Noto Sans Myanmar", sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
   body::before { position: fixed; inset: 0; z-index: -2; background: radial-gradient(circle at 76% -16%, rgba(11,116,94,.12), transparent 34%), linear-gradient(180deg, #fbfaf6 0, var(--bg) 54%, #f2f4ef 100%); content: ""; }
   body::after { display: none; content: ""; }
   a { color: inherit; }
@@ -372,6 +372,28 @@ const sharedStyle = `
   .offer-model-action p { max-width: 720px; margin: 0; color: var(--quiet); font-size: 11px; }
   :focus-visible { outline: 3px solid rgba(11,116,94,.34); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; } }
+  .home-hero { display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; gap: 64px; padding-block: 88px; }
+  .home-hero h1 { font-size: clamp(44px, 5.4vw, 76px); line-height: 1.05; letter-spacing: -.055em; }
+  .home-hero .lede { max-width: 500px; font-size: 20px; }
+  .hero-local, .myanmar-label { color: var(--muted); line-height: 1.9; letter-spacing: normal; }
+  .hero-caption { margin: 20px 0 0; color: var(--quiet); font-size: 14px; }
+  .business-overview { padding: 28px; background: var(--panel-solid); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .overview-heading { display: flex; align-items: center; gap: 16px; padding-bottom: 24px; font-size: 14px; font-weight: 650; }
+  .business-overview > a { display: grid; grid-template-columns: 36px minmax(0,1fr) auto; align-items: center; gap: 16px; min-height: 114px; padding-block: 20px; border-top: 1px solid var(--line); text-decoration: none; }
+  .business-overview > a:hover strong { color: var(--green); }
+  .overview-symbol { color: var(--green); font-family: monospace; font-size: 14px; }
+  .business-overview small { display: block; color: var(--quiet); font-size: 11px; letter-spacing: .1em; }
+  .business-overview strong { display: block; margin-block: 4px; font-size: 21px; letter-spacing: -.025em; }
+  .business-overview em { color: var(--muted); font-size: 14px; font-style: normal; }
+  .business-overview > p { margin: 12px 0 0; padding-top: 20px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 13px; }
+  .compact-solution .myanmar-label { margin-bottom: 14px; font-size: 14px; }
+  .compact-solution .card-link { justify-content: space-between; margin-top: auto; }
+  .compact-solution { display: flex; flex-direction: column; }
+  .product-details { border-block: 1px solid var(--line-strong); margin-block: 24px; }
+  .product-details > summary { display: list-item; cursor: pointer; min-height: 64px; padding: 20px 8px; font-weight: 650; }
+  .product-details .frame { width: 100%; }
+  .product-details .section { padding-block: 32px; }
+  @media (max-width: 760px) { .home-hero { gap: 32px; } .business-overview { padding: 20px; } .home-hero .lede { font-size: 18px; } .home-hero .actions > a { flex: 1; } }
   @media (max-width: 980px) { .hero { grid-template-columns: 1fr; gap: 42px; padding-top: 60px; } .hero-copy { max-width: 820px; } .workspace { transform: none; } .split, .solution-block { grid-template-columns: 1fr; gap: 30px; } .sticky-copy { position: static; } .surface-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .surface-card:last-child { grid-column: 1/-1; min-height: 210px; } .principle-grid, .trust-compact { grid-template-columns: repeat(2,minmax(0,1fr)); } .product-roadmap { grid-template-columns: 1fr; } .contact-layout { grid-template-columns: 1fr; gap: 42px; } }
   @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .brand { gap: 8px; font-size: 11px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap, .shared-capability { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 38px; } .product-card { padding: 24px; } .compact-solution { padding: 22px; } }
@@ -500,24 +522,26 @@ function shopProfitControlAction() {
 
 const SHOP_PROFIT_CONTROL_ACTION = shopProfitControlAction()
 
+const productSummary = {
+  shop: ['Run your shop', 'Record sales, check stock and see what needs attention.', 'အရောင်းနှင့် ကုန်ပစ္စည်းစာရင်း'],
+  website: ['Present your business', 'A clear website with your services, photos and contact details.', 'လုပ်ငန်းဝက်ဘ်ဆိုက်'],
+  ecommerce: ['Take customer requests', 'Show your catalog and let customers send a request for your team to confirm.', 'အွန်လိုင်းကုန်ပစ္စည်းစာရင်း'],
+}
+
 function productCardHtml(product, index) {
-  const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
-  const firstLoop = productFirstOperatingLoop(product)
-  const guidedSample = guidedSampleAction(product)
+  const [job, description, myanmar] = productSummary[product.id]
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
-    <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
-    <h3>${escapeHtml(product.name)}</h3>
-    <p>${escapeHtml(product.headline)}</p>
-    <div class="compact-first"><span>Start here</span>${escapeHtml(firstLoop[0])}</div>
-    <div class="module-tags" role="group" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
-    <a class="card-link" href="/${escapeHtml(product.id)}/">${escapeHtml(product.name)} overview</a>
-    <a class="card-link" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a>
+    <span class="card-index">0${index + 1} / ${escapeHtml(product.name)}</span>
+    <h3>${escapeHtml(job)}</h3>
+    <p lang="my" class="myanmar-label">${escapeHtml(myanmar)}</p>
+    <p>${escapeHtml(description)}</p>
+    <a class="card-link" href="/${escapeHtml(product.id)}/">Explore ${escapeHtml(product.name)} <span aria-hidden="true">↗</span></a>
   </article>`
 }
 
 const homePage = manifest.pages.find((page) => page.route === '/')
 assert(homePage?.file === 'index.html', 'home_page_manifest_entry_invalid')
-assert(typeof homePage.title === 'string' && homePage.title.includes('Shop Profit Control'), 'home_page_title_invalid')
+assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'), 'home_page_title_invalid')
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const homeHtml = documentHtml({
@@ -526,10 +550,13 @@ const homeHtml = documentHtml({
   description: homePage.description,
   schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: homePage.description },
   content: `<main id="content">
-    <section class="frame hero"><div class="hero-copy"><span class="eyebrow">Business tools, prepared with you</span><h1>Less setup.<br>More time for your business.</h1><p class="lede">A clearer shop day, a Website you are proud to share, and a catalog customers can request from. Tell us what you need. SuperMega prepares the details with you.</p><div class="actions"><a class="button primary" href="${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.href)}">${escapeHtml(SHOP_PROFIT_CONTROL_ACTION.label)}</a><a class="button" href="#products">Explore all products</a></div><div class="hero-note"><span>Shop</span><span>Website</span><span>Ecommerce</span></div><details class="delivery-boundary"><summary>What the Shop example does</summary><p>${escapeHtml(manifest.company.headline)}</p><p>${escapeHtml(manifest.company.supporting)}</p><p>POS-independent · Read-only local record · No payment or stock write</p></details></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Start with Shop Profit Control, then choose a connected workflow.</h2><p>${escapeHtml(manifest.company.statement)}</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
-    <section class="frame section offer-model" id="model" aria-label="How SuperMega prepares your business tools"><div class="section-head"><span class="eyebrow">Prepared with you</span><h2>Your business. Our setup work.</h2><p>Start with what you already have. We prepare the workflow, you review it, and we agree the next step before live use.</p></div><ol class="delivery-steps"><li><h3>Tell us the job</h3><p>Share your business type and what needs to work better. An existing catalog, brochure or short description is enough to start the conversation.</p></li><li><h3>Review a prepared result</h3><p>We confirm scope, price and timing, then prepare your Shop workflow, Website or catalog. You check the business details without learning a builder.</p></li><li><h3>Prepare for daily use</h3><p>We check access, devices, data and recovery before handoff. Publishing and managed activation require their own checks and approval.</p></li></ol><div class="offer-model-action"><p class="delivery-summary">Explore local examples free. Assisted setup and ongoing service are scoped separately. A sample or submitted brief is not a live business account.</p><a class="button primary" href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a></div></section>
-    <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
+    <section class="frame hero home-hero">
+      <div class="hero-copy"><span class="eyebrow">For businesses in Myanmar</span><h1>Your business.<br>A clearer day.</h1><p class="lede">Keep sales organised. Get your business online. Make it easier for customers to order.</p><p class="hero-local" lang="my">သင့်လုပ်ငန်းကို ပိုမိုလွယ်ကူစွာ စီမံပါ။</p><div class="actions"><a class="button primary" href="#products">Find your business tool <span aria-hidden="true">↗</span></a><a class="button" href="https://app.supermega.dev/?choose=1">Open app</a></div><p class="hero-caption">Explore a free sample, or ask us to set it up with you.</p></div>
+      <aside class="business-overview" aria-label="Three ways to use SuperMega"><div class="overview-heading"><span class="brand-mark" aria-hidden="true">&gt;_</span><span>One business. Less busywork.</span></div><a href="/shop/"><span class="overview-symbol" aria-hidden="true">01</span><span><small>SHOP</small><strong>Sales &amp; stock</strong><em>Know where the day stands.</em></span><b aria-hidden="true">↗</b></a><a href="/ecommerce/"><span class="overview-symbol" aria-hidden="true">02</span><span><small>ECOMMERCE</small><strong>Your product catalog</strong><em>From browsing to a customer request.</em></span><b aria-hidden="true">↗</b></a><a href="/website/"><span class="overview-symbol" aria-hidden="true">03</span><span><small>WEBSITE</small><strong>Your online presence</strong><em>Help people find and contact you.</em></span><b aria-hidden="true">↗</b></a><p>Choose one. Add more when you need them.</p></aside>
+    </section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">What do you need?</span><h2>Start with one useful tool.</h2><p>For shops, service businesses and growing teams.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
+    <section class="frame section offer-model" id="model" aria-label="How SuperMega prepares your business tools"><div class="section-head"><span class="eyebrow">Help with setup</span><h2>You know your business.<br>We help with the tools.</h2></div><ol class="delivery-steps"><li><h3>Tell us what you need</h3><p>A short description, product list or existing brochure is enough to start.</p></li><li><h3>Review your setup</h3><p>We agree scope, price and timing. You check a prepared preview.</p></li><li><h3>Start when it is ready</h3><p>We confirm access, support and the steps to go live with you.</p></li></ol><div class="offer-model-action"><p class="delivery-summary">Samples are free and stored on your device. Business setup is agreed separately.</p><a class="button primary" href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a></div></section>
+    <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">You stay in control</span><p>You review before anything is published, sent or charged.</p></div></section>
   </main>`,
 })
 
@@ -613,25 +640,25 @@ function firstJobTemplatesHtml(productId) {
 function assistedDeliverablesHtml(productId) {
   const offers = {
     website: {
-      title: 'A Website prepared for your business, not another builder to learn.',
+      title: 'Your business, clearly presented.',
       steps: [
-        ['Share the essentials', 'Tell us what you offer, who it is for and how people should reach you. The current Website starter supports up to four featured offerings, not full menu management. Existing copy and photos are optional starting points.'],
-        ['Review your prepared pages', 'We agree the scope, then prepare a responsive layout, business copy and clear contact actions. You review names, services, images and claims before approval.'],
-        ['Approve a separate launch', 'Receive a reviewed preview and an agreed handoff. Domain ownership, publishing, maintenance and any forms are scoped and checked separately.'],
+        ['Share the essentials', 'Share your services, photos and contact details. The starter features up to four offerings; full menu management is not included.'],
+        ['Review your prepared pages', 'We prepare your pages. You check the words, images and business details.'],
+        ['Approve a separate launch', 'You approve the preview. We agree your domain, publishing and ongoing support separately.'],
       ],
     },
     ecommerce: {
-      title: 'A prepared catalog with a clear path from interest to request.',
+      title: 'Your catalog, ready for customers to browse.',
       steps: [
-        ['Share your product list', 'Start with a list or existing catalog. We confirm product details, variants, photos and prices with you rather than inventing them.'],
-        ['Review the customer journey', 'We prepare the catalog and cart for review. Check the item details and request handoff; a request is not a confirmed order or payment.'],
-        ['Agree how requests are handled', 'Confirm who reviews requests and how availability and manual payment are checked. Live access, delivery rules and integrations require a separate agreed setup.'],
+        ['Share your product list', 'Share your products, photos and prices. We confirm the details with you.'],
+        ['Review the customer journey', 'Check the catalog and request flow. Your team confirms each order and payment.'],
+        ['Agree how requests are handled', 'Agree who handles requests, delivery and manual payment checks before going live.'],
       ],
     },
   }
   const offer = offers[productId]
   if (!offer) return ''
-  return `<section class="frame section" id="prepared-delivery"><div class="section-head"><span class="eyebrow">Done with SuperMega</span><h2>${escapeHtml(offer.title)}</h2><p>No builder experience needed. Scope, price and timing are agreed before work begins.</p></div><ol class="delivery-steps">${offer.steps.map(([title, body]) => `<li><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></li>`).join('')}</ol><p class="delivery-summary">We prepare your agreed deliverables from approved material. You review facts and image rights; nothing is published, sent or charged automatically. The free sample is optional and is not a live service.</p></section>`
+  return `<section class="frame section" id="prepared-delivery"><div class="section-head"><span class="eyebrow">Done with SuperMega</span><h2>${escapeHtml(offer.title)}</h2><p>No builder experience needed. Scope, price and timing are agreed before work begins.</p></div><ol class="delivery-steps">${offer.steps.map(([title, body]) => `<li><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></li>`).join('')}</ol><p class="delivery-summary">You approve the content and image rights before launch. Samples are optional and are not a live service.</p></section>`
 }
 
 function productLandingHtml(product, page) {
@@ -654,15 +681,15 @@ function productLandingHtml(product, page) {
     shareImage: `/og-card-${product.id}.png`,
     schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
     content: `<main id="content">
-    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions">${actionsHtml}</div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
+    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions">${actionsHtml}</div><div class="hero-note"><span>Free browser sample</span><span>No account needed</span><span>Mobile-ready workflows</span></div><p class="hero-caption">Samples stay on this device. They do not publish, send orders or take payments.</p></section>
     ${assistedDeliverablesHtml(product.id)}
-    <section class="frame section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">${product.id === 'shop' ? 'First operating loop' : 'Optional sample walkthrough'}</span><h2>${product.id === 'shop' ? `Start with one ${escapeHtml(product.name)} job.` : 'Want to explore the example first?'}</h2><p>${product.id === 'shop' ? 'This is the path a new owner should understand before looking at advanced modules.' : 'You can request assisted setup without completing this sample. These steps explain the local example, not work you must do before contacting us.'}</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
+    <details class="frame product-details"><summary>Explore the sample and workflow details</summary><p class="delivery-summary">${escapeHtml(product.description)}</p><section class="section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">${product.id === 'shop' ? 'First operating loop' : 'Optional sample walkthrough'}</span><h2>${product.id === 'shop' ? `Start with one ${escapeHtml(product.name)} job.` : 'Want to explore the example first?'}</h2><p>${product.id === 'shop' ? 'This is the path a new owner should understand before looking at advanced modules.' : 'You can request assisted setup without completing this sample. These steps explain the local example, not work you must do before contacting us.'}</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
     ${firstJobTemplatesHtml(product.id)}
     <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">Start here</span><h2>${escapeHtml(launchModules.length)} core ${escapeHtml(product.name)} workflows.</h2><p>Begin with the work used most often. Advanced tools stay inside the workspace and appear when they are relevant.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} core workflows">${launchModules.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
     ${product.id === 'shop' ? tradeTemplatesHtml() : ''}
     <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Use the core workflow before adding complexity.</h2><p>The guided workspace runs on the owner’s device. Managed service is scoped separately for shared records and infrastructure the business asks SuperMega to operate.</p></div><div class="tier-grid"><div class="tier-lane"><span class="eyebrow">Local</span><h3>Start one real job</h3><ul class="offer-model-list"><li>The ${escapeHtml(launchModules.length)} core workflows above</li><li>Backup and restore</li><li>Review before consequential actions</li></ul></div><div class="tier-lane"><span class="eyebrow">Assisted setup</span><h3>Prepare, then review</h3><ul class="offer-model-list"><li>Agreed setup from approved business information</li><li>Review scope and delivery before activation</li><li>No automatic send or payment</li></ul></div><div class="tier-lane"><span class="eyebrow">Managed</span><h3>One company workspace</h3><ul class="offer-model-list"><li>Separate client portal</li><li>Staff sign-ins and limits</li><li>Shared records with recovery controls</li></ul></div></div></section>
-    <section class="frame trust-strip" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
-    <section class="frame section"><div class="closing-strip"><div><h2>Free product. Managed intelligence.</h2><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></div><a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a></div></section>
+    <p class="delivery-summary">Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></details><section class="frame trust-strip" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>You review before anything is published, sent or charged.</p></div></section>
+    <section class="frame section"><div class="closing-strip"><div><h2>Ready to make it yours?</h2><p>Tell us what you need. We agree the setup and next steps with you.</p></div><a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a></div></section>
   </main>`,
   })
 }

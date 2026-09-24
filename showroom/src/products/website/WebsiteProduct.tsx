@@ -1176,7 +1176,7 @@ export function WebsiteProduct() {
           <header className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
-              <p>{showAssistedWebsitePreview ? 'Review this local preview. SuperMega can prepare the finished website for you; nothing here is published.' : activeViewCopy.copy}</p>
+              <p>{showAssistedWebsitePreview ? 'Preview saved on this device. Not published.' : activeViewCopy.copy}</p>
             </div>
             {canRequestWebsiteSetup && surface === 'work' ? <a className="website-button is-secondary" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
             {view === 'publish' ? (
@@ -1209,14 +1209,14 @@ export function WebsiteProduct() {
             <div className="website-today-priority">
               <span className="core-eyebrow">Start here</span>
               <h2 id="website-today-title">{showAssistedWebsitePreview ? 'Let SuperMega prepare your website' : websiteAgentJob}</h2>
-              <p>{showAssistedWebsitePreview ? 'Use this preview as a reference. Tell us about your business; we confirm the scope, prepare the pages and send a preview for your approval. You do not need to edit the site yourself.' : websiteAgentReason}</p>
+              <p>{showAssistedWebsitePreview ? 'Share your business details. We prepare the pages for you to review.' : websiteAgentReason}</p>
               {showAssistedWebsitePreview ? (
                 <>
                   <details className="website-today-checks website-assisted-intake">
                     <summary>What to send · about 2 minutes</summary>
                     <div className="website-check-guidance">
                       <p><strong>Tell us your business name, best contact, and where public material can be reviewed.</strong> A Facebook page, public menu, or short description is enough to start. Keep passwords and private customer data out.</p>
-                      <p>SuperMega prepares the page plan, starter copy, responsive layout, and first reviewable preview. You review one preview; domain connection and publishing stay separate.</p>
+                      <p>We agree the scope and prepare a preview. Domain connection and publishing are separate steps.</p>
                     </div>
                   </details>
                   <AssistedDeliveryScope product="website" />
@@ -1238,7 +1238,7 @@ export function WebsiteProduct() {
                   <ul>
                     {failingContentChecks.map((check) => <li key={check.id}><strong>{check.label}</strong><p>{check.detail}</p></li>)}
                   </ul>
-                  {showAssistedWebsitePreview ? <p>You do not need to fix these yourself. Request Website setup above so SuperMega can review the work with you. Nothing is published automatically.</p> : null}
+                  {showAssistedWebsitePreview ? <p>Need help with these checks? Request Website setup. Nothing is published automatically.</p> : null}
                 </div>
               ) : null}
             </details>

@@ -885,14 +885,14 @@ function gitHead() {
 }
 
 const launcherText = [
-  'Switch product',
-  'First action',
+  'Your business tools',
+  'Sample workspace',
   'Shop',
-  'Complete a sample sale',
+  'Open Shop',
   'Website',
-  'Preview a business website',
+  'Open Website',
   'Ecommerce',
-  'Save a sample request on this device',
+  'Open Ecommerce',
 ]
 
 const shopSetup = {

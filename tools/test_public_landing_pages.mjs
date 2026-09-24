@@ -105,12 +105,12 @@ for (const page of landingPages) {
     check(html.indexOf('id="prepared-delivery"') < html.indexOf('id="first-loop"'), `landing_service_before_sample:${page.route}`)
     check(html.includes('You can request assisted setup without completing this sample.'), `landing_sample_not_prerequisite:${page.route}`)
     check(html.includes('Scope, price and timing are agreed before work begins.'), `landing_scope_before_work:${page.route}`)
-    check(html.includes('You review facts and image rights; nothing is published, sent or charged automatically.'), `landing_ai_review_boundary:${page.route}`)
-    check(html.includes('The free sample is optional and is not a live service.'), `landing_optional_sample_boundary:${page.route}`)
-    check(html.includes(product.id === 'website' ? 'Domain ownership, publishing, maintenance and any forms are scoped and checked separately.' : 'a request is not a confirmed order or payment.'), `landing_product_delivery_boundary:${page.route}`)
+    check(html.includes('You approve the content and image rights before launch.'), `landing_ai_review_boundary:${page.route}`)
+    check(html.includes('Samples are optional and are not a live service.'), `landing_optional_sample_boundary:${page.route}`)
+    check(html.includes(product.id === 'website' ? 'We agree your domain, publishing and ongoing support separately.' : 'Your team confirms each order and payment.'), `landing_product_delivery_boundary:${page.route}`)
   }
-  check(html.includes('Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.'), `landing_external_effect_boundary:${page.route}`)
-  const websiteOfferingBoundary = 'The current Website starter supports up to four featured offerings, not full menu management.'
+  check(html.includes('You review before anything is published, sent or charged.'), `landing_external_effect_boundary:${page.route}`)
+  const websiteOfferingBoundary = 'The starter features up to four offerings; full menu management is not included.'
   check(html.includes(websiteOfferingBoundary) === (product.id === 'website'), `landing_website_offering_scope:${page.route}`)
   check(html.includes('Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.'), `landing_managed_activation_boundary:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
@@ -188,9 +188,9 @@ for (const token of ['No action is needed now.', 'SuperMega will review your bri
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')
 const homePage = manifest.pages.find((page) => page.route === '/')
-const expectedHomeDescription = manifest.company.supporting.split(' It does not replace a POS')[0]
+const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Explore free samples or get help setting up the tools your business needs.'
 check(homePage?.file === 'index.html', 'home_manifest_entry_exact')
-check(homePage?.title === 'Shop Profit Control for Myanmar operators | SuperMega', 'home_manifest_profit_control_title_exact')
+check(homePage?.title === 'SuperMega | Business tools for Myanmar', 'home_manifest_business_title_exact')
 check(homePage?.description === expectedHomeDescription, 'home_manifest_description_derived_from_supported_copy')
 for (const token of [
   `<title>${homePage.title}</title>`,
@@ -215,28 +215,25 @@ check(manifest.company.positioning === 'POS-independent Shop Profit Control for 
 check(manifest.company.headline === 'Shop Profit Control: see today’s operating money risk and close one accountable action.', 'home_shop_profit_control_headline_exact')
 for (const token of ['read-only first job', 'current local Shop record', 'operating money leak or risk', 'accountable owner', 'objective closure', 'next action', 'does not replace a POS']) {
   check(manifest.company.supporting.includes(token), `home_shop_profit_control_truth:${token}`)
-  check(home.includes(token), `home_shop_profit_control_visible:${token}`)
 }
-check(home.includes(`<a class="button primary" ${shopProfitControlAnchor}`), 'home_shop_profit_control_primary_action')
-check(countOccurrences(home, shopProfitControlAnchor) === 1, 'home_shop_profit_control_action_once')
+check(home.includes('class="button primary" href="#products"'), 'home_primary_product_choice')
+check(home.includes('href="https://app.supermega.dev/?choose=1"'), 'home_explicit_app_launcher')
 check(!shopProfitControlHref.includes('/contact/'), 'home_shop_profit_control_not_contact')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
-  const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
   if (!activeIds.includes(product.id)) {
     check(!home.includes(`href="${page.route}"`) && !home.includes(`?product=${product.id}`), `home_retired_acquisition_absent:${product.id}`)
     continue
   }
-  check(home.includes(`href="${page.route}">${product.name} overview</a>`), `home_links_landing:${page.route}`)
-  check(home.includes(`href="https://app.supermega.dev/settings/?product=${product.id}">${guidedSampleLabel}</a>`), `home_keeps_guided_cta:${product.id}`)
-  check(home.includes(product.firstOperatingLoop[0]), `home_shows_first_loop:${product.id}`)
+  check(home.includes(`href="${page.route}">Explore ${product.name} `), `home_links_landing:${page.route}`)
+  check(readStatic(page.file).includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`), `product_page_keeps_guided_cta:${product.id}`)
 }
 
 const shopLanding = readStatic('shop/index.html')
 const shopGenericSetupHref = 'https://app.supermega.dev/settings/?product=shop'
 const shopGenericSetupLabel = 'Choose Shop type or continue saved'
 const shopGenericSetupAnchor = `href="${shopGenericSetupHref}">${shopGenericSetupLabel}</a>`
-check(countOccurrences(home, shopGenericSetupAnchor) === 1, 'home_shop_generic_cta_truthful_once')
+check(countOccurrences(home, shopGenericSetupAnchor) === 0, 'home_no_duplicate_setup_door')
 check(countOccurrences(shopLanding, shopGenericSetupAnchor) === 1, 'shop_landing_generic_cta_truthful_once')
 check(!`${home}\n${shopLanding}`.includes(`href="${shopGenericSetupHref}">Start free sample</a>`), 'shop_generic_cta_does_not_promise_new_sample')
 check(!shopGenericSetupHref.includes('template='), 'shop_generic_cta_does_not_silently_choose_trade')
@@ -276,7 +273,7 @@ for (const id of activeIds) {
 
 const ecommerceLanding = readStatic('ecommerce/index.html')
 for (const token of [
-  'current local Shop workspace',
+  'current Shop workspace',
   'browser-local catalog',
   'request, not an order',
   'nothing is published or sent to a managed Shop inbox; no payment is taken, and no stock is reserved or moved',
@@ -391,4 +388,13 @@ for (const page of discoverablePages) {
 check(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/.test(sitemap), 'sitemap_lastmod_format')
 check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.xml'), 'robots_references_sitemap')
 
+
+check((home.match(/class="compact-solution"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
+check(home.includes('lang="my"') && home.includes('Myanmar Text'), 'home_myanmar_language_and_font_fallback')
+for (const id of activeIds) {
+  const html = readStatic(`${id}/index.html`)
+  check(html.includes('<details class="frame product-details"><summary>'), `sample_details_native_disclosure:${id}`)
+  check(html.indexOf('<details class="frame product-details">') < html.indexOf('id="first-loop"'), `sample_details_grouped:${id}`)
+  check(html.includes('Samples stay on this device. They do not publish, send orders or take payments.'), `sample_boundary_at_entry:${id}`)
+}
 console.log(JSON.stringify({ ok: true, contract: 'supermega_public_landing_pages', checks, routes: landingPages.map((page) => page.route) }))

@@ -6,7 +6,7 @@ import vm from 'node:vm'
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
 test('launcher promises a local request, not a delivered Shop order', () => {
   const shell = readFileSync(new URL('../showroom/src/core/CoreShell.tsx', import.meta.url), 'utf8')
-  assert.ok(shell.includes("['Ecommerce', 'Storefront to Shop handoff.', 'Save a sample request on this device', '/ecommerce/']"))
+  assert.ok(shell.includes("['Ecommerce', 'A product catalog and customer requests.', 'Open Ecommerce', '/ecommerce/']"))
   assert.ok(!shell.includes('Send a sample order to Shop'))
 })
 const ts = require('typescript')
@@ -43,7 +43,7 @@ test('assisted catalog setup stays available in both local views and preserves t
     }
   }
   assert.match(product, /product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer"/)
-  assert.match(product, /sample requests are not live orders/)
+  assert.match(product, /Requests stay on this device and are not live orders/)
   assert.match(product, /: ecommerceTodayHeadline\}/)
 })
 
@@ -58,12 +58,12 @@ test('fresh assisted entry yields to retained work, carts, attention and editor 
   }
   assert.ok(product.includes('{!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">'))
   assert.ok(product.includes('Let SuperMega prepare your catalog'))
-  assert.ok(product.includes('Requesting setup does not publish a store or activate orders, payments or stock.'))
+  assert.ok(product.includes('Setup requests do not publish a store, take payments or change stock.'))
   assert.ok(product.includes('Tell us what you sell and where a public menu or catalog can be reviewed.'))
   assert.ok(product.includes('A short list of key products and prices is enough to start.'))
   assert.ok(product.includes('After scope confirmation, SuperMega provides a safe transfer method for any private spreadsheet or POS export.'))
-  assert.ok(product.includes('SuperMega cleans the catalog, drafts categories and descriptions, and prepares the customer view and Shop handoff.'))
-  assert.ok(product.includes('You review one preview before anything becomes live.'))
+  assert.ok(product.includes('We organise your catalog and prepare the customer view.'))
+  assert.ok(product.includes('You review it before launch.'))
   const action = product.slice(product.indexOf('{assistedCatalogEntry ? <>'), product.indexOf('{ecommerceTodayGuided ? ('))
   assert.match(action, /<details className="ecommerce-assisted-intake">/)
   assert.match(action, /<AssistedDeliveryScope product="ecommerce" \/>/)

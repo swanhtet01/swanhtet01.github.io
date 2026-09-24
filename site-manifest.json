@@ -726,8 +726,8 @@
       "publicAnchor": "/#website",
       "appRoute": "https://app.supermega.dev/website/",
       "status": "available-in-app",
-      "eyebrow": "Website maker",
-      "headline": "Build a simple company website from a brief.",
+      "eyebrow": "Your business online",
+      "headline": "Make your business easy to find.",
       "workspaceSchema": "supermega.website.workspace.v2",
       "views": [
         "Start",
@@ -843,8 +843,8 @@
       "publicAnchor": "/#ecommerce",
       "appRoute": "https://app.supermega.dev/ecommerce/",
       "status": "release-candidate-local",
-      "eyebrow": "Ecommerce maker",
-      "headline": "Draft an ordering page from the current local Shop workspace.",
+      "eyebrow": "Your product catalog",
+      "headline": "Turn browsing into customer requests.",
       "views": [
         "Storefront",
         "Cart and quote",
@@ -995,8 +995,8 @@
     {
       "route": "/",
       "file": "index.html",
-      "title": "Shop Profit Control for Myanmar operators | SuperMega",
-      "description": "A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action."
+      "title": "SuperMega | Business tools for Myanmar",
+      "description": "Sales and stock, business websites, and customer requests. Explore free samples or get help setting up the tools your business needs."
     },
     {
       "route": "/shop/",
@@ -1015,18 +1015,18 @@
     {
       "route": "/website/",
       "file": "website/index.html",
-      "title": "Website | Build a simple company website from a brief | SuperMega",
+      "title": "Website | Your business online | SuperMega",
       "productId": "website",
       "liveGate": "post-release",
-      "description": "Answer a short business brief, edit finite pages, review a responsive preview, and download a standalone website. Request managed hosting when needed."
+      "description": "A clear website for your services, photos and contact details. Review a prepared preview before agreeing to launch."
     },
     {
       "route": "/ecommerce/",
       "file": "ecommerce/index.html",
-      "title": "Ecommerce | Browser-local ordering from Shop | SuperMega",
+      "title": "Ecommerce | Your product catalog | SuperMega",
       "productId": "ecommerce",
       "liveGate": "post-release",
-      "description": "Choose items from the current local Shop workspace, draft a browser-local catalog, cart, and quote, and save a recoverable request receipt. Nothing is published or sent to a managed Shop inbox; no payment is taken, and no stock is reserved or moved. Shop remains the price and stock record."
+      "description": "Help customers browse your products and prepare a request. Your team confirms availability, orders and payment."
     },
     {
       "route": "/contact/",

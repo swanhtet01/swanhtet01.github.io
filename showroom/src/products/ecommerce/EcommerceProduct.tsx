@@ -1793,7 +1793,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Sample store'}</span>
           <h1>Ecommerce</h1>
-          <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Explore a local catalog preview. SuperMega can prepare your catalog for you; sample requests are not live orders.'}</p>
+          <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Browse a sample catalog. Requests stay on this device and are not live orders.'}</p>
         </div>
         {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="https://supermega.dev/contact/?product=ecommerce&source=ecommerce-preview" target="_blank" rel="noopener noreferrer">Request catalog setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
       </header>
@@ -1802,12 +1802,12 @@ export function EcommerceProduct() {
         <div className="ecommerce-today-priority">
           <span className="core-eyebrow">Start here</span>
           <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Let SuperMega prepare your catalog' : ecommerceTodayHeadline}</h2>
-          <p>{assistedCatalogEntry ? 'Tell us what you sell. We confirm the scope, prepare your catalog and send a preview for approval. You do not need to build the store yourself. Requesting setup does not publish a store or activate orders, payments or stock.' : ecommerceTodaySummary}</p>
+          <p>{assistedCatalogEntry ? 'Share your products and prices. We prepare a preview for you to review. Setup requests do not publish a store, take payments or change stock.' : ecommerceTodaySummary}</p>
           {assistedCatalogEntry ? <>
             <details className="ecommerce-assisted-intake">
               <summary>What to send · about 2 minutes</summary>
               <p><strong>Tell us what you sell and where a public menu or catalog can be reviewed.</strong> A short list of key products and prices is enough to start. After scope confirmation, SuperMega provides a safe transfer method for any private spreadsheet or POS export.</p>
-              <p>SuperMega cleans the catalog, drafts categories and descriptions, and prepares the customer view and Shop handoff. You review one preview before anything becomes live.</p>
+              <p>We organise your catalog and prepare the customer view. You review it before launch.</p>
             </details>
             <AssistedDeliveryScope product="ecommerce" />
             <div className="form-actions ecommerce-service-actions">
