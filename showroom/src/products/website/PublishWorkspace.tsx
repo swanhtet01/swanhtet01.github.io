@@ -567,9 +567,10 @@ export function PublishWorkspace({
                 <header>
                   <span className="website-eyebrow">Next step</span>
                   <h4 id="go-live-title">Get this live</h4>
-                  <p>The downloaded site file is the whole website. Put it online yourself, or ask about managed hosting.</p>
+                  <p>Ask SuperMega to prepare hosting and your domain. We confirm the details before publishing.</p>
                 </header>
-                <details className="website-go-live-option" open>
+                <a className="website-button is-primary" href={GO_LIVE_CONTACT_URL} rel="noopener noreferrer" target="_blank">Request website setup</a>
+                <details className="website-go-live-option">
                   <summary>Host it yourself</summary>
                   <ol>
                     <li>Download the site file above.</li>
@@ -579,14 +580,11 @@ export function PublishWorkspace({
                   </ol>
                   <p>Any host that serves plain HTML files works. The upload happens outside this app.</p>
                 </details>
-                <details className="website-go-live-option">
-                  <summary>Request managed hosting</summary>
-                  <p>Describe the site and where it should live. We reply with the smallest useful next step. Nothing deploys from this app.</p>
-                  <a className="website-button is-secondary" href={GO_LIVE_CONTACT_URL} rel="noreferrer" target="_blank">Open the contact form</a>
-                </details>
               </section>
             ) : null}
 
+            <details className="website-go-live-option">
+              <summary>Release controls</summary>
             <Suspense fallback={<div className="website-release-loading">Loading client release controls...</div>}>
               <WebsiteReleaseFoundation
                 managedActorId={managedActorId}
@@ -596,6 +594,7 @@ export function PublishWorkspace({
                 workspace={workspace}
               />
             </Suspense>
+            </details>
 
             {workspace.localPublishes.length ? (
               <details className="website-publish-history-disclosure">
