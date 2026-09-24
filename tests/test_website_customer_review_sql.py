@@ -818,6 +818,40 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             finally:
                 connection.rollback()
 
+    def test_sql_catalog_freshness_matches_product_and_stock_boundaries(self):
+        from pathlib import Path
+        from tests.test_commerce_runtime import catalog_state, storefront_configuration
+        from supermega_runtime.commerce_runtime import commerce_storefront_preview, commerce_storefront_preview_digest
+        source = catalog_state()
+        source['storefrontConfiguration'] = storefront_configuration(source)
+        sql = (Path(__file__).resolve().parents[1] / 'tools/ecommerce_review_projection_candidate.sql').read_text(encoding='utf-8')
+        with pg._connect(self.admin_url) as connection:
+            try:
+                connection.execute(sql)
+                for field,value in (('name','Changed'),('variant','Large'),('price',999),('sku','SKU-NEW')):
+                    changed = deepcopy(source)
+                    changed['items'][0][field] = value
+                    with self.subTest(field=field),self.assertRaises(self.db_error):
+                        with connection.transaction():
+                            connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(changed),))
+                missing = deepcopy(source)
+                del missing['storefrontConfiguration']['shopCatalogDigest']
+                with self.assertRaises(self.db_error):
+                    with connection.transaction():
+                        connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(missing),))
+                stock = deepcopy(source)
+                stock['items'][0]['onHand'] = 0
+                actual = connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(stock),)).fetchone()[0]
+                self.assertEqual(actual,commerce_storefront_preview(stock))
+                self.assertNotEqual(commerce_storefront_preview_digest(stock),commerce_storefront_preview_digest(source))
+                refreshed = deepcopy(source)
+                refreshed['items'][0]['price'] = 999
+                refreshed['storefrontConfiguration'] = storefront_configuration(refreshed,revision=2)
+                actual = connection.execute('select app_private.ecommerce_review_projection(%s::jsonb)',(json.dumps(refreshed),)).fetchone()[0]
+                self.assertEqual(actual,commerce_storefront_preview(refreshed))
+            finally:
+                connection.rollback()
+
     def test_ecommerce_entitlement_is_private_and_product_specific(self):
         vectors = (({'products':['ecommerce']}, True), ({'product':'ecommerce'}, True),
                    ({'products':['shop','ecommerce']}, True), ({'products':['shop']}, False),

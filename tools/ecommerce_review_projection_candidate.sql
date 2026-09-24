@@ -1,5 +1,6 @@
 -- Local rehearsal candidate, not a migration or authorization boundary.
--- Caller must validate the saved state, catalog freshness and assignment separately.
+-- Caller must validate the complete saved-state grammar and assignment separately.
+-- Catalog product-field freshness is checked here; stock binds through preview/source version.
 -- No table reads; never returns inventory quantities, costs, orders or evidence.
 create function app_private.ecommerce_review_projection(source jsonb) returns jsonb
 language plpgsql immutable security invoker set search_path=pg_catalog,app_private as $$
@@ -11,11 +12,20 @@ declare
   projected jsonb;
   items jsonb := '[]'::jsonb;
   matches bigint;
+  catalog_json text;
 begin
   if jsonb_typeof(configuration) is distinct from 'object'
     or jsonb_typeof(configuration->'selectedSkus') is distinct from 'array'
     or jsonb_typeof(source->'items') is distinct from 'array' then
     raise exception using errcode='22023',message='ecommerce_review_source_invalid';
+  end if;
+  select '[' || coalesce(string_agg('[' || coalesce((i->'sku')::text,'null') || ',' ||
+    coalesce((i->'name')::text,'null') || ',' || coalesce((i->'variant')::text,'null') || ',' ||
+    coalesce((i->'price')::text,'null') || ']', ',' order by i->>'sku' collate "C"),'') || ']'
+    into catalog_json from jsonb_array_elements(source->'items') i;
+  if configuration->>'shopCatalogDigest' is distinct from
+    'sha256:' || encode(sha256(convert_to(catalog_json,'UTF8')),'hex') then
+    raise exception using errcode='22023',message='ecommerce_review_catalog_stale';
   end if;
   if jsonb_array_length(configuration->'selectedSkus') = 0
     or (select count(*) <> count(distinct value) from jsonb_array_elements(configuration->'selectedSkus')) then
