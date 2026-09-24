@@ -3156,7 +3156,10 @@ async function authorizedRequest<T>(
   }
   if (expectedIdentity) await sessionForRequest(expectedIdentity)
   if (!response.ok) throw await parseError(response)
-  return response.json() as Promise<T>
+  const body = await response.json() as T
+  // Body delivery can outlive the session checked when headers arrived.
+  if (expectedIdentity) await sessionForRequest(expectedIdentity)
+  return body
 }
 
 export async function validateManagedClientImport(
