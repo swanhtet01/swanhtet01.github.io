@@ -135,6 +135,13 @@ class CatalogReviewSqlTests(unittest.TestCase):
         writer=EcommerceCustomerReviewStore(PostgresTrialStore(self.runtime_url,reducer=lambda *args:{},write_enabled=True))
         args=dict(review_id=str(uuid4()),recipient_actor_id=RECIPIENT,expected_version=version,
                   expires_at=(datetime.now(timezone.utc)+timedelta(days=1)).isoformat())
+        for change in (dict(expected_version=version+1),dict(expected_version=True),dict(expected_version=0)):
+            with self.subTest(change=change),self.assertRaises(TrialValidationError):
+                writer.prepare(operator,**(args|change))
+        with self.assertRaises(TrialPermissionDenied):
+            writer.prepare(operator,**(args|dict(recipient_actor_id=str(uuid4()))))
+        with self.assertRaises(TrialNotReadyError): adapter.prepare(operator,**args)
+        with self.assertRaises(TrialPermissionDenied): writer.prepare(actor,**args)
         created=writer.prepare(operator,**args)
         replay=writer.prepare(operator,**args)
         self.assertTrue(created['persisted']);self.assertFalse(created['replayed']);self.assertTrue(replay['replayed'])
@@ -146,6 +153,22 @@ class CatalogReviewSqlTests(unittest.TestCase):
         self.assertTrue(writer.revoke(operator,args['review_id'])['replayed'])
         with self.assertRaises(TrialPermissionDenied): adapter.preview(actor,args['review_id'])
         with self.assertRaises(TrialValidationError): writer.prepare(operator,**args)
+        # Both callers rendezvous before entering the actual adapter. Source and
+        # advisory locks must serialize them into one insert and one exact replay.
+        from threading import Barrier
+        rendezvous=Barrier(2)
+        concurrent_args=args|dict(review_id=str(uuid4()))
+        def same_preparation():
+            rendezvous.wait(timeout=5)
+            return writer.prepare(operator,**concurrent_args)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first=pool.submit(same_preparation)
+            second=pool.submit(same_preparation)
+            receipts=[first.result(timeout=15),second.result(timeout=15)]
+        self.assertEqual(sorted(receipt['replayed'] for receipt in receipts),[False,True])
+        self.assertEqual(receipts[0]['preparedAt'],receipts[1]['preparedAt'])
+        with self.transaction(OWNER) as connection:
+            self.assertEqual(connection.execute('select count(*) from app_private.ecommerce_customer_reviews where review_id=%s',(concurrent_args['review_id'],)).fetchone()[0],1)
         class ObservedStore(PostgresTrialStore):
             def _connect(inner):
                 connection=super()._connect()
