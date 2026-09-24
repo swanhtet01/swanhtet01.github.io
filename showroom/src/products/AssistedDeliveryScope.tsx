@@ -7,7 +7,6 @@ type Product = 'website' | 'ecommerce'
 export function AssistedDeliveryScope({ product }: { product: Product }) {
   return <section className="assisted-delivery-scope" aria-label="Get setup help">
     <a className="assisted-delivery-request" href={`/${product}/${product === 'ecommerce' ? '?setup=1' : ''}`}>Tell us about your business</a>
-    <small>We prepare it. You review the result.</small>
     <details>
       <summary>Before we start</summary>
       <p>Share your business details or a public page. We agree scope, price and timing before work. Publishing needs your approval.</p>
