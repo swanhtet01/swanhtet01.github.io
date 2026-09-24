@@ -45,13 +45,16 @@ export function BusinessBrief({ product, onOpenWorkspace }: { product: Product; 
       <label htmlFor={`${id}-company`}>Business name</label>
       <input id={`${id}-company`} autoComplete="organization" required maxLength={180} pattern=".*\S.*" value={company} onChange={event => updateDraft({ company: event.target.value })} />
       <label htmlFor={`${id}-description`}>{product === 'website' ? 'What does your business offer?' : 'What do you sell?'}</label>
-      <textarea id={`${id}-description`} required maxLength={3000} rows={4} value={description} onChange={event => updateDraft({ description: event.target.value })} placeholder={product === 'website' ? 'Services, location and how customers reach you.' : 'A few products and prices are enough to start.'} />
-      <label htmlFor={`${id}-reference`}>Existing page or catalog <span>optional</span></label>
-      <input id={`${id}-reference`} maxLength={700} value={reference} onChange={event => updateDraft({ reference: event.target.value })} placeholder="Facebook page, website or public catalog" />
+      <textarea id={`${id}-description`} required maxLength={3000} rows={4} value={description} onChange={event => updateDraft({ description: event.target.value })} placeholder={product === 'website' ? 'Services, location and how customers reach you.' : 'Products, prices and where you deliver.'} />
+      <details className="business-brief-reference">
+        <summary>Existing page or catalog <span>optional</span></summary>
+        <label htmlFor={`${id}-reference`}>Facebook page, website or public catalog</label>
+        <input id={`${id}-reference`} maxLength={700} value={reference} onChange={event => updateDraft({ reference: event.target.value })} />
+      </details>
       <button type="submit" disabled={!company.trim() || !description.trim()}>Continue</button>
       {handoffFailed ? <small role="alert">Could not open contact. Your details are still here. Try Continue again.</small> : null}
-      {draftUnavailable ? <small role="status">This browser cannot keep your draft. Copy it before leaving this page.</small> : <small>Your draft stays in this tab for up to one hour.</small>}
-      <small>Next: add your contact details and review before sending. No passwords or private customer data.</small>
+      {draftUnavailable ? <small role="status">This browser cannot keep your draft. Copy it before leaving this page.</small> : null}
+      <small>Next: contact details and review. No passwords or private customer data.</small>
     </form>
     <footer><span>Scope and price agreed before work begins.</span><button type="button" onClick={onOpenWorkspace}>Open existing workspace</button></footer>
   </section>

@@ -16,6 +16,9 @@
 .business-brief form { display: grid; gap: .65rem; }
 .business-brief label { margin-top: .85rem; font-size: .9rem; font-weight: 600; }
 .business-brief label span { font-weight: 400; margin-left: .5rem; }
+.business-brief-reference summary { min-height: 44px; align-content: center; cursor: pointer; font-size: .9rem; }
+.business-brief-reference summary span { color: var(--core-muted); margin-left: .5rem; }
+.business-brief-reference label { display: block; margin: .25rem 0 .65rem; }
 .business-brief :is(input, textarea) { width: 100%; box-sizing: border-box; min-height: 48px; padding: .9rem 1rem; border: 1px solid var(--core-field-line); background: var(--core-panel); color: inherit; border-radius: 10px; font: inherit; resize: vertical; }
 .business-brief button { font: inherit; cursor: pointer; }
 .business-brief button[type=submit] { margin-top: 1rem; padding: 1rem; border: 0; border-radius: 10px; background: var(--core-green); color: var(--core-on-accent); font-weight: 600; min-height: 48px; }
@@ -23,6 +26,6 @@
 .business-brief small { font-size: .78rem; line-height: 1.5; }
 .business-brief footer { border-top: 1px solid var(--core-line); margin-top: 2rem; padding-top: 1.25rem; display: grid; gap: 1rem; font-size: .8rem; }
 .business-brief footer button { min-height: 44px; justify-self: start; border: 0; padding: .5rem 0; background: transparent; color: var(--core-ink); text-decoration: underline; }
-.business-brief :is(input, textarea, button):focus-visible { outline: 3px solid var(--core-green); outline-offset: 3px; }
+.business-brief :is(input, textarea, button, summary):focus-visible { outline: 3px solid var(--core-green); outline-offset: 3px; }
 
 .business-brief :is(.business-brief-kicker, header p, label span, small, footer) { color: var(--core-muted); }
