@@ -244,3 +244,23 @@ test('directory contract rejects unordered, oversized or malformed saved assignm
   {reviews:[{...item,recipient:'private'}]},{reviews:[{...item,expiresAt:prepared.readAt}]},{readAt:'bad'},{deploymentAuthorized:true}])assert.throws(()=>contract.verifyCatalogReviewDirectory({...page,...patch}))
  assert.throws(()=>contract.verifyCatalogReviewDirectory(page,id))
 })
+
+
+test('replacement preparation requires verified stale receipt and reloads current source',async()=>{
+ const h=harness();h.click('Open saved catalog');await flush();h.click('Prepare review');await flush()
+ const retained=JSON.stringify([...h.storage]);assert.equal(h.sourceReads,1)
+ h.click('Open saved catalog');await flush()
+ assert.equal(h.sourceReads,1,'retained receipt cannot silently start another review')
+ h.checkFail=true;h.click('Check review status');await flush()
+ assert.equal(JSON.stringify([...h.storage]),retained)
+ assert.equal(h.writes.length,1)
+ h.checkFail=false;h.checkStatus='stale';h.click('Check review status');await flush()
+ assert.equal(h.storage.size,0)
+ assert.doesNotMatch(JSON.stringify(h.render()),/Open private review|Withdraw review/)
+ h.click('Open saved catalog');await flush()
+ assert.equal(h.sourceReads,2,'replacement reads the current catalog instead of reusing old source')
+ assert.equal(h.recipientReads,2)
+ assert.match(JSON.stringify(h.render()),/Prepare review/)
+ assert.equal(h.writes.length,1,'opening replacement never submits it automatically')
+ assert.equal(h.withdrawals.length,0,'stale cleanup does not revoke or delete server history')
+})
