@@ -47,9 +47,10 @@ const result = await build({
     VITE_SUPABASE_PUBLISHABLE_KEY: ['sb', 'publishable', 'synthetic-unit-test-only'].join('_'),
   }), 'process.env.NODE_ENV': '"development"' },
   stdin: { resolveDir: resolve(root, 'showroom/src/core'), loader: 'tsx', contents: `
-    import React from 'react'; import { createRoot } from 'react-dom/client';
-    import { MemoryRouter, Routes, Route, Outlet } from 'react-router';
+    import React, { useLayoutEffect } from 'react'; import { createRoot } from 'react-dom/client';
+    import { MemoryRouter, Routes, Route, Outlet, useLocation } from 'react-router';
     import { ManagedLoginPage } from './ManagedLoginPage.tsx';
+    import { ManagedAccountPage } from './ManagedAccountPage.tsx';
     import { readManagedSignupPolicy } from './managed-signup-policy.ts';
     import './core-app.css';
     const health = ${JSON.stringify(policy)};
@@ -69,6 +70,7 @@ const result = await build({
     const counts = { authRequests: 0, healthReads: 0, blockedRequests: 0, errors: 0 };
     const show = () => { counter.textContent = Object.entries(counts).map(([key,value]) => key + ': ' + value).join(' · ') }; show();
     window.addEventListener('fixture-auth-request', () => { counts.authRequests++; show() });
+    window.addEventListener('fixture-recovery-request', event => { document.getElementById('fixture-recovery').textContent = 'Synthetic redirect: ' + event.detail; });
     window.addEventListener('error', () => { counts.errors++; show() });
     window.addEventListener('unhandledrejection', () => { counts.errors++; show() });
     window.fetch = async (url, init = {}) => {
@@ -77,10 +79,10 @@ const result = await build({
       }
       counts.blockedRequests++; show(); throw Error('fixture_network_denied');
     };
-    function Frame() { return <main className="core-main"><div className="core-route-content"><Outlet context={{status:${JSON.stringify(managedEntry ? 'enterprise' : 'demo')}, signupPolicy:readManagedSignupPolicy(health)}} /></div></main> }
+    function Frame() { const route = useLocation(); useLayoutEffect(() => { window.history.replaceState(null, '', window.location.pathname + route.search); }, [route.search]); return <main className="core-main"><div className="core-route-content"><Outlet context={{status:${JSON.stringify(managedEntry ? 'enterprise' : 'demo')}, authReady:${managedEntry}, signupPolicy:readManagedSignupPolicy(health)}} /></div></main> }
     createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={[${JSON.stringify(reviewProduct ? '/login?product=' + reviewProduct + '&review=11111111-1111-4111-8111-111111111111' : '/login?product=shop')}]}>
       <Routes><Route element={<Frame/>}><Route path='/login' element={<ManagedLoginPage/>}/>
-      <Route path='/account/recovery' element={<p>Recovery route reached. Synthetic QA does not send email.</p>}/></Route></Routes>
+      <Route path='/account/recovery' element={<ManagedAccountPage/>}/></Route></Routes>
     </MemoryRouter>);
   ` },
   plugins: [{ name: 'local-only-auth-fixture', setup(builder) {
@@ -94,11 +96,19 @@ const result = await build({
           return { data: { user: null, session: null }, error: null };
         }
         async resend(input) { return this.signUp(input) }
+        async resetPasswordForEmail(email, options) {
+          if (email !== 'owner@example.invalid') throw Error('synthetic_email_only');
+          const url = new URL(options.redirectTo);
+          if (url.origin !== window.location.origin || url.pathname !== '/account/setup' || url.searchParams.get('mode') !== 'recovery') throw Error('invalid_synthetic_redirect');
+          window.dispatchEvent(new Event('fixture-auth-request'));
+          window.dispatchEvent(new CustomEvent('fixture-recovery-request', {detail:options.redirectTo}));
+          return { data: {}, error: null };
+        }
       }` }))
   } }],
 })
 const assets = new Map(result.outputFiles.map((file) => ['/' + file.path.split(/[\\/]/).at(-1), file.contents]))
-const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SuperMega synthetic signup QA</title><link rel="stylesheet" href="/stdin.css"><body><aside>LOCAL SYNTHETIC QA — no real account or email. Source ${head.slice(0, 8)}.</aside><output id="fixture-counts"></output><div id="root"></div><script type="module" src="/stdin.js"></script></body></html>`
+const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SuperMega synthetic signup QA</title><link rel="stylesheet" href="/stdin.css"><body><aside>LOCAL SYNTHETIC QA — no real account or email. Source ${head.slice(0, 8)}.</aside><output id="fixture-counts"></output><p id="fixture-recovery"></p><div id="root"></div><script type="module" src="/stdin.js"></script></body></html>`
 if (buildOnly) {
   const out = resolve(root, 'showroom/dist/__qa-managed-account')
   mkdirSync(out, { recursive: true })
