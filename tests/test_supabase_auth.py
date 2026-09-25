@@ -5,9 +5,11 @@ import json
 import os
 import unittest
 from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError, URLError
 
 from supermega_runtime.supabase_auth import (
     SupabaseAuthConfig,
+    SupabaseAuthUnavailable,
     VerifiedSupabaseUser,
     verify_supabase_user_identity,
     verify_supabase_user_token,
@@ -160,6 +162,39 @@ class SupabaseAuthTests(unittest.TestCase):
         response.read.return_value = json.dumps({"id": "identity-without-kind"}).encode()
         with patch("supermega_runtime.supabase_auth.build_opener", return_value=opener):
             self.assertIsNone(verify_supabase_user_token(_user_token(), config))
+
+
+    def test_provider_errors_fail_closed_without_returning_upstream_details(self):
+        config = SupabaseAuthConfig("https://example.supabase.co", "sb_publishable_abcdefghijklmnopqrstuvwxyz")
+        for failure in [HTTPError(config.base_url, status, "PRIVATE_UPSTREAM_DETAIL", {}, None)
+                        for status in (302, 400, 401, 403, 429, 500)] + [URLError("PRIVATE_UPSTREAM_DETAIL"), TimeoutError("PRIVATE_UPSTREAM_DETAIL")]:
+            with self.subTest(failure=type(failure).__name__, status=getattr(failure, 'code', None)):
+                opener = MagicMock()
+                opener.open.side_effect = failure
+                with patch("supermega_runtime.supabase_auth.build_opener", return_value=opener):
+                    if getattr(failure, 'code', None) in (400, 401, 403):
+                        self.assertIsNone(verify_supabase_user_identity(_user_token(), config))
+                    else:
+                        with self.assertRaises(SupabaseAuthUnavailable) as caught:
+                            verify_supabase_user_identity(_user_token(), config)
+                        self.assertNotIn("PRIVATE_UPSTREAM_DETAIL", str(caught.exception))
+                self.assertEqual(opener.open.call_count, 1)
+                self.assertEqual(opener.open.call_args.kwargs['timeout'], 4.0)
+
+    def test_provider_body_is_bounded_and_invalid_json_is_unavailable(self):
+        config = SupabaseAuthConfig("https://example.supabase.co", "sb_publishable_abcdefghijklmnopqrstuvwxyz")
+        for raw in (b'x' * (64 * 1024 + 1), b'{broken', b'\xff'):
+            with self.subTest(size=len(raw)):
+                response = MagicMock()
+                response.__enter__.return_value = response
+                response.read.return_value = raw
+                opener = MagicMock()
+                opener.open.return_value = response
+                with patch("supermega_runtime.supabase_auth.build_opener", return_value=opener):
+                    with self.assertRaises(SupabaseAuthUnavailable):
+                        verify_supabase_user_identity(_user_token(), config)
+                response.read.assert_called_once_with(64 * 1024 + 1)
+                response.__exit__.assert_called_once()
 
 
 if __name__ == "__main__":
