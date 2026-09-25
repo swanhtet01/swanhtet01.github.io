@@ -509,8 +509,8 @@ function documentHtml({ route, title, description, content, schema = null, robot
 </html>`
 }
 
-function guidedSampleAction(product) {
-  return { href: 'https://app.supermega.dev/login', label: 'Login' }
+function productLoginAction(product) {
+  return { href: `https://app.supermega.dev/login?product=${encodeURIComponent(product.id)}`, label: 'Login' }
 }
 
 function assistedSetupAction(product) {
@@ -669,12 +669,12 @@ function assistedDeliverablesHtml(productId) {
 }
 
 function productLandingHtml(product, page) {
-  const guidedSample = guidedSampleAction(product)
+  const loginAction = productLoginAction(product)
   const assistedSetup = assistedSetupAction(product)
   const leadingAction = product.id === 'shop' ? SHOP_PROFIT_CONTROL_ACTION : assistedSetup
   const actionsHtml = product.id === 'shop'
-    ? `<a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a><a class="button" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
-    : `<a class="button primary" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a><a class="button" href="${escapeHtml(guidedSample.href)}">${escapeHtml(guidedSample.label)}</a>`
+    ? `<a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a><a class="button" href="${escapeHtml(loginAction.href)}">${escapeHtml(loginAction.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
+    : `<a class="button primary" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a><a class="button" href="${escapeHtml(loginAction.href)}">${escapeHtml(loginAction.label)}</a>`
   const description = page.description || product.description
   const moduleItems = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
   const launchModuleLimit = manifest.templatePackPolicy.maxEnabledModulesAtLaunch

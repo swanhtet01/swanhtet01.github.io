@@ -1,3 +1,4 @@
+import { managedPortalEntryPath, managedAccountRequestUrl } from '../showroom/src/core/account-routes.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -88,8 +89,12 @@ for (const page of landingPages) {
   check(html.includes(`<h1>${product.headline}</h1>`), `landing_headline:${page.route}`)
   check(!html.includes('id="first-loop"') && !html.includes('id="free-sample"'), `landing_no_sample_detour:${page.route}`)
   check(html.includes('id="modules"'), `landing_workflows_visible:${page.route}`)
-  const guidedSampleHref = 'https://app.supermega.dev/login'
+  const guidedSampleHref = `https://app.supermega.dev/login?product=${encodeURIComponent(product.id)}`
   const guidedSampleLabel = 'Login'
+  const loginIntent = new URL(guidedSampleHref).searchParams.get('product')
+  check(managedPortalEntryPath(loginIntent) === `/${product.id}/`, `landing_login_returns_to_product:${page.route}`)
+  check(new URL(managedAccountRequestUrl(loginIntent)).searchParams.get('product') === product.id, `landing_unavailable_setup_retains_product:${page.route}`)
+
   const assistedSetupHref = `/contact/?product=${product.id}`
   check(html.includes(`href="${guidedSampleHref}">${guidedSampleLabel}</a>`), `landing_guided_sample_cta:${page.route}`)
   check(product.secondaryCta?.label === 'Request assisted setup' && product.secondaryCta.url === assistedSetupHref, `landing_assisted_setup_manifest:${page.route}`)

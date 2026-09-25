@@ -331,7 +331,7 @@ if ((home.match(/<a\b/g) || []).length !== expectedHomeLinkCount) fail('homepage
 for (const product of publicProducts) {
   const landingRoute = `/${product.id}/`
   const landing = pages.get(landingRoute)?.html || ''
-  const guidedSampleRoute = 'https://app.supermega.dev/login'
+  const guidedSampleRoute = `https://app.supermega.dev/login?product=${encodeURIComponent(product.id)}`
   const guidedSampleLabel = 'Login'
   const guidedSampleAnchor = `href="${guidedSampleRoute}">${guidedSampleLabel}</a>`
   const assistedSetupRoute = `/contact/?product=${encodeURIComponent(product.id)}`
