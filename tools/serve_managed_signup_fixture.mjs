@@ -17,7 +17,8 @@ function fixtureHref(raw, origin) {
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const rawArgs = process.argv.slice(2)
 const buildOnly = rawArgs.includes('--build-only')
-const args = rawArgs.filter(arg => arg !== '--build-only')
+const managedEntry = rawArgs.includes('--managed-entry')
+const args = rawArgs.filter(arg => !['--build-only', '--managed-entry'].includes(arg))
 if (args.length === 1 && args[0] === '--self-test') {
   const origin = 'http://127.0.0.1:4194'
   for (const value of ['https://supermega.dev/terms/v1/', 'https://supermega.dev/contact/?product=shop', '//example.invalid', 'javascript:void(0)', 'data:text/plain,test', 'http://localhost:4194/', 'http://127.0.0.1:4195/']) assert.equal(fixtureHref(value, origin), '/fixture/external-link')
@@ -74,7 +75,7 @@ const result = await build({
       }
       counts.blockedRequests++; show(); throw Error('fixture_network_denied');
     };
-    function Frame() { return <main className="core-main"><div className="core-route-content"><Outlet context={{status:'demo', signupPolicy:readManagedSignupPolicy(health)}} /></div></main> }
+    function Frame() { return <main className="core-main"><div className="core-route-content"><Outlet context={{status:${JSON.stringify(managedEntry ? 'enterprise' : 'demo')}, signupPolicy:readManagedSignupPolicy(health)}} /></div></main> }
     createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={['/login?product=shop']}>
       <Routes><Route element={<Frame/>}><Route path='/login' element={<ManagedLoginPage/>}/>
       <Route path='/account/recovery' element={<p>Recovery route reached. Synthetic QA does not send email.</p>}/></Route></Routes>
