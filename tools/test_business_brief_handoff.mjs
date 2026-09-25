@@ -76,3 +76,13 @@ for (const outcome of ['success', 'validation', 'exception']) {
     assert.equal(issue, outcome === 'success' ? null : outcome === 'validation' ? 'Review the business name' : 'Could not prepare your preview. Your details are still here.')
   })
 }
+
+test('saved Website bypasses the intake after refresh', async () => {
+  const website = await readFile(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
+  const condition = website.match(/if \((showAssistedWebsitePreview[^\n]+)\) \{\s*return <BusinessBrief/)?.[1]
+  assert.ok(condition)
+  const base = { showAssistedWebsitePreview: true, starterAvailable: true, workspaceOpened: false, searchParams: new URLSearchParams() }
+  assert.equal(vm.runInNewContext(condition, base), true)
+  assert.equal(vm.runInNewContext(condition, { ...base, starterAvailable: false }), false)
+  assert.equal(vm.runInNewContext(condition, { ...base, workspaceOpened: true }), false)
+})

@@ -1147,7 +1147,7 @@ export function WebsiteProduct() {
     }
   }
 
-  if (showAssistedWebsitePreview && !workspaceOpened && searchParams.get('workspace') !== '1') {
+  if (showAssistedWebsitePreview && starterAvailable && !workspaceOpened && searchParams.get('workspace') !== '1') {
     return <BusinessBrief product="website" onPreparePreview={starterAvailable ? draft => {
       const brief = websiteBusinessBriefPreview(draft, shopTradeId)
       const issues = websiteStarterBriefIssues(brief)
