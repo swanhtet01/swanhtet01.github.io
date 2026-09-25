@@ -1,5 +1,6 @@
 // Local human QA only; never a release, provider, identity or email-delivery proof.
 import { createServer } from 'node:http'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
@@ -14,7 +15,9 @@ function fixtureHref(raw, origin) {
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const args = process.argv.slice(2)
+const rawArgs = process.argv.slice(2)
+const buildOnly = rawArgs.includes('--build-only')
+const args = rawArgs.filter(arg => arg !== '--build-only')
 if (args.length === 1 && args[0] === '--self-test') {
   const origin = 'http://127.0.0.1:4194'
   for (const value of ['https://supermega.dev/terms/v1/', 'https://supermega.dev/contact/?product=shop', '//example.invalid', 'javascript:void(0)', 'data:text/plain,test', 'http://localhost:4194/', 'http://127.0.0.1:4195/']) assert.equal(fixtureHref(value, origin), '/fixture/external-link')
@@ -53,7 +56,8 @@ const result = await build({
     const isolateLinks = () => {
       for (const link of document.querySelectorAll('a[href]')) {
         const original = link.getAttribute('href');
-        const safe = fixtureHref(original, window.location.origin);
+        const safeHref = fixtureHref(original, window.location.origin);
+        const safe = ${buildOnly} && safeHref === '/fixture/external-link' ? './external-link.html' : safeHref;
         if (safe !== original) { link.setAttribute('href', safe); link.removeAttribute('target'); }
       }
     };
@@ -92,6 +96,16 @@ const result = await build({
 })
 const assets = new Map(result.outputFiles.map((file) => ['/' + file.path.split(/[\\/]/).at(-1), file.contents]))
 const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SuperMega synthetic signup QA</title><link rel="stylesheet" href="/stdin.css"><body><aside>LOCAL SYNTHETIC QA — no real account or email. Source ${head.slice(0, 8)}.</aside><output id="fixture-counts"></output><div id="root"></div><script type="module" src="/stdin.js"></script></body></html>`
+if (buildOnly) {
+  const out = resolve(root, 'showroom/dist/__qa-managed-account')
+  mkdirSync(out, { recursive: true })
+  for (const [name, bytes] of assets) writeFileSync(resolve(out, name.slice(1)), bytes)
+  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">`
+  writeFileSync(resolve(out, 'index.html'), html.replace('<title>', csp + '<title>').replace('href="/stdin.css"', 'href="./stdin.css"').replace('src="/stdin.js"', 'src="./stdin.js"'))
+  writeFileSync(resolve(out, 'external-link.html'), '<!doctype html><meta charset="utf-8"><h1>External link kept local</h1><p>Synthetic QA only. No account, email or setup request.</p>')
+  console.log(JSON.stringify({ mode: 'synthetic_build_only', head, path: out, serverStarted: false }))
+  process.exit(0)
+}
 const server = createServer((request, response) => {
   if (request.headers.host !== '127.0.0.1:4194' || request.method !== 'GET') { response.writeHead(403); response.end(); return }
   response.setHeader('cache-control', 'no-store')
