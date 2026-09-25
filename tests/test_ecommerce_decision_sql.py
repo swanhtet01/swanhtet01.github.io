@@ -264,4 +264,3 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                 self.assertFalse(connection.execute("select has_table_privilege(%s,'app_private.ecommerce_customer_decisions','SELECT,INSERT,UPDATE,DELETE')",(role,)).fetchone()[0])
 
 if __name__ == '__main__': unittest.main()
-
