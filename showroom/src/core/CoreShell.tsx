@@ -692,7 +692,7 @@ export function ProductHomePage() {
     <div className="workspace-screen product-home-screen">
       {managedPortal
         ? emptyCompany ? null : <PageHeading copy="Only assigned products are shown." eyebrow="Company portal" title="Company products" />
-        : <PageHeading copy="Sales, orders and your online presence." eyebrow="SuperMega" title="Your workspace" />}
+        : <PageHeading copy="Sign in to access your business." eyebrow="SuperMega" title="Your workspace" actions={<Link className="core-button primary" to={managedLoginPath(null)}>Login</Link>} />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
           <span>Active company</span>
@@ -707,10 +707,10 @@ export function ProductHomePage() {
       {emptyCompany
         ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Request setup</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
         : null}
-      {!emptyCompany ? <nav aria-label="Choose product" className="product-track-grid">
+      {!emptyCompany && (managedPortal || anyStarted) ? <nav aria-label="Choose product" className="product-track-grid">
         {customerProducts.filter(([name]) => managedPortal
           ? managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name])
-          : activeSetupIds.includes(PRODUCT_SETUP_KEY[name]) || Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]))
+          : Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]?.startedAt))
           .sort(([left], [right]) => managedPortal ? 0
             : (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]))
               - (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right])))
@@ -722,7 +722,7 @@ export function ProductHomePage() {
           const workspaceName = setup?.startedAt ? setup.workspace : null
           return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
               <span className="product-track-copy">
-                <small>{!managedPortal && !activeSetupIds.includes(setupKey) ? 'Retained workspace' : managedPortal ? 'Company product' : workspaceName ? 'Saved on this device' : 'Sample workspace'}</small>
+                <small>{managedPortal ? 'Company product' : 'Saved on this device'}</small>
                 <h2>{name}</h2>
                 <p>{workspaceName || outcome}</p>
               </span>
@@ -732,7 +732,7 @@ export function ProductHomePage() {
       </nav> : null}
       {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
       {!managedPortal && anyStarted ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
-      {!emptyCompany ? <p className="product-home-note">{managedPortal ? 'Your company controls access to each product.' : <>Samples and saved work stay on this device. <a href="https://supermega.dev/contact/?product=guide&amp;source=assisted-app-entry">Request business setup</a>.</>}</p> : null}
+      {!emptyCompany && (managedPortal || anyStarted) ? <p className="product-home-note">{managedPortal ? 'Your company controls access to each product.' : 'Saved work is stored on this device.'}</p> : null}
     </div>
   )
 }
