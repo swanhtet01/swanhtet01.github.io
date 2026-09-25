@@ -59,7 +59,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
       if (!confirmed) closeChangedAccess()
     } catch {
       if (!await access.commit(epoch, identity, review.expiresAt, () => {})) closeChangedAccess()
-      else setSaveMessage('Could not confirm your response. Retry to check and send the same response.')
+      else setSaveMessage('Response unconfirmed. Retry safely.')
     } finally {
       command.busy = false
       setSaving(false)
@@ -133,7 +133,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         </form> : <>
           <button type="button" onClick={() => void submit('acceptance')}>Accept catalog</button>
           <button type="button" onClick={() => setEditing(true)}>Request changes</button>
-          <p>Acceptance sends this catalog to SuperMega for a publishing review.</p>
+          <p>SuperMega reviews before publishing.</p>
         </>}
       </section> : null}
     </> : <section className="prepared-catalog">
