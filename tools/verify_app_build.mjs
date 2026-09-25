@@ -3638,7 +3638,7 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('Shop recorded the order and stock reservation.')
   || !ecommerceBuyingUiSource.includes('Start another order')
   || !ecommerceBuyingUiSource.includes('Payment still needs Shop reconciliation.')
-  || !ecommerceBuyingUiSource.includes('is already confirmed as')
+  || !ecommerceBuyingUiSource.includes('This request is already confirmed. Review a new total only to start another order.')
   || !ecommerceBuyingUiSource.includes('Review a new total only when creating another order.')
   || !ecommerceBuyingUiSource.includes('const recoveredCheckoutNotice = latestRequest')
   || !commerceSource.includes('export function restoreBrowserLocalSamplePaymentPolicies(')

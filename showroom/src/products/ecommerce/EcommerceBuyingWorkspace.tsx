@@ -571,7 +571,7 @@ export function EcommerceBuyingWorkspace({
   const checkoutNotice = latestRequestConfirmed && latestRequestOrder
     ? `${latestRequest?.id} is confirmed as ${latestRequestOrder.id}. ${latestRequestEntry?.paymentStatus === 'reconciled' ? 'Payment is reconciled in Shop.' : 'Payment still needs Shop reconciliation.'}`
     : notice || (latestRequestOrder
-      ? `${latestRequest?.id} is already confirmed as ${latestRequestOrder.id}. Review a new total only to start another order.`
+      ? 'This request is already confirmed. Review a new total only to start another order.'
       : recoveredCheckoutNotice || recoveryIssue || (cart.length
         ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
         : 'Add a product to begin.'))
