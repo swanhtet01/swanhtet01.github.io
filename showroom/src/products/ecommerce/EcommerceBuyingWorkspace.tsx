@@ -1417,7 +1417,7 @@ export function EcommerceBuyingWorkspace({
             <div className="ecommerce-stale-quote" role="status">
               <strong>{latestRequestOrder ? 'Start another order' : 'Review a new total'}</strong>
               <small>{latestRequestOrder
-                ? `Order ${latestRequestOrder.id} is already confirmed. Review a new total only when creating another order.`
+                ? 'Your order is confirmed. Review a new total only when creating another order.'
                 : 'The previous quote remains in Your orders. Review the current items and details before requesting a new total.'}</small>
             </div>
           ) : null}
@@ -1432,7 +1432,6 @@ export function EcommerceBuyingWorkspace({
                 {customerOrderTimeline.slice(0, 5).map((entry) => (
                   <article key={entry.request.id}>
                     <span>
-                      <small>{entry.request.id}</small>
                       <strong>{orderStageLabel(entry)}</strong>
                       <b>{formatMmk(entry.order?.total ?? entry.request.totalMmk)}</b>
                     </span>
@@ -1442,6 +1441,11 @@ export function EcommerceBuyingWorkspace({
                        {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : quoteExpiredWithoutOrder(entry) ? <small>Review again for the current total</small> : <small>Shop confirms the promise</small>}
                        {entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}
                     </div>
+                    <details className="ecommerce-order-reference">
+                      <summary>Reference</summary>
+                      <small>Request: {entry.request.id}</small>
+                      {entry.order ? <small>Order: {entry.order.id}</small> : null}
+                    </details>
                     <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">{entry.order ? 'Reorder' : 'Review items again'}</button>
                   </article>
                 ))}

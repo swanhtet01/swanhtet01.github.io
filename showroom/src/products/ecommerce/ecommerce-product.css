@@ -2020,3 +2020,21 @@
 }
 .catalog-review-recovery { border-top: 1px solid var(--core-line); }
 .catalog-review-recovery > div { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+
+.ecommerce-order-history .ecommerce-order-reference { min-width: 0; }
+.ecommerce-order-history .ecommerce-order-reference > summary {
+  min-height: 2.75rem;
+  display: list-item;
+  align-content: center;
+  cursor: pointer;
+  font-size: .8125rem;
+}
+.ecommerce-order-history .ecommerce-order-reference > summary:focus-visible {
+  outline: 2px solid var(--core-green);
+  outline-offset: 2px;
+}
+.ecommerce-order-history .ecommerce-order-reference > small {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-block: .25rem;
+}
