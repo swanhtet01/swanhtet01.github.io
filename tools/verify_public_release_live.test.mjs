@@ -29,9 +29,9 @@ globalThis.fetch=async input=>{
  const page=manifest.pages.find(p=>p.route===u.pathname);
  if(!page) throw Error('offline_fixture_unknown_route');
  let html=fs.readFileSync('.vercel/output/static/'+page.file,'utf8');
- if(mode==='missing-offer') html=html.replaceAll('Your business. Our setup work.','REMOVED');
- if(mode==='missing-action') html=html.replaceAll('Open Shop Profit Control','REMOVED');
- if(mode==='missing-guided') html=html.replaceAll('Choose Shop type or continue saved','REMOVED');
+ if(mode==='missing-offer') html=html.replaceAll('Tell us about your business.','REMOVED');
+ if(mode==='missing-action') html=html.replaceAll('Explore Shop','REMOVED');
+ if(mode==='missing-guided') html=html.replaceAll('>Login</a>','>REMOVED</a>');
  if(mode==='missing-assisted') html=html.replaceAll('Request assisted setup','REMOVED');
  if(mode==='plant-marketing'&&u.pathname==='/') html+='<a href="/plant/">Plant</a>';
  if(mode==='plant-indexed'&&u.pathname==='/plant/') html=html.replace('noindex,follow','index,follow');
@@ -64,7 +64,7 @@ test('current generated three-product pages pass exact-release checks through of
 for (const [mutation, failure] of [
   ['privacy-header', 'page_security_header_wrong'], ['usb-policy', 'page_security_header_wrong'],
   ['missing-offer', 'homepage_offer_contract_missing'], ['missing-action', 'homepage_shop_action_missing'],
-  ['missing-guided', 'guided_product_label_wrong'], ['missing-assisted', 'page_contact_route_missing'],
+  ['missing-guided', 'page_shared_contract_missing'], ['missing-assisted', 'page_contact_route_missing'],
   ['plant-marketing', 'retired_product_marketed'], ['plant-indexed', 'retired_product_boundary_missing'],
   ['wrong-commit', 'release_commit_wrong'], ['contact-down', 'contact_not_accepting'],
   ['old-redirect', 'redirect_destination_wrong'],

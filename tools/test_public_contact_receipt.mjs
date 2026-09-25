@@ -10,9 +10,9 @@ assert.ok(script, 'actual generated contact script exists')
 
 test('service brief asks for a business result without requiring template knowledge', () => {
   assert.match(html, /Tell us what your business needs\./)
-  assert.match(html, /We set it up\. You review\./)
+  assert.match(html, /What to include/)
   assert.match(html, /scope, price and timing/)
-  assert.match(html, /Going live is a separate step after approval/)
+  assert.match(html, /We use your email to reply about this request\./)
   assert.match(html, /<input type="hidden" name="template" maxlength="120"/)
   assert.doesNotMatch(html, /Template, if known|>Send workflow<|>Send the workflow</)
   assert.match(html, />Request setup<\/button>/)
@@ -351,7 +351,7 @@ test('actual business brief handoff preserves Myanmar text and reference through
     const description = '  ' + 'မြန်မာ & + # ? '.repeat(180) + '  '
     const reference = ' https://example.invalid/catalog?q=tea&lang=my#items '
     let destination
-    runInNewContext(submit, { company, description, reference, product, URLSearchParams, setHandoffFailed() {},
+    runInNewContext(`(() => {${submit}})()`, { company, description, reference, product, onPreparePreview: undefined, URLSearchParams, setHandoffFailed() {},
       event: { preventDefault() {} }, window: { location: { assign: value => { destination = value } } } })
     const url = new URL(destination)
     assert.equal(url.origin + url.pathname, 'https://supermega.dev/contact/')
@@ -386,7 +386,7 @@ test('confirmed handoff resets entry guidance only when no later edits remain', 
     assert.equal(state.calls[0].body, state.calls[1].body)
     assert.equal(state.resets(), edited ? 0 : 1)
     assert.equal(state.headings.get('[data-contact-heading]').textContent, edited ? originalHeading : 'Tell us what your business needs.')
-    assert.equal(state.headings.get('[data-contact-copy-heading]').textContent, edited ? 'Your brief is ready to review.' : 'We set it up. You review.')
+    assert.equal(state.headings.get('[data-contact-copy-heading]').textContent, edited ? 'Your brief is ready to review.' : 'What to include')
     if (edited) assert.equal(state.fields.get('[name="goal"]').value, 'Later unsent brief')
     else assert.equal(state.fields.get('button[type="submit"]').textContent, 'Request setup')
     assert.match(state.fields.get('[data-form-status]').textContent, /Request received: LEAD-/)
