@@ -309,10 +309,10 @@ const loginSource = readFileSync('showroom/src/core/ManagedLoginPage.tsx', 'utf8
 check(shellSource.split('href={assistedSetupHref}').length - 1 === 2, 'desktop and mobile entry offer assisted setup instead of a trial detour')
 check(shellSource.includes("portalAccess.status !== 'ready'") && !shellSource.includes('>Free trial</Link>'), 'assigned company portal does not advertise a trial')
 check(loginSource.split('to={signupPath}').length - 1 === 1, 'managed login retains one product-specific trial link')
-const unavailableLogin = loginSource.slice(loginSource.indexOf('aria-label="Company account unavailable"'))
-check(unavailableLogin.includes('to="/?choose=1">Try a sample — no account</Link>'), 'unavailable login offers the no-account sample chooser directly')
+const unavailableLogin = loginSource.slice(loginSource.indexOf('aria-label="Login unavailable"'))
+check(unavailableLogin.includes('to="/?choose=1">Saved work on this device</Link>'), 'unavailable login preserves access to existing device work')
 check(!unavailableLogin.includes('to={signupPath}'), 'unavailable login does not duplicate sample access with a signup detour')
-check(unavailableLogin.includes('Sample records stay on this device; they are not a shared company workspace.'), 'sample access keeps the local-only boundary visible')
+check(unavailableLogin.includes('Request setup for your business, or open work already saved on this device.'), 'saved-work access keeps the device boundary visible')
 check(unavailableLogin.includes('href={managedAccountRequestUrl(productIntent)}'), 'assisted setup preserves product intent separately from samples')
 
 const coreCss = readFileSync('showroom/src/core/core-app.css', 'utf8')
@@ -361,3 +361,6 @@ check(submission.indexOf('const identity = createTrialSignupRecord(') < submissi
 check(submission.includes('...identity,') && submission.includes('shopIndustryPackId: industryPackId'), 'validated identity is retained with the actually preserved industry pack')
 
 console.log(`signup trial contract: ${checks} checks passed`)
+
+check(unavailableLogin.includes('className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Request setup</a>'), 'unavailable login has product-aware setup as primary action')
+check(!unavailableLogin.includes('Try a sample'), 'unavailable login does not promise a removed sample chooser')
