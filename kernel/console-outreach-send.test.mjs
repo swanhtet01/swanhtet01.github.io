@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sendOutreachOnce } from './console/outreach-send.mjs'
+import { sendOutreachOnce, readOutreachState } from './console/outreach-send.mjs'
 
 const message = { to: 'qa@example.invalid', subject: 'Synthetic', html: '<p>Review only</p>', text: 'Review only' }
 function fixture() {
@@ -105,4 +105,37 @@ test('actual outreach UI retains recovery guidance and retries only the original
       assert.equal(requests.length,1)
     }
   }
+})
+
+
+test('read-only outreach projection survives reopening without exposing payload or receipt',async()=>{
+  const f=fixture()
+  assert.equal(await readOutreachState('deal-1',f.store),'none')
+  await f.run({send:async()=>{throw Error('unknown')}})
+  assert.equal(await readOutreachState('deal-1',f.store),'unconfirmed')
+  assert.equal(f.sends,0)
+  const accepted=fixture();accepted.failStatus=true;await accepted.run()
+  assert.equal(await readOutreachState('deal-1',accepted.store),'accepted')
+  assert.equal(accepted.sends,1)
+  for(const response of [{durable:false},{durable:true,claim:{id:'wrong',kind:'outreach_send_claim'}}, {durable:true,claim:{...accepted.claims.values().next().value,ref:'accepted:corrupt'}}]){
+    assert.equal(await readOutreachState('deal-1',{getActivityClaim:async()=>response}),'unavailable')
+  }
+  assert.equal(await readOutreachState('deal-1',{getActivityClaim:async()=>{throw Error('unavailable')}}),'unavailable')
+})
+
+
+test('actual reopened outreach list offers send only for verified absent claims',async()=>{
+  const {readFile}=await import('node:fs/promises');const {runInNewContext}=await import('node:vm')
+  const html=await readFile(new URL('./public/index.html',import.meta.url),'utf8')
+  const render=html.slice(html.indexOf('async function loadOutreach(){'),html.indexOf('function openProposal(d){'))
+  const rows=[];const box={innerHTML:'',appendChild:x=>rows.push(x),querySelectorAll:()=>[]}
+  await runInNewContext(render+';loadOutreach()',{
+    $:()=>box,esc:String,document:{createElement:()=>({})},
+    api:async()=>({ok:true,deals:['none','unconfirmed','accepted','unavailable',undefined].map((state,i)=>({id:'d'+i,status:'approved',packet:{},outreach_send_state:state}))}),
+  })
+  assert.match(rows[0].innerHTML,/data-emailsend/)
+  for(const row of rows.slice(1))assert.doesNotMatch(row.innerHTML,/data-emailsend/)
+  assert.match(rows[1].innerHTML,/Send outcome is unconfirmed/)
+  assert.match(rows[2].innerHTML,/needs reconciliation/)
+  assert.match(rows[3].innerHTML,/could not be verified/)
 })

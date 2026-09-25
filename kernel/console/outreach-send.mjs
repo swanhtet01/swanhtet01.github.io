@@ -44,3 +44,18 @@ export async function sendOutreachOnce({ dealId, message, store, send }) {
   if (updated?.id !== dealId || updated?.status !== 'sent') return failure('outreach_sent_status_unconfirmed')
   return { ok: true, email_id: emailId, to: message.to, deal: updated, replayed: !claim.fresh }
 }
+
+
+// Read-only projection: never expose recipient, body, fingerprint or provider receipt.
+export async function readOutreachState(dealId, store) {
+  if (!dealId) return 'unavailable'
+  const id = 'outreach-send:' + hash(String(dealId))
+  let retained
+  try { retained = await store.getActivityClaim(id) } catch { return 'unavailable' }
+  if (!retained?.durable) return 'unavailable'
+  if (!retained.claim) return 'none'
+  if (retained.claim.id !== id || retained.claim.kind !== 'outreach_send_claim') return 'unavailable'
+  if (/^dispatch:[a-f0-9]{64}$/.test(retained.claim.ref || '')) return 'unconfirmed'
+  if (/^accepted:[a-f0-9]{64}:[A-Za-z0-9_-]{1,80}$/.test(retained.claim.ref || '')) return 'accepted'
+  return 'unavailable'
+}

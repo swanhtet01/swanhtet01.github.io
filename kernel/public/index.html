@@ -1636,12 +1636,12 @@ async function loadOutreach(){
     el.innerHTML=`<div class="row" style="justify-content:space-between"><b style="font-size:15px">${esc(p.headline||'(deal)')}</b><span class="pill ${d.status==='sent'?'won':''}">${esc(d.status)}</span></div>
       <div class="muted" style="font-size:12.5px;margin:4px 0 10px">fit ${p.fit_score||'—'}/100 · ${esc(p.segment||'')} · ${p.pricing?.build_fee_mmk?esc(p.pricing.build_fee_mmk)+' MMK':'Pricing pending review'}</div>
       ${p.outreach_en?`<div class="draft" id="ot-${d.id}">${esc(p.outreach_en)}</div>`:'<div class="muted" style="font-size:12px">No outreach draft.</div>'}
-      <p class="muted" data-send-status="${esc(d.id)}" role="status"></p>
+      <p class="muted" data-send-status="${esc(d.id)}" role="status">${esc(({unconfirmed:'Send outcome is unconfirmed. Check the provider record before further outreach.',accepted:d.status==='sent'?'Accepted by email provider. Delivery is not yet confirmed.':'Provider accepted the email. Saved deal status needs reconciliation.',unavailable:'Send status could not be verified. Refresh before continuing.'})[d.outreach_send_state]||(d.outreach_send_state==='none'?'':'Send status could not be verified. Refresh before continuing.'))}</p>
       <div class="row" style="margin-top:10px">
         ${p.outreach_en?`<button class="sm" data-copy="${d.id}">Copy draft</button>`:''}
         <button class="sm" data-prop2="${d.id}">Proposal</button>
         ${d.status!=='approved'&&d.status!=='sent'?`<button class="sm" data-app="${d.id}">Approve</button>`:''}
-        ${d.status==='approved'?`<button class="sm primary" data-emailsend="${d.id}">Send email</button>`:''}
+        ${d.status==='approved'&&d.outreach_send_state==='none'?`<button class="sm primary" data-emailsend="${d.id}">Send email</button>`:''}
         ${d.status!=='sent'?`<button class="sm" data-sent="${d.id}">Mark sent</button>`:''}
       </div>`
     box.appendChild(el)

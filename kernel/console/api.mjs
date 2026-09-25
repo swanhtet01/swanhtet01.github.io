@@ -9,7 +9,7 @@ import connectors from '../connectors/index.mjs'
 import { captureError } from '../alert.mjs'
 import { companyDailyBudgetCap, currentDailyBudgetWindow, providerChain } from '../gateway.mjs'
 import { listLeadsForReview, markLeadReviewed } from './leads-review.mjs'
-import { sendOutreachOnce } from './outreach-send.mjs'
+import { sendOutreachOnce, readOutreachState } from './outreach-send.mjs'
 import crypto from 'node:crypto'
 
 // One implementation of the floor for every owner surface — see kernel/ops-key.mjs. A key
@@ -357,7 +357,11 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         const filter = {}
         if (query.lead_id) filter.lead_id = query.lead_id
         if (query.status) filter.status = query.status
-        return ok({ ok: true, deals: await store.listDeals(filter) })
+        const deals = await store.listDeals(filter)
+        const projected = []
+        // Bound claim lookups; older rows remain visible but cannot imply send readiness.
+        for (let i = 0; i < deals.length; i++) projected.push({ ...deals[i], outreach_send_state: i < 50 ? await readOutreachState(deals[i].id, store) : 'unavailable' })
+        return ok({ ok: true, deals: projected })
       }
       if (method === 'POST' && !seg[1]) {
         if (!body.packet) return bad(400, 'no_packet')
