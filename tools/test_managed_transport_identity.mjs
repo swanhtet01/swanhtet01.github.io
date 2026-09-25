@@ -60,3 +60,11 @@ test('authentication retry retains the original company and never resends after 
   await assert.rejects(run.request(), /managed_identity_changed/)
   assert.deepEqual(run.counts(), { fetches: 1, refreshes: 1 })
 })
+
+
+test('account switched during caller preparation prevents the initial request', async () => {
+  const run = harness([])
+  run.change()
+  await assert.rejects(run.request(), /managed_identity_changed/)
+  assert.deepEqual(run.counts(), { fetches: 0, refreshes: 0 })
+})
