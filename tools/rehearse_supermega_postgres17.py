@@ -3745,9 +3745,9 @@ def _run_rehearsal(
             phase = "runtime_provisioning"
             _provision_runtime(admin_database_url, runtime_password)
             phase = "runtime_password_expiry"
-            from provision_supermega_runtime_role import apply_runtime_role
+            from provision_supermega_runtime_role import apply_runtime_role, _connect as connect_provisioner
             runtime_expiry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-            with _connect(admin_database_url) as expiry_connection:
+            with connect_provisioner(admin_database_url) as expiry_connection:
                 apply_runtime_role(expiry_connection, runtime_password, valid_until=runtime_expiry)
             phase = "local_storage_catalog_fixture"
             _bootstrap_local_storage_catalog_fixture(admin_database_url)
