@@ -278,6 +278,11 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             adapter.record_decision(actor,payload,kind='feedback')
         with self.assertRaises(TrialPermissionDenied):
             adapter.decisions(actor, payload['reviewId'])
+        stale_acceptance = dict(commandId=str(uuid4()), reviewId=reviews[1],
+                                previewDigest=payload['previewDigest'],
+                                decision='accept_preview_for_release_review')
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.record_decision(actor, stale_acceptance, kind='acceptance')
         history = adapter.operator_decisions(operator_actor, reviews[1])
         self.assertEqual(history['status'], 'stale')
         self.assertEqual(history['decisions'], page['decisions'])
