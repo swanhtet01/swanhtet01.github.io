@@ -738,6 +738,8 @@ test('Ecommerce operator transport binds identity, no-store and exact endpoint p
     const id = '11111111-1111-4111-8111-111111111111'
     const payload = { reviewId: id, recipientGrantId: id, expectedVersion: 1, expiresAt: '2099-01-01T00:00:00Z' }
     for (const [invoke, path, body] of [
+      [() => mod.loadManagedEcommerceOperatorDecisions(id, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/operator-decisions'],
+      [() => mod.loadManagedEcommerceOperatorDecisions(id, identity, id), '/api/trial/v1/ecommerce-reviews/'+id+'/operator-decisions?after='+id],
       [() => mod.loadManagedEcommercePreparation(identity), '/api/trial/v1/ecommerce-review-preparation'],
       [() => mod.reconcileManagedEcommerceReview(id, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/reconciliation'],
       [() => mod.resolveExpiredManagedEcommerceReview(id, payload.expiresAt, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/resolve-expired', { expiresAt: payload.expiresAt }],
@@ -765,6 +767,8 @@ test('Ecommerce operator transport binds identity, no-store and exact endpoint p
 test('Ecommerce invalid identifiers fail before provider or network access', async () => {
   await withAuth(async (mod, state) => {
     for (const bad of ['', '../other', '11111111-1111-4111-8111-111111111111\n']) {
+      await assert.rejects(mod.loadManagedEcommerceOperatorDecisions(bad, {}))
+      await assert.rejects(mod.loadManagedEcommerceOperatorDecisions('11111111-1111-4111-8111-111111111111', {}, bad))
       await assert.rejects(mod.loadManagedEcommerceRecipients({}, bad))
       await assert.rejects(mod.withdrawManagedEcommerceReview(bad, {}))
       await assert.rejects(mod.reconcileManagedEcommerceReview(bad, {}))
@@ -803,7 +807,7 @@ test('sign-in distinguishes unavailable service and rate limits without exposing
 
 
 test('customer review reads bound stalled requests and bodies without retrying or clearing identity', async () => {
-  for (const method of ['loadManagedWebsiteReview', 'loadManagedWebsiteAcceptance', 'loadManagedEcommerceReview', 'loadManagedEcommerceDecisions']) {
+  for (const method of ['loadManagedWebsiteReview', 'loadManagedWebsiteAcceptance', 'loadManagedEcommerceReview', 'loadManagedEcommerceDecisions', 'loadManagedEcommerceOperatorDecisions']) {
     for (const phase of ['request', 'body']) await withAuth(async (mod, state) => {
       state.session = { ...fixedSession }
       state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'synthetic-company')
@@ -880,5 +884,25 @@ test('Ecommerce decision transport keeps exact commands and does not retry uncer
     assert.deepEqual(await mod.currentManagedIdentity(), identity)
     await assert.rejects(mod.sendManagedEcommerceDecision({ ...payload, commandId: '../invalid' }, identity))
     assert.equal(state.calls.filter(([name]) => name === 'fetch').length, 1)
+  })
+})
+
+
+test('operator response transport rejects identity changes before fetch, at headers and after body delivery', async () => {
+  for (const phase of ['before', 'headers', 'body']) await withAuth(async (mod, state) => {
+    state.session = { ...fixedSession }
+    state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'synthetic-company')
+    const identity = await mod.currentManagedIdentity()
+    const change = () => state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'different-company')
+    state.calls.length = 0
+    state.fetch = async () => {
+      if (phase === 'headers') change()
+      return { ok: true, status: 200, json: async () => { if (phase === 'body') change(); return { privateNote: 'Synthetic private note' } } }
+    }
+    if (phase === 'before') change()
+    await assert.rejects(mod.loadManagedEcommerceOperatorDecisions('11111111-1111-4111-8111-111111111111', identity),
+      error => error.code === 'managed_identity_changed')
+    assert.equal(state.calls.filter(([name]) => name === 'fetch').length, phase === 'before' ? 0 : 1)
+    assert.equal(state.calls.some(([name]) => name === 'signOut'), false)
   })
 })
