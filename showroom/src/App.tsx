@@ -28,7 +28,7 @@ function ProductLoading({ name }: { name: string }) {
 
 function productDemoPath(value: string | null) {
   const demo = value?.toLowerCase()
-  if (demo === 'plant' || demo === 'factory') return '/plant/'
+  if (demo === 'plant' || demo === 'factory') return '/?choose=1'
   if (demo === 'shop' || demo === 'retail') return '/shop/'
   if (demo === 'website' || demo === 'site') return '/website/'
   if (demo === 'ecommerce' || demo === 'storefront' || demo === 'online-orders') return '/ecommerce/'

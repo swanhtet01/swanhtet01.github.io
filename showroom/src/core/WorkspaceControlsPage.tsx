@@ -745,7 +745,7 @@ export function WorkspaceControlsPage() {
             {runtime.activationManifest?.next_action ? <p>{runtime.activationManifest.next_action}</p> : null}
             {runtime.requirements.length ? <ul className="requirement-list">{runtime.requirements.map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
           </details> : null}
-          <div className="trial-actions"><Link className="core-button" to="/login">Company login</Link><Link className="core-button primary" to="/">Open a product</Link></div>
+          <div className="trial-actions"><Link className="core-button" to="/login">Login</Link><Link className="core-button primary" to="/">Open a product</Link></div>
           <p className="authority-note">SuperMega can prepare local work. Customer messages, payments, publishing, imports, and managed writes still require verified company controls and human approval.</p>
         </section>
 

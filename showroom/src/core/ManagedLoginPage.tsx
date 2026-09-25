@@ -284,7 +284,7 @@ export function ManagedLoginPage() {
 
   return (
     <div className={`workspace-screen managed-login-screen${creatingAccount ? ' signup-entry-screen' : ''}`}>
-      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Company account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : managedReady ? 'Open your company.' : 'Company access.'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? 'Sign in once. SuperMega finds the companies assigned to you.' : ''} />
+      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? 'Sign in to your workspace.' : ''} />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
@@ -318,7 +318,7 @@ export function ManagedLoginPage() {
         <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Ask a person to finish setup instead</a>
         <button className="account-inline-link account-link-button" disabled={busy} onClick={() => { if (accountRequestPending.current) return; setActivating(false); setNotice(''); setNoticeTone('quiet'); setClaimCodeFieldError(false) }} type="button">{bi('Back to sign in')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
-      </form> : managedReady ? <form aria-label="Company sign-in" aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
+      </form> : managedReady ? <form aria-label="Login" aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
         {directory ? <div><h2>Choose your company.</h2><p>Only active companies assigned to this account are shown.</p></div> : null}
         {directory ? <label>Company<select onChange={(event) => setWorkspaceId(event.target.value)} required value={workspaceId}>{directory.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <>
           {/* Design phase 2 item 11: a failed sign-in only ever means "this email/password
@@ -332,9 +332,9 @@ export function ManagedLoginPage() {
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Find my company')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
-      </form> : <section className="managed-login-panel" aria-label="Company account unavailable">
+      </form> : <section className="managed-login-panel" aria-label="Login unavailable">
         {reviewReturnPath ? <div><h2>Review sign-in is unavailable here.</h2><p>Keep your original review link and ask SuperMega in your existing setup conversation to restore access. A sample or a new company cannot open this review.</p></div> : <>
-          <div><h2>Company sign-in is not available here yet.</h2><p>Explore a sample without an account. Sample records stay on this device; they are not a shared company workspace.</p></div>
+          <div><h2>Login is not available here yet.</h2><p>Explore a sample without an account. Sample records stay on this device; they are not a shared company workspace.</p></div>
           <div className="managed-login-actions"><Link className="core-button primary" to="/?choose=1">Try a sample — no account</Link>{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}<a className="core-button" href={managedAccountRequestUrl(productIntent)}>Ask SuperMega to set me up</a></div>
         </>}
       </section>}
