@@ -30,6 +30,11 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     if (command.busy || !review || !decisions || decisions.decisions.length || !command.identity) return
     const epoch = access.capture()
     const identity = command.identity
+    const closeChangedAccess = () => {
+      if (!access.isCurrent(epoch)) return
+      access.invalidate(); setReview(null); setDecisions(null)
+      setMessage('Your access changed. Sign in and reopen this review.')
+    }
     if (!command.pending) {
       if (kind === 'feedback' && (!note.trim() || [...note.trim()].length > 2000)) return
       command.pending = { identity, payload: { reviewId, commandId: crypto.randomUUID(), previewDigest: review.previewDigest,
@@ -39,15 +44,16 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     command.busy = true; setSaving(true); setSaveMessage('')
     try {
       if (!sameManagedIdentity(identity, pending.identity)
-        || !await access.commit(epoch, identity, review.expiresAt, () => {})) throw Error('access changed')
+        || !await access.commit(epoch, identity, review.expiresAt, () => {})) { closeChangedAccess(); return }
       await sendManagedEcommerceDecision(pending.payload, pending.identity)
       const saved = verifyCatalogDecisionPage(await loadManagedEcommerceDecisions(reviewId, identity), review)
       const retained = saved.decisions.find(item => item.commandId === pending.payload.commandId)
       if (!retained || (pending.payload.decision ? retained.kind !== 'acceptance'
         : retained.kind !== 'feedback' || retained.note !== pending.payload.note)) throw Error('unconfirmed')
-      await access.commit(epoch, identity, review.expiresAt, () => {
+      const confirmed = await access.commit(epoch, identity, review.expiresAt, () => {
         setDecisions(saved); command.pending = null; setNote(''); setEditing(false)
       })
+      if (!confirmed) closeChangedAccess()
     } catch {
       if (access.isCurrent(epoch)) setSaveMessage('Could not confirm your response. Retry to check and send the same response.')
     } finally {

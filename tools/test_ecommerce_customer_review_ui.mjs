@@ -67,7 +67,7 @@ function harness({ identity = { actor: 'customer' }, changed = false, denied = f
     for (const child of [node.props?.children].flat(Infinity)) { const found = find(child, predicate); if (found) return found }
     return null
   }
-  return { states, effects, listeners, timers, render, writes, calls: () => calls,
+  return { states, effects, listeners, timers, render, writes, changeIdentity: () => { identity = { actor: 'other' } }, calls: () => calls,
     control: label => find(tree(), node => node.type === 'button' && node.props.children === label),
     field: () => find(tree(), node => node.type === 'textarea'),
     form: () => find(tree(), node => node.type === 'form') }
@@ -167,4 +167,35 @@ test('uncertain feedback retry preserves command ID and note', async () => {
   h.control('Retry response').props.onClick(); await flush()
   assert.equal(h.writes.length, 2); assert.deepEqual(h.writes[0], h.writes[1])
   assert.equal(h.writes[0].note, 'Change price'); assert.match(h.render(), /Changes requested/); cleanup()
+})
+
+
+test('pending writes cannot restore content after focus, storage, expiry or unmount', async () => {
+  for (const event of ['focus', 'storage', 'expiry', 'unmount']) {
+    let release; const writeWait = new Promise(resolve => { release = resolve })
+    const h = harness({ writeWait }); h.render(); const cleanup = h.effects[0](); await flush()
+    h.render(); const stopTimer = h.effects[1]()
+    h.control('Accept catalog').props.onClick(); await flush(); assert.equal(h.writes.length, 1)
+    if (event === 'unmount') cleanup()
+    else if (event === 'expiry') [...h.timers.values()][0].callback()
+    else h.listeners.get(event)()
+    release(); await flush()
+    assert.doesNotMatch(h.render(), /Catalog accepted/)
+    if (event !== 'unmount') assert.doesNotMatch(h.render(), /Synthetic catalog/)
+    stopTimer(); if (event !== 'unmount') cleanup()
+  }
+})
+
+test('identity change before or during submission clears the private review', async () => {
+  for (const phase of ['before', 'during']) {
+    let release; const writeWait = new Promise(resolve => { release = resolve })
+    const h = harness({ writeWait }); h.render(); const cleanup = h.effects[0](); await flush()
+    if (phase === 'before') h.changeIdentity()
+    h.control('Accept catalog').props.onClick(); await flush()
+    if (phase === 'during') h.changeIdentity()
+    release(); await flush()
+    assert.equal(h.writes.length, phase === 'before' ? 0 : 1)
+    assert.doesNotMatch(h.render(), /Synthetic catalog|Catalog accepted/)
+    cleanup()
+  }
 })
