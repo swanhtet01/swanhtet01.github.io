@@ -1148,6 +1148,15 @@ def create_trial_router(
             return adapter.decisions(principal, review_id, after=query.get("after"))
         return await ecommerce_review_request(request, operation)
 
+    @router.get("/ecommerce-reviews/{review_id}/operator-decisions")
+    async def read_ecommerce_operator_decisions(review_id: str, request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            query = request.query_params
+            if set(query) - {"after"} or len(query.getlist("after")) > 1:
+                raise TrialValidationError("ecommerce_review_cursor_invalid")
+            return adapter.operator_decisions(principal, review_id, after=query.get("after"))
+        return await ecommerce_review_request(request, operation)
+
     async def write_ecommerce_decision(review_id: str, request: Request, kind: str) -> JSONResponse:
         def operation(adapter, principal, body):
             if (request.query_params or not isinstance(body, Mapping)

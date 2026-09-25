@@ -80,6 +80,17 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             self.assertEqual(readback['decisions'], [dict(commandId=payload['commandId'], kind=kind,
                 note=payload.get('note'), createdAt=first['acceptedAt' if kind=='acceptance' else 'createdAt'])])
             self.assertIsNone(readback['nextAfter'])
+            operator = adapter.operator_decisions(TrialPrincipal(workspace, owner, 'human'), review_id)
+            self.assertEqual(operator['decisions'], readback['decisions'])
+            self.assertEqual(operator['status'], 'active')
+            self.assertFalse(operator['publicationAuthorized']); self.assertFalse(operator['deploymentAuthorized'])
+            with self.assertRaises(TrialPermissionDenied):
+                adapter.operator_decisions(actor, review_id)
+            with self.assertRaises(TrialPermissionDenied):
+                adapter.operator_decisions(TrialPrincipal(workspace, owner, 'agent'), review_id)
+            with self.assertRaises(TrialNotReadyError):
+                adapter.operator_decisions(TrialPrincipal('other-company', owner, 'human'), review_id)
+
             self.assertFalse(readback['publicationAuthorized'])
             self.assertEqual(adapter.decisions(actor, review_id, after=payload['commandId'])['decisions'], [])
             with self.assertRaises(TrialPermissionDenied):
@@ -102,6 +113,17 @@ class CatalogDecisionSqlTests(unittest.TestCase):
         with TestClient(app) as client:
             headers = {'x-test-actor': 'customer'}
             base = '/api/trial/v1/ecommerce-reviews/' + payload['reviewId']
+            operator_url = base + '/operator-decisions'
+            operator_read = client.get(operator_url, headers={'x-test-actor': 'owner'})
+            self.assertEqual(operator_read.status_code, 200)
+            self.assertEqual(operator_read.json()['decisions'][0]['note'], 'စျေးနှုန်း ပြင်ပါ')
+            self.assertIn('no-store', operator_read.headers['cache-control'])
+            for denied_actor in ('customer', 'agent'):
+                self.assertEqual(client.get(operator_url, headers={'x-test-actor': denied_actor}).status_code, 403)
+            self.assertEqual(client.get(operator_url).status_code, 401)
+            for query in ('?after=bad', '?after='+str(uuid4())+'&after='+str(uuid4()), '?extra=1'):
+                self.assertEqual(client.get(operator_url+query, headers={'x-test-actor': 'owner'}).status_code, 422)
+
             read = client.get(base + '/decisions', headers=headers)
             self.assertEqual(read.status_code, 200)
             self.assertEqual(read.json(), adapter.decisions(actor, payload['reviewId']))
@@ -216,6 +238,12 @@ class CatalogDecisionSqlTests(unittest.TestCase):
         commands = [item['commandId'] for item in page['decisions'] + tail['decisions']]
         self.assertEqual(len(set(commands)), 52)
         self.assertEqual(commands, sorted(commands))
+        operator_actor = TrialPrincipal(workspace, owner, 'human')
+        operator_page = adapter.operator_decisions(operator_actor, reviews[1])
+        operator_tail = adapter.operator_decisions(operator_actor, reviews[1], after=operator_page['nextAfter'])
+        self.assertEqual(operator_page['decisions'] + operator_tail['decisions'], page['decisions'] + tail['decisions'])
+        self.assertIsNone(operator_tail['nextAfter'])
+
         with pg._connect(self.runtime_url) as connection:
             self.context(connection,owner)
             connection.execute("update app_private.workspace_state set version=version+1 where workspace_id=%s and surface='commerce'", (workspace,))
@@ -227,8 +255,13 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             adapter.record_decision(actor,payload,kind='feedback')
         with self.assertRaises(TrialPermissionDenied):
             adapter.decisions(actor, payload['reviewId'])
+        history = adapter.operator_decisions(operator_actor, reviews[1])
+        self.assertEqual(history['status'], 'stale')
+        self.assertEqual(history['decisions'], page['decisions'])
+        self.assertFalse(history['publicationAuthorized']); self.assertFalse(history['deploymentAuthorized'])
         with pg._connect(self.admin_url) as connection:
             for role in ('anon','authenticated','service_role'):
                 self.assertFalse(connection.execute("select has_table_privilege(%s,'app_private.ecommerce_customer_decisions','SELECT,INSERT,UPDATE,DELETE')",(role,)).fetchone()[0])
 
 if __name__ == '__main__': unittest.main()
+

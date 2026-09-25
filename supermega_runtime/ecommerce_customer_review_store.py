@@ -272,6 +272,37 @@ class EcommerceCustomerReviewStore:
                 publicationAuthorized=False, deploymentAuthorized=False)
         return result
 
+    def operator_decisions(self, principal, review_id, *, after=None):
+        """Read retained responses for the caller's own prepared review, including history."""
+        review_id = uuid(review_id)
+        after = uuid(after) if after is not None else None
+        with self._transaction(principal, capability='commerce.write') as (cursor, actor):
+            cursor.execute("""select source_version,content_revision,preview_digest,recipient_actor_id,
+                    status,expires_at,clock_timestamp() as read_at
+                from app_private.ecommerce_customer_reviews
+                where workspace_id=%s and prepared_by=%s and review_id=%s""",
+                (actor.workspace_id, actor.actor_id, review_id))
+            assignment = cursor.fetchone()
+            if assignment is None: raise TrialPermissionDenied('commerce.write')
+            cursor.execute("""select command_id,kind,note,created_at
+                from app_private.ecommerce_customer_decisions
+                where workspace_id=%s and actor_id=%s and review_id=%s
+                  and source_version=%s and content_revision=%s and preview_digest=%s
+                  and (%s::uuid is null or command_id>%s::uuid)
+                order by command_id limit 51""",
+                (actor.workspace_id, assignment['recipient_actor_id'], review_id,
+                 assignment['source_version'], assignment['content_revision'], assignment['preview_digest'], after, after))
+            rows = cursor.fetchall()
+            items = [dict(commandId=str(row['command_id']), kind=row['kind'], note=row['note'],
+                          createdAt=row['created_at'].astimezone(timezone.utc).isoformat()) for row in rows[:50]]
+            status = assignment['status']
+            if status == 'active' and assignment['expires_at'] <= assignment['read_at']: status = 'expired'
+            return dict(reviewId=review_id, status=status, sourceVersion=assignment['source_version'],
+                contentRevision=assignment['content_revision'], previewDigest=assignment['preview_digest'],
+                readAt=assignment['read_at'].astimezone(timezone.utc).isoformat(), decisions=items,
+                nextAfter=items[-1]['commandId'] if len(rows)>50 else None,
+                publicationAuthorized=False, deploymentAuthorized=False)
+
     def record_decision(self, principal, payload, *, kind):
         """Commit an exact customer command; no route or publication authority.
 
