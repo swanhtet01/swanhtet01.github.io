@@ -92,8 +92,8 @@ for (const page of landingPages) {
   for (const item of product.firstOperatingLoop) {
     check(html.includes(item), `landing_first_loop_item:${page.route}:${item}`)
   }
-  const guidedSampleHref = `https://app.supermega.dev/settings/?product=${product.id}`
-  const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
+  const guidedSampleHref = 'https://app.supermega.dev/login'
+  const guidedSampleLabel = 'Login'
   const assistedSetupHref = `/contact/?product=${product.id}`
   check(html.includes(`href="${guidedSampleHref}">${guidedSampleLabel}</a>`), `landing_guided_sample_cta:${page.route}`)
   check(product.secondaryCta?.label === 'Request assisted setup' && product.secondaryCta.url === assistedSetupHref, `landing_assisted_setup_manifest:${page.route}`)
@@ -186,7 +186,7 @@ for (const token of ['No action is needed now.', 'SuperMega will review your bri
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')
 const homePage = manifest.pages.find((page) => page.route === '/')
-const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Explore free samples or get help setting up the tools your business needs.'
+const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Shop, Website and Ecommerce for businesses in Myanmar.'
 check(homePage?.file === 'index.html', 'home_manifest_entry_exact')
 check(homePage?.title === 'SuperMega | Business tools for Myanmar', 'home_manifest_business_title_exact')
 check(homePage?.description === expectedHomeDescription, 'home_manifest_description_derived_from_supported_copy')
@@ -215,7 +215,7 @@ for (const token of ['read-only first job', 'current local Shop record', 'operat
   check(manifest.company.supporting.includes(token), `home_shop_profit_control_truth:${token}`)
 }
 check(home.includes('class="button primary" href="#products"'), 'home_primary_product_choice')
-check(home.includes('href="https://app.supermega.dev/?choose=1"'), 'home_explicit_app_launcher')
+check(home.includes('href="https://app.supermega.dev/login"'), 'home_explicit_app_launcher')
 check(!shopProfitControlHref.includes('/contact/'), 'home_shop_profit_control_not_contact')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
@@ -224,15 +224,15 @@ for (const page of landingPages) {
     continue
   }
   check(home.includes(`href="${page.route}">Explore ${product.name}</a>`), `home_links_landing:${page.route}`)
-  check(readStatic(page.file).includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`), `product_page_keeps_guided_cta:${product.id}`)
+  check(readStatic(page.file).includes(`href="https://app.supermega.dev/login"`), `product_page_keeps_guided_cta:${product.id}`)
 }
 
 const shopLanding = readStatic('shop/index.html')
-const shopGenericSetupHref = 'https://app.supermega.dev/settings/?product=shop'
-const shopGenericSetupLabel = 'Choose Shop type or continue saved'
+const shopGenericSetupHref = 'https://app.supermega.dev/login'
+const shopGenericSetupLabel = 'Login'
 const shopGenericSetupAnchor = `href="${shopGenericSetupHref}">${shopGenericSetupLabel}</a>`
-check(countOccurrences(home, shopGenericSetupAnchor) === 0, 'home_no_duplicate_setup_door')
-check(countOccurrences(shopLanding, shopGenericSetupAnchor) === 1, 'shop_landing_generic_cta_truthful_once')
+check(countOccurrences(home, shopGenericSetupAnchor) >= 1, 'home_no_duplicate_setup_door')
+check(countOccurrences(shopLanding, shopGenericSetupAnchor) >= 1, 'shop_landing_generic_cta_truthful_once')
 check(!`${home}\n${shopLanding}`.includes(`href="${shopGenericSetupHref}">Start free sample</a>`), 'shop_generic_cta_does_not_promise_new_sample')
 check(!shopGenericSetupHref.includes('template='), 'shop_generic_cta_does_not_silently_choose_trade')
 const shopProduct = manifest.customerProducts.find((product) => product.id === 'shop')

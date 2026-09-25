@@ -381,7 +381,7 @@ const sharedStyle = `
   .offer-model-action p { max-width: 720px; margin: 0; color: var(--quiet); font-size: 11px; }
   :focus-visible { outline: 3px solid rgba(11,116,94,.34); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; } }
-  .home-hero { display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; gap: 64px; padding-block: 88px; }
+  .home-hero { display: grid; grid-template-columns: 1fr; align-items: center; gap: 64px; padding-block: 88px; }
   .home-hero h1 { font-size: clamp(44px, 5.4vw, 76px); line-height: 1.05; letter-spacing: -.055em; }
   .home-hero .lede { max-width: 500px; font-size: 20px; }
   .hero-local, .myanmar-label { color: var(--muted); line-height: 1.9; letter-spacing: normal; }
@@ -510,10 +510,7 @@ function documentHtml({ route, title, description, content, schema = null, robot
 }
 
 function guidedSampleAction(product) {
-  const href = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  return product.id === 'shop'
-    ? { href, label: 'Choose Shop type or continue saved' }
-    : { href, label: 'Start free sample' }
+  return { href: 'https://app.supermega.dev/login', label: 'Login' }
 }
 
 function assistedSetupAction(product) {
@@ -561,11 +558,11 @@ const homeHtml = documentHtml({
   schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: homePage.description },
   content: `<main id="content">
     <section class="frame hero home-hero">
-      <div class="hero-copy"><span class="eyebrow">For businesses in Myanmar</span><h1>Your business.<br>A clearer day.</h1><p class="lede">Keep sales organised. Get your business online. Make it easier for customers to order.</p><p class="hero-local" lang="my">သင့်လုပ်ငန်းကို ပိုမိုလွယ်ကူစွာ စီမံပါ။</p><div class="actions"><a class="button primary" href="#products">Find your business tool <span aria-hidden="true">↗</span></a><a class="button" href="https://app.supermega.dev/?choose=1">Open app</a></div><p class="hero-caption">Explore a free sample, or ask us to set it up with you.</p></div>
-      <aside class="business-overview" aria-label="Three ways to use SuperMega"><div class="overview-heading"><span class="brand-mark" aria-hidden="true">&gt;_</span><span>One business. Less busywork.</span></div><a href="/shop/"><span class="overview-symbol" aria-hidden="true">01</span><span><small>SHOP</small><strong>Sales &amp; stock</strong><em>Know where the day stands.</em></span><b aria-hidden="true">↗</b></a><a href="/ecommerce/"><span class="overview-symbol" aria-hidden="true">02</span><span><small>ECOMMERCE</small><strong>Your product catalog</strong><em>From browsing to a customer request.</em></span><b aria-hidden="true">↗</b></a><a href="/website/"><span class="overview-symbol" aria-hidden="true">03</span><span><small>WEBSITE</small><strong>Your online presence</strong><em>Help people find and contact you.</em></span><b aria-hidden="true">↗</b></a><p>Choose one. Add more when you need them.</p></aside>
+      <div class="hero-copy"><span class="eyebrow">For businesses in Myanmar</span><h1>Your business.<br>A clearer day.</h1><p class="lede">Keep sales organised. Get your business online. Make it easier for customers to order.</p><p class="hero-local" lang="my">သင့်လုပ်ငန်းကို ပိုမိုလွယ်ကူစွာ စီမံပါ။</p><div class="actions"><a class="button primary" href="#products">Explore solutions <span aria-hidden="true">↗</span></a><a class="button" href="https://app.supermega.dev/login">Login</a></div><p class="hero-caption">Shop, Website and Ecommerce. Choose what your business needs.</p></div>
+
     </section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">What do you need?</span><h2>Start with one useful tool.</h2><p>For shops, service businesses and growing teams.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
-    <section class="frame section offer-model" id="model" aria-label="Business setup"><div class="closing-strip"><div><h2>We can set it up for you.</h2><p>Send your business details, products or services. Get a website or catalog to review.</p></div><a class="button primary" href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">What do you need?</span><h2>Three solutions. One business.</h2><p>For shops, service businesses and growing teams.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
+    <section class="frame section offer-model" id="model" aria-label="Business setup"><div class="closing-strip"><div><h2>Tell us about your business.</h2><p>Share your products, services and the work you want to simplify.</p></div><a class="button primary" href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a></div></section>
 
   </main>`,
 })
@@ -691,9 +688,9 @@ function productLandingHtml(product, page) {
     shareImage: `/og-card-${product.id}.png`,
     schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
     content: `<main id="content">
-    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions">${actionsHtml}</div><div class="hero-note"><span>Free browser sample</span><span>No account needed</span><span>Mobile-ready workflows</span></div><p class="hero-caption">Samples stay on this device. They do not publish, send orders or take payments.</p></section>
+    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions">${actionsHtml}</div></section>
     ${assistedDeliverablesHtml(product.id)}
-    <details class="frame product-details"><summary>Explore the sample and workflow details</summary><p class="delivery-summary">${escapeHtml(product.description)}</p><section class="section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">${product.id === 'shop' ? 'First operating loop' : 'Optional sample walkthrough'}</span><h2>${product.id === 'shop' ? `Start with one ${escapeHtml(product.name)} job.` : 'Want to explore the example first?'}</h2><p>${product.id === 'shop' ? 'This is the path a new owner should understand before looking at advanced modules.' : 'You can request assisted setup without completing this sample. These steps explain the local example, not work you must do before contacting us.'}</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
+    <details class="frame product-details"><summary>Technical details</summary><p class="delivery-summary">Samples stay on this device. They do not publish, send orders or take payments.</p><p class="delivery-summary">${escapeHtml(product.description)}</p><section class="section first-loop" id="first-loop"><div class="section-head"><span class="eyebrow">${product.id === 'shop' ? 'First operating loop' : 'Optional sample walkthrough'}</span><h2>${product.id === 'shop' ? `Start with one ${escapeHtml(product.name)} job.` : 'Want to explore the example first?'}</h2><p>${product.id === 'shop' ? 'This is the path a new owner should understand before looking at advanced modules.' : 'You can request assisted setup without completing this sample. These steps explain the local example, not work you must do before contacting us.'}</p></div><ol class="first-loop-list" aria-label="${escapeHtml(product.name)} first operating loop">${firstLoop.map((item, index) => `<li><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</li>`).join('')}</ol></section>
     ${firstJobTemplatesHtml(product.id)}
     <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">Start here</span><h2>${escapeHtml(launchModules.length)} core ${escapeHtml(product.name)} workflows.</h2><p>Begin with the work used most often. Advanced tools stay inside the workspace and appear when they are relevant.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} core workflows">${launchModules.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
     ${product.id === 'shop' ? tradeTemplatesHtml() : ''}

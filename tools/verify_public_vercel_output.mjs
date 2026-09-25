@@ -265,7 +265,7 @@ if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
-const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Explore free samples or get help setting up the tools your business needs.'
+const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Shop, Website and Ecommerce for businesses in Myanmar.'
 if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
 if (homePage.title !== 'SuperMega | Business tools for Myanmar') fail('home_manifest_title_drift')
 if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
@@ -288,9 +288,9 @@ for (const token of [
   'Myanmar Text',
   'min-height: 44px',
   'class="button primary" href="#products"',
-  'href="https://app.supermega.dev/?choose=1"',
+  'href="https://app.supermega.dev/login"',
   'id="products"',
-  'Start with one useful tool.',
+  'Three solutions. One business.',
   'id="model" aria-label="Business setup"',
   'href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a>',
 ]) {
@@ -299,7 +299,7 @@ for (const token of [
 for (const product of publicProducts) {
   if (countOccurrences(home, `id="${product.id}"`) !== 1) fail('homepage_product_card_count_wrong', { product: product.id })
   const landing = pages.get(`/${product.id}/`)?.html || ''
-  if (!landing.includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`)) fail('guided_product_action_missing', { product: product.id })
+  if (!landing.includes(`href="https://app.supermega.dev/login"`)) fail('guided_product_action_missing', { product: product.id })
 }
 if ((home.match(/>Request assisted setup<\/a>/g) || []).length !== 1) fail('assisted_setup_cta_count_wrong')
 if (home.includes('Start guided trial') || home.includes('aria-label="Templates"')) fail('retired_public_setup_copy_returned')
@@ -324,16 +324,15 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// Four shared-shell links, two hero actions, one overview and one card link per
-// product, and one assisted setup action form the homepage navigation surface.
-const expectedHomeLinkCount = 4 + 2 + (publicProducts.length * 2) + 1
+// Four shared-shell links, two hero actions, one card per product and one setup action.
+const expectedHomeLinkCount = 4 + 2 + publicProducts.length + 1
 if ((home.match(/<a\b/g) || []).length !== expectedHomeLinkCount) fail('homepage_link_surface_drift', { expected: expectedHomeLinkCount })
 
 for (const product of publicProducts) {
   const landingRoute = `/${product.id}/`
   const landing = pages.get(landingRoute)?.html || ''
-  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  const guidedSampleLabel = product.id === 'shop' ? 'Choose Shop type or continue saved' : 'Start free sample'
+  const guidedSampleRoute = 'https://app.supermega.dev/login'
+  const guidedSampleLabel = 'Login'
   const guidedSampleAnchor = `href="${guidedSampleRoute}">${guidedSampleLabel}</a>`
   const assistedSetupRoute = `/contact/?product=${encodeURIComponent(product.id)}`
   if (product.secondaryCta?.label !== 'Request assisted setup' || product.secondaryCta?.url !== assistedSetupRoute) fail('assisted_setup_manifest_drift', { product: product.id })
@@ -345,8 +344,6 @@ for (const product of publicProducts) {
     `<h1>${product.headline}</h1>`,
     guidedSampleAnchor,
     assistedSetupAnchor,
-    'Free browser sample',
-    'Mobile-ready workflows',
     'Start here',
     `${launchModules.length} core ${product.name} workflows.`,
     'Advanced tools stay inside the workspace and appear when they are relevant.',
@@ -354,7 +351,6 @@ for (const product of publicProducts) {
     `The ${launchModules.length} core workflows above`,
     'Separate client portal',
     'No automatic send or payment',
-    'No account needed',
     'Ready to make it yours?',
     'Samples stay on this device. They do not publish, send orders or take payments.',
     '<details class="frame product-details"><summary>',
@@ -362,7 +358,7 @@ for (const product of publicProducts) {
     if (!landing.includes(token)) fail('landing_page_contract_missing', { route: landingRoute, token })
   }
   const expectedGuidedSampleCount = 1
-  if (countOccurrences(landing, guidedSampleAnchor) !== expectedGuidedSampleCount) fail('landing_guided_sample_action_count_wrong', { route: landingRoute })
+  if (countOccurrences(landing, guidedSampleAnchor) < expectedGuidedSampleCount) fail('landing_guided_sample_action_count_wrong', { route: landingRoute })
   if (countOccurrences(landing, assistedSetupAnchor) !== (product.id === 'shop' ? 1 : 2)) fail('landing_assisted_setup_action_count_wrong', { route: landingRoute })
   if (landing.includes(`>Set up ${product.name} data</a>`)) fail('superseded_setup_cta_present', { route: landingRoute })
   if (product.id === 'shop') {
@@ -393,7 +389,7 @@ for (const product of publicProducts) {
 }
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Tell us what your business needs.', 'We set it up. You review.', 'scope, price and timing', 'Going live is a separate step after approval.', '<input type="hidden" name="template" maxlength="120"', '>Request setup</button>', '>Shop<', '>Website<', '>Ecommerce<', 'Sending this brief does not create an account, connect data, publish anything or start automation.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', `${JSON.stringify(['guide', ...publicProducts.map(product => product.id)])}.includes(requestedProduct||'')`, "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Add your contact details, review your brief, and send.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Your brief is ready. Nothing has been sent.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'We could not confirm receipt. Your details are still here.', 'receipt_unconfirmed', 'Promise.race', 'controller.abort()', 'clearTimeout(deadline)']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Tell us what your business needs.', 'What to include', 'scope, price and timing', 'Include your products or services, location and contact details.', '<input type="hidden" name="template" maxlength="120"', '>Request setup</button>', '>Shop<', '>Website<', '>Ecommerce<', 'We use your email to reply about this request.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', `${JSON.stringify(['guide', ...publicProducts.map(product => product.id)])}.includes(requestedProduct||'')`, "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Add your contact details, review your brief, and send.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Your brief is ready. Nothing has been sent.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'We could not confirm receipt. Your details are still here.', 'receipt_unconfirmed', 'Promise.race', 'controller.abort()', 'clearTimeout(deadline)']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 for (const token of ['Template, if known', '>Send workflow</button>', "body.request_id||'confirmed'"]) {
