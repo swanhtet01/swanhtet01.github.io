@@ -109,10 +109,8 @@ for (const page of landingPages) {
     check(html.includes('Samples are optional and are not a live service.'), `landing_optional_sample_boundary:${page.route}`)
     check(html.includes(product.id === 'website' ? 'We agree your domain, publishing and ongoing support separately.' : 'Your team confirms each order and payment.'), `landing_product_delivery_boundary:${page.route}`)
   }
-  check(html.includes('You review before anything is published, sent or charged.'), `landing_external_effect_boundary:${page.route}`)
   const websiteOfferingBoundary = 'The starter features up to four offerings; full menu management is not included.'
   check(html.includes(websiteOfferingBoundary) === (product.id === 'website'), `landing_website_offering_scope:${page.route}`)
-  check(html.includes('Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.'), `landing_managed_activation_boundary:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
   }

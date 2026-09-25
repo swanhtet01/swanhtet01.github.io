@@ -119,10 +119,14 @@ const sharedRequired = [
   '<a class="button compact header-cta" href="https://app.supermega.dev/login">Company sign in</a>',
   '<script src="/vercel-insights.js"></script>',
   'href="/privacy/">Privacy</a>',
-  'Accountable company software.',
 ]
 
 const forbiddenCopy = [
+  'Accountable company software.',
+  'You stay in control',
+  'You review before anything is published, sent or charged.',
+  'Start when it is ready',
+  'Managed activation proceeds only after',
   ...manifest.retiredPublicNames,
   'Custom software at SaaS prices',
   'Three products',
@@ -287,13 +291,8 @@ for (const token of [
   'href="https://app.supermega.dev/?choose=1"',
   'id="products"',
   'Start with one useful tool.',
-  'id="model" aria-label="How SuperMega prepares your business tools"',
-  'We agree scope, price and timing.',
-  'Samples are free and stored on your device. Business setup is agreed separately.',
+  'id="model" aria-label="Business setup"',
   'href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a>',
-  'id="trust"',
-  'aria-label="Security boundary"',
-  'You review before anything is published, sent or charged.',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
@@ -356,12 +355,9 @@ for (const product of publicProducts) {
     'Separate client portal',
     'No automatic send or payment',
     'No account needed',
-    'aria-label="Security boundary"',
-    'You review before anything is published, sent or charged.',
     'Ready to make it yours?',
     'Samples stay on this device. They do not publish, send orders or take payments.',
     '<details class="frame product-details"><summary>',
-    'Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.',
   ]) {
     if (!landing.includes(token)) fail('landing_page_contract_missing', { route: landingRoute, token })
   }
