@@ -137,7 +137,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
       {decisions?.decisions.length && !command.pending ? <section className="prepared-catalog" role="status">
         <h2>{decisions.decisions[0].kind === 'acceptance' ? 'Catalog accepted' : 'Changes requested'}</h2>
         <p>{decisions.decisions[0].kind === 'acceptance'
-          ? 'SuperMega will review it before publishing.' : 'SuperMega will prepare an updated review.'}</p>
+          ? 'Your acceptance is saved for SuperMega’s release review. The catalog is not published.' : 'Your change request is saved for SuperMega to review.'}</p>
       </section> : decisions ? <section className="prepared-catalog" aria-busy={saving}>
         {command.pending ? <>
           <p role="status">{saveMessage || 'Saving response.'}</p>
