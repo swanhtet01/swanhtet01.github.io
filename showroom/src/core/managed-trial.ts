@@ -607,7 +607,7 @@ function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIden
     || !isRecord(value.brief)
     || !isRecord(value.identity)
     || !exactRecordKeys(value.identity, ['actor_id', 'actor_kind', 'workspace_id'])) {
-    throw new ManagedTrialError('Managed Company Brief response is invalid.', { code: 'managed_company_brief_invalid' })
+    throw errorManagedCompanyBriefInvalid('Managed Company Brief response is invalid.')
   }
   const brief = value.brief
   const responseIdentity = value.identity
@@ -686,7 +686,7 @@ function assertManagedCompanyBrief(value: unknown, expectedIdentity: ManagedIden
     || responseIdentity.workspace_id !== expectedIdentity.workspaceId
     || responseIdentity.actor_id !== expectedIdentity.userId
     || responseIdentity.actor_kind !== 'human') {
-    throw new ManagedTrialError('Managed Company Brief failed its tenant and evidence checks.', { code: 'managed_company_brief_invalid' })
+    throw errorManagedCompanyBriefInvalid('Managed Company Brief failed its tenant and evidence checks.')
   }
   return brief as unknown as ManagedCompanyBrief
 }
@@ -722,7 +722,7 @@ export function assertManagedOwnerControlRun(value: unknown, expectedIdentity: M
     || !isRecord(value.identity)
     || !isRecord(value.run)
     || !exactRecordKeys(value.identity, ['actor_id', 'actor_kind', 'workspace_id'])) {
-    throw new ManagedTrialError('Managed Owner Control response is invalid.', { code: 'managed_owner_control_invalid' })
+    throw errorManagedOwnerControlInvalid('Managed Owner Control response is invalid.')
   }
   const run = value.run
   const identity = value.identity
@@ -831,7 +831,7 @@ export function assertManagedOwnerControlRun(value: unknown, expectedIdentity: M
     || identity.workspace_id !== expectedIdentity.workspaceId
     || identity.actor_id !== expectedIdentity.userId
     || identity.actor_kind !== 'human') {
-    throw new ManagedTrialError('Managed Owner Control failed its tenant and evidence checks.', { code: 'managed_owner_control_invalid' })
+    throw errorManagedOwnerControlInvalid('Managed Owner Control failed its tenant and evidence checks.')
   }
   return run as unknown as ManagedOwnerControlRun
 }
@@ -931,9 +931,7 @@ export async function assertManagedContextValidation(
     || !isRecord(value.identity)
     || !isRecord(value.validation)
     || !structurallyValidManagedContextProfile(value.profile, approvedContext, expectedIdentity)) {
-    throw new ManagedTrialError('The managed context validation response is invalid.', {
-      code: 'managed_context_validation_invalid',
-    })
+    throw errorManagedContextValidationInvalid('The managed context validation response is invalid.')
   }
   const validation = value.validation
   const profile = value.profile
@@ -952,9 +950,7 @@ export async function assertManagedContextValidation(
     || identity.actor_id !== expectedIdentity.userId
     || identity.actor_kind !== 'human'
     || value.secretValuesExposed !== false) {
-    throw new ManagedTrialError('Managed context validation failed its tenant and evidence checks.', {
-      code: 'managed_context_validation_invalid',
-    })
+    throw errorManagedContextValidationInvalid('Managed context validation failed its tenant and evidence checks.')
   }
   const expectedValidationDigest = await sha256Text(JSON.stringify(managedContextValidationProjection(
     expectedProfileDigest,
@@ -983,9 +979,7 @@ export async function assertManagedContextRetention(
     || !isRecord(value.retention)
     || !isRecord(value.result)
     || !structurallyValidManagedContextProfile(value.profile, approvedContext, expectedIdentity)) {
-    throw new ManagedTrialError('The managed context retention response is invalid.', {
-      code: 'managed_context_retention_invalid',
-    })
+    throw errorManagedContextRetentionInvalid('The managed context retention response is invalid.')
   }
   const profile = value.profile
   const retention = value.retention
@@ -1005,9 +999,7 @@ export async function assertManagedContextRetention(
     || identity.actor_id !== expectedIdentity.userId
     || identity.actor_kind !== 'human'
     || value.secretValuesExposed !== false) {
-    throw new ManagedTrialError('Managed context retention failed its tenant and evidence checks.', {
-      code: 'managed_context_retention_invalid',
-    })
+    throw errorManagedContextRetentionInvalid('Managed context retention failed its tenant and evidence checks.')
   }
   return {
     profile: profile as ManagedContextProfile,
@@ -2910,9 +2902,7 @@ function parseSelfServeWorkspace(value: unknown, claimCode: string, product: Cli
     || !isRecord(value.workspace)
     || !isRecord(value.claim)
     || value.claim.claimCode !== claimCode) {
-    throw new ManagedTrialError('The workspace activation returned an invalid response.', {
-      code: 'self_serve_workspace_invalid',
-    })
+    throw errorSelfServeWorkspaceInvalid('The workspace activation returned an invalid response.')
   }
   const workspace = value.workspace
   if (typeof workspace.workspace_id !== 'string'
@@ -2923,9 +2913,7 @@ function parseSelfServeWorkspace(value: unknown, claimCode: string, product: Cli
     || workspace.access !== 'owner'
     || workspace.product !== product
     || value.claim.workspaceId !== workspace.workspace_id) {
-    throw new ManagedTrialError('The workspace activation returned an invalid company.', {
-      code: 'self_serve_workspace_invalid',
-    })
+    throw errorSelfServeWorkspaceInvalid('The workspace activation returned an invalid company.')
   }
   return {
     workspaceId: workspace.workspace_id,
@@ -2976,9 +2964,7 @@ export async function createSelfServeWorkspace(
   }
   const { data, error } = await supabase.auth.getSession()
   if (error || !validNamedUserSession(data.session)) {
-    throw new ManagedTrialError('Sign in with your verified work email first.', {
-      code: 'auth_required',
-    })
+    throw errorAuthRequired('Sign in with your verified work email first.')
   }
   return requestSelfServeWorkspace(data.session, claimCode, businessName, product)
 }
@@ -3006,7 +2992,7 @@ async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
   if (!supabase) throw errorAuthNotConfigured('Managed sign-in is not configured.')
   const workspaceId = normalizeWorkspaceId(currentManagedWorkspace())
   let { data, error } = await supabase.auth.getSession()
-  if (error || !data.session) throw new ManagedTrialError('Sign in to the company account first.', { code: 'auth_required' })
+  if (error || !data.session) throw errorAuthRequired('Sign in to the company account first.')
   if (data.session.expires_at && data.session.expires_at * 1000 <= Date.now() + 60_000) {
     const refreshed = await supabase.auth.refreshSession()
     data = refreshed.data
@@ -4119,3 +4105,9 @@ const errorManagedClientImportDigestUnavailable = codedManagedError('managed_cli
 const errorManagedClientImportValidationInvalid = codedManagedError('managed_client_import_validation_invalid')
 const errorManagedClientImportApplyPreflightInvalid = codedManagedError('managed_client_import_apply_preflight_invalid')
 const errorManagedPlantEquipmentValidationInvalid = codedManagedError('managed_plant_equipment_validation_invalid')
+const errorManagedCompanyBriefInvalid = codedManagedError('managed_company_brief_invalid')
+const errorManagedOwnerControlInvalid = codedManagedError('managed_owner_control_invalid')
+const errorManagedContextValidationInvalid = codedManagedError('managed_context_validation_invalid')
+const errorManagedContextRetentionInvalid = codedManagedError('managed_context_retention_invalid')
+const errorSelfServeWorkspaceInvalid = codedManagedError('self_serve_workspace_invalid')
+const errorAuthRequired = codedManagedError('auth_required')
