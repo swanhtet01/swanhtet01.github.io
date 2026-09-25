@@ -287,6 +287,16 @@ class CatalogDecisionSqlTests(unittest.TestCase):
         with pg._connect(self.admin_url) as connection:
             connection.execute("update app_private.workspace_memberships set capabilities=(select capabilities from app_private.workspace_memberships where workspace_id=%s and actor_id=%s) where workspace_id=%s and actor_id=%s", (workspace,owner,workspace,recipient))
         self.assertEqual(adapter.prepared_reviews(actor)['reviews'], [], 'another entitled operator cannot list the preparer records')
+        # Knowing the UUID must not bypass the directory's preparer boundary.
+        with self.assertRaises(TrialPermissionDenied):
+            adapter.operator_decisions(actor, reviews[1])
+        with TestClient(app) as client:
+            denied = client.get('/api/trial/v1/ecommerce-reviews/' + reviews[1] + '/operator-decisions',
+                                headers={'x-test-actor': 'customer'})
+            self.assertEqual(denied.status_code, 403)
+            self.assertEqual(denied.headers['cache-control'], 'private, no-store')
+            self.assertNotIn('decisions', denied.json())
+            self.assertNotIn('စျေးနှုန်း ပြင်ပါ', denied.text)
         with pg._connect(self.admin_url) as connection:
             for role in ('anon','authenticated','service_role'):
                 self.assertFalse(connection.execute("select has_table_privilege(%s,'app_private.ecommerce_customer_decisions','SELECT,INSERT,UPDATE,DELETE')",(role,)).fetchone()[0])
