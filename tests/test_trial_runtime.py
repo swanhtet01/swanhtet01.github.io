@@ -1103,6 +1103,29 @@ class TrialRuntimeTests(unittest.TestCase):
             self.assertEqual(commerce["state"]["orders"][0]["id"], "ORD-MANAGED-001")
             self.assertEqual(commerce["state"]["items"][0]["onHand"], 8)
 
+            newer = deepcopy(body)
+            newer["command_id"] = str(uuid4())
+            newer["expected_version"] = result["version"]
+            newer["payload"]["intent"]["orderId"] = "ORD-MANAGED-002"
+            newer["payload"]["evidence"]["actionId"] = "ACT-SHOP-ORDER-002"
+            newer["payload"]["evidence"]["evidenceReference"] = "COUNTER-ORD-MANAGED-002"
+            advanced = client.post("/api/trial/v1/commands", headers=self._headers(), json=newer)
+            self.assertEqual(advanced.status_code, 200, advanced.text)
+            late_replay = client.post("/api/trial/v1/commands", headers=self._headers(), json=body)
+            self.assertEqual(late_replay.status_code, 200, late_replay.text)
+            old_receipt = late_replay.json()["result"]
+            self.assertTrue(old_receipt["idempotent_replay"])
+            self.assertEqual(old_receipt["version"], result["version"])
+            self.assertEqual(old_receipt["state"], result["state"])
+            latest = client.get("/api/trial/v1/bootstrap", headers=self._headers())
+            self.assertEqual(latest.status_code, 200, latest.text)
+            latest_commerce = latest.json()["states"]["commerce"]
+            self.assertEqual(latest_commerce["version"], result["version"] + 1)
+            self.assertEqual({row["id"] for row in latest_commerce["state"]["orders"]},
+                             {"ORD-MANAGED-001", "ORD-MANAGED-002"})
+            self.assertEqual(len(latest_commerce["state"]["orders"]), 2)
+            self.assertEqual(latest_commerce["state"]["items"][0]["onHand"], 6)
+
             other = client.get(
                 "/api/trial/v1/bootstrap",
                 headers=self._headers("other-operator-session"),
