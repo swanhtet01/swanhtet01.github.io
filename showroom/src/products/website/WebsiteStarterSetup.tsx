@@ -1,7 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 
 import {
-  websiteStarterTemplates,
   websiteStarterBriefIssues,
   type WebsiteStarterBrief,
 } from './website-starter'
@@ -164,8 +163,8 @@ export function WebsiteStarterSetup({
       <header className="website-panel-head">
         <div>
           <span className="website-eyebrow">Prepared by SuperMega</span>
-          <h2 id="website-starter-title">Tell us the basics. We prepare the Website.</h2>
-          <p>Give us only the details that must be correct. SuperMega drafts a private three-page Website for your review; nothing is published from here.</p>
+          <h2 id="website-starter-title">Your business, online.</h2>
+          <p>Add your business details to prepare a private draft.</p>
         </div>
         <span className="website-status is-draft">Private draft</span>
       </header>
@@ -187,8 +186,8 @@ export function WebsiteStarterSetup({
           </select>
           <small>
             {opening.detected
-              ? 'Taken from your Shop setup. Change it only if this Website is for another business; anything you have already written stays yours.'
-              : 'SuperMega uses this to start with relevant wording. Anything you have already written stays yours.'}
+              ? 'From your Shop setup. Your edits are kept.'
+              : 'We suggest a layout and wording for your business.'}
           </small>
         </label>
 
@@ -202,12 +201,6 @@ export function WebsiteStarterSetup({
             <small id="website-business-stage-help">{businessStage === 'existing'
               ? 'Reuse your approved menu, service list or catalog in the featured entries below. Check current prices and details first. This form does not scrape websites or import customer records; changing this choice keeps your draft.'
               : 'Start with the services or products you are ready to describe. Leave unconfirmed prices out. This creates a private draft, not a booking, live store or published Website.'}</small>
-          </label>
-          <label>
-            <span>Starting layout <small>Optional</small></span>
-            <select onChange={(event) => updateBrief('templateId', event.target.value as WebsiteStarterBrief['templateId'])} value={brief.templateId}>
-              {websiteStarterTemplates.map((template) => <option key={template.id} value={template.id}>{template.label} — {template.detail}</option>)}
-            </select>
           </label>
           <label>
             <span>Business name</span>

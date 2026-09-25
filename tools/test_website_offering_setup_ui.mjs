@@ -49,6 +49,19 @@ function harness() {
   return { nodes, find, click, edit, submit, created, render }
 }
 
+test('business type chooses the layout without a customer template selector', () => {
+  const ui = harness()
+  assert.equal(ui.nodes().some(node => node.type === 'select' && node.props.value === 'catalog-showcase'), false)
+  const businessType = trade.websiteTradeBriefOptions()[0].id
+  const selector = ui.find(node => node.type === 'select' && node.props.value === '')
+  selector.props.onChange({ target: { value: businessType } }); ui.render()
+  ui.submit()
+  assert.equal(ui.created.length, 1)
+  const brief = ui.created[0]
+  const expected = trade.websiteTradeBrief({ tradeId: businessType, businessName: brief.businessName, contactHref: brief.contactHref })
+  assert.equal(brief.templateId, expected.templateId)
+})
+
 test('offerings are optional and ordinary name/details edits reach the brief', () => {
   const ui = harness()
   assert.equal(ui.find(node => node.type === 'details').props.open, undefined)

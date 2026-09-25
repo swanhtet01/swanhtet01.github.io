@@ -4043,7 +4043,8 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSetupSource.includes("businessName: 'Mingalar Fresh Mart'")
   || !websiteStarterSetupSource.includes("audience: 'families and office buyers in Yangon'")
   || !websiteStarterSetupSource.includes("templateId: 'catalog-showcase'")
-  || !websiteStarterSetupSource.includes('websiteStarterTemplates.map')
+  || websiteStarterSetupSource.includes('websiteStarterTemplates.map')
+  || !websiteStarterSetupSource.includes('function chooseTrade(nextTradeId: string)')
   || !websiteStarterSetupSource.includes('Prepared by SuperMega')
   // The starter opens from SAMPLE_BRIEF unless the shell passes the trade the device's Shop
   // was set up as, in which case it opens on that trade's wording. openingState() is a pure
