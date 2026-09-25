@@ -478,6 +478,8 @@ requireContract('real migration proof precedes every production candidate',
   && migrationVerifier.includes('unsafe role rejected before foundation grants')
   && migrationVerifier.includes('hosted_postgres_17_proof_required: true'))
 requireContract('app guard remains non-mutating but runs API tests', appWorkflow.includes("- 'supermega_runtime/**'") && appWorkflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && !/vercel@56\.1\.0\s+(?:deploy|promote|rollback)\b/.test(appWorkflow) && !appWorkflow.includes('VERCEL_TOKEN') && !/environment:\s*production/.test(appWorkflow))
+requireContract('canonical verification includes Ecommerce customer review identity and recovery',
+  packageJson.scripts['app:verify:steps'].split(' && ').includes('node --test tools/test_ecommerce_customer_review_ui.mjs'))
 requireContract('canonical verification includes managed Ecommerce handoff races',
   packageJson.scripts['app:verify:steps'].split(' && ').includes('node --test tools/test_ecommerce_managed_request_identity.mjs'))
 requireContract('protected app candidate verification', workflow.includes("VERCEL_PROTECTED_PREVIEW: '1'") && appVerifier.includes("'curl', path, '--deployment'") && appVerifier.includes('deploymentFunctions') && appVerifier.includes("JSON.stringify(['api/app'])") && appVerifier.includes('hosted_agent_runtime_contract_wrong'))
