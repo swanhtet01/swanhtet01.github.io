@@ -31,3 +31,13 @@ export function recoverCatalogDecision(storage: Storage, identity: ManagedIdenti
 export function clearCatalogDecision(storage: Storage, identity: ManagedIdentity, reviewId: string) {
   storage.removeItem(key(identity, reviewId))
 }
+
+// Cleanup uses only this signed-in actor's exact review key, never a storage scan.
+export function discardExpiredCatalogDecision(storage: Storage, identity: ManagedIdentity, reviewId: string) {
+  const raw = storage.getItem(key(identity, reviewId))
+  if (!raw) return
+  const value = JSON.parse(raw)
+  if (Object.keys(value).sort().join() === 'expiresAt,payload'
+    && value.payload?.reviewId === reviewId && typeof value.expiresAt === 'string'
+    && Date.parse(value.expiresAt) <= Date.now()) clearCatalogDecision(storage, identity, reviewId)
+}

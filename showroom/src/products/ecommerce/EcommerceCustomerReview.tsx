@@ -4,7 +4,7 @@ import { currentManagedIdentity, loadManagedEcommerceReview, loadManagedEcommerc
 import { customerEcommerceReviewLoginPath } from '../../core/account-routes'
 import { createReviewAccessBoundary } from '../website/customer-review-access'
 import { verifyPreparedCatalogReview, verifyCatalogDecisionPage, type PreparedCatalogReview, type CatalogDecisionPage } from './prepared-catalog-review'
-import { retainCatalogDecision, recoverCatalogDecision, clearCatalogDecision } from './pending-catalog-decision'
+import { retainCatalogDecision, recoverCatalogDecision, clearCatalogDecision, discardExpiredCatalogDecision } from './pending-catalog-decision'
 import { PreparedCatalog } from './PreparedCatalog'
 
 export default function EcommerceCustomerReview() {
@@ -74,7 +74,8 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
       try {
         const identity = await currentManagedIdentity()
         if (!active || !access.isCurrent(epoch)) return
-        if (!identity) { setMessage('Sign in with the account assigned to this review.'); return }
+        if (!identity) { setMessage('Sign in with your assigned account.'); return }
+        discardExpiredCatalogDecision(window.sessionStorage, identity, reviewId)
         const verified = await verifyPreparedCatalogReview(await loadManagedEcommerceReview(reviewId, identity), reviewId)
         if (!active || !access.isCurrent(epoch)) return
         const recovered = recoverCatalogDecision(window.sessionStorage, identity, verified)
@@ -92,7 +93,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         })
         if (!accepted && access.isCurrent(epoch)) setMessage('Your access changed. Sign in and reopen this review.')
       } catch {
-        if (active && access.isCurrent(epoch)) setMessage('Could not open this review. Try again. If it still does not open, ask SuperMega to check your access.')
+        if (active && access.isCurrent(epoch)) setMessage('Review unavailable. Retry or ask SuperMega for help.')
       } finally {
         if (active && access.isCurrent(epoch)) setOpening(false)
       }
@@ -111,7 +112,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     const timer = window.setTimeout(() => {
       try { if (command.identity) clearCatalogDecision(window.sessionStorage, command.identity, reviewId) } catch { /* Storage may be unavailable. */ }
       command.pending = null; setNote('')
-      access.invalidate(); setReview(null); setDecisions(null); setMessage('This review expired. Ask SuperMega for a fresh review.')
+      access.invalidate(); setReview(null); setDecisions(null); setMessage('This review expired. Ask for a new review.')
     }, Math.max(0, Math.min(2147483647, Date.parse(review.expiresAt) - Date.now())))
     return () => window.clearTimeout(timer)
   }, [review, access, command, reviewId])
@@ -135,7 +136,6 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         </form> : <>
           <button type="button" onClick={() => void submit('acceptance')}>Accept catalog</button>
           <button type="button" onClick={() => setEditing(true)}>Request changes</button>
-          <p>SuperMega reviews before publishing.</p>
         </>}
       </section> : null}
     </> : <section className="prepared-catalog">

@@ -301,3 +301,25 @@ test('verified expiry removes the pending tab note and never enables a replaceme
   assert.match(h.render(), /review expired/); assert.equal(h.writes.length, 1)
   stopTimer(); cleanup()
 })
+
+
+test('fresh instance discards only its expired recovery record even when review access is denied', async () => {
+  const scopedKey = 'supermega.catalog-response:' + JSON.stringify(['customer', 'company', id])
+  const expired = JSON.stringify({ expiresAt: '2000-01-01T00:00:00Z', payload: { reviewId: id, commandId: id, previewDigest: review.previewDigest, note: 'Private synthetic note' } })
+  const storage = new Map([[scopedKey, expired], [scopedKey + ':other', expired]])
+  const h = harness({ storage, denied: true }); h.render(); const close = h.effects[0](); await flush()
+  assert.equal(storage.has(scopedKey), false); assert.equal(storage.get(scopedKey + ':other'), expired)
+  assert.equal(h.writes.length, 0); assert.doesNotMatch(h.render(), /Synthetic catalog|Retry response|Accept catalog/); close()
+})
+
+test('cleanup preserves unexpired, invalid-date and mismatched records; storage failure stays closed', async () => {
+  const scopedKey = 'supermega.catalog-response:' + JSON.stringify(['customer', 'company', id])
+  for (const [expiresAt, reviewId, failDelete] of [[review.expiresAt, id, false], ['invalid', id, false], ['2000-01-01T00:00:00Z', 'other', false], ['2000-01-01T00:00:00Z', id, true]]) {
+    const raw = JSON.stringify({ expiresAt, payload: { reviewId, note: 'Private synthetic note' } })
+    const storage = new Map([[scopedKey, raw]])
+    if (failDelete) storage.delete = () => { throw Error('storage unavailable') }
+    const h = harness({ storage, denied: true }); h.render(); const close = h.effects[0](); await flush()
+    assert.equal(storage.get(scopedKey), raw); assert.equal(h.writes.length, 0)
+    assert.doesNotMatch(h.render(), /Synthetic catalog|Retry response|Accept catalog/); close()
+  }
+})
