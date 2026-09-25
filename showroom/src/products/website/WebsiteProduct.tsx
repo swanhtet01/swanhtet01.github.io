@@ -1299,6 +1299,22 @@ export function WebsiteProduct() {
               </span>
               {!starterSetupActive ? (
                 <div className="website-primary-actions">
+                <details className="compact-disclosure">
+                  <summary>Preview options</summary>
+                <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
+                  {previewDevices.map((option) => (
+                    <button
+                      aria-pressed={device === option.id}
+                      key={option.id}
+                      onClick={() => setDevice(option.id)}
+                      title={option.label + ' preview'}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                </details>
                 {surface === 'work' ? (
                   <details
                     className="website-site-settings"
@@ -1504,28 +1520,7 @@ export function WebsiteProduct() {
             </div>
 
             <div className="website-preview-surface">
-              <header className="website-preview-surface-head">
-                <div>
-                  <strong>{hasUnsavedChanges ? 'Unsaved preview' : 'Preview'}</strong>
-                  <small>{selectedPage.internalName || 'Untitled page'}</small>
-                </div>
-                <details className="compact-disclosure">
-                  <summary>Preview options</summary>
-                <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
-                  {previewDevices.map((option) => (
-                    <button
-                      aria-pressed={device === option.id}
-                      key={option.id}
-                      onClick={() => setDevice(option.id)}
-                      title={option.label + ' preview'}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                </details>
-              </header>
+
               <SitePreview
                 device={device}
                 onSelectPage={selectPage}

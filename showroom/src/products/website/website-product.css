@@ -1089,7 +1089,7 @@
 
 .website-preview-panel {
   display: grid;
-  grid-template-rows: 47px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .website-preview-toolbar {
@@ -2069,7 +2069,7 @@
 
 .website-preview-surface {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -2364,7 +2364,7 @@
 }
 
 .website-preview-panel {
-  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .website-preview-toolbar {
@@ -2780,7 +2780,7 @@
   z-index: 20;
   min-height: 60px;
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) auto auto;
+  grid-template-columns: minmax(150px, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   border: 1px solid var(--website-line);
@@ -3773,3 +3773,6 @@
   border: 0;
   padding: 0;
 }
+
+.website-primary-actions > .compact-disclosure { position: relative; }
+.website-primary-actions > .compact-disclosure > .website-preview-controls { position: absolute; right: 0; top: 100%; z-index: 30; min-width: 240px; padding: 8px; border: 1px solid var(--website-line); border-radius: 8px; background: var(--website-panel); }
