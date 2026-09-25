@@ -56,8 +56,8 @@
   .bars{display:grid;gap:7px}.bar{display:grid;grid-template-columns:90px 1fr auto;gap:9px;align-items:center;font-size:12.5px}
   .bar i{height:8px;border-radius:999px;background:var(--accent);display:block;min-width:4px}
   /* leads */
-  .lead{display:grid;grid-template-columns:1fr auto;gap:10px;border:1px solid var(--line);border-radius:8px;padding:13px 15px;background:var(--surf-2)}
-  .lead h3{font-size:16px}.lead .meta{color:var(--muted);font-size:12.5px;margin-top:3px}.lead .msg{margin-top:8px;font-size:13px}
+  .lead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;border:1px solid var(--line);border-radius:8px;padding:13px 15px;background:var(--surf-2)}
+  .lead h3{font-size:16px}.lead .meta{color:var(--muted);font-size:12.5px;margin-top:3px}.lead .msg{margin-top:8px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
   .pill{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-2)}
   .pill.won{background:rgba(52,211,153,.10);color:var(--good)}
   /* pipeline */
