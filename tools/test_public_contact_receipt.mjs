@@ -27,6 +27,8 @@ function harness(responses, search = '', hash = '') {
   const calls = []
   const timers = new Map()
   const headings = new Map()
+  const historyCalls = []
+  const location = { search, hash, pathname: '/contact/', href: 'https://supermega.dev/contact/' + search + hash }
   let timerId = 0
   const form = {
     querySelector(selector) {
@@ -47,8 +49,12 @@ function harness(responses, search = '', hash = '') {
       }
       return null
     }, referrer: '' },
-    history: { replaceState() {} },
-    location: { search, hash, pathname: '/contact/', href: 'https://supermega.dev/contact/' + search },
+    history: { replaceState(state, title, path) {
+      historyCalls.push(path)
+      const next = new URL(path, location.href)
+      Object.assign(location, { href: next.href, hash: next.hash, search: next.search, pathname: next.pathname })
+    } },
+    location,
     URLSearchParams, window: { crypto, addEventListener(name, callback) { windowEvents.set(name, callback) }, removeEventListener(name, callback) { if (windowEvents.get(name) === callback) windowEvents.delete(name) } }, crypto,
     AbortController,
     setTimeout(callback, delay) { assert.equal(delay, 20000); timers.set(++timerId, callback); return timerId },
@@ -68,7 +74,7 @@ function harness(responses, search = '', hash = '') {
     },
   })
   if (!hash) form.querySelector('[name="goal"]').value = 'Please build my business website'
-  return { fields, headings, calls, timers, windowEvents, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
+  return { fields, headings, calls, timers, windowEvents, historyCalls, location, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
 
 test('complete assisted briefs collapse the editable service choice only', () => {
@@ -384,5 +390,29 @@ test('confirmed handoff resets entry guidance only when no later edits remain', 
     if (edited) assert.equal(state.fields.get('[name="goal"]').value, 'Later unsent brief')
     else assert.equal(state.fields.get('button[type="submit"]').textContent, 'Request setup')
     assert.match(state.fields.get('[data-form-status]').textContent, /Request received: LEAD-/)
+  }
+})
+
+
+test('Myanmar brief handoff preserves text and clears the fragment before submission', async () => {
+  const company = 'ရွှေမေတ္တာ & Sons + မန္တလေး'
+  const description = 'အဝတ်အထည်နှင့် လက်ဆောင်များ\nဈေးနှုန်း ၁၀,၀၀၀ ကျပ် — A&B + #1'
+  const reference = 'https://example.invalid/catalog?q=A+B&lang=my#ပစ္စည်း'
+  const goal = `${description}\nExisting page or catalog: ${reference}`
+  for (const product of ['website', 'ecommerce']) {
+    const search = `?product=${product}&source=${product}-brief`
+    const hash = '#' + new URLSearchParams({ company, goal }).toString()
+    const state = harness([{ body: receipt }], search, hash)
+    assert.equal(state.fields.get('[name="company"]').value, company)
+    assert.equal(state.fields.get('[name="goal"]').value, goal)
+    assert.deepEqual(state.historyCalls, ['/contact/' + search])
+    assert.equal(state.location.hash, '')
+    assert.equal(state.calls.length, 0)
+    await state.submit()
+    const payload = JSON.parse(state.calls[0].body)
+    assert.equal(payload.company, company)
+    assert.equal(payload.goal, goal)
+    assert.equal(payload.source_url, 'https://supermega.dev/contact/' + search)
+    assert.equal(payload.source_url.includes(company), false)
   }
 })
