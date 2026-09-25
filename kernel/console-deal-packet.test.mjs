@@ -153,3 +153,33 @@ test('actual deal UI discards stale generation and save handlers after enquiry s
   assert.equal($('#d-run').disabled,false)
   assert.match($('#dealOut').innerHTML,/Could not generate/)
 })
+
+
+test('actual autopilot route preserves customer briefs and never substitutes product labels', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { runInNewContext } = await import('node:vm')
+  const source = await readFile(new URL('./console/api.mjs', import.meta.url), 'utf8')
+  const route = source.slice(source.indexOf("    if (method === 'POST' && seg[0] === 'autopilot')"), source.indexOf("    return bad(404, 'not_found')"))
+  const brief='ဆိုင်အတွက် Website ပြင်ပါ\nHours: 9–5\nKeep approved prices unchanged.'
+  const leads=[
+    {id:'website',name:'QA',company:'Example',contact:'qa@example.invalid',package:'website',message:brief,stage:'new'},
+    {id:'ecommerce',package:'ecommerce',message:'Prepare the approved catalog for review; no publishing.',stage:'qualified'},
+    {id:'missing',package:'A long product label is not a customer brief',stage:'new'},
+    {id:'done',message:'Already prepared',stage:'new'},
+  ]
+  const inputs=[], saved=[]
+  const result=await runInNewContext('(async()=>{'+route+'})()', {
+    method:'POST',seg:['autopilot'],aiConfigured:()=>true,
+    ok:x=>x,bad:(status,reason)=>({status,reason}),log:()=>{},
+    store:{listLeads:async()=>leads,listDeals:async()=>[{lead_id:'done'}],saveDeal:async x=>{saved.push(x);return {id:'draft-'+x.lead_id}}},
+    generateDeal:async input=>{inputs.push(input);return input.workflow.length>=12?{ok:true,packet:{headline:input.workflow}}:{ok:false,reason:'need_workflow'}},
+  })
+  assert.equal(inputs.length,3)
+  assert.equal(inputs[0].workflow,brief)
+  assert.equal(inputs[0].contact,'qa@example.invalid')
+  assert.equal(inputs[1].workflow,leads[1].message)
+  assert.equal(inputs[2].workflow,'')
+  assert.deepEqual(saved.map(x=>x.lead_id),['website','ecommerce'])
+  assert.ok(saved.every(x=>x.status==='draft'))
+  assert.equal(result.results[2].reason,'need_workflow')
+})

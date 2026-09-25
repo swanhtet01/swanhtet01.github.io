@@ -476,7 +476,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       if (!pending.length) return ok({ ok: true, ran: 0, message: 'No pending leads to process.' })
       const results = []
       for (const lead of pending) {
-        const result = await generateDeal({ name: lead.name, company: lead.company, workflow: lead.package, contact: lead.contact })
+        const result = await generateDeal({ name: lead.name, company: lead.company, workflow: lead.message || '', contact: lead.contact })
         if (result.ok) {
           const deal = await store.saveDeal({ lead_id: lead.id, packet: result.packet, status: 'draft' })
           log('autopilot', `Autopilot: deal generated for ${lead.company || lead.name}`, deal.id)
