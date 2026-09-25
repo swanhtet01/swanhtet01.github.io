@@ -57,6 +57,7 @@
   .bar i{height:8px;border-radius:999px;background:var(--accent);display:block;min-width:4px}
   /* leads */
   .lead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;border:1px solid var(--line);border-radius:8px;padding:13px 15px;background:var(--surf-2)}
+  .lead>div{min-width:0;overflow-wrap:anywhere}
   .lead h3{font-size:16px}.lead .meta{color:var(--muted);font-size:12.5px;margin-top:3px}.lead .msg{margin-top:8px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
   .pill{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-2)}
   .pill.won{background:rgba(52,211,153,.10);color:var(--good)}
@@ -142,6 +143,7 @@
   @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
   .err-banner{background:rgba(248,113,113,.09);border:1px solid rgba(248,113,113,.35);border-radius:8px;padding:14px 16px;color:var(--bad);font-size:13px}
   @media(max-width:820px){
+    .lead{grid-template-columns:minmax(0,1fr)}
     header{display:grid;grid-template-columns:minmax(0,max-content) minmax(0,1fr) max-content;gap:8px 10px;padding:12px 16px}
     .brand{grid-column:1/-1;white-space:nowrap}.grow{display:none}#modeBadge,#aiBadge{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.key{grid-column:1/-1;max-width:none}
     nav{display:block;position:static;padding:10px 16px 0;overflow:visible}.nav-primary{width:100%;max-width:100%;min-width:0;overflow-x:auto;scrollbar-width:thin}.nav-more{border-top:1px solid var(--line)}.nav-more summary{width:max-content}.nav-menu{position:static;width:100%;max-width:100%;grid-template-columns:repeat(5,minmax(150px,1fr));overflow-x:auto;min-width:0;margin-bottom:8px;box-shadow:none}.nav-menu button{min-height:44px}
