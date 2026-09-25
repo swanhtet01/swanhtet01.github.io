@@ -104,6 +104,31 @@ class EcommerceCustomerReviewStore:
                 readAt=now.isoformat(),publicationAuthorized=False,deploymentAuthorized=False)
         return result
 
+    def prepared_reviews(self, principal, *, after=None):
+        """Discover only this operator's retained assignments without browser receipts."""
+        after = uuid(after) if after is not None else None
+        with self._transaction(principal, capability='commerce.write') as (cursor, actor):
+            cursor.execute('select clock_timestamp() as read_at')
+            read_at = cursor.fetchone()['read_at']
+            cursor.execute("""select review_id,source_version,content_revision,preview_digest,
+                    prepared_at,expires_at,status
+                from app_private.ecommerce_customer_reviews
+                where workspace_id=%s and prepared_by=%s
+                  and (%s::uuid is null or review_id>%s::uuid)
+                order by review_id limit 51""", (actor.workspace_id, actor.actor_id, after, after))
+            rows = cursor.fetchall()
+            reviews = []
+            for row in rows[:50]:
+                status = row['status']
+                if status == 'active' and row['expires_at'] <= read_at: status = 'expired'
+                reviews.append(dict(reviewId=str(row['review_id']), sourceVersion=row['source_version'],
+                    contentRevision=row['content_revision'], previewDigest=row['preview_digest'],
+                    preparedAt=row['prepared_at'].astimezone(timezone.utc).isoformat(),
+                    expiresAt=row['expires_at'].astimezone(timezone.utc).isoformat(), status=status))
+            return dict(reviews=reviews, nextAfter=reviews[-1]['reviewId'] if len(rows)>50 else None,
+                readAt=read_at.astimezone(timezone.utc).isoformat(),
+                publicationAuthorized=False, deploymentAuthorized=False)
+
     def reconcile(self,principal,review_id):
         """Read only the caller's retained assignment; absence stays uncertain."""
         review_id=uuid(review_id)

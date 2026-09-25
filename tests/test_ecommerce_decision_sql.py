@@ -50,7 +50,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
         workspace, owner, recipient = fixture.WORKSPACE, fixture.OWNER, fixture.RECIPIENT
         source = catalog_state(); source['storefrontConfiguration'] = storefront_configuration(source)
         digest = commerce_storefront_preview_digest(source)
-        reviews = [str(uuid4()) for _ in range(5)]
+        reviews = [str(uuid4()) for _ in range(55)]
         with pg._connect(self.admin_url) as connection:
             connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s", (workspace,recipient))
             connection.execute("""insert into app_private.workspace_events
@@ -69,6 +69,19 @@ class CatalogDecisionSqlTests(unittest.TestCase):
         from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialValidationError, TrialPermissionDenied, TrialNotReadyError, TrialIdempotencyConflict
         adapter = EcommerceCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=True))
         actor = TrialPrincipal(workspace, recipient, 'human')
+        operator_actor = TrialPrincipal(workspace, owner, 'human')
+        listing = adapter.prepared_reviews(operator_actor)
+        listing_tail = adapter.prepared_reviews(operator_actor, after=listing['nextAfter'])
+        self.assertEqual(len(listing['reviews']), 50); self.assertEqual(len(listing_tail['reviews']), 5)
+        self.assertEqual([r['reviewId'] for r in listing['reviews']+listing_tail['reviews']], sorted(reviews))
+        self.assertIsNone(listing_tail['nextAfter'])
+        self.assertFalse(listing['publicationAuthorized']); self.assertFalse(listing['deploymentAuthorized'])
+        self.assertEqual(set(listing['reviews'][0]), {'reviewId','sourceVersion','contentRevision','previewDigest','preparedAt','expiresAt','status'})
+        for denied in (actor, TrialPrincipal(workspace, owner, 'agent')):
+            with self.assertRaises(TrialPermissionDenied): adapter.prepared_reviews(denied)
+        with self.assertRaises(TrialNotReadyError):
+            adapter.prepared_reviews(TrialPrincipal('other-company', owner, 'human'))
+
         for review_id, kind in [(reviews[3], 'acceptance'), (reviews[4], 'feedback')]:
             payload = dict(commandId=str(uuid4()), reviewId=review_id, previewDigest=digest)
             payload.update(dict(decision='accept_preview_for_release_review') if kind=='acceptance' else dict(note='စျေးနှုန်း ပြင်ပါ'))
@@ -112,6 +125,16 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             resolve_principal=lambda request: principals.get(request.headers.get('x-test-actor'))))
         with TestClient(app) as client:
             headers = {'x-test-actor': 'customer'}
+            directory = '/api/trial/v1/ecommerce-reviews'
+            listed = client.get(directory, headers={'x-test-actor': 'owner'})
+            self.assertEqual(listed.status_code, 200); self.assertEqual(len(listed.json()['reviews']), 50)
+            self.assertIn('no-store', listed.headers['cache-control'])
+            for denied_actor in ('customer','agent'):
+                self.assertEqual(client.get(directory, headers={'x-test-actor': denied_actor}).status_code, 403)
+            self.assertEqual(client.get(directory).status_code, 401)
+            for query in ('?after=bad','?after='+str(uuid4())+'&after='+str(uuid4()),'?extra=1'):
+                self.assertEqual(client.get(directory+query, headers={'x-test-actor': 'owner'}).status_code, 422)
+
             base = '/api/trial/v1/ecommerce-reviews/' + payload['reviewId']
             operator_url = base + '/operator-decisions'
             operator_read = client.get(operator_url, headers={'x-test-actor': 'owner'})
@@ -259,6 +282,11 @@ class CatalogDecisionSqlTests(unittest.TestCase):
         self.assertEqual(history['status'], 'stale')
         self.assertEqual(history['decisions'], page['decisions'])
         self.assertFalse(history['publicationAuthorized']); self.assertFalse(history['deploymentAuthorized'])
+        historical = adapter.prepared_reviews(operator_actor)
+        self.assertTrue(all(r['status'] in ('stale','revoked') for r in historical['reviews']))
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("update app_private.workspace_memberships set capabilities=(select capabilities from app_private.workspace_memberships where workspace_id=%s and actor_id=%s) where workspace_id=%s and actor_id=%s", (workspace,owner,workspace,recipient))
+        self.assertEqual(adapter.prepared_reviews(actor)['reviews'], [], 'another entitled operator cannot list the preparer records')
         with pg._connect(self.admin_url) as connection:
             for role in ('anon','authenticated','service_role'):
                 self.assertFalse(connection.execute("select has_table_privilege(%s,'app_private.ecommerce_customer_decisions','SELECT,INSERT,UPDATE,DELETE')",(role,)).fetchone()[0])

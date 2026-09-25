@@ -1118,6 +1118,15 @@ def create_trial_router(
             return adapter.list_recipients(principal, after=query.get("after"))
         return await ecommerce_review_request(request, operation)
 
+    @router.get("/ecommerce-reviews")
+    async def list_prepared_ecommerce_reviews(request: Request) -> JSONResponse:
+        def operation(adapter, principal, _body):
+            query = request.query_params
+            if set(query) - {"after"} or len(query.getlist("after")) > 1:
+                raise TrialValidationError("ecommerce_review_cursor_invalid")
+            return adapter.prepared_reviews(principal, after=query.get("after"))
+        return await ecommerce_review_request(request, operation)
+
     @router.post("/ecommerce-reviews")
     async def prepare_ecommerce_review(request: Request) -> JSONResponse:
         def operation(adapter, principal, body):
