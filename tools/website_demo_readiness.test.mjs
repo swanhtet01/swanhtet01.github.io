@@ -81,8 +81,8 @@ test('assisted Website entry stays local-only and defers to recovery and edit st
   }
   assert.doesNotMatch(websiteProductSource, /website-assisted-intake|What to send/)
   const brief = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
-  assert.match(brief, /No passwords or private customer data/)
-  assert.match(brief, /Publishing needs your approval/)
+  assert.doesNotMatch(brief, /Publishing needs your approval|Before we start/)
+  assert.match(brief, /Next: your contact details\./)
   assert.match(websiteProductSource, /disabled=\{portalViewOnly\} onClick=\{runWebsiteAutopilot\}/)
 })
 
