@@ -740,6 +740,8 @@ test('Ecommerce operator transport binds identity, no-store and exact endpoint p
     for (const [invoke, path, body] of [
       [() => mod.loadManagedEcommerceOperatorDecisions(id, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/operator-decisions'],
       [() => mod.loadManagedEcommerceOperatorDecisions(id, identity, id), '/api/trial/v1/ecommerce-reviews/'+id+'/operator-decisions?after='+id],
+      [() => mod.loadManagedEcommerceReviews(identity), '/api/trial/v1/ecommerce-reviews'],
+      [() => mod.loadManagedEcommerceReviews(identity, id), '/api/trial/v1/ecommerce-reviews?after='+id],
       [() => mod.loadManagedEcommercePreparation(identity), '/api/trial/v1/ecommerce-review-preparation'],
       [() => mod.reconcileManagedEcommerceReview(id, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/reconciliation'],
       [() => mod.resolveExpiredManagedEcommerceReview(id, payload.expiresAt, identity), '/api/trial/v1/ecommerce-reviews/'+id+'/resolve-expired', { expiresAt: payload.expiresAt }],
@@ -769,6 +771,7 @@ test('Ecommerce invalid identifiers fail before provider or network access', asy
     for (const bad of ['', '../other', '11111111-1111-4111-8111-111111111111\n']) {
       await assert.rejects(mod.loadManagedEcommerceOperatorDecisions(bad, {}))
       await assert.rejects(mod.loadManagedEcommerceOperatorDecisions('11111111-1111-4111-8111-111111111111', {}, bad))
+      await assert.rejects(mod.loadManagedEcommerceReviews({}, bad))
       await assert.rejects(mod.loadManagedEcommerceRecipients({}, bad))
       await assert.rejects(mod.withdrawManagedEcommerceReview(bad, {}))
       await assert.rejects(mod.reconcileManagedEcommerceReview(bad, {}))
@@ -905,4 +908,22 @@ test('operator response transport rejects identity changes before fetch, at head
     assert.equal(state.calls.filter(([name]) => name === 'fetch').length, phase === 'before' ? 0 : 1)
     assert.equal(state.calls.some(([name]) => name === 'signOut'), false)
   })
+})
+
+
+test('saved review directory times out privately and rejects identity changes during body delivery',async()=>{
+ for(const phase of ['timeout','identity'])await withAuth(async(mod,state)=>{
+  state.session={...fixedSession};state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY,'synthetic-company')
+  const identity=await mod.currentManagedIdentity(),controller=new AbortController(),timeout=AbortSignal.timeout
+  AbortSignal.timeout=ms=>{assert.equal(ms,8000);return controller.signal}
+  try{
+   state.fetch=async(_url,init)=>({ok:true,status:200,json:async()=>{
+    if(phase==='identity'){state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY,'other-company');return {reviews:[]}}
+    return new Promise((_resolve,reject)=>{init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true});queueMicrotask(()=>controller.abort(new DOMException('Timed out','TimeoutError')))})
+   }})
+   await assert.rejects(mod.loadManagedEcommerceReviews(identity),error=>phase==='identity'?error.code==='managed_identity_changed':error.name==='TimeoutError')
+   assert.equal(state.calls.filter(([name])=>name==='fetch').length,1)
+   assert.equal(state.calls.some(([name])=>name==='signOut'),false)
+  }finally{AbortSignal.timeout=timeout}
+ })
 })

@@ -202,7 +202,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
     <button className="core-button" type="button" disabled={busy} onClick={() => void savedReviews()}>Saved reviews</button>
     {directory ? <div aria-label="Saved reviews">
       {!directory.reviews.length ? <p>No saved reviews.</p> : directory.reviews.map(item => <button className="core-button" key={item.reviewId} disabled={busy} onClick={() => {setChosen(item); void readResponses(undefined,item)}}>
-        {item.preparedAt.slice(0,10)} · {item.status}
+        {new Date(item.preparedAt).toLocaleString()} · {item.status}
       </button>)}
       {directory.nextAfter ? <button className="core-button" disabled={busy} onClick={() => void savedReviews(directory.nextAfter!)}>More reviews</button> : null}
     </div> : null}

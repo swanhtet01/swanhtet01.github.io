@@ -14,9 +14,12 @@ const now=Date.now(),readAt=new Date(now-1000).toISOString(),expiresAt=new Date(
 const command={reviewId,recipientGrantId:reviewId,expectedVersion:1,contentRevision:1,previewDigest:'sha256:'+'a'.repeat(64),readAt,expiresAt};
 const receipt={reviewId,sourceVersion:1,contentRevision:1,previewDigest:command.previewDigest,preparedAt:readAt,expiresAt,status:'prepared_preview',persisted:true,replayed:false,publicationAuthorized:false,deploymentAuthorized:false};
 const key='supermega.ecommerce.pending-review.v1:'+JSON.stringify([identity.workspaceId,identity.userId]);
-sessionStorage.setItem(key+':receipt',JSON.stringify({command,receipt}));
+const recovery=new URLSearchParams(location.search).has('recovery');
+if(recovery){sessionStorage.removeItem(key);sessionStorage.removeItem(key+':receipt')}
+else sessionStorage.setItem(key+':receipt',JSON.stringify({command,receipt}));
 export const currentManagedIdentity=async()=>identity;
 export const sameManagedIdentity=(a,b)=>a.userId===b.userId&&a.workspaceId===b.workspaceId;
+export const loadManagedEcommerceReviews=async()=>({reviews:[{reviewId,sourceVersion:1,contentRevision:1,previewDigest:command.previewDigest,preparedAt:readAt,expiresAt,status:'active'}],nextAfter:null,readAt:new Date().toISOString(),publicationAuthorized:false,deploymentAuthorized:false});
 export const loadManagedEcommerceOperatorDecisions=async(id,who,after)=>{
  if(id!==reviewId||!sameManagedIdentity(who,identity))throw Error('fixture identity mismatch');
  const accepted=new URLSearchParams(location.search).get('scenario')==='acceptance';

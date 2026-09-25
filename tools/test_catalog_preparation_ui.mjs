@@ -216,7 +216,7 @@ test('operator response pages replace previous notes and label inactive history'
 test('saved directory restores read-only responses with empty tab storage',async()=>{
  const h=harness();assert.equal(h.storage.size,0)
  h.click('Saved reviews');await flush()
- h.click(prepared.readAt.slice(0,10)+' · active');await flush()
+ h.click(new Date(prepared.readAt).toLocaleString()+' · active');await flush()
  assert.match(JSON.stringify(h.render()),/စျေးနှုန်း ပြင်ပါ/)
  assert.equal(h.storage.size,0);assert.equal(h.writes.length,0);assert.equal(h.withdrawals.length,0)
  assert.doesNotMatch(JSON.stringify(h.render()),/Withdraw review|Retry same request|Prepare review/)
