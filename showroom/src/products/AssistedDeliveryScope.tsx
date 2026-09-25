@@ -52,6 +52,6 @@ export function BusinessBrief({ product, onOpenWorkspace }: { product: Product; 
       {draftUnavailable ? <small role="status">This browser cannot keep your draft. Copy it before leaving this page.</small> : null}
       <small>Next: your contact details.</small>
     </form>
-    <footer><button type="button" onClick={onOpenWorkspace}>Open existing workspace</button></footer>
+    <footer><button type="button" onClick={onOpenWorkspace}>Open preview</button></footer>
   </section>
 }

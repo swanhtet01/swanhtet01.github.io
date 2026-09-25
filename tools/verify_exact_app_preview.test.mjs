@@ -67,7 +67,7 @@ test('Website default preview requires the business brief and review boundaries'
   for (const needle of needles) assert.ok(source.includes(needle), `Website source missing ${needle}`)
   assert.ok(needles.includes('Next: your contact details.'))
   assert.ok(needles.includes('What does your business offer?'))
-  assert.ok(needles.includes('Open existing workspace'))
+  assert.ok(needles.includes('Open preview'))
   assert.ok(!needles.includes('Request Website setup'))
   assert.ok(!needles.includes('Make this website yours'))
   assert.ok(!needles.includes('Nothing has been deployed.'))
