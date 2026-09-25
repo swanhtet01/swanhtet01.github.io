@@ -1217,9 +1217,9 @@ export function WebsiteProduct() {
 
           {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
-              <span className="core-eyebrow">Start here</span>
-              <h2 id="website-today-title">{showAssistedWebsitePreview ? 'Let SuperMega prepare your website' : websiteAgentJob}</h2>
-              <p>{showAssistedWebsitePreview ? 'Share your business details. We prepare the pages for you to review.' : websiteAgentReason}</p>
+              {!showAssistedWebsitePreview ? <span className="core-eyebrow">Start here</span> : null}
+              <h2 id="website-today-title">{showAssistedWebsitePreview ? 'Preview' : websiteAgentJob}</h2>
+              {!showAssistedWebsitePreview ? <p>{websiteAgentReason}</p> : null}
               {showAssistedWebsitePreview ? (
                 <>
                   <AssistedDeliveryScope product="website" />
@@ -1241,13 +1241,12 @@ export function WebsiteProduct() {
                   <ul>
                     {failingContentChecks.map((check) => <li key={check.id}><strong>{check.label}</strong><p>{check.detail}</p></li>)}
                   </ul>
-                  {showAssistedWebsitePreview ? <p>Need help with these checks? Request Website setup. Nothing is published automatically.</p> : null}
                 </div>
               ) : null}
             </details>
             <div className="website-today-source" role="status">
               <span>{websiteTodayContext}</span>
-              <small>{showAssistedWebsitePreview ? 'Requesting setup does not publish this preview, connect a domain or approve a release.' : websiteReviewNote}</small>
+              {!showAssistedWebsitePreview ? <small>{websiteReviewNote}</small> : null}
             </div>
           </section> : null}
 
