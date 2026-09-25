@@ -116,7 +116,7 @@ const sharedRequired = [
   'aria-label="SuperMega home"',
   '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
   '<span class="brand-name">SUPERMEGA</span>',
-  '<a class="button compact header-cta" href="https://app.supermega.dev/login">Company sign in</a>',
+  '<a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a>',
   '<script src="/vercel-insights.js"></script>',
   'href="/privacy/">Privacy</a>',
 ]

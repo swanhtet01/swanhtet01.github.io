@@ -112,7 +112,7 @@ const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" 
 const sharedStyle = `
   :root {
     color-scheme: light;
-    --bg: #f6f4ee;
+    --bg: #ffffff;
     --bg-raised: #eef2ec;
     --panel: rgba(255, 255, 255, .92);
     --panel-solid: #ffffff;
@@ -133,7 +133,7 @@ const sharedStyle = `
   * { box-sizing: border-box; }
   html { min-width: 320px; scroll-behavior: smooth; background: var(--bg); }
   body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Myanmar Text", "Noto Sans Myanmar", sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
-  body::before { position: fixed; inset: 0; z-index: -2; background: radial-gradient(circle at 76% -16%, rgba(11,116,94,.12), transparent 34%), linear-gradient(180deg, #fbfaf6 0, var(--bg) 54%, #f2f4ef 100%); content: ""; }
+  body::before { display: none; content: ""; }
   body::after { display: none; content: ""; }
   a { color: inherit; }
   button, input, select, textarea { font: inherit; }
@@ -142,7 +142,7 @@ const sharedStyle = `
   .skip-link:focus { transform: translateY(0); }
   .shell { min-height: 100svh; }
   .frame { width: min(calc(100% - 48px), 1200px); margin-inline: auto; }
-  .site-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--line); background: rgba(246,244,238,.9); backdrop-filter: blur(18px); }
+  .site-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }
   .header-inner { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
   .brand { display: inline-flex; min-height: 44px; align-items: center; gap: 12px; text-decoration: none; font-size: 13px; font-weight: 820; letter-spacing: .08em; }
   .brand-mark { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 20px; letter-spacing: -.12em; }
@@ -419,7 +419,7 @@ function brandHtml() {
 }
 
 function headerHtml() {
-  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<a class="button compact header-cta" href="https://app.supermega.dev/login">Company sign in</a></div></header>`
+  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></header>`
 }
 
 function footerHtml(route) {
@@ -481,7 +481,7 @@ function documentHtml({ route, title, description, content, schema = null, robot
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="robots" content="${robots}" />
-    <meta name="theme-color" content="${brand.colors.background}" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="supermega-brand-version" content="${escapeHtml(brand.version)}" />
     <meta name="supermega-context-version" content="${escapeHtml(manifest.contextVersion)}" />
     <title>${escapeHtml(title)}</title>
@@ -1437,7 +1437,7 @@ for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(static
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)
 await writeStatic('robots.txt', previewAppBinding ? 'User-agent: *\nDisallow: /\n' : 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
 await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${discoverablePages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><lastmod>${release.generatedAt.slice(0, 10)}</lastmod><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)
-await writeStatic('site.webmanifest', `${JSON.stringify({ name: 'SuperMega', short_name: 'SuperMega', start_url: '/', display: 'browser', background_color: brand.colors.background, theme_color: brand.colors.background, icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }] }, null, 2)}\n`)
+await writeStatic('site.webmanifest', `${JSON.stringify({ name: 'SuperMega', short_name: 'SuperMega', start_url: '/', display: 'browser', background_color: '#ffffff', theme_color: '#ffffff', icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }] }, null, 2)}\n`)
 
 await writeFunction('health.js', healthFunction)
 await writeFunction('contact-submissions.js', contactFunction)
