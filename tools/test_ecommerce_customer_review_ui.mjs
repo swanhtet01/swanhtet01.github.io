@@ -15,7 +15,7 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
   jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 const id = '11111111-1111-4111-8111-111111111111'
 const review = { reviewId: id, contentRevision: 1, previewDigest: 'sha256:' + 'a'.repeat(64), preview: { name: 'Synthetic catalog' }, expiresAt: '2099-01-01T00:00:00Z' }
-function harness({ identity = { actor: 'customer', userId: 'customer', workspaceId: 'company' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false, uncertainWrite = false, writeWait = null, storage = new Map(), retainedDecision = null } = {}) {
+function harness({ identity = { actor: 'customer', userId: 'customer', workspaceId: 'company' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false, uncertainWrite = false, writeWait = null, storage = new Map(), retainedDecision = null, transformSaved = value => value } = {}) {
   const states = [], effects = [], listeners = new Map(), timers = new Map()
   let index = 0, reads = 0, calls = 0, timerId = 0, savedItem = retainedDecision
   const writes = []
@@ -49,6 +49,7 @@ function harness({ identity = { actor: 'customer', userId: 'customer', workspace
           if (writeWait) await writeWait
           savedItem = { commandId: payload.commandId, kind: payload.decision ? 'acceptance' : 'feedback',
             note: payload.note ?? null, createdAt: '2026-01-01T00:00:00Z' }
+          savedItem = transformSaved(savedItem)
           if (uncertainWrite && writes.length === 1) throw Error('response lost')
           return { persisted: true }
         },
@@ -321,5 +322,31 @@ test('cleanup preserves unexpired, invalid-date and mismatched records; storage 
     const h = harness({ storage, denied: true }); h.render(); const close = h.effects[0](); await flush()
     assert.equal(storage.get(scopedKey), raw); assert.equal(h.writes.length, 0)
     assert.doesNotMatch(h.render(), /Synthetic catalog|Retry response|Accept catalog/); close()
+  }
+})
+
+
+test('successful send cannot confirm missing or mismatched response readback', async () => {
+  for (const transformSaved of [
+    () => null,
+    value => ({ ...value, commandId: id }),
+    value => ({ ...value, kind: 'acceptance', note: null }),
+    value => ({ ...value, note: 'Different feedback' }),
+  ]) {
+    const storage = new Map()
+    const h = harness({ storage, transformSaved })
+    h.render(); const cleanup = h.effects[0](); await flush()
+    h.control('Request changes').props.onClick()
+    h.field().props.onChange({ target: { value: 'Change price' } })
+    h.form().props.onSubmit({ preventDefault() {} }); await flush()
+    assert.equal(h.writes.length, 1)
+    assert.match(h.render(), /Response unconfirmed/)
+    assert.doesNotMatch(h.render(), /Catalog accepted|Changes requested/)
+    assert.equal(storage.size, 1)
+    h.control('Retry response').props.onClick(); await flush()
+    assert.equal(h.writes.length, 2)
+    assert.deepEqual(h.writes[1], h.writes[0])
+    assert.match(h.render(), /Response unconfirmed/)
+    cleanup()
   }
 })
