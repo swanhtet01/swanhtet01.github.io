@@ -204,3 +204,26 @@ test('generated prices are unset even when the model returns an invented quote',
   const {normalizeDealPacket}=await import('./console/deal.mjs')
   assert.equal(normalizeDealPacket(samplePacket).packet.pricing.build_fee_mmk,'3,000,000 MMK')
 })
+
+
+test('actual printable proposal preserves Myanmar text and labels unapproved terms as a draft', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { runInNewContext } = await import('node:vm')
+  const html=await readFile(new URL('./public/index.html',import.meta.url),'utf8')
+  const esc=html.split('\n').find(line=>line.startsWith('const esc='))
+  const render=html.slice(html.indexOf('function openProposal(d){'),html.indexOf("$('#l-add').onclick="))
+  let output='',closed=false
+  runInNewContext(esc+'\n'+render+';openProposal(input)', {
+    input:{status:'draft',packet:{headline:'စျေးနှုန်း <img src=x onerror=alert(1)>',pain:'လုပ်ငန်း & content',modules:[{name:'<script>bad()</script>',why:'ပြင်ပါ'}],phases:['Review'],pricing:{}}},
+    window:{open:()=>({document:{write:x=>{output=x},close:()=>{closed=true}}})},toast:()=>{},
+  })
+  assert.equal(closed,true)
+  assert.match(output,/Proposal draft/)
+  assert.match(output,/Pricing pending review/)
+  assert.match(output,/Payment terms require founder approval/)
+  assert.match(output,/စျေးနှုန်း &lt;img/)
+  assert.match(output,/လုပ်ငန်း &amp; content/)
+  assert.match(output,/&lt;script&gt;bad\(\)&lt;\/script&gt;/)
+  assert.doesNotMatch(output,/<img|<script|offline-ready|You own it|Two rounds|50% deposit/)
+  assert.match(output,/Review the business facts and confirm the scope/)
+})

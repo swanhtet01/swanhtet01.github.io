@@ -1662,16 +1662,17 @@ function openProposal(d){
   const modules=(p.modules||[]).map(m=>`<li><b>${esc(m.name)}</b> — ${esc(m.why)}</li>`).join('')
   const phases=(p.phases||[]).map((s,i)=>`<li>Phase ${i+1}: ${esc(s)}</li>`).join('')
   const w=window.open('','_blank');if(!w){toast('Allow popups for proposals');return}
-  w.document.write(`<!doctype html><meta charset=utf-8><title>Proposal — ${esc(p.headline||'')}</title>
+  w.document.write(`<!doctype html><meta charset=utf-8><title>Proposal draft — ${esc(p.headline||'')}</title>
   <style>body{font-family:Inter,"Segoe UI",sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#0B0F17;line-height:1.6}h1{font-family:"Space Grotesk",Inter,sans-serif;font-size:26px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#2563EB;margin-top:26px}.muted{color:#5A6478}ul{padding-left:20px}.box{border:1px solid rgba(11,15,23,.14);border-radius:8px;padding:16px;margin-top:8px}@media print{a{display:none}}</style>
-  <h1>SUPERMEGA.dev — Proposal</h1>
+  <h1>SuperMega — Proposal draft</h1>
+  <p class=muted>For review. Scope, pricing and terms require founder approval before a customer commitment.</p>
   <p class=muted>${esc(p.segment||'')} · ${new Date().toLocaleDateString()}</p>
   <h2>The problem</h2><p>${esc(p.pain||'')}</p>
-  <h2>What we'll build</h2><ul>${modules}</ul>
-  <h2>How it works for you</h2><p>Built for Myanmar — MMK, KBZPay / MMQR, bilingual, offline-ready. You own it. AI-native: it drafts, you approve anything that sends, pays, or changes records.${p.operator?' '+esc(p.operator):''}</p>
-  <h2>Timeline</h2><ul>${phases}</ul><p class=muted>Two rounds of revisions included.</p>
+  <h2>Proposed work</h2><ul>${modules}</ul>
+  <h2>How it works for you</h2><p>SuperMega prepares the agreed result from your approved business facts. You review it before any separately approved launch.${p.operator?' '+esc(p.operator):''}</p>
+  <h2>Proposed steps</h2><ul>${phases}</ul><p class=muted>Dates and revision scope are agreed before work begins.</p>
   <h2>Price</h2><div class=box><b>Build:</b> ${p.pricing?.build_fee_mmk?esc(p.pricing.build_fee_mmk)+' MMK':'Pricing pending review'}${p.pricing&&p.pricing.pro_mrr_mmk?` · <b>Care:</b> ${esc(p.pricing.pro_mrr_mmk)} MMK/month`:''}<br><span class=muted>${esc((p.pricing&&p.pricing.rationale)||'')}</span><br><br>Payment terms require founder approval after scoping.</div>
-  <h2>Next step</h2><p>${esc(p.next_action||'Reply to confirm and we send the KBZPay/MMQR details to start.')}</p>
+  <h2>Next step</h2><p>${esc(p.next_action||'Review the business facts and confirm the scope with SuperMega.')}</p>
   <p class=muted>— Swan Htet · swanhtet@supermega.dev · +95 9 500 0721</p>
   <a href="javascript:print()" style="display:inline-block;margin-top:20px;padding:10px 16px;background:#2563EB;color:#fff;border-radius:8px;text-decoration:none">Print / Save PDF</a>`)
   w.document.close()
