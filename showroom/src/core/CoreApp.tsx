@@ -3164,7 +3164,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         : commerceSync.message || notice || (managedIdentity
           ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the company account.`
           : 'Sample data on this device. Sign in for team data.')}</p>
-    {commerceSync.status === 'pending'
+    {commerceSync.status === 'pending' || (managedIdentity && workspaceMode === 'managed-ready' && Boolean(commerceStorageError))
       ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
       : !commerceCanWrite && commerceSync.status !== 'checking'
         ? <Link to="/settings/#controls">Open Settings</Link>
