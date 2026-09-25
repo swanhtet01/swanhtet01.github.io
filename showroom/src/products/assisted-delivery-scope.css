@@ -29,3 +29,8 @@
 .business-brief :is(input, textarea, button, summary):focus-visible { outline: 3px solid var(--core-green); outline-offset: 3px; }
 
 .business-brief :is(.business-brief-kicker, header p, label span, small, footer) { color: var(--core-muted); }
+
+/* The initial business brief is customer intake, not the operator workspace. */
+.core-main:has(> .core-route-content .business-brief) > .product-tools-disclosure {
+  display: none;
+}
