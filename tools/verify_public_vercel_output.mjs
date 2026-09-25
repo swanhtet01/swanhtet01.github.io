@@ -347,13 +347,7 @@ for (const product of publicProducts) {
     'Start here',
     `${launchModules.length} core ${product.name} workflows.`,
     'Advanced tools stay inside the workspace and appear when they are relevant.',
-    'Use the core workflow before adding complexity.',
-    `The ${launchModules.length} core workflows above`,
-    'Separate client portal',
-    'No automatic send or payment',
     'Ready to make it yours?',
-    'Samples stay on this device. They do not publish, send orders or take payments.',
-    '<details class="frame product-details"><summary>',
   ]) {
     if (!landing.includes(token)) fail('landing_page_contract_missing', { route: landingRoute, token })
   }
@@ -371,8 +365,8 @@ for (const product of publicProducts) {
     }
   }
   if (product.id === 'ecommerce') {
-    for (const token of ['current Shop workspace', 'browser-local catalog', 'request, not an order', 'no payment is taken', 'no stock is reserved or moved', 'Shop remains the price and stock record']) {
-      if (!landing.toLowerCase().includes(token.toLowerCase())) fail('ecommerce_local_boundary_missing', { token })
+    for (const token of ['Your team confirms each order and payment.', 'Agree who handles requests, delivery and manual payment checks before going live.']) {
+      if (!landing.toLowerCase().includes(token.toLowerCase())) fail('ecommerce_delivery_boundary_missing', { token })
     }
     for (const token of ['Storefront from real stock', 'Create a Shop-connected ordering page.', 'Send the reviewed request into Shop.']) {
       if (`${JSON.stringify(manifest)}\n${landing}`.includes(token)) fail('superseded_ecommerce_claim_present', { token })

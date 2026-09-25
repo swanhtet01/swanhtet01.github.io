@@ -86,12 +86,8 @@ for (const page of landingPages) {
   check(schema['@context'] === 'https://schema.org' && schema['@type'] === 'Product' && schema.name === product.name && schema.url === canonical && schema.description === description, `landing_structured_data:${page.route}`)
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check(html.includes(`<h1>${product.headline}</h1>`), `landing_headline:${page.route}`)
-  check(html.includes('id="first-loop"'), `landing_first_loop_section:${page.route}`)
-  check(html.includes(product.id === 'shop' ? 'First operating loop' : 'Optional sample walkthrough'), `landing_first_loop_label:${page.route}`)
-  check(html.includes(`<ol class="first-loop-list" aria-label="${product.name} first operating loop">`), `landing_first_loop_accessible:${page.route}`)
-  for (const item of product.firstOperatingLoop) {
-    check(html.includes(item), `landing_first_loop_item:${page.route}:${item}`)
-  }
+  check(!html.includes('id="first-loop"') && !html.includes('id="free-sample"'), `landing_no_sample_detour:${page.route}`)
+  check(html.includes('id="modules"'), `landing_workflows_visible:${page.route}`)
   const guidedSampleHref = 'https://app.supermega.dev/login'
   const guidedSampleLabel = 'Login'
   const assistedSetupHref = `/contact/?product=${product.id}`
@@ -102,8 +98,6 @@ for (const page of landingPages) {
     check(html.includes(`<a class="button primary" href="${assistedSetupHref}">Request assisted setup</a>`), `landing_service_primary:${page.route}`)
     check(!html.includes(`<a class="button primary" href="${guidedSampleHref}">`), `landing_sample_not_primary:${page.route}`)
     check(html.includes('id="prepared-delivery"'), `landing_prepared_deliverables:${page.route}`)
-    check(html.indexOf('id="prepared-delivery"') < html.indexOf('id="first-loop"'), `landing_service_before_sample:${page.route}`)
-    check(html.includes('You can request assisted setup without completing this sample.'), `landing_sample_not_prerequisite:${page.route}`)
     check(html.includes('Scope, price and timing are agreed before work begins.'), `landing_scope_before_work:${page.route}`)
     check(html.includes('You approve the content and image rights before launch.'), `landing_ai_review_boundary:${page.route}`)
     check(html.includes('Samples are optional and are not a live service.'), `landing_optional_sample_boundary:${page.route}`)
@@ -114,7 +108,7 @@ for (const page of landingPages) {
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
   }
-  check(html.includes('Agreed setup from approved business information'), `landing_assisted_setup_offer:${page.route}`)
+  check(html.includes(assistedSetupHref), `landing_setup_available:${page.route}`)
   check(!html.includes(`href="${product.appRoute}"`), `landing_no_direct_app_route:${page.route}`)
   check(html.includes('href="/contact/">Contact</a>') && html.includes('href="/privacy/">Privacy</a>'), `landing_footer_parity:${page.route}`)
   check(html.includes('aria-label="SuperMega home"'), `landing_home_navigation:${page.route}`)
@@ -253,13 +247,8 @@ const shopTemplateCopy = shopProduct?.modules?.filter((module) => /^\d+ Myanmar 
 const expectedShopTemplateCopy = `${shopTemplates.length} Myanmar trade templates — ${shopTemplates.map((template) => template.name.en).join(', ')}`
 check(shopTemplateCopy.length === 1, 'shop_trade_manifest_copy_once')
 check(shopTemplateCopy[0] === expectedShopTemplateCopy, 'shop_trade_manifest_copy_matches_registry_exactly')
-check(new Set(publicShopTemplateIds).size === publicShopTemplateIds.length, 'shop_trade_links_unique')
-check(publicShopTemplateIds.join(',') === shopTemplateIds.join(','), 'shop_trade_links_match_registry_exactly')
-for (const templateId of shopTemplateIds) {
-  check(shopLanding.includes(`href="https://app.supermega.dev/shop/?template=${templateId}"`), `shop_trade_opens_sell:${templateId}`)
-  check(!shopLanding.includes(`href="https://app.supermega.dev/settings/?product=shop&amp;template=${templateId}"`), `shop_trade_skips_setup_detour:${templateId}`)
-}
-check(!shopLanding.includes('id="first-job-templates"'), 'shop_keeps_trade_first_door_without_generic_template_section')
+check(publicShopTemplateIds.length === 0, 'shop_sample_trade_links_removed')
+check(!shopLanding.includes('id="first-job-templates"'), 'shop_sample_template_section_removed')
 
 const allLandingHtml = landingPages.map((page) => readStatic(page.file)).join('\n')
 for (const product of manifest.customerProducts) {
@@ -271,17 +260,10 @@ for (const id of activeIds) {
 
 const ecommerceLanding = readStatic('ecommerce/index.html')
 for (const token of [
-  'current Shop workspace',
-  'browser-local catalog',
-  'request, not an order',
-  'nothing is published or sent to a managed Shop inbox; no payment is taken, and no stock is reserved or moved',
-  'Shop remains the price and stock record',
-  'Current-workspace catalog',
-  'not a live stock promise',
-  'no managed quote is issued',
-  'no card capture, nothing charged automatically',
+  'Your team confirms each order and payment.',
+  'Agree who handles requests, delivery and manual payment checks before going live.',
 ]) {
-  check(ecommerceLanding.toLowerCase().includes(token.toLowerCase()), `ecommerce_local_request_boundary:${token}`)
+  check(ecommerceLanding.includes(token), `ecommerce_delivery_boundary:${token}`)
 }
 for (const forbidden of ['Storefront from real stock', 'Send the reviewed request into Shop.', 'Create a Shop-connected ordering page.']) {
   check(!`${JSON.stringify(manifest)}\n${ecommerceLanding}`.includes(forbidden), `ecommerce_old_claim_absent:${forbidden}`)
@@ -318,28 +300,10 @@ check(plantDoors.length === 0, 'plant_acquisition_doors_retired')
 check(!plantLanding.includes('Open retained workspace') && plantLanding.includes('Existing workspace records are preserved'), 'plant_retained_records_without_tool_action')
 
 for (const productId of ['website', 'ecommerce']) {
-  const product = productContract(productId)
   const html = readStatic(`${productId}/index.html`)
-  const doors = publicFirstJobDoors(html)
-  const expectedDoors = product.templates.map((template) => ({
-    id: template.id,
-    href: escapedHtml(`https://app.supermega.dev/settings/?product=${productId}&template=${template.id}`),
-  }))
-  check(product.templates.length === 3, `${productId}_template_registry_count`)
-  check(JSON.stringify(doors) === JSON.stringify(expectedDoors), `${productId}_first_job_doors_match_registry_exactly`)
-  for (const template of product.templates) {
-    check(html.includes(`<strong>${escapedHtml(template.name)}</strong><span>${escapedHtml(template.outcome)}</span>`), `${productId}_first_job_copy_matches_registry:${template.id}`)
-  }
-}
-
-for (const productId of ['website', 'ecommerce']) {
-  const html = readStatic(`${productId}/index.html`)
-  const doors = publicFirstJobDoors(html)
-  check(doors.length > 0 && new Set(doors.map((door) => door.id)).size === doors.length, `${productId}_first_job_template_ids_unique`)
-  check(new Set(doors.map((door) => door.href)).size === doors.length, `${productId}_first_job_routes_unique`)
-  check(html.includes('Browser-local setup only'), `${productId}_first_job_local_boundary`)
-  check(html.includes('does not overwrite an existing workspace, create a managed record, contact a customer, publish or send anything, accept payment, move stock, or record revenue'), `${productId}_first_job_external_effect_boundary`)
-  check(html.includes('@media (max-width: 560px) { .trade-grid { grid-template-columns: 1fr; }'), `${productId}_first_job_mobile_single_column`)
+  check(publicFirstJobDoors(html).length === 0, `${productId}_sample_doors_removed`)
+  check(!html.includes('https://app.supermega.dev/settings/?'), `${productId}_no_local_setup_detour`)
+  check(html.includes('https://app.supermega.dev/login'), `${productId}_connected_login`)
 }
 
 const productOnboardingSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
@@ -391,8 +355,7 @@ check((home.match(/class="compact-solution"/g) || []).length === activeIds.lengt
 check(home.includes('lang="my"') && home.includes('Myanmar Text'), 'home_myanmar_language_and_font_fallback')
 for (const id of activeIds) {
   const html = readStatic(`${id}/index.html`)
-  check(html.includes('<details class="frame product-details"><summary>'), `sample_details_native_disclosure:${id}`)
-  check(html.indexOf('<details class="frame product-details">') < html.indexOf('id="first-loop"'), `sample_details_grouped:${id}`)
-  check(html.includes('Samples stay on this device. They do not publish, send orders or take payments.'), `sample_boundary_at_entry:${id}`)
+  check(!html.includes('<details class="frame product-details">'), `workflows_not_hidden:${id}`)
+  check(!html.includes('id="trades"') && !html.includes('id="free-sample"'), `no_sample_catalog:${id}`)
 }
 console.log(JSON.stringify({ ok: true, contract: 'supermega_public_landing_pages', checks, routes: landingPages.map((page) => page.route) }))
