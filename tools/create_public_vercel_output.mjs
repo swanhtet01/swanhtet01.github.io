@@ -1362,8 +1362,7 @@ module.exports = async function handler(req, res) {
   if (storeResult.status !== 'ready') { send(res, 503, { status: 'error', reason: 'contact_persistence_unavailable' }); return }
   // Receipt confirms retained storage, never notification delivery. Unknown
   // notification outcomes are not retried by a cold replay of the saved lead.
-  await Promise.allSettled([sendResend(record), sendTelegram(record), sendWebhook(record)])
-  try { await sendCustomerAcknowledgement(record) } catch {}
+  await Promise.allSettled([sendResend(record), sendTelegram(record), sendWebhook(record), sendCustomerAcknowledgement(record)])
   replayCache.set(cacheKey, { fingerprint, body: acceptedBody, expiresAt: now + IDEMPOTENCY_TTL_MS })
   send(res, 202, acceptedBody)
   } finally {

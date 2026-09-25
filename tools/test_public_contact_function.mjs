@@ -518,7 +518,7 @@ try {
   assert.equal(overlapping.body.reason, 'request_in_progress')
   const conflicting = await invoke({ ...concurrentArgs, body: { ...validSubmission, goal: 'A different brief' } })
   assert.equal(conflicting.body.reason, 'idempotency_conflict')
-  assert.equal(overlappingCalls, 1)
+  assert.equal(overlappingCalls, 2, 'acknowledgement starts while operator notification is still pending')
   finishDelivery()
   const originalDelivery = await firstDelivery
   assert.equal(originalDelivery.status, 202)
