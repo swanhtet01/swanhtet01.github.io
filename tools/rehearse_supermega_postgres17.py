@@ -3567,7 +3567,7 @@ def _verify_restored_data(
     *,
     expected_approval_authority_snapshot: dict[str, Any],
     schema_version: int = 11,
-    expected_row_counts: tuple[int, ...] = (11, 7, 23, 3),
+    expected_row_counts: tuple[int, ...] = (11, 7, 25, 3),
 ) -> None:
     from supermega_runtime.managed_context import build_managed_context_profile
 
@@ -4064,3 +4064,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
