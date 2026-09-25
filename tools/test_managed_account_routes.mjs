@@ -111,7 +111,7 @@ async function bundleAuth(configured = true) {
       builder.onLoad({ filter: /.*/, namespace: 'page-shell' }, ({ path }) => ({ contents: shells[path] }))
       builder.onResolve({ filter: /^@supabase\/auth-js$/ }, () => ({ path: 'auth-mock', namespace: 'offline' }))
       builder.onLoad({ filter: /.*/, namespace: 'offline' }, () => ({
-        contents: 'export class AuthClient { constructor(options) { globalThis.__accountHarness.options = options; return globalThis.__accountHarness.auth } }',
+        contents: 'export class AuthClient { constructor(options) { const h = globalThis.__accountHarness; if (options.persistSession === false) { h.signupOptions = options; return h.signupAuth } h.options = options; return h.auth } }',
       }))
     } }],
   })
@@ -163,8 +163,24 @@ async function withAuth(run, configured = true) {
       throw new Error(`Unexpected provider mutation ${name}`)
     }
   }
+  const signupAuth = {
+    signUp: async (...args) => {
+      calls.push(['signUp', ...args])
+      const result = state.signUp ? await state.signUp(...args) : state.signupResult
+      state.signupSession = result.data?.session ?? null
+      return result
+    },
+    resend: async (...args) => { calls.push(['resend', ...args]); return state.resend ? state.resend(...args) : state.resendResult },
+    signOut: async (...args) => {
+      calls.push(['signup-signOut', ...args])
+      if (state.signupSignOut) await state.signupSignOut(...args)
+      state.signupSession = null
+      return { error: null }
+    },
+    dispose: () => { calls.push(['signup-dispose']) },
+  }
   const replacements = {
-    __accountHarness: { auth, effects: [], cursor: 0, slots: [], runtime: { status: 'checking', authReady: false } },
+    __accountHarness: { auth, signupAuth, effects: [], cursor: 0, slots: [], runtime: { status: 'checking', authReady: false } },
     window: { location, history: { state: null, replaceState(_state, _title, path) {
       calls.push(['scrub', path]); location.search = ''; location.hash = ''
     } }, localStorage: {
@@ -354,9 +370,10 @@ test('existing sessions and unexpected auto-confirmed signup never grant silent 
   })
   await withAuth(async (mod, state) => {
     state.signupResult.data.session = fixedSession
-    state.signUp = async () => { state.session = fixedSession; return state.signupResult }
     await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'email_confirmation_required')
-    assert.deepEqual(state.calls.find(([name]) => name === 'signOut'), ['signOut', { scope: 'local' }])
+    assert.deepEqual(state.calls.find(([name]) => name === 'signup-signOut'), ['signup-signOut', { scope: 'local' }])
+    assert.equal(state.session, null)
+    assert.equal(state.signupSession, null)
     assert.equal(state.calls.some(([name, url]) => name === 'fetch' && url.includes('workspaces')), false)
   })
 })
@@ -373,6 +390,30 @@ test('late auto-confirmed signup does not clear a newer account or company', asy
     assert.equal(state.calls.some(([name]) => name === 'signOut'), false)
     assert.equal(state.session, newer)
     assert.equal(state.storage.get('supermega.managed.workspace.v1'), 'newer-company')
+  })
+})
+
+test('signup uses a disposable nonpersistent client for success, resend and cleanup races', async () => {
+  for (const scenario of ['success', 'resend', 'cleanup-race', 'cleanup-error']) await withAuth(async (mod, state) => {
+    const newer = { ...fixedSession, access_token: 'synthetic-newer-token' }
+    if (scenario.startsWith('cleanup')) {
+      state.signupResult.data.session = fixedSession
+      state.signupSignOut = async () => {
+        state.session = newer
+        state.storage.set('supermega.managed.workspace.v1', 'newer-company')
+        if (scenario === 'cleanup-error') throw new Error('private-provider-failure')
+      }
+      await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), scenario === 'cleanup-error' ? 'account_request_failed' : 'email_confirmation_required')
+      assert.equal(state.session, newer)
+      assert.equal(state.storage.get('supermega.managed.workspace.v1'), 'newer-company')
+    } else if (scenario === 'resend') await mod.resendManagedAccountConfirmation('owner@example.invalid', 'v1')
+    else await mod.createManagedAccount(signupInput, 'v1')
+    assert.equal(state.page.signupOptions.persistSession, false)
+    assert.equal(state.page.signupOptions.autoRefreshToken, false)
+    assert.equal(state.page.signupOptions.detectSessionInUrl, false)
+    assert.notEqual(state.page.signupOptions.storageKey, state.page.options.storageKey)
+    assert.equal(state.calls.filter(([name]) => name === 'signup-dispose').length, 1)
+    assert.equal(state.calls.some(([name]) => name === 'signOut' || name === 'storage-remove'), false)
   })
 })
 
@@ -1027,4 +1068,41 @@ test('stale workspace selection cannot overwrite a newer account selection', asy
     assert.equal(state.storage.get(MANAGED_WORKSPACE_STORAGE_KEY), 'newer-company')
     assert.equal(state.calls.some(([name]) => ['fetch', 'storage-write', 'storage-remove', 'signOut'].includes(name)), false)
   })
+})
+
+
+test('installed SDK nonpersistent signup cleanup cannot touch workspace storage', async () => {
+  const { AuthClient } = await import(pathToFileURL(requireShowroom.resolve('@supabase/auth-js')).href)
+  let workspace = 'original-workspace-session'
+  let requests = 0
+  const token = `${Buffer.from('{}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: fixedUser.id, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.synthetic`
+  const client = new AuthClient({
+    url: 'https://auth.example.invalid', persistSession: false, autoRefreshToken: false,
+    detectSessionInUrl: false, storageKey: 'isolated-signup-sdk-test',
+    storage: {
+      getItem: () => { throw Error('persistent storage read') },
+      setItem: () => { throw Error('persistent storage write') },
+      removeItem: () => { throw Error('persistent storage removal') },
+    },
+    fetch: async (url, init) => {
+      requests++
+      if (String(url).endsWith('/signup')) return new Response(JSON.stringify({
+        access_token: token, refresh_token: 'synthetic-refresh', token_type: 'bearer',
+        expires_in: 3600, user: fixedUser,
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+      assert.equal(String(url), 'https://auth.example.invalid/logout?scope=local')
+      assert.equal(new Headers(init.headers).get('authorization'), `Bearer ${token}`)
+      workspace = 'newer-workspace-session'
+      return new Response(null, { status: 204 })
+    },
+  })
+  try {
+    const result = await client.signUp({ email: fixedUser.email, password: signupInput.password })
+    assert.equal(result.error, null)
+    assert.equal(result.data.session.access_token, token)
+    assert.equal((await client.signOut({ scope: 'local' })).error, null)
+    assert.equal((await client.getSession()).data.session, null)
+    assert.equal(workspace, 'newer-workspace-session')
+    assert.equal(requests, 2)
+  } finally { client.dispose() }
 })

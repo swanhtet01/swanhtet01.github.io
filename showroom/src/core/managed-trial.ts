@@ -2412,10 +2412,10 @@ export function managedTrialAuthConfigured() {
   return validSupabaseUrl(SUPABASE_URL) && validPublishableKey(SUPABASE_PUBLISHABLE_KEY)
 }
 
-function authClient() {
-  if (clientPromise) return clientPromise
+function authClient(signup = false) {
+  if (!signup && clientPromise) return clientPromise
   if (!managedTrialAuthConfigured()) return Promise.resolve(null)
-  clientPromise = import('@supabase/auth-js').then(({ AuthClient }) => ({
+  const pending = import('@supabase/auth-js').then(({ AuthClient }) => ({
     auth: new AuthClient({
       url: new URL('auth/v1', SUPABASE_URL.endsWith('/') ? SUPABASE_URL : `${SUPABASE_URL}/`).href,
       headers: {
@@ -2423,14 +2423,15 @@ function authClient() {
         apikey: SUPABASE_PUBLISHABLE_KEY,
         'X-Client-Info': 'supabase-js/2.110.8; runtime=web',
       },
-      autoRefreshToken: true,
+      autoRefreshToken: !signup,
       detectSessionInUrl: false,
-      persistSession: true,
-      storageKey: 'supermega.auth.session.v1',
+      persistSession: !signup,
+      storageKey: signup ? 'supermega.auth.signup.v1' : 'supermega.auth.session.v1',
       hasCustomAuthorizationHeader: false,
     }),
   }))
-  return clientPromise
+  if (!signup) clientPromise = pending
+  return pending
 }
 
 function normalizeWorkspaceId(value: string) {
@@ -2577,6 +2578,7 @@ async function requestManagedSignup(input: CreateAccountInput | string, shownTer
   if (!managedTrialAuthConfigured()) throw errorAuthNotConfigured('Company signup is unavailable.')
   if (signupRequestPending) throw managedError('An account request is already pending.', 'account_request_pending')
   signupRequestPending = true
+  let signupClient: ManagedAuthClient | null = null
   try {
     // Never accept a caller-supplied flag or reuse a cached successful health response.
     const response = await fetch('/api/health', {
@@ -2598,18 +2600,15 @@ async function requestManagedSignup(input: CreateAccountInput | string, shownTer
     if (current.error || current.data.session) {
       throw managedError('Sign out before requesting another account.', 'auth_existing_session')
     }
+    // Signup never writes or broadcasts into the active workspace session.
+    signupClient = await authClient(true)
+    if (!signupClient) throw errorAuthNotConfigured('Company signup is unavailable.')
     const result = 'password' in request
-      ? await supabase.auth.signUp({ email: request.email, password: request.password, options: { emailRedirectTo } })
-      : await supabase.auth.resend({ type: 'signup', email: request.email, options: { emailRedirectTo } })
+      ? await signupClient.auth.signUp({ email: request.email, password: request.password, options: { emailRedirectTo } })
+      : await signupClient.auth.resend({ type: 'signup', email: request.email, options: { emailRedirectTo } })
     if (result.data && 'session' in result.data && result.data.session) {
       // A misconfigured provider must not silently turn signup into signed-in access.
-      // A late signup response must not revoke a different, newer session.
-      const latest = await supabase.auth.getSession()
-      if (!latest.error && latest.data.session?.access_token === result.data.session.access_token
-        && latest.data.session?.user.id === result.data.session.user.id) {
-        await supabase.auth.signOut({ scope: 'local' })
-        if (!(await supabase.auth.getSession()).data.session) forgetWorkspace()
-      }
+      await signupClient.auth.signOut({ scope: 'local' })
       throw managedError('Email confirmation is required before account access.', 'email_confirmation_required')
     }
     if (result.error && !['user_already_exists', 'email_exists', 'user_not_found'].includes(result.error.code ?? '')) {
@@ -2621,6 +2620,7 @@ async function requestManagedSignup(input: CreateAccountInput | string, shownTer
     if (error instanceof ManagedTrialError) throw error
     throw managedError('The account request could not be confirmed. Wait before trying again.', 'account_request_failed')
   } finally {
+    signupClient?.auth.dispose()
     signupRequestPending = false
   }
 }
