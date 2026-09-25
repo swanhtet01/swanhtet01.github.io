@@ -327,3 +327,39 @@ test('actual acceptance keeps an uncertain request for exact retry after a misma
     assert.equal(uncertain.at(-1), false)
   }
 })
+
+
+test('Website feedback recovery survives remount and isolates account, review and exact content', async () => {
+  const { retainWebsiteFeedback, recoverWebsiteFeedback, clearWebsiteFeedback } = await import('../showroom/src/products/website/pending-website-feedback.ts')
+  const values = new Map()
+  const storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), removeItem: k => values.delete(k) }
+  const review = { reviewId: 'review-a', previewDigest: 'sha256:synthetic', expiresAt: '2099-01-01T00:00:00Z' }
+  const payload = { reviewId: review.reviewId, previewDigest: review.previewDigest, commandId: '11111111-1111-4111-8111-111111111111', note: 'စျေးနှုန်း ပြင်ပါ' }
+  retainWebsiteFeedback(storage, actor, review, payload)
+  assert.deepEqual(recoverWebsiteFeedback(storage, actor, review), payload)
+  for (const who of [{ ...actor, userId: 'other' }, { ...actor, workspaceId: 'other' }]) assert.equal(recoverWebsiteFeedback(storage, who, review), null)
+  assert.equal(recoverWebsiteFeedback(storage, actor, { ...review, reviewId: 'other' }), null)
+  assert.throws(() => recoverWebsiteFeedback(storage, actor, { ...review, previewDigest: 'changed' }))
+  assert.throws(() => retainWebsiteFeedback(storage, actor, review, { ...payload, note: 'different' }))
+  assert.throws(() => clearWebsiteFeedback(storage, actor, { ...payload, note: 'different' }))
+  assert.deepEqual(recoverWebsiteFeedback(storage, actor, review), payload)
+  clearWebsiteFeedback(storage, actor, payload); assert.equal(values.size, 0)
+})
+
+test('Website feedback recovery fails closed on corrupt, denied and dropped storage', async () => {
+  const { retainWebsiteFeedback, recoverWebsiteFeedback, clearWebsiteFeedback } = await import('../showroom/src/products/website/pending-website-feedback.ts')
+  const review = { reviewId: 'review-a', previewDigest: 'digest', expiresAt: '2099-01-01T00:00:00Z' }
+  const payload = { reviewId: review.reviewId, previewDigest: review.previewDigest, commandId: '11111111-1111-4111-8111-111111111111', note: 'Changes' }
+  for (const raw of ['{broken', 'x'.repeat(16001), JSON.stringify({ expiresAt: review.expiresAt, payload: { ...payload, note: '' } })]) {
+    assert.throws(() => recoverWebsiteFeedback({ getItem: () => raw }, actor, review))
+  }
+  assert.throws(() => retainWebsiteFeedback({ getItem: () => null, setItem: () => { throw Error('denied') } }, actor, review, payload))
+  assert.throws(() => retainWebsiteFeedback({ getItem: () => null, setItem: () => {} }, actor, review, payload))
+  const raw = JSON.stringify({ expiresAt: review.expiresAt, payload })
+  assert.throws(() => clearWebsiteFeedback({ getItem: () => raw, removeItem: () => {} }, actor, payload))
+  let removed = false
+  const expired = { ...review, expiresAt: '2000-01-01T00:00:00Z' }
+  const old = JSON.stringify({ expiresAt: expired.expiresAt, payload })
+  assert.equal(recoverWebsiteFeedback({ getItem: () => removed ? null : old, removeItem: () => { removed = true } }, actor, expired), null)
+  assert.equal(removed, true)
+})
