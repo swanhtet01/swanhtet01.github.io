@@ -1090,6 +1090,19 @@ class TrialRuntimeTests(unittest.TestCase):
             self.assertEqual(agent.status_code, 422)
             self.assertEqual(agent.json()["detail"]["code"], "commerce_actor_evidence_required")
 
+            # Verify authoritative readback after replay and rejected variants:
+            # a matching response alone cannot prove stock was reserved only once.
+            recovered = client.get(
+                "/api/trial/v1/bootstrap",
+                headers=self._headers(),
+            )
+            self.assertEqual(recovered.status_code, 200, recovered.text)
+            commerce = recovered.json()["states"]["commerce"]
+            self.assertEqual(commerce["version"], result["version"])
+            self.assertEqual(len(commerce["state"]["orders"]), 1)
+            self.assertEqual(commerce["state"]["orders"][0]["id"], "ORD-MANAGED-001")
+            self.assertEqual(commerce["state"]["items"][0]["onHand"], 8)
+
             other = client.get(
                 "/api/trial/v1/bootstrap",
                 headers=self._headers("other-operator-session"),
