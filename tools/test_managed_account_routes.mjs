@@ -967,3 +967,32 @@ test('review 401 refresh retries exact requests only within the original identit
     assert.equal(state.calls.filter(([name]) => name === 'signOut').length, 0)
   })
 })
+
+
+test('terminal review authentication failures stop bounded retries without clearing local state', async () => {
+  for (const failure of ['second401', 'refreshError', 'refreshThrows']) await withAuth(async (mod, state) => {
+    state.session = { ...fixedSession }
+    state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'synthetic-company')
+    const identity = await mod.currentManagedIdentity()
+    const id = '11111111-1111-4111-8111-111111111111'
+    const payload = { reviewId: id, commandId: id, previewDigest: 'sha256:' + 'a'.repeat(64), note: 'Retain this decision' }
+    const original = JSON.stringify(payload)
+    state.allowedPostPath = `/api/trial/v1/ecommerce-reviews/${id}/change-requests`
+    state.refreshSession = async () => {
+      if (failure === 'refreshThrows') throw new Error('synthetic refresh unavailable')
+      return failure === 'refreshError' ? { data: { session: null }, error: { message: 'refresh failed' } }
+        : { data: { session: state.session }, error: null }
+    }
+    state.fetch = async (_url, init) => {
+      assert.equal(init.body, original)
+      return { ok: false, status: 401, json: async () => ({ detail: { code: 'auth_required', message: 'Sign in again.' } }) }
+    }
+    await assert.rejects(mod.sendManagedEcommerceDecision(payload, identity), error =>
+      failure === 'refreshThrows' ? error.message === 'synthetic refresh unavailable' : error.code === 'auth_required' && error.status === 401)
+    assert.equal(state.calls.filter(([name]) => name === 'fetch').length, failure === 'second401' ? 2 : 1)
+    assert.equal(state.calls.filter(([name]) => name === 'refreshSession').length, 1)
+    assert.equal(state.calls.some(([name]) => name === 'signOut' || name === 'storage-remove'), false)
+    assert.equal(JSON.stringify(payload), original)
+    assert.equal(state.storage.get(MANAGED_WORKSPACE_STORAGE_KEY), 'synthetic-company')
+  })
+})
