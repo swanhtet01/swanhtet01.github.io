@@ -139,6 +139,26 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             changed = client.post(base + '/change-requests', headers=headers, json=payload | {'note': 'Different'})
             self.assertEqual(changed.status_code, 409)
             self.assertIn('trial_idempotency_conflict', changed.text)
+            session = str(uuid4())
+            with pg._connect(self.admin_url) as connection:
+                connection.execute('insert into auth.sessions(id,user_id) values (%s,%s)', (session, recipient))
+            principals['session'] = TrialPrincipal(workspace, recipient, 'human',
+                session_id=session, identity_provider='supabase')
+            session_headers = {'x-test-actor': 'session'}
+            self.assertEqual(client.get(base + '/decisions', headers=session_headers).status_code, 200)
+            with pg._connect(self.admin_url) as connection:
+                connection.execute('delete from auth.sessions where id=%s', (session,))
+            # The resolver still supplies the old identity: the database must refuse it.
+            for response in [client.get(base + '/decisions', headers=session_headers),
+                             client.post(base + '/change-requests', headers=session_headers, json=payload),
+                             client.post('/api/trial/v1/ecommerce-reviews/' + reviews[2] + '/acceptance',
+                                         headers=session_headers, json=acceptance)]:
+                self.assertEqual(response.status_code, 503)
+                self.assertIn('auth_session_active', response.text)
+                self.assertEqual(response.headers['cache-control'], 'private, no-store')
+                self.assertNotIn('commandId', response.text)
+                self.assertNotIn('createdAt', response.text)
+
 
         def insert(connection, review, kind, *, bad_digest=False, source_version=1):
             command = str(uuid4())
