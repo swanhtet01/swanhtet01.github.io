@@ -7,7 +7,7 @@ from .commerce_runtime import commerce_storefront_preview, commerce_storefront_p
 from hashlib import sha256
 from .ecommerce_customer_review import uuid, stamp
 from .website_customer_review import _text
-from .trial_store import TrialPermissionDenied, TrialNotReadyError, TrialValidationError
+from .trial_store import TrialPermissionDenied, TrialNotReadyError, TrialValidationError, TrialInvalidTransition, TrialIdempotencyConflict
 
 # Reviewed local candidate bodies, LF-normalized and outer-trimmed only.
 FUNCTIONS = {
@@ -310,6 +310,12 @@ class EcommerceCustomerReviewStore:
             retained = cursor.fetchone()
             replayed = retained is not None
             if retained is None:
+                # The shared review lock serializes this check with all decision writes.
+                cursor.execute("""select 1 from app_private.ecommerce_customer_decisions
+                    where workspace_id=%s and review_id=%s and (kind='acceptance' or %s='acceptance') limit 1""",
+                    (actor.workspace_id, review_id, kind))
+                if cursor.fetchone() is not None:
+                    raise TrialInvalidTransition('ecommerce_decision_already_recorded')
                 cursor.execute("""insert into app_private.ecommerce_customer_decisions
                     (workspace_id,actor_id,command_id,review_id,source_version,content_revision,preview_digest,command_fingerprint,kind,note)
                     values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
@@ -323,7 +329,7 @@ class EcommerceCustomerReviewStore:
                 or retained['preview_digest'] != candidate['previewDigest']
                 or retained['command_fingerprint'] != candidate['commandFingerprint']
                 or retained['kind'] != kind or retained['note'] != candidate.get('note')):
-                raise TrialValidationError('ecommerce_decision_command_conflict')
+                raise TrialIdempotencyConflict(candidate['commandId'])
             result = candidate | dict(persisted=True, replayed=replayed)
             result['acceptedAt' if kind == 'acceptance' else 'createdAt'] = retained['created_at'].astimezone(timezone.utc).isoformat()
         return result

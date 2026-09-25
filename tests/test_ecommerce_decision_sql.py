@@ -66,7 +66,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
                   values (%s,%s,%s,%s,1,%s::jsonb,%s,clock_timestamp()+interval '1 day')""",
                   (review,workspace,recipient,owner,json.dumps(commerce_storefront_preview(source)),digest))
         from supermega_runtime.ecommerce_customer_review_store import EcommerceCustomerReviewStore
-        from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialValidationError, TrialPermissionDenied, TrialNotReadyError
+        from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialValidationError, TrialPermissionDenied, TrialNotReadyError, TrialIdempotencyConflict
         adapter = EcommerceCustomerReviewStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=True))
         actor = TrialPrincipal(workspace, recipient, 'human')
         for review_id, kind in [(reviews[3], 'acceptance'), (reviews[4], 'feedback')]:
@@ -87,7 +87,7 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             with self.assertRaisesRegex(TrialNotReadyError, 'membership_ready'):
                 adapter.decisions(TrialPrincipal('other-company', recipient, 'human'), review_id)
             if kind=='feedback':
-                with self.assertRaises(TrialValidationError):
+                with self.assertRaises(TrialIdempotencyConflict):
                     adapter.record_decision(actor,payload | {'note': 'Changed request'},kind=kind)
         with self.assertRaises(TrialValidationError):
             adapter.record_decision(actor,payload | {'extra': True},kind='feedback')
@@ -126,6 +126,20 @@ class CatalogDecisionSqlTests(unittest.TestCase):
             self.assertEqual(accepted.status_code, 200)
             self.assertTrue(accepted.json()['persisted'])
             self.assertFalse(accepted.json()['replayed'])
+            for review_id, route, conflict in [
+                (reviews[2], 'change-requests', dict(commandId=str(uuid4()), note='Change')),
+                (payload['reviewId'], 'acceptance', dict(commandId=str(uuid4()), decision='accept_preview_for_release_review')),
+            ]:
+                response = client.post('/api/trial/v1/ecommerce-reviews/' + review_id + '/' + route,
+                    headers=headers, json=dict(reviewId=review_id, previewDigest=digest, **conflict))
+                self.assertEqual(response.status_code, 409)
+                self.assertIn('trial_invalid_transition', response.text)
+                self.assertEqual(response.headers['cache-control'], 'private, no-store')
+                self.assertNotIn('app_private', response.text)
+            changed = client.post(base + '/change-requests', headers=headers, json=payload | {'note': 'Different'})
+            self.assertEqual(changed.status_code, 409)
+            self.assertIn('trial_idempotency_conflict', changed.text)
+
         def insert(connection, review, kind, *, bad_digest=False, source_version=1):
             command = str(uuid4())
             note = 'စျေးနှုန်း ပြင်ပါ' if kind == 'feedback' else None
