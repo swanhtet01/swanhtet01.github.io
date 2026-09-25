@@ -1,3 +1,4 @@
+import { recoverWebsiteFeedback, retainWebsiteFeedback, clearWebsiteFeedback } from './pending-website-feedback'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { currentManagedIdentity, loadManagedWebsiteReview, loadManagedWebsiteAcceptance, sameManagedIdentity, sendManagedWebsiteReviewChanges, sendManagedWebsiteAcceptance, type ManagedIdentity } from '../../core/managed-trial'
@@ -21,7 +22,7 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
   const [actor, setActor] = useState<ManagedIdentity | null>(null)
   const [pageId, setPageId] = useState('')
   const [note, setNote] = useState('')
-  const [message, setMessage] = useState('Opening your prepared Website…')
+  const [message, setMessage] = useState('Opening Website…')
   const [busy, setBusy] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [unconfirmed, setUnconfirmed] = useState(false)
@@ -46,34 +47,37 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
           pending.current = null; pendingAcceptance.current = null; setUnconfirmed(false); setAcceptanceUnconfirmed(false); setNote('')
         }
         lastIdentity.current = identity
-        if (!identity) { setReview(null); setActor(null); setMessage('Sign in to open your prepared review. We will bring you back here.'); return }
+        if (!identity) { setReview(null); setActor(null); setMessage('Sign in to open your review.'); return }
         const verified = await verifyCustomerWebsiteReview(await loadManagedWebsiteReview(reviewId, identity), reviewId)
         if (!active || !access.isCurrent(epoch)) return
+        const recovered = recoverWebsiteFeedback(window.sessionStorage, identity, verified)
         const retainedDecision = verifyCustomerReviewDecision(await loadManagedWebsiteAcceptance(reviewId, identity), verified)
         if (!active || !access.isCurrent(epoch)) return
         const accepted = await access.commit(epoch, identity, verified.expiresAt, () => {
+          pending.current = recovered ? { identity, payload: recovered } : null
+          setUnconfirmed(Boolean(recovered)); setNote(recovered?.note ?? '')
           setActor(identity); setReview(verified); setPageId(verified.preview.pages[0].id)
           setDecision(retainedDecision); setConfirmed(Boolean(pendingAcceptance.current)); setBusy(inFlight.current)
           if (retainedDecision.status !== 'pending_review') {
             pendingAcceptance.current = null; setAcceptanceUnconfirmed(false)
           }
-          setMessage(retainedDecision.status === 'accepted_for_operator_release_review'
-            ? 'Your acceptance is saved for SuperMega’s release review. Nothing has been published.'
-            : retainedDecision.status === 'changes_requested' ? 'Your changes are saved. SuperMega will prepare a new revision for acceptance.'
-              : 'Prepared for your review. Not a published website.')
+          setMessage(recovered ? 'Retry your saved change request to confirm it.' : retainedDecision.status === 'accepted_for_operator_release_review'
+            ? 'Your acceptance is saved. Publishing needs review.'
+            : retainedDecision.status === 'changes_requested' ? 'Changes saved. A new revision will follow.'
+              : 'Private preview. Not published.')
         })
         if (!accepted && access.isCurrent(epoch)) {
           setReview(null); setActor(null); pending.current = null; setUnconfirmed(false); setNote('')
-          setMessage('Your review access changed. Sign in and reopen the review.')
+          setMessage('Access changed. Sign in again.')
         }
       } catch {
-        if (active && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('Could not open this review. Try again. If it still does not open, ask SuperMega to check your access.') }
+        if (active && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('Review unavailable. Try again.') }
       } finally {
         if (active && access.isCurrent(epoch)) setOpening(false)
       }
     }
     void open()
-    const refresh = () => { access.invalidate(); setOpening(true); setReview(null); setActor(null); setBusy(false); setMessage('Checking your review access…'); setAttempt(value => value + 1) }
+    const refresh = () => { access.invalidate(); setOpening(true); setReview(null); setActor(null); setBusy(false); setMessage('Checking access…'); setAttempt(value => value + 1) }
     window.addEventListener('storage', refresh)
     window.addEventListener('focus', refresh)
     return () => { active = false; access.invalidate(); window.removeEventListener('storage', refresh); window.removeEventListener('focus', refresh) }
@@ -81,7 +85,9 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
 
   useEffect(() => {
     if (!review) return
-    const timer = window.setTimeout(() => { access.invalidate(); setReview(null); setActor(null); setBusy(false); pending.current = null; pendingAcceptance.current = null; setAcceptanceUnconfirmed(false); setUnconfirmed(false); setNote(''); setMessage('This review has expired. Ask SuperMega for a fresh review.') }, Math.max(0, Date.parse(review.expiresAt) - Date.now()))
+    const timer = window.setTimeout(() => {
+      try { if (pending.current) clearWebsiteFeedback(window.sessionStorage, pending.current.identity, pending.current.payload) } catch { /* Retain uncertain cleanup. */ }
+      access.invalidate(); setReview(null); setActor(null); setBusy(false); pending.current = null; pendingAcceptance.current = null; setAcceptanceUnconfirmed(false); setUnconfirmed(false); setNote(''); setMessage('Review expired. Ask for a new link.') }, Math.max(0, Date.parse(review.expiresAt) - Date.now()))
     return () => window.clearTimeout(timer)
   }, [review, access])
 
@@ -98,19 +104,21 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
     function denyChangedAccess() {
       if (!access.isCurrent(epoch)) return
       setReview(null); setActor(null); pending.current = null; setUnconfirmed(false); setNote('')
-      setMessage('Your review access changed. Sign in and reopen the review.')
+      setMessage('Access changed. Sign in again.')
     }
     try {
+      retainWebsiteFeedback(window.sessionStorage, request.identity, review, request.payload)
       const response = await sendManagedWebsiteReviewChanges(request.payload, request.identity)
       verifyCustomerChangeAcknowledgement(response, request.payload)
       const accepted = await access.commit(epoch, request.identity, review.expiresAt, () => {
+        clearWebsiteFeedback(window.sessionStorage, request.identity, request.payload)
         pending.current = null; setUnconfirmed(false); setNote('')
         setDecision(previous => previous ? { ...previous, status: 'changes_requested', acceptedAt: null } : null)
-        setMessage('Your change request is saved for SuperMega. Nothing has been published.')
+        setMessage('Your change request is saved. Not published.')
       })
       if (!accepted) denyChangedAccess()
     } catch {
-      const accepted = await access.commit(epoch, request.identity, review.expiresAt, () => setMessage('We could not confirm the save. Retry this same request; it will not create a duplicate.'))
+      const accepted = await access.commit(epoch, request.identity, review.expiresAt, () => setMessage('Save unconfirmed. Retry the same request.'))
       if (!accepted) denyChangedAccess()
     } finally { inFlight.current = false; setBusy(false) }
   }
@@ -130,46 +138,35 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
       const saved = verifyCustomerAcceptanceAcknowledgement(response, request.payload, review)
       const current = await access.commit(epoch, request.identity, review.expiresAt, () => {
         pendingAcceptance.current = null; setAcceptanceUnconfirmed(false); setDecision(saved)
-        setMessage('Your acceptance is saved for SuperMega’s release review. Nothing has been published.')
+        setMessage('Your acceptance is saved. Publishing needs review.')
       })
-      if (!current && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('Your access changed. Sign in and reopen this review.') }
+      if (!current && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('Access changed. Sign in again.') }
     } catch {
       const current = await access.commit(epoch, request.identity, review.expiresAt,
-        () => setMessage('We could not confirm acceptance. Retry the same acceptance, or reopen this review to check its saved status.'))
-      if (!current && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('Your access changed. Sign in and reopen this review.') }
+        () => setMessage('Acceptance unconfirmed. Retry or reopen this review.'))
+      if (!current && access.isCurrent(epoch)) { setReview(null); setActor(null); setMessage('Access changed. Sign in again.') }
     } finally { inFlight.current = false; setBusy(false) }
   }
 
   return <main className="website-product customer-website-review">
-    <header className="customer-review-heading"><Link to="/">SuperMega</Link><h1>Your prepared Website</h1><p>Review the finished pages. Accept this revision or tell us what to change. We handle the build.</p></header>
+    <header className="customer-review-heading"><Link to="/">SuperMega</Link><h1>Your prepared Website</h1><p>Check the pages, then accept or request changes.</p></header>
     <p role="status" aria-live="polite">{message}</p>
     {!review && <section aria-label="Open your private review" aria-busy={opening}>
-      <div className="customer-review-actions"><Link to={customerWebsiteReviewLoginPath(reviewId)}>Sign in</Link><button type="button" disabled={opening} onClick={() => { access.invalidate(); setOpening(true); setReview(null); setActor(null); setBusy(false); setMessage('Checking your review access…'); setAttempt(value => value + 1) }}>{opening ? 'Opening review…' : 'Try opening again'}</button></div>
-      {!opening && <p>Use the account assigned by SuperMega and the latest review link. If it still will not open, reply to the person who sent it and ask them to check your access or send a fresh review. You do not need to create another company or start a trial. Never share your password or sign-in code.</p>}
+      <div className="customer-review-actions"><Link to={customerWebsiteReviewLoginPath(reviewId)}>Sign in</Link><button type="button" disabled={opening} onClick={() => { access.invalidate(); setOpening(true); setReview(null); setActor(null); setBusy(false); setMessage('Checking access…'); setAttempt(value => value + 1) }}>{opening ? 'Opening review…' : 'Try opening again'}</button></div>
+      {!opening && <p>Use your assigned account and latest review link. Ask SuperMega for help if access fails.</p>}
     </section>}
     {review && <>
-      <details className="customer-review-details">
-        <summary>How to review your website</summary>
-        <section aria-labelledby="customer-review-guide-title" className="customer-review-guide">
-        <div><span className="core-eyebrow">Private review</span><h2 id="customer-review-guide-title">Review in 3 steps</h2></div>
-        <ol>
-          <li><strong>Open each prepared page</strong><span>{review.preview.pages.length} {review.preview.pages.length === 1 ? 'page' : 'pages'} ready</span></li>
-          <li><strong>Check the business facts, offers, and contact action</strong><span>No design or editing work required</span></li>
-          <li><strong>Accept this revision or request changes</strong><span>SuperMega makes the updates and sends a new exact revision.</span></li>
-        </ol>
-        <p>Acceptance records your decision for this exact revision. SuperMega handles the separate release review and publishing. Nothing is published from this screen.</p>
-      </section>
-      </details>
+      <p>SuperMega handles publishing.</p>
       <PreparedWebsitePage review={review} pageId={pageId} onPageChange={setPageId} />
       {decision?.status === 'accepted_for_operator_release_review' ? <section className="customer-review-feedback"><h2>Acceptance saved</h2><p>Revision {review.contentRevision} is accepted for SuperMega’s release review, not published. Contact SuperMega if you need another revision.</p></section> : <>
         {decision?.status === 'pending_review' && <section className="customer-review-feedback" aria-labelledby="website-accept-title">
-          <h2 id="website-accept-title">Ready for SuperMega to take the next step?</h2>
+          <h2 id="website-accept-title">Accept this revision?</h2>
           <label className="customer-review-consent"><input type="checkbox" checked={confirmed} disabled={busy || acceptanceUnconfirmed || unconfirmed} onChange={event => setConfirmed(event.target.checked)} /><span>I checked the prepared pages and accept this exact revision for release review.</span></label>
           <p>Accepting does not publish the Website, register a domain, or take payment.</p>
           {note.trim() && <p>Send your changes below, or clear the note before accepting this revision.</p>}
           <button type="button" disabled={!confirmed || busy || unconfirmed || Boolean(note.trim())} onClick={() => { void acceptRevision() }}>{busy && acceptanceUnconfirmed ? 'Saving acceptance…' : acceptanceUnconfirmed ? 'Retry same acceptance' : 'Accept this revision'}</button>
         </section>}
-        <form className="customer-review-feedback" onSubmit={submit}><h2>What would you like changed?</h2><label htmlFor="website-review-note">Only describe the changes</label><textarea aria-describedby="website-review-note-help" id="website-review-note" rows={4} maxLength={2000} placeholder="Example: On Home, change the phone number to…" value={note} readOnly={unconfirmed} disabled={acceptanceUnconfirmed} onChange={event => setNote(event.target.value)} required /><p id="website-review-note-help">SuperMega reviews your request. This does not approve or publish the Website.</p><button type="submit" disabled={busy || acceptanceUnconfirmed || !note.trim()}>{busy && !acceptanceUnconfirmed ? 'Saving…' : unconfirmed ? 'Retry same request' : 'Request changes'}</button></form>
+        <form className="customer-review-feedback" onSubmit={submit}><h2>Request changes</h2><label htmlFor="website-review-note">Your changes</label><textarea aria-describedby="website-review-note-help" id="website-review-note" rows={4} maxLength={2000} placeholder="What needs changing?" value={note} readOnly={unconfirmed} disabled={acceptanceUnconfirmed} onChange={event => setNote(event.target.value)} required /><p id="website-review-note-help">Your request does not publish the Website.</p><button type="submit" disabled={busy || acceptanceUnconfirmed || !note.trim()}>{busy && !acceptanceUnconfirmed ? 'Saving…' : unconfirmed ? 'Retry same request' : 'Request changes'}</button></form>
       </>}
     </>}
   </main>

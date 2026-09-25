@@ -1,3 +1,4 @@
+import * as feedbackRecovery from '../showroom/src/products/website/pending-website-feedback.ts'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
@@ -18,6 +19,7 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
 const module = { exports: {} }
 vm.runInNewContext(compiled, { URL, exports: module.exports, require: name => {
   if (name.endsWith('.css')) return {}
+  if (name === './pending-website-feedback') return feedbackRecovery
   if (name === './customer-review-access') return { createReviewAccessBoundary }
   if (name === '../../core/account-routes') return { customerWebsiteReviewLoginPath }
   if (name === './customer-review-contract') return new Proxy({ reviewContactDestination }, { get: (target, key) => { if (key === 'reviewContactDestination') return target[key]; throw new Error('Pure preview must not access auth or transport') } })
@@ -92,10 +94,8 @@ test('supported contact routes stay visible as inert text', () => {
 })
 
 test('customer review is a short result-review journey rather than a builder', () => {
-  for (const text of ['Review in 3 steps', 'Open each prepared page', 'Check the business facts, offers, and contact action',
-    'Accept this revision or request changes', 'SuperMega makes the updates and sends a new exact revision.',
-    'Acceptance records your decision for this exact revision. SuperMega handles the separate release review and publishing. Nothing is published from this screen.']) assert.ok(source.includes(text), text)
-  assert.match(source, /placeholder="Example: On Home, change the phone number to…"/)
+  assert.ok(source.includes('SuperMega handles publishing.'))
+  assert.match(source, /placeholder="What needs changing\?"/)
   assert.match(source, /aria-describedby="website-review-note-help"/)
   assert.doesNotMatch(source, /Edit page|Customize page|Publish now|Approve and publish/)
 })
@@ -129,6 +129,7 @@ function renderDecision(status, { confirmed = false, note = '', uncertain = fals
     exports: controlled.exports, URL,
     require: name => {
       if (name.endsWith('.css')) return {}
+  if (name === './pending-website-feedback') return feedbackRecovery
       if (name === 'react') return { ...React, useState: () => [states[index++], () => {}],
         useEffect: () => {}, useRef: value => ({ current: value }) }
       if (name === 'react-router') return { Link: props => React.createElement('a', { href: props.to }, props.children) }
@@ -150,9 +151,8 @@ test('unavailable review offers a safe recovery path and loading prevents repeat
   const failed = renderDecision('pending_review', { unavailable: true })
   assert.match(failed, /aria-busy="false"/)
   assert.match(failed, /<button type="button">Try opening again/)
-  assert.match(failed, /account assigned by SuperMega/)
-  assert.match(failed, /do not need to create another company or start a trial/)
-  assert.match(failed, /Never share your password or sign-in code/)
+  assert.match(failed, /assigned account and latest review link/)
+  assert.match(failed, /Ask SuperMega for help/)
   assert.ok(failed.includes(customerWebsiteReviewLoginPath('11111111-1111-4111-8111-111111111111').replaceAll('&', '&amp;')))
   assert.doesNotMatch(failed, />Accept this revision<|<textarea|<iframe/)
 })
@@ -257,6 +257,7 @@ test('actual change and acceptance handlers reject late success after access cha
     access.invalidate()
     const noop = () => {}
     const context = {
+      retainWebsiteFeedback: () => {}, clearWebsiteFeedback: () => {}, window: { sessionStorage: {} },
       review: { expiresAt: new Date(Date.now() + 60000).toISOString(), previewDigest: 'synthetic-digest' },
       reviewId: 'synthetic-review', actor, busy: false, confirmed: true,
       note: name === 'submit' ? 'Synthetic changes' : '', decision: { status: 'pending_review' },
@@ -315,7 +316,7 @@ test('actual acceptance keeps an uncertain request for exact retry after a misma
     const run = vm.runInNewContext(`${js}; acceptRevision`, context)
     await run()
     assert.equal(decisions.length, 0, mismatch)
-    assert.match(messages.at(-1), /could not confirm acceptance/)
+    assert.match(messages.at(-1), /Acceptance unconfirmed/)
     assert.equal(uncertain.at(-1), true)
     assert.ok(context.pendingAcceptance.current)
     faulty = false
@@ -362,4 +363,44 @@ test('Website feedback recovery fails closed on corrupt, denied and dropped stor
   const old = JSON.stringify({ expiresAt: expired.expiresAt, payload })
   assert.equal(recoverWebsiteFeedback({ getItem: () => removed ? null : old, removeItem: () => { removed = true } }, actor, expired), null)
   assert.equal(removed, true)
+})
+
+
+test('actual Website open and submit recover the same feedback command after remount', async () => {
+  const ast = ts.createSourceFile('review.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const functions = {}
+  function visit(node) { if (ts.isFunctionDeclaration(node) && ['open', 'submit'].includes(node.name?.text)) functions[node.name.text] = node.getText(ast); ts.forEachChild(node, visit) }
+  visit(ast)
+  const js = ts.transpileModule(Object.values(functions).join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  for (const denied of [false, true]) {
+    const values = new Map(), writes = []
+    const storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => { if (denied) throw Error('denied'); values.set(k,v) }, removeItem: k => values.delete(k) }
+    const review = { reviewId: '11111111-1111-4111-8111-111111111111', previewDigest: 'sha256:'+'a'.repeat(64), expiresAt: '2099-01-01T00:00:00Z', preview: { pages: [{ id: 'home' }] } }
+    let sequence = 0, lost = true
+    function mount() {
+      const access = createReviewAccessBoundary(async () => actor, same)
+      const context = { ...feedbackRecovery, active: true, epoch: access.invalidate(), access, reviewId: review.reviewId,
+        review, actor, busy: false, note: 'စျေးနှုန်း ပြင်ပါ', decision: { status: 'pending_review' },
+        pending: { current: null }, pendingAcceptance: { current: null }, inFlight: { current: false }, lastIdentity: { current: null },
+        window: { sessionStorage: storage }, crypto: { randomUUID: () => `00000000-0000-4000-8000-${String(++sequence).padStart(12,'0')}` },
+        sameManagedIdentity: same, currentManagedIdentity: async () => actor,
+        loadManagedWebsiteReview: async () => review, verifyCustomerWebsiteReview: async x => x,
+        loadManagedWebsiteAcceptance: async () => ({ status: 'changes_requested' }), verifyCustomerReviewDecision: x => x,
+        setReview: x => { context.review=x }, setActor: x => { context.actor=x }, setNote: x => { context.note=x },
+        setDecision: x => { context.decision=typeof x==='function'?x(context.decision):x },
+        setBusy: () => {}, setMessage: () => {}, setUnconfirmed: () => {}, setAcceptanceUnconfirmed: () => {}, setConfirmed: () => {}, setPageId: () => {}, setOpening: () => {},
+        sendManagedWebsiteReviewChanges: async p => { writes.push(structuredClone(p)); if (lost) throw Error('lost'); return { commandId:p.commandId,reviewId:p.reviewId,status:'changes_requested',createdAt:'2026-01-01T00:00:00Z',persisted:true,replayed:true,publicationAuthorized:false } },
+        verifyCustomerChangeAcknowledgement: contract.verifyCustomerChangeAcknowledgement,
+      }
+      return { ...vm.runInNewContext(`${js};({open,submit})`,context), context }
+    }
+    const contract = await import('../showroom/src/products/website/customer-review-contract.ts')
+    const first = mount(); await first.submit({ preventDefault() {} })
+    if (denied) { assert.equal(writes.length,0); continue }
+    const second = mount(); await second.open()
+    assert.equal(second.context.note, writes[0].note)
+    assert.deepEqual(second.context.pending.current.payload, writes[0])
+    lost=false; await second.submit({ preventDefault() {} })
+    assert.deepEqual(writes[1],writes[0]); assert.equal(values.size,0)
+  }
 })
