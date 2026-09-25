@@ -725,7 +725,7 @@ export function ProductHomePage() {
         : null}
       {!managedPortal && productSetups && !anyStarted ? (
         <section aria-label="Setup by SuperMega" className="platform-start-nudge">
-          <div><strong>Try a sample</strong><p>No account needed. Sample records stay on this device.</p></div><Link className="core-button" to="/login">Company sign in</Link>
+          <div><strong>Try a sample</strong><p>No account needed. Sample records stay on this device.</p></div><Link className="core-button" to="/login">Login</Link>
         </section>
       ) : nextSetupStep ? (
         <p className="platform-start-nudge"><strong>Your saved work stays here.</strong> For another product, <a className="platform-start-link" href={`https://supermega.dev/contact/?product=${signupProductSlug(nextSetupStep[0])}&source=assisted-app-entry`}>request {nextSetupStep[1]} setup</a>. SuperMega prepares it for your review.</p>
