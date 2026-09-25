@@ -251,18 +251,6 @@ details:not([open]) > :not(summary) { display: none; }
 .platform-start-link:hover { color: var(--core-green); }
 .product-track-workspace { display: inline-block; margin-top: 5px; padding: 2px 8px; border-radius: 4px; background: color-mix(in srgb, var(--core-green) 14%, transparent); color: var(--core-green); font-size: 0.625rem; font-weight: 760; letter-spacing: .01em; }
 .product-track-card[data-active] { border-color: color-mix(in srgb, var(--core-green) 38%, transparent); }
-.wsp-panel { width: 100%; }
-.wsp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.wsp-item { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--core-line); background: var(--core-panel); text-decoration: none; font-size: 0.8125rem; line-height: 1.4; }
-.wsp-item:hover { border-color: var(--core-ink); }
-.wsp-mark { display: block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-.wsp-copy { min-width: 0; display: grid; gap: 0.125rem; color: var(--core-ink); }
-.wsp-label { min-width: 0; color: var(--core-ink); }
-.wsp-meta { min-width: 0; color: var(--core-muted); font-size: 0.72rem; }
-.wsp-arrow { color: var(--core-muted); font-size: 0.875rem; }
-.wsp-critical { color: var(--core-danger); }
-.wsp-warning { color: var(--core-warn); }
-.wsp-action { color: var(--core-green); }
 .setup-action-group, .setup-complete-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
 
 .workspace-toolbar { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--core-line); }

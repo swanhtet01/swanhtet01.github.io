@@ -19,7 +19,6 @@ import { readManagedSignupPolicy, type ManagedSignupPolicy } from './managed-sig
 import type { SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
-const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
 const ManagedProductConnections = lazy(() => import('./ManagedProductConnections').then((module) => ({ default: module.ManagedProductConnections })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
@@ -733,7 +732,6 @@ export function ProductHomePage() {
         })}
       </nav> : null}
       {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
-      {!managedPortal && anyStarted ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
       {!emptyCompany && (managedPortal || anyStarted) ? <p className="product-home-note">{managedPortal ? 'Your company controls access to each product.' : 'Saved work is stored on this device.'}</p> : null}
     </div>
   )
