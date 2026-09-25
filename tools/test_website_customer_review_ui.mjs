@@ -372,18 +372,20 @@ test('actual Website open and submit recover the same feedback command after rem
   function visit(node) { if (ts.isFunctionDeclaration(node) && ['open', 'submit'].includes(node.name?.text)) functions[node.name.text] = node.getText(ast); ts.forEachChild(node, visit) }
   visit(ast)
   const js = ts.transpileModule(Object.values(functions).join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-  for (const denied of [false, true]) {
+  for (const mode of ['normal', 'denied', 'user', 'workspace', 'cleanup']) {
+    const denied = mode === 'denied'
+    let cleanupDenied = mode === 'cleanup', who = actor
     const values = new Map(), writes = []
-    const storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => { if (denied) throw Error('denied'); values.set(k,v) }, removeItem: k => values.delete(k) }
+    const storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => { if (denied) throw Error('denied'); values.set(k,v) }, removeItem: k => { if (cleanupDenied) throw Error('cleanup denied'); values.delete(k) } }
     const review = { reviewId: '11111111-1111-4111-8111-111111111111', previewDigest: 'sha256:'+'a'.repeat(64), expiresAt: '2099-01-01T00:00:00Z', preview: { pages: [{ id: 'home' }] } }
     let sequence = 0, lost = true
     function mount() {
-      const access = createReviewAccessBoundary(async () => actor, same)
+      const access = createReviewAccessBoundary(async () => who, same)
       const context = { ...feedbackRecovery, active: true, epoch: access.invalidate(), access, reviewId: review.reviewId,
         review, actor, busy: false, note: 'စျေးနှုန်း ပြင်ပါ', decision: { status: 'pending_review' },
         pending: { current: null }, pendingAcceptance: { current: null }, inFlight: { current: false }, lastIdentity: { current: null },
         window: { sessionStorage: storage }, crypto: { randomUUID: () => `00000000-0000-4000-8000-${String(++sequence).padStart(12,'0')}` },
-        sameManagedIdentity: same, currentManagedIdentity: async () => actor,
+        sameManagedIdentity: same, currentManagedIdentity: async () => who,
         loadManagedWebsiteReview: async () => review, verifyCustomerWebsiteReview: async x => x,
         loadManagedWebsiteAcceptance: async () => ({ status: 'changes_requested' }), verifyCustomerReviewDecision: x => x,
         setReview: x => { context.review=x }, setActor: x => { context.actor=x }, setNote: x => { context.note=x },
@@ -397,10 +399,23 @@ test('actual Website open and submit recover the same feedback command after rem
     const contract = await import('../showroom/src/products/website/customer-review-contract.ts')
     const first = mount(); await first.submit({ preventDefault() {} })
     if (denied) { assert.equal(writes.length,0); continue }
+    if (mode === 'user') who = { ...actor, userId: 'other' }
+    if (mode === 'workspace') who = { ...actor, workspaceId: 'other' }
     const second = mount(); await second.open()
+    if (mode === 'user' || mode === 'workspace') {
+      assert.equal(second.context.pending.current, null); assert.equal(second.context.note, '')
+      assert.equal(writes.length, 1); assert.equal(values.size, 1); continue
+    }
     assert.equal(second.context.note, writes[0].note)
     assert.deepEqual(second.context.pending.current.payload, writes[0])
     lost=false; await second.submit({ preventDefault() {} })
-    assert.deepEqual(writes[1],writes[0]); assert.equal(values.size,0)
+    assert.deepEqual(writes[1],writes[0])
+    if (mode === 'cleanup') {
+      assert.equal(values.size, 1); assert.ok(second.context.pending.current)
+      cleanupDenied=false
+      const third=mount(); await third.open(); await third.submit({ preventDefault() {} })
+      assert.deepEqual(writes[2],writes[0])
+    }
+    assert.equal(values.size,0)
   }
 })
