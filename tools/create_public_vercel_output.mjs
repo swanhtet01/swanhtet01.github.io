@@ -1214,7 +1214,7 @@ async function fetchSupabaseLead(base, key, leadId) {
   const response = await fetch(base + '/rest/v1/supermega_leads?' + query.toString(), {
     method: 'GET',
     headers: { apikey: key, authorization: 'Bearer ' + key, accept: 'application/json' },
-    signal: AbortSignal.timeout(9000),
+    redirect: 'error', signal: AbortSignal.timeout(9000),
   })
   if (!response.ok) throw new Error('lead_store_lookup_' + response.status)
   const rows = await responseRows(response)
@@ -1226,7 +1226,7 @@ async function saveSupabase(record, fingerprint, historical) {
   const base = env('SUPABASE_URL').replace(/\\/$/, '')
   const key = env('SUPABASE_SERVICE_ROLE_KEY')
   if (!base || !key) throw new Error('lead_store_unconfigured')
-  const response = await fetch(base + '/rest/v1/supermega_leads?on_conflict=lead_id', { method: 'POST', headers: { apikey: key, authorization: 'Bearer ' + key, 'content-type': 'application/json', prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify(record), signal: AbortSignal.timeout(9000) })
+  const response = await fetch(base + '/rest/v1/supermega_leads?on_conflict=lead_id', { method: 'POST', headers: { apikey: key, authorization: 'Bearer ' + key, 'content-type': 'application/json', prefer: 'resolution=ignore-duplicates,return=representation' }, body: JSON.stringify(record), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('lead_store_' + response.status)
   const rows = await responseRows(response)
   if (rows.length > 1) throw new Error('lead_store_insert_ambiguous')
@@ -1252,7 +1252,7 @@ async function sendResend(record) {
   const to = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
   const body = ['New SuperMega request', '', 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected'), 'Company: ' + record.company, 'Name: ' + record.name, 'Email: ' + record.email].concat(record.raw.trial_claim_code ? ['Trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Operator next step: ' + record.next_step, '', 'Customer brief:', record.goal, '', 'Source: ' + record.source_url, 'Lead: ' + record.lead_id]).join('\\n')
-  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-email/' + record.lead_id }, body: JSON.stringify({ from, to: [to], reply_to: record.email, subject: 'SuperMega request — ' + record.company, text: body }), signal: AbortSignal.timeout(9000) })
+  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-email/' + record.lead_id }, body: JSON.stringify({ from, to: [to], reply_to: record.email, subject: 'SuperMega request — ' + record.company, text: body }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('email_' + response.status)
   return { status: 'ready', channel: 'email' }
 }
@@ -1262,7 +1262,7 @@ async function sendTelegram(record) {
   const chatId = env('TELEGRAM_CHAT_ID')
   if (!token || !chatId) return { status: 'skipped' }
   const message = ['New SuperMega request', record.company + ' · ' + record.name, record.email, 'Product: ' + record.workflow, 'Template: ' + (record.requested_package || 'not selected')].concat(record.raw.trial_claim_code ? ['Claim: ' + record.raw.trial_claim_code] : []).concat(['', 'Next: ' + record.next_step, '', 'Customer brief:', record.goal, '', record.lead_id]).join('\\n').slice(0, 3900)
-  const response = await fetch('https://api.telegram.org/bot' + token + '/sendMessage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text: message, disable_web_page_preview: true }), signal: AbortSignal.timeout(9000) })
+  const response = await fetch('https://api.telegram.org/bot' + token + '/sendMessage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text: message, disable_web_page_preview: true }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('telegram_' + response.status)
   return { status: 'ready', channel: 'telegram' }
 }
@@ -1271,7 +1271,7 @@ async function sendWebhook(record) {
   const url = env('SUPERMEGA_LEAD_WEBHOOK_URL')
   if (!url) return { status: 'skipped' }
   const secret = env('SUPERMEGA_LEAD_WEBHOOK_SECRET')
-  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': 'supermega.contact.created/' + record.lead_id, ...(secret ? { authorization: 'Bearer ' + secret } : {}) }, body: JSON.stringify({ event: 'supermega.contact.created', record }), signal: AbortSignal.timeout(9000) })
+  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': 'supermega.contact.created/' + record.lead_id, ...(secret ? { authorization: 'Bearer ' + secret } : {}) }, body: JSON.stringify({ event: 'supermega.contact.created', record }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('webhook_' + response.status)
   return { status: 'ready', channel: 'webhook' }
 }
@@ -1298,7 +1298,7 @@ async function sendCustomerAcknowledgement(record) {
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
   const replyTo = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
   const body = ['Hi ' + record.name + ',', '', 'Thanks for contacting SuperMega. We received your setup request for ' + record.company + '.', '', 'No action is needed from you now. We will review this brief and reply with one scoped next step.', '', acknowledgementPlan(record.workflow), '', 'What happens next:', '1. We confirm the scope, price and timing with you.', '2. Once agreed, SuperMega prepares the setup or preview. You review the result instead of building it yourself.', '3. Going live is a separate step after your approval and readiness checks.', '', 'If private files are needed, we will provide a safe transfer method after scope confirmation. Do not email passwords, payment slips or customer records.', '', 'This receipt does not create an account, publish a site, connect your business data or take payment.', '', 'Your reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Your trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply only if you have a question or correction, and keep the reference above.', '', 'SuperMega - https://supermega.dev']).join('\\n')
-  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-ack/' + record.lead_id }, body: JSON.stringify({ from, to: [record.email], reply_to: replyTo, subject: 'We received your request - SuperMega', text: body }), signal: AbortSignal.timeout(9000) })
+  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-ack/' + record.lead_id }, body: JSON.stringify({ from, to: [record.email], reply_to: replyTo, subject: 'We received your request - SuperMega', text: body }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('ack_email_' + response.status)
   return { status: 'ready', channel: 'ack_email' }
 }

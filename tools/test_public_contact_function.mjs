@@ -39,6 +39,7 @@ function enableFixtureStore() {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only-retention-key'
 }
 function retainedFixtureResponse(url, options) {
+  assert.equal(options.redirect, 'error', 'private delivery must refuse redirects')
   const target = new URL(String(url))
   if (target.origin !== 'https://retention.example.test') return null
   let rows
@@ -191,6 +192,7 @@ try {
   process.env.SUPERMEGA_LEAD_WEBHOOK_URL = 'https://lead-router.example.test/events'
   process.env.SUPERMEGA_LEAD_WEBHOOK_SECRET = 'test-only-webhook-secret'
   globalThis.fetch = async (url, options) => {
+    assert.equal(options.redirect, 'error', 'private delivery must refuse redirects')
     const stored = retainedFixtureResponse(url, options)
     if (stored) return stored
     fetchCalls += 1
@@ -424,6 +426,7 @@ try {
   enableFixtureStore()
   const resendMail = []
   globalThis.fetch = async (url, options) => {
+    assert.equal(options.redirect, 'error', 'private delivery must refuse redirects')
     const stored = retainedFixtureResponse(url, options)
     if (stored) return stored
     assert.equal(String(url), 'https://api.resend.com/emails')
@@ -480,6 +483,7 @@ try {
   // The acknowledgement is best-effort: its failure must never fail a delivered lead.
   let ackAttempted = false
   globalThis.fetch = async (url, options) => {
+    assert.equal(options.redirect, 'error', 'private delivery must refuse redirects')
     const stored = retainedFixtureResponse(url, options)
     if (stored) return stored
     if (String(options.headers['idempotency-key'] || '').startsWith('supermega-contact-ack/')) {
@@ -498,6 +502,7 @@ try {
   const held = new Promise(resolve => { finishDelivery = resolve })
   let overlappingCalls = 0
   globalThis.fetch = async (url, options) => {
+    assert.equal(options.redirect, 'error', 'private delivery must refuse redirects')
     const stored = retainedFixtureResponse(url, options)
     if (stored) return stored
     overlappingCalls++
@@ -540,6 +545,7 @@ try {
   let storeCalls = 0
   let unexpectedDeliveryCalls = 0
   globalThis.fetch = async (url, options) => {
+    assert.equal(options.redirect, 'error', 'private delivery must refuse redirects')
     const target = new URL(String(url))
     if (target.origin !== 'https://example.supabase.co') {
       unexpectedDeliveryCalls += 1
@@ -721,6 +727,7 @@ try {
       let deliveredEvent
       let deliveryCount = 0
       globalThis.fetch = async (url, options) => {
+    assert.equal(options.redirect, 'error', 'private delivery must refuse redirects')
         const stored = retainedFixtureResponse(url, options)
         if (stored) return stored
         assert.equal(url, 'https://lead-router.example.test/events')
