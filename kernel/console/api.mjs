@@ -9,6 +9,7 @@ import connectors from '../connectors/index.mjs'
 import { captureError } from '../alert.mjs'
 import { companyDailyBudgetCap, currentDailyBudgetWindow, providerChain } from '../gateway.mjs'
 import { listLeadsForReview, markLeadReviewed } from './leads-review.mjs'
+import { sendOutreachOnce } from './outreach-send.mjs'
 import crypto from 'node:crypto'
 
 // One implementation of the floor for every owner surface — see kernel/ops-key.mjs. A key
@@ -411,14 +412,10 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
           '</div>',
         ].filter(Boolean).join('\n')
         const text = p.outreach_en || p.headline || ''
-        const sent = await resend.send({ to, subject, html, text })
-        // resend.send() returns { ok:false, reason } on failure — it does NOT throw. Do NOT mark the
-        // deal 'sent' or log success unless the email actually went out. The whole console is built on
-        // the draft→approve→SEND integrity guarantee; a silent "sent" on a failed send breaks it.
-        if (!sent || !sent.ok) return bad(502, sent?.reason || 'email_send_failed')
-        const updated = await store.updateDeal(seg[1], { status: 'sent' })
-        log('outreach', `Email sent to ${to.slice(0, 80)}: "${String(p.headline || '').slice(0, 60)}"`, deal.id)
-        return ok({ ok: true, email_id: sent.id, to, deal: updated })
+        const result = await sendOutreachOnce({ dealId: deal.id, message: { to, subject, html, text }, store, send: message => resend.send(message) })
+        if (!result.ok) return bad(result.status, result.reason)
+        if (!result.replayed) log('outreach', 'Outreach accepted by provider and sent status recorded', deal.id)
+        return ok(result)
       }
     }
 
