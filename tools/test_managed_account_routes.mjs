@@ -146,7 +146,7 @@ async function withAuth(run, configured = true) {
     resendResult: { data: {}, error: null },
   }
   const auth = {}
-  for (const name of ['getSession', 'signInWithPassword', 'signUp', 'resend', 'signOut', 'getUser', 'exchangeCodeForSession', 'setSession', 'resetPasswordForEmail', 'updateUser']) {
+  for (const name of ['refreshSession', 'getSession', 'signInWithPassword', 'signUp', 'resend', 'signOut', 'getUser', 'exchangeCodeForSession', 'setSession', 'resetPasswordForEmail', 'updateUser']) {
     auth[name] = async (...args) => {
       calls.push([name, ...args])
       if (state[name]) return state[name](...args)
@@ -926,4 +926,44 @@ test('saved review directory times out privately and rejects identity changes du
    assert.equal(state.calls.some(([name])=>name==='signOut'),false)
   }finally{AbortSignal.timeout=timeout}
  })
+})
+
+
+test('review 401 refresh retries exact requests only within the original identity', async () => {
+  for (const write of [false, true]) for (const changed of [false, true]) await withAuth(async (mod, state) => {
+    state.session = { ...fixedSession }
+    state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'synthetic-company')
+    const identity = await mod.currentManagedIdentity()
+    const id = '11111111-1111-4111-8111-111111111111'
+    const payload = { reviewId: id, commandId: id, previewDigest: 'sha256:' + 'a'.repeat(64), note: 'Exact retained request' }
+    const path = '/api/trial/v1/ecommerce-reviews' + (write ? `/${id}/change-requests` : '')
+    if (write) state.allowedPostPath = path
+    state.refreshSession = async () => {
+      state.session = { ...fixedSession, access_token: 'synthetic-refreshed-token',
+        user: changed ? { ...fixedUser, id: 'different-user' } : fixedUser }
+      return { data: { session: state.session }, error: null }
+    }
+    const attempts = []
+    state.fetch = async (url, init) => {
+      assert.equal(url, path)
+      attempts.push(init)
+      if (attempts.length === 1) return { ok: false, status: 401, json: async () => ({}) }
+      return { ok: true, status: 200, json: async () => ({ retained: true }) }
+    }
+    const request = write ? mod.sendManagedEcommerceDecision(payload, identity) : mod.loadManagedEcommerceReviews(identity)
+    if (changed) {
+      await assert.rejects(request, error => error.code === 'managed_identity_changed')
+      assert.equal(attempts.length, 1, 'changed user must never receive a retried command or private read')
+    } else {
+      assert.deepEqual(await request, { retained: true })
+      assert.equal(attempts.length, 2)
+      assert.equal(attempts[0].body, attempts[1].body)
+      if (write) assert.deepEqual(JSON.parse(attempts[1].body), payload)
+      assert.equal(attempts[1].headers.get('authorization'), 'Bearer synthetic-refreshed-token')
+      assert.equal(attempts[1].headers.get('x-supermega-workspace-id'), 'synthetic-company')
+      assert.equal(attempts[0].signal, attempts[1].signal, 'retry must not extend the original deadline')
+    }
+    assert.equal(state.calls.filter(([name]) => name === 'refreshSession').length, 1)
+    assert.equal(state.calls.filter(([name]) => name === 'signOut').length, 0)
+  })
 })
