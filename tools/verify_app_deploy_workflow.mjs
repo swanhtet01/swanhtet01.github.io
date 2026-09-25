@@ -279,6 +279,31 @@ const invalidDeploymentResolution = runRollbackResolver(
   ['deployment', fixtureUrl, 'dpl_fixture123'],
   { id: 'dpl_different', url: 'megaos-release-fixture.vercel.app', target: 'production', readyState: 'READY' },
 )
+// Run the real CLI: invalid provider state must never yield a rollback URL.
+for (const [name, patch, reason] of [
+  ['different project', { projectId: 'prj_other' }, 'project'],
+  ['different alias', { alias: 'supermega.dev' }, 'live_alias'],
+  ['redirect alias', { redirect: 'https://example.com' }, 'redirect'],
+  ['external deployment URL', { deployment: { ...aliasFixture.deployment, url: 'example.com' } }, 'url'],
+]) {
+  const result = runRollbackResolver(
+    ['alias', aliasFixture.alias, aliasFixture.projectId], { ...aliasFixture, ...patch },
+  )
+  requireContract(`rollback rejects ${name}`, result.status === 1
+    && result.stdout === '' && result.stderr.trim() === `vercel_rollback_target_invalid:${reason}`)
+}
+for (const [name, patch, reason] of [
+  ['preview target', { target: 'preview' }, 'target'],
+  ['unready artifact', { readyState: 'BUILDING' }, 'state'],
+  ['different artifact URL', { url: 'other-release.vercel.app' }, 'deployment_url'],
+]) {
+  const result = runRollbackResolver(['deployment', fixtureUrl, aliasFixture.deploymentId], {
+    id: aliasFixture.deploymentId, url: aliasFixture.deployment.url,
+    target: 'production', readyState: 'READY', ...patch,
+  })
+  requireContract(`rollback rejects ${name}`, result.status === 1
+    && result.stdout === '' && result.stderr.trim() === `vercel_rollback_target_invalid:${reason}`)
+}
 const releaseBarrierSelfTest = spawnSync(
   process.execPath,
   [resolve(root, 'tools/verify_coordinated_release_live.mjs'), '--self-test'],
