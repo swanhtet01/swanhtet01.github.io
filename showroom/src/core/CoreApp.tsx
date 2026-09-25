@@ -3154,7 +3154,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const commerceWriteBanner = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Sample data'}</span>
     <p>{commerceStorageError
-      ? `Writes paused: ${commerceStorageError}`
+      ? `Writes paused: ${commerceStorageError}${managedIdentity ? ' Reload Shop and check Orders before recording the sale again; it may already be saved.' : ''}`
       : commerceSync.status === 'checking'
         ? commerceSync.message
         : commerceSync.status === 'pending' || commerceSync.status === 'conflict' || commerceSync.status === 'unavailable'
