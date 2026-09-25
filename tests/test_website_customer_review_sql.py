@@ -675,6 +675,50 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         with self.assertRaises(TrialPermissionDenied):
             adapter.request_changes(actor, payload)
 
+    def test_staff_history_reads_recheck_ended_session(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from supermega_runtime.trial_runtime import create_trial_router
+        review = self.retained_assignment()
+        adapter = self.adapter()
+        note = "Private customer wording request"
+        adapter.request_changes(TrialPrincipal(WORKSPACE, RECIPIENT, "human"),
+            dict(commandId=str(uuid4()), reviewId=str(review[0]), previewDigest=review[2], note=note))
+        session, staff = str(uuid4()), str(uuid4())
+        actor = TrialPrincipal(WORKSPACE, staff, "human", session_id=session, identity_provider="supabase")
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("""insert into app_private.workspace_memberships(workspace_id,actor_id,status,capabilities,actor_kind)
+                select workspace_id,%s,status,capabilities,actor_kind from app_private.workspace_memberships
+                where workspace_id=%s and actor_id=%s""", (staff, WORKSPACE, OWNER))
+            connection.execute("insert into auth.sessions(id,user_id) values (%s,%s)", (session, staff))
+        app = FastAPI()
+        # Deliberately retain the resolved identity after database revocation.
+        app.include_router(create_trial_router(store=adapter.store, resolve_principal=lambda request: actor))
+        routes = ('/api/trial/v1/website-reviews',
+                  '/api/trial/v1/website-reviews/' + str(review[0]) + '/change-requests')
+        try:
+            with TestClient(app) as client:
+                for route in routes:
+                    response = client.get(route)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.headers['cache-control'], 'private, no-store')
+                self.assertEqual(response.json()['requests'][0]['note'], note)
+                with pg._connect(self.admin_url) as connection:
+                    connection.execute("delete from auth.sessions where id=%s", (session,))
+                for route in routes:
+                    denied = client.get(route)
+                    self.assertEqual(denied.status_code, 503)
+                    self.assertIn('auth_session_active', denied.text)
+                    self.assertEqual(denied.headers['cache-control'], 'private, no-store')
+                    self.assertNotIn(note, denied.text)
+                    self.assertNotIn(str(review[0]), denied.text)
+                retained = adapter.feedback(TrialPrincipal(WORKSPACE, OWNER, "human"), str(review[0]))
+                self.assertEqual(retained['requests'][0]['note'], note)
+        finally:
+            with pg._connect(self.admin_url) as connection:
+                connection.execute("delete from auth.sessions where id=%s", (session,))
+                connection.execute("delete from app_private.workspace_memberships where workspace_id=%s and actor_id=%s", (WORKSPACE, staff))
+
     def test_adapter_rechecks_real_supabase_session_before_retry(self):
         review = self.retained_assignment()
         session = str(uuid4())
