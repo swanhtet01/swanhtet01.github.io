@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import test from 'node:test'
 import { createReviewAccessBoundary } from '../showroom/src/products/website/customer-review-access.ts'
+import * as recovery from '../showroom/src/products/ecommerce/pending-catalog-decision.ts'
 import { verifyCatalogDecisionPage } from '../showroom/src/products/ecommerce/prepared-catalog-review.ts'
 import { customerEcommerceReviewLoginPath } from '../showroom/src/core/account-routes.ts'
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
@@ -14,13 +15,13 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
   jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 const id = '11111111-1111-4111-8111-111111111111'
 const review = { reviewId: id, contentRevision: 1, previewDigest: 'sha256:' + 'a'.repeat(64), preview: { name: 'Synthetic catalog' }, expiresAt: '2099-01-01T00:00:00Z' }
-function harness({ identity = { actor: 'customer' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false, uncertainWrite = false, writeWait = null } = {}) {
+function harness({ identity = { actor: 'customer', userId: 'customer', workspaceId: 'company' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false, uncertainWrite = false, writeWait = null, storage = new Map() } = {}) {
   const states = [], effects = [], listeners = new Map(), timers = new Map()
   let index = 0, reads = 0, calls = 0, timerId = 0, savedItem = null
   const writes = []
   const exports = {}
   vm.runInNewContext(compiled + '; exports.Content = CatalogReviewContent;', { exports, crypto: globalThis.crypto,
-    window: { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name),
+    window: { sessionStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }, addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name),
       setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id }, clearTimeout: id => timers.delete(id) },
     require: name => {
       if (name === 'react') return { useState: initial => {
@@ -31,6 +32,7 @@ function harness({ identity = { actor: 'customer' }, changed = false, denied = f
       if (name === '../../core/account-routes') return { customerEcommerceReviewLoginPath }
       if (name === '../website/customer-review-access') return { createReviewAccessBoundary }
       if (name === './prepared-catalog-review') return { verifyPreparedCatalogReview: async value => value, verifyCatalogDecisionPage }
+      if (name === './pending-catalog-decision') return recovery
       if (name === './PreparedCatalog') return { PreparedCatalog: () => React.createElement('section', null, 'Synthetic catalog') }
       if (name === '../../core/managed-trial') return {
         currentManagedIdentity: async () => ++reads > 1 && changed ? { actor: 'other' } : identity,
@@ -208,4 +210,35 @@ test('lost write response plus identity change clears private content without of
   h.changeIdentity(); release(); await flush()
   assert.doesNotMatch(h.render(), /Synthetic catalog|Catalog accepted|Retry response/)
   assert.match(h.render(), /Your access changed/); cleanup()
+})
+
+
+test('reload recovers the exact uncertain response before server commit', async () => {
+  const storage = new Map()
+  const h = harness({ uncertainWrite: true, storage }); h.render(); const cleanup = h.effects[0](); await flush()
+  h.control('Request changes').props.onClick(); h.field().props.onChange({ target: { value: 'Change price' } })
+  h.form().props.onSubmit({ preventDefault() {} }); await flush(); cleanup()
+  assert.equal(storage.size, 1)
+  const reopened = harness({ storage }); reopened.render(); const close = reopened.effects[0](); await flush()
+  assert.match(reopened.render(), /Retry response/); assert.doesNotMatch(reopened.render(), /Accept catalog/)
+  reopened.control('Retry response').props.onClick(); await flush()
+  assert.deepEqual(reopened.writes[0], h.writes[0]); assert.equal(storage.size, 0)
+  assert.match(reopened.render(), /Changes requested/); close()
+})
+
+
+test('recovery is actor/workspace scoped and malformed storage prevents a fresh submission', async () => {
+  const storage = new Map()
+  const h = harness({ uncertainWrite: true, storage }); h.render(); const cleanup = h.effects[0](); await flush()
+  h.control('Accept catalog').props.onClick(); await flush(); cleanup()
+  assert.equal(storage.size, 1)
+  for (const identity of [{ actor: 'other', userId: 'other', workspaceId: 'company' },
+                          { actor: 'customer', userId: 'customer', workspaceId: 'other-company' }]) {
+    const other = harness({ storage, identity }); other.render(); const close = other.effects[0](); await flush()
+    assert.doesNotMatch(other.render(), /Retry response/); close()
+  }
+  storage.set([...storage.keys()][0], '{broken')
+  const broken = harness({ storage }); broken.render(); const close = broken.effects[0](); await flush()
+  assert.doesNotMatch(broken.render(), /Synthetic catalog|Accept catalog|Retry response/)
+  assert.equal(broken.writes.length, 0); close()
 })

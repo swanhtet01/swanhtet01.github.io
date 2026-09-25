@@ -4,6 +4,7 @@ import { currentManagedIdentity, loadManagedEcommerceReview, loadManagedEcommerc
 import { customerEcommerceReviewLoginPath } from '../../core/account-routes'
 import { createReviewAccessBoundary } from '../website/customer-review-access'
 import { verifyPreparedCatalogReview, verifyCatalogDecisionPage, type PreparedCatalogReview, type CatalogDecisionPage } from './prepared-catalog-review'
+import { retainCatalogDecision, recoverCatalogDecision, clearCatalogDecision } from './pending-catalog-decision'
 import { PreparedCatalog } from './PreparedCatalog'
 
 export default function EcommerceCustomerReview() {
@@ -45,12 +46,14 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     try {
       if (!sameManagedIdentity(identity, pending.identity)
         || !await access.commit(epoch, identity, review.expiresAt, () => {})) { closeChangedAccess(); return }
+      retainCatalogDecision(window.sessionStorage, pending.identity, review, pending.payload)
       await sendManagedEcommerceDecision(pending.payload, pending.identity)
       const saved = verifyCatalogDecisionPage(await loadManagedEcommerceDecisions(reviewId, identity), review)
       const retained = saved.decisions.find(item => item.commandId === pending.payload.commandId)
       if (!retained || (pending.payload.decision ? retained.kind !== 'acceptance'
         : retained.kind !== 'feedback' || retained.note !== pending.payload.note)) throw Error('unconfirmed')
       const confirmed = await access.commit(epoch, identity, review.expiresAt, () => {
+        clearCatalogDecision(window.sessionStorage, identity, reviewId)
         setDecisions(saved); command.pending = null; setNote(''); setEditing(false)
       })
       if (!confirmed) closeChangedAccess()
@@ -74,10 +77,18 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         if (!identity) { setMessage('Sign in with the account assigned to this review.'); return }
         const verified = await verifyPreparedCatalogReview(await loadManagedEcommerceReview(reviewId, identity), reviewId)
         if (!active || !access.isCurrent(epoch)) return
+        const recovered = recoverCatalogDecision(window.sessionStorage, identity, verified)
         const saved = verifyCatalogDecisionPage(await loadManagedEcommerceDecisions(reviewId, identity), verified)
         if (!active || !access.isCurrent(epoch)) return
         const accepted = await access.commit(epoch, identity, verified.expiresAt, () => {
-          command.identity = identity; setDecisions(saved); setReview(verified)
+          command.identity = identity
+          command.pending = recovered ? { identity, payload: recovered } : null
+          if (recovered && saved.decisions.some(item => item.commandId === recovered.commandId
+            && (recovered.decision ? item.kind === 'acceptance' : item.kind === 'feedback' && item.note === recovered.note))) {
+            clearCatalogDecision(window.sessionStorage, identity, reviewId); command.pending = null
+          }
+          setSaveMessage(recovered ? 'Check and resend your saved response.' : '')
+          setDecisions(saved); setReview(verified)
         })
         if (!accepted && access.isCurrent(epoch)) setMessage('Your access changed. Sign in and reopen this review.')
       } catch {
