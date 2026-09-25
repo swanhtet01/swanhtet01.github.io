@@ -15,9 +15,9 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
   jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 const id = '11111111-1111-4111-8111-111111111111'
 const review = { reviewId: id, contentRevision: 1, previewDigest: 'sha256:' + 'a'.repeat(64), preview: { name: 'Synthetic catalog' }, expiresAt: '2099-01-01T00:00:00Z' }
-function harness({ identity = { actor: 'customer', userId: 'customer', workspaceId: 'company' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false, uncertainWrite = false, writeWait = null, storage = new Map() } = {}) {
+function harness({ identity = { actor: 'customer', userId: 'customer', workspaceId: 'company' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false, uncertainWrite = false, writeWait = null, storage = new Map(), retainedDecision = null } = {}) {
   const states = [], effects = [], listeners = new Map(), timers = new Map()
-  let index = 0, reads = 0, calls = 0, timerId = 0, savedItem = null
+  let index = 0, reads = 0, calls = 0, timerId = 0, savedItem = retainedDecision
   const writes = []
   const exports = {}
   vm.runInNewContext(compiled + '; exports.Content = CatalogReviewContent;', { exports, crypto: globalThis.crypto,
@@ -241,4 +241,50 @@ test('recovery is actor/workspace scoped and malformed storage prevents a fresh 
   const broken = harness({ storage }); broken.render(); const close = broken.effects[0](); await flush()
   assert.doesNotMatch(broken.render(), /Synthetic catalog|Accept catalog|Retry response/)
   assert.equal(broken.writes.length, 0); close()
+})
+
+
+test('reload after server commit confirms retained command without sending again', async () => {
+  for (const kind of ['acceptance', 'feedback']) {
+    const storage = new Map()
+    const h = harness({ storage, uncertainWrite: true }); h.render(); const cleanup = h.effects[0](); await flush()
+    if (kind === 'acceptance') h.control('Accept catalog').props.onClick()
+    else {
+      h.control('Request changes').props.onClick(); h.field().props.onChange({ target: { value: 'Change price' } })
+      h.form().props.onSubmit({ preventDefault() {} })
+    }
+    await flush(); cleanup()
+    const command = h.writes[0]
+    const reopened = harness({ storage, retainedDecision: { commandId: command.commandId, kind,
+      note: command.note ?? null, createdAt: '2026-01-01T00:00:00Z' } })
+    reopened.render(); const close = reopened.effects[0](); await flush()
+    assert.equal(reopened.writes.length, 0); assert.equal(storage.size, 0)
+    assert.match(reopened.render(), kind === 'acceptance' ? /Catalog accepted/ : /Changes requested/)
+    assert.doesNotMatch(reopened.render(), /Retry response/); close()
+  }
+})
+
+test('unavailable tab storage prevents a decision from being sent', async () => {
+  for (const mode of ['throws', 'drops']) {
+    const storage = new Map()
+    storage.set = () => { if (mode === 'throws') throw Error('quota'); return storage }
+    const h = harness({ storage }); h.render(); const close = h.effects[0](); await flush()
+    h.control('Accept catalog').props.onClick(); await flush()
+    assert.equal(h.writes.length, 0); assert.match(h.render(), /Retry response/); close()
+  }
+})
+
+test('expired or altered recovery records cannot be used to construct a retry', () => {
+  const identity = { userId: 'customer', workspaceId: 'company', email: '' }
+  const payload = { reviewId: id, commandId: id, previewDigest: review.previewDigest, note: 'Change price' }
+  const storage = new Map()
+  const api = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }
+  recovery.retainCatalogDecision(api, identity, review, payload)
+  const key = [...storage.keys()][0], original = JSON.parse(storage.get(key))
+  for (const change of [v => v.expiresAt = '2000-01-01T00:00:00Z', v => v.payload.reviewId = 'other',
+    v => v.payload.previewDigest = 'wrong', v => v.payload.commandId = '../bad', v => v.payload.note = '',
+    v => v.payload.extra = true, v => v.payload.note = 'x'.repeat(2001)]) {
+    const value = structuredClone(original); change(value); storage.set(key, JSON.stringify(value))
+    assert.throws(() => recovery.recoverCatalogDecision(api, identity, review))
+  }
 })
