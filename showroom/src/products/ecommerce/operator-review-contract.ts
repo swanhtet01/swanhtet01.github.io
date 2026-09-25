@@ -121,20 +121,47 @@ export function verifyCatalogExpiredAbsence(value: unknown, command: CatalogPrep
   return { reviewId: retained.reviewId, status: 'absent_expired' as const }
 }
 
-export function verifyCatalogOperatorDecisions(value: unknown, command: CatalogPreparationCommand, after?: string) {
-  const retained = readCatalogCommand({ getItem: () => JSON.stringify(command) }, 'request')
-  if (!retained || retained === 'unavailable') return invalid()
+export type CatalogSavedReview = { reviewId: string; sourceVersion: number; contentRevision: number; previewDigest: string;
+  preparedAt: string; expiresAt: string; status: 'active' | 'stale' | 'revoked' | 'expired' }
+function savedAssignment(value: unknown, readAt: unknown): CatalogSavedReview {
+  const row = exact(value, ['reviewId','sourceVersion','contentRevision','previewDigest','preparedAt','expiresAt','status'])
+  const read = instant(readAt), prepared = instant(row.preparedAt), expiry = instant(row.expiresAt)
+  if (!uuid(row.reviewId) || !Number.isSafeInteger(row.sourceVersion) || Number(row.sourceVersion)<1
+    || !Number.isSafeInteger(row.contentRevision) || Number(row.contentRevision)<0
+    || typeof row.previewDigest!=='string' || !/^sha256:[0-9a-f]{64}$/.test(row.previewDigest)
+    || !['active','stale','revoked','expired'].includes(String(row.status)) || prepared>read || expiry<=prepared
+    || expiry-prepared>604800000000n || (row.status==='active' && read>=expiry) || (row.status==='expired' && read<expiry)) return invalid()
+  return structuredClone(row) as CatalogSavedReview
+}
+export function verifyCatalogReviewDirectory(value: unknown, after?: string) {
+  const row = exact(value, ['reviews','nextAfter','readAt','publicationAuthorized','deploymentAuthorized'])
+  if (row.publicationAuthorized!==false || row.deploymentAuthorized!==false || !Array.isArray(row.reviews)
+    || row.reviews.length>50 || (after!==undefined && !uuid(after))) return invalid()
+  instant(row.readAt)
+  let previous=after??''
+  const reviews=row.reviews.map(value=>{const item=savedAssignment(value,row.readAt);if(item.reviewId<=previous)return invalid();previous=item.reviewId;return item})
+  if(row.nextAfter!==null && (reviews.length!==50 || row.nextAfter!==previous))return invalid()
+  return {reviews,nextAfter:row.nextAfter as string|null,readAt:String(row.readAt)}
+}
+
+export function verifyCatalogOperatorDecisions(value: unknown, command: CatalogPreparationCommand | CatalogSavedReview, after?: string) {
+  if ('expectedVersion' in command) {
+    const retained = readCatalogCommand({ getItem: () => JSON.stringify(command) }, 'request')
+    if (!retained || retained === 'unavailable') return invalid()
+  }
   const row = exact(value, ['reviewId', 'status', 'sourceVersion', 'contentRevision', 'previewDigest', 'readAt',
     'decisions', 'nextAfter', 'publicationAuthorized', 'deploymentAuthorized'])
+  const lower = 'readAt' in command ? command.readAt : command.preparedAt
+  if (!('expectedVersion' in command)) savedAssignment({ ...command, status: row.status }, row.readAt)
   if (typeof row.status !== 'string' || !['active', 'stale', 'revoked', 'expired'].includes(row.status)
-    || row.sourceVersion !== command.expectedVersion) return invalid()
+    || row.sourceVersion !== ('expectedVersion' in command ? command.expectedVersion : command.sourceVersion)) return invalid()
   const read = instant(row.readAt), expiry = instant(command.expiresAt)
-  if (read < instant(command.readAt) || (row.status === 'active' && read >= expiry)
+  if (read < instant(lower) || (row.status === 'active' && read >= expiry)
     || (row.status === 'expired' && read < expiry)) return invalid()
   const { status, readAt, ...page } = row
   const verified = verifyCatalogDecisionPage(page, command, after)
   for (const item of verified.decisions) {
-    if (instant(item.createdAt) < instant(command.readAt) || instant(item.createdAt) > read) return invalid()
+    if (instant(item.createdAt) < instant(lower) || instant(item.createdAt) > read) return invalid()
   }
   return { ...verified, status: status as 'active' | 'stale' | 'revoked' | 'expired', readAt: String(readAt) }
 }

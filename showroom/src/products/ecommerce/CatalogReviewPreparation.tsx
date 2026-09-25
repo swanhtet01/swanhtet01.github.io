@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { currentManagedIdentity, sameManagedIdentity, loadManagedEcommerceOperatorDecisions, loadManagedEcommercePreparation, loadManagedEcommerceRecipients, prepareManagedEcommerceReview, withdrawManagedEcommerceReview, reconcileManagedEcommerceReview, resolveExpiredManagedEcommerceReview, type ManagedIdentity } from '../../core/managed-trial'
-import { verifyCatalogOperatorDecisions, verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, verifyCatalogReconciliation, verifyCatalogExpiredAbsence, readCatalogCommand, retainCatalogCommand, clearCatalogCommand, type CatalogPreparation, type CatalogRecipients, type CatalogPreparationCommand, type CatalogPreparationReceipt } from './operator-review-contract'
+import { currentManagedIdentity, sameManagedIdentity, loadManagedEcommerceReviews, loadManagedEcommerceOperatorDecisions, loadManagedEcommercePreparation, loadManagedEcommerceRecipients, prepareManagedEcommerceReview, withdrawManagedEcommerceReview, reconcileManagedEcommerceReview, resolveExpiredManagedEcommerceReview, type ManagedIdentity } from '../../core/managed-trial'
+import { verifyCatalogReviewDirectory, type CatalogSavedReview, verifyCatalogOperatorDecisions, verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, verifyCatalogReconciliation, verifyCatalogExpiredAbsence, readCatalogCommand, retainCatalogCommand, clearCatalogCommand, type CatalogPreparation, type CatalogRecipients, type CatalogPreparationCommand, type CatalogPreparationReceipt } from './operator-review-contract'
 import { PreparedCatalog } from './PreparedCatalog'
 
 export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId: string; actorId: string }) {
@@ -14,8 +14,10 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
   const lock = useRef(false), epoch = useRef(0)
   const key = `supermega.ecommerce.pending-review.v1:${JSON.stringify([workspaceId, actorId])}`
   const [responses, setResponses] = useState<ReturnType<typeof verifyCatalogOperatorDecisions> | null>(null)
+  const [directory, setDirectory] = useState<ReturnType<typeof verifyCatalogReviewDirectory> | null>(null)
+  const [chosen, setChosen] = useState<CatalogSavedReview | null>(null)
   useEffect(() => {
-    const clear = () => { epoch.current++; setSource(null); setRecipients(null); setSelected(''); setPending(null); setReceipt(null); setResponses(null); setMessage('Open the saved catalog to continue.') }
+    const clear = () => { epoch.current++; setSource(null); setRecipients(null); setSelected(''); setPending(null); setReceipt(null); setResponses(null); setDirectory(null); setChosen(null); setMessage('Open the saved catalog to continue.') }
     clear()
     window.addEventListener('focus', clear); window.addEventListener('storage', clear)
     return () => { epoch.current++; window.removeEventListener('focus', clear); window.removeEventListener('storage', clear) }
@@ -23,7 +25,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
   async function identity() {
     const who = await currentManagedIdentity()
     if (!who || who.workspaceId !== workspaceId || who.userId !== actorId) {
-      epoch.current++; setSource(null); setRecipients(null); setSelected(''); setPending(null); setReceipt(null); setResponses(null)
+      epoch.current++; setSource(null); setRecipients(null); setSelected(''); setPending(null); setReceipt(null); setResponses(null); setDirectory(null); setChosen(null)
       setMessage('Your account changed. Reopen this workspace to continue.')
       throw Error('Account changed')
     }
@@ -45,7 +47,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
   }
   async function open(after?: string) {
     if (lock.current) return
-    lock.current = true; setBusy(true); setResponses(null)
+    lock.current = true; setBusy(true); setResponses(null); setChosen(null); setDirectory(null)
     const started = epoch.current
     try {
       const who = await identity()
@@ -76,7 +78,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
   }
   async function prepare() {
     if (lock.current || (!pending && (!source || !selected))) return
-    lock.current = true; setBusy(true); setResponses(null)
+    lock.current = true; setBusy(true); setResponses(null); setChosen(null); setDirectory(null)
     const started = epoch.current
     try {
       const who = await identity()
@@ -98,7 +100,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
   }
   async function resolveExpired() {
     if (lock.current || !pending || receipt) return
-    lock.current = true; setBusy(true); setResponses(null)
+    lock.current = true; setBusy(true); setResponses(null); setChosen(null); setDirectory(null)
     const started = epoch.current
     try {
       const who = await identity()
@@ -116,7 +118,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
   async function reconcile() {
     const displayed = pending ?? receipt
     if (lock.current || !displayed) return
-    lock.current = true; setBusy(true); setResponses(null)
+    lock.current = true; setBusy(true); setResponses(null); setChosen(null); setDirectory(null)
     const started = epoch.current
     try {
       const who = await identity()
@@ -142,29 +144,41 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
           window.sessionStorage.removeItem(key + ':receipt')
           if (window.sessionStorage.getItem(key + ':receipt') !== null) throw Error('Receipt retained')
         }
-        setReceipt(null); setResponses(null); setPending(null); setSource(null); setRecipients(null)
+        setReceipt(null); setResponses(null); setDirectory(null); setChosen(null); setPending(null); setSource(null); setRecipients(null)
         setMessage('This review is inactive. Open the saved catalog to prepare a new review.')
       }
     } catch { if (started === epoch.current) setMessage('Review status is unconfirmed. Your saved request is retained; check again.') }
     finally { lock.current = false; setBusy(false) }
   }
-  async function readResponses(after?: string) {
-    if (lock.current || !receipt) return
+  async function savedReviews(after?: string) {
+    if (lock.current) return
+    lock.current=true; setBusy(true); setResponses(null); setChosen(null); setDirectory(null)
+    const started=epoch.current
+    try {
+      const who=await identity()
+      const result=verifyCatalogReviewDirectory(await loadManagedEcommerceReviews(who,after),after)
+      if(await current(who,started))setDirectory(result)
+    } catch { if(started===epoch.current)setMessage('Could not load saved reviews.') }
+    finally {lock.current=false;setBusy(false)}
+  }
+  async function readResponses(after?: string, selected = chosen) {
+    if (lock.current || (!receipt && !selected)) return
     lock.current = true; setBusy(true); setResponses(null)
     const started = epoch.current
     try {
       const who = await identity()
-      const retained = savedReview()
-      if (!retained || retained.receipt.reviewId !== receipt.reviewId) throw Error('Review changed')
-      const page = verifyCatalogOperatorDecisions(await loadManagedEcommerceOperatorDecisions(receipt.reviewId, who, after), retained.command, after)
+      const retained = selected ? null : savedReview()
+      const binding = selected ?? retained?.command
+      if (!binding || (!selected && retained?.receipt.reviewId !== receipt?.reviewId)) throw Error('Review changed')
+      const page = verifyCatalogOperatorDecisions(await loadManagedEcommerceOperatorDecisions(binding.reviewId, who, after), binding, after)
       if (!await current(who, started)) return
-      setResponses(page); setMessage('Customer response. Publishing still needs review.')
+      setChosen(selected); setResponses(page); setMessage('Customer response. Publishing still needs review.')
     } catch { if (started === epoch.current) setMessage('Could not check the response. Try again.') }
     finally { lock.current = false; setBusy(false) }
   }
   async function withdraw() {
     if (lock.current || !receipt) return
-    lock.current = true; setBusy(true); setResponses(null)
+    lock.current = true; setBusy(true); setResponses(null); setChosen(null); setDirectory(null)
     const started = epoch.current
     try {
       const who = await identity()
@@ -177,7 +191,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
       if (stored !== null) clearCatalogCommand(window.sessionStorage, key, command)
       window.sessionStorage.removeItem(key + ':receipt')
       if (window.sessionStorage.getItem(key + ':receipt') !== null) throw Error('Receipt retained')
-      setReceipt(null); setResponses(null); setPending(null); setSource(null); setRecipients(null)
+      setReceipt(null); setResponses(null); setDirectory(null); setChosen(null); setPending(null); setSource(null); setRecipients(null)
       setMessage('Review withdrawn. The customer link no longer opens this review.')
     } catch { if (started === epoch.current) setMessage('Withdrawal is unconfirmed. Retry withdrawal for this review.') }
     finally { lock.current = false; setBusy(false) }
@@ -185,6 +199,13 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
   return <section className="catalog-review-tools" aria-label="Prepare customer catalog" aria-busy={busy}>
     <p role="status">{message}</p>
     <button className="core-button" type="button" disabled={busy} onClick={() => void open()}>Open saved catalog</button>
+    <button className="core-button" type="button" disabled={busy} onClick={() => void savedReviews()}>Saved reviews</button>
+    {directory ? <div aria-label="Saved reviews">
+      {!directory.reviews.length ? <p>No saved reviews.</p> : directory.reviews.map(item => <button className="core-button" key={item.reviewId} disabled={busy} onClick={() => {setChosen(item); void readResponses(undefined,item)}}>
+        {item.preparedAt.slice(0,10)} · {item.status}
+      </button>)}
+      {directory.nextAfter ? <button className="core-button" disabled={busy} onClick={() => void savedReviews(directory.nextAfter!)}>More reviews</button> : null}
+    </div> : null}
     {source ? <details><summary>Preview catalog</summary><PreparedCatalog preview={source.preview} /></details> : null}
     {recipients && !receipt ? <>
       <label>Customer<select value={selected} disabled={busy || !!pending} onChange={event => setSelected(event.target.value)}>
@@ -194,7 +215,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
     </> : null}
     {!receipt && (pending || (source && recipients)) ? <button className="core-button primary" type="button" disabled={busy || (!pending && !selected)} onClick={() => void prepare()}>{pending ? 'Retry same request' : 'Prepare review'}</button> : null}
     {receipt ? <a className="core-button primary" href={`/ecommerce/review/${receipt.reviewId}`}>Open private review</a> : null}
-    {receipt ? <button className="core-button" type="button" disabled={busy} onClick={() => void readResponses()}>Check response</button> : null}
+    {receipt ? <button className="core-button" type="button" disabled={busy} onClick={() => void readResponses(undefined,null)}>Check response</button> : null}
     {responses ? <section aria-label="Customer response">
       {responses.status !== 'active' ? <p>Review {responses.status}. These are earlier responses.</p> : null}
       {!responses.decisions.length ? <p>No response on this page.</p> : responses.decisions.map(item => <div key={item.commandId}>

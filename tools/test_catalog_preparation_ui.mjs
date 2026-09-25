@@ -22,11 +22,18 @@ function harness() {
   if(name==='../../core/managed-trial')return {
    currentManagedIdentity:async()=>h.who,sameManagedIdentity:(a,b)=>a.workspaceId===b.workspaceId&&a.userId===b.userId,
    loadManagedEcommercePreparation:async()=>{h.sourceReads=(h.sourceReads??0)+1;if(h.readFail)throw Error('unavailable');return {}},loadManagedEcommerceRecipients:async()=>{h.recipientReads=(h.recipientReads??0)+1;if(h.readFail)throw Error('unavailable');return {recipients:[{grantId:id,label:'Customer'}],nextAfter:null}},
+   loadManagedEcommerceReviews:async (who,after)=>{
+    h.directoryReads=(h.directoryReads??0)+1
+    if(h.directoryWait)await h.directoryWait
+    return {reviews:[{reviewId:id,sourceVersion:1,contentRevision:0,previewDigest:prepared.previewDigest,
+      preparedAt:prepared.readAt,expiresAt:new Date(Date.now()+86400000).toISOString(),status:'active'}],
+      nextAfter:null,readAt:new Date().toISOString(),publicationAuthorized:false,deploymentAuthorized:false,...h.directoryPatch}
+   },
    loadManagedEcommerceOperatorDecisions:async (reviewId,who,after)=>{
     h.responseReads=(h.responseReads??0)+1;h.responseCursor=after
     if(h.responseWait)await h.responseWait;if(h.responseFail)throw Error('unavailable')
     const envelope=[...h.storage.values()].map(JSON.parse).find(v=>v.command)
-    const command=envelope.command
+    const command=envelope?.command??{expectedVersion:1,contentRevision:0,previewDigest:prepared.previewDigest,readAt:prepared.readAt}
     return {reviewId,sourceVersion:command.expectedVersion,contentRevision:command.contentRevision,previewDigest:command.previewDigest,
       status:'active',readAt:new Date().toISOString(),decisions:[{commandId:id,kind:'feedback',note:'စျေးနှုန်း ပြင်ပါ',createdAt:command.readAt}],
       nextAfter:null,publicationAuthorized:false,deploymentAuthorized:false,...h.responsePatch}
@@ -50,7 +57,7 @@ function harness() {
  }})
  h.render=()=>{h.cursor=0;h.effects=[];return exports.CatalogReviewPreparation({workspaceId:'workspace',actorId:'owner'})}
  const nodes=t=>Array.isArray(t)?t.flatMap(nodes):t&&typeof t==='object'?[t,...nodes(t.props?.children)]:[]
- h.click=label=>{const button=nodes(h.render()).find(n=>n.type==='button'&&n.props.children===label);assert.ok(button,label);button.props.onClick()}
+ h.click=label=>{const button=nodes(h.render()).find(n=>n.type==='button'&&(Array.isArray(n.props.children)?n.props.children.join(''):n.props.children)===label);assert.ok(button,label);button.props.onClick()}
  h.render();h.cleanup=h.effects[0]();return h
 }
 const flush=async()=>{for(let i=0;i<25;i++)await Promise.resolve()}
@@ -203,4 +210,37 @@ test('operator response pages replace previous notes and label inactive history'
  h.click('More responses');await flush();assert.equal(h.responseCursor,commandId(50))
  assert.match(JSON.stringify(h.render()),/Last note/);assert.doesNotMatch(JSON.stringify(h.render()),/Earlier note/)
  assert.equal(h.writes.length,1)
+})
+
+
+test('saved directory restores read-only responses with empty tab storage',async()=>{
+ const h=harness();assert.equal(h.storage.size,0)
+ h.click('Saved reviews');await flush()
+ h.click(prepared.readAt.slice(0,10)+' · active');await flush()
+ assert.match(JSON.stringify(h.render()),/စျေးနှုန်း ပြင်ပါ/)
+ assert.equal(h.storage.size,0);assert.equal(h.writes.length,0);assert.equal(h.withdrawals.length,0)
+ assert.doesNotMatch(JSON.stringify(h.render()),/Withdraw review|Retry same request|Prepare review/)
+ h.listeners.get('focus')();assert.doesNotMatch(JSON.stringify(h.render()),/စျေးနှုန်း ပြင်ပါ/)
+})
+
+test('directory rejects invalid payload and late identity changes without replacing pending command',async()=>{
+ for(const change of ['invalid','account','focus']){
+  const h=harness();h.click('Open saved catalog');await flush();h.fail=true;h.click('Prepare review');await flush()
+  const before=JSON.stringify([...h.storage]);let release;h.directoryWait=new Promise(resolve=>{release=resolve})
+  h.click('Saved reviews');await flush()
+  if(change==='invalid')h.directoryPatch={publicationAuthorized:true}
+  else if(change==='account')h.who={workspaceId:'other',userId:'other'}
+  else h.listeners.get('focus')()
+  release();await flush();assert.equal(JSON.stringify([...h.storage]),before);assert.equal(h.writes.length,1)
+  assert.doesNotMatch(JSON.stringify(h.render()),/ · active/)
+ }
+})
+
+test('directory contract rejects unordered, oversized or malformed saved assignments',()=>{
+ const item={reviewId:id,sourceVersion:1,contentRevision:0,previewDigest:prepared.previewDigest,preparedAt:prepared.readAt,
+  expiresAt:new Date(Date.now()+86400000).toISOString(),status:'active'}
+ const page={reviews:[item],nextAfter:null,readAt:new Date().toISOString(),publicationAuthorized:false,deploymentAuthorized:false}
+ for(const patch of [{nextAfter:id},{reviews:[item,item]},{reviews:[{...item,sourceVersion:0}]},{reviews:[{...item,status:'published'}]},
+  {reviews:[{...item,recipient:'private'}]},{reviews:[{...item,expiresAt:prepared.readAt}]},{readAt:'bad'},{deploymentAuthorized:true}])assert.throws(()=>contract.verifyCatalogReviewDirectory({...page,...patch}))
+ assert.throws(()=>contract.verifyCatalogReviewDirectory(page,id))
 })

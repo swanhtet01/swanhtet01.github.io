@@ -3987,6 +3987,12 @@ export async function loadManagedEcommerceDecisions(reviewId: string, expectedId
     { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
+export async function loadManagedEcommerceReviews(expectedIdentity: ManagedIdentity, after?: string) {
+  if (after !== undefined && (after.length !== 36 || !managedReviewUuid.test(after))) throw errorEcommerceReviewInvalid('Invalid review page.')
+  return authorizedRequest<unknown>('/api/trial/v1/ecommerce-reviews' + (after ? `?after=${after}` : ''),
+    { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
+}
+
 export async function loadManagedEcommerceOperatorDecisions(reviewId: string, expectedIdentity: ManagedIdentity, after?: string) {
   for (const id of [reviewId, ...(after === undefined ? [] : [after])]) {
     if (!managedReviewUuid.test(id)) throw errorEcommerceReviewInvalid('This review link is invalid.')
