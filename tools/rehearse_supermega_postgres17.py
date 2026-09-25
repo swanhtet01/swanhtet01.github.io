@@ -3744,6 +3744,11 @@ def _run_rehearsal(
             )
             phase = "runtime_provisioning"
             _provision_runtime(admin_database_url, runtime_password)
+            phase = "runtime_password_expiry"
+            from provision_supermega_runtime_role import apply_runtime_role
+            runtime_expiry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+            with _connect(admin_database_url) as expiry_connection:
+                apply_runtime_role(expiry_connection, runtime_password, valid_until=runtime_expiry)
             phase = "local_storage_catalog_fixture"
             _bootstrap_local_storage_catalog_fixture(admin_database_url)
             phase = "runtime_seed"
@@ -3946,6 +3951,7 @@ def _run_rehearsal(
                     "public_browser_quarantine_enforced": True,
                     "public_browser_quarantine_idempotent": True,
                     "dedicated_runtime_role_validated": True,
+                    "temporary_runtime_password_expiry_verified": True,
                     **boundaries,
                     **product_journeys,
                     **approval_authority,
