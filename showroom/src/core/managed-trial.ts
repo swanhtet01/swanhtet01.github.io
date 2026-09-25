@@ -2603,8 +2603,13 @@ async function requestManagedSignup(input: CreateAccountInput | string, shownTer
       : await supabase.auth.resend({ type: 'signup', email: request.email, options: { emailRedirectTo } })
     if (result.data && 'session' in result.data && result.data.session) {
       // A misconfigured provider must not silently turn signup into signed-in access.
-      await supabase.auth.signOut({ scope: 'local' })
-      forgetWorkspace()
+      // A late signup response must not revoke a different, newer session.
+      const latest = await supabase.auth.getSession()
+      if (!latest.error && latest.data.session?.access_token === result.data.session.access_token
+        && latest.data.session?.user.id === result.data.session.user.id) {
+        await supabase.auth.signOut({ scope: 'local' })
+        if (!(await supabase.auth.getSession()).data.session) forgetWorkspace()
+      }
       throw managedError('Email confirmation is required before account access.', 'email_confirmation_required')
     }
     if (result.error && !['user_already_exists', 'email_exists', 'user_not_found'].includes(result.error.code ?? '')) {

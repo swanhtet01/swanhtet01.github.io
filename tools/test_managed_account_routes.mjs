@@ -354,9 +354,25 @@ test('existing sessions and unexpected auto-confirmed signup never grant silent 
   })
   await withAuth(async (mod, state) => {
     state.signupResult.data.session = fixedSession
+    state.signUp = async () => { state.session = fixedSession; return state.signupResult }
     await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'email_confirmation_required')
     assert.deepEqual(state.calls.find(([name]) => name === 'signOut'), ['signOut', { scope: 'local' }])
     assert.equal(state.calls.some(([name, url]) => name === 'fetch' && url.includes('workspaces')), false)
+  })
+})
+
+test('late auto-confirmed signup does not clear a newer account or company', async () => {
+  await withAuth(async (mod, state) => {
+    const newer = { ...fixedSession, access_token: 'synthetic-newer-token', user: { ...fixedUser, id: 'newer-user' } }
+    state.signUp = async () => {
+      state.session = newer
+      state.storage.set('supermega.managed.workspace.v1', 'newer-company')
+      return { data: { session: fixedSession }, error: null }
+    }
+    await rejectsCode(mod.createManagedAccount(signupInput, 'v1'), 'email_confirmation_required')
+    assert.equal(state.calls.some(([name]) => name === 'signOut'), false)
+    assert.equal(state.session, newer)
+    assert.equal(state.storage.get('supermega.managed.workspace.v1'), 'newer-company')
   })
 })
 
