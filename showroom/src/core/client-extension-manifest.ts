@@ -375,20 +375,20 @@ function bounded(value: string, label: string, maximum: number) {
   if (!normalized || normalized.length > maximum || Array.from(normalized).some((character) => {
     const point = character.codePointAt(0) as number
     return point <= 31 || point === 127
-  })) throw new Error(`${label} is invalid.`)
+  })) domainError(`${label} is invalid.`)
   return normalized
 }
 
 function uniqueText(values: readonly string[], label: string, minimum: number, maximum: number, itemMaximum: number) {
-  if (!Array.isArray(values) || values.length < minimum || values.length > maximum) throw new Error(`${label} is invalid.`)
+  if (!Array.isArray(values) || values.length < minimum || values.length > maximum) domainError(`${label} is invalid.`)
   const normalized = values.map((value) => bounded(value, label, itemMaximum))
-  if (new Set(normalized).size !== normalized.length) throw new Error(`${label} contains duplicates.`)
+  if (new Set(normalized).size !== normalized.length) domainError(`${label} contains duplicates.`)
   return normalized
 }
 
 function canonicalTimestamp(value: string) {
   const normalized = bounded(value, 'Created at', 32)
-  if (new Date(normalized).toISOString() !== normalized) throw new Error('Created at must be a canonical ISO timestamp.')
+  if (new Date(normalized).toISOString() !== normalized) domainError('Created at must be a canonical ISO timestamp.')
   return normalized
 }
 
@@ -412,7 +412,7 @@ function canonicalJson(value: unknown): string {
     const record = value as Record<string, unknown>
     return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(',')}}`
   }
-  throw new Error('Portal manifest contains a non-canonical value.')
+  domainError('Portal manifest contains a non-canonical value.')
 }
 
 async function canonicalDigest(value: unknown) {
@@ -422,7 +422,7 @@ async function canonicalDigest(value: unknown) {
 
 function evidenceDigest(value: string, label: string) {
   const normalized = bounded(value, label, 71)
-  if (!SHA256.test(normalized)) throw new Error(`${label} must be a SHA-256 digest.`)
+  if (!SHA256.test(normalized)) domainError(`${label} must be a SHA-256 digest.`)
   return normalized
 }
 
@@ -432,18 +432,18 @@ export async function buildClientExtensionManifest(
   createdAtValue: string,
 ): Promise<ClientExtensionManifest> {
   const selectedProducts = blueprint.products.map((product) => product.product)
-  if (!selectedProducts.includes(request.baseProduct)) throw new Error('The extension base product is not selected for this client.')
-  if (!ID.test(request.id)) throw new Error('The extension id must start with ext- and use lowercase letters numbers or hyphens.')
-  if (!DOMAIN.includes(request.domain)) throw new Error('Choose a supported extension domain.')
-  if (!MODE.includes(request.mode)) throw new Error('Choose a supported extension mode.')
+  if (!selectedProducts.includes(request.baseProduct)) domainError('The extension base product is not selected for this client.')
+  if (!ID.test(request.id)) domainError('The extension id must start with ext- and use lowercase letters numbers or hyphens.')
+  if (!DOMAIN.includes(request.domain)) domainError('Choose a supported extension domain.')
+  if (!MODE.includes(request.mode)) domainError('Choose a supported extension mode.')
 
   const records = uniqueText(request.records, 'Extension records', 1, 16, 64)
-  if (records.some((record) => !RECORD_ID.test(record))) throw new Error('Extension record ids must use lowercase snake_case.')
+  if (records.some((record) => !RECORD_ID.test(record))) domainError('Extension record ids must use lowercase snake_case.')
   const roles = uniqueText(request.roles, 'Extension roles', 1, 12, 80)
   const dependsOn = uniqueText(request.dependsOn, 'Extension dependencies', 1, 16, 80)
   const knownCapabilities = clientCapabilityIdsForProducts(selectedProducts)
   if (dependsOn.some((dependency) => !knownCapabilities.has(dependency))) {
-    throw new Error('Every extension dependency must be a known capability available to this client.')
+    domainError('Every extension dependency must be a known capability available to this client.')
   }
   const acceptanceCriteria = uniqueText(request.acceptanceCriteria, 'Extension acceptance criteria', 2, 12, 240)
 
@@ -487,9 +487,9 @@ export async function buildClientExtensionManifest(
 
 export async function verifyClientExtensionManifest(value: unknown, blueprint: ClientDemoBlueprint) {
   try {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid')
+    if (!value || typeof value !== 'object' || Array.isArray(value)) domainError('invalid')
     const candidate = value as Partial<ClientExtensionManifest>
-    if (!candidate.authority || typeof candidate.authority !== 'object' || Array.isArray(candidate.authority)) throw new Error('invalid')
+    if (!candidate.authority || typeof candidate.authority !== 'object' || Array.isArray(candidate.authority)) domainError('invalid')
     const rebuilt = await buildClientExtensionManifest(blueprint, {
       id: candidate.id as string,
       label: candidate.label as string,
@@ -502,10 +502,10 @@ export async function verifyClientExtensionManifest(value: unknown, blueprint: C
       dependsOn: candidate.dependsOn as string[],
       acceptanceCriteria: candidate.acceptanceCriteria as string[],
     }, candidate.createdAt as string)
-    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) domainError('invalid')
     return { ok: true as const, contract: CLIENT_EXTENSION_MANIFEST_SCHEMA, digest: rebuilt.digest, blueprintDigest: rebuilt.blueprintDigest }
   } catch {
-    throw new Error('The client extension manifest is invalid, belongs to another client blueprint, or changed after review.')
+    domainError('The client extension manifest is invalid, belongs to another client blueprint, or changed after review.')
   }
 }
 
@@ -516,23 +516,23 @@ export async function buildClientExtensionActivationPlan(
 ): Promise<ClientExtensionActivationPlan> {
   const verified = await verifyClientExtensionManifest(manifest, blueprint)
   if (!Number.isInteger(evidence.implementationVersion) || evidence.implementationVersion < 1 || evidence.implementationVersion > 1000) {
-    throw new Error('Implementation version must be an integer from 1 to 1000.')
+    domainError('Implementation version must be an integer from 1 to 1000.')
   }
   const implementationDigest = evidenceDigest(evidence.implementationDigest, 'Implementation digest')
   const migrationDigest = evidenceDigest(evidence.migrationDigest, 'Migration digest')
   const rollbackDigest = evidenceDigest(evidence.rollbackDigest, 'Rollback digest')
   const securityReviewDigest = evidenceDigest(evidence.securityReviewDigest, 'Security review digest')
   if (new Set([implementationDigest, migrationDigest, rollbackDigest, securityReviewDigest]).size !== 4) {
-    throw new Error('Implementation, migration, rollback, and security evidence must be independently digest-bound.')
+    domainError('Implementation, migration, rollback, and security evidence must be independently digest-bound.')
   }
   const securityReviewedAt = canonicalTimestamp(evidence.securityReviewedAt)
   const approvedAt = canonicalTimestamp(evidence.approvedAt)
   if (Date.parse(approvedAt) < Date.parse(securityReviewedAt)) {
-    throw new Error('Owner activation approval cannot predate the security review.')
+    domainError('Owner activation approval cannot predate the security review.')
   }
   const approvedBy = bounded(evidence.approvedBy, 'Activation approver', 80)
   const blueprintOwner = bounded(blueprint.client.owner, 'Blueprint owner', 80)
-  if (approvedBy !== blueprintOwner) throw new Error('Activation approval must come from the named client owner.')
+  if (approvedBy !== blueprintOwner) domainError('Activation approval must come from the named client owner.')
 
   const payload: Omit<ClientExtensionActivationPlan, 'digest'> = {
     schema: CLIENT_EXTENSION_ACTIVATION_PLAN_SCHEMA,
@@ -587,7 +587,7 @@ export async function verifyClientExtensionActivationPlan(
   blueprint: ClientDemoBlueprint,
 ) {
   try {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid')
+    if (!value || typeof value !== 'object' || Array.isArray(value)) domainError('invalid')
     const candidate = value as Partial<ClientExtensionActivationPlan>
     const implementation = candidate.implementation as ClientExtensionActivationPlan['implementation']
     const security = candidate.reviews?.security as ClientExtensionActivationPlan['reviews']['security']
@@ -603,7 +603,7 @@ export async function verifyClientExtensionActivationPlan(
       approvedBy: approval?.approvedBy,
       approvedAt: approval?.approvedAt,
     })
-    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) domainError('invalid')
     return {
       ok: true as const,
       contract: CLIENT_EXTENSION_ACTIVATION_PLAN_SCHEMA,
@@ -612,7 +612,7 @@ export async function verifyClientExtensionActivationPlan(
       status: rebuilt.authority.status,
     }
   } catch {
-    throw new Error('The client extension activation plan is invalid, stale, approved by another owner, or changed after review.')
+    domainError('The client extension activation plan is invalid, stale, approved by another owner, or changed after review.')
   }
 }
 
@@ -627,7 +627,7 @@ export async function buildClientExtensionPortalBinding(
   const portalDigest = evidenceDigest(portal.manifestDigest, 'Portal manifest digest')
   const portalPayload = { ...portal } as Record<string, unknown>
   delete portalPayload.manifestDigest
-  if (await canonicalDigest(portalPayload) !== portalDigest) throw new Error('The client portal manifest digest is invalid.')
+  if (await canonicalDigest(portalPayload) !== portalDigest) domainError('The client portal manifest digest is invalid.')
   if (portal.contract !== 'supermega.client_portal_activation_manifest.v1'
     || portal.status !== 'approved_plan_not_applied'
     || portal.authority?.humanApprovalBound !== true
@@ -644,19 +644,19 @@ export async function buildClientExtensionPortalBinding(
     || portal.customSolutions?.securityReviewRequired !== true
     || portal.customSolutions?.namedOwnerApprovalRequired !== true
     || portal.customSolutions?.crossProductWritesAllowed !== false) {
-    throw new Error('The client portal is not an approved no-write custom-solution target.')
+    domainError('The client portal is not an approved no-write custom-solution target.')
   }
   const workspaceLabel = bounded(portal.tenant?.workspaceLabel, 'Portal workspace label', 60)
   const ownerLabel = bounded(portal.tenant?.ownerLabel, 'Portal owner label', 80)
-  if (workspaceLabel !== manifest.workspace || workspaceLabel !== blueprint.client.workspace) throw new Error('The extension workspace does not match the tenant portal.')
-  if (ownerLabel !== blueprint.client.owner || activationPlan.reviews.ownerActivation.approvedBy !== ownerLabel) throw new Error('The extension owner approval does not match the tenant portal owner.')
+  if (workspaceLabel !== manifest.workspace || workspaceLabel !== blueprint.client.workspace) domainError('The extension workspace does not match the tenant portal.')
+  if (ownerLabel !== blueprint.client.owner || activationPlan.reviews.ownerActivation.approvedBy !== ownerLabel) domainError('The extension owner approval does not match the tenant portal owner.')
   const productEntitlement = PRODUCT_ENTITLEMENT[manifest.baseProduct]
   const productBindings = portal.portal?.productBindings
   if (!Array.isArray(portal.tenant?.products)
     || !portal.tenant.products.includes(productEntitlement)
     || !Array.isArray(productBindings)
     || !productBindings.some((binding) => binding?.product === productEntitlement && binding.runtimeProduct === manifest.baseProduct)) {
-    throw new Error('The extension base product is not purchased and bound to this tenant portal.')
+    domainError('The extension base product is not purchased and bound to this tenant portal.')
   }
   const payload: Omit<ClientExtensionPortalBinding, 'digest'> = {
     schema: CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA,
@@ -714,7 +714,7 @@ export async function verifyClientExtensionPortalBinding(
 ) {
   try {
     const rebuilt = await buildClientExtensionPortalBinding(manifest, activationPlan, blueprint, portal)
-    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) domainError('invalid')
     return {
       ok: true as const,
       contract: CLIENT_EXTENSION_PORTAL_BINDING_SCHEMA,
@@ -724,7 +724,7 @@ export async function verifyClientExtensionPortalBinding(
       status: rebuilt.authority.status,
     }
   } catch {
-    throw new Error('The client extension portal binding is invalid, cross-tenant, unentitled, stale, or changed after review.')
+    domainError('The client extension portal binding is invalid, cross-tenant, unentitled, stale, or changed after review.')
   }
 }
 
@@ -738,25 +738,25 @@ export async function buildClientExtensionRuntimeAuthorization(
 ): Promise<ClientExtensionRuntimeAuthorization> {
   const bindingVerification = await verifyClientExtensionPortalBinding(binding, manifest, activationPlan, blueprint, portal)
   const releaseCommit = bounded(evidence.releaseCommit, 'Runtime release commit', 40)
-  if (!GIT_COMMIT.test(releaseCommit)) throw new Error('Runtime activation requires an exact lowercase 40-character release commit.')
-  if (!['pilot', 'production'].includes(evidence.environment)) throw new Error('Runtime activation environment must be pilot or production.')
+  if (!GIT_COMMIT.test(releaseCommit)) domainError('Runtime activation requires an exact lowercase 40-character release commit.')
+  if (!['pilot', 'production'].includes(evidence.environment)) domainError('Runtime activation environment must be pilot or production.')
   const approvedBy = bounded(evidence.approvedBy, 'Runtime activation approver', 80)
   const approvedByActorId = bounded(evidence.approvedByActorId, 'Runtime activation approver actor id', 160)
   if (approvedBy !== binding.tenant.ownerLabel || approvedByActorId !== binding.tenant.ownerActorId) {
-    throw new Error('Runtime activation approval must come from the exact tenant portal owner.')
+    domainError('Runtime activation approval must come from the exact tenant portal owner.')
   }
   const approvedAt = canonicalTimestamp(evidence.approvedAt)
   const expiresAt = canonicalTimestamp(evidence.expiresAt)
   const approvedAtMs = Date.parse(approvedAt)
   const expiresAtMs = Date.parse(expiresAt)
   if (approvedAtMs < Date.parse(activationPlan.reviews.ownerActivation.approvedAt)) {
-    throw new Error('Runtime activation approval cannot predate the reviewed extension plan.')
+    domainError('Runtime activation approval cannot predate the reviewed extension plan.')
   }
   if (expiresAtMs <= approvedAtMs || expiresAtMs - approvedAtMs > 24 * 60 * 60 * 1000) {
-    throw new Error('Runtime activation authorization must expire after approval and within 24 hours.')
+    domainError('Runtime activation authorization must expire after approval and within 24 hours.')
   }
   const idempotencyKey = bounded(evidence.idempotencyKey, 'Runtime activation idempotency key', 180)
-  if (!IDEMPOTENCY_KEY.test(idempotencyKey)) throw new Error('Runtime activation idempotency key is invalid.')
+  if (!IDEMPOTENCY_KEY.test(idempotencyKey)) domainError('Runtime activation idempotency key is invalid.')
 
   const payload: Omit<ClientExtensionRuntimeAuthorization, 'digest'> = {
     schema: CLIENT_EXTENSION_RUNTIME_AUTHORIZATION_SCHEMA,
@@ -808,7 +808,7 @@ export async function verifyClientExtensionRuntimeAuthorization(
   executionAtValue?: string,
 ) {
   try {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid')
+    if (!value || typeof value !== 'object' || Array.isArray(value)) domainError('invalid')
     const candidate = value as Partial<ClientExtensionRuntimeAuthorization>
     const rebuilt = await buildClientExtensionRuntimeAuthorization(binding, manifest, activationPlan, blueprint, portal, {
       environment: candidate.target?.environment as ClientExtensionRuntimeAuthorizationEvidence['environment'],
@@ -819,10 +819,10 @@ export async function verifyClientExtensionRuntimeAuthorization(
       expiresAt: candidate.approval?.expiresAt as string,
       idempotencyKey: candidate.target?.idempotencyKey as string,
     })
-    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) domainError('invalid')
     const executionAt = executionAtValue === undefined ? null : canonicalTimestamp(executionAtValue)
     if (executionAt !== null && (Date.parse(executionAt) < Date.parse(rebuilt.approval.approvedAt) || Date.parse(executionAt) > Date.parse(rebuilt.approval.expiresAt))) {
-      throw new Error('expired')
+      domainError('expired')
     }
     return {
       ok: true as const,
@@ -837,7 +837,7 @@ export async function verifyClientExtensionRuntimeAuthorization(
       status: rebuilt.authority.status,
     }
   } catch {
-    throw new Error('The client extension runtime authorization is invalid, expired by contract, cross-tenant, stale, or changed after approval.')
+    domainError('The client extension runtime authorization is invalid, expired by contract, cross-tenant, stale, or changed after approval.')
   }
 }
 
@@ -854,39 +854,39 @@ export async function buildClientExtensionActivationReceipt(
   const authorizationVerification = await verifyClientExtensionRuntimeAuthorization(authorization, binding, manifest, activationPlan, blueprint, portal, activatedAt)
   const activatedAtMs = Date.parse(activatedAt)
   if (activatedAtMs < Date.parse(authorization.approval.approvedAt) || activatedAtMs > Date.parse(authorization.approval.expiresAt)) {
-    throw new Error('Extension activation must occur inside the authorized time window.')
+    domainError('Extension activation must occur inside the authorized time window.')
   }
   const activatedByActorId = bounded(evidence.activatedByActorId, 'Extension activation actor id', 160)
-  if (activatedByActorId !== authorization.approval.approvedByActorId) throw new Error('Extension activation actor does not match the authorized tenant owner.')
+  if (activatedByActorId !== authorization.approval.approvedByActorId) domainError('Extension activation actor does not match the authorized tenant owner.')
   const idempotencyKey = bounded(evidence.idempotencyKey, 'Extension activation idempotency key', 180)
-  if (idempotencyKey !== authorization.target.idempotencyKey) throw new Error('Extension activation idempotency key does not match the authorization.')
+  if (idempotencyKey !== authorization.target.idempotencyKey) domainError('Extension activation idempotency key does not match the authorization.')
   const runtimeRelease = {
     commit: bounded(evidence.runtimeRelease?.commit, 'Runtime release commit', 40),
     brandVersion: bounded(evidence.runtimeRelease?.brandVersion, 'Runtime brand version', 80),
     contextVersion: bounded(evidence.runtimeRelease?.contextVersion, 'Runtime context version', 80),
     catalogVersion: bounded(evidence.runtimeRelease?.catalogVersion, 'Runtime catalog version', 80),
   }
-  if (runtimeRelease.commit !== authorization.target.releaseCommit || !GIT_COMMIT.test(runtimeRelease.commit)) throw new Error('Extension activation did not run on the exact authorized release.')
+  if (runtimeRelease.commit !== authorization.target.releaseCommit || !GIT_COMMIT.test(runtimeRelease.commit)) domainError('Extension activation did not run on the exact authorized release.')
   if (![runtimeRelease.brandVersion, runtimeRelease.contextVersion, runtimeRelease.catalogVersion].every((value) => RELEASE_VERSION.test(value))) {
-    throw new Error('Extension activation runtime release versions are invalid.')
+    domainError('Extension activation runtime release versions are invalid.')
   }
   if (!Number.isInteger(evidence.tenantConfigRevision) || evidence.tenantConfigRevision < 1 || evidence.tenantConfigRevision > 2_147_483_647) {
-    throw new Error('Tenant configuration revision must be a positive integer.')
+    domainError('Tenant configuration revision must be a positive integer.')
   }
-  if (evidence.rollbackReady !== true) throw new Error('Extension activation requires rollback readiness.')
+  if (evidence.rollbackReady !== true) domainError('Extension activation requires rollback readiness.')
   if (evidence.customerRecordWritesPerformed !== false
     || evidence.providerCallsPerformed !== false
     || evidence.deploymentPerformed !== false
     || evidence.externalMessagesSent !== false
     || evidence.crossTenantWritesPerformed !== false
     || evidence.crossProductWritesPerformed !== false) {
-    throw new Error('Extension activation evidence exceeds the tenant configuration write authority.')
+    domainError('Extension activation evidence exceeds the tenant configuration write authority.')
   }
   const runtimeReleaseRecordDigest = await canonicalDigest(runtimeRelease)
   const tenantConfigDigest = evidenceDigest(evidence.tenantConfigDigest, 'Tenant configuration digest')
   const executionEvidenceDigest = evidenceDigest(evidence.executionEvidenceDigest, 'Activation execution evidence digest')
   if (new Set([runtimeReleaseRecordDigest, tenantConfigDigest, executionEvidenceDigest, activationPlan.implementation.rollbackDigest]).size !== 4) {
-    throw new Error('Release, tenant configuration, execution, and rollback evidence must be independently digest-bound.')
+    domainError('Release, tenant configuration, execution, and rollback evidence must be independently digest-bound.')
   }
 
   const payload: Omit<ClientExtensionActivationReceipt, 'digest'> = {
@@ -929,7 +929,7 @@ export async function verifyClientExtensionActivationReceipt(
   portal: ClientExtensionPortalContext,
 ) {
   try {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid')
+    if (!value || typeof value !== 'object' || Array.isArray(value)) domainError('invalid')
     const candidate = value as Partial<ClientExtensionActivationReceipt>
     const execution = candidate.execution as ClientExtensionActivationReceipt['execution']
     const authority = candidate.authority as ClientExtensionActivationReceipt['authority']
@@ -954,7 +954,7 @@ export async function verifyClientExtensionActivationReceipt(
       crossTenantWritesPerformed: authority?.crossTenantWritesPerformed,
       crossProductWritesPerformed: authority?.crossProductWritesPerformed,
     })
-    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) domainError('invalid')
     return {
       ok: true as const,
       contract: CLIENT_EXTENSION_ACTIVATION_RECEIPT_SCHEMA,
@@ -965,7 +965,7 @@ export async function verifyClientExtensionActivationReceipt(
       status: rebuilt.execution.status,
     }
   } catch {
-    throw new Error('The client extension activation receipt is invalid, unauthorized, cross-tenant, stale, or changed after execution.')
+    domainError('The client extension activation receipt is invalid, unauthorized, cross-tenant, stale, or changed after execution.')
   }
 }
 
@@ -998,7 +998,7 @@ export async function buildClientExtensionAgentContext(
     || profile.rawBehaviorEntriesIncluded !== false
     || profile.rawDecisionRecordsIncluded !== false
     || profile.modelTrainingAllowed !== false) {
-    throw new Error('The managed context profile is invalid, cross-tenant, cross-owner, or exceeds the extension agent privacy boundary.')
+    domainError('The managed context profile is invalid, cross-tenant, cross-owner, or exceeds the extension agent privacy boundary.')
   }
 
   const payload: Omit<ClientExtensionAgentContext, 'digest'> = {
@@ -1054,7 +1054,7 @@ export async function verifyClientExtensionAgentContext(
     const rebuilt = await buildClientExtensionAgentContext(
       receipt, authorization, binding, manifest, activationPlan, blueprint, portal, profile,
     )
-    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) throw new Error('invalid')
+    if (JSON.stringify(rebuilt) !== JSON.stringify(value)) domainError('invalid')
     return {
       ok: true as const,
       contract: CLIENT_EXTENSION_AGENT_CONTEXT_SCHEMA,
@@ -1065,6 +1065,8 @@ export async function verifyClientExtensionAgentContext(
       status: rebuilt.agentPolicy.status,
     }
   } catch {
-    throw new Error('The client extension agent context is invalid, unactivated, cross-tenant, cross-owner, stale, or changed after review.')
+    domainError('The client extension agent context is invalid, unactivated, cross-tenant, cross-owner, stale, or changed after review.')
   }
 }
+
+function domainError(message: string): never { throw new Error(message) }
