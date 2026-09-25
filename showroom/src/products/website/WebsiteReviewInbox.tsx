@@ -131,7 +131,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
   const [selected, setSelected] = useState<Review | null>(null)
   const [changes, setChanges] = useState<Changes | null>(null)
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('Open the prepared reviews for this company. Nothing is published or sent here.')
+  const [message, setMessage] = useState('Choose a saved website or refresh reviews.')
   const [now, setNow] = useState(() => Date.now())
   const [preparation, setPreparation] = useState<Preparation | null>(null)
   const [withdrawal, setWithdrawal] = useState<string | null>(null)
@@ -194,7 +194,7 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
       }
       if (review) setChanges(data as Changes); else setListing(data as Listing)
       setNow(Date.now())
-      setMessage(review ? 'Retained customer decisions. They do not authorize publication.' : 'Reviews are ordered by reference, not by date. Refresh starts again at the first page.')
+      setMessage(review ? 'Customer response. Publishing still needs approval.' : 'Reviews loaded.')
     } catch {
       if (attempt === epoch.current) {
         setListing(null); setSelected(null); setChanges(null)
@@ -329,9 +329,9 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
   const handoff = !withdrawal && selected && changes ? customerHandoff(selected, changes, window.location.origin, now) : null
 
   return <section className="website-editor-panel" aria-labelledby="website-review-inbox-title">
-    <h2 id="website-review-inbox-title">Customer review decisions</h2>
-    <p>Read customer feedback and acceptance of prepared revisions. Making edits, preparing a new review and publishing remain separate.</p>
-    <button className="core-button" disabled={busy || pendingReceipt !== null} onClick={() => void inspectSavedSource()} type="button">Check saved Website before handoff</button>
+    <h2 id="website-review-inbox-title">Customer reviews</h2>
+    <p>Prepare a review or read customer feedback. Publishing requires a separate approval.</p>
+    <button className="core-button" disabled={busy || pendingReceipt !== null} onClick={() => void inspectSavedSource()} type="button">Preview saved website</button>
     <button className="core-button" disabled={busy} onClick={() => void load()} type="button">Refresh reviews</button>
     <p className="form-notice" role="status">{message}</p>
     {pendingReceipt === 'unavailable' ? <p>Review recovery storage is unavailable or invalid. New preparation is blocked. Restore this browser session or ask the workspace owner to reconcile retained reviews; do not clear storage to retry.</p>
@@ -373,13 +373,17 @@ export function WebsiteReviewInbox({ workspaceId, actorId }: { workspaceId: stri
     {listing?.reviews.length === 0 ? <p>No prepared reviews in this company yet.</p> : null}
     <ul>{listing?.reviews.map(review => <li key={review.reviewId}>
       <strong>Revision {review.contentRevision}</strong> · {review.status} · prepared {new Date(review.preparedAt).toLocaleString()}
-      <p style={{ overflowWrap: 'anywhere' }}>Review reference: {review.reviewId}</p>
-      <p>{review.hasCustomerAcceptance ? 'Customer acceptance retained — release review still required' : review.hasChangeRequests ? 'Customer changes retained'
-        : review.status === 'revoked' ? 'Review withdrawn — no new customer decision can be submitted'
-          : review.status === 'expired' ? 'Review expired — prepare a new review'
-            : review.status === 'stale' ? 'Website changed — prepare a review of the current revision'
-              : 'Awaiting customer decision'} · expires {new Date(review.expiresAt).toLocaleString()}</p>
-      <button className="core-button" disabled={busy} onClick={() => void load(review)} type="button">Read decision for revision {review.contentRevision}</button>
+      <details>
+        <summary style={{ minHeight: 44, padding: '0.75rem 0', cursor: 'pointer' }}>Review details</summary>
+        <p style={{ overflowWrap: 'anywhere' }}>Review reference: {review.reviewId}</p>
+        <p>Expires {new Date(review.expiresAt).toLocaleString()}. Listed by reference, not date.</p>
+      </details>
+      <p>{review.hasCustomerAcceptance ? 'Accepted · release review required' : review.hasChangeRequests ? 'Changes requested'
+        : review.status === 'revoked' ? 'Withdrawn'
+          : review.status === 'expired' ? 'Expired · prepare a new review'
+            : review.status === 'stale' ? 'Website changed · prepare a new review'
+              : 'Awaiting response'}</p>
+      <button className="core-button" disabled={busy} onClick={() => void load(review)} type="button">View response for revision {review.contentRevision}</button>
     </li>)}</ul>
     {listing?.nextAfter ? <button className="core-button" disabled={busy} onClick={() => void load(undefined, listing.nextAfter!)} type="button">Next reviews</button> : null}
     {changes && selected ? <section aria-label="Selected revision customer decision">

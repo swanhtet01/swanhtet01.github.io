@@ -81,7 +81,7 @@ test('settle waits for actual preview hashing, not a fixed number of event-loop 
   beforeDigest = () => new Promise(resolve => { release = resolve })
   let settling
   try {
-    click(render(), 'Check saved Website before handoff')
+    click(render(), 'Preview saved website')
     let settled = false
     settling = settle().then(() => { settled = true })
     for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve))
@@ -114,8 +114,12 @@ test('feedback binds source revision, preserves microsecond order and remains pl
 test('actual inbox loads on demand, displays retained notes and does not send writes', async () => {
   fixture(); let tree = render(); assert.equal(sandbox.h.calls.length, 0)
   click(tree, 'Refresh reviews'); await settle(); tree = render()
-  assert.match(text(tree), /Customer changes retained/)
-  click(tree, 'Read decision for revision 1'); await settle(); tree = render()
+  assert.match(text(tree), /Changes requested/)
+  const details = elements(tree).find(node => node.type === 'details' && text(node).includes('Review reference:'))
+  assert.ok(details); assert.notEqual(details.props.open, true)
+  assert.ok(text(details).includes(row.reviewId))
+  assert.match(text(details), /Expires/)
+  click(tree, 'View response for revision 1'); await settle(); tree = render()
   assert.ok(text(tree).includes(feedback.requests[0].note))
   assert.equal(elements(tree).some(node => node.type === 'script' || node.props?.dangerouslySetInnerHTML), false)
   assert.equal(sandbox.h.calls.length, 2)
@@ -142,8 +146,8 @@ test('operator sees accepted revision and historical warning without a publish a
     : { ...listing, reviews: [acceptedRow] })
   let tree = render()
   click(tree, 'Refresh reviews'); await settle(); tree = render()
-  assert.match(text(tree), /Customer acceptance retained — release review still required/)
-  click(tree, 'Read decision for revision 1'); await settle(); tree = render()
+  assert.match(text(tree), /Accepted · release review required/)
+  click(tree, 'View response for revision 1'); await settle(); tree = render()
   assert.match(text(tree), /Historical decision only/)
   assert.match(text(tree), /Not published or deployment-authorized/)
   assert.match(text(tree), /Revision 1/)
@@ -157,7 +161,7 @@ test('late responses after account change or cleanup cannot reveal private notes
   click(tree, 'Refresh reviews'); await settle()
   sandbox.h.identity = { userId: 'other', workspaceId: 'elsewhere' }
   release(listing); await settle(); tree = render()
-  assert.doesNotMatch(text(tree), /Customer changes retained/)
+  assert.doesNotMatch(text(tree), /Changes requested/)
   assert.match(text(tree), /could not be verified/)
   cleanup()
   fixture(() => new Promise(resolve => { release = resolve }))
@@ -196,7 +200,7 @@ test('actual staff handoff is read-only, current, and clears on account focus ch
   let tree = render(); const cleanup = sandbox.h.effects[0]()
   click(tree, 'Refresh reviews'); await settle(); tree = render()
   assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
-  click(tree, 'Read decision for revision 1'); await settle(); tree = render()
+  click(tree, 'View response for revision 1'); await settle(); tree = render()
   const draft = elements(tree).find(n => n.type === 'textarea')
   assert.equal(draft.props.readOnly, true)
   assert.match(draft.props.value, /Sign in with the account assigned/)
@@ -217,7 +221,7 @@ test('open handoff disappears at expiry without a network write or periodic poll
     fixture((_identity, review) => review ? { ...feedback, requests: [] }
       : { ...listing, reviews: [{ ...row, hasChangeRequests: false }] })
     let tree = render(); click(tree, 'Refresh reviews'); await settle(); tree = render()
-    click(tree, 'Read decision for revision 1'); await settle(); tree = render()
+    click(tree, 'View response for revision 1'); await settle(); tree = render()
     assert.equal(elements(tree).some(n => n.type === 'textarea'), true)
     const cancelExpiry = sandbox.h.effects[1]()
     assert.equal(scheduledDelay, Date.parse(row.expiresAt) - clock + 1)
@@ -258,7 +262,7 @@ test('saved-source verification binds complete preview bytes and refuses authori
 test('staff can inspect verified saved pages without active links, an invitation or provider writes', async () => {
   fixture(); sandbox.h.prepareResponse = () => preparationFixture()
   let tree = render(); assert.equal(sandbox.h.calls.length, 0)
-  click(tree, 'Check saved Website before handoff'); await settle(); tree = render()
+  click(tree, 'Preview saved website'); await settle(); tree = render()
   assert.match(text(tree), /Example Studio · saved revision 2/)
   assert.match(text(tree), /Unsaved edits are not included/)
   assert.match(text(tree), /Saved headline/)
@@ -278,7 +282,7 @@ test('staff can inspect verified saved pages without active links, an invitation
 test('saved-source late response cannot cross an account boundary', async () => {
   let release
   fixture(); sandbox.h.prepareResponse = () => new Promise(resolve => { release = resolve })
-  let tree = render(); click(tree, 'Check saved Website before handoff'); await settle()
+  let tree = render(); click(tree, 'Preview saved website'); await settle()
   sandbox.h.identity = { userId: 'another', workspaceId: 'elsewhere' }
   release(preparationFixture()); await settle(); tree = render()
   assert.doesNotMatch(text(tree), /Saved headline/)
@@ -287,15 +291,16 @@ test('saved-source late response cannot cross an account boundary', async () => 
 
 test('saved-source transport is identity-bound, no-store, and redirect-refusing', () => {
   const transport = readFileSync('showroom/src/core/managed-trial.ts', 'utf8')
+  assert.match(transport, /const privateReviewRequest = \{ cache: 'no-store', redirect: 'error', credentials: 'omit' \} as const/)
   const slice = transport.slice(transport.indexOf('export async function loadManagedWebsitePreparation('), transport.indexOf('export async function loadManagedWebsiteReviewStaffPage('))
   assert.match(slice, /\/api\/trial\/v1\/website-review-preparation/)
-  for (const boundary of ["cache: 'no-store'", "redirect: 'error'", "credentials: 'omit'", 'true, expectedIdentity']) assert.ok(slice.includes(boundary))
+  for (const boundary of ['...privateReviewRequest', 'true, expectedIdentity']) assert.ok(slice.includes(boundary))
   assert.doesNotMatch(slice, /POST|workspaceId=|recipientActorId=/)
 })
 
 async function openDecision() {
   let tree = render(); click(tree, 'Refresh reviews'); await settle(); tree = render()
-  click(tree, 'Read decision for revision 1'); await settle(); return render()
+  click(tree, 'View response for revision 1'); await settle(); return render()
 }
 const withdrawn = { reviewId: row.reviewId, status: 'revoked', persisted: true, replayed: false, publicationAuthorized: false }
 
@@ -352,17 +357,18 @@ test('already withdrawn reviews offer no withdrawal action and transport binds e
   const tree = await openDecision()
   assert.equal(elements(tree).some(n => n.type === 'button' && /withdraw/i.test(text(n))), false)
   const transport = readFileSync('showroom/src/core/managed-trial.ts', 'utf8')
+  assert.match(transport, /const privateReviewRequest = \{ cache: 'no-store', redirect: 'error', credentials: 'omit' \} as const/)
   const slice = transport.slice(transport.indexOf('export async function withdrawManagedWebsiteReview('), transport.indexOf('export async function loadManagedWebsitePreparation('))
-  for (const boundary of ["method: 'POST'", 'JSON.stringify({})', "cache: 'no-store'", "redirect: 'error'", "credentials: 'omit'", 'true, expectedIdentity', '/withdraw']) assert.ok(slice.includes(boundary))
+  for (const boundary of ["method: 'POST'", 'JSON.stringify({})', '...privateReviewRequest', 'true, expectedIdentity', '/withdraw']) assert.ok(slice.includes(boundary))
   assert.doesNotMatch(slice, /workspaceId=|recipientActorId=/)
 })
 
 test('inactive undecided reviews never say they are awaiting a customer decision', async () => {
-  for (const [status, expected] of [['revoked', 'Review withdrawn'], ['expired', 'Review expired'], ['stale', 'Website changed']]) {
+  for (const [status, expected] of [['revoked', 'Withdrawn'], ['expired', 'Expired'], ['stale', 'Website changed']]) {
     fixture(() => ({ ...listing, reviews: [{ ...row, status, hasChangeRequests: false }] }))
     let tree = render(); click(tree, 'Refresh reviews'); await settle(); tree = render()
     assert.ok(text(tree).includes(expected))
-    assert.doesNotMatch(text(tree), /Awaiting customer decision/)
+    assert.doesNotMatch(text(tree), /Awaiting response/)
   }
 })
 
@@ -384,7 +390,7 @@ function prepareReceipt(command) {
 async function openRecipients() {
   sandbox.h.prepareResponse = () => preparationFixture()
   sandbox.h.recipientResponse = () => recipients
-  let tree = render(); click(tree, 'Check saved Website before handoff'); await settle(); tree = render()
+  let tree = render(); click(tree, 'Preview saved website'); await settle(); tree = render()
   click(tree, 'Choose customer for review'); await settle(); return render()
 }
 function selectAndConfirm(tree) {
@@ -419,7 +425,7 @@ test('owner explicitly selects and confirms before creating an exact private rev
   assert.deepEqual(Object.keys(command).sort(), ['expectedVersion', 'expiresAt', 'recipientGrantId', 'reviewId'])
   assert.match(text(tree), /Private review prepared for the selected customer/)
   assert.equal(elements(tree).some(n => n.type === 'textarea'), false)
-  assert.match(text(tree), /Read decision for revision 2/)
+  assert.match(text(tree), /View response for revision 2/)
 })
 
 test('lost preparation response retains the exact command for an idempotent retry', async () => {
@@ -449,8 +455,9 @@ test('tampered receipts and switched accounts never create a successful handoff'
 
 test('preparation transport binds expected identity and never sends a raw customer actor ID', () => {
   const transport = readFileSync('showroom/src/core/managed-trial.ts', 'utf8')
+  assert.match(transport, /const privateReviewRequest = \{ cache: 'no-store', redirect: 'error', credentials: 'omit' \} as const/)
   const slice = transport.slice(transport.indexOf('export async function loadManagedWebsiteRecipients('), transport.indexOf('export async function withdrawManagedWebsiteReview('))
-  for (const boundary of ['recipientGrantId', "method: 'POST'", "cache: 'no-store'", "redirect: 'error'", "credentials: 'omit'", 'true, expectedIdentity']) assert.ok(slice.includes(boundary))
+  for (const boundary of ['recipientGrantId', "method: 'POST'", '...privateReviewRequest', 'true, expectedIdentity']) assert.ok(slice.includes(boundary))
   assert.doesNotMatch(slice, /recipientActorId|workspaceId=/)
 })
 
@@ -468,8 +475,8 @@ test('reload retains minimal reference and blocks a duplicate while list absence
   assert.deepEqual(Object.keys(receipt).sort(), ['contentRevision', 'expectedVersion', 'expiresAt', 'previewDigest', 'readAt', 'recipientGrantId', 'reviewId'])
   let tree = reloadInbox()
   assert.ok(text(tree).includes(receipt.reviewId))
-  assert.equal(elements(tree).find(n => text(n) === 'Check saved Website before handoff').props.disabled, true)
-  click(tree, 'Check saved Website before handoff'); await settle()
+  assert.equal(elements(tree).find(n => text(n) === 'Preview saved website').props.disabled, true)
+  click(tree, 'Preview saved website'); await settle()
   assert.equal(sandbox.h.writes.length, 1)
   sandbox.h.response = () => ({ ...listing, reviews: [] })
   click(render(), 'Refresh reviews'); await settle(); tree = render()
@@ -492,9 +499,9 @@ test('only matching retained source, digest and expiry clear recovery after relo
       : { ...listing, reviews: [review] }
     if (mismatch === 'delete') sandbox.window.sessionStorage.removeItem = () => { throw Error('storage denied') }
     let tree = reloadInbox(); click(tree, 'Refresh reviews'); await settle(); tree = render()
-    click(tree, 'Read decision for revision 2'); await settle(); tree = render()
+    click(tree, 'View response for revision 2'); await settle(); tree = render()
     assert.equal(sandbox.window.sessionStorage.getItem(recoveryKey) === null, mismatch === 'none')
-    assert.equal(elements(tree).find(n => text(n) === 'Check saved Website before handoff').props.disabled, mismatch !== 'none')
+    assert.equal(elements(tree).find(n => text(n) === 'Preview saved website').props.disabled, mismatch !== 'none')
     assert.equal(sandbox.h.writes.length, 1)
   }
 })
@@ -505,7 +512,7 @@ test('corrupt or inaccessible recovery storage fails closed without a write', as
     if (mode === 'corrupt') sandbox.window.sessionStorage.setItem(recoveryKey, '{broken')
     if (mode === 'read') sandbox.window.sessionStorage.getItem = () => { throw Error('denied') }
     if (mode === 'corrupt' || mode === 'read') {
-      const tree = render(); click(tree, 'Check saved Website before handoff'); await settle()
+      const tree = render(); click(tree, 'Preview saved website'); await settle()
       assert.match(text(render()), /storage is unavailable or invalid/)
     } else {
       const tree = selectAndConfirm(await openRecipients())
