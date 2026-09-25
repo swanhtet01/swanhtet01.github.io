@@ -37,7 +37,7 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
       return String.fromCodePoint(parseInt(entity.slice(entity[2].toLowerCase() === 'x' ? 3 : 2, -1), entity[2].toLowerCase() === 'x' ? 16 : 10))
     })
   })
-  const appPaths = new Set(['/login', '/shop/?tab=today', ...active.map(p => `/settings/?product=${p.id}`),
+  const appPaths = new Set(['/login', '/?choose=1', '/shop/?tab=today', ...active.map(p => `/settings/?product=${p.id}`),
     ...(options.shopTemplateIds || []).map(id => `/shop/?template=${id}`),
     ...active.filter(p => p.id !== 'shop').flatMap(p => (p.templates || []).map(t => `/settings/?product=${p.id}&template=${t.id}`))])
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'

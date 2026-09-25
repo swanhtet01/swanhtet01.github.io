@@ -51,3 +51,11 @@ test('all-page mode permits informational tombstone but not a retired tool actio
   assert.throws(() => validatePreviewLinks(`<a href="${app.origin}/plant/">Open retained workspace</a>`, policy, products, options))
   validatePreviewLinks('<a href="mailto:swanhtet@supermega.dev">Contact</a>', policy, products, options)
 })
+
+
+test('explicit product picker is allowed without allowing arbitrary app-root queries', () => {
+  validatePreviewLinks(html + `<a href="${app.origin}/?choose=1">Choose product</a>`, policy, products)
+  for (const suffix of ['/?choose=0', '/?choose=1&next=https://evil.example', '/?product=plant']) {
+    assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}${suffix}">Open</a>`, policy, products))
+  }
+})
