@@ -1642,11 +1642,22 @@ async function loadOutreach(focus=''){
         <button class="sm" data-prop2="${d.id}">Proposal</button>
         ${d.status!=='approved'&&d.status!=='sent'?`<button class="sm" data-app="${d.id}">Approve</button>`:''}
         ${['not_loaded','unavailable'].includes(d.outreach_send_state)?`<button class="sm" data-checksend="${esc(d.id)}">Check send status</button>`:''}
+        ${d.status==='approved'&&d.outreach_send_state==='accepted'?`<button class="sm" data-reconcilesend="${esc(d.id)}">Recover sent status</button>`:''}
         ${d.status==='approved'&&d.outreach_send_state==='none'?`<button class="sm primary" data-emailsend="${d.id}">Send email</button>`:''}
         ${d.status!=='sent'?`<button class="sm" data-sent="${d.id}">Mark sent</button>`:''}
       </div>`
     box.appendChild(el)
   }
+  box.querySelectorAll('[data-reconcilesend]').forEach(b=>b.onclick=async()=>{
+    if(b.disabled)return
+    b.disabled=true
+    const status=b.closest('.deal').querySelector('[data-send-status]')
+    status.textContent='Recovering saved status…'
+    let x
+    try{x=await api('POST','/api/deals/'+encodeURIComponent(b.dataset.reconcilesend)+'?action=reconcile-send',{})}catch{x={ok:false}}
+    if(x.ok){toast('Sent status recovered; no new email sent');loadOutreach(b.dataset.reconcilesend)}
+    else{status.textContent='Status recovery was not confirmed. Check the retained receipt and try again; this action never sends email.';b.disabled=false}
+  })
   box.querySelectorAll('[data-checksend]').forEach(b=>b.onclick=()=>loadOutreach(b.dataset.checksend))
   box.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.copy);navigator.clipboard.writeText(d.packet.outreach_en||'');toast('Copied draft')})
   box.querySelectorAll('[data-prop2]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.prop2);openProposal(d)})

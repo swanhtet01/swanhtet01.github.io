@@ -9,7 +9,7 @@ import connectors from '../connectors/index.mjs'
 import { captureError } from '../alert.mjs'
 import { companyDailyBudgetCap, currentDailyBudgetWindow, providerChain } from '../gateway.mjs'
 import { listLeadsForReview, markLeadReviewed } from './leads-review.mjs'
-import { sendOutreachOnce, readOutreachState } from './outreach-send.mjs'
+import { sendOutreachOnce, readOutreachState, reconcileOutreachStatus } from './outreach-send.mjs'
 import crypto from 'node:crypto'
 
 // One implementation of the floor for every owner surface — see kernel/ops-key.mjs. A key
@@ -384,6 +384,15 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (patch.status === 'sent') log('outreach', `Outreach marked sent`, deal.id)
         if (patch.status === 'approved') log('outreach', `Outreach approved`, deal.id)
         return ok({ ok: true, deal })
+      }
+      // Repair only an already accepted receipt; never invoke a connector here.
+      if (method === 'POST' && seg[1] && !seg[2] && query.action === 'reconcile-send') {
+        const rows = await store.listDeals({ id: seg[1] })
+        const deal = rows[0]
+        if (!deal || deal.id !== seg[1]) return bad(404, 'deal_not_found')
+        if (!['approved', 'sent'].includes(deal.status)) return bad(409, 'deal_not_approved')
+        const result = await reconcileOutreachStatus(deal.id, store)
+        return result.ok ? ok(result) : bad(result.status, result.reason)
       }
       // POST /api/deals/:id?action=send — fires the approved outreach email via Resend.
       // Gate: deal.status must be 'approved' — enforces draft→approve→send discipline.

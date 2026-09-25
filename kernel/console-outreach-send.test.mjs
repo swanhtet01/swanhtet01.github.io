@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sendOutreachOnce, readOutreachState } from './console/outreach-send.mjs'
+import { sendOutreachOnce, readOutreachState, reconcileOutreachStatus } from './console/outreach-send.mjs'
 
 const message = { to: 'qa@example.invalid', subject: 'Synthetic', html: '<p>Review only</p>', text: 'Review only' }
 function fixture() {
@@ -137,6 +137,8 @@ test('actual reopened outreach list offers send only for verified absent claims'
   for(const row of rows.slice(1))assert.doesNotMatch(row.innerHTML,/data-emailsend/)
   assert.match(rows[1].innerHTML,/Send outcome is unconfirmed/)
   assert.match(rows[2].innerHTML,/needs reconciliation/)
+  assert.match(rows[2].innerHTML,/data-reconcilesend/)
+  assert.doesNotMatch(rows[1].innerHTML,/data-reconcilesend/)
   assert.match(rows[3].innerHTML,/could not be verified/)
   assert.match(rows[5].innerHTML,/has not been checked/)
   assert.match(rows[5].innerHTML,/data-checksend/)
@@ -158,4 +160,36 @@ test('focused deal status read reaches older rows with exactly one claim lookup'
   context.query={send_status_id:'bad&query'}
   assert.equal((await runInNewContext('(async()=>{'+route+'})()',context)).status,400)
   assert.equal(reads.length,1)
+})
+
+
+test('reopened accepted receipt repairs status without any dispatch capability',async()=>{
+  const f=fixture();f.failStatus=true
+  await f.run();assert.equal(f.sends,1)
+  assert.equal((await reconcileOutreachStatus('deal-1',f.store)).reason,'outreach_sent_status_unconfirmed')
+  f.failStatus=false
+  const result=await reconcileOutreachStatus('deal-1',f.store)
+  assert.equal(result.ok,true);assert.equal(result.deal.status,'sent');assert.equal(f.sends,1)
+  assert.equal((await reconcileOutreachStatus('deal-1',f.store)).ok,true)
+  const uncertain=fixture();await uncertain.run({send:async()=>{throw Error('unknown')}})
+  let writes=0;uncertain.store.updateDeal=async()=>{writes++;return {id:'deal-1',status:'sent'}}
+  assert.equal((await reconcileOutreachStatus('deal-1',uncertain.store)).reason,'outreach_receipt_not_accepted')
+  assert.equal((await reconcileOutreachStatus('missing',uncertain.store)).reason,'outreach_receipt_not_accepted')
+  assert.equal(writes,0)
+})
+
+
+test('actual reconciliation route requires eligible deal and never resolves a connector',async()=>{
+  const {readFile}=await import('node:fs/promises');const {runInNewContext}=await import('node:vm')
+  const source=await readFile(new URL('./console/api.mjs',import.meta.url),'utf8')
+  const start=source.indexOf("      if (method === 'POST' && seg[1] && !seg[2] && query.action === 'reconcile-send')")
+  const route=source.slice(start,source.indexOf('// POST /api/deals/:id?action=send',start))
+  let calls=0;let status='draft'
+  const context={method:'POST',seg:['deals','deal-1'],query:{action:'reconcile-send'},store:{listDeals:async()=>[{id:'deal-1',status}]},
+    reconcileOutreachStatus:async id=>{assert.equal(id,'deal-1');calls++;return {ok:true,reconciled:true}},
+    connectors:{get:()=>{throw Error('no connector allowed')}},ok:x=>x,bad:(status,reason)=>({status,reason})}
+  assert.equal((await runInNewContext('(async()=>{'+route+'})()',context)).status,409)
+  assert.equal(calls,0);status='approved'
+  assert.equal((await runInNewContext('(async()=>{'+route+'})()',context)).reconciled,true)
+  assert.equal(calls,1)
 })

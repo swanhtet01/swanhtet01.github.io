@@ -59,3 +59,15 @@ export async function readOutreachState(dealId, store) {
   if (/^accepted:[a-f0-9]{64}:[A-Za-z0-9_-]{1,80}$/.test(retained.claim.ref || '')) return 'accepted'
   return 'unavailable'
 }
+
+
+// Status repair only: deliberately has no provider dependency or dispatch capability.
+export async function reconcileOutreachStatus(dealId, store) {
+  const state = await readOutreachState(dealId, store)
+  if (state !== 'accepted') return failure(state === 'unavailable' ? 'outreach_claim_unavailable' : 'outreach_receipt_not_accepted', state === 'unavailable' ? 503 : 409)
+  let updated
+  try { updated = await store.updateDeal(dealId, { status: 'sent' }) }
+  catch { return failure('outreach_sent_status_unconfirmed') }
+  if (updated?.id !== dealId || updated?.status !== 'sent') return failure('outreach_sent_status_unconfirmed')
+  return { ok: true, deal: updated, reconciled: true }
+}
