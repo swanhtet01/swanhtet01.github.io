@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { createRequire } from 'node:module'
+import vm from 'node:vm'
 import { verifyCustomerWebsiteReview, verifyCustomerChangeAcknowledgement, verifyCustomerReviewDecision, verifyCustomerAcceptanceAcknowledgement } from '../showroom/src/products/website/customer-review-contract.ts'
 
 const reviewId = '11111111-1111-4111-8111-111111111111'
@@ -60,13 +62,37 @@ test('requires exact durable acknowledgement rather than a queued or published c
     assert.throws(() => verifyCustomerChangeAcknowledgement({ ...result, ...change }, { reviewId, commandId }))
   }
 })
-test('transport retains expected identity and rejects redirects and browser caching', () => {
+test('transport retains expected identity and rejects redirects and browser caching', async () => {
   const source = readFileSync(new URL('../showroom/src/core/managed-trial.ts', import.meta.url), 'utf8')
-  const slice = source.slice(source.indexOf('export async function loadManagedWebsiteReview('), source.indexOf('export async function preflightManagedClientImport'))
-  assert.equal((slice.match(/redirect: 'error'/g) ?? []).length, 4)
-  assert.equal((slice.match(/cache: 'no-store'/g) ?? []).length, 4)
-  assert.equal((slice.match(/credentials: 'omit'/g) ?? []).length, 4)
-  assert.equal((slice.match(/true, expectedIdentity/g) ?? []).length, 4)
+  const start = source.indexOf('const managedReviewUuid =')
+  const end = source.indexOf('export async function preflightManagedClientImport', start)
+  assert.ok(start >= 0 && end > start)
+  const require = createRequire(new URL('../showroom/package.json', import.meta.url))
+  const ts = require('typescript')
+  const compiled = ts.transpileModule(source.slice(start, end), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const calls = [], exports = {}
+  vm.runInNewContext(compiled, { exports, AbortSignal,
+    errorWebsiteReviewInvalid: message => new Error(message),
+    authorizedRequest: async (...args) => { calls.push(args); return {} },
+  })
+  const identity = { actor: 'synthetic-reviewer', workspaceId: 'synthetic-workspace' }
+  await exports.loadManagedWebsiteReview(reviewId, identity)
+  await exports.sendManagedWebsiteReviewChanges({ reviewId, commandId, previewDigest: 'digest', note: 'Update hours' }, identity)
+  await exports.loadManagedWebsiteAcceptance(reviewId, identity)
+  await exports.sendManagedWebsiteAcceptance({ reviewId, commandId, previewDigest: 'digest', decision: 'accept_preview_for_release_review' }, identity)
+  assert.equal(calls.length, 4)
+  for (const [path, options, required, expectedIdentity] of calls) {
+    assert.ok(path.startsWith(`/api/trial/v1/website-reviews/${reviewId}`))
+    assert.equal(options.redirect, 'error')
+    assert.equal(options.cache, 'no-store')
+    assert.equal(options.credentials, 'omit')
+    assert.equal(required, true)
+    assert.equal(expectedIdentity, identity)
+  }
+  assert.equal(calls[1][1].method, 'POST')
+  assert.equal(calls[3][1].method, 'POST')
 })
 
 test('decision reload binds exact review, revision, digest and expiry without publication', () => {
