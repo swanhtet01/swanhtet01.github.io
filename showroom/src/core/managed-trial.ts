@@ -894,7 +894,7 @@ function assertManagedOwnerControlRetention(
   expectedItemId: string,
 ) {
   if (!isRecord(value) || !isRecord(value.retention)) {
-    throw new ManagedTrialError('Managed Owner Control acknowledgement is invalid.', { code: 'managed_owner_control_retention_invalid' })
+    throw errorManagedOwnerControlRetentionInvalid('Managed Owner Control acknowledgement is invalid.')
   }
   const run = assertManagedOwnerControlRun({ identity: value.identity, run: value.run }, expectedIdentity)
   const retention = value.retention
@@ -917,7 +917,7 @@ function assertManagedOwnerControlRetention(
     || retention.companyVersion !== run.companyVersion
     || retention.externalWritesPerformed !== false
     || item?.status !== 'acknowledged') {
-    throw new ManagedTrialError('Managed Owner Control acknowledgement failed verification.', { code: 'managed_owner_control_retention_invalid' })
+    throw errorManagedOwnerControlRetentionInvalid('Managed Owner Control acknowledgement failed verification.')
   }
   return { run, retention: retention as unknown as ManagedOwnerControlRetention }
 }
@@ -1021,7 +1021,7 @@ function assertManagedCompanyBriefRetention(
   expectedDigest: string,
 ) {
   if (!isRecord(value) || !isRecord(value.retention)) {
-    throw new ManagedTrialError('Managed Company Brief retention response is invalid.', { code: 'managed_company_brief_retention_invalid' })
+    throw errorManagedCompanyBriefRetentionInvalid('Managed Company Brief retention response is invalid.')
   }
   const retention = value.retention
   const brief = assertManagedCompanyBrief({ brief: value.brief, identity: value.identity }, expectedIdentity)
@@ -1042,7 +1042,7 @@ function assertManagedCompanyBriefRetention(
     || typeof retention.idempotentReplay !== 'boolean'
     || brief.briefDigest !== expectedDigest
     || brief.retention !== 'persisted_managed_audit') {
-    throw new ManagedTrialError('Managed Company Brief receipt failed verification.', { code: 'managed_company_brief_retention_invalid' })
+    throw errorManagedCompanyBriefRetentionInvalid('Managed Company Brief receipt failed verification.')
   }
   return { brief, retention: retention as unknown as ManagedCompanyBriefRetention }
 }
@@ -1255,9 +1255,7 @@ export function assertManagedEcommerceOrderQueueValidation(
   expectedIdentity: ManagedIdentity,
 ): ManagedEcommerceOrderQueueValidation {
   if (!isRecord(response) || !isRecord(response.validation)) {
-    throw new ManagedTrialError('The company account returned an invalid Ecommerce order queue validation.', {
-      code: 'managed_ecommerce_order_queue_validation_invalid',
-    })
+    throw errorManagedEcommerceOrderQueueValidationInvalid('The company account returned an invalid Ecommerce order queue validation.')
   }
   if (response.identity_authority !== 'trusted_managed_identity') {
     throw new ManagedTrialError('The managed Ecommerce queue check was not bound to trusted workspace identity.', { code: 'managed_ecommerce_order_queue_identity_untrusted' })
@@ -1279,9 +1277,7 @@ export function assertManagedEcommerceOrderQueueValidation(
     || validation.human_approval_required !== true
     || validation.external_writes_performed !== false
     || validation.next_step !== expected.next_step) {
-    throw new ManagedTrialError('The managed Ecommerce order queue validation does not match the packet.', {
-      code: 'managed_ecommerce_order_queue_validation_invalid',
-    })
+    throw errorManagedEcommerceOrderQueueValidationInvalid('The managed Ecommerce order queue validation does not match the packet.')
   }
   return validation as unknown as ManagedEcommerceOrderQueueValidation
 }
@@ -1293,9 +1289,7 @@ export function assertManagedEcommerceOrderQueueImportPlan(
   expectedIdentity: ManagedIdentity,
 ): ManagedEcommerceOrderQueueImportPlan {
   if (!isRecord(response) || !isRecord(response.plan)) {
-    throw new ManagedTrialError('The company account returned an invalid Ecommerce import plan.', {
-      code: 'managed_ecommerce_order_queue_import_plan_invalid',
-    })
+    throw errorManagedEcommerceOrderQueueImportPlanInvalid('The company account returned an invalid Ecommerce import plan.')
   }
   if (response.identity_authority !== 'trusted_managed_identity') {
     throw new ManagedTrialError('The managed Ecommerce import plan was not bound to trusted workspace identity.', { code: 'managed_ecommerce_order_queue_identity_untrusted' })
@@ -1327,9 +1321,7 @@ export function assertManagedEcommerceOrderQueueImportPlan(
     || typeof plan.apply_boundary !== 'string'
     || !plan.apply_boundary.includes('Apply requires a decided human approval record')
     || typeof plan.next_step !== 'string') {
-    throw new ManagedTrialError('The managed Ecommerce import plan does not match the approved queue packet.', {
-      code: 'managed_ecommerce_order_queue_import_plan_invalid',
-    })
+    throw errorManagedEcommerceOrderQueueImportPlanInvalid('The managed Ecommerce import plan does not match the approved queue packet.')
   }
   return plan as unknown as ManagedEcommerceOrderQueueImportPlan
 }
@@ -1372,9 +1364,7 @@ export function assertManagedEcommerceOrderQueueApplyPreflight(
 
 async function sha256Text(value: string) {
   if (!globalThis.crypto?.subtle) {
-    throw new ManagedTrialError('Secure package verification is unavailable in this browser.', {
-      code: 'managed_client_import_digest_unavailable',
-    })
+    throw errorManagedClientImportDigestUnavailable('Secure package verification is unavailable in this browser.')
   }
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
   return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
@@ -1441,9 +1431,7 @@ export function assertManagedClientImportValidation(
   expectedPackageDigest: string,
 ): ManagedClientImportValidation {
   if (!isRecord(response) || !isRecord(response.validation) || !isRecord(response.validation.activation)) {
-    throw new ManagedTrialError('The company account returned an invalid import validation.', {
-      code: 'managed_client_import_validation_invalid',
-    })
+    throw errorManagedClientImportValidationInvalid('The company account returned an invalid import validation.')
   }
   const validation = response.validation
   const activation = validation.activation as Record<string, unknown>
@@ -1468,9 +1456,7 @@ export function assertManagedClientImportValidation(
     || activation.human_approval_required !== true
     || activation.atomic_adapter_ready !== Boolean(clientImportAtomicAdapter(stagingPackage.product))
     || activation.external_writes_performed !== false) {
-    throw new ManagedTrialError('The company account returned a mismatched import validation.', {
-      code: 'managed_client_import_validation_invalid',
-    })
+    throw errorManagedClientImportValidationInvalid('The company account returned a mismatched import validation.')
   }
   if (validation.workspace_id !== expectedIdentity.workspaceId) {
     throw new ManagedTrialError('The company account returned a different identity.', { code: 'managed_identity_changed' })
@@ -1498,9 +1484,7 @@ export async function assertManagedClientImportApplyPreflight(
     || response.identity_authority !== 'trusted_managed_identity'
     || response.external_writes_performed !== false
     || response.secret_values_exposed !== false) {
-    throw new ManagedTrialError('The managed import preflight was not bound to trusted workspace authority.', {
-      code: 'managed_client_import_apply_preflight_invalid',
-    })
+    throw errorManagedClientImportApplyPreflightInvalid('The managed import preflight was not bound to trusted workspace authority.')
   }
   const preflight = response.preflight
   const expectedDigest = await managedClientImportApplyPreflightDigest({
@@ -1550,9 +1534,7 @@ export async function assertManagedClientImportApplyPreflight(
     || preflight.external_writes_performed !== false
     || typeof preflight.next_step !== 'string'
     || !preflight.next_step.includes('idempotent managed import')) {
-    throw new ManagedTrialError('The managed import preflight does not match the reviewed package and workspace revision.', {
-      code: 'managed_client_import_apply_preflight_invalid',
-    })
+    throw errorManagedClientImportApplyPreflightInvalid('The managed import preflight does not match the reviewed package and workspace revision.')
   }
   return preflight as unknown as ManagedClientImportApplyPreflight
 }
@@ -1711,9 +1693,7 @@ export function assertManagedPlantEquipmentValidation(
   expectedPackageDigest: string,
 ): ManagedPlantEquipmentValidation {
   if (!isRecord(response) || !isRecord(response.validation) || !isRecord(response.validation.activation)) {
-    throw new ManagedTrialError('The company account returned an invalid equipment validation.', {
-      code: 'managed_plant_equipment_validation_invalid',
-    })
+    throw errorManagedPlantEquipmentValidationInvalid('The company account returned an invalid equipment validation.')
   }
   const validation = response.validation
   const activation = validation.activation as Record<string, unknown>
@@ -1735,9 +1715,7 @@ export function assertManagedPlantEquipmentValidation(
     || activation.atomic_adapter_ready !== true
     || activation.external_writes_performed !== false
     || activation.commissioning_performed !== false) {
-    throw new ManagedTrialError('The managed equipment validation does not match the reviewed package.', {
-      code: 'managed_plant_equipment_validation_invalid',
-    })
+    throw errorManagedPlantEquipmentValidationInvalid('The managed equipment validation does not match the reviewed package.')
   }
   return validation as unknown as ManagedPlantEquipmentValidation
 }
@@ -2213,9 +2191,7 @@ export async function assertManagedEcommerceImportState(
   try {
     catalogDigest = await commerceCatalogDigest(previous)
   } catch {
-    throw new ManagedTrialError('The managed Shop catalog fingerprint could not be verified.', {
-      code: 'managed_client_import_digest_unavailable',
-    })
+    throw errorManagedClientImportDigestUnavailable('The managed Shop catalog fingerprint could not be verified.')
   }
   const expectedMerchandising = expectedEcommerceMerchandising(stagingPackage)
   const expectedSelectedSkus = expectedMerchandising.map((row) => row.sku)
@@ -4135,3 +4111,11 @@ const errorWebsiteReviewInvalid = codedManagedError('website_review_invalid')
 const errorManagedOrderIntentInvalid = codedManagedError('managed_order_intent_invalid')
 const errorManagedProductionJobIntentInvalid = codedManagedError('managed_production_job_intent_invalid')
 const errorEcommerceReviewInvalid = codedManagedError('ecommerce_review_invalid')
+const errorManagedOwnerControlRetentionInvalid = codedManagedError('managed_owner_control_retention_invalid')
+const errorManagedCompanyBriefRetentionInvalid = codedManagedError('managed_company_brief_retention_invalid')
+const errorManagedEcommerceOrderQueueValidationInvalid = codedManagedError('managed_ecommerce_order_queue_validation_invalid')
+const errorManagedEcommerceOrderQueueImportPlanInvalid = codedManagedError('managed_ecommerce_order_queue_import_plan_invalid')
+const errorManagedClientImportDigestUnavailable = codedManagedError('managed_client_import_digest_unavailable')
+const errorManagedClientImportValidationInvalid = codedManagedError('managed_client_import_validation_invalid')
+const errorManagedClientImportApplyPreflightInvalid = codedManagedError('managed_client_import_apply_preflight_invalid')
+const errorManagedPlantEquipmentValidationInvalid = codedManagedError('managed_plant_equipment_validation_invalid')
