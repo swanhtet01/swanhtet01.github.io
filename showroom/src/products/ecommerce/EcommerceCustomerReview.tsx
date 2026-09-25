@@ -12,9 +12,11 @@ export default function EcommerceCustomerReview() {
   return <CatalogReviewContent key={reviewId} reviewId={reviewId} />
 }
 
+const changedAccessMessage = 'Your access changed. Sign in and reopen this review.'
+
 function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   const [review, setReview] = useState<PreparedCatalogReview | null>(null)
-  const [message, setMessage] = useState('Opening your catalog…')
+  const [message, setMessage] = useState('Opening catalog…')
   const [opening, setOpening] = useState(true)
   const [attempt, setAttempt] = useState(0)
   const [access] = useState(() => createReviewAccessBoundary(currentManagedIdentity, sameManagedIdentity))
@@ -27,14 +29,26 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   const [command] = useState(() => ({ busy: false, identity: null as ManagedIdentity | null,
     pending: null as { payload: EcommerceReviewDecision; identity: ManagedIdentity } | null }))
 
+  async function readDecisions(identity: ManagedIdentity, currentReview: PreparedCatalogReview,
+    epoch: number, pending?: EcommerceReviewDecision | null) {
+    let after: string | undefined
+    for (let pageNumber = 0; pageNumber < 20; pageNumber++) {
+      if (!await access.commit(epoch, identity, currentReview.expiresAt, () => {})) throw Error()
+      const page = verifyCatalogDecisionPage(await loadManagedEcommerceDecisions(reviewId, identity, after), currentReview, after)
+      if (!pending || page.decisions.some(item => item.commandId === pending.commandId) || !page.nextAfter) return page
+      after = page.nextAfter
+    }
+    throw Error()
+  }
+
   async function submit(kind: 'acceptance' | 'feedback') {
-    if (command.busy || !review || !decisions || decisions.decisions.length || !command.identity) return
+    if (command.busy || !review || !decisions || (decisions.decisions.length && !command.pending) || !command.identity) return
     const epoch = access.capture()
     const identity = command.identity
     const closeChangedAccess = () => {
       if (!access.isCurrent(epoch)) return
       access.invalidate(); setReview(null); setDecisions(null)
-      setMessage('Your access changed. Sign in and reopen this review.')
+      setMessage(changedAccessMessage)
     }
     if (!command.pending) {
       if (kind === 'feedback' && (!note.trim() || [...note.trim()].length > 2000)) return
@@ -48,10 +62,10 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         || !await access.commit(epoch, identity, review.expiresAt, () => {})) { closeChangedAccess(); return }
       retainCatalogDecision(window.sessionStorage, pending.identity, review, pending.payload)
       await sendManagedEcommerceDecision(pending.payload, pending.identity)
-      const saved = verifyCatalogDecisionPage(await loadManagedEcommerceDecisions(reviewId, identity), review)
+      const saved = await readDecisions(identity, review, epoch, pending.payload)
       const retained = saved.decisions.find(item => item.commandId === pending.payload.commandId)
       if (!retained || (pending.payload.decision ? retained.kind !== 'acceptance'
-        : retained.kind !== 'feedback' || retained.note !== pending.payload.note)) throw Error('unconfirmed')
+        : retained.kind !== 'feedback' || retained.note !== pending.payload.note)) throw Error()
       const confirmed = await access.commit(epoch, identity, review.expiresAt, () => {
         clearCatalogDecision(window.sessionStorage, identity, reviewId)
         setDecisions(saved); command.pending = null; setNote(''); setEditing(false)
@@ -79,7 +93,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         const verified = await verifyPreparedCatalogReview(await loadManagedEcommerceReview(reviewId, identity), reviewId)
         if (!active || !access.isCurrent(epoch)) return
         const recovered = recoverCatalogDecision(window.sessionStorage, identity, verified)
-        const saved = verifyCatalogDecisionPage(await loadManagedEcommerceDecisions(reviewId, identity), verified)
+        const saved = await readDecisions(identity, verified, epoch, recovered)
         if (!active || !access.isCurrent(epoch)) return
         const accepted = await access.commit(epoch, identity, verified.expiresAt, () => {
           command.identity = identity
@@ -88,12 +102,12 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
             && (recovered.decision ? item.kind === 'acceptance' : item.kind === 'feedback' && item.note === recovered.note))) {
             clearCatalogDecision(window.sessionStorage, identity, reviewId); command.pending = null
           }
-          setSaveMessage(recovered ? 'Check and resend your saved response.' : '')
+          setSaveMessage(recovered ? 'Retry your saved response.' : '')
           setDecisions(saved); setReview(verified)
         })
-        if (!accepted && access.isCurrent(epoch)) setMessage('Your access changed. Sign in and reopen this review.')
+        if (!accepted && access.isCurrent(epoch)) setMessage(changedAccessMessage)
       } catch {
-        if (active && access.isCurrent(epoch)) setMessage('Review unavailable. Retry or ask SuperMega for help.')
+        if (active && access.isCurrent(epoch)) setMessage('Review unavailable. Try again.')
       } finally {
         if (active && access.isCurrent(epoch)) setOpening(false)
       }
@@ -120,13 +134,13 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   return <main className="catalog-review-page" aria-busy={opening}>
     {review ? <>
       <PreparedCatalog preview={review.preview} />
-      {decisions?.decisions.length ? <section className="prepared-catalog" role="status">
+      {decisions?.decisions.length && !command.pending ? <section className="prepared-catalog" role="status">
         <h2>{decisions.decisions[0].kind === 'acceptance' ? 'Catalog accepted' : 'Changes requested'}</h2>
         <p>{decisions.decisions[0].kind === 'acceptance'
           ? 'SuperMega will review it before publishing.' : 'SuperMega will prepare an updated review.'}</p>
       </section> : decisions ? <section className="prepared-catalog" aria-busy={saving}>
         {command.pending ? <>
-          <p role="status">{saveMessage || 'Your response is being saved.'}</p>
+          <p role="status">{saveMessage || 'Saving response.'}</p>
           <button type="button" disabled={saving} onClick={() => void submit('acceptance')}>{saving ? 'Saving…' : 'Retry response'}</button>
         </> : editing ? <form onSubmit={event => { event.preventDefault(); void submit('feedback') }}>
           <label htmlFor="catalog-changes">What needs changing?</label>

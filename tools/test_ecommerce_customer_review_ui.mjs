@@ -15,7 +15,7 @@ const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.Modu
   jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 const id = '11111111-1111-4111-8111-111111111111'
 const review = { reviewId: id, contentRevision: 1, previewDigest: 'sha256:' + 'a'.repeat(64), preview: { name: 'Synthetic catalog' }, expiresAt: '2099-01-01T00:00:00Z' }
-function harness({ identity = { actor: 'customer', userId: 'customer', workspaceId: 'company' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false, uncertainWrite = false, writeWait = null, storage = new Map(), retainedDecision = null, transformSaved = value => value } = {}) {
+function harness({ identity = { actor: 'customer', userId: 'customer', workspaceId: 'company' }, changed = false, denied = false, wait = null, expiresAt = review.expiresAt, decisionKind = null, decisionWait = null, invalidDecision = false, uncertainWrite = false, writeWait = null, storage = new Map(), retainedDecision = null, transformSaved = value => value, decisionPages = null } = {}) {
   const states = [], effects = [], listeners = new Map(), timers = new Map()
   let index = 0, reads = 0, calls = 0, timerId = 0, savedItem = retainedDecision
   const writes = []
@@ -37,7 +37,8 @@ function harness({ identity = { actor: 'customer', userId: 'customer', workspace
       if (name === '../../core/managed-trial') return {
         currentManagedIdentity: async () => ++reads > 1 && changed ? { actor: 'other' } : identity,
         sameManagedIdentity: (a, b) => a.actor === b.actor,
-        loadManagedEcommerceDecisions: async () => {
+        loadManagedEcommerceDecisions: async (_reviewId, _identity, after) => {
+          if (decisionPages) return decisionPages(after)
           if (decisionWait) await decisionWait
           return { reviewId: invalidDecision ? 'other' : id, contentRevision: 1, previewDigest: review.previewDigest,
             sourceVersion: 1, nextAfter: null, publicationAuthorized: false, deploymentAuthorized: false,
@@ -348,5 +349,32 @@ test('successful send cannot confirm missing or mismatched response readback', a
     assert.deepEqual(h.writes[1], h.writes[0])
     assert.match(h.render(), /Response unconfirmed/)
     cleanup()
+  }
+})
+
+
+test('paginated recovery confirms only the exact response under unchanged access', async () => {
+  for (const mode of ['matching', 'missing', 'wrong-note', 'invalid-cursor', 'identity-change']) {
+  const storage = new Map(), identity = { userId: 'customer', workspaceId: 'company' }
+  const commandId = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+  recovery.retainCatalogDecision({ setItem: (k, v) => storage.set(k, v), getItem: k => storage.get(k) }, identity, review,
+    { reviewId: id, commandId, previewDigest: review.previewDigest, note: 'Change price' })
+  const items = Array.from({ length: 50 }, (_, n) => ({ commandId: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+    kind: 'feedback', note: 'Earlier feedback', createdAt: '2026-01-01T00:00:00Z' }))
+  const cursor = items.at(-1).commandId, reads = []
+  const h = harness({ storage, decisionPages: after => {
+    reads.push(after)
+    if (after && mode === 'identity-change') h.changeIdentity()
+    return { reviewId: id, contentRevision: 1, previewDigest: review.previewDigest, sourceVersion: 1,
+      publicationAuthorized: false, deploymentAuthorized: false, nextAfter: after ? null : mode === 'invalid-cursor' ? id : cursor,
+      decisions: after ? mode === 'missing' ? [] : [{ commandId, kind: 'feedback', note: mode === 'wrong-note' ? 'Other feedback' : 'Change price', createdAt: '2026-01-01T00:00:00Z' }] : items }
+  } })
+  h.render(); const close = h.effects[0](); await flush()
+  assert.deepEqual(reads, mode === 'invalid-cursor' ? [undefined] : [undefined, cursor])
+  assert.equal(h.writes.length, 0)
+  assert.equal(storage.size, mode === 'matching' ? 0 : 1)
+  if (mode === 'matching') assert.match(h.render(), /Changes requested/)
+  else assert.doesNotMatch(h.render(), /Changes requested|Catalog accepted/)
+  close()
   }
 })
