@@ -958,9 +958,7 @@ export async function assertManagedContextValidation(
     expectedIdentity,
   )))
   if (validation.validationDigest !== expectedValidationDigest) {
-    throw new ManagedTrialError('Managed context validation no longer matches the company revision.', {
-      code: 'managed_context_validation_changed',
-    })
+    throw managedError('Managed context validation no longer matches the company revision.', 'managed_context_validation_changed')
   }
   return {
     profile: profile as ManagedContextProfile,
@@ -1369,9 +1367,7 @@ function serializeManagedClientImportPackage(stagingPackage: ManagedClientImport
   } catch {
     // The caller receives the same bounded contract error for every serialization failure.
   }
-  throw new ManagedTrialError('The staged import package could not be serialized safely.', {
-    code: 'managed_client_import_package_invalid',
-  })
+  throw managedError('The staged import package could not be serialized safely.', 'managed_client_import_package_invalid')
 }
 
 export async function managedClientImportPackageDigest(stagingPackage: ManagedClientImportPackage) {
@@ -1407,9 +1403,7 @@ function serializePlantEquipmentImportPackage(equipmentPackage: PlantEquipmentIm
   } catch {
     // The caller receives the same bounded contract error for every serialization failure.
   }
-  throw new ManagedTrialError('The equipment import package could not be serialized safely.', {
-    code: 'managed_plant_equipment_package_invalid',
-  })
+  throw managedError('The equipment import package could not be serialized safely.', 'managed_plant_equipment_package_invalid')
 }
 
 export async function managedPlantEquipmentPackageDigest(equipmentPackage: PlantEquipmentImportPackage) {
@@ -2442,7 +2436,7 @@ function authClient() {
 function normalizeWorkspaceId(value: string) {
   const workspaceId = value.trim()
   if (!WORKSPACE_ID.test(workspaceId)) {
-    throw new ManagedTrialError('Enter a valid company account ID.', { code: 'workspace_invalid' })
+    throw managedError('Enter a valid company account ID.', 'workspace_invalid')
   }
   return workspaceId
 }
@@ -2522,7 +2516,7 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
 function normalizeAuthEmail(value: string) {
   const email = value.trim().toLowerCase()
   if (!AUTH_EMAIL.test(email) || email.length > 160) {
-    throw new ManagedTrialError('Enter a valid work email.', { code: 'auth_email_invalid' })
+    throw managedError('Enter a valid work email.', 'auth_email_invalid')
   }
   return email
 }
@@ -2531,9 +2525,7 @@ function managedAccountRedirectUrl(purpose: 'recovery' | 'signup' = 'recovery') 
   const origin = new URL(window.location.origin)
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
   if (origin.protocol !== 'https:' && !(origin.protocol === 'http:' && loopback)) {
-    throw new ManagedTrialError('Account access requires a secure SuperMega address.', {
-      code: 'auth_redirect_insecure',
-    })
+    throw managedError('Account access requires a secure SuperMega address.', 'auth_redirect_insecure')
   }
   const redirect = new URL('/account/setup', origin)
   redirect.searchParams.set('mode', purpose)
@@ -2546,9 +2538,7 @@ function managedAccountRedirectUrl(purpose: 'recovery' | 'signup' = 'recovery') 
 }
 
 function accountLinkError() {
-  return new ManagedTrialError('This account link is invalid or expired. Request a new link.', {
-    code: 'account_link_invalid',
-  })
+  return managedError('This account link is invalid or expired. Request a new link.', 'account_link_invalid')
 }
 
 function exactAuthParameters(parameters: URLSearchParams, allowed: readonly string[]) {
@@ -2581,11 +2571,11 @@ let signupRequestPending = false
 async function requestManagedSignup(input: CreateAccountInput | string, shownTermsVersion: string) {
   const request = typeof input === 'string' ? { email: normalizeAuthEmail(input) } : validateCreateAccountRequest(input)
   if (typeof shownTermsVersion !== 'string' || shownTermsVersion.trim() !== shownTermsVersion || !/^v[1-9][0-9]{0,3}$/.test(shownTermsVersion)) {
-    throw new ManagedTrialError('Read and accept the current terms before requesting an account.', { code: 'account_terms_required' })
+    throw managedError('Read and accept the current terms before requesting an account.', 'account_terms_required')
   }
   const emailRedirectTo = managedAccountRedirectUrl('signup')
   if (!managedTrialAuthConfigured()) throw errorAuthNotConfigured('Company signup is unavailable.')
-  if (signupRequestPending) throw new ManagedTrialError('An account request is already pending.', { code: 'account_request_pending' })
+  if (signupRequestPending) throw managedError('An account request is already pending.', 'account_request_pending')
   signupRequestPending = true
   try {
     // Never accept a caller-supplied flag or reuse a cached successful health response.
@@ -2597,16 +2587,16 @@ async function requestManagedSignup(input: CreateAccountInput | string, shownTer
       ? await response.json() : null
     const policy = readManagedSignupPolicy(health)
     if (!policy) {
-      throw new ManagedTrialError('Company signup is not open. Sign in or request an account.', { code: 'signup_window_closed' })
+      throw managedError('Company signup is not open. Sign in or request an account.', 'signup_window_closed')
     }
     if (policy.termsVersion !== shownTermsVersion) {
-      throw new ManagedTrialError('The terms changed. Reload and read the current version before trying again.', { code: 'account_terms_changed' })
+      throw managedError('The terms changed. Reload and read the current version before trying again.', 'account_terms_changed')
     }
     const supabase = await authClient()
     if (!supabase) throw errorAuthNotConfigured('Company signup is unavailable.')
     const current = await supabase.auth.getSession()
     if (current.error || current.data.session) {
-      throw new ManagedTrialError('Sign out before requesting another account.', { code: 'auth_existing_session' })
+      throw managedError('Sign out before requesting another account.', 'auth_existing_session')
     }
     const result = 'password' in request
       ? await supabase.auth.signUp({ email: request.email, password: request.password, options: { emailRedirectTo } })
@@ -2615,7 +2605,7 @@ async function requestManagedSignup(input: CreateAccountInput | string, shownTer
       // A misconfigured provider must not silently turn signup into signed-in access.
       await supabase.auth.signOut({ scope: 'local' })
       forgetWorkspace()
-      throw new ManagedTrialError('Email confirmation is required before account access.', { code: 'email_confirmation_required' })
+      throw managedError('Email confirmation is required before account access.', 'email_confirmation_required')
     }
     if (result.error && !['user_already_exists', 'email_exists', 'user_not_found'].includes(result.error.code ?? '')) {
       throw new Error('account_request_failed')
@@ -2624,7 +2614,7 @@ async function requestManagedSignup(input: CreateAccountInput | string, shownTer
     return { status: 'confirmation_requested' as const }
   } catch (error) {
     if (error instanceof ManagedTrialError) throw error
-    throw new ManagedTrialError('The account request could not be confirmed. Wait before trying again.', { code: 'account_request_failed' })
+    throw managedError('The account request could not be confirmed. Wait before trying again.', 'account_request_failed')
   } finally {
     signupRequestPending = false
   }
@@ -2760,9 +2750,7 @@ async function discoverManagedWorkspaces(session: Session): Promise<ManagedWorks
     }
   } catch (error) {
     if (error instanceof ManagedTrialError) throw error
-    throw new ManagedTrialError('Your company list could not be loaded. Check your connection and try again.', {
-      code: 'workspace_directory_unavailable',
-    })
+    throw managedError('Your company list could not be loaded. Check your connection and try again.', 'workspace_directory_unavailable')
   }
 }
 
@@ -2791,9 +2779,7 @@ async function discoverForUnchangedSession(supabase: ManagedAuthClient, session:
 
 export async function completeManagedAccountPassword(password: string): Promise<ManagedWorkspaceSignIn> {
   if (password.length < 12 || password.length > 128 || !password.trim()) {
-    throw new ManagedTrialError('Use a password with at least 12 characters.', {
-      code: 'password_too_weak',
-    })
+    throw managedError('Use a password with at least 12 characters.', 'password_too_weak')
   }
   const supabase = await authClient()
   if (!supabase) {
@@ -2838,9 +2824,7 @@ export async function completeManagedWorkspaceSignIn(
 ): Promise<ManagedIdentity> {
   const workspaceId = normalizeWorkspaceId(workspace)
   if (!signIn.workspaces.some((entry) => entry.workspaceId === workspaceId)) {
-    throw new ManagedTrialError('Choose one of the companies assigned to this account.', {
-      code: 'workspace_membership_missing',
-    })
+    throw managedError('Choose one of the companies assigned to this account.', 'workspace_membership_missing')
   }
   const supabase = await authClient()
   const { data, error } = await supabase?.auth.getSession() ?? { data: { session: null }, error: null }
@@ -2874,9 +2858,7 @@ const MAX_SELF_SERVE_BUSINESS_NAME = 120
 export function normalizeSelfServeClaimCode(value: string) {
   const claimCode = value.trim().toUpperCase()
   if (!SELF_SERVE_CLAIM_CODE.test(claimCode)) {
-    throw new ManagedTrialError('Enter the claim code exactly as SM-XXXX-XXXX.', {
-      code: 'claim_code_invalid',
-    })
+    throw managedError('Enter the claim code exactly as SM-XXXX-XXXX.', 'claim_code_invalid')
   }
   return claimCode
 }
@@ -2884,9 +2866,7 @@ export function normalizeSelfServeClaimCode(value: string) {
 function normalizeSelfServeBusinessName(value: string) {
   const businessName = value.trim()
   if (!businessName || businessName.length > MAX_SELF_SERVE_BUSINESS_NAME) {
-    throw new ManagedTrialError('Enter the business name, up to 120 characters.', {
-      code: 'business_name_invalid',
-    })
+    throw managedError('Enter the business name, up to 120 characters.', 'business_name_invalid')
   }
   return businessName
 }
@@ -2999,7 +2979,7 @@ async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
     error = refreshed.error
   }
   if (error || !data.session || data.session.user.is_anonymous !== false) {
-    throw new ManagedTrialError('The managed session expired. Sign in again.', { code: 'auth_expired' })
+    throw managedError('The managed session expired. Sign in again.', 'auth_expired')
   }
   if (currentManagedWorkspace() !== workspaceId) {
     throw new ManagedTrialError('The company account changed during authentication.', { code: 'managed_identity_changed' })
@@ -3374,9 +3354,7 @@ export async function applyManagedPlantEquipmentImport(request: {
     || request.validation.package_digest !== currentDigest
     || request.validation.activation.atomic_adapter_ready !== true
     || request.validation.activation.commissioning_performed !== false) {
-    throw new ManagedTrialError('The validated equipment import changed before activation.', {
-      code: 'managed_plant_equipment_package_changed',
-    })
+    throw managedError('The validated equipment import changed before activation.', 'managed_plant_equipment_package_changed')
   }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/imports/plant-equipment/apply',
@@ -3551,7 +3529,7 @@ export async function retainManagedCompanyBrief(request: {
   identity: ManagedIdentity
 }) {
   if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)) {
-    throw new ManagedTrialError('Managed Company Brief command ID is invalid.', { code: 'managed_company_brief_command_invalid' })
+    throw managedError('Managed Company Brief command ID is invalid.', 'managed_company_brief_command_invalid')
   }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/company-brief/receipts',
@@ -3589,7 +3567,7 @@ export async function acknowledgeManagedOwnerControlItem(request: {
   if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)
     || !SHA256_DIGEST.test(request.itemId)
     || !request.run.items.some((item) => item.itemId === request.itemId && item.status === 'pending')) {
-    throw new ManagedTrialError('Managed Owner Control acknowledgement request is invalid.', { code: 'managed_owner_control_command_invalid' })
+    throw managedError('Managed Owner Control acknowledgement request is invalid.', 'managed_owner_control_command_invalid')
   }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/owner-control/acknowledgements',
@@ -3630,7 +3608,7 @@ export async function retainManagedContextProfile(request: {
   validation: ManagedContextValidation
 }) {
   if (!CLIENT_IMPORT_COMMAND_ID.test(request.commandId)) {
-    throw new ManagedTrialError('Managed context command ID is invalid.', { code: 'managed_context_command_invalid' })
+    throw managedError('Managed context command ID is invalid.', 'managed_context_command_invalid')
   }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/managed-context/retain',
@@ -3661,9 +3639,7 @@ function managedServiceSchedule(value: unknown) {
       ? null
       : readShopServiceSchedule(JSON.stringify(value))
   } catch {
-    throw new ManagedTrialError('The managed appointment schedule is invalid.', {
-      code: 'managed_service_schedule_invalid',
-    })
+    throw managedError('The managed appointment schedule is invalid.', 'managed_service_schedule_invalid')
   }
 }
 
@@ -3682,9 +3658,7 @@ export async function loadManagedServiceSchedule(
     || !Number.isSafeInteger(response.version)
     || response.version < 1
     || typeof response.privacy_owner !== 'boolean') {
-    throw new ManagedTrialError('The managed appointment response is invalid.', {
-      code: 'managed_service_schedule_response_invalid',
-    })
+    throw managedError('The managed appointment response is invalid.', 'managed_service_schedule_response_invalid')
   }
   return {
     version: response.version,
@@ -3726,9 +3700,7 @@ export async function saveManagedServiceSchedule(request: {
     || !Number.isSafeInteger(result.version)
     || result.version !== request.expectedVersion + 1
     || !nextSchedule) {
-    throw new ManagedTrialError('The managed appointment save response is invalid.', {
-      code: 'managed_service_schedule_save_invalid',
-    })
+    throw managedError('The managed appointment save response is invalid.', 'managed_service_schedule_save_invalid')
   }
   return { version: result.version, schedule: nextSchedule }
 }
@@ -4111,3 +4083,7 @@ const errorManagedContextValidationInvalid = codedManagedError('managed_context_
 const errorManagedContextRetentionInvalid = codedManagedError('managed_context_retention_invalid')
 const errorSelfServeWorkspaceInvalid = codedManagedError('self_serve_workspace_invalid')
 const errorAuthRequired = codedManagedError('auth_required')
+
+function managedError(message: string, code: string) {
+  return new ManagedTrialError(message, { code })
+}

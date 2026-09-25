@@ -109,10 +109,12 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   useEffect(() => {
     if (!review) return
     const timer = window.setTimeout(() => {
+      try { if (command.identity) clearCatalogDecision(window.sessionStorage, command.identity, reviewId) } catch { /* Storage may be unavailable. */ }
+      command.pending = null; setNote('')
       access.invalidate(); setReview(null); setDecisions(null); setMessage('This review expired. Ask SuperMega for a fresh review.')
     }, Math.max(0, Math.min(2147483647, Date.parse(review.expiresAt) - Date.now())))
     return () => window.clearTimeout(timer)
-  }, [review, access])
+  }, [review, access, command, reviewId])
 
   return <main className="catalog-review-page" aria-busy={opening}>
     {review ? <>

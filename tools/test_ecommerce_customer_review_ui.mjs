@@ -288,3 +288,16 @@ test('expired or altered recovery records cannot be used to construct a retry', 
     assert.throws(() => recovery.recoverCatalogDecision(api, identity, review))
   }
 })
+
+
+test('verified expiry removes the pending tab note and never enables a replacement write', async () => {
+  const storage = new Map()
+  const h = harness({ storage, uncertainWrite: true }); h.render(); const cleanup = h.effects[0](); await flush()
+  h.control('Request changes').props.onClick(); h.field().props.onChange({ target: { value: 'Private synthetic note' } })
+  h.form().props.onSubmit({ preventDefault() {} }); await flush(); assert.equal(storage.size, 1)
+  h.render(); const stopTimer = h.effects[1](); [...h.timers.values()][0].callback()
+  assert.equal(storage.size, 0)
+  assert.doesNotMatch(h.render(), /Synthetic catalog|Retry response|Accept catalog|Private synthetic note/)
+  assert.match(h.render(), /review expired/); assert.equal(h.writes.length, 1)
+  stopTimer(); cleanup()
+})
