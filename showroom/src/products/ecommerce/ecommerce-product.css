@@ -794,8 +794,11 @@
   }
 
   .ecommerce-order-intake-guide,
-  .ecommerce-order-repair-checklist,
-.ecommerce-ops-cockpit-rows {
+  .ecommerce-order-repair-checklist {
+    grid-template-columns: 1fr;
+  }
+
+  .ecommerce-ops-cockpit-rows {
     grid-template-columns: 1fr;
   }
 
@@ -1723,8 +1726,12 @@
     grid-template-columns: 1fr;
   }
 
-  .ecommerce-after-purchase > div,
-.ecommerce-return-status {
+  .ecommerce-after-purchase > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ecommerce-return-status {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1745,8 +1752,11 @@
     flex-direction: column;
   }
 
-  .ecommerce-order-history article .core-button,
-.ecommerce-after-purchase .core-button {
+  .ecommerce-order-history article .core-button {
+    width: 100%;
+  }
+
+  .ecommerce-after-purchase .core-button {
     width: 100%;
   }
 }
@@ -1760,9 +1770,15 @@
   }
 
   .ecommerce-setup,
-  .ecommerce-preview-panel,
-.ecommerce-request-lab,
-.ecommerce-buying-workspace {
+  .ecommerce-preview-panel {
+    scroll-margin-top: 112px;
+  }
+
+  .ecommerce-request-lab {
+    scroll-margin-top: 112px;
+  }
+
+  .ecommerce-buying-workspace {
     scroll-margin-top: 112px;
   }
 }
@@ -1814,8 +1830,11 @@
     font-size: 0.75rem;
   }
 
-  .storefront-request-button,
-.ecommerce-cart-line > button {
+  .storefront-request-button {
+    font-size: 0.75rem;
+  }
+
+  .ecommerce-cart-line > button {
     font-size: 0.75rem;
   }
 }

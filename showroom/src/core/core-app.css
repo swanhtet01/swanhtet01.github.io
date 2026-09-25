@@ -1976,11 +1976,11 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .team-screen.mobile-focus-open > .simple-toolbar,
   .team-screen.mobile-focus-open > .compact-summary { display: none; }
   .team-screen.mobile-focus-open > .workspace-view { flex: 1; }
-  .team-board-view.mobile-list-open .record-detail-panel,
-.team-board-view.mobile-detail-open .queue-panel { display: none; }
+  .team-board-view.mobile-list-open .record-detail-panel { display: none; }
+  .team-board-view.mobile-detail-open .queue-panel { display: none; }
   .team-board-view .team-mobile-back { min-height: 44px; display: inline-flex; align-items: center; margin-bottom: 8px; }
-  .agent-team-view.mobile-list-open .agent-detail-panel,
-.agent-team-view.mobile-detail-open .agent-roster-panel { display: none; }
+  .agent-team-view.mobile-list-open .agent-detail-panel { display: none; }
+  .agent-team-view.mobile-detail-open .agent-roster-panel { display: none; }
   .agent-team-view .agent-mobile-back { min-height: 44px; display: inline-flex; align-items: center; margin-bottom: 8px; }
   .agent-team-view { flex: none; }
   .agent-roster { max-height: 360px; }
@@ -2015,8 +2015,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .stock-catalog-content { max-height: none; overflow: visible; padding-inline: 10px; }
   .data-row.stock-empty-row { min-height: 72px; grid-template-columns: 1fr; grid-template-rows: auto; }
   .data-row.stock-empty-row > span:first-child { grid-column: 1; grid-row: 1; }
-  .stock-receipt-editor,
-.order-return-editor { grid-template-columns: 1fr; }
+  .stock-receipt-editor { grid-template-columns: 1fr; }
+  .order-return-editor { grid-template-columns: 1fr; }
   .order-return-editor .form-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .order-return-editor .core-button { width: 100%; }
   .purchase-order-editor[data-mode="create"],
@@ -2245,8 +2245,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .agent-control-grid { grid-template-columns: 1fr; }
   .agent-create-form { position: static; width: min(100%,300px); margin-top: 8px; }
   .agent-roster-panel .panel-head { align-items: flex-start; }
-  .action-history summary,
-.compact-disclosure > summary,
+  .action-history summary { min-height: 44px; }
+  .compact-disclosure > summary,
 .core-button, .core-button.compact, .text-link, .core-topbar .mobile-brand .core-brand, .topbar-meta > a, .view-tabs button, .mobile-nav a { min-height: 44px; }
   input, select, textarea { font-size: 1rem; }
   /* Component rules outrank the element floor above; re-assert it where they win, or iOS zooms mid-form. */
@@ -2259,8 +2259,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
      the target; explicit floors where a component rule outranks it. Non-interactive captions
      (record metadata, eyebrows, summary sub-lines) deliberately keep their smaller sizes. */
   .view-tabs button, .core-button.compact, .text-link,
-.compact-disclosure > summary, .order-row-more > summary,
-.action-history summary { font-size: 0.75rem; }
+.compact-disclosure > summary, .order-row-more > summary { font-size: 0.75rem; }
+  .action-history summary { font-size: 0.75rem; }
   .catalog-import-technical > summary,
 .shop-payment-options button,
 .shop-pack-context a { min-height: 44px; font-size: 0.75rem; }
