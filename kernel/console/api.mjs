@@ -354,13 +354,15 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
     // ---- DEALS (save a generated packet; list; outreach status) ----
     if (seg[0] === 'deals') {
       if (method === 'GET' && !seg[1]) {
+        const focus = query.send_status_id || ''
+        if (typeof focus !== 'string' || (focus && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(focus))) return bad(400, 'invalid_send_status_id')
         const filter = {}
         if (query.lead_id) filter.lead_id = query.lead_id
         if (query.status) filter.status = query.status
         const deals = await store.listDeals(filter)
         const projected = []
         // Bound claim lookups; older rows remain visible but cannot imply send readiness.
-        for (let i = 0; i < deals.length; i++) projected.push({ ...deals[i], outreach_send_state: i < 50 ? await readOutreachState(deals[i].id, store) : 'unavailable' })
+        for (let i = 0; i < deals.length; i++) projected.push({ ...deals[i], outreach_send_state: (focus ? deals[i].id === focus : i < 50) ? await readOutreachState(deals[i].id, store) : 'not_loaded' })
         return ok({ ok: true, deals: projected })
       }
       if (method === 'POST' && !seg[1]) {

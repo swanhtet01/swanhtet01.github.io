@@ -127,15 +127,35 @@ test('read-only outreach projection survives reopening without exposing payload 
 test('actual reopened outreach list offers send only for verified absent claims',async()=>{
   const {readFile}=await import('node:fs/promises');const {runInNewContext}=await import('node:vm')
   const html=await readFile(new URL('./public/index.html',import.meta.url),'utf8')
-  const render=html.slice(html.indexOf('async function loadOutreach(){'),html.indexOf('function openProposal(d){'))
+  const render=html.slice(html.indexOf('async function loadOutreach('),html.indexOf('function openProposal(d){'))
   const rows=[];const box={innerHTML:'',appendChild:x=>rows.push(x),querySelectorAll:()=>[]}
   await runInNewContext(render+';loadOutreach()',{
     $:()=>box,esc:String,document:{createElement:()=>({})},
-    api:async()=>({ok:true,deals:['none','unconfirmed','accepted','unavailable',undefined].map((state,i)=>({id:'d'+i,status:'approved',packet:{},outreach_send_state:state}))}),
+    api:async()=>({ok:true,deals:['none','unconfirmed','accepted','unavailable',undefined,'not_loaded'].map((state,i)=>({id:'d'+i,status:'approved',packet:{},outreach_send_state:state}))}),
   })
   assert.match(rows[0].innerHTML,/data-emailsend/)
   for(const row of rows.slice(1))assert.doesNotMatch(row.innerHTML,/data-emailsend/)
   assert.match(rows[1].innerHTML,/Send outcome is unconfirmed/)
   assert.match(rows[2].innerHTML,/needs reconciliation/)
   assert.match(rows[3].innerHTML,/could not be verified/)
+  assert.match(rows[5].innerHTML,/has not been checked/)
+  assert.match(rows[5].innerHTML,/data-checksend/)
+})
+
+
+test('focused deal status read reaches older rows with exactly one claim lookup',async()=>{
+  const {readFile}=await import('node:fs/promises');const {runInNewContext}=await import('node:vm')
+  const source=await readFile(new URL('./console/api.mjs',import.meta.url),'utf8')
+  const start=source.indexOf("      if (method === 'GET' && !seg[1]) {",source.indexOf('// ---- DEALS'))
+  const route=source.slice(start,source.indexOf("      if (method === 'POST' && !seg[1])",start))
+  const rows=Array.from({length:75},(_,i)=>({id:'deal-'+i}))
+  const reads=[]
+  const context={method:'GET',seg:['deals'],query:{send_status_id:'deal-74'},store:{listDeals:async()=>rows},
+    readOutreachState:async id=>{reads.push(id);return 'none'},ok:x=>x,bad:(status,reason)=>({status,reason})}
+  const result=await runInNewContext('(async()=>{'+route+'})()',context)
+  assert.deepEqual(reads,['deal-74']);assert.equal(result.deals[74].outreach_send_state,'none')
+  assert.equal(result.deals[0].outreach_send_state,'not_loaded')
+  context.query={send_status_id:'bad&query'}
+  assert.equal((await runInNewContext('(async()=>{'+route+'})()',context)).status,400)
+  assert.equal(reads.length,1)
 })
