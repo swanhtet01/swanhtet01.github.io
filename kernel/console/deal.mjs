@@ -119,7 +119,7 @@ export async function generateDeal({ name, company, workflow, contact }) {
       operator: clip(a.operator, 600),
       phases: arr(a.phases, 3, (s) => clip(s, 90)),
       first_proof: clip(a.first_proof, 360),
-      pricing: { build_fee_mmk: clip(a.pricing?.build_fee_mmk, 80), pro_mrr_mmk: clip(a.pricing?.pro_mrr_mmk, 80), rationale: clip(a.pricing?.rationale, 500) },
+      pricing: { build_fee_mmk: '', pro_mrr_mmk: '', rationale: 'Pricing awaits founder review after scoping.' },
       objections: arr(b?.objections, 4, (o) => ({ objection: clip(o?.objection, 200), answer: clip(o?.answer, 400) })),
       outreach_en: clip(b?.outreach_en, 1200),
       next_action: clip(a.next_action, 300),

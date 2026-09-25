@@ -130,6 +130,8 @@ test('actual deal UI discards stale generation and save handlers after enquiry s
   const betaPacket={headline:'Beta draft'}
   pending.shift().resolve({ok:true,packet:betaPacket})
   await second
+  assert.match($('#dealOut').innerHTML,/Pending review/)
+  assert.doesNotMatch($('#dealOut').innerHTML,/<dd> MMK<\/dd>/)
   const staleSave=$('#d-save').onclick
   choose('a')
   const before=calls.length
@@ -182,4 +184,23 @@ test('actual autopilot route preserves customer briefs and never substitutes pro
   assert.deepEqual(saved.map(x=>x.lead_id),['website','ecommerce'])
   assert.ok(saved.every(x=>x.status==='draft'))
   assert.equal(result.results[2].reason,'need_workflow')
+})
+
+
+test('generated prices are unset even when the model returns an invented quote', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { runInNewContext } = await import('node:vm')
+  let source=await readFile(new URL('./console/deal.mjs',import.meta.url),'utf8')
+  source=source.replace(/import \{ complete, stripInjectionFrames \} from '..\/gateway.mjs'/,'')
+    .replaceAll('export async function','async function').replaceAll('export function','function')
+    .replace('export default { generateDeal, normalizeDealPacket }','')
+  const context={stripInjectionFrames:x=>String(x||''),complete:async()=>({data:samplePacket})}
+  const generated=await runInNewContext(source+";generateDeal({workflow:'Prepare the approved Website preview'})",context)
+  assert.equal(generated.ok,true)
+  assert.equal(generated.packet.pricing.build_fee_mmk,'')
+  assert.equal(generated.packet.pricing.pro_mrr_mmk,'')
+  assert.equal(generated.packet.pricing.rationale,'Pricing awaits founder review after scoping.')
+  // This generator boundary must not erase a separately stored/manual packet's pricing.
+  const {normalizeDealPacket}=await import('./console/deal.mjs')
+  assert.equal(normalizeDealPacket(samplePacket).packet.pricing.build_fee_mmk,'3,000,000 MMK')
 })

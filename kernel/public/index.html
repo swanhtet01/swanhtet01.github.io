@@ -1634,7 +1634,7 @@ async function loadOutreach(){
     const p=d.packet||{}
     const el=document.createElement('div');el.className='deal'
     el.innerHTML=`<div class="row" style="justify-content:space-between"><b style="font-size:15px">${esc(p.headline||'(deal)')}</b><span class="pill ${d.status==='sent'?'won':''}">${esc(d.status)}</span></div>
-      <div class="muted" style="font-size:12.5px;margin:4px 0 10px">fit ${p.fit_score||'—'}/100 · ${esc(p.segment||'')} · ${esc((p.pricing&&p.pricing.build_fee_mmk)||'')} MMK</div>
+      <div class="muted" style="font-size:12.5px;margin:4px 0 10px">fit ${p.fit_score||'—'}/100 · ${esc(p.segment||'')} · ${p.pricing?.build_fee_mmk?esc(p.pricing.build_fee_mmk)+' MMK':'Pricing pending review'}</div>
       ${p.outreach_en?`<div class="draft" id="ot-${d.id}">${esc(p.outreach_en)}</div>`:'<div class="muted" style="font-size:12px">No outreach draft.</div>'}
       <div class="row" style="margin-top:10px">
         ${p.outreach_en?`<button class="sm" data-copy="${d.id}">Copy draft</button>`:''}
@@ -1670,7 +1670,7 @@ function openProposal(d){
   <h2>What we'll build</h2><ul>${modules}</ul>
   <h2>How it works for you</h2><p>Built for Myanmar — MMK, KBZPay / MMQR, bilingual, offline-ready. You own it. AI-native: it drafts, you approve anything that sends, pays, or changes records.${p.operator?' '+esc(p.operator):''}</p>
   <h2>Timeline</h2><ul>${phases}</ul><p class=muted>Two rounds of revisions included.</p>
-  <h2>Price</h2><div class=box><b>Build:</b> ${esc((p.pricing&&p.pricing.build_fee_mmk)||'')} MMK${p.pricing&&p.pricing.pro_mrr_mmk?` · <b>Care:</b> ${esc(p.pricing.pro_mrr_mmk)} MMK/month`:''}<br><span class=muted>${esc((p.pricing&&p.pricing.rationale)||'')}</span><br><br>To start: <b>50% deposit by KBZPay / MMQR</b>. Balance on go-live + your sign-off.</div>
+  <h2>Price</h2><div class=box><b>Build:</b> ${p.pricing?.build_fee_mmk?esc(p.pricing.build_fee_mmk)+' MMK':'Pricing pending review'}${p.pricing&&p.pricing.pro_mrr_mmk?` · <b>Care:</b> ${esc(p.pricing.pro_mrr_mmk)} MMK/month`:''}<br><span class=muted>${esc((p.pricing&&p.pricing.rationale)||'')}</span><br><br>Payment terms require founder approval after scoping.</div>
   <h2>Next step</h2><p>${esc(p.next_action||'Reply to confirm and we send the KBZPay/MMQR details to start.')}</p>
   <p class=muted>— Swan Htet · swanhtet@supermega.dev · +95 9 500 0721</p>
   <a href="javascript:print()" style="display:inline-block;margin-top:20px;padding:10px 16px;background:#2563EB;color:#fff;border-radius:8px;text-decoration:none">Print / Save PDF</a>`)
@@ -1701,7 +1701,7 @@ $('#d-run').onclick=async()=>{
     <div class="kv"><dt>Pain</dt><dd>${esc(p.pain||'')}</dd><dt>Operator</dt><dd>${esc(p.operator||'')}</dd></div>
     <div><b>Build:</b> ${(p.modules||[]).map(m=>`<span class="chip">${esc(m.name)}</span>`).join('')}</div>
     <div style="margin:10px 0"><b>Phases:</b> ${(p.phases||[]).map(esc).join(' → ')}</div>
-    <div class="kv"><dt>Build fee</dt><dd>${esc(p.pricing?.build_fee_mmk||'')} MMK</dd><dt>Care / mo</dt><dd>${esc(p.pricing?.pro_mrr_mmk||'')} MMK</dd></div>
+    <div class="kv"><dt>Build fee</dt><dd>${p.pricing?.build_fee_mmk?esc(p.pricing.build_fee_mmk)+' MMK':'Pending review'}</dd><dt>Care / mo</dt><dd>${p.pricing?.pro_mrr_mmk?esc(p.pricing.pro_mrr_mmk)+' MMK':'Pending review'}</dd></div>
     ${p.outreach_en?`<div style="margin-top:10px"><b>Outreach draft</b><div class="draft">${esc(p.outreach_en)}</div></div>`:''}
     <div class="muted" style="margin-top:10px"><b>Next:</b> ${esc(p.next_action||'')}</div>
     <div class="row" style="margin-top:14px"><button class="primary" id="d-save">Save deal${dealLead?' to '+esc(dealLead.company||dealLead.name):''}</button></div>
