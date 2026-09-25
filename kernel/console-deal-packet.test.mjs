@@ -101,3 +101,55 @@ test('POST /api/deals persists only the normalized packet shape', async () => {
     restoreEnvironment(saved)
   }
 })
+
+
+test('actual deal UI discards stale generation and save handlers after enquiry switch', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { runInNewContext } = await import('node:vm')
+  const html = await readFile(new URL('./public/index.html', import.meta.url), 'utf8')
+  const run = html.slice(html.indexOf("$('#d-run').onclick=async()=>{"), html.indexOf('const WORKCELL_MISSING='))
+  const select = html.split("box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{")[1].split('})')[0]
+  const nodes = new Map()
+  const $ = (id) => { if (!nodes.has(id)) nodes.set(id, {value:'',innerHTML:'',textContent:'',disabled:false}); return nodes.get(id) }
+  const calls = [], pending = []
+  const context = { $, esc: String, toast:()=>{}, openConsoleView:()=>{}, b:{dataset:{deal:'a'}},
+    r:{leads:[{id:'a',company:'Alpha',message:'Website brief'}, {id:'b',company:'Beta',message:'Ecommerce brief'}]},
+    api: (method,path,body) => { calls.push({method,path,body}); return new Promise((resolve,reject)=>pending.push({resolve,reject})) },
+  }
+  runInNewContext('let dealLead=null,lastPacket=null,dealGeneration=0;'+run, context)
+  const choose = (id) => { context.b.dataset.deal=id; runInNewContext('(()=>{'+select+'})()',context) }
+  choose('a')
+  const first = $('#d-run').onclick()
+  choose('b')
+  assert.equal($('#d-workflow').value,'Ecommerce brief')
+  assert.equal($('#dealOut').innerHTML,'')
+  pending.shift().resolve({ok:true,packet:{headline:'Old Alpha draft'}})
+  await first
+  assert.equal($('#dealOut').innerHTML,'', 'late Alpha result must not appear for Beta')
+  const second = $('#d-run').onclick()
+  const betaPacket={headline:'Beta draft'}
+  pending.shift().resolve({ok:true,packet:betaPacket})
+  await second
+  const staleSave=$('#d-save').onclick
+  choose('a')
+  const before=calls.length
+  await staleSave()
+  assert.equal(calls.length,before,'detached save cannot attach Beta packet to Alpha')
+  const third=$('#d-run').onclick()
+  const alphaPacket={headline:'Current Alpha draft'}
+  pending.shift().resolve({ok:true,packet:alphaPacket})
+  await third
+  const save=$('#d-save').onclick()
+  assert.equal(calls.at(-1).body.lead_id,'a')
+  assert.equal(calls.at(-1).body.packet,alphaPacket)
+  choose('b')
+  pending.shift().resolve({ok:true})
+  await save
+  assert.equal($('#dealOut').innerHTML,'')
+  assert.notEqual($('#d-save').textContent,'Saved ✓','late save does not confirm in new enquiry')
+  const failed=$('#d-run').onclick()
+  pending.shift().reject(new Error('synthetic transport failure'))
+  await failed
+  assert.equal($('#d-run').disabled,false)
+  assert.match($('#dealOut').innerHTML,/Could not generate/)
+})

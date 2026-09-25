@@ -451,7 +451,7 @@ const getOpsKey=()=>$('#opsKey').value.trim()
 const hasOpsKey=()=>getOpsKey().length>0
 let consoleAccessGranted=false
 let requestedConsoleView=location.hash==='#company'?'company':location.hash==='#activation'?'workcells':'overview'
-let dealLead=null, lastPacket=null
+let dealLead=null, lastPacket=null, dealGeneration=0
 let companyRoster=[], companyDraft=null, companyAgentLimit=1, companyWorkOrders=[], companyOperations=null, companyOpenWorkOrder=null, companyCeoCycle=null
 let companyPlaybooks=[], companyPlaybookPlan=null, companyPreparedPlaybookStage=null, companyMissions=[], companyOpenMission=null
 let companyAuth=null, companyAccessInventory=null
@@ -1594,7 +1594,7 @@ async function loadLeads(cursor=''){
   }
   box.querySelectorAll('[data-review]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.review)+'/review',{});if(x.ok){toast('Review recorded');loadLeads()}})
   box.querySelectorAll('[data-conv]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.conv)+'?action=convert',{});if(x.ok){toast('Project created');loadLeads()}})
-  box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealLead=l;openConsoleView('deal');$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'request')})
+  box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealGeneration++;dealLead=l;lastPacket=null;$('#dealOut').innerHTML='';$('#d-run').disabled=false;$('#d-run').textContent='Generate';openConsoleView('deal');$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'request')})
 }
 
 const P_COLS=[['scoping','Scoping'],['deposit','Deposit'],['building','Building'],['live','Live'],['care','Support']]
@@ -1685,9 +1685,13 @@ $('#l-add').onclick=async()=>{
 }
 
 $('#d-run').onclick=async()=>{
+  const generation=++dealGeneration, leadId=dealLead?dealLead.id:null
+  lastPacket=null
   const btn=$('#d-run');btn.disabled=true;btn.textContent='Generating…'
   const out=$('#dealOut');out.innerHTML='<div class="panel muted">Thinking… (drafts only)</div>'
-  const r=await api('POST','/api/deal',{name:$('#d-name').value,company:$('#d-company').value,contact:$('#d-contact').value,workflow:$('#d-workflow').value})
+  let r
+  try{r=await api('POST','/api/deal',{name:$('#d-name').value,company:$('#d-company').value,contact:$('#d-contact').value,workflow:$('#d-workflow').value})}catch{r={ok:false,reason:'Request failed. Try again.'}}
+  if(generation!==dealGeneration)return
   btn.disabled=false;btn.textContent='Generate'
   if(!r.ok){out.innerHTML=`<div class="panel"><b>Could not generate.</b><p class="muted">${esc(r.reason||'error')}${r.reason==='ai_not_configured'?' — set ANTHROPIC_API_KEY.':''}</p></div>`;return}
   lastPacket=r.packet;const p=r.packet
@@ -1703,7 +1707,9 @@ $('#d-run').onclick=async()=>{
     <div class="row" style="margin-top:14px"><button class="primary" id="d-save">Save deal${dealLead?' to '+esc(dealLead.company||dealLead.name):''}</button></div>
   </div>`
   $('#d-save').onclick=async()=>{
-    const x=await api('POST','/api/deals',{lead_id:dealLead?dealLead.id:null,packet:lastPacket})
+    if(generation!==dealGeneration)return
+    const x=await api('POST','/api/deals',{lead_id:leadId,packet:p})
+    if(generation!==dealGeneration)return
     if(x.ok){toast('Deal saved → Outreach');$('#d-save').textContent='Saved ✓';$('#d-save').disabled=true}
   }
 }
