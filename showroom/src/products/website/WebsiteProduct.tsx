@@ -8,7 +8,7 @@ import {
   readLocalShopBusinessTemplateId,
 } from '../../core/product-onboarding-runtime'
 import { ContentWorkspace } from './ContentWorkspace'
-import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
+import { BusinessBrief } from '../AssistedDeliveryScope'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
@@ -1225,19 +1225,13 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-preview={showAssistedWebsitePreview || undefined} data-state={websiteTodayState} data-step={websiteTodayStep}>
-            <div className="website-today-priority">
-              {!showAssistedWebsitePreview ? <span className="core-eyebrow">Start here</span> : null}
-              <h2 id="website-today-title">{showAssistedWebsitePreview ? 'Preview' : websiteAgentJob}</h2>
-              {!showAssistedWebsitePreview ? <p>{websiteAgentReason}</p> : null}
-              {showAssistedWebsitePreview ? (
-                <>
-                  <AssistedDeliveryScope product="website" />
-                </>
-              ) : (
-                <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
-              )}
-            </div>
+          {!starterSetupActive ? <section aria-label="Website status" className="website-today" data-preview={showAssistedWebsitePreview || undefined} data-state={websiteTodayState} data-step={websiteTodayStep}>
+            {!showAssistedWebsitePreview ? <div className="website-today-priority">
+              <span className="core-eyebrow">Start here</span>
+              <h2 id="website-today-title">{websiteAgentJob}</h2>
+              <p>{websiteAgentReason}</p>
+              <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
+            </div> : null}
             <details className="website-today-checks">
               <summary>Site checks · {websiteTodayMetrics[1][1]}</summary>
               <div aria-label="Website today status" className="website-today-metrics" role="group">
@@ -1254,10 +1248,10 @@ export function WebsiteProduct() {
                 </div>
               ) : null}
             </details>
-            <div className="website-today-source" role="status">
+            {!showAssistedWebsitePreview ? <div className="website-today-source" role="status">
               <span>{websiteTodayContext}</span>
-              {!showAssistedWebsitePreview ? <small>{websiteReviewNote}</small> : null}
-            </div>
+              <small>{websiteReviewNote}</small>
+            </div> : null}
           </section> : null}
 
           {view === 'content' ? (
