@@ -1,5 +1,6 @@
 // Synthetic visual/interaction QA only. No real identity, database or release proof.
 import { createServer } from 'node:http'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
@@ -7,7 +8,8 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const args = process.argv.slice(2)
-if (args.length !== 2 || args[0] !== '--expected-head' || !/^[0-9a-f]{40}$/.test(args[1])) throw Error('exact_expected_head_required')
+const buildOnly = args[2] === '--build-only'
+if ((args.length !== 2 && !(args.length === 3 && buildOnly)) || args[0] !== '--expected-head' || !/^[0-9a-f]{40}$/.test(args[1])) throw Error('exact_expected_head_required')
 const git = (...argv) => execFileSync('git', argv, { cwd: root, encoding: 'utf8', windowsHide: true }).trim()
 const head = git('rev-parse', 'HEAD')
 if (head !== args[1] || git('status', '--porcelain')) throw Error('clean_exact_source_required')
@@ -117,6 +119,15 @@ const result = await build({
 const assets = new Map(result.outputFiles.map(file => ['/' + file.path.split(/[\\/]/).at(-1), file.contents]))
 assets.set('/fixture.css', Buffer.from('body{margin:0;background:#f7f9f7;font:16px/1.5 system-ui;color:#18372a}.qa-banner,.qa-controls,#fixture-counts{display:flex;flex-wrap:wrap;gap:.5rem;padding:.75rem;overflow-wrap:anywhere}.qa-banner{background:#fff0bc}.qa-controls button{min-height:44px;padding:.5rem .75rem}#fixture-counts{font-size:12px}.qa-staff{padding:1rem;min-height:100dvh}.qa-staff ul{padding-left:1.25rem}'))
 const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SuperMega synthetic Website review QA</title><link rel="stylesheet" href="/stdin.css"><link rel="stylesheet" href="/fixture.css"><body><aside class="qa-banner">LOCAL SYNTHETIC QA — no real identity, database, customer or publishing. Source ${head.slice(0, 8)}. Reopen tests component state; browser refresh resets fixture data.</aside><output id="fixture-counts"></output><div id="root"></div><script type="module" src="/stdin.js"></script></body></html>`
+if (buildOnly) {
+  const output = resolve(root, 'showroom/dist/__qa-website-review')
+  mkdirSync(output, { recursive: true })
+  for (const [name, bytes] of assets) writeFileSync(resolve(output, name.slice(1)), bytes)
+  const policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'"
+  writeFileSync(resolve(output, 'index.html'), html.replace('<title>', `<meta http-equiv="Content-Security-Policy" content="${policy}"><title>`)
+    .replaceAll('href="/', 'href="./').replaceAll('src="/', 'src="./'))
+  console.log(JSON.stringify({ mode: 'synthetic_only', head, output, serverStarted: false }))
+} else {
 const server = createServer((request, response) => {
   if (request.headers.host !== '127.0.0.1:4194' || request.method !== 'GET') { response.writeHead(403); response.end(); return }
   response.setHeader('cache-control', 'no-store')
@@ -129,3 +140,5 @@ const server = createServer((request, response) => {
   response.setHeader('content-type', request.url.endsWith('.css') ? 'text/css' : 'text/javascript'); response.end(asset)
 })
 server.listen(4194, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'synthetic_only', head, url: 'http://127.0.0.1:4194/', externalRequestsAllowed: false })))
+
+}
