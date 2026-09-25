@@ -9,6 +9,7 @@ an ignored file or a process-scoped environment variable.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone, timedelta
 import argparse
 import json
 import os
@@ -247,13 +248,28 @@ def _assert_runtime_role_postconditions(cursor: Any) -> None:
         raise ProvisioningFailure("runtime_role_atomic_postcondition_failed")
 
 
-def apply_runtime_role(connection: Any, runtime_password: str) -> None:
+def validate_runtime_expiry(value: str, now: datetime | None = None) -> datetime:
+    try:
+        expiry = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if expiry.tzinfo is None:
+            raise ValueError()
+        expiry = expiry.astimezone(timezone.utc)
+        current = now or datetime.now(timezone.utc)
+        if not current < expiry <= current + timedelta(hours=24):
+            raise ValueError()
+        return expiry
+    except (ValueError, TypeError):
+        raise ProvisioningFailure("runtime_expiry_must_be_within_24_hours") from None
+
+
+def apply_runtime_role(connection: Any, runtime_password: str, *, valid_until: str = "") -> None:
     if len(runtime_password) < 24 or len(runtime_password) > 1024:
         raise ProvisioningFailure("runtime_password_length_invalid")
     try:
         from psycopg import sql
     except ImportError as exc:
         raise ProvisioningFailure("postgres_driver_missing") from exc
+    expiry = validate_runtime_expiry(valid_until) if valid_until else None
     before = inspect_runtime_role(connection)
     unsafe = [
         item
@@ -290,6 +306,12 @@ def apply_runtime_role(connection: Any, runtime_password: str) -> None:
                     "grant {} to {} with inherit true, set false, admin false"
                 ).format(sql.Identifier(BACKEND_ROLE), sql.Identifier(RUNTIME_ROLE))
             )
+            if expiry is not None:
+                cursor.execute(sql.SQL("alter role {} valid until {}").format(
+                    sql.Identifier(RUNTIME_ROLE), sql.Literal(expiry.isoformat())))
+                cursor.execute("select rolvaliduntil from pg_roles where rolname = %s", (RUNTIME_ROLE,))
+                if _mapping(cursor.fetchone()).get("rolvaliduntil") != expiry:
+                    raise ProvisioningFailure("runtime_expiry_postcondition_failed")
             _assert_runtime_role_postconditions(cursor)
 
 
@@ -323,6 +345,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expected-project-ref", required=True)
     parser.add_argument("--approval-id", default="")
     parser.add_argument("--production-handoff", action="store_true")
+    parser.add_argument("--valid-until", default="", help="Timezone-aware deadline within 24 hours for temporary runtime credentials.")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--evidence-output", default="")
     args = parser.parse_args(argv)
@@ -352,7 +375,7 @@ def main(argv: list[str] | None = None) -> int:
                     "runtime_password",
                 )
                 try:
-                    apply_runtime_role(connection, password)
+                    apply_runtime_role(connection, password, valid_until=args.valid_until)
                 finally:
                     password = ""
                 after = inspect_runtime_role(connection)

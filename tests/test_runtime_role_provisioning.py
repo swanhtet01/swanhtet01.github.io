@@ -24,6 +24,17 @@ class RuntimeRoleProvisioningTests(unittest.TestCase):
     PROD = "zvtzwcimpvvtkowflhda"
     APPROVAL = "123e4567-e89b-42d3-a456-426614174000"
 
+    def test_temporary_expiry_rejects_unbounded_or_ambiguous_deadlines(self):
+        from datetime import datetime, timezone
+        now = datetime(2026, 9, 26, tzinfo=timezone.utc)
+        for value in ["infinity", "2026-09-26T12:00:00", "2026-09-26T00:00:00Z", "2026-09-27T00:00:01Z"]:
+            with self.assertRaises(MODULE.ProvisioningFailure):
+                MODULE.validate_runtime_expiry(value, now)
+        self.assertEqual(MODULE.validate_runtime_expiry("2026-09-27T00:00:00Z", now).day, 27)
+        source = (TOOLS / "provision_supermega_runtime_role.py").read_text()
+        self.assertIn("runtime_expiry_postcondition_failed", source)
+        self.assertIn("valid_until=args.valid_until", source)
+
     def guard(self, status: str = "protected-unapproved"):
         return MODULE.TargetGuard(self.PROD, status)
 
