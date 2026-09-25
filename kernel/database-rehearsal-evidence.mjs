@@ -102,7 +102,7 @@ const rawCheckNames = [
   'identity_transaction_local',
   'invalid_initial_version_denied',
   'legacy_actor_denied',
-  'managed_exact_retry',
+  'managed_counter_old_receipt_recovery', 'temporary_runtime_password_expiry_verified', 'managed_exact_retry',
   'managed_human_attribution',
   'managed_owner_authorization_durable',
   'managed_supabase_session_revocation_enforced',

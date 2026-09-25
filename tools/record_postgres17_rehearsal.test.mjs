@@ -43,7 +43,7 @@ const checkNames = [
   'approval_service_row_spoof_denied', 'approval_terminal_replay_rejected', 'backup_created', 'browser_role_isolation',
   'capability_denial', 'capability_scoped_event_reads', 'capability_scoped_reads', 'dedicated_runtime_role_validated',
   'event_immutability', 'identity_transaction_local', 'invalid_initial_version_denied', 'legacy_actor_denied',
-  'managed_exact_retry', 'managed_human_attribution', 'managed_owner_authorization_durable',
+  'managed_counter_old_receipt_recovery', 'temporary_runtime_password_expiry_verified', 'managed_exact_retry', 'managed_human_attribution', 'managed_owner_authorization_durable',
   'managed_supabase_session_revocation_enforced',
   'managed_activation_atomic_rollback', 'managed_activation_idempotent_replay', 'managed_context_activation_evidence_bound',
   'managed_context_authenticated_identity_enforced', 'managed_context_owner_capability_enforced',
@@ -113,7 +113,7 @@ test('builds a sanitized digest-bound local PostgreSQL 17 proof without hosted c
   assert.deepEqual(validateSanitizedProof(proof, implementation), {
     ok: true,
     contract: DATABASE_REHEARSAL_EVIDENCE_SCHEMA,
-    checks: 72,
+    checks: 74,
     implementationFiles: implementation.fileCount,
     hostedActivationProven: false,
   })
@@ -138,7 +138,7 @@ test('record completion is derived from validated shared proof before publishing
   const proof = buildSanitizedProof(raw, context)
   const summary = recordCompletionSummary(proof, implementation)
   assert.equal(summary.ok, true)
-  assert.equal(summary.checks, 72)
+  assert.equal(summary.checks, 74)
   assert.equal(summary.implementationCommit, context.implementationCommit)
   assert.equal(summary.implementationTree, context.implementationTree)
   assert.equal(summary.receiptDigest, proof.receiptDigest)
@@ -186,7 +186,7 @@ test('exact catalog checks cannot be omitted, renamed, failed or replaced by a c
 })
 
 test('restored rows must match and every legacy plus new behavior must pass', () => {
-  assert.equal(checkNames.length, 72)
+  assert.equal(checkNames.length, 74)
   for (const name of checkNames) {
     const invalid = structuredClone(raw)
     invalid.checks[name] = false
@@ -244,7 +244,7 @@ test('read-only CLI consumer recomputes exact raw receipt pair and rejects chang
     assert.match(duplicate.stderr, /database_rehearsal_output_exists/)
     const pass = invoke()
     assert.equal(pass.status, 0, pass.stderr)
-    assert.equal(JSON.parse(pass.stdout).checks, 72)
+    assert.equal(JSON.parse(pass.stdout).checks, 74)
     const changed = structuredClone(raw)
     changed.checks.billing_runtime_write_denied = false
     await writeFile(`${input}.raw.json`, JSON.stringify(changed))
