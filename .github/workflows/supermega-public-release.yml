@@ -196,6 +196,8 @@ jobs:
         run: |
           node --test tools/test_generated_python_function.mjs
           node tools/verify_generated_python_function.mjs
+          python tools/test_packaged_app_import.py
+          python tools/verify_packaged_app_import.py
 
       - name: Verify immutable app asset contract
         run: node tools/verify_app_release_live.mjs --artifact-self-test
