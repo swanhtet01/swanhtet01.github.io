@@ -3741,3 +3741,35 @@
   .website-restored-draft-actions { display: grid; justify-content: stretch; }
   .website-restored-draft-actions .website-button { width: 100%; }
 }
+
+/* Keep the customer preview in view; operator guidance retains its full layout. */
+.website-today[data-preview='true'] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  padding: .5rem .75rem;
+  box-shadow: none;
+}
+.website-today[data-preview='true'] .website-today-priority {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem 1rem;
+}
+.website-today[data-preview='true'] .website-today-priority h2 { font-size: 1rem; }
+.website-today[data-preview='true'] .assisted-delivery-scope { margin: 0; }
+.website-today[data-preview='true'] .assisted-delivery-request {
+  border-color: transparent;
+  padding-inline: .25rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: .2em;
+}
+.website-today[data-preview='true'] .website-today-checks { flex: 1 1 12rem; }
+.website-today[data-preview='true'] .website-today-checks[open] { flex-basis: 100%; }
+.website-today[data-preview='true'] .website-today-source {
+  flex-basis: 100%;
+  border: 0;
+  padding: 0;
+}

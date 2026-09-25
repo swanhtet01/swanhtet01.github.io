@@ -1215,7 +1215,7 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
+          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-preview={showAssistedWebsitePreview || undefined} data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
               {!showAssistedWebsitePreview ? <span className="core-eyebrow">Start here</span> : null}
               <h2 id="website-today-title">{showAssistedWebsitePreview ? 'Preview' : websiteAgentJob}</h2>
