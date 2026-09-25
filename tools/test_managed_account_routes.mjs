@@ -996,3 +996,19 @@ test('terminal review authentication failures stop bounded retries without clear
     assert.equal(state.storage.get(MANAGED_WORKSPACE_STORAGE_KEY), 'synthetic-company')
   })
 })
+
+
+test('stale workspace selection cannot overwrite a newer account selection', async () => {
+  for (const kind of ['other-user', 'signed-out', 'anonymous', 'unlisted']) await withAuth(async (mod, state) => {
+    state.storage.set(MANAGED_WORKSPACE_STORAGE_KEY, 'newer-company')
+    state.session = kind === 'signed-out' ? null : { ...fixedSession,
+      user: kind === 'other-user' ? { ...fixedUser, id: 'new-account' }
+        : kind === 'anonymous' ? { ...fixedUser, is_anonymous: true } : fixedUser }
+    const prior = { userId: fixedUser.id, email: fixedUser.email,
+      workspaces: [{ workspaceId: 'old-company', label: 'Old company', access: 'owner' }] }
+    await assert.rejects(mod.completeManagedWorkspaceSignIn(prior, kind === 'unlisted' ? 'not-assigned' : 'old-company'),
+      error => error.code === (kind === 'unlisted' ? 'workspace_membership_missing' : 'managed_identity_changed'))
+    assert.equal(state.storage.get(MANAGED_WORKSPACE_STORAGE_KEY), 'newer-company')
+    assert.equal(state.calls.some(([name]) => ['fetch', 'storage-write', 'storage-remove', 'signOut'].includes(name)), false)
+  })
+})
