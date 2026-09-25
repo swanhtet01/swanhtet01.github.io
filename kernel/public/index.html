@@ -1644,7 +1644,6 @@ async function loadOutreach(focus=''){
         ${['not_loaded','unavailable'].includes(d.outreach_send_state)?`<button class="sm" data-checksend="${esc(d.id)}">Check send status</button>`:''}
         ${d.status==='approved'&&d.outreach_send_state==='accepted'?`<button class="sm" data-reconcilesend="${esc(d.id)}">Recover sent status</button>`:''}
         ${d.status==='approved'&&d.outreach_send_state==='none'?`<button class="sm primary" data-emailsend="${d.id}">Send email</button>`:''}
-        ${d.status!=='sent'?`<button class="sm" data-sent="${d.id}">Mark sent</button>`:''}
       </div>`
     box.appendChild(el)
   }
@@ -1683,7 +1682,6 @@ async function loadOutreach(focus=''){
     else{b.disabled=false}
 
   })
-  box.querySelectorAll('[data-sent]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.sent,{status:'sent'});loadOutreach();toast('Marked sent')})
 }
 
 function openProposal(d){

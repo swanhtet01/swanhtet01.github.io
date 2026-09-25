@@ -85,9 +85,9 @@ test('actual send route uses durable guard across provider success and status fa
 
 test('actual outreach UI retains recovery guidance and retries only the original recipient',async()=>{
   const {readFile}=await import('node:fs/promises');const {runInNewContext}=await import('node:vm')
-  const html=await readFile(new URL('./public/index.html',import.meta.url),'utf8')
+  const html=(await readFile(new URL('./public/index.html',import.meta.url),'utf8')).replace(/\r\n/g,'\n')
   const start=html.indexOf("  box.querySelectorAll('[data-emailsend]').forEach(b=>b.onclick=async()=>{")
-  const body=html.slice(start,html.indexOf("  box.querySelectorAll('[data-sent]')",start)).split('b.onclick=async()=>{')[1].trim().replace(/\}\)$/, '')
+  const body=html.slice(start,html.indexOf('\n}\n\nfunction openProposal',start)).split('b.onclick=async()=>{')[1].trim().replace(/\}\)$/, '')
   for(const reason of ['outreach_send_unconfirmed','outreach_receipt_unconfirmed','outreach_payload_conflict','outreach_sent_status_unconfirmed']){
     const status={textContent:''};const b={disabled:false,dataset:{emailsend:'deal-1'},closest:()=>({querySelector:()=>status})}
     let prompts=0;const requests=[]
@@ -126,7 +126,7 @@ test('read-only outreach projection survives reopening without exposing payload 
 
 test('actual reopened outreach list offers send only for verified absent claims',async()=>{
   const {readFile}=await import('node:fs/promises');const {runInNewContext}=await import('node:vm')
-  const html=await readFile(new URL('./public/index.html',import.meta.url),'utf8')
+  const html=(await readFile(new URL('./public/index.html',import.meta.url),'utf8')).replace(/\r\n/g,'\n')
   const render=html.slice(html.indexOf('async function loadOutreach('),html.indexOf('function openProposal(d){'))
   const rows=[];const box={innerHTML:'',appendChild:x=>rows.push(x),querySelectorAll:()=>[]}
   await runInNewContext(render+';loadOutreach()',{
@@ -192,4 +192,22 @@ test('actual reconciliation route requires eligible deal and never resolves a co
   assert.equal(calls,0);status='approved'
   assert.equal((await runInNewContext('(async()=>{'+route+'})()',context)).reconciled,true)
   assert.equal(calls,1)
+})
+
+
+test('generic deal status PATCH cannot bypass receipt-backed sent state',async()=>{
+  const {readFile}=await import('node:fs/promises');const {runInNewContext}=await import('node:vm')
+  const source=await readFile(new URL('./console/api.mjs',import.meta.url),'utf8')
+  const start=source.indexOf("      if (method === 'PATCH' && seg[1] && !seg[2]) {",source.indexOf('// ---- DEALS'))
+  const route=source.slice(start,source.indexOf('// Repair only an already accepted receipt',start))
+  let writes=0
+  const context={method:'PATCH',seg:['deals','deal-1'],body:{status:'sent'},DEAL_STATUSES:['draft','approved'],
+    store:{updateDeal:async(id,patch)=>{writes++;return {id,...patch}}},log:()=>{},bad:(status,reason)=>({status,reason}),ok:x=>x}
+  assert.equal((await runInNewContext('(async()=>{'+route+'})()',context)).reason,'sent_status_requires_receipt')
+  assert.equal(writes,0)
+  context.body={status:'approved'}
+  assert.equal((await runInNewContext('(async()=>{'+route+'})()',context)).ok,true)
+  assert.equal(writes,1)
+  const html=(await readFile(new URL('./public/index.html',import.meta.url),'utf8')).replace(/\r\n/g,'\n')
+  assert.doesNotMatch(html,/data-sent|>Mark sent</)
 })

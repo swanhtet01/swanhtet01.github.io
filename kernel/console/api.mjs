@@ -34,7 +34,7 @@ function constantTimeEqual(a, b) {
   return crypto.timingSafeEqual(ha, hb)
 }
 const PROJECT_STATUSES = ['scoping', 'deposit', 'building', 'live', 'care']
-const DEAL_STATUSES = ['draft', 'approved', 'sent']
+const DEAL_STATUSES = ['draft', 'approved']
 // USD anchors per offer (mirrors /offers/). Deposit = 50%. care-plan is monthly (MRR).
 // care-plan = 79 (Care-Lite/mo) is required by mrrUsd below — without it OFFER_USD['care-plan']
 // is undefined → mrrUsd NaN. The public console PRICE table MUST mirror these exactly so the
@@ -377,11 +377,11 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         return ok({ ok: true, deal })
       }
       if (method === 'PATCH' && seg[1] && !seg[2]) {
+        if (body.status === 'sent') return bad(409, 'sent_status_requires_receipt')
         const patch = {}
         if (body.status && DEAL_STATUSES.includes(body.status)) patch.status = body.status
         const deal = await store.updateDeal(seg[1], patch)
         if (!deal) return bad(404, 'deal_not_found')
-        if (patch.status === 'sent') log('outreach', `Outreach marked sent`, deal.id)
         if (patch.status === 'approved') log('outreach', `Outreach approved`, deal.id)
         return ok({ ok: true, deal })
       }
