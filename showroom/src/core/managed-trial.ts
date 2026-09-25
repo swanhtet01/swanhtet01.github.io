@@ -1260,7 +1260,7 @@ export function assertManagedEcommerceOrderQueueValidation(
     })
   }
   if (response.identity_authority !== 'trusted_managed_identity') {
-    throw errorManagedEcommerceOrderQueueIdentityUntrusted('The managed Ecommerce queue check was not bound to trusted workspace identity.')
+    throw new ManagedTrialError('The managed Ecommerce queue check was not bound to trusted workspace identity.', { code: 'managed_ecommerce_order_queue_identity_untrusted' })
   }
   const validation = response.validation as Record<string, unknown>
   const expected = buildManagedEcommerceOrderQueueValidation(packet, expectedIdentity)
@@ -1298,7 +1298,7 @@ export function assertManagedEcommerceOrderQueueImportPlan(
     })
   }
   if (response.identity_authority !== 'trusted_managed_identity') {
-    throw errorManagedEcommerceOrderQueueIdentityUntrusted('The managed Ecommerce import plan was not bound to trusted workspace identity.')
+    throw new ManagedTrialError('The managed Ecommerce import plan was not bound to trusted workspace identity.', { code: 'managed_ecommerce_order_queue_identity_untrusted' })
   }
   const plan = response.plan as Record<string, unknown>
   const validation = buildManagedEcommerceOrderQueueValidation(packet, expectedIdentity)
@@ -1346,7 +1346,7 @@ export function assertManagedEcommerceOrderQueueApplyPreflight(
     })
   }
   if (response.identity_authority !== 'trusted_managed_identity') {
-    throw errorManagedEcommerceOrderQueueIdentityUntrusted('The managed Ecommerce apply preflight was not bound to trusted workspace identity.')
+    throw new ManagedTrialError('The managed Ecommerce apply preflight was not bound to trusted workspace identity.', { code: 'managed_ecommerce_order_queue_identity_untrusted' })
   }
   const preflight = response.preflight as Record<string, unknown>
   if (preflight.contract !== 'supermega.ecommerce.shop_queue_apply_preflight.v1'
@@ -1473,10 +1473,10 @@ export function assertManagedClientImportValidation(
     })
   }
   if (validation.workspace_id !== expectedIdentity.workspaceId) {
-    throw errorManagedIdentityChanged('The company account returned a different identity.')
+    throw new ManagedTrialError('The company account returned a different identity.', { code: 'managed_identity_changed' })
   }
   if (validation.package_digest !== expectedPackageDigest) {
-    throw errorManagedClientImportPackageChanged('The managed import receipt does not match the package that was sent.')
+    throw new ManagedTrialError('The managed import receipt does not match the package that was sent.', { code: 'managed_client_import_package_changed' })
   }
   return validation as unknown as ManagedClientImportValidation
 }
@@ -2335,12 +2335,12 @@ export function assertManagedBootstrapIdentity(
     || !isRecord(bootstrap.readiness)
     || !isRecord(bootstrap.states)
     || !Array.isArray(bootstrap.approvals)) {
-    throw errorManagedBootstrapInvalid('The company account returned an invalid bootstrap response.')
+    throw new ManagedTrialError('The company account returned an invalid bootstrap response.', { code: 'managed_bootstrap_invalid' })
   }
   if (bootstrap.identity.workspace_id !== expectedIdentity.workspaceId
     || bootstrap.identity.actor_id !== expectedIdentity.userId
     || bootstrap.identity.actor_kind !== 'human') {
-    throw errorManagedIdentityChanged('The company account returned a different identity.')
+    throw new ManagedTrialError('The company account returned a different identity.', { code: 'managed_identity_changed' })
   }
   return bootstrap as ManagedBootstrap
 }
@@ -2361,7 +2361,7 @@ export function managedBootstrapHasCapability(
     || capabilities.some((value) => typeof value !== 'string' || !MANAGED_CAPABILITY_PATTERN.test(value))
     || new Set(capabilities).size !== capabilities.length
     || JSON.stringify(capabilities) !== JSON.stringify([...capabilities].sort())) {
-    throw errorManagedBootstrapInvalid('The company account returned invalid staff capabilities.')
+    throw new ManagedTrialError('The company account returned invalid staff capabilities.', { code: 'managed_bootstrap_invalid' })
   }
   return capabilities.includes(capability)
 }
@@ -2378,7 +2378,7 @@ export function managedProductsFromBootstrap(
       || explicit.some((product) => !order.includes(product))
       || new Set(explicit).size !== explicit.length
       || JSON.stringify(explicit) !== JSON.stringify(order.filter((product) => explicit.includes(product)))) {
-      throw errorManagedBootstrapInvalid('The company account returned invalid product entitlements.')
+      throw new ManagedTrialError('The company account returned invalid product entitlements.', { code: 'managed_bootstrap_invalid' })
     }
     return explicit.filter((product) => {
       if (product === 'commerce' || product === 'ecommerce') return Boolean(verified.states.commerce)
@@ -2816,7 +2816,7 @@ async function discoverForUnchangedSession(supabase: ManagedAuthClient, session:
   if (error || !validNamedUserSession(data.session)
     || data.session.user.id !== session.user.id
     || data.session.access_token !== session.access_token) {
-    throw errorManagedIdentityChanged('The managed session changed. Sign in again.')
+    throw new ManagedTrialError('The managed session changed. Sign in again.', { code: 'managed_identity_changed' })
   }
   return directory
 }
@@ -2877,7 +2877,7 @@ export async function completeManagedWorkspaceSignIn(
   const supabase = await authClient()
   const { data, error } = await supabase?.auth.getSession() ?? { data: { session: null }, error: null }
   if (error || !data.session || data.session.user.id !== signIn.userId || data.session.user.is_anonymous !== false) {
-    throw errorManagedIdentityChanged('The managed session changed. Sign in again.')
+    throw new ManagedTrialError('The managed session changed. Sign in again.', { code: 'managed_identity_changed' })
   }
   rememberWorkspace(workspaceId)
   return identity(data.session, workspaceId)
@@ -3040,11 +3040,11 @@ async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
     throw new ManagedTrialError('The managed session expired. Sign in again.', { code: 'auth_expired' })
   }
   if (currentManagedWorkspace() !== workspaceId) {
-    throw errorManagedIdentityChanged('The company account changed during authentication.')
+    throw new ManagedTrialError('The company account changed during authentication.', { code: 'managed_identity_changed' })
   }
   const resolvedIdentity = identity(data.session, workspaceId)
   if (expectedIdentity && !sameManagedIdentity(resolvedIdentity, expectedIdentity)) {
-    throw errorManagedIdentityChanged('The company account changed during the request.')
+    throw new ManagedTrialError('The company account changed during the request.', { code: 'managed_identity_changed' })
   }
   return { session: data.session, workspaceId }
 }
@@ -3199,7 +3199,7 @@ export async function preflightManagedClientImport(request: {
   if (request.validation.workspace_id !== request.identity.workspaceId
     || request.validation.package_digest !== currentDigest
     || request.validation.product !== submittedPackage.product) {
-    throw errorManagedClientImportPackageChanged('The validated import changed before preflight.')
+    throw new ManagedTrialError('The validated import changed before preflight.', { code: 'managed_client_import_package_changed' })
   }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/imports/apply-preflight',
@@ -3347,7 +3347,7 @@ export async function applyManagedClientImport(request: {
     || request.preflight.preflight_digest !== expectedPreflightDigest
     || request.preflight.external_writes_performed !== false
     || !CLIENT_IMPORT_COMMAND_ID.test(request.commandId)) {
-    throw errorManagedClientImportPackageChanged('The validated import changed before activation.')
+    throw new ManagedTrialError('The validated import changed before activation.', { code: 'managed_client_import_package_changed' })
   }
   let submittedPriorState: CommerceState | undefined
   if (submittedPackage.product === 'ecommerce') {
@@ -4126,13 +4126,9 @@ function codedManagedError(code: string) {
 }
 const errorManagedOwnerControlDigestInvalid = codedManagedError('managed_owner_control_digest_invalid')
 const errorManagedClientImportActivationInvalid = codedManagedError('managed_client_import_activation_invalid')
-const errorManagedEcommerceOrderQueueIdentityUntrusted = codedManagedError('managed_ecommerce_order_queue_identity_untrusted')
-const errorManagedIdentityChanged = codedManagedError('managed_identity_changed')
-const errorManagedClientImportPackageChanged = codedManagedError('managed_client_import_package_changed')
 const errorManagedPlantEquipmentActivationInvalid = codedManagedError('managed_plant_equipment_activation_invalid')
 const errorManagedPlantEquipmentCommissioningInvalid = codedManagedError('managed_plant_equipment_commissioning_invalid')
 const errorManagedPlantEquipmentMaintenanceStrategyInvalid = codedManagedError('managed_plant_equipment_maintenance_strategy_invalid')
-const errorManagedBootstrapInvalid = codedManagedError('managed_bootstrap_invalid')
 const errorWorkspaceDirectoryInvalid = codedManagedError('workspace_directory_invalid')
 const errorAuthNotConfigured = codedManagedError('auth_not_configured')
 const errorWebsiteReviewInvalid = codedManagedError('website_review_invalid')
