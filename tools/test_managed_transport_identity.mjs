@@ -68,3 +68,38 @@ test('account switched during caller preparation prevents the initial request', 
   await assert.rejects(run.request(), /managed_identity_changed/)
   assert.deepEqual(run.counts(), { fetches: 0, refreshes: 0 })
 })
+
+
+const sessionStart = source.indexOf('async function sessionForRequest(')
+assert.ok(sessionStart >= 0 && sessionStart < start)
+const sessionCode = transformSync(source.slice(sessionStart, start), { loader: 'ts', format: 'cjs' }).code
+
+test('real session resolver rejects workspace and user changes across awaited authentication', async () => {
+  for (const stage of ['get', 'refresh']) {
+    for (const change of ['workspace', 'user', 'none']) {
+      let workspace = 'company-a', release, started
+      const waiting = new Promise(resolve => { started = resolve })
+      const delayed = new Promise(resolve => { release = resolve })
+      const expected = { workspaceId: 'company-a', userId: 'user-a' }
+      const makeSession = (userId, expiring = false) => ({ user: { id: userId, is_anonymous: false },
+        expires_at: Math.floor(Date.now() / 1000) + (expiring ? 0 : 3600), access_token: 'synthetic-only' })
+      const invoke = runInNewContext(`${sessionCode}\nsessionForRequest`, {
+        authClient: async () => ({ auth: {
+          getSession: async () => stage === 'get' ? (started(), delayed) : { data: { session: makeSession('user-a', true) } },
+          refreshSession: async () => { started(); return delayed },
+        } }),
+        currentManagedWorkspace: () => workspace, normalizeWorkspaceId: value => value,
+        identity: (session, workspaceId) => ({ workspaceId, userId: session.user.id }),
+        sameManagedIdentity: (a, b) => a.workspaceId === b.workspaceId && a.userId === b.userId,
+        ManagedTrialError: class extends Error {}, managedError: message => new Error(message),
+        errorAuthRequired: message => new Error(message), errorAuthNotConfigured: message => new Error(message),
+      })
+      const pending = invoke(expected)
+      await waiting
+      if (change === 'workspace') workspace = 'company-b'
+      release({ data: { session: makeSession(change === 'user' ? 'user-b' : 'user-a') }, error: null })
+      if (change === 'none') assert.equal((await pending).workspaceId, 'company-a')
+      else await assert.rejects(pending, /company account changed/)
+    }
+  }
+})
