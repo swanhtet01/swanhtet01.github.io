@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { verifyCatalogExpiredAbsence, verifyCatalogReconciliation, verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, readCatalogCommand, retainCatalogCommand, clearCatalogCommand } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
+import { verifyCatalogOperatorDecisions, verifyCatalogExpiredAbsence, verifyCatalogReconciliation, verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, readCatalogCommand, retainCatalogCommand, clearCatalogCommand } from '../showroom/src/products/ecommerce/operator-review-contract.ts'
 import { storefrontPreviewDigest, STOREFRONT_PREVIEW_SCHEMA } from '../showroom/src/products/ecommerce/storefront-model.ts'
 import { COMMERCE_WORKSPACE_SCHEMA } from '../showroom/src/core/commerce-workspace.ts'
 const id = n => `11111111-1111-4111-8111-${String(n).padStart(12,'0')}`
@@ -101,4 +101,24 @@ test('expired absence proves only the original request expiry after server time'
   assert.throws(()=>verifyCatalogExpiredAbsence({...row,...patch},command))
  for(const patch of [{reviewId:'bad'},{expiresAt:'bad'},{expectedVersion:0},{recipientGrantId:'bad'},{previewDigest:'bad'}])
   assert.throws(()=>verifyCatalogExpiredAbsence(row,{...command,...patch}))
+})
+
+test('operator decisions bind source, status, timestamps, privacy and response contents', () => {
+  const command={reviewId:id(1),recipientGrantId:id(2),expectedVersion:4,contentRevision:2,
+    previewDigest:'sha256:'+'a'.repeat(64),readAt:'2026-09-25T00:00:00Z',expiresAt:'2026-09-26T00:00:00Z'}
+  const page={reviewId:id(1),sourceVersion:4,contentRevision:2,previewDigest:command.previewDigest,
+    status:'active',readAt:'2026-09-25T01:00:00Z',decisions:[{commandId:id(3),kind:'feedback',note:'စျေးနှုန်း ပြင်ပါ',createdAt:'2026-09-25T00:30:00Z'}],
+    nextAfter:null,publicationAuthorized:false,deploymentAuthorized:false}
+  const verified=verifyCatalogOperatorDecisions(page,command);verified.decisions[0].note='changed'
+  assert.equal(page.decisions[0].note,'စျေးနှုန်း ပြင်ပါ')
+  for(const status of ['stale','revoked','expired']) assert.equal(verifyCatalogOperatorDecisions({...page,status,readAt:command.expiresAt},command).status,status)
+  for(const patch of [{reviewId:id(2)},{sourceVersion:5},{contentRevision:3},{previewDigest:'wrong'},{status:'published'},
+    {readAt:command.expiresAt},{readAt:'2026-09-24T00:00:00Z'},{publicationAuthorized:true},{deploymentAuthorized:true},{actorId:'private'},
+    {decisions:[{...page.decisions[0],createdAt:'2026-09-25T02:00:00Z'}]},
+    {decisions:[{...page.decisions[0],createdAt:'2026-09-24T23:00:00Z'}]}]) assert.throws(()=>verifyCatalogOperatorDecisions({...page,...patch},command))
+  assert.throws(()=>verifyCatalogOperatorDecisions({...page,status:'expired'},command))
+  assert.throws(()=>verifyCatalogOperatorDecisions(page,{...command,expiresAt:'bad'}))
+  assert.throws(()=>verifyCatalogOperatorDecisions(page,command,id(3)))
+  const accepted={...page,decisions:[{...page.decisions[0],kind:'acceptance',note:null}]}
+  assert.equal(verifyCatalogOperatorDecisions(accepted,command).decisions[0].kind,'acceptance')
 })

@@ -35,7 +35,7 @@ export type CatalogDecisionPage = {
   nextAfter: string | null; publicationAuthorized: false; deploymentAuthorized: false
 }
 
-export function verifyCatalogDecisionPage(value: unknown, review: PreparedCatalogReview, after?: string): CatalogDecisionPage {
+export function verifyCatalogDecisionPage(value: unknown, review: Pick<PreparedCatalogReview, 'reviewId' | 'contentRevision' | 'previewDigest' | 'expiresAt'>, after?: string): CatalogDecisionPage {
   const invalid = () => { throw new Error('Your saved response could not be verified. Try again.') }
   const uuid = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)
   const exact = (object: unknown, keys: string[]): object is Record<string, unknown> =>

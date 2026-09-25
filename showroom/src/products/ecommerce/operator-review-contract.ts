@@ -1,3 +1,4 @@
+import { verifyCatalogDecisionPage } from './prepared-catalog-review.ts'
 import { storefrontPreviewDigest, validateStorefrontPreview, type StorefrontPreview } from './storefront-model.ts'
 
 export type CatalogPreparation = { sourceVersion: number; contentRevision: number; previewDigest: string; readAt: string; preview: StorefrontPreview }
@@ -118,4 +119,22 @@ export function verifyCatalogExpiredAbsence(value: unknown, command: CatalogPrep
     || row.publicationAuthorized !== false || row.deploymentAuthorized !== false
     || instant(row.expiresAt) !== instant(retained.expiresAt) || instant(row.readAt) < instant(retained.expiresAt)) return invalid()
   return { reviewId: retained.reviewId, status: 'absent_expired' as const }
+}
+
+export function verifyCatalogOperatorDecisions(value: unknown, command: CatalogPreparationCommand, after?: string) {
+  const retained = readCatalogCommand({ getItem: () => JSON.stringify(command) }, 'request')
+  if (!retained || retained === 'unavailable') return invalid()
+  const row = exact(value, ['reviewId', 'status', 'sourceVersion', 'contentRevision', 'previewDigest', 'readAt',
+    'decisions', 'nextAfter', 'publicationAuthorized', 'deploymentAuthorized'])
+  if (typeof row.status !== 'string' || !['active', 'stale', 'revoked', 'expired'].includes(row.status)
+    || row.sourceVersion !== command.expectedVersion) return invalid()
+  const read = instant(row.readAt), expiry = instant(command.expiresAt)
+  if (read < instant(command.readAt) || (row.status === 'active' && read >= expiry)
+    || (row.status === 'expired' && read < expiry)) return invalid()
+  const { status, readAt, ...page } = row
+  const verified = verifyCatalogDecisionPage(page, command, after)
+  for (const item of verified.decisions) {
+    if (instant(item.createdAt) < instant(command.readAt) || instant(item.createdAt) > read) return invalid()
+  }
+  return { ...verified, status: status as 'active' | 'stale' | 'revoked' | 'expired', readAt: String(readAt) }
 }

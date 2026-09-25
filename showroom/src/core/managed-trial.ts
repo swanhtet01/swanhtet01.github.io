@@ -3987,6 +3987,14 @@ export async function loadManagedEcommerceDecisions(reviewId: string, expectedId
     { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
 }
 
+export async function loadManagedEcommerceOperatorDecisions(reviewId: string, expectedIdentity: ManagedIdentity, after?: string) {
+  for (const id of [reviewId, ...(after === undefined ? [] : [after])]) {
+    if (!managedReviewUuid.test(id)) throw errorEcommerceReviewInvalid('This review link is invalid.')
+  }
+  return authorizedRequest<unknown>(`/api/trial/v1/ecommerce-reviews/${reviewId}/operator-decisions${after ? `?after=${after}` : ''}`,
+    { ...privateReviewRequest, signal: AbortSignal.timeout(8000) }, true, expectedIdentity)
+}
+
 export type EcommerceReviewDecision = { reviewId: string; commandId: string; previewDigest: string } & (
   { decision: 'accept_preview_for_release_review'; note?: never } | { note: string; decision?: never }
 )
