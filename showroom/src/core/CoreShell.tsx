@@ -22,12 +22,6 @@ const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').the
 const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
 const ManagedProductConnections = lazy(() => import('./ManagedProductConnections').then((module) => ({ default: module.ManagedProductConnections })))
 
-function signupProductSlug(product: SetupProductId) {
-  if (product === 'commerce') return 'shop'
-  if (product === 'production') return 'plant'
-  return product
-}
-
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
 type RuntimeActivationStep = {
@@ -620,12 +614,6 @@ const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
   Ecommerce: 'ecommerce',
 }
 
-const STEP_SUGGESTIONS: ReadonlyArray<[SetupProductId, string, string]> = [
-  ['commerce', 'Shop', 'make the first sale'],
-  ['ecommerce', 'Ecommerce', 'take Shop-backed orders'],
-  ['website', 'Website', 'publish a simple site'],
-]
-
 const customerProducts = [
   ['Shop', 'Sales, stock and your daily totals.', 'Open Shop', '/shop/'],
   ['Website', 'Your services, photos and contact details.', 'Open Website', '/website/'],
@@ -695,10 +683,6 @@ export function ProductHomePage() {
   }, [managedPortal, setupLoadAttempt])
   const productSetups = managedPortal ? null : localProductSetups
   const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
-  const nextSetupStep = (() => {
-    if (!productSetups) return null
-    return STEP_SUGGESTIONS.find(([id]) => activeSetupIds.includes(id) && !productSetups[id]?.startedAt) ?? null
-  })()
   if (!managedPortal && !productSetups) {
     return setupLoadFailed
       ? <PortalAccessPanel action={<button className="button" onClick={() => { setSetupLoadFailed(false); setSetupLoadAttempt(attempt => attempt + 1) }} type="button">Retry loading products</button>} copy="We could not read product setup information. Saved records have not been changed. Check that browser storage is available, then retry." title="Products could not load" />
@@ -708,7 +692,7 @@ export function ProductHomePage() {
     <div className="workspace-screen product-home-screen">
       {managedPortal
         ? emptyCompany ? null : <PageHeading copy="Only assigned products are shown." eyebrow="Company portal" title="Company products" />
-        : <PageHeading copy="Choose a tool to get started. Your saved work stays on this device." eyebrow="SuperMega" title="Your business tools" />}
+        : <PageHeading copy="Sales, orders and your online presence." eyebrow="SuperMega" title="Your workspace" />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
           <span>Active company</span>
@@ -723,13 +707,6 @@ export function ProductHomePage() {
       {emptyCompany
         ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Request setup</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
         : null}
-      {!managedPortal && productSetups && !anyStarted ? (
-        <section aria-label="Setup by SuperMega" className="platform-start-nudge">
-          <div><strong>Try a sample</strong><p>No account needed. Sample records stay on this device.</p></div><Link className="core-button" to="/login">Login</Link>
-        </section>
-      ) : nextSetupStep ? (
-        <p className="platform-start-nudge"><strong>Your saved work stays here.</strong> For another product, <a className="platform-start-link" href={`https://supermega.dev/contact/?product=${signupProductSlug(nextSetupStep[0])}&source=assisted-app-entry`}>request {nextSetupStep[1]} setup</a>. SuperMega prepares it for your review.</p>
-      ) : null}
       {!emptyCompany ? <nav aria-label="Choose product" className="product-track-grid">
         {customerProducts.filter(([name]) => managedPortal
           ? managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name])
@@ -757,7 +734,7 @@ export function ProductHomePage() {
       </nav> : null}
       {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
       {!managedPortal && anyStarted ? <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense> : null}
-      {!emptyCompany ? <p className="product-home-note">{managedPortal ? 'Your company controls access to each product.' : <>Need this set up for your business? <a href="https://supermega.dev/contact/?product=guide&amp;source=assisted-app-entry">Ask SuperMega</a>. Samples are not live business accounts.</>}</p> : null}
+      {!emptyCompany ? <p className="product-home-note">{managedPortal ? 'Your company controls access to each product.' : <>Samples and saved work stay on this device. <a href="https://supermega.dev/contact/?product=guide&amp;source=assisted-app-entry">Request business setup</a>.</>}</p> : null}
     </div>
   )
 }
