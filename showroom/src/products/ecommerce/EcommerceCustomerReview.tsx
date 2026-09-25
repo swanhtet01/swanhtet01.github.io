@@ -55,7 +55,8 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
       })
       if (!confirmed) closeChangedAccess()
     } catch {
-      if (access.isCurrent(epoch)) setSaveMessage('Could not confirm your response. Retry to check and send the same response.')
+      if (!await access.commit(epoch, identity, review.expiresAt, () => {})) closeChangedAccess()
+      else setSaveMessage('Could not confirm your response. Retry to check and send the same response.')
     } finally {
       command.busy = false
       setSaving(false)

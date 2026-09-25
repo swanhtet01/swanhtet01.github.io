@@ -199,3 +199,13 @@ test('identity change before or during submission clears the private review', as
     cleanup()
   }
 })
+
+
+test('lost write response plus identity change clears private content without offering retry', async () => {
+  let release; const writeWait = new Promise(resolve => { release = resolve })
+  const h = harness({ writeWait, uncertainWrite: true }); h.render(); const cleanup = h.effects[0](); await flush()
+  h.control('Accept catalog').props.onClick(); await flush(); assert.equal(h.writes.length, 1)
+  h.changeIdentity(); release(); await flush()
+  assert.doesNotMatch(h.render(), /Synthetic catalog|Catalog accepted|Retry response/)
+  assert.match(h.render(), /Your access changed/); cleanup()
+})
