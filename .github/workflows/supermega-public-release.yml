@@ -160,6 +160,25 @@ jobs:
           printf 'operating_mode=%s\n' "$OPERATING_MODE" >> "$GITHUB_OUTPUT"
           printf 'runtime_mode=%s\n' "$RUNTIME_MODE" >> "$GITHUB_OUTPUT"
 
+      - name: Build the immutable app artifact
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
+          SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
+            npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
+
+      - name: Verify generated app Python function contract
+        run: |
+          node --test tools/test_generated_python_function.mjs
+          node tools/verify_generated_python_function.mjs
+          python tools/test_packaged_app_import.py
+          python tools/verify_packaged_app_import.py
+
+      - name: Verify immutable app asset contract
+        run: node tools/verify_app_release_live.mjs --artifact-self-test
+
       - name: Enforce exact app runtime database and RLS gate
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -182,25 +201,6 @@ jobs:
               exit 1
               ;;
           esac
-
-      - name: Build the immutable app artifact
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}
-          SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
-        run: |
-          npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
-            npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
-
-      - name: Verify generated app Python function contract
-        run: |
-          node --test tools/test_generated_python_function.mjs
-          node tools/verify_generated_python_function.mjs
-          python tools/test_packaged_app_import.py
-          python tools/verify_packaged_app_import.py
-
-      - name: Verify immutable app asset contract
-        run: node tools/verify_app_release_live.mjs --artifact-self-test
 
       - name: Capture app production rollback target
         id: app-rollback-target

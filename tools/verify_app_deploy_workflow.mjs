@@ -682,7 +682,11 @@ requireContract('no POS route', !/\/pos\/login/i.test(combined))
 requireContract('no YTF schedule', !/\/api\/cron\/ytf/i.test(combined))
 
 const orderedSteps = [
+  'Build the immutable app artifact',
+  'Verify generated app Python function contract',
+  'Verify immutable app asset contract',
   'Enforce exact app runtime database and RLS gate',
+  'Deploy isolated app production candidate',
   'Inspect and verify app candidate',
   'Verify protected candidate content',
   'Verify candidate release identity barrier',
@@ -692,6 +696,10 @@ const orderedSteps = [
   'Verify production project controls',
   'Roll back a failed production verification',
 ]
+requireContract('generated Python package checks run before managed schema writes',
+  workflow.includes('node tools/verify_generated_python_function.mjs')
+  && workflow.includes('python tools/verify_packaged_app_import.py')
+  && workflow.indexOf('python tools/verify_packaged_app_import.py') < workflow.indexOf('--ensure-schema --require-ready'))
 const positions = orderedSteps.map((step) => workflow.indexOf(step))
 requireContract('coordinated release steps are ordered', positions.every((position) => position >= 0) && positions.every((position, index) => index === 0 || position > positions[index - 1]))
 
