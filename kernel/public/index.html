@@ -1636,6 +1636,7 @@ async function loadOutreach(){
     el.innerHTML=`<div class="row" style="justify-content:space-between"><b style="font-size:15px">${esc(p.headline||'(deal)')}</b><span class="pill ${d.status==='sent'?'won':''}">${esc(d.status)}</span></div>
       <div class="muted" style="font-size:12.5px;margin:4px 0 10px">fit ${p.fit_score||'—'}/100 · ${esc(p.segment||'')} · ${p.pricing?.build_fee_mmk?esc(p.pricing.build_fee_mmk)+' MMK':'Pricing pending review'}</div>
       ${p.outreach_en?`<div class="draft" id="ot-${d.id}">${esc(p.outreach_en)}</div>`:'<div class="muted" style="font-size:12px">No outreach draft.</div>'}
+      <p class="muted" data-send-status="${esc(d.id)}" role="status"></p>
       <div class="row" style="margin-top:10px">
         ${p.outreach_en?`<button class="sm" data-copy="${d.id}">Copy draft</button>`:''}
         <button class="sm" data-prop2="${d.id}">Proposal</button>
@@ -1649,10 +1650,25 @@ async function loadOutreach(){
   box.querySelectorAll('[data-prop2]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.prop2);openProposal(d)})
   box.querySelectorAll('[data-app]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.app,{status:'approved'});loadOutreach()})
   box.querySelectorAll('[data-emailsend]').forEach(b=>b.onclick=async()=>{
-    const d=r.deals.find(x=>x.id===b.dataset.emailsend);const defTo=(d&&d.packet&&d.packet.outreach_en)?'':''
-    const to=prompt('Send to email address:',defTo);if(!to||!to.includes('@'))return
-    const x=await api('POST','/api/deals/'+b.dataset.emailsend+'?action=send',{to})
-    if(x.ok){toast('Email sent → '+to);loadOutreach()}else toast('Error: '+(x.reason||'failed'))
+    if(b.disabled)return
+    const status=b.closest('.deal').querySelector('[data-send-status]')
+    const to=b.dataset.retryTo||prompt('Send to email address:','');if(!to||!to.includes('@'))return
+    b.disabled=true;status.textContent='Submitting…'
+    let x
+    try{x=await api('POST','/api/deals/'+b.dataset.emailsend+'?action=send',{to})}catch{x={ok:false,reason:'outreach_send_unconfirmed'}}
+    if(x.ok){status.textContent='Accepted by email provider. Delivery is not yet confirmed.';toast('Provider accepted email');loadOutreach();return}
+    const messages={
+      outreach_sent_status_unconfirmed:'The provider accepted the email, but its saved status is unconfirmed. Retry saving status; this will not send again.',
+      outreach_send_unconfirmed:'Send outcome is unconfirmed. Check the provider record before any further outreach.',
+      outreach_receipt_unconfirmed:'The send receipt could not be saved. Check the provider record before any further outreach.',
+      outreach_payload_conflict:'This deal has a send reservation for different content or a different recipient. Reconcile it before continuing.',
+      outreach_claim_unavailable:'The send reservation could not be verified. Check service availability before trying again.'
+    }
+    status.textContent=messages[x.reason]||'Email was not confirmed. Review the deal and service status before trying again.'
+    if(x.reason==='outreach_sent_status_unconfirmed'){b.dataset.retryTo=to;b.textContent='Retry saving status';b.disabled=false}
+    else if(['outreach_send_unconfirmed','outreach_receipt_unconfirmed','outreach_payload_conflict'].includes(x.reason)){b.textContent='Needs review'}
+    else{b.disabled=false}
+
   })
   box.querySelectorAll('[data-sent]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.sent,{status:'sent'});loadOutreach();toast('Marked sent')})
 }

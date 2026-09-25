@@ -81,3 +81,28 @@ test('actual send route uses durable guard across provider success and status fa
   const retry=await runInNewContext('(async()=>{'+route+'})()',context)
   assert.equal(retry.status,200);assert.equal(retry.json.replayed,true);assert.equal(sends,1)
 })
+
+
+test('actual outreach UI retains recovery guidance and retries only the original recipient',async()=>{
+  const {readFile}=await import('node:fs/promises');const {runInNewContext}=await import('node:vm')
+  const html=await readFile(new URL('./public/index.html',import.meta.url),'utf8')
+  const start=html.indexOf("  box.querySelectorAll('[data-emailsend]').forEach(b=>b.onclick=async()=>{")
+  const body=html.slice(start,html.indexOf("  box.querySelectorAll('[data-sent]')",start)).split('b.onclick=async()=>{')[1].trim().replace(/\}\)$/, '')
+  for(const reason of ['outreach_send_unconfirmed','outreach_receipt_unconfirmed','outreach_payload_conflict','outreach_sent_status_unconfirmed']){
+    const status={textContent:''};const b={disabled:false,dataset:{emailsend:'deal-1'},closest:()=>({querySelector:()=>status})}
+    let prompts=0;const requests=[]
+    const context={b,prompt:()=>{prompts++;return 'qa@example.invalid'},toast:()=>{},loadOutreach:()=>{},api:async(method,path,data)=>{requests.push(data);return {ok:false,reason}}}
+    await runInNewContext('(async()=>{'+body+'})()',context)
+    assert.ok(status.textContent.length>30)
+    assert.ok(!status.textContent.includes('outreach_'))
+    if(reason==='outreach_sent_status_unconfirmed'){
+      assert.equal(b.disabled,false);assert.equal(b.textContent,'Retry saving status')
+      await runInNewContext('(async()=>{'+body+'})()',context)
+      assert.equal(prompts,1);assert.equal(requests[1].to,'qa@example.invalid')
+    }else{
+      assert.equal(b.disabled,true);assert.equal(b.textContent,'Needs review')
+      await runInNewContext('(async()=>{'+body+'})()',context)
+      assert.equal(requests.length,1)
+    }
+  }
+})
