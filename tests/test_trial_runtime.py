@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from copy import deepcopy
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -84,6 +85,28 @@ class TrialRuntimeTests(unittest.TestCase):
         }
         self._provision(self.store)
         self.client = self._client(self.store)
+
+    def test_provider_failure_is_private_and_never_reaches_workspace_store(self):
+        from supermega_runtime.runtime import resolve_trial_principal
+        from supermega_runtime.supabase_auth import SupabaseAuthUnavailable
+        app = FastAPI()
+        app.include_router(create_trial_router(store=self.store, resolve_principal=resolve_trial_principal))
+        with patch.dict('os.environ', {}, clear=True), \
+             patch('supermega_runtime.runtime.verify_supabase_user_identity',
+                   side_effect=SupabaseAuthUnavailable('PRIVATE_PROVIDER_SENTINEL')), \
+             patch.object(self.store, 'readiness', side_effect=AssertionError('store must not be reached')) as readiness, \
+             TestClient(app) as client:
+            for path in ('/api/trial/v1/website-reviews', '/api/trial/v1/ecommerce-reviews'):
+                with self.subTest(path=path):
+                    response = client.get(path, headers={'authorization': 'Bearer synthetic-token',
+                        'x-supermega-workspace-id': 'workspace-a', 'x-supermega-actor-id': 'forged-actor'})
+                    self.assertEqual(response.status_code, 503)
+                    self.assertEqual(response.json(), {'detail': {'code': 'trial_auth_unavailable'}})
+                    self.assertEqual(response.headers['cache-control'], 'private, no-store')
+                    self.assertNotIn('PRIVATE_PROVIDER_SENTINEL', response.text)
+                    self.assertNotIn('forged-actor', response.text)
+            readiness.assert_not_called()
+        self.assertEqual(self.reducer.calls, 0)
 
     def tearDown(self) -> None:
         self.client.close()
