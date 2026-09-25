@@ -658,13 +658,15 @@ export function ProductHomePage() {
   const emptyCompany = managedPortal && !customerProducts.some(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
   const [localProductSetups, setLocalProductSetups] = useState<Record<SetupProductId, { startedAt?: string; workspace: string } | null> | null>(null)
   const [activeSetupIds, setActiveSetupIds] = useState<SetupProductId[]>([])
+  const [savedWebsiteName, setSavedWebsiteName] = useState<string | null>(null)
   const [setupLoadFailed, setSetupLoadFailed] = useState(false)
   const [setupLoadAttempt, setSetupLoadAttempt] = useState(0)
   useEffect(() => {
     let active = true
     if (managedPortal || typeof window === 'undefined') return () => { active = false }
-    void import('./product-setup').then(({ readProductSetup, activeSetupProductContracts }) => {
+    void Promise.all([import('./product-setup'), import('./saved-website-entry')]).then(([{ readProductSetup, activeSetupProductContracts }, { savedWebsiteEntry }]) => {
       if (!active) return
+      setSavedWebsiteName(savedWebsiteEntry(window.localStorage))
       setActiveSetupIds(activeSetupProductContracts.map(product => product.id))
       setLocalProductSetups({
         commerce: readProductSetup(window.localStorage, 'commerce'),
@@ -682,7 +684,7 @@ export function ProductHomePage() {
     return () => { active = false }
   }, [managedPortal, setupLoadAttempt])
   const productSetups = managedPortal ? null : localProductSetups
-  const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
+  const anyStarted = Boolean(savedWebsiteName) || (productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false)
   if (!managedPortal && !productSetups) {
     return setupLoadFailed
       ? <PortalAccessPanel action={<button className="button" onClick={() => { setSetupLoadFailed(false); setSetupLoadAttempt(attempt => attempt + 1) }} type="button">Retry loading products</button>} copy="We could not read product setup information. Saved records have not been changed. Check that browser storage is available, then retry." title="Products could not load" />
@@ -710,7 +712,7 @@ export function ProductHomePage() {
       {!emptyCompany && (managedPortal || anyStarted) ? <nav aria-label="Choose product" className="product-track-grid">
         {customerProducts.filter(([name]) => managedPortal
           ? managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name])
-          : Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]?.startedAt))
+          : Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]?.startedAt) || (name === 'Website' && Boolean(savedWebsiteName)))
           .sort(([left], [right]) => managedPortal ? 0
             : (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]))
               - (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right])))
@@ -719,7 +721,7 @@ export function ProductHomePage() {
           if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null
           const setup = productSetups?.[setupKey]
           if (!managedPortal && !activeSetupIds.includes(setupKey) && !setup) return null
-          const workspaceName = setup?.startedAt ? setup.workspace : null
+          const workspaceName = name === 'Website' && savedWebsiteName ? savedWebsiteName : setup?.startedAt ? setup.workspace : null
           return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
               <span className="product-track-copy">
                 <small>{managedPortal ? 'Company product' : 'Saved on this device'}</small>

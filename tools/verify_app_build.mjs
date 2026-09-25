@@ -1431,7 +1431,7 @@ if (!productHomePageContract.includes('title="Your workspace"')
   || productHomePageContract.includes('Operations')
   // Setup-aware home page: each product card shows its workspace name when started,
   // and new clients get Login without fresh sample product cards.
-  || !productHomePageContract.includes("void import('./product-setup')")
+  || !productHomePageContract.includes("void Promise.all([import('./product-setup'), import('./saved-website-entry')])")
   || !productHomePageContract.includes("readProductSetup(window.localStorage, 'commerce')")
   || !productHomePageContract.includes("readProductSetup(window.localStorage, 'production')")
   || !productHomePageContract.includes("readProductSetup(window.localStorage, 'website')")

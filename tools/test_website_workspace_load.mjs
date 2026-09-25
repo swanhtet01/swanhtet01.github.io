@@ -20,7 +20,7 @@ const bundle = await build({
     contents: `export {
       loadWebsiteWorkspace, createInitialWorkspace,
       WEBSITE_STORAGE_KEY, LEGACY_WEBSITE_STORAGE_KEY,
-    } from './website-model.ts'`,
+    } from './website-model.ts'; export { savedWebsiteEntry } from '../../core/saved-website-entry.ts'`,
     resolveDir: 'showroom/src/products/website',
     sourcefile: 'showroom/src/products/website/load-test-entry.ts',
     loader: 'ts',
@@ -32,7 +32,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { loadWebsiteWorkspace, createInitialWorkspace, WEBSITE_STORAGE_KEY, LEGACY_WEBSITE_STORAGE_KEY } =
+const { savedWebsiteEntry, loadWebsiteWorkspace, createInitialWorkspace, WEBSITE_STORAGE_KEY, LEGACY_WEBSITE_STORAGE_KEY } =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -119,3 +119,8 @@ check(
 )
 
 console.log(`website workspace load contract: ${checks} checks passed`)
+
+assert.equal(savedWebsiteEntry(emptyStore), null, 'fresh starter is not a saved launcher entry')
+assert.equal(savedWebsiteEntry(validStore), saved.siteName, 'saved Website needs no setup registration')
+assert.equal(savedWebsiteEntry(storageWith({ [WEBSITE_STORAGE_KEY]: '{bad' })), 'Website recovery', 'unreadable saved work remains reachable')
+assert.equal(validStore.writes.length, 0, 'launcher discovery never writes setup or workspace')
