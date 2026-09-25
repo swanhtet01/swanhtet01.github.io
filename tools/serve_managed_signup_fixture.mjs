@@ -18,7 +18,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const rawArgs = process.argv.slice(2)
 const buildOnly = rawArgs.includes('--build-only')
 const managedEntry = rawArgs.includes('--managed-entry')
-const args = rawArgs.filter(arg => !['--build-only', '--managed-entry'].includes(arg))
+const reviewProduct = rawArgs.includes('--website-review') ? 'website' : rawArgs.includes('--ecommerce-review') ? 'ecommerce' : null
+if (rawArgs.includes('--website-review') && rawArgs.includes('--ecommerce-review')) throw Error('one_review_product_required')
+const args = rawArgs.filter(arg => !['--build-only', '--managed-entry', '--website-review', '--ecommerce-review'].includes(arg))
 if (args.length === 1 && args[0] === '--self-test') {
   const origin = 'http://127.0.0.1:4194'
   for (const value of ['https://supermega.dev/terms/v1/', 'https://supermega.dev/contact/?product=shop', '//example.invalid', 'javascript:void(0)', 'data:text/plain,test', 'http://localhost:4194/', 'http://127.0.0.1:4195/']) assert.equal(fixtureHref(value, origin), '/fixture/external-link')
@@ -76,7 +78,7 @@ const result = await build({
       counts.blockedRequests++; show(); throw Error('fixture_network_denied');
     };
     function Frame() { return <main className="core-main"><div className="core-route-content"><Outlet context={{status:${JSON.stringify(managedEntry ? 'enterprise' : 'demo')}, signupPolicy:readManagedSignupPolicy(health)}} /></div></main> }
-    createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={['/login?product=shop']}>
+    createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={[${JSON.stringify(reviewProduct ? '/login?product=' + reviewProduct + '&review=11111111-1111-4111-8111-111111111111' : '/login?product=shop')}]}>
       <Routes><Route element={<Frame/>}><Route path='/login' element={<ManagedLoginPage/>}/>
       <Route path='/account/recovery' element={<p>Recovery route reached. Synthetic QA does not send email.</p>}/></Route></Routes>
     </MemoryRouter>);
