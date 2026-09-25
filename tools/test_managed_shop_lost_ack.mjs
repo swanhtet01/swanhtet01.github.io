@@ -59,3 +59,42 @@ test('managed lost acknowledgement pauses writes; remount reads saved order with
   assert.equal(reads, 1)
   assert.equal(writes, 1)
 })
+
+
+test('rendered recovery controls distinguish uncertain writes from setup and access failures', () => {
+  const require = createRequire(resolve('showroom/package.json'))
+  const React = require('react')
+  const { renderToStaticMarkup } = require('react-dom/server')
+  const app = readFileSync('showroom/src/core/CoreApp.tsx', 'utf8')
+  const start = app.indexOf('  const commerceWriteBanner = ')
+  const end = app.indexOf('\n  </div>', start) + '\n  </div>'.length
+  assert.ok(start >= 0 && end > start)
+  const code = transformSync(app.slice(start, end) + ';\ncommerceWriteBanner', { loader: 'tsx', jsx: 'transform' }).code
+  function render(overrides) {
+    let reloads = 0
+    const element = runInNewContext(code, {
+      React, Link: ({ to, children }) => React.createElement('a', { href: to }, children),
+      commerceCanWrite: false, commerceStorageError: 'Synthetic failure',
+      managedIdentity: { workspaceId: 'synthetic', userId: 'synthetic' },
+      workspaceMode: 'managed-ready', commerceSync: { status: 'ready', message: '' },
+      managedVersion: 2, notice: '', window: { location: { reload: () => { reloads++ } } },
+      ...overrides,
+    })
+    const html = renderToStaticMarkup(element)
+    assert.equal(reloads, 0, 'rendering never reloads or retries automatically')
+    return html
+  }
+  const uncertain = render({})
+  assert.match(uncertain, />Reload Shop<\/button>/)
+  assert.doesNotMatch(uncertain, /Open Settings/)
+  for (const workspaceMode of ['managed-loading', 'managed-error', 'managed-unprovisioned']) {
+    const html = render({ workspaceMode })
+    assert.match(html, /href="\/settings\/#controls"/)
+    assert.doesNotMatch(html, />Reload Shop<\/button>/)
+    assert.doesNotMatch(html, /sale again|already be saved/)
+  }
+  const ready = render({ commerceCanWrite: true, commerceStorageError: '' })
+  assert.doesNotMatch(ready, /Reload Shop|Open Settings/)
+  const localPending = render({ managedIdentity: null, workspaceMode: 'local', commerceSync: { status: 'pending', message: 'Synthetic pending write' } })
+  assert.match(localPending, />Reload Shop<\/button>/)
+})
