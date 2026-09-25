@@ -237,10 +237,11 @@ export function projectWebsiteManagedBriefAcceptance(
       reason: responsiveReviewDigest ? 'Responsive review digest is present.' : 'Responsive review digest is missing or not sha256.',
     },
     {
+      // Retain the v1 gate ID; digest inequality is not reviewer provenance.
       id: 'independent_review_digests',
       passed: !!ownerReviewDigest && !!responsiveReviewDigest && ownerReviewDigest !== responsiveReviewDigest,
       reason: ownerReviewDigest && responsiveReviewDigest && ownerReviewDigest !== responsiveReviewDigest
-        ? 'Owner and responsive review digests are independent.'
+        ? 'Owner and responsive review digests differ; reviewer independence is not verified.'
         : 'Owner and responsive review digests must both be present and different.',
     },
     {
