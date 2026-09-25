@@ -22,6 +22,15 @@ function harness() {
   if(name==='../../core/managed-trial')return {
    currentManagedIdentity:async()=>h.who,sameManagedIdentity:(a,b)=>a.workspaceId===b.workspaceId&&a.userId===b.userId,
    loadManagedEcommercePreparation:async()=>{h.sourceReads=(h.sourceReads??0)+1;if(h.readFail)throw Error('unavailable');return {}},loadManagedEcommerceRecipients:async()=>{h.recipientReads=(h.recipientReads??0)+1;if(h.readFail)throw Error('unavailable');return {recipients:[{grantId:id,label:'Customer'}],nextAfter:null}},
+   loadManagedEcommerceOperatorDecisions:async (reviewId,who,after)=>{
+    h.responseReads=(h.responseReads??0)+1;h.responseCursor=after
+    if(h.responseWait)await h.responseWait;if(h.responseFail)throw Error('unavailable')
+    const envelope=[...h.storage.values()].map(JSON.parse).find(v=>v.command)
+    const command=envelope.command
+    return {reviewId,sourceVersion:command.expectedVersion,contentRevision:command.contentRevision,previewDigest:command.previewDigest,
+      status:'active',readAt:new Date().toISOString(),decisions:[{commandId:id,kind:'feedback',note:'စျေးနှုန်း ပြင်ပါ',createdAt:command.readAt}],
+      nextAfter:null,publicationAuthorized:false,deploymentAuthorized:false,...h.responsePatch}
+   },
    resolveExpiredManagedEcommerceReview:async (reviewId,expiresAt)=>{
     h.resolutions=(h.resolutions??0)+1;h.resolutionPayload={reviewId,expiresAt}
     if(h.resolveWait)await h.resolveWait;if(h.resolveFail)throw Error('unconfirmed')
@@ -157,4 +166,41 @@ test('expired recovery retains requests on failed proof, storage denial or ident
   }
   release();await flush();assert.equal(h.storage.size,1,failure);assert.equal(h.writes.length,1)
  }
+})
+
+
+test('operator shows verified feedback or acceptance without preparing again',async()=>{
+ for(const kind of ['feedback','acceptance']){
+  const h=harness();h.click('Open saved catalog');await flush();h.click('Prepare review');await flush()
+  if(kind==='acceptance')h.responsePatch={decisions:[{commandId:id,kind,note:null,createdAt:prepared.readAt}]}
+  h.click('Check response');h.click('Check response');await flush()
+  const output=JSON.stringify(h.render());assert.match(output,kind==='feedback'?/စျေးနှုန်း ပြင်ပါ/:/Catalog accepted/)
+  assert.equal(h.responseReads,1);assert.equal(h.writes.length,1)
+  h.listeners.get('focus')();assert.doesNotMatch(JSON.stringify(h.render()),/စျေးနှုန်း ပြင်ပါ|Catalog accepted/)
+ }
+})
+
+test('late or invalid operator responses never restore private notes',async()=>{
+ for(const change of ['focus','storage','account','unmount','invalid','failed']){
+  const h=harness();h.click('Open saved catalog');await flush();h.click('Prepare review');await flush()
+  let release;h.responseWait=new Promise(resolve=>{release=resolve});h.click('Check response');await flush()
+  if(change==='account')h.who={workspaceId:'other',userId:'other'}
+  else if(change==='unmount')h.cleanup()
+  else if(change==='invalid')h.responsePatch={sourceVersion:999}
+  else if(change==='failed')h.responseFail=true
+  else h.listeners.get(change)()
+  release();await flush();assert.doesNotMatch(JSON.stringify(h.render()),/စျေးနှုန်း ပြင်ပါ|Catalog accepted/)
+  assert.equal(h.writes.length,1)
+ }
+})
+
+test('operator response pages replace previous notes and label inactive history',async()=>{
+ const h=harness();h.click('Open saved catalog');await flush();h.click('Prepare review');await flush()
+ const commandId=n=>`22222222-2222-4222-8222-${String(n).padStart(12,'0')}`
+ h.responsePatch={status:'stale',decisions:Array.from({length:50},(_,i)=>({commandId:commandId(i+1),kind:'feedback',note:'Earlier note '+i,createdAt:prepared.readAt})),nextAfter:commandId(50)}
+ h.click('Check response');await flush();assert.match(JSON.stringify(h.render()),/earlier responses/)
+ h.responsePatch={status:'stale',decisions:[{commandId:commandId(51),kind:'feedback',note:'Last note',createdAt:prepared.readAt}],nextAfter:null}
+ h.click('More responses');await flush();assert.equal(h.responseCursor,commandId(50))
+ assert.match(JSON.stringify(h.render()),/Last note/);assert.doesNotMatch(JSON.stringify(h.render()),/Earlier note/)
+ assert.equal(h.writes.length,1)
 })
