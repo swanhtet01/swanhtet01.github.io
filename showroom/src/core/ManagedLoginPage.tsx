@@ -319,8 +319,8 @@ export function ManagedLoginPage() {
         <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Ask a person to finish setup instead</a>
         <button className="account-inline-link account-link-button" disabled={busy} onClick={() => { if (accountRequestPending.current) return; setActivating(false); setNotice(''); setNoticeTone('quiet'); setClaimCodeFieldError(false) }} type="button">{bi('Back to sign in')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
-      </form> : managedReady ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
-        <div><span className="core-eyebrow">Company account</span><h2>{directory ? 'Choose your company.' : 'Use your work account.'}</h2><p>{directory ? 'Only active companies assigned to this account are shown.' : 'No workspace code or technical setup is required.'}</p></div>
+      </form> : managedReady ? <form aria-label="Company sign-in" aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
+        {directory ? <div><h2>Choose your company.</h2><p>Only active companies assigned to this account are shown.</p></div> : null}
         {directory ? <label>Company<select onChange={(event) => setWorkspaceId(event.target.value)} required value={workspaceId}>{directory.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <>
           {/* Design phase 2 item 11: a failed sign-in only ever means "this email/password
               combination was rejected" -- there is no way to attribute it to just one of the

@@ -632,7 +632,7 @@ const managedLoginLiveCopyUpdates = new Map([
   ['Open free workspace', 'Try a sample — no account'],
   ['Request managed activation', 'Ask SuperMega to set me up'],
 ])
-for (const required of ['Open your company.', 'Sign in once. SuperMega finds the companies assigned to you.', 'Use your work account.', 'No workspace code or technical setup is required.', 'Only active companies assigned to this account are shown.', 'Find my company', 'Open company', 'Open free workspace', 'Request managed activation']) {
+for (const required of ['Open your company.', 'Sign in once. SuperMega finds the companies assigned to you.', 'Company sign-in', 'Choose your company.', 'Only active companies assigned to this account are shown.', 'Find my company', 'Open company', 'Open free workspace', 'Request managed activation']) {
   const currentRequired = managedLoginLiveCopyUpdates.get(required) ?? required
   if (!managedLoginChunk.includes(currentRequired)) throw new Error(`missing_live_managed_login_context:${required}`)
 }
