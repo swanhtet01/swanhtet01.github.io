@@ -7,10 +7,6 @@ type Product = 'website' | 'ecommerce'
 export function AssistedDeliveryScope({ product }: { product: Product }) {
   return <section className="assisted-delivery-scope" aria-label="Get setup help">
     <a className="assisted-delivery-request" href={`/${product}/${product === 'ecommerce' ? '?setup=1' : ''}`}>Tell us about your business</a>
-    <details>
-      <summary>Before we start</summary>
-      <p>Share your business details or a public page. We agree scope, price and timing before work. Publishing needs your approval.</p>
-    </details>
   </section>
 }
 
@@ -32,7 +28,7 @@ export function BusinessBrief({ product, onOpenWorkspace }: { product: Product; 
     <header>
       <span className="business-brief-kicker">{product === 'website' ? 'Website' : 'Ecommerce'}</span>
       <h1 id={`${id}-title`}>{product === 'website' ? 'Your business, online.' : 'Your products, ready to browse.'}</h1>
-      <p>Tell us the essentials. We prepare it. You review.</p>
+      <p>Share your business details.</p>
     </header>
     <form onSubmit={event => {
       event.preventDefault()
@@ -54,8 +50,8 @@ export function BusinessBrief({ product, onOpenWorkspace }: { product: Product; 
       <button type="submit" disabled={!company.trim() || !description.trim()}>Continue</button>
       {handoffFailed ? <small role="alert">Could not open contact. Your details are still here. Try Continue again.</small> : null}
       {draftUnavailable ? <small role="status">This browser cannot keep your draft. Copy it before leaving this page.</small> : null}
-      <small>Next: contact details and review. No passwords or private customer data.</small>
+      <small>Next: your contact details.</small>
     </form>
-    <footer><span>Scope and price agreed before work begins.</span><button type="button" onClick={onOpenWorkspace}>Open existing workspace</button></footer>
+    <footer><button type="button" onClick={onOpenWorkspace}>Open existing workspace</button></footer>
   </section>
 }

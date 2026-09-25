@@ -1047,8 +1047,8 @@ export function expectedText(spec, publicHomepageExpectedText) {
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.boundary,
   ]
   if (spec.surface === 'retired_plant') return ['Shop', 'Website', 'Ecommerce']
-  if (spec.surface === 'ecommerce_brief') return ['Ecommerce', 'Your products, ready to browse.', 'Business name', 'What do you sell?', 'Existing page or catalog', 'Continue', 'Next: add your contact details and review before sending. No passwords or private customer data.', 'Scope and price agreed before work begins.', 'Open existing workspace']
-  if (spec.surface === 'website') return ['Website', 'Your business, online.', 'Business name', 'What does your business offer?', 'Existing page or catalog', 'Continue', 'Next: add your contact details and review before sending. No passwords or private customer data.', 'Scope and price agreed before work begins.', 'Open existing workspace']
+  if (spec.surface === 'ecommerce_brief') return ['Ecommerce', 'Your products, ready to browse.', 'Business name', 'What do you sell?', 'Existing page or catalog', 'Continue', 'Next: your contact details.', 'Open existing workspace']
+  if (spec.surface === 'website') return ['Website', 'Your business, online.', 'Business name', 'What does your business offer?', 'Existing page or catalog', 'Continue', 'Next: your contact details.', 'Open existing workspace']
   return ['Ecommerce', 'Sample store', 'Browse a sample catalog. Requests stay on this device and are not live orders.', 'Request catalog setup', 'Try sample request']
 }
 

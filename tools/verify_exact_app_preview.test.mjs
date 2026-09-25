@@ -65,7 +65,7 @@ test('Website default preview requires the business brief and review boundaries'
   const needles = expectedText({ surface: 'website' })
   const source = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
   for (const needle of needles) assert.ok(source.includes(needle), `Website source missing ${needle}`)
-  assert.ok(needles.includes('Scope and price agreed before work begins.'))
+  assert.ok(needles.includes('Next: your contact details.'))
   assert.ok(needles.includes('What does your business offer?'))
   assert.ok(needles.includes('Open existing workspace'))
   assert.ok(!needles.includes('Request Website setup'))
