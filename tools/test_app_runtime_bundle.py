@@ -9,6 +9,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = r"""
 import builtins, json, pathlib, sys
+from importlib.metadata import version
 bundle = pathlib.Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(bundle))
 def deny_network(event, args):
@@ -21,6 +22,16 @@ def guarded(name, *args, **kwargs):
         raise RuntimeError('excluded_source_imported')
     return original_import(name, *args, **kwargs)
 builtins.__import__ = guarded
+pins = {}
+for line in (bundle / 'requirements.txt').read_text().splitlines():
+    if not line.strip() or line.startswith('#'):
+        continue
+    name, expected = line.split('==')
+    pins[name.split('[')[0]] = expected
+    if name == 'psycopg[binary]':
+        pins['psycopg-binary'] = expected
+for name, expected in pins.items():
+    assert version(name) == expected, f'dependency_pin_mismatch:{name}'
 from api.app import app
 schema = app.openapi()
 required = {
@@ -39,7 +50,7 @@ modules = [m for name, m in sys.modules.items() if name == 'supermega_runtime' o
 for module in modules:
     assert pathlib.Path(module.__file__).resolve().is_relative_to(bundle)
 print(json.dumps({'ok': True, 'evidence': 'isolated_source_cold_import', 'runtimeModules': len(modules),
-                  'requiredRoutes': len(required), 'hostedAcceptance': False, 'providerPackage': False}))
+                  'requiredRoutes': len(required), 'dependencyPins': len(pins), 'hostedAcceptance': False, 'providerPackage': False}))
 """
 
 def main():
@@ -50,6 +61,7 @@ def main():
         bundle = Path(directory)
         shutil.copytree(ROOT / 'supermega_runtime', bundle / 'supermega_runtime',
                         ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        shutil.copy2(ROOT / 'requirements.txt', bundle / 'requirements.txt')
         (bundle / 'api').mkdir()
         shutil.copy2(ROOT / 'api/app.py', bundle / 'api/app.py')
         result = subprocess.run([sys.executable, '-I', '-B', '-c', PROBE, str(bundle)],

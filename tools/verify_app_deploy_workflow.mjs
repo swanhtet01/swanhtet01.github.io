@@ -207,6 +207,16 @@ function runRollbackResolver(args, payload) {
   )
 }
 
+function selectedPython() {
+  const overridePython = process.env.SUPERMEGA_LOCAL_PYTHON?.trim()
+  const localPython = process.platform === 'win32'
+    ? resolve(root, '.venv/Scripts/python.exe')
+    : resolve(root, '.venv/bin/python')
+  return overridePython || (existsSync(localPython)
+    ? localPython
+    : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3')))
+}
+
 async function verifyCanonicalPythonBundle() {
   const bundleRoot = await mkdtemp(join(tmpdir(), 'supermega-vercel-python-'))
   try {
@@ -219,13 +229,7 @@ async function verifyCanonicalPythonBundle() {
     ]) {
       await copyFile(resolve(root, relativePath), resolve(bundleRoot, relativePath))
     }
-    const overridePython = process.env.SUPERMEGA_LOCAL_PYTHON?.trim()
-    const localPython = process.platform === 'win32'
-      ? resolve(root, '.venv/Scripts/python.exe')
-      : resolve(root, '.venv/bin/python')
-    const python = overridePython || (existsSync(localPython)
-      ? localPython
-      : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3')))
+    const python = selectedPython()
     return spawnSync(
       python,
       ['-c', [
@@ -297,6 +301,16 @@ if (releaseTransportTests.status !== 0) {
   console.error(String(releaseTransportTests.stderr || releaseTransportTests.stdout || releaseTransportTests.error || 'Transport tests failed').slice(-4000))
 }
 const canonicalPythonBundle = await verifyCanonicalPythonBundle()
+const appRuntimeBundle = spawnSync(selectedPython(), [resolve(root, 'tools/test_app_runtime_bundle.py')],
+  { cwd: root, encoding: 'utf8', timeout: 75000, maxBuffer: 1024 * 1024 })
+let appRuntimeEvidence
+try { appRuntimeEvidence = JSON.parse(appRuntimeBundle.stdout) } catch { /* Missing evidence fails closed. */ }
+requireContract('actual app entrypoint imports from isolated source with pinned dependencies',
+  appRuntimeBundle.status === 0 && appRuntimeEvidence?.ok === true
+  && appRuntimeEvidence.evidence === 'isolated_source_cold_import'
+  && appRuntimeEvidence.requiredRoutes === 8 && appRuntimeEvidence.dependencyPins === 9
+  && appRuntimeEvidence.providerPackage === false && appRuntimeEvidence.hostedAcceptance === false)
+if (appRuntimeBundle.status !== 0) console.error('Isolated app runtime probe failed; run tools/test_app_runtime_bundle.py for details.')
 
 requireContract('canonical app project id', workflow.includes('APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'))
 requireContract('canonical public project id', workflow.includes('VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR'))
