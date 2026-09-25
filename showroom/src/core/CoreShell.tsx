@@ -714,21 +714,19 @@ export function ProductHomePage() {
           .sort(([left], [right]) => managedPortal ? 0
             : (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]))
               - (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right])))
-          .map(([name, outcome, firstAction, path], index) => {
+          .map(([name, outcome, , path]) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
           if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null
           const setup = productSetups?.[setupKey]
           if (!managedPortal && !activeSetupIds.includes(setupKey) && !setup) return null
           const workspaceName = setup?.startedAt ? setup.workspace : null
           return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
-              <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
               <span className="product-track-copy">
                 <small>{!managedPortal && !activeSetupIds.includes(setupKey) ? 'Retained workspace' : managedPortal ? 'Company product' : workspaceName ? 'Saved on this device' : 'Sample workspace'}</small>
                 <h2>{name}</h2>
-                <p>{outcome}</p>
-                {workspaceName ? <span className="product-track-workspace">Continue saved workspace: {workspaceName}</span> : null}
+                <p>{workspaceName || outcome}</p>
               </span>
-              <strong className="product-track-open">{!managedPortal && !activeSetupIds.includes(setupKey) ? 'Continue saved workspace' : firstAction} <span aria-hidden="true">→</span></strong>
+              <span aria-hidden="true" className="product-track-open">→</span>
             </Link>
         })}
       </nav> : null}
