@@ -284,8 +284,7 @@ export function ManagedLoginPage() {
 
   return (
     <div className={`workspace-screen managed-login-screen${creatingAccount ? ' signup-entry-screen' : ''}`}>
-      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Company account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : managedReady ? 'Open your company.' : 'Company access.'} copy={reviewReturnPath ? 'Use the account SuperMega assigned to this review. No trial or company setup is needed.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? 'Sign in once. SuperMega finds the companies assigned to you.' : ''} />
-      {reviewReturnPath ? <p className="form-notice" role="status">After sign-in, you will return to your prepared review. Only its assigned account can open it.</p> : null}
+      <PageHeading eyebrow={reviewReturnPath ? 'Private customer review' : 'Company account'} title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : managedReady ? 'Open your company.' : 'Company access.'} copy={reviewReturnPath ? 'Sign in with the account assigned to this review.' : creatingAccount ? 'Confirm your email first. Company access is a separate step.' : managedReady ? 'Sign in once. SuperMega finds the companies assigned to you.' : ''} />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <div className="managed-login-actions">
@@ -329,7 +328,7 @@ export function ManagedLoginPage() {
           <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
           <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent, location.search)}>Forgot password?</Link>
-          {reviewReturnPath ? <p>Missing your account or invitation? Ask SuperMega in your existing setup conversation to check your review access. Do not create a new company or trial.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <Link className="account-inline-link" to={signupPath}>No account yet? Try the local demo</Link>}
+          {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. No new company or trial is needed.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <Link className="account-inline-link" to={signupPath}>No account yet? Try the local demo</Link>}
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Find my company')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
