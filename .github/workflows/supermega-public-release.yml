@@ -192,6 +192,11 @@ jobs:
           npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
             npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
 
+      - name: Verify generated app Python function contract
+        run: |
+          node --test tools/test_generated_python_function.mjs
+          node tools/verify_generated_python_function.mjs
+
       - name: Verify immutable app asset contract
         run: node tools/verify_app_release_live.mjs --artifact-self-test
 
