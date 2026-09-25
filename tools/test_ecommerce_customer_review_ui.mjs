@@ -378,3 +378,30 @@ test('paginated recovery confirms only the exact response under unchanged access
   close()
   }
 })
+
+
+test('recovery stops at the page limit without losing or resending the pending response', async () => {
+  const storage = new Map(), identity = { userId: 'customer', workspaceId: 'company' }
+  const payload = { reviewId: id, commandId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    previewDigest: review.previewDigest, note: 'Keep this response' }
+  recovery.retainCatalogDecision({ setItem: (k, v) => storage.set(k, v), getItem: k => storage.get(k) }, identity, review, payload)
+  const original = [...storage.entries()]
+  let reads = 0, previous
+  const h = harness({ storage, decisionPages: after => {
+    assert.equal(after, previous)
+    const start = reads++ * 50
+    const decisions = Array.from({ length: 50 }, (_, n) => ({
+      commandId: `00000000-0000-4000-8000-${String(start + n).padStart(12, '0')}`,
+      kind: 'feedback', note: 'Earlier response', createdAt: '2026-01-01T00:00:00Z' }))
+    previous = decisions.at(-1).commandId
+    return { reviewId: id, contentRevision: 1, previewDigest: review.previewDigest, sourceVersion: 1,
+      publicationAuthorized: false, deploymentAuthorized: false, decisions, nextAfter: previous }
+  } })
+  h.render(); const close = h.effects[0](); await flush()
+  assert.equal(reads, 20)
+  assert.equal(h.writes.length, 0)
+  assert.deepEqual([...storage.entries()], original)
+  assert.match(h.render(), /Review unavailable/)
+  assert.doesNotMatch(h.render(), /Synthetic catalog|Changes requested|Catalog accepted|Accept catalog|Retry response/)
+  close()
+})
