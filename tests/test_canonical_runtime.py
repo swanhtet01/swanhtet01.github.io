@@ -285,6 +285,9 @@ class CanonicalRuntimeTests(unittest.TestCase):
         )
 
     def test_workspace_directory_rejects_gateway_headers_and_fails_closed(self) -> None:
+        timestamp = str(int(time.time()))
+        message = f"v2\n{timestamp}\ncompany-a\nowner-a\nhuman".encode()
+        signature = hmac.new(STRONG_TEST_IDENTITY_SECRET.encode(), message, hashlib.sha256).hexdigest()
         with self._client(SUPERMEGA_TRIAL_IDENTITY_SECRET=STRONG_TEST_IDENTITY_SECRET) as client:
             gateway_only = client.get(
                 "/api/trial/v1/workspaces",
@@ -292,6 +295,8 @@ class CanonicalRuntimeTests(unittest.TestCase):
                     "x-supermega-workspace-id": "company-a",
                     "x-supermega-actor-id": "owner-a",
                     "x-supermega-actor-kind": "human",
+                    "x-supermega-identity-timestamp": timestamp,
+                    "x-supermega-identity-signature": signature,
                 },
             )
         self.assertEqual(gateway_only.status_code, 401)
