@@ -16,6 +16,7 @@ for (const changeAt of [2, 3, Infinity]) test(changeAt === Infinity ? 'unchanged
   const state = {}
   let reads = 0, applied = 0, writes = 0
   const context = {
+    setManagedCanDeliverReviews: () => {}, canDeliverCatalogReviews: () => false,
     managedIdentity: identity, managedCanWrite: true, crypto: { randomUUID: () => 'id' },
     currentManagedIdentity: async () => ++reads >= changeAt ? { workspaceId: 'company-b', userId: 'user-b' } : identity,
     loadManagedBootstrap: async () => ({}), managedBootstrapHasCapability: () => true,
@@ -40,7 +41,8 @@ for (const loseResponse of [false, true]) for (const switchAccount of [false, tr
     const initial = { items: [] }, saved = { items: [], requests: [request] }
     let started = false, writes = 0, applied = 0
     const context = {
-      managedIdentity: identity, managedCanWrite: true, crypto: { randomUUID: () => 'command' },
+      setManagedCanDeliverReviews: () => {}, canDeliverCatalogReviews: () => false,
+    managedIdentity: identity, managedCanWrite: true, crypto: { randomUUID: () => 'command' },
       currentManagedIdentity: async () => started && switchAccount ? { workspaceId: 'b', userId: 'user-b' } : identity,
       loadManagedBootstrap: async () => ({}), managedBootstrapHasCapability: () => true,
       setManagedCanWrite: () => { applied++ }, setManagedInbox: () => { applied++ }, setCatalog: () => { applied++ },
@@ -73,7 +75,8 @@ for (const recovery of ['missing', 'different', 'duplicate']) {
     const recovered = { items: [], requests: recovery === 'missing' ? [] : recovery === 'duplicate' ? [request, request] : [{ ...request, sourcePreviewDigest: 'other' }] }
     let writes = 0, applied = 0
     const context = {
-      managedIdentity: identity, managedCanWrite: true, crypto: { randomUUID: () => 'command' },
+      setManagedCanDeliverReviews: () => {}, canDeliverCatalogReviews: () => false,
+    managedIdentity: identity, managedCanWrite: true, crypto: { randomUUID: () => 'command' },
       currentManagedIdentity: async () => identity, loadManagedBootstrap: async () => ({}),
       managedBootstrapHasCapability: () => true,
       setManagedCanWrite: () => { applied++ }, setManagedInbox: () => { applied++ }, setCatalog: () => { applied++ },
