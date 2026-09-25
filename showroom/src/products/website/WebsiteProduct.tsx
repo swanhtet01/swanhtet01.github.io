@@ -13,6 +13,8 @@ import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
 import { WebsiteReviewInbox } from './WebsiteReviewInbox'
+import { websiteBusinessBriefPreview } from './website-trade-brief'
+import { websiteStarterBriefIssues } from './website-starter'
 import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
@@ -681,14 +683,14 @@ export function WebsiteProduct() {
   function startWithBusiness(brief: WebsiteStarterBrief) {
     if (!starterAvailable) {
       setNotice('The Website example has already changed. Nothing was replaced.')
-      return
+      return false
     }
     const staged = stageWorkspace((current) => (
       applyWebsiteStarterBrief(current, brief, new Date().toISOString())
     ))
     if (!staged) {
       setNotice('The business brief was not applied. Review every required field and try again.')
-      return
+      return false
     }
     setSelectedPageId(staged.workspace.selectedPageId)
     setStarterDismissed(true)
@@ -700,6 +702,7 @@ export function WebsiteProduct() {
       detail: `Website starter brief generated: ${brief.businessName}`,
     })
     setNotice('Your three-page site is ready as an unsaved preview. Review every page, then Save or Discard.')
+    return true
   }
 
   function openStarterSetup() {
@@ -1145,7 +1148,14 @@ export function WebsiteProduct() {
   }
 
   if (showAssistedWebsitePreview && !workspaceOpened && searchParams.get('workspace') !== '1') {
-    return <BusinessBrief product="website" onOpenWorkspace={() => {
+    return <BusinessBrief product="website" onPreparePreview={starterAvailable ? draft => {
+      const brief = websiteBusinessBriefPreview(draft, shopTradeId)
+      const issues = websiteStarterBriefIssues(brief)
+      if (issues.length) return issues[0].message
+      if (!startWithBusiness(brief)) return 'Could not prepare the preview. Open your workspace to review its status.'
+      setWorkspaceOpened(true)
+      return null
+    } : undefined} onOpenWorkspace={() => {
       setWorkspaceOpened(true)
       const next = new URLSearchParams(searchParams)
       next.set('workspace', '1')

@@ -166,3 +166,16 @@ export function websiteTradeBrief(request: WebsiteTradeBriefRequest): WebsiteSta
     proof: copy.proof,
   }
 }
+
+/** Prepare a preview from owner-supplied facts without inventing business claims. */
+export function websiteBusinessBriefPreview(input: { company: string; description: string }, tradeId?: ShopBusinessTemplateId | null): WebsiteStarterBrief {
+  const suggested = tradeId ? websiteTradeBrief({ tradeId, businessName: input.company }) : null
+  return {
+    templateId: suggested?.templateId ?? 'business-presence',
+    businessName: input.company,
+    audience: 'customers of your business',
+    offer: input.description,
+    proof: 'Contact the business for current details.',
+    contactHref: '',
+  }
+}
