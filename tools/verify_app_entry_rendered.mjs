@@ -551,10 +551,12 @@ export function inspectBusinessBrief(document) {
   const editable = node => visible(node) && !node.disabled && !node.readOnly && node.tabIndex >= 0
   const named = node => [...(node.labels || [])].some(label => label.textContent.trim())
   const submit = form?.querySelector('button[type="submit"]')
+  const preview = submit?.textContent.trim() === 'Create preview'
+  const count = preview ? 2 : 3
   return {
-    fieldsReady: fields.length === 3 && fields.every(node => editable(node) && named(node)),
-    essentialsRequired: fields.length === 3 && fields[0].required && fields[1].required && !fields[2].required,
-    emptyContinueBlocked: fields.every(node => node.value === '') && visible(submit) && submit.disabled && submit.textContent.trim() === 'Continue',
+    fieldsReady: fields.length === count && fields.every(node => editable(node) && named(node)),
+    essentialsRequired: fields.length === count && fields[0].required && fields[1].required && (preview || !fields[2].required),
+    emptyContinueBlocked: fields.every(node => node.value === '') && visible(submit) && submit.disabled && submit.textContent.trim() === (preview ? 'Create preview' : 'Continue'),
   }
 }
 

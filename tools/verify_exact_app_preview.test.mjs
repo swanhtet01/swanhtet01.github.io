@@ -65,7 +65,8 @@ test('Website default preview requires the business brief and review boundaries'
   const needles = expectedText({ surface: 'website' })
   const source = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
   for (const needle of needles) assert.ok(source.includes(needle), `Website source missing ${needle}`)
-  assert.ok(needles.includes('Next: your contact details.'))
+  assert.ok(needles.includes('Preview on this device. Not published.'))
+  assert.ok(needles.includes('Create preview'))
   assert.ok(needles.includes('What does your business offer?'))
   assert.ok(needles.includes('Open preview'))
   assert.ok(!needles.includes('Request Website setup'))
@@ -1036,6 +1037,7 @@ test('actual brief harness expression rejects unusable DOM controls', async () =
     return runInNewContext(`(async () => { ${line}; return briefControls })()`, context)
   }
   assert.ok(Object.values(await inspect()).every(value => value === true))
+  assert.ok(Object.values(await inspect(d => { d.fields.pop(); d.submit.textContent = 'Create preview' })).every(value => value === true))
   for (const change of [
     d => { d.absent = true }, d => { d.fields.pop() }, d => { d.fields.push(d.fields[0]) },
     d => { d.fields[0].getClientRects = () => [] }, d => { d.fields[0].visibility = 'hidden' },

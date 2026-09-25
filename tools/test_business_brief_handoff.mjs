@@ -19,7 +19,7 @@ for (const product of ['website', 'ecommerce']) {
     test(`${product}: ${name} reaches contact without loss or query disclosure`, () => {
       let destination
       let prevented = false
-      vm.runInNewContext(submit, { ...values, product, URLSearchParams, setHandoffFailed() {},
+      vm.runInNewContext(`(() => {${submit}})()`, { ...values, onPreparePreview: undefined, product, URLSearchParams, setHandoffFailed() {},
         event: { preventDefault() { prevented = true } },
         window: { location: { assign(url) { destination = url } } },
       })
@@ -42,7 +42,7 @@ for (const product of ['website', 'ecommerce']) {
     const values = Object.freeze({ company: 'မြန်မာ Tea', description: 'Tea & snacks', reference: 'Public menu' })
     const attempts = []
     const failures = []
-    const context = { ...values, product, URLSearchParams,
+    const context = { ...values, onPreparePreview: undefined, product, URLSearchParams,
       setHandoffFailed: value => failures.push(value), event: { preventDefault() {} },
       window: { location: { assign(url) {
         attempts.push(url)
@@ -57,5 +57,22 @@ for (const product of ['website', 'ecommerce']) {
     assert.equal(attempts[0], attempts[1])
     for (const key of Object.keys(values)) assert.equal(context[key], values[key])
     assert.match(component, /handoffFailed \? <small role="alert">Could not open contact/)
+  })
+}
+
+for (const outcome of ['success', 'validation', 'exception']) {
+  test(`preview ${outcome}: uses local callback without contact navigation or losing input`, () => {
+    const draft = Object.freeze({ company: 'Thazin Bakery', description: 'Bread and cakes', reference: '' })
+    let received, issue, prevented = false
+    vm.runInNewContext(`(() => {${submit}})()`, {
+      draft,
+      event: { preventDefault() { prevented = true } },
+      onPreparePreview(value) { received = value; if (outcome === 'exception') throw Error('staging failed'); return outcome === 'validation' ? 'Review the business name' : null },
+      setPreviewIssue(value) { issue = value },
+      window: { location: { assign() { assert.fail('must not navigate to contact') } } },
+    })
+    assert.equal(prevented, true)
+    assert.equal(received, draft)
+    assert.equal(issue, outcome === 'success' ? null : outcome === 'validation' ? 'Review the business name' : 'Could not prepare your preview. Your details are still here.')
   })
 }
