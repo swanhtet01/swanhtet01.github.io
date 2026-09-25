@@ -14,6 +14,7 @@ const code = transformSync(source.slice(start, end), { loader: 'ts', format: 'cj
 
 function harness(responses) {
   let current = 'company-a', fetches = 0, refreshes = 0
+  const requests = []
   const request = runInNewContext(`${code}\nauthorizedRequest`, {
     Headers,
     sessionForRequest: async expected => {
@@ -21,11 +22,11 @@ function harness(responses) {
       return { session: { access_token: 'synthetic-only' }, workspaceId: current }
     },
     withTraceHeaders: () => {},
-    fetch: async () => responses[fetches++](),
+    fetch: async (path, init) => { requests.push({ path, init }); return responses[fetches++]() },
     authClient: async () => ({ auth: { refreshSession: async () => { refreshes++; return { data: { session: {} } } } } }),
     parseError: async () => new Error('request_failed'),
   })
-  return { request: () => request('/synthetic', {}, true, { workspaceId: 'company-a' }),
+  return { request: (init = {}) => request('/synthetic', init, true, { workspaceId: 'company-a' }), requests,
     change: () => { current = 'company-b' }, counts: () => ({ fetches, refreshes }) }
 }
 
@@ -101,5 +102,32 @@ test('real session resolver rejects workspace and user changes across awaited au
       if (change === 'none') assert.equal((await pending).workspaceId, 'company-a')
       else await assert.rejects(pending, /company account changed/)
     }
+  }
+})
+
+
+test('uncertain POST transport and body failures never automatically resend a command', async () => {
+  for (const stage of ['transport', 'body']) {
+    const failure = new Error('synthetic connection interrupted')
+    const run = harness([() => {
+      if (stage === 'transport') throw failure
+      return { status: 200, ok: true, json: async () => { throw failure } }
+    }])
+    await assert.rejects(run.request({ method: 'POST', body: '{"command_id":"synthetic-command"}' }), /synthetic connection interrupted/)
+    assert.deepEqual(run.counts(), { fetches: 1, refreshes: 0 })
+  }
+})
+
+test('POST authentication retry preserves the exact reviewed command and workspace', async () => {
+  const body = JSON.stringify({ command_id: 'synthetic-command', expected_version: 7, state: { synthetic: true } })
+  const run = harness([() => ({ status: 401 }), () => ({ status: 200, ok: true, json: async () => ({ accepted: true }) })])
+  await run.request({ method: 'POST', body })
+  assert.deepEqual(run.counts(), { fetches: 2, refreshes: 1 })
+  for (const sent of run.requests) {
+    assert.equal(sent.path, '/synthetic')
+    assert.equal(sent.init.method, 'POST')
+    assert.equal(sent.init.body, body)
+    assert.equal(sent.init.headers.get('x-supermega-workspace-id'), 'company-a')
+    assert.equal(sent.init.headers.get('content-type'), 'application/json')
   }
 })
