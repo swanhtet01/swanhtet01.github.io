@@ -2486,11 +2486,53 @@ def _exercise_managed_product_journeys(
         ("rehearsal-product", "owner-product", "human", 10),
     ]:
         raise RehearsalFailure("managed_journey_event_attribution_failed")
+    # Exact old receipts must survive a newer counter order without reserving stock again.
+    counter_start = store.get_state(product_owner, "commerce")
+    counter_commands = []
+    for index in range(2):
+        command = {
+            "command_id": f"10000000-0000-4000-8000-{900 + index:012d}",
+            "surface": "commerce",
+            "event_type": "commerce.order.created",
+            "expected_version": counter_start.version + index,
+            "payload": {
+                "intent": {
+                    "orderId": f"ORD-COUNTER-REHEARSAL-{index}",
+                    "customer": "Synthetic counter customer",
+                    "channel": "Counter", "payment": "Cash",
+                    "fulfilment": "pickup", "fulfilmentReference": "Synthetic counter",
+                    "promisedAt": "2099-01-01T01:00:00.000Z", "paymentTermsDays": 0,
+                    "lines": [{"sku": "SKU-REHEARSAL-1", "quantity": 1}],
+                },
+                "evidence": _journey_evidence(
+                    f"ACT-COUNTER-REHEARSAL-{index}", actor=JOURNEY_PRODUCT_ACTOR,
+                    captured_at="2026-07-24T10:00:00.000Z",
+                    reason="Verify exact counter receipt recovery", reference=f"counter:{index}",
+                ),
+            },
+        }
+        receipt = store.apply_command(product_owner, **command)
+        counter_commands.append((command, receipt))
+    original_command, original_receipt = counter_commands[0]
+    recovered = store.apply_command(product_owner, **original_command)
+    latest = store.get_state(product_owner, "commerce")
+    before_stock = counter_start.state["items"][0]["onHand"]
+    if (
+        not recovered.idempotent_replay
+        or recovered.version != original_receipt.version
+        or recovered.state != original_receipt.state
+        or latest.version != counter_start.version + 2
+        or latest.state["items"][0]["onHand"] != before_stock - 2
+        or len(latest.state["orders"]) != len(counter_start.state["orders"]) + 2
+        or any(sum(row["id"] == f"ORD-COUNTER-REHEARSAL-{i}" for row in latest.state["orders"]) != 1 for i in range(2))
+    ):
+        raise RehearsalFailure("managed_counter_old_receipt_recovery_failed")
     return {
         "managed_website_to_commerce_journey": True,
         "managed_production_job_to_output": True,
         "managed_human_attribution": True,
         "managed_exact_retry": True,
+        "managed_counter_old_receipt_recovery": True,
     }
 
 
