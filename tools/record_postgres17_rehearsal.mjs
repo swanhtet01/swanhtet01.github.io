@@ -153,6 +153,9 @@ async function verify(input, expectedHead) {
   }
   const raw = JSON.parse(await readFile(`${input}.raw.json`, 'utf8'))
   const implementation = await implementationEvidence()
+  // Check receipt integrity and freshness before comparing the raw runner output
+  // with today's implementation. Old evidence requires a new rehearsal.
+  validateSanitizedProof(proof, implementation)
   const rebuilt = buildSanitizedProof(raw, {
     recordedAt: proof.recordedAt, implementationCommit: proof.implementationCommit,
     implementationTree: proof.implementationTree, implementation,

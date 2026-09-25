@@ -76,7 +76,8 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.deepEqual(implementation.paths, runner.paths)
   assert.deepEqual(migrationNames, runner.migrations)
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
-  assert.equal(runner.migrations.at(-1), '20260918011500_website_customer_acceptance.sql')
+  assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
+  assert.equal(runner.migrations.at(-1), '20260924231714_ecommerce_customer_decisions.sql')
 })
 const context = {
   recordedAt: '2026-07-31T10:00:00.000Z',
@@ -303,5 +304,24 @@ test('only terminal confirmed cleanup, or prelaunch failure, releases owned leas
       }), /simulated_end/)
       for (const path of locks) await assert.rejects(access(path), { code: 'ENOENT' })
     } finally { await rm(folder, { recursive: true, force: true }) }
+  }
+})
+
+test('CLI reports stale evidence before rebuilding a raw runner receipt', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'supermega-stale-rehearsal-'))
+  try {
+    const proof = buildSanitizedProof(raw, context)
+    const staleDigest = `sha256:${'0'.repeat(64)}`
+    proof.implementationDigest = staleDigest
+    proof.implementation.digest = staleDigest
+    proof.receiptDigest = proofDigest(proof)
+    const input = join(folder, 'receipt.json')
+    await writeFile(input, JSON.stringify(proof))
+    await writeFile(`${input}.raw.json`, '{}')
+    const result = spawnSync(process.execPath, ['tools/record_postgres17_rehearsal.mjs', '--verify', '--input', input], { encoding: 'utf8', windowsHide: true })
+    assert.equal(result.status, 1)
+    assert.equal(JSON.parse(result.stderr).error, 'database_rehearsal_evidence_stale')
+  } finally {
+    await rm(folder, { recursive: true, force: true })
   }
 })

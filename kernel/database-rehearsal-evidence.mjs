@@ -23,6 +23,9 @@ const migrations = [
   '20260915184728_website_customer_review_storage.sql',
   '20260915191528_website_review_entitlement_proof.sql',
   '20260918011500_website_customer_acceptance.sql',
+  '20260924190304_ecommerce_review_entitlement_proof.sql',
+  '20260924194557_ecommerce_customer_review_storage.sql',
+  '20260924231714_ecommerce_customer_decisions.sql',
 ]
 
 const implementationPaths = [...new Set([
@@ -32,6 +35,7 @@ const implementationPaths = [...new Set([
   'supermega_runtime/trial_runtime.py',
   'supermega_runtime/trial_store.py',
   'supermega_runtime/core_security_catalog.py',
+  'supermega_runtime/ecommerce_decision_schema.py',
   'supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql',
   'supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql',
   'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
