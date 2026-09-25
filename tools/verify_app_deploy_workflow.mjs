@@ -411,6 +411,8 @@ requireContract('app shell carries no inline script the policy would refuse',
 requireContract('canonical API function', config.routes?.[1]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
+requireContract('Python dependencies and entrypoint probe trigger app review',
+  ['requirements.txt', 'requirements-test.txt', 'tools/test_app_runtime_bundle.py'].every(path => appWorkflow.includes("- '" + path + "'")))
 requireContract('deployment control files trigger non-mutating review gates',
   allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'vercel.json'") && source.includes("- '.vercelignore'")))
 requireContract('remote app build includes kernel release contract', generator.includes("['.github', 'kernel', 'supabase']"))

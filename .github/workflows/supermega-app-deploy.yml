@@ -8,6 +8,9 @@ on:
     paths:
       - 'api/**'
       - 'api_app.py'
+      - 'requirements.txt'
+      - 'requirements-test.txt'
+      - 'tools/test_app_runtime_bundle.py'
       - 'supermega_runtime/**'
       - 'tests/**'
       - 'supabase/migrations/**'
