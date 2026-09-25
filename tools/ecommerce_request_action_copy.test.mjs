@@ -25,7 +25,7 @@ test('local entry consistently names a sample request in source and acceptance c
   for (const path of ['../showroom/src/products/ecommerce/EcommerceProduct.tsx', './verify_app_build.mjs', './verify_app_release_live.mjs', './verify_exact_app_preview.mjs']) {
     const text = readFileSync(new URL(path, import.meta.url), 'utf8')
     if (path !== './verify_exact_app_preview.mjs') assert.ok(text.includes("'Try one sample request'"), path)
-    else assert.ok(text.includes("'Let SuperMega prepare your catalog', 'Request catalog setup'"), path)
+    else assert.ok(text.includes("'Request catalog setup'"), path)
     assert.ok(text.includes("'Try sample request'"), path)
     assert.doesNotMatch(text, /'Try one customer order'|'Start sample order'/)
   }
@@ -58,8 +58,9 @@ test('fresh assisted entry yields to retained work, carts, attention and editor 
     assert.equal(vm.runInNewContext(expression, { ...ready, ...blocked }), false)
   }
   assert.ok(product.includes('{!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">'))
-  assert.ok(product.includes('Let SuperMega prepare your catalog'))
-  assert.ok(product.includes('Review your catalog before launch.'))
+  assert.ok(product.includes('Explore the catalog'))
+  assert.ok(!product.includes('Let SuperMega prepare your catalog'))
+  assert.ok(!product.includes('Review your catalog before launch.'))
   const action = product.slice(product.indexOf('{assistedCatalogEntry ? <>'), product.indexOf('{ecommerceTodayGuided ? ('))
   assert.doesNotMatch(action, /ecommerce-assisted-intake|What to send/)
   assert.match(action, /<AssistedDeliveryScope product="ecommerce" \/>/)

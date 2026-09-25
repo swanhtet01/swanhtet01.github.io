@@ -1876,9 +1876,9 @@ export function EcommerceProduct() {
 
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-density={ecommerceTodayGuided ? 'guided' : 'compact'} data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
-          <span className="core-eyebrow">Start here</span>
-          <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Let SuperMega prepare your catalog' : ecommerceTodayHeadline}</h2>
-          <p>{assistedCatalogEntry ? 'Share your products and prices. Review your catalog before launch.' : ecommerceTodaySummary}</p>
+          {!assistedCatalogEntry ? <span className="core-eyebrow">Start here</span> : null}
+          <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Explore the catalog' : ecommerceTodayHeadline}</h2>
+          {!assistedCatalogEntry ? <p>{ecommerceTodaySummary}</p> : null}
           {assistedCatalogEntry ? <>
             <AssistedDeliveryScope product="ecommerce" />
             <div className="form-actions ecommerce-service-actions">
