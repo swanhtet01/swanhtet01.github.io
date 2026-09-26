@@ -1066,7 +1066,9 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.migration?.count === databaseImplementationPaths.filter((path) => path.startsWith('supabase/migrations/')).length
   && databaseRehearsal.migration?.schemaVersion === 13
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 72
+  && Object.keys(databaseRehearsal.checks || {}).length === 74
+  && databaseRehearsal.checks?.managedCounterOldReceiptRecovery === true
+  && databaseRehearsal.checks?.temporaryRuntimePasswordExpiryVerified === true
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
   && databaseRehearsal.checks?.capabilityScopedReads === true
   && databaseRehearsal.checks?.capabilityScopedEventReads === true
