@@ -721,7 +721,8 @@ export function ProductHomePage() {
           const setup = productSetups?.[setupKey]
           if (!managedPortal && !activeSetupIds.includes(setupKey) && !setup) return null
           const workspaceName = name === 'Website' && savedWebsiteName ? savedWebsiteName : setup?.startedAt ? setup.workspace : null
-          return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
+          const workspacePath = !managedPortal && (name === 'Website' || name === 'Ecommerce') ? `${path}?workspace=1` : path
+          return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={workspacePath}>
               <span className="product-track-copy">
                 <small>{managedPortal ? 'Company product' : 'Saved on this device'}</small>
                 <h2>{name}</h2>
