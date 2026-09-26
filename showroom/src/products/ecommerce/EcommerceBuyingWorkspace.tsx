@@ -1422,7 +1422,7 @@ export function EcommerceBuyingWorkspace({
             </div>
           ) : null}
 
-          <section className="ecommerce-order-tracking" aria-label="Customer order tracking">
+          <section className="ecommerce-order-tracking" aria-label="Customer order tracking" tabIndex={-1}>
             <div className="ecommerce-order-tracking-head">
               <span><strong>Your orders</strong><small>Quotes and orders, followed through Shop</small></span>
               <b>{customerOrderTimeline.length ? `${customerOrderTimeline.length} found` : 'Enter contact above'}</b>

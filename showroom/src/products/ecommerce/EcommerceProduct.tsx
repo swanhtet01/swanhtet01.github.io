@@ -1733,6 +1733,8 @@ export function EcommerceProduct() {
           ? `${ecommercePaymentAttentionCount} payment${ecommercePaymentAttentionCount === 1 ? '' : 's'} need confirmation`
           : pendingManagedRequests.length
             ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
+            : customerRequestState === 'confirmed'
+              ? 'Your order is confirmed'
             : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
               ? ecommerceWaitingHeadline
             : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
@@ -1748,6 +1750,8 @@ export function EcommerceProduct() {
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
+        : customerRequestState === 'confirmed'
+          ? 'Track this order, or use Reorder to review another purchase.'
         : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
           ? ecommerceWaitingSummary
         : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
@@ -1767,6 +1771,8 @@ export function EcommerceProduct() {
           ? 'Fix order import'
           : pendingManagedRequests.length
             ? 'Review orders in Shop'
+            : customerRequestState === 'confirmed'
+              ? 'View order'
             : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
               ? 'View request receipt'
             : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
@@ -1811,6 +1817,15 @@ export function EcommerceProduct() {
     }
     if (pendingManagedRequests.length) {
       navigate('/shop/?tab=orders&source=ecommerce')
+      return
+    }
+    if (customerRequestState === 'confirmed') {
+      openBuyingWorkspace()
+      const tracking = document.querySelector<HTMLElement>('.ecommerce-order-tracking')
+      if (tracking) requestAnimationFrame(() => {
+        tracking.focus({ preventScroll: true })
+        tracking.scrollIntoView({ block: 'start' })
+      })
       return
     }
     if (customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits) {
