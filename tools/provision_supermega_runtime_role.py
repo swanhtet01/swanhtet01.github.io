@@ -262,7 +262,7 @@ def validate_runtime_expiry(value: str, now: datetime | None = None) -> datetime
         raise ProvisioningFailure("runtime_expiry_must_be_within_24_hours") from None
 
 
-def apply_runtime_role(connection: Any, runtime_password: str, *, valid_until: str = "") -> None:
+def apply_runtime_role(connection: Any, runtime_password: str, *, valid_until: str = "", create_only: bool = False) -> None:
     if len(runtime_password) < 24 or len(runtime_password) > 1024:
         raise ProvisioningFailure("runtime_password_length_invalid")
     try:
@@ -271,6 +271,8 @@ def apply_runtime_role(connection: Any, runtime_password: str, *, valid_until: s
         raise ProvisioningFailure("postgres_driver_missing") from exc
     expiry = validate_runtime_expiry(valid_until) if valid_until else None
     before = inspect_runtime_role(connection)
+    if create_only and before["runtime_exists"]:
+        raise ProvisioningFailure("runtime_role_creation_collision")
     unsafe = [
         item
         for item in before["failed_checks"]
@@ -286,7 +288,11 @@ def apply_runtime_role(connection: Any, runtime_password: str, *, valid_until: s
     with connection.transaction():
         with connection.cursor() as cursor:
             cursor.execute("select pg_advisory_xact_lock(hashtextextended(%s, 0))", (CONTRACT,))
-            if before["runtime_exists"]:
+            if create_only:
+                cursor.execute("select exists(select 1 from pg_roles where rolname = %s) as present", (RUNTIME_ROLE,))
+                if _mapping(cursor.fetchone()).get("present") is not False:
+                    raise ProvisioningFailure("runtime_role_creation_collision")
+            if before["runtime_exists"] and not create_only:
                 cursor.execute(
                     sql.SQL(
                         "alter role {} login inherit nosuperuser nocreatedb nocreaterole "
@@ -347,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--production-handoff", action="store_true")
     parser.add_argument("--valid-until", default="", help="Timezone-aware deadline within 24 hours for temporary runtime credentials.")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--create-only", action="store_true", help="Reject an existing runtime login; never rotate its credential.")
     parser.add_argument("--evidence-output", default="")
     args = parser.parse_args(argv)
 
@@ -375,7 +382,7 @@ def main(argv: list[str] | None = None) -> int:
                     "runtime_password",
                 )
                 try:
-                    apply_runtime_role(connection, password, valid_until=args.valid_until)
+                    apply_runtime_role(connection, password, valid_until=args.valid_until, create_only=args.create_only)
                 finally:
                     password = ""
                 after = inspect_runtime_role(connection)

@@ -35,8 +35,8 @@ function harness(responses, search = '', hash = '') {
       if (!fields.has(selector)) fields.set(selector, { open: true, value: selector === '[name="product"]' ? 'guide' : '', selectedOptions: [], addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
       return fields.get(selector)
     },
-    addEventListener(name, callback) { if (name === 'submit') handler = callback },
-    reset() { resets++; for (const field of fields.values()) field.value = '' },
+    addEventListener(name, callback) { if (name === 'submit') handler = callback; else events.set('form:' + name, callback) },
+    reset() { events.get('form:reset')?.(); resets++; for (const field of fields.values()) field.value = '' },
   }
   let keys = 0
   const crypto = { randomUUID: () => 'local-retry-key-' + ++keys }
@@ -74,7 +74,7 @@ function harness(responses, search = '', hash = '') {
     },
   })
   if (!hash) form.querySelector('[name="goal"]').value = 'Please build my business website'
-  return { fields, headings, calls, timers, windowEvents, historyCalls, location, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
+  return { invalid: field => events.get('form:invalid')({ target: form.querySelector('[name="' + field + '"]') }), reset: () => form.reset(), fields, headings, calls, timers, windowEvents, historyCalls, location, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
 
 test('complete assisted briefs collapse the editable service choice only', () => {
@@ -435,4 +435,20 @@ test('a failed second request cannot retain the earlier success heading', async 
   assert.equal(state.calls[1].body, state.calls[2].body)
   assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Request received.')
   assert.match(state.headings.get('[data-contact-lede]').textContent, /^Reference: LEAD-FEDCBA9876543210/)
+})
+
+ test('complete three-product briefs stay editable and reveal invalid fields', () => {
+  assert.match(html, /data-contact-brief open/)
+  for (const product of ['shop', 'website', 'ecommerce']) {
+    const state = harness([], `?product=${product}`, '#company=Example&goal=Prepare%20our%20business')
+    assert.equal(state.fields.get('[data-contact-brief]').open, false)
+    assert.equal(state.fields.get('[data-contact-brief-summary]').textContent, 'Review brief — Example')
+    state.invalid('goal')
+    assert.equal(state.fields.get('[data-contact-brief]').open, true)
+    state.reset()
+    assert.equal(state.fields.get('[data-contact-brief-summary]').textContent, 'Business brief')
+    assert.equal(state.calls.length, 0)
+  }
+  const incomplete = harness([], '?product=website', '#company=Example')
+  assert.equal(incomplete.fields.get('[data-contact-brief]').open, true)
 })
