@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import './test_ecommerce_confirmed_next_action.mjs'
 
 import {
   COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
