@@ -3012,12 +3012,10 @@ for (const [handler, next] of [
 
 if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !appSource.includes('<ManagedLoginPage /></Suspense>} path="login"')
-  // /signup used to redirect here, which was a dead end: /login is gated on
-  // workspace login remains enterprise-gated. Local trial and separately default-closed
-  // identity creation are distinct doors; neither grants company access by itself.
-  || !appSource.includes("lazy(() => import('./core/SignupPage')")
-  || !appSource.includes('<SignupPage /></Suspense>} path="signup"')
-  || appSource.includes('<Navigate replace to="/login" />} path="signup"')
+  // Retired sample signup must preserve product/review intent into the account flow.
+  || appSource.includes("lazy(() => import('./core/SignupPage')")
+  || !appSource.includes('<AccountEntryRedirect />} path="signup"')
+  || !appSource.includes("managedAccountPath('/login', product, location.search)")
   || !managedLoginPageSource.includes("title={reviewReturnPath ? 'Open your prepared review.' : creatingAccount ? 'Create your account.' : 'Login'}")
   || !managedLoginPageSource.includes('creatingAccount && !reviewReturnPath')
   || !managedLoginPageSource.includes('managedReady && activating && !reviewReturnPath')
