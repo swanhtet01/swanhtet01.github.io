@@ -335,7 +335,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             ? 'The file is clean. Check it with the company account, then confirm the final import.'
             : `The file is clean. Review it once, then confirm it into this browser's ${productName} demo.`
           : 'Fix the highlighted rows before this can become a clean import.'
-      : `Drop in a CSV or try the sample. SuperMega reads, maps, and checks ${object.label.toLowerCase()} before any write.`
+      : `Choose your CSV. SuperMega reads, maps, and checks ${object.label.toLowerCase()} before any write.`
   const missingRequiredColumns = state.preview
     ? state.preview.fields.filter((field) => field.required && !state.preview?.mapping[field.id]).length
     : 0
@@ -400,7 +400,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                         : managedIdentity
                           ? 'Check with company'
                           : 'Prepare import file'
-                : 'Upload or try sample'
+                : 'Upload your CSV'
   const importCoachReason = appliedIsCurrent
     ? 'The company import is confirmed and ready to use.'
     : state.preflighting
@@ -413,7 +413,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             ? state.preview.readyForStaging
               ? 'The file is clean; the next step is a company check or setup file.'
               : importRepairMessage
-            : 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.'
+            : 'Choose your CSV to match columns and check your data.'
   const importCoachRows = [
     ['Next action', importCoachAction],
     ['Reason', importCoachReason],
@@ -444,7 +444,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             : 'Free mode can export the package for support review without sending data from the browser.'
           : state.preview
             ? 'Setup stays locked until required columns, row issues, and duplicate keys are clear.'
-            : 'Start with the sample or a CSV so SuperMega can build one clear setup file.'
+            : 'Choose your CSV to prepare your import.'
   const activationHandoffRows = [
     ['Package', state.preview ? `${state.preview.totals.ready}/${state.preview.totals.rows} ready` : 'Waiting'],
     ['Company', importContextReady ? workspace.trim() : 'Missing'],
@@ -558,18 +558,6 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       `supermega-${productSlug}-${workflowTemplateId}-${object.id}-data-checklist-v1.csv`,
       `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`,
       'text/csv;charset=utf-8',
-    )
-  }
-
-  function previewSample() {
-    const expectedProduct = product
-    const expectedWorkflowTemplateId = workflowTemplateId
-    void runPreview(
-      `supermega-${productSlug}-${expectedWorkflowTemplateId}-${object.id}-sample-v1.csv`,
-      clientImportTemplate(expectedProduct, expectedWorkflowTemplateId, templateContext),
-      undefined,
-      expectedProduct,
-      expectedWorkflowTemplateId,
     )
   }
 
@@ -882,11 +870,10 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           <div>
             <span className="core-eyebrow">Smart import</span>
             <h3>Import existing {object.label.toLowerCase()}</h3>
-            <p>Choose a CSV or try the sample. SuperMega matches columns, shows only the fixes, and asks once before writing.</p>
+            <p>Choose your CSV, check the matched columns, and review any corrections.</p>
           </div>
           <div className="catalog-import-file-actions">
             <label htmlFor={`client-import-${product}`}>Choose your CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
-            <button className="core-button" disabled={state.busy} onClick={previewSample} type="button">Try sample</button>
           </div>
         </div>
         <details className="catalog-import-help">
