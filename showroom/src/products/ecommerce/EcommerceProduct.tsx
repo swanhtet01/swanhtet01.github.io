@@ -1841,9 +1841,8 @@ export function EcommerceProduct() {
 
   const showAssistedCatalogSetup = !catalogHydrating && !managedIdentity
     && catalog.source !== 'unavailable' && !draftIssue && !draftBusy
-  const assistedCatalogEntry = showAssistedCatalogSetup && workspaceView === 'preview'
-    && !savedDraft && ecommerceTodayAction === 'Try sample request'
-    && ecommerceTodayState === 'ready' && !ecommerceTodayCartUnits
+  const assistedCatalogEntry = showAssistedCatalogSetup
+    && new URLSearchParams(location.search).get('workspace') !== '1'
 
   if ((showAssistedCatalogSetup && new URLSearchParams(location.search).get('setup') === '1') || (assistedCatalogEntry && !workspaceOpened && new URLSearchParams(location.search).get('workspace') !== '1')) {
     return <BusinessBrief product="ecommerce" onOpenWorkspace={() => {
