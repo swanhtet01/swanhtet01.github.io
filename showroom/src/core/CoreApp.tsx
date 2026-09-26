@@ -3377,13 +3377,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Memory', 'Saves helpful patterns'],
     ['Safety', 'Review first'],
   ] as const
-  const shopCatalogUploadRows = [
-    ['Source', commerce.items.length ? `${commerce.items.length} current SKU` : 'Need catalog'],
-    ['Upload', 'Shared mapper'],
-    ['Checks', 'SKU, price, stock'],
-    ['Review', 'Review package'],
-    ['Safety', 'Review first'],
-  ] as const
   const shopSetupGuideRows = [
     ['Products', commerce.items.length ? `${commerce.items.length} current SKU` : 'Import catalog'],
     ['Stock', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + ATP' : 'Simple count first'],
@@ -3394,8 +3387,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   ] as const
   const [catalogImportOpen, setCatalogImportOpen] = useState(false)
   const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
-    <div><span className="core-eyebrow">Catalog import helper</span><strong>Add your products.</strong><p>Upload a spreadsheet, match its columns, and review your products before importing.</p></div>
-    <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <div><strong>Add your products</strong><p>Upload a CSV to add products in bulk.</p></div>
     <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportOpen} className="core-button" disabled={commerceControlsDisabled} onClick={() => setCatalogImportOpen((open) => !open)} type="button">{catalogImportOpen ? 'Close upload' : 'Upload product data'}</button>
     {catalogImportOpen ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
   </section>
