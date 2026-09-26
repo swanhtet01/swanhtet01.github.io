@@ -72,7 +72,6 @@ const ONLINE_ONLY = [
   'WorkspaceControlsPage',
   'src/core/ManagedLoginPage.tsx',
   'src/core/ManagedAccountPage.tsx',
-  'src/core/SignupPage.tsx',
   // The "data tools" panel behind the product switcher: a client's catalog/CSV import, run once
   // while setting a shop up. Flagged by the two-levels-deep check below rather than by hand.
   'src/core/ClientDataOnboarding.tsx',
