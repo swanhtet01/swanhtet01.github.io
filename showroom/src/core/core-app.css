@@ -2442,8 +2442,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-today-actions .core-button { flex: 1; }
   .shop-today-module-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .shop-margin-priorities,
-.shop-batch-priorities,
-.shop-batch-first-use-lines, .shop-batch-first-use-items { grid-template-columns: 1fr; }
+  .shop-batch-first-use-lines, .shop-batch-first-use-items { grid-template-columns: 1fr; }
+  .shop-batch-priorities { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
