@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { managedAccountPath } from './core/account-routes'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 
 import {
@@ -16,11 +17,16 @@ const WorkspaceControlsPage = lazy(() => import('./core/WorkspaceControlsPage').
 const ProductOnboardingPage = lazy(() => import('./core/ProductOnboardingPage').then((module) => ({ default: module.ProductOnboardingPage })))
 const ManagedLoginPage = lazy(() => import('./core/ManagedLoginPage').then((module) => ({ default: module.ManagedLoginPage })))
 const ManagedAccountPage = lazy(() => import('./core/ManagedAccountPage').then((module) => ({ default: module.ManagedAccountPage })))
-const SignupPage = lazy(() => import('./core/SignupPage').then((module) => ({ default: module.SignupPage })))
 const visionPreviewEnabled = import.meta.env.DEV || import.meta.env.VITE_SUPERMEGA_VISION_PREVIEW === '1'
 const VisionProduct = visionPreviewEnabled
   ? lazy(() => import('./products/vision/VisionProduct').then((module) => ({ default: module.VisionProduct })))
   : null
+
+function AccountEntryRedirect() {
+  const location = useLocation()
+  const product = new URLSearchParams(location.search).get('product')
+  return <Navigate replace to={managedAccountPath('/login', product, location.search)} />
+}
 
 function ProductLoading({ name }: { name: string }) {
   return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>{name}</p></div>
@@ -99,7 +105,7 @@ export default function App() {
           <Route element={<Suspense fallback={<ProductLoading name="login" />}><ManagedLoginPage /></Suspense>} path="login" />
           <Route element={<Suspense fallback={<ProductLoading name="recovery" />}><ManagedAccountPage /></Suspense>} path="account/recovery" />
           <Route element={<Suspense fallback={<ProductLoading name="account" />}><ManagedAccountPage /></Suspense>} path="account/setup" />
-          <Route element={<Suspense fallback={<ProductLoading name="trial" />}><SignupPage /></Suspense>} path="signup" />
+          <Route element={<AccountEntryRedirect />} path="signup" />
           <Route element={<Navigate replace to="/" />} path="*" />
         </Route>
       </Routes>

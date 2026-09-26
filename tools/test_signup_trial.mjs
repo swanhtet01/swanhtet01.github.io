@@ -301,8 +301,8 @@ for (const [name, source] of [['signup-trial.ts', moduleSource], ['SignupPage.ts
 
 // --- the wiring the page depends on ----------------------------------------------------
 const appSource = readFileSync('showroom/src/App.tsx', 'utf8')
-check(appSource.includes('<SignupPage /></Suspense>} path="signup"'), '/signup renders the trial page')
-check(!appSource.includes('<Navigate replace to="/login" />} path="signup"'), 'and no longer dead-ends at /login')
+check(appSource.includes('<AccountEntryRedirect />} path="signup"'), '/signup enters the managed account flow')
+check(appSource.includes("managedAccountPath('/login', product, location.search)") && !appSource.includes("import('./core/SignupPage')"), 'legacy signup preserves product intent without loading sample provisioning')
 
 const shellSource = readFileSync('showroom/src/core/CoreShell.tsx', 'utf8')
 const loginSource = readFileSync('showroom/src/core/ManagedLoginPage.tsx', 'utf8')
