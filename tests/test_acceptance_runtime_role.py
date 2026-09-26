@@ -103,6 +103,25 @@ class AcceptanceRoleTests(unittest.TestCase):
                 self.assertEqual(report["external_mutation_performed"], applying)
                 self.assertNotIn("PRIVATE_SENTINEL", output.getvalue())
 
+    def test_expiry_during_connect_prevents_password_read_and_mutation(self):
+        with contextlib.ExitStack() as stack:
+            output = io.StringIO()
+            stack.enter_context(contextlib.redirect_stdout(output))
+            stack.enter_context(patch.object(module.core, "_assert_package_guard_committed"))
+            stack.enter_context(patch.object(module.core, "_load_target_guard", return_value=module.core.TargetGuard("zvtzwcimpvvtkowflhda", "protected-unapproved")))
+            stack.enter_context(patch.object(module.Path, "read_text", return_value=json.dumps(self.record)))
+            stack.enter_context(patch.object(module, "validate_approval", side_effect=[self.now + timedelta(hours=1), ValueError("expired")]))
+            secret = stack.enter_context(patch.object(module.core, "_read_secret", return_value="PRIVATE_SENTINEL"))
+            stack.enter_context(patch.object(module.core, "validate_admin_target"))
+            stack.enter_context(patch.object(module.core, "_connect"))
+            stack.enter_context(patch.object(module.core, "inspect_runtime_role", return_value={"runtime_exists": False, "ready": False}))
+            apply = stack.enter_context(patch.object(module.core, "apply_runtime_role"))
+            self.assertEqual(module.main(["--expected-project-ref", module.ACCEPTANCE_REF, "--apply", "--approval-file", "approval.json"]), 2)
+            self.assertEqual(secret.call_count, 1)
+            self.assertEqual(secret.call_args.args[1], "SUPERMEGA_ACCEPTANCE_ADMIN_URL")
+            apply.assert_not_called()
+            self.assertFalse(json.loads(output.getvalue())["external_mutation_performed"])
+
 
 if __name__ == "__main__":
     unittest.main()
