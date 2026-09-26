@@ -3040,3 +3040,11 @@ input, select, textarea,
   .product-home-screen .product-track-card { grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-4); }
   .product-home-screen .product-track-open { grid-column: 1; }
 }
+
+/* First real item: separate product facts from the opening-stock record. */
+.shop-first-product-form { gap: 1.25rem; }
+.shop-first-product-form fieldset { display: grid; gap: .875rem; min-width: 0; margin: 0; padding: 1rem; border: 1px solid var(--core-line); border-radius: .875rem; }
+.shop-first-product-form legend { padding: 0 .375rem; font-size: .875rem; font-weight: 600; }
+.shop-first-product-form input { min-height: 2.75rem; }
+.shop-first-product-form .form-row { gap: .875rem; }
+@media (max-width: 600px) { .shop-first-product-form .form-row { grid-template-columns: minmax(0, 1fr); } }
