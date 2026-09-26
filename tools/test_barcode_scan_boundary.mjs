@@ -69,7 +69,7 @@ for (const forbidden of ['fetch(', 'XMLHttpRequest', 'sendBeacon', 'localStorage
 }
 
 check(coreApp.includes("import { BarcodeScanButton } from './BarcodeScanButton'"), 'core_app_barcode_import_missing')
-// Both managed setup branches render the same catalogForm after deduplication.
+// Managed setup always renders the same catalogForm; optional template setup follows it.
 // Five source sites still cover the six original screen placements.
 check(count(coreApp, '<BarcodeScanButton') === 5, 'barcode_call_site_count_changed')
 const catalogFormStart = coreApp.indexOf('const catalogForm = <form')
@@ -78,8 +78,10 @@ check(catalogFormStart >= 0 && catalogFormEnd > catalogFormStart, 'barcode_share
 const catalogForm = coreApp.slice(catalogFormStart, catalogFormEnd)
 check(count(catalogForm, '<BarcodeScanButton') === 1
   && catalogForm.includes('onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))}'), 'barcode_shared_catalog_scan_must_only_fill_sku')
-check(count(coreApp, '{catalogForm}') === 1 && count(coreApp, '</details> : catalogForm}') === 1,
-  'barcode_both_managed_catalog_entry_paths_required')
+check(count(coreApp, '{catalogForm}') === 1
+  && coreApp.indexOf('{catalogForm}') < coreApp.indexOf('{managedTemplate ? <details className="secondary-setup-path">')
+  && !coreApp.includes('</details> : catalogForm}'),
+  'barcode_shared_catalog_entry_must_precede_optional_template_setup')
 check(coreApp.includes('placeholder="Search or scan SKU"'), 'shop_counter_keyboard_wedge_placeholder_missing')
 check(coreApp.includes('onKeyDown={addSearchMatch}'), 'shop_counter_keyboard_wedge_handler_missing')
 check(coreApp.includes('label="Scan a barcode with the camera" onDetected={addCameraScan}'), 'shop_counter_camera_handler_missing')
@@ -115,4 +117,4 @@ check(css.includes('.barcode-scan-button { flex: 0 0 auto; min-width: 44px; min-
 check(css.includes('.barcode-scan-video { width: 100%; aspect-ratio: 4 / 3;'), 'barcode_scan_video_stage_missing')
 check(css.includes('.plant-job-scan-miss { overflow-wrap: anywhere; }'), 'plant_scan_miss_wrap_missing')
 
-console.log(`barcode scan boundary: ${checks} checks passed (5 source sites; shared managed form in both setup branches; no scan-triggered domain writes; keyboard fallback retained)`)
+console.log(`barcode scan boundary: ${checks} checks passed (5 source sites; shared managed form before optional template setup; no scan-triggered domain writes; keyboard fallback retained)`)
