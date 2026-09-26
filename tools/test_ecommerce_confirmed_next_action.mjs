@@ -25,15 +25,14 @@ test('unsubmitted cart still leads to checkout and setup keeps priority', () => 
   assert.equal(value('ecommerceTodayAction', 'ecommerceTodayMetrics', { importNeeded: true }), 'Connect products')
   assert.equal(value('ecommerceTodayAction', 'ecommerceTodayMetrics', { pendingManagedRequests: [{}] }), 'Review orders in Shop')
 })
-test('confirmed action opens and focuses tracking without preparing another quote', () => {
+test('confirmed action requests controlled tracking without preparing another quote', () => {
   const body = source.slice(source.indexOf('  function runOrderAutopilot() {'), source.indexOf('\n  useEffect(() => {', source.indexOf('  function runOrderAutopilot() {')))
   const calls = []
-  const tracking = { focus: () => calls.push('focus'), scrollIntoView: () => calls.push('scroll') }
   runInNewContext(`${body.replaceAll('<HTMLElement>', '')}; runOrderAutopilot()`, {
     ...context, recordBehaviorSignal() {}, window: { localStorage: {} }, location: { pathname: '/', search: '' },
     orderAutopilotStage: 'Continue fulfilment', openBuyingWorkspace: () => calls.push('open'),
-    document: { querySelector: () => tracking }, requestAnimationFrame: fn => fn(),
+    setTrackingRequest: update => calls.push(update(3)),
     prepareQuoteRecovery: () => calls.push('unexpected quote'),
   })
-  assert.deepEqual(calls, ['open', 'focus', 'scroll'])
+  assert.deepEqual(calls, [4])
 })

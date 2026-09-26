@@ -78,6 +78,7 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
   onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void
+  trackingRequest?: number
   onDeliveryConfirmationChange?: (confirmation: DeliveryConfirmation | null) => void
   preview: StorefrontPreview
   scope: string
@@ -150,6 +151,7 @@ export function EcommerceBuyingWorkspace({
   onOpenSupport,
   onRecordManagedRequest,
   onRequestStateChange,
+  trackingRequest = 0,
   onDeliveryConfirmationChange,
   preview,
   scope,
@@ -172,6 +174,18 @@ export function EcommerceBuyingWorkspace({
   const [paymentAdapter, setPaymentAdapter] = useState<EcommercePaymentAdapter>('pay_on_pickup')
   const [promotionCode, setPromotionCode] = useState('')
   const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (trackingRequest > 0) setOpen(true)
+  }, [trackingRequest])
+  useEffect(() => {
+    if (!open || trackingRequest === 0) return
+    const frame = requestAnimationFrame(() => {
+      const tracking = document.querySelector<HTMLElement>('.ecommerce-order-tracking')
+      tracking?.focus({ preventScroll: true })
+      tracking?.scrollIntoView({ block: 'start' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [open, trackingRequest])
   const [quoteBusy, setQuoteBusy] = useState(false)
   const quoteInFlight = useRef(false)
   const checkoutEpoch = useRef(0)

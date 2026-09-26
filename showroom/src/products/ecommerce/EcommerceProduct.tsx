@@ -316,6 +316,7 @@ export function EcommerceProduct() {
   const restoredCartScope = useRef('')
   const [cartSessionUnavailable, setCartSessionUnavailable] = useState(false)
   const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
+  const [trackingRequest, setTrackingRequest] = useState(0)
   const [customerRequestDeliveryConfirmed, setCustomerRequestDeliveryConfirmed] = useState<DeliveryConfirmation | null>(null)
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
@@ -1820,12 +1821,7 @@ export function EcommerceProduct() {
       return
     }
     if (customerRequestState === 'confirmed') {
-      openBuyingWorkspace()
-      const tracking = document.querySelector<HTMLElement>('.ecommerce-order-tracking')
-      if (tracking) requestAnimationFrame(() => {
-        tracking.focus({ preventScroll: true })
-        tracking.scrollIntoView({ block: 'start' })
-      })
+      setTrackingRequest((request) => request + 1)
       return
     }
     if (customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits) {
@@ -2392,6 +2388,7 @@ export function EcommerceProduct() {
               onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
               onRecordManagedRequest={managedIdentity && managedCanWrite ? recordManagedBuyingRequest : undefined}
               onRequestStateChange={setCustomerRequestState}
+              trackingRequest={trackingRequest}
               onDeliveryConfirmationChange={setCustomerRequestDeliveryConfirmed}
               preview={previewResult.preview}
               scope={buyingScope}
