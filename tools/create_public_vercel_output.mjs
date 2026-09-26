@@ -764,7 +764,7 @@ const contactScript = `<script>(function(){
   var unconfirmedPayload=null,submittedFields=null;
   function warnUnconfirmedNavigation(event){if(unconfirmedPayload){event.preventDefault();event.returnValue=true;}}
   form.addEventListener('submit',async function(event){
-    event.preventDefault();if(submit.disabled)return;status.textContent='Sending...';submit.disabled=true;var deadline;
+    event.preventDefault();if(submit.disabled)return;if(heading&&heading.textContent==='Request received.'){heading.textContent='Send another request.';if(lede)lede.textContent='Previous request — '+lede.textContent;submit.textContent='Request setup';}status.textContent='Sending...';submit.disabled=true;var deadline;
     try{
       if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';
       if(!unconfirmedPayload){submittedFields=JSON.stringify(Object.fromEntries(new FormData(form).entries()));unconfirmedPayload=submittedFields;}

@@ -419,3 +419,20 @@ test('Myanmar brief handoff preserves text and clears the fragment before submis
     assert.equal(payload.source_url.includes(company), false)
   }
 })
+
+
+test('a failed second request cannot retain the earlier success heading', async () => {
+  const state = harness([{ body: receipt }, new Error('offline'), { body: { ...receipt, request_id: 'LEAD-FEDCBA9876543210' } }])
+  await state.submit()
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Request received.')
+  state.fields.get('[name="goal"]').value = 'A separate new brief'
+  await state.submit()
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Send another request.')
+  assert.match(state.headings.get('[data-contact-lede]').textContent, /^Previous request — Reference: LEAD-0123456789ABCDEF/)
+  assert.match(state.fields.get('[data-form-status]').textContent, /could not confirm receipt/)
+  assert.notEqual(state.calls[0].headers['x-idempotency-key'], state.calls[1].headers['x-idempotency-key'])
+  await state.submit()
+  assert.equal(state.calls[1].body, state.calls[2].body)
+  assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Request received.')
+  assert.match(state.headings.get('[data-contact-lede]').textContent, /^Reference: LEAD-FEDCBA9876543210/)
+})
