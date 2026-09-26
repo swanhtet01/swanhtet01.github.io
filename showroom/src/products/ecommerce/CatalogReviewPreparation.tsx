@@ -129,7 +129,7 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
       const result = verifyCatalogReconciliation(await reconcileManagedEcommerceReview(command.reviewId, who), command)
       if (!await current(who, started)) return
       if (result.status === 'active') {
-        const { readAt: _readAt, ...assignment } = result
+        const assignment = Object.fromEntries(Object.entries(result).filter(([field]) => field !== 'readAt'))
         const saved = verifyCatalogPreparationReceipt({ ...assignment, status: 'prepared_preview', persisted: true, replayed: true }, command)
         retainCatalogCommand(window.sessionStorage, key, command)
         window.sessionStorage.setItem(key + ':receipt', JSON.stringify({ command, receipt: saved }))

@@ -16,7 +16,7 @@ export function recoverWebsiteFeedback(storage: Pick<Storage, 'getItem' | 'remov
     || p.reviewId !== review.reviewId || p.previewDigest !== review.previewDigest
     || typeof p.commandId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(p.commandId)
     || typeof p.note !== 'string' || !p.note.trim() || p.note !== p.note.trim() || [...p.note].length > 2000
-    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(p.note)) throw Error()
+    || [...p.note].some(character => { const code = character.charCodeAt(0); return (code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127 })) throw Error()
   if (Date.parse(value.expiresAt) <= Date.now()) {
     clearWebsiteFeedback(storage, who, p)
     return null

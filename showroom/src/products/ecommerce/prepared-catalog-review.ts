@@ -58,7 +58,7 @@ export function verifyCatalogDecisionPage(value: unknown, review: Pick<PreparedC
       accepted = true
     } else if (item.kind !== 'feedback' || typeof item.note !== 'string' || !item.note.trim()
       || item.note !== item.note.trim() || [...item.note].length > 2000
-      || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(item.note)) return invalid()
+      || [...item.note].some(character => { const code = character.charCodeAt(0); return (code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127 })) return invalid()
   }
   if (value.nextAfter !== null && (accepted || value.decisions.length !== 50 || value.nextAfter !== previous)) return invalid()
   return structuredClone(value) as CatalogDecisionPage

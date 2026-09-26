@@ -6,7 +6,7 @@ const terms: Record<string, number> = { 'SPA-PACK-MASSAGE-5': 5, 'SPA-PACK-FACIA
 function requireValue(ok: unknown, message: string): asserts ok { if (!ok) throw new Error(`Invalid package ledger: ${message}.`) }
 function integer(value: number, minimum = 0) { return Number.isSafeInteger(value) && value >= minimum }
 function time(value: string) { const result = Date.parse(value); requireValue(Number.isFinite(result), 'timestamp'); return result }
-function text(value: string, max: number) { return typeof value === 'string' && value.trim().length > 0 && value.length <= max && !/[\x00-\x1f\x7f]/.test(value) }
+function text(value: string, max: number) { return typeof value === 'string' && value.trim().length > 0 && value.length <= max && ![...value].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) }
 function exact(value: object, keys: string[]) { requireValue(value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).sort().join('|') === keys.sort().join('|'), 'fields') }
 export function validateServicePackages(state: ShopServiceSchedule) {
   if (state.packageDefinitions === undefined && state.packageLedger === undefined) return
