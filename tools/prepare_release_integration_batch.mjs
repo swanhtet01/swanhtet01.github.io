@@ -131,8 +131,8 @@ export const APP_SHELL_REQUIREMENTS = [
       'function managedLoginPath(product: string | null)',
       "const sensitiveAccountRoute = location.pathname.startsWith('/account/')",
       'const accountEntryRoute = loginRoute || sensitiveAccountRoute',
-      'Company login',
-      'aria-label="Company login"',
+      'Login',
+      'aria-label="Login"',
       'mobile-account-link',
     ],
   },
@@ -157,7 +157,7 @@ export const APP_SHELL_REQUIREMENTS = [
     id: 'upstream-action-reachability', authority: 'upstream', file: 'showroom/src/core/core-app.css', tokens: [
       '.shop-counter-module > .shop-counter-surface { min-height: 440px; flex: 0 0 clamp(440px,calc(100svh - 280px),620px); overflow: hidden; }',
       '.operations-screen:not(.commerce-screen) .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }',
-      '.plant-production-module > .production-view { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }',
+      '.production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; grid-template-columns: minmax(0,1fr); }',
     ],
   },
   {
@@ -345,7 +345,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   {
     id: 'candidate-demo-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
       'Try a sample',
-      'supermega.last-product.v1', 'Samples stay separate.',
+      'supermega.last-product.v1', 'retired_launcher_release_asset',
       "'Choose what you want to run.'",
       'Ecommerce order review packet checked locally.', 'No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.',
     ],
