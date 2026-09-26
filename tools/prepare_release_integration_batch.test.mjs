@@ -188,7 +188,7 @@ test('app shell requires production safeguards and candidate task-first UX toget
   assert.equal(integrated.ok, true)
 
   const withoutSignIn = appShellSources()
-  withoutSignIn['showroom/src/core/CoreShell.tsx'] = withoutSignIn['showroom/src/core/CoreShell.tsx'].replaceAll('Company login', '')
+  withoutSignIn['showroom/src/core/CoreShell.tsx'] = withoutSignIn['showroom/src/core/CoreShell.tsx'].replaceAll('Login', '')
   assert.equal(assessAppShellSources(withoutSignIn).ok, false)
 
   const withoutBoundary = appShellSources()
