@@ -3393,7 +3393,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Boundary', 'Review before writes'],
   ] as const
   const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
-    <div><span className="core-eyebrow">Catalog import helper</span><strong>Bring your catalog into the Shop trial.</strong><p>The assistant routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
+    <div><span className="core-eyebrow">Catalog import helper</span><strong>Add your products.</strong><p>Upload a spreadsheet, match its columns, and review your products before importing.</p></div>
     <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <button className="core-button" disabled={commerceControlsDisabled} onClick={loadSampleCatalogItem} type="button">Load sample catalog item</button>
     <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
