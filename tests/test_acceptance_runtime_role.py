@@ -75,6 +75,34 @@ class AcceptanceRoleTests(unittest.TestCase):
         self.assertIsNone(json.loads(output.getvalue())["external_mutation_performed"])
         self.assertNotIn("PRIVATE_SENTINEL", output.getvalue())
 
+    def test_inspection_and_successful_apply_dispatch(self):
+        for applying in (False, True):
+            with self.subTest(applying=applying), contextlib.ExitStack() as stack:
+                output = io.StringIO()
+                connection = MagicMock()
+                connection.__enter__.return_value = connection
+                stack.enter_context(contextlib.redirect_stdout(output))
+                stack.enter_context(patch.object(module.core, "_assert_package_guard_committed"))
+                stack.enter_context(patch.object(module.core, "_load_target_guard", return_value=module.core.TargetGuard("zvtzwcimpvvtkowflhda", "protected-unapproved")))
+                stack.enter_context(patch.object(module.Path, "read_text", return_value=json.dumps(self.record)))
+                approval = stack.enter_context(patch.object(module, "validate_approval", return_value=self.now + timedelta(hours=1)))
+                secret = stack.enter_context(patch.object(module.core, "_read_secret", return_value="PRIVATE_SENTINEL"))
+                stack.enter_context(patch.object(module.core, "validate_admin_target"))
+                stack.enter_context(patch.object(module.core, "_connect", return_value=connection))
+                stack.enter_context(patch.object(module.core, "inspect_runtime_role", return_value={"runtime_exists": applying, "ready": applying}))
+                apply = stack.enter_context(patch.object(module.core, "apply_runtime_role"))
+                args = ["--expected-project-ref", module.ACCEPTANCE_REF]
+                if applying:
+                    args += ["--apply", "--approval-file", "approval.json"]
+                self.assertEqual(module.main(args), 0)
+                self.assertEqual(apply.call_count, int(applying))
+                self.assertEqual(approval.call_count, 2 if applying else 0)
+                self.assertEqual(secret.call_count, 2 if applying else 1)
+                report = json.loads(output.getvalue())
+                self.assertEqual(report["status"], "provisioned" if applying else "inspected")
+                self.assertEqual(report["external_mutation_performed"], applying)
+                self.assertNotIn("PRIVATE_SENTINEL", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
