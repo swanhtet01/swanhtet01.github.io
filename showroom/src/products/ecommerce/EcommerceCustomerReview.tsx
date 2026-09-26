@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { currentManagedIdentity, loadManagedEcommerceReview, loadManagedEcommerceDecisions, sendManagedEcommerceDecision, sameManagedIdentity, type ManagedIdentity, type EcommerceReviewDecision } from '../../core/managed-trial'
 import { customerEcommerceReviewLoginPath } from '../../core/account-routes'
@@ -26,7 +26,8 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
-  const [command] = useState(() => ({ busy: false, identity: null as ManagedIdentity | null,
+  const busy = useRef(false)
+  const [command, setCommand] = useState(() => ({ identity: null as ManagedIdentity | null,
     pending: null as { payload: EcommerceReviewDecision; identity: ManagedIdentity } | null }))
 
   async function readDecisions(identity: ManagedIdentity, currentReview: PreparedCatalogReview,
@@ -42,7 +43,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   }
 
   async function submit(kind: 'acceptance' | 'feedback') {
-    if (command.busy || !review || !decisions || (decisions.decisions.length && !command.pending) || !command.identity) return
+    if (busy.current || !review || !decisions || (decisions.decisions.length && !command.pending) || !command.identity) return
     const epoch = access.capture()
     const identity = command.identity
     const closeChangedAccess = () => {
@@ -50,13 +51,15 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
       access.invalidate(); setReview(null); setDecisions(null)
       setMessage(changedAccessMessage)
     }
-    if (!command.pending) {
+    let draft = command.pending
+    if (!draft) {
       if (kind === 'feedback' && (!note.trim() || [...note.trim()].length > 2000)) return
-      command.pending = { identity, payload: { reviewId, commandId: crypto.randomUUID(), previewDigest: review.previewDigest,
+      draft = { identity, payload: { reviewId, commandId: crypto.randomUUID(), previewDigest: review.previewDigest,
         ...(kind === 'acceptance' ? { decision: 'accept_preview_for_release_review' as const } : { note: note.trim() }) } }
+      setCommand({ identity, pending: draft })
     }
-    const pending = command.pending
-    command.busy = true; setSaving(true); setSaveMessage('')
+    const pending = draft
+    busy.current = true; setSaving(true); setSaveMessage('')
     try {
       if (!sameManagedIdentity(identity, pending.identity)
         || !await access.commit(epoch, identity, review.expiresAt, () => {})) { closeChangedAccess(); return }
@@ -68,14 +71,14 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         : retained.kind !== 'feedback' || retained.note !== pending.payload.note)) throw Error()
       const confirmed = await access.commit(epoch, identity, review.expiresAt, () => {
         clearCatalogDecision(window.sessionStorage, identity, reviewId)
-        setDecisions(saved); command.pending = null; setNote(''); setEditing(false)
+        setDecisions(saved); setCommand({ identity, pending: null }); setNote(''); setEditing(false)
       })
       if (!confirmed) closeChangedAccess()
     } catch {
       if (!await access.commit(epoch, identity, review.expiresAt, () => {})) closeChangedAccess()
       else setSaveMessage('Response unconfirmed. Retry safely.')
     } finally {
-      command.busy = false
+      busy.current = false
       setSaving(false)
     }
   }
@@ -96,12 +99,12 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
         const saved = await readDecisions(identity, verified, epoch, recovered)
         if (!active || !access.isCurrent(epoch)) return
         const accepted = await access.commit(epoch, identity, verified.expiresAt, () => {
-          command.identity = identity
-          command.pending = recovered ? { identity, payload: recovered } : null
+          let pending = recovered ? { identity, payload: recovered } : null
           if (recovered && saved.decisions.some(item => item.commandId === recovered.commandId
             && (recovered.decision ? item.kind === 'acceptance' : item.kind === 'feedback' && item.note === recovered.note))) {
-            clearCatalogDecision(window.sessionStorage, identity, reviewId); command.pending = null
+            clearCatalogDecision(window.sessionStorage, identity, reviewId); pending = null
           }
+          setCommand({ identity, pending })
           setSaveMessage(recovered ? 'Retry your saved response.' : '')
           setDecisions(saved); setReview(verified)
         })
@@ -119,17 +122,17 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     window.addEventListener('storage', refresh)
     window.addEventListener('focus', refresh)
     return () => { active = false; access.invalidate(); window.removeEventListener('storage', refresh); window.removeEventListener('focus', refresh) }
-  }, [reviewId, attempt, access, command])
+  }, [reviewId, attempt, access])
 
   useEffect(() => {
     if (!review) return
     const timer = window.setTimeout(() => {
       try { if (command.identity) clearCatalogDecision(window.sessionStorage, command.identity, reviewId) } catch { /* Storage may be unavailable. */ }
-      command.pending = null; setNote('')
+      setCommand(previous => ({ ...previous, pending: null })); setNote('')
       access.invalidate(); setReview(null); setDecisions(null); setMessage('This review expired. Ask for a new review.')
     }, Math.max(0, Math.min(2147483647, Date.parse(review.expiresAt) - Date.now())))
     return () => window.clearTimeout(timer)
-  }, [review, access, command, reviewId])
+  }, [review, access, command.identity, reviewId])
 
   return <main className="catalog-review-page" aria-busy={opening}>
     {review ? <>

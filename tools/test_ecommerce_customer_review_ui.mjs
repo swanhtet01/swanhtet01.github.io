@@ -27,6 +27,9 @@ function harness({ identity = { actor: 'customer', userId: 'customer', workspace
       if (name === 'react') return { useState: initial => {
         const slot = index++; if (!(slot in states)) states[slot] = typeof initial === 'function' ? initial() : initial
         return [states[slot], value => { states[slot] = typeof value === 'function' ? value(states[slot]) : value }]
+      }, useRef: initial => {
+        const slot = index++; if (!(slot in states)) states[slot] = { current: initial }
+        return states[slot]
       }, useEffect: effect => effects.push(effect) }
       if (name === 'react-router') return { Link: p => React.createElement('a', { href: p.to }, p.children) }
       if (name === '../../core/account-routes') return { customerEcommerceReviewLoginPath }
