@@ -10,7 +10,7 @@ const { renderToStaticMarkup } = require('react-dom/server')
 const source = readFileSync(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText
 const module = { exports: {} }
-vm.runInNewContext(compiled, { exports: module.exports, require: name => name.endsWith('.css') || name === './business-brief-draft' ? {} : require(name) })
+vm.runInNewContext(compiled, { exports: module.exports, require: name => name.endsWith('.css') ? {} : name === './business-brief-draft' ? { emptyBusinessBrief: () => ({ company: '', description: '', reference: '' }) } : require(name) })
 const { AssistedDeliveryScope } = module.exports
 for (const product of ['website', 'ecommerce']) {
   test(`${product}: one business-brief entry without implementation choices`, () => {
@@ -30,3 +30,14 @@ test('assisted scope overrides compact-grid named placements without changing ot
   assert.ok(css.includes('.website-today:has(.assisted-delivery-scope) { grid-template-columns: minmax(0, 1fr); }'))
   assert.doesNotMatch(css, /!important/)
 })
+
+for (const product of ['website', 'ecommerce']) {
+  test(`${product}: intake has one primary action and only two required business fields`, () => {
+    const html = renderToStaticMarkup(React.createElement(module.exports.BusinessBrief, { product, onOpenWorkspace: () => {} }))
+    assert.equal((html.match(/<button /g) ?? []).length, 1)
+    assert.equal((html.match(/required=""/g) ?? []).length, 2)
+    assert.match(html, />Continue<\/button>/)
+    assert.doesNotMatch(html, /Open preview|Create preview/)
+    assert.match(html, /Existing page or catalog/)
+  })
+}

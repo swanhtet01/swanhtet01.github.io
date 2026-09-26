@@ -11,7 +11,7 @@ export function AssistedDeliveryScope({ product }: { product: Product }) {
 }
 
 
-export function BusinessBrief({ product, onOpenWorkspace, onPreparePreview }: { product: Product; onOpenWorkspace: () => void; onPreparePreview?: (draft: BusinessBriefDraft) => string | null }) {
+export function BusinessBrief({ product, onPreparePreview }: { product: Product; onOpenWorkspace: () => void; onPreparePreview?: (draft: BusinessBriefDraft) => string | null }) {
   const id = useId()
   const [draft, setDraft] = useState(() => {
     try { return readBusinessBrief(window.sessionStorage, product) } catch { return emptyBusinessBrief() }
@@ -59,6 +59,5 @@ export function BusinessBrief({ product, onOpenWorkspace, onPreparePreview }: { 
       {previewIssue ? <small role="alert">{previewIssue}</small> : null}
       <small>{onPreparePreview ? 'Preview on this device. Not published.' : 'Next: your contact details.'}</small>
     </form>
-    <footer><button type="button" onClick={onOpenWorkspace}>Open preview</button></footer>
   </section>
 }
