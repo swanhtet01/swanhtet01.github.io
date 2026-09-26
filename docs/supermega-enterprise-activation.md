@@ -133,3 +133,21 @@ powershell -ExecutionPolicy Bypass -File tools/activate_supermega_database.ps1 -
 6. Record Founder and customer trial-owner acceptance against the requeried PostgreSQL activation event, its matching local receipt projection, and exact live release metadata. Only then onboard customer data and begin the bounded paid pilot.
 
 If any gate fails, keep or restore `isolated_demo`, do not redeploy partial environment variables, suspend the workspace membership, and do not describe the workspace as activated. The helpers emit sanitized JSON evidence, never print database URLs or keys, and send production values to Vercel through standard input.
+
+## Existing acceptance branch: temporary runtime login
+
+For the existing `twflgmlwfkykgzsxnegc` acceptance branch, reconcile current catalog and migration history first. The empty-target preflight above intentionally rejects an already initialized schema; do not remove its guards or replay migrations to satisfy it.
+
+Inspect the runtime-role contract without applying changes:
+
+```powershell
+python tools/provision_acceptance_runtime_role.py --expected-project-ref twflgmlwfkykgzsxnegc --admin-database-url-file .tmp/acceptance-admin-url.txt
+```
+
+The administrative URL must use the verified project endpoint, TLS, and a direct or session connection; transaction-pooler administrative sessions are rejected. Keep it in an ignored, access-restricted file or the process-scoped `SUPERMEGA_ACCEPTANCE_ADMIN_URL` variable. Obtain connection details from this branch's dashboard, not a copied production endpoint.
+
+Only after the owner authorizes creating the temporary login, record that decision in an ignored approval JSON with these fields: `contract` = `supermega.acceptance-runtime-role.v1`, `project_ref` = the exact branch above, `action` = `create_temporary_runtime_login`, `create_only` = true, `approval_id` = the reviewed UUID, and timezone-aware `issued_at` / `expires_at` timestamps no more than 24 hours apart. The file validates scope and time; it does not authenticate owner consent. Never invent an approval to authorize execution.
+
+The authorized apply command adds `--apply --approval-file .tmp/acceptance-role-approval.json --runtime-password-file .tmp/acceptance-runtime-password.txt` to the inspection command. Use a newly generated temporary secret of at least 24 characters; never put it in command arguments or output. The same expiry controls database login validity. Production and unrelated targets are rejected, and an existing login is never rotated. An expired login role still exists: expiry is not deletion, so subsequent cleanup or renewal needs separate review.
+
+A failure result with `external_mutation_performed: null` means the outcome is uncertain. Inspect the remote role before retrying. Successful provisioning establishes the role only; it does not establish hosted sign-in, tenant isolation, persistence, recovery or customer acceptance.
