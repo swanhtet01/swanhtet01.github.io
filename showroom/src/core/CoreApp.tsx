@@ -3117,20 +3117,19 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) {
       const catalogForm = <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
-        <div className="form-row"><label>SKU<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
+        <div className="form-row"><label>SKU<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label></div>
         <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Reorder at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
         <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
         <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet, stocktake, or source record" required value={catalogDraft.evidenceReference} /></label>
-        <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : 'Create managed catalog'}</button></div>
-        <p className="form-notice" role="status">{catalogError || commerceStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
+        <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Saving…' : 'Add product'}</button></div>
+        <p className="form-notice" role="status">{catalogError || commerceStorageError || ''}</p>
       </form>
       return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Company Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
-      <p className="panel-copy">{managedTemplate
-        ? `Review the ${managedTemplate.name.en} starter catalog, confirm its opening values, and create the whole catalog once. No demo sales, customers, or appointments are copied.`
-        : 'Start with the first real inventory item. No browser demo orders, customers, or stock records are copied into this workspace.'}</p>
-      {managedTemplate ? <form className="core-form compact-form managed-template-catalog-form" onSubmit={(formEvent) => void initializeManagedTemplateCatalog(formEvent)}>
+      <div className="panel-head"><div><span className="core-eyebrow">Shop</span><h2>Add your first product</h2></div></div>
+      <p className="panel-copy">Enter an item you sell. You can add more products afterward.</p>
+      {catalogForm}
+      {managedTemplate ? <details className="secondary-setup-path"><summary>Use a business catalog</summary><form className="core-form compact-form managed-template-catalog-form" onSubmit={(formEvent) => void initializeManagedTemplateCatalog(formEvent)}>
         <div className="setup-choice-copy"><strong>{managedTemplate.name.en}</strong><span>{managedTemplate.catalog.length} items · prices and opening counts can be edited in Shop after setup</span></div>
         <details><summary>Review starter items</summary><div className="compact-list">{managedTemplate.catalog.map((item) => <span key={item.sku}><strong>{item.name}</strong> · {item.priceMmk.toLocaleString()} MMK · opening {item.openingStock}</span>)}</div></details>
         <label className="checkbox-row"><input checked={managedTemplateDraft.reviewed} onChange={(inputEvent) => setManagedTemplateDraft((current) => ({ ...current, reviewed: inputEvent.target.checked }))} required type="checkbox" />I reviewed the starter prices, opening counts, and reorder levels.</label>
@@ -3138,10 +3137,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <label>Source or evidence<input maxLength={180} onChange={(inputEvent) => setManagedTemplateDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Price list, stock count, or owner review" required value={managedTemplateDraft.evidenceReference} /></label>
         <div className="form-actions"><Link className="text-link" to="/settings/?product=shop">Choose another business type</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : `Create ${managedTemplate.name.en} catalog`}</button></div>
         <p className="form-notice" role="status">{catalogError || commerceStorageError || `Signed in as ${managedIdentity.email}. This creates server-backed company records.`}</p>
-      </form> : null}
-      {managedTemplate ? <details className="secondary-setup-path"><summary>Start with one item instead</summary>
-      {catalogForm}
-      </details> : catalogForm}
+      </form></details> : null}
     </section>
     }
     return <section className="core-panel managed-commerce-boundary">
