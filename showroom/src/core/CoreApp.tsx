@@ -3395,7 +3395,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
     <div><span className="core-eyebrow">Catalog import helper</span><strong>Add your products.</strong><p>Upload a spreadsheet, match its columns, and review your products before importing.</p></div>
     <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <button className="core-button" disabled={commerceControlsDisabled} onClick={loadSampleCatalogItem} type="button">Load sample catalog item</button>
     <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
   </section>
   function runShopAutopilot() {
@@ -3410,35 +3409,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return
     }
     navigate(shopAgentPath)
-  }
-
-  function loadSampleCatalogItem() {
-    const sampleItem = {
-      sku: 'SM-FRESH-006',
-      name: 'Fresh market delivery pack',
-      onHand: '24',
-      reorderAt: '8',
-      price: '16500',
-    }
-    if (pendingAction) {
-      setNotice('Finish or cancel the pending Shop review before loading a sample catalog item.')
-      return
-    }
-    if (commerce.items.some((item) => item.sku === sampleItem.sku)) {
-      setSku(sampleItem.sku)
-      setNotice(`${sampleItem.sku} is already in the catalog. Open its row to edit price, reorder level, stock, or receiving.`)
-      return
-    }
-    setItemDraft(sampleItem)
-    setCatalogCreateOpen(true)
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_chosen',
-      product: 'commerce',
-      route: commerceLocation.pathname + commerceLocation.search,
-      detail: 'Load sample Shop catalog item',
-    })
-    setNotice('Sample Shop catalog item loaded for review. Click Review catalog item to queue it; no Shop write, stock move, supplier message, sale, payment, or accounting post ran.')
-    requestAnimationFrame(() => catalogCreateFormRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 
   const shopCommandCenter = <section aria-label="Shop next step" className="shop-command-center">
