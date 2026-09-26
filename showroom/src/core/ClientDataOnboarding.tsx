@@ -982,6 +982,8 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.${state.applied.shopPack ? ` ${state.applied.shopPack.id} pack revision ${state.applied.shopPack.version} is ready.` : ''}${state.applied.plantPack ? ` ${state.applied.plantPack.id} Plant setup is ready.` : ''}`
               : validationIsCurrent
               ? state.validation?.preflight ? 'Company record check passed. The reviewed import remains bound to this exact receipt.' : 'Checked successfully. Review and confirm above; SuperMega runs one final company record check before writing.'
+              : mappingNeedsReview
+                ? 'Choose the required columns above.'
               : !state.preview.readyForStaging
                 ? 'Correct the CSV and upload it again.'
               : !importContextReady
