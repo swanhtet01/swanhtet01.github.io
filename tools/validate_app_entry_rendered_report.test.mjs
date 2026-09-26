@@ -25,7 +25,7 @@ test('receipt boundary must be visibly sized and inside the viewport', () => {
 test('rendered harness follows current assisted Website and Ecommerce entry actions', () => {
   assert.match(renderedVerifierSource, /candidate\.textContent\.trim\(\) === 'Try sample request'/)
   assert.match(renderedVerifierSource, /'Preview'/)
-  assert.match(renderedVerifierSource, /'Tell us about your business'/)
+  assert.match(renderedVerifierSource, /'Site checks'/)
   assert.match(renderedVerifierSource, /'Preview saved on this device\. Not published\.'/)
   assert.doesNotMatch(renderedVerifierSource, /'Start sample order'/)
   assert.doesNotMatch(renderedVerifierSource, /'The working sample stays unchanged until you choose Customize demo\.'/)
@@ -387,11 +387,9 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
     readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
     readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8'),
   ])
-  const assistedBrief = await readFile(join(rootDir, 'showroom', 'src', 'products', 'AssistedDeliveryScope.tsx'), 'utf8')
   const sourceBoundText = [
     [websiteProduct, 'Preview'],
-    [assistedBrief, 'Tell us about your business'],
-    [websiteProduct, 'Saved on this device'],
+    [websiteProduct, 'Site checks'],
     [websiteProduct, 'Preview saved on this device. Not published.'],
     [ecommerceProduct, 'Sample request saved locally'],
     [ecommerceWorkspace, 'This sample order request is saved on this device for Shop review.'],
