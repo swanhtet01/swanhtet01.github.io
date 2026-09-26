@@ -803,8 +803,8 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     let launcherFailure = ''
     if (testCase.requireLauncherProducts) {
       try {
-        assertLauncherProductLinks(beforeCapture.launcherLinks)
-        assertLauncherProductLinks(afterCapture.launcherLinks)
+        assertLauncherProductLinks(beforeCapture.launcherLinks, testCase.expectedLauncherProducts)
+        assertLauncherProductLinks(afterCapture.launcherLinks, testCase.expectedLauncherProducts)
       } catch { launcherFailure = 'app_entry_rendered_launcher_products_mismatch' }
     }
     const missingText = testCase.expectedText.filter((needle) => !(finalRendered?.text || '').includes(needle))
@@ -941,33 +941,36 @@ const tests = [
   {
     name: 'desktop root shows launcher despite remembered product',
     requireLauncherProducts: true,
+    expectedLauncherProducts: [['Shop', '/shop/']],
     route: '/',
     width: 1280,
     height: 900,
     expectedPath: '/',
-    expectedText: [...launcherText, 'Continue saved workspace: Pilot Spa Workspace'],
+    expectedText: ['Your workspace', 'Login', 'Shop', 'Pilot Spa Workspace', 'Saved on this device'],
     screenshotName: 'app-launcher-desktop-1280x900',
     seed: { lastProduct: 'production', productSetups: shopSetup },
   },
   {
     name: 'desktop choose query shows launcher',
     requireLauncherProducts: true,
+    expectedLauncherProducts: [],
     route: '/?choose=1',
     width: 1280,
     height: 900,
     expectedPath: '/?choose=1',
-    expectedText: launcherText,
+    expectedText: ['Your workspace', 'Login', 'Sign in to access your business.'],
     seed: { lastProduct: 'commerce' },
   },
   {
     name: 'mobile root shows launcher',
     requireLauncherProducts: true,
+    expectedLauncherProducts: [],
     route: '/',
     width: 390,
     height: 844,
     mobile: true,
     expectedPath: '/',
-    expectedText: launcherText,
+    expectedText: ['Your workspace', 'Login', 'Sign in to access your business.'],
     screenshotName: 'app-launcher-mobile-390x844',
     seed: { lastProduct: 'ecommerce' },
   },

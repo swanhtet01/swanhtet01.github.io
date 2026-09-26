@@ -75,14 +75,17 @@ test('launcher evidence binds exact visible product order and routes in the disk
     [links[1], links[0], links[2]], [links[0], links[0], links[2]],
     [links[0], { name: 'Ecommerce', href: '/login' }, links[2]]]
   for (const name of ['desktop root shows launcher despite remembered product', 'desktop choose query shows launcher', 'mobile root shows launcher']) {
+    const savedShop = name === 'desktop root shows launcher despite remembered product'
+    const visibleLinks = savedShop ? [links[0]] : []
     const width = name.startsWith('mobile') ? 390 : 1280
     const height = width === 390 ? 844 : 900
     const expected = { name, width, height }
     const entry = { ok: true, failures: [], runtime: { clean: true, errors: [] }, bodyLength: 100,
       path: '/', viewport: `${width}x${height}`, network: { mutatingRequestCount: 0, mutatingRequests: [] },
-      rendered: { viewportWidth: width, viewportHeight: height, documentScrollWidth: width, noHorizontalOverflow: true, launcherLinks: links } }
+      rendered: { viewportWidth: width, viewportHeight: height, documentScrollWidth: width, noHorizontalOverflow: true, launcherLinks: visibleLinks } }
     assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
-    for (const wrong of invalid) {
+    for (const wrong of [undefined, links, ...invalid.filter(value => value?.length),
+      ...(savedShop ? [[], [{ name: 'Shop', href: '/login' }]] : [[links[0]]])]) {
       assert.throws(() => assertCaseSemantics({ ...entry, rendered: { ...entry.rendered, launcherLinks: wrong } }, expected), /launcher_products_mismatch/)
     }
   }

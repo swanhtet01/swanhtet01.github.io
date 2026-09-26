@@ -21,8 +21,7 @@ const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024
 const MAX_CASES = 100
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-export function assertLauncherProductLinks(links) {
-  const expected = [['Shop', '/shop/'], ['Ecommerce', '/ecommerce/'], ['Website', '/website/']]
+export function assertLauncherProductLinks(links, expected = [['Shop', '/shop/'], ['Ecommerce', '/ecommerce/'], ['Website', '/website/']]) {
   if (!Array.isArray(links) || links.length !== expected.length
     || links.some((link, index) => !link || link.name !== expected[index][0] || link.href !== expected[index][1])) {
     throw new Error('app_entry_rendered_launcher_products_mismatch')
@@ -212,7 +211,8 @@ export function assertCaseSemantics(testCase, expected) {
 
   if (expected.name === 'desktop root shows launcher despite remembered product'
     || expected.name === 'desktop choose query shows launcher'
-    || expected.name === 'mobile root shows launcher') assertLauncherProductLinks(rendered.launcherLinks)
+    || expected.name === 'mobile root shows launcher') assertLauncherProductLinks(rendered.launcherLinks,
+      expected.name === 'desktop root shows launcher despite remembered product' ? [['Shop', '/shop/']] : [])
 
   if (expected.semantics === 'retired-product') {
     assertLauncherProductLinks(rendered.launcherLinks)
