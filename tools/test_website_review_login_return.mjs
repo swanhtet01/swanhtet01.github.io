@@ -65,7 +65,13 @@ test('rendered review login offers no sample, trial activation or self-registrat
       assert.equal(nodes.some(node => node.type === 'button' && ['Create an account', 'Activate my company'].includes(text(node))), false)
       assert.match(content, ready ? /existing setup conversation/ : /Review sign-in is unavailable/)
       if (ready) assert.equal(nodes.find(node => text(node) === 'Forgot password?').props.to, `/account/recovery?product=website&review=${id}`)
-    } else assert.match(content, ready ? /Create an account/ : /Try a sample/)
+    } else {
+      assert.match(content, ready ? /Create an account/ : /Request setup/)
+      if (!ready) {
+        assert.match(content, /Saved work on this device/)
+        assert.doesNotMatch(content, /Try a sample/)
+      }
+    }
   }
 })
 

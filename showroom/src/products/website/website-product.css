@@ -57,7 +57,7 @@
   background: #090f16;
   color: var(--website-ink);
 }
-.theme-dark .website-panel-actions,
+.theme-dark .website-panel-actions { background: var(--website-panel); }
 .theme-dark .website-preview-toolbar { background: var(--website-panel); }
 .theme-dark .website-notice { border-color: rgba(86,240,193,.2); background: rgba(12,18,26,.96); }
 
@@ -85,7 +85,7 @@
 
 .website-product :where(button, input, select, textarea, summary, a):focus-visible {
   outline: 2px solid var(--website-green);
-  outline-offset: 2px;
+  outline-offset: .125rem;
 }
 
 .website-product ::selection {

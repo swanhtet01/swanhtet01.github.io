@@ -25,8 +25,10 @@ test('managed browser auth excludes unused Supabase database, realtime, storage,
   assert.match(managedTrialSource, /Authorization: `Bearer \$\{SUPABASE_PUBLISHABLE_KEY\}`/)
   assert.match(managedTrialSource, /apikey: SUPABASE_PUBLISHABLE_KEY/)
   assert.match(managedTrialSource, /detectSessionInUrl: false/)
-  assert.match(managedTrialSource, /persistSession: true/)
-  assert.match(managedTrialSource, /storageKey: 'supermega\.auth\.session\.v1'/)
+  assert.match(managedTrialSource, /function authClient\(signup = false\)/)
+  assert.match(managedTrialSource, /persistSession: !signup/)
+  assert.match(managedTrialSource, /autoRefreshToken: !signup/)
+  assert.match(managedTrialSource, /storageKey: signup \? 'supermega\.auth\.signup\.v1' : 'supermega\.auth\.session\.v1'/)
   assert.doesNotMatch(managedTrialSource, /@supabase\/supabase-js/)
 })
 
