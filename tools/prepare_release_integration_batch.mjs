@@ -343,8 +343,9 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
     ],
   },
   {
-    id: 'candidate-demo-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
-      'Try a sample',
+    id: 'candidate-workspace-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
+      'Your workspace', 'Saved work is stored on this device.',
+      'Sign in to your workspace.', 'Saved work on this device',
       'supermega.last-product.v1', 'retired_launcher_release_asset',
       "'Choose what you want to run.'",
       'Ecommerce order review packet checked locally.', 'No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.',

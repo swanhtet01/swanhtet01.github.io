@@ -176,7 +176,19 @@ if (artifactSelfTest) {
     }
     if (!rejected) throw new Error(`launcher_mutation_not_rejected:${expected}`)
   }
-  console.log(JSON.stringify({ ok: true, ...result, launcherMutationChecks: launcherMutations.length, evidenceVersion }, null, 2))
+  const loginRequirements = ['Sign in to your workspace.', 'Login is not available here yet.', 'Saved work on this device', 'Request setup']
+  for (const text of loginRequirements) {
+    const expected = `missing_current_release_asset:company_login:${text}`
+    let rejected = false
+    try {
+      verifyCurrentReleaseAssets({ ...artifactInput, managedLoginChunk: managedLoginChunk.replaceAll(text, '') })
+    } catch (error) {
+      if (error.message !== expected) throw error
+      rejected = true
+    }
+    if (!rejected) throw new Error(`login_mutation_not_rejected:${text}`)
+  }
+  console.log(JSON.stringify({ ok: true, ...result, launcherMutationChecks: launcherMutations.length, loginMutationChecks: loginRequirements.length, evidenceVersion }, null, 2))
   process.exit(0)
 }
 
