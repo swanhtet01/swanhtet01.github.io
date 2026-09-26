@@ -190,6 +190,26 @@ class SelfServeWorkspaceTests(unittest.TestCase):
         self.assertEqual(link["owner_actor_id"], OWNER_ACTOR_ID)
         self.assertEqual(link["business_name"], BUSINESS_NAME)
 
+    def test_workspace_creation_rejects_local_demo_payloads(self) -> None:
+        # Account creation must never double as an implicit browser-data import.
+        for product in ("commerce", "website", "ecommerce"):
+            for field in ("counterSales", "pendingOrder", "items", "snapshot"):
+                with self.subTest(product=product, field=field), activation_window("open"):
+                    response = self.client.post(
+                        "/api/trial/v1/workspaces",
+                        headers={"x-test-signup-session": OWNER_SESSION},
+                        json={
+                            "claimCode": CLAIM_CODE,
+                            "businessName": BUSINESS_NAME,
+                            "product": product,
+                            field: {"synthetic_demo": True},
+                        },
+                    )
+                self.assertEqual(response.status_code, 422)
+                self.assertNotIn(CLAIM_CODE, self.store._self_serve_links)
+                self.assertFalse(self.store._memberships)
+                self.assertFalse(self.store._events)
+
     def test_idempotent_replay_returns_the_same_workspace(self) -> None:
         with activation_window("open"):
             first = self._post()
