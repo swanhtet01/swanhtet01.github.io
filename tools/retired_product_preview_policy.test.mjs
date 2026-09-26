@@ -9,7 +9,7 @@ function fixture(spec = cases[0]) {
   const retainedBefore = Object.fromEntries(keys.map(key => [key, `synthetic-preserved:${key}`]))
   const state = { origin: 'https://isolated.example', path: '/?choose=1', hash: '',
     viewportWidth: spec.width, viewportHeight: spec.height,
-    launcherLinks: [{ name: 'Shop', href: '/shop/' }, { name: 'Ecommerce', href: '/ecommerce/' }, { name: 'Website', href: '/website/' }],
+    launcherLinks: [],
     retiredToolVisible: false, retiredActionVisible: false, retained: { ...retainedBefore } }
   return { policy, caseId: spec.id, origin: state.origin, before: structuredClone(state), after: structuredClone(state), retainedBefore }
 }
@@ -62,6 +62,8 @@ test('both screenshot-adjacent observations must preserve location, chooser and 
     for (const mutate of [s => { s.path = '/plant/' }, s => { s.origin = 'https://production.example' },
       s => { s.hash = '#plant' }, s => { s.viewportWidth = 1 },
       s => { s.launcherLinks.push({ name: 'Plant', href: '/plant/' }) },
+      s => { s.launcherLinks.push({ name: 'Shop', href: '/shop/' }) },
+      s => { delete s.launcherLinks },
       s => { s.retiredToolVisible = true }, s => { delete s.retiredActionVisible },
       s => { s.retained[keys[0]] = null }, s => { delete s.retained[keys[1]] }]) {
       const input = fixture(); mutate(input[phase]); assert.throws(() => validate(input), /retired_product_preview_/)

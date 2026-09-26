@@ -910,14 +910,9 @@ function gitHead() {
 }
 
 const launcherText = [
-  'Your business tools',
-  'Sample workspace',
-  'Shop',
-  'Open Shop',
-  'Website',
-  'Open Website',
-  'Ecommerce',
-  'Open Ecommerce',
+  'Your workspace',
+  'Login',
+  'Sign in to access your business.',
 ]
 
 const shopSetup = {
@@ -1015,6 +1010,7 @@ const tests = [
   },
   ...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,
     retirementCaseId: spec.id, requireLauncherProducts: true,
+    expectedLauncherProducts: [],
     isolatedBrowserContext: true, noHorizontalOverflow: true,
     expectedText: launcherText, screenshotName: spec.id,
     seed: { retained: Object.fromEntries(RETIRED_STORAGE_KEYS.map(key => [key,

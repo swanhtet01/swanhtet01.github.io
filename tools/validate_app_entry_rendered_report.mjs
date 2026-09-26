@@ -215,7 +215,7 @@ export function assertCaseSemantics(testCase, expected) {
       expected.name === 'desktop root shows launcher despite remembered product' ? [['Shop', '/shop/']] : [])
 
   if (expected.semantics === 'retired-product') {
-    assertLauncherProductLinks(rendered.launcherLinks)
+    assertLauncherProductLinks(rendered.launcherLinks, [])
     const proof = rendered.retirement
     if (!isObject(proof) || proof.policy !== RETIRED_PRODUCT_PREVIEW_POLICY || proof.caseId !== expected.name
       || proof.redirectVerified !== true || proof.activeChooserVerified !== true

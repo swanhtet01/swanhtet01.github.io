@@ -420,7 +420,7 @@ test('disk consumer rejects absent, old and false retirement evidence', () => {
   const entry = { ok: true, failures: [], runtime: { clean: true, errors: [] }, bodyLength: 100,
     path: '/?choose=1', viewport: '1280x900', network: { mutatingRequestCount: 0, mutatingRequests: [] },
     rendered: { viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280, noHorizontalOverflow: true,
-      launcherLinks: [{ name: 'Shop', href: '/shop/' }, { name: 'Ecommerce', href: '/ecommerce/' }, { name: 'Website', href: '/website/' }], retirement } }
+      launcherLinks: [], retirement } }
   assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
   for (const wrong of [undefined, { ...retirement, policy: 'old' }, { ...retirement, caseId: 'plant_desktop' },
     ...['redirectVerified', 'activeChooserVerified', 'retiredUiAbsent', 'retainedDataUnchanged'].map(key => ({ ...retirement, [key]: false }))]) {

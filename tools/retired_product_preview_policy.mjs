@@ -34,9 +34,8 @@ export function validateRetiredProductObservation({ policy, caseId, origin, befo
   for (const state of [before, after]) {
     if (!record(state) || state.origin !== origin || state.path !== spec.expectedPath || state.hash !== '') fail('location_mismatch')
     if (state.viewportWidth !== spec.width || state.viewportHeight !== spec.height) fail('viewport_mismatch')
-    const expected = [['Shop', '/shop/'], ['Ecommerce', '/ecommerce/'], ['Website', '/website/']]
-    if (!Array.isArray(state.launcherLinks) || state.launcherLinks.length !== expected.length
-      || state.launcherLinks.some((link, index) => link?.name !== expected[index][0] || link?.href !== expected[index][1])) fail('launcher_mismatch')
+    // These cases seed no active product setups; retired records must not create product cards.
+    if (!Array.isArray(state.launcherLinks) || state.launcherLinks.length !== 0) fail('launcher_mismatch')
     // Collector must inspect rendered controls, not infer absence from redirect.
     if (state.retiredToolVisible !== false || state.retiredActionVisible !== false) fail('retired_ui_present_or_unknown')
     if (!record(state.retained) || Object.keys(state.retained).length !== RETIRED_STORAGE_KEYS.length
