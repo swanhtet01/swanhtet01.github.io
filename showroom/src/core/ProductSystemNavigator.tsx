@@ -41,7 +41,7 @@ function readCurrentShopIndustryPackId(): ShopIndustryPackId {
   }
 }
 
-function ProductDataImport({ product, managed, details }: { product: ClientSolutionId; managed: boolean; details: ProductSystemDetail }) {
+export function ProductDataImport({ product, managed, details = productDetails[product] }: { product: ClientSolutionId; managed: boolean; details?: ProductSystemDetail }) {
   const [setup] = useSetupWorkspace()
   const [managedIdentity] = useManagedIdentity(managed)
   const [shopIndustryPackId] = useState<ShopIndustryPackId>(readCurrentShopIndustryPackId)

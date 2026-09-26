@@ -1,3 +1,4 @@
+import { ProductDataImport } from './ProductSystemNavigator'
 import { spaCounterFields } from './shop-spa-counter-fields'
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
@@ -31,7 +32,6 @@ import {
   productDisplayName,
   SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
   SHOP_ORDER_DRAFT_RESET_PREFIX,
-  clientSetupPath,
   managedTemplateDoorRequiresReview,
   shopTemplateDoorState,
   type SetupProductId,
@@ -3392,10 +3392,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
     ['Boundary', 'Review before writes'],
   ] as const
+  const [catalogImportOpen, setCatalogImportOpen] = useState(false)
   const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
     <div><span className="core-eyebrow">Catalog import helper</span><strong>Add your products.</strong><p>Upload a spreadsheet, match its columns, and review your products before importing.</p></div>
     <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
+    <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportOpen} className="core-button" disabled={commerceControlsDisabled} onClick={() => setCatalogImportOpen((open) => !open)} type="button">{catalogImportOpen ? 'Close upload' : 'Upload product data'}</button>
+    {catalogImportOpen ? <div id="shop-catalog-import-panel"><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></div> : null}
   </section>
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
