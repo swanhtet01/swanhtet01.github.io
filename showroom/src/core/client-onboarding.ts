@@ -866,8 +866,9 @@ function suggestMapping(object: ClientImportObject, headers: string[], normalize
       const rank = aliases.indexOf(header)
       return rank < 0 ? [] : [{ header: headers[index], rank }]
     }).sort((left, right) => left.rank - right.rank || compareCodePoints(left.header, right.header))
-    const best = ranked[0]
-    const ambiguous = Boolean(best && ranked.filter((candidate) => candidate.rank === best.rank).length > 1)
+    const canonical = ranked.find(candidate => normalizeHeader(candidate.header) === normalizeHeader(field.id))
+    const best = canonical ?? ranked[0]
+    const ambiguous = !canonical && ranked.length > 1
     mapping[field.id] = best && !ambiguous ? best.header : ''
     suggestions.push({
       field: field.id,
