@@ -750,7 +750,7 @@ const contactScript = `<script>(function(){
   form.addEventListener('invalid',function(event){if(briefChoice&&(event.target===company||event.target===goal))briefChoice.open=true;},true);
   form.addEventListener('reset',function(){if(briefChoice)briefChoice.open=true;if(briefSummary)briefSummary.textContent='Business brief';});
   updateBriefHint();
-  if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateBriefHint();updateServiceSummary()});
+  if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateBriefHint();updateServiceSummary();if(briefChoice)briefChoice.open=true});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(managedIntelligenceRequest&&!handoff.toString()){
     if(heading)heading.textContent='Request managed company intelligence.';

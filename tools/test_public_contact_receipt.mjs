@@ -452,3 +452,29 @@ test('a failed second request cannot retain the earlier success heading', async 
   const incomplete = harness([], '?product=website', '#company=Example')
   assert.equal(incomplete.fields.get('[data-contact-brief]').open, true)
 })
+
+
+test('synthetic business briefs survive service corrections without repeat entry', async () => {
+  const briefs = [
+    { product: 'shop', company: 'Synthetic Mandalay Grocery', goal: 'One counter, Android tablet, cash sales and a daily close. About 80 products.' },
+    { product: 'website', company: 'Synthetic Yangon Salon', goal: 'Show services, opening hours and location. Visitors should call to book. Burmese and English.' },
+    { product: 'ecommerce', company: 'Synthetic Gift Store', goal: 'Thirty gifts with sizes and prices. Customers request items for collection; staff confirm availability.' },
+  ]
+  for (const brief of briefs) {
+    const state = harness([{ body: receipt }], `?product=${brief.product}&template=original`, '#' + new URLSearchParams({ company: brief.company, goal: brief.goal }))
+    assert.equal(state.fields.get('[data-contact-brief]').open, false)
+    const corrected = brief.product === 'shop' ? 'ecommerce' : 'shop'
+    state.changeProduct(corrected)
+    assert.equal(state.fields.get('[data-contact-brief]').open, true, 'show the existing brief when its service changes')
+    assert.equal(state.fields.get('[name="company"]').value, brief.company)
+    assert.equal(state.fields.get('[name="goal"]').value, brief.goal)
+    assert.equal(state.fields.get('[name="template"]').value, '')
+    assert.equal(state.calls.length, 0)
+    await state.submit()
+    const payload = JSON.parse(state.calls[0].body)
+    assert.equal(payload.product, corrected)
+    assert.equal(payload.company, brief.company)
+    assert.equal(payload.goal, brief.goal)
+    assert.equal(payload.template, '')
+  }
+})
