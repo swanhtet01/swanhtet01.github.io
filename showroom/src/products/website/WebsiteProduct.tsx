@@ -13,8 +13,6 @@ import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
 import { WebsiteReviewInbox } from './WebsiteReviewInbox'
-import { websiteBusinessBriefPreview } from './website-trade-brief'
-import { websiteStarterBriefIssues } from './website-starter'
 import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
@@ -1148,14 +1146,7 @@ export function WebsiteProduct() {
   }
 
   if (showAssistedWebsitePreview && starterAvailable && !workspaceOpened && searchParams.get('workspace') !== '1') {
-    return <BusinessBrief product="website" onPreparePreview={starterAvailable ? draft => {
-      const brief = websiteBusinessBriefPreview(draft, shopTradeId)
-      const issues = websiteStarterBriefIssues(brief)
-      if (issues.length) return issues[0].message
-      if (!startWithBusiness(brief)) return 'Could not prepare the preview. Open your workspace to review its status.'
-      setWorkspaceOpened(true)
-      return null
-    } : undefined} onOpenWorkspace={() => {
+    return <BusinessBrief product="website" onOpenWorkspace={() => {
       setWorkspaceOpened(true)
       const next = new URLSearchParams(searchParams)
       next.set('workspace', '1')

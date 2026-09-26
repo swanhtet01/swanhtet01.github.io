@@ -420,7 +420,7 @@ function MoonIcon() {
 }
 
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Demo mode'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Local workspace'}</span>
 }
 
 export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: string; title: string; copy: string; actions?: ReactNode }) {
