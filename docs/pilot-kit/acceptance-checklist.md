@@ -17,7 +17,7 @@ Also before day 1:
 - [ ] Agreement outline read together ([pilot-agreement-outline.md](pilot-agreement-outline.md)).
 - [ ] Pilot dates fixed: the review date is exactly the start date plus four days; the generator rejects anything else (`review_date_must_close_five_day_plan`).
 - [ ] Workspace created on the shop's own device at `https://app.supermega.dev/settings/?product=shop`, with the real business name typed into `Business name`. Setup states `Stays on this device. Nothing is sent or published.`
-- [ ] Sidebar badge confirmed to read `Demo mode`.
+- [ ] Sidebar badge confirmed to read `Local workspace`.
 
 ## What an accepted run means
 

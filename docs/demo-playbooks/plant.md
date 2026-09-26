@@ -12,10 +12,10 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 
 ## 2. Pre-demo setup
 
-1. Open `https://app.supermega.dev/settings/?product=plant` — the same destination as the `Start free sample` button on the public `/plant/` landing page.
+1. Open `https://app.supermega.dev/settings/?product=plant` only for an internal compatibility rehearsal. Plant is not part of the current Shop, Website and Ecommerce offer.
 2. Under `Name your workspace`, enter the client's name in `Business name`.
 3. Press `Create Plant and open the job`. The app provisions a scheduled job, materials, and line, and opens `/plant/?tab=production`. The stated first result is `Run a sample production job`.
-4. Confirm the sidebar badge reads `Demo mode` and the `Start here` panel names the loaded industry working sample (source line: `Local sample records on this device`).
+4. Confirm the sidebar badge reads `Local workspace` and the `Start here` panel names the loaded industry working sample (source line: `Local sample records on this device`).
 
 ## 3. Demo script
 
@@ -33,13 +33,13 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 
 "Where does the demo data live?" — the panel's source line says `Local sample records on this device`, and setup says `Stays on this device. Nothing is sent or published.`
 
-"What do I get free, and what is paid?" — current public framing: `Explore local examples free. Assisted setup and ongoing service are scoped separately. A sample or submitted brief is not a live business account.` Agree a reviewed quote before paid preparation; do not infer a managed entitlement. The activation gate remains: `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.`
+"What do I get free, and what is paid?" — there is no free-tier commitment in this walkthrough. A local rehearsal or submitted brief is not a live business account. Agree a reviewed quote before paid preparation; do not infer a managed entitlement. The activation gate remains: Managed activation requires verified identity, tenant isolation, recovery and write controls for the named company.
 
-"Who is accountable for a bad entry?" — every change goes through the `Confirm change` gate with a named person, reason, and evidence reference, and the trust line applies: `Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.`
+"Who is accountable for a bad entry?" — every change goes through the `Confirm change` gate with a named person, reason, and evidence reference, and the trust line applies: Real sends, payments, publication, access changes and stock writes require their applicable authority and verified server-side controls.
 
 ## 5. The close
 
-- Self-serve close: public `/plant/` page, `Start free sample` (`https://app.supermega.dev/settings/?product=plant`), on the supervisor's own phone.
+- No public Plant sales close: the retained `https://app.supermega.dev/settings/?product=plant` route is internal compatibility work only. Do not offer Plant as a currently launched product.
 - Retained compatibility route: the historical `Request assisted setup` target is `/contact/?product=plant`. Plant is not in the current public product selector; do not promise Plant pre-selection or sell this retained sample as an active offering. For an explicitly requested enquiry, use `Help me choose` under `What do you need?` and submit with `Request setup` only with authorization; a `Request received: ` ID confirms the brief, not Plant activation.
 - From inside the app: the setup page's "Ask SuperMega to set up Plant" link carries the template, for example `https://supermega.dev/contact/?product=plant&template=production-control&utm_source=app&utm_medium=guided_trial`.
 - Existing-workspace assistance: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Plant is not a current acquisition offer; any retained-workspace support requires an explicitly agreed scope, not automatic managed activation.

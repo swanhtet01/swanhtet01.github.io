@@ -18,10 +18,10 @@ Both paths remain owner-gated. Synthetic, sample, browser-local, and local-rende
 
 ## 2. Pre-demo setup
 
-1. Open `https://app.supermega.dev/settings/?product=shop` — the same destination as the `Start free sample` button on the public `/shop/` landing page.
+1. Open `https://app.supermega.dev/settings/?product=shop` for an internal, synthetic rehearsal. Current customers enter through Login or request setup; this legacy route is not the public acquisition path.
 2. Under `Name your workspace`, enter the client's name in `Business name` (the field shows `Example: Golden Valley Trading`).
 3. Press `Create Shop and start selling`. The app provisions the industry sample and opens the first task at `/shop/?tab=counter`. The stated first result is `Complete a sample sale`.
-4. Confirm the sidebar badge reads `Demo mode` and the counter heading shows the working-sample pack context.
+4. Confirm the sidebar badge reads `Local workspace` and the counter heading shows the working-sample pack context.
 
 Shop trade links may include a reviewed `template` query parameter, such as ?product=shop&template=mini-mart. Guided setup resolves it to the matching trade and industry pack, keeps the business-type picker visible, and provisions that local working sample only after the user submits setup. Service businesses without a trade template use the `pack` parameter, such as ?product=shop&pack=spa. Unknown values fail back to an explicit setup choice; never describe a query parameter alone as client activation.
 
@@ -50,13 +50,13 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 "Where does my data go?" — setup says `Stays on this device. Nothing is sent or published.` Nothing in the demo requires an account.
 
-"What do I get free, and what is paid?" — current public framing: `Explore local examples free. Assisted setup and ongoing service are scoped separately. A sample or submitted brief is not a live business account.` Agree a reviewed quote before paid preparation; do not infer a managed entitlement. The activation gate remains: `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.`
+"What do I get free, and what is paid?" — there is no free-tier commitment in this walkthrough. A local rehearsal or submitted brief is not a live business account. Agree a reviewed quote before paid preparation; do not infer a managed entitlement. The activation gate remains: Managed activation requires verified identity, tenant isolation, recovery and write controls for the named company.
 
-"What stops a mistake from going live?" — `Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.`
+"What stops a mistake from going live?" — Real sends, payments, publication, access changes and stock writes require their applicable authority and verified server-side controls.
 
 ## 5. The close
 
 - Primary close: `Request assisted setup` opens `/contact/?product=shop`, pre-selecting Shop in `What do you need?`. The form asks `What would you like us to prepare?` and submits with `Request setup` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
-- Optional self-configuration: `Choose Shop type or continue saved` (`https://app.supermega.dev/settings/?product=shop`). Do not require this before a customer can ask SuperMega to prepare Shop; never overwrite saved work for a demo.
+- Internal rehearsal setup only (`https://app.supermega.dev/settings/?product=shop`). Do not require this before a customer can ask SuperMega to prepare Shop; never overwrite saved work for a demo.
 - From inside the app: the setup page's "Ask SuperMega to set up Shop" link carries the workflow template, for example `https://supermega.dev/contact/?product=shop&template=social-commerce&utm_source=app&utm_medium=guided_trial`.
 - Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Multi-product setup and managed activation require separate scope and acceptance; submitting a brief does not activate a workspace.
