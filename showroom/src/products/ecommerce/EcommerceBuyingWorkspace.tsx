@@ -174,9 +174,11 @@ export function EcommerceBuyingWorkspace({
   const [paymentAdapter, setPaymentAdapter] = useState<EcommercePaymentAdapter>('pay_on_pickup')
   const [promotionCode, setPromotionCode] = useState('')
   const [open, setOpen] = useState(false)
-  useEffect(() => {
+  const [handledTrackingRequest, setHandledTrackingRequest] = useState(trackingRequest)
+  if (trackingRequest !== handledTrackingRequest) {
+    setHandledTrackingRequest(trackingRequest)
     if (trackingRequest > 0) setOpen(true)
-  }, [trackingRequest])
+  }
   useEffect(() => {
     if (!open || trackingRequest === 0) return
     const frame = requestAnimationFrame(() => {
