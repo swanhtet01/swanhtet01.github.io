@@ -55,7 +55,7 @@ check(generator.includes("assert(product.secondaryCta?.label === 'Request assist
 check(generator.includes('assert(product.secondaryCta.url === expectedHref'), 'generator_assisted_setup_route_guard')
 check(generator.includes('return { href: product.secondaryCta.url, label: product.secondaryCta.label }'), 'generator_assisted_setup_manifest_projection')
 check(generator.includes('const assistedSetup = assistedSetupAction(product)'), 'generator_assisted_setup_call')
-check(generator.includes('https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}'), 'generator_guided_sample_link_pattern')
+check(generator.includes('https://app.supermega.dev/login?product=${encodeURIComponent(product.id)}'), 'generator_product_login_link_pattern')
 // eslint-disable-next-line no-template-curly-in-string
 check(!generator.includes('Set up ${product.name} data'), 'generator_retired_setup_label_absent')
 check(generator.includes('/contact/?product=guide&amp;source=assisted-setup'), 'generator_assisted_guide_link')
