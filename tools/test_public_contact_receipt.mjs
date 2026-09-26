@@ -385,10 +385,13 @@ test('confirmed handoff resets entry guidance only when no later edits remain', 
     await state.submit()
     assert.equal(state.calls[0].body, state.calls[1].body)
     assert.equal(state.resets(), edited ? 0 : 1)
-    assert.equal(state.headings.get('[data-contact-heading]').textContent, edited ? originalHeading : 'Tell us what your business needs.')
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, edited ? originalHeading : 'Request received.')
     assert.equal(state.headings.get('[data-contact-copy-heading]').textContent, edited ? 'Your brief is ready to review.' : 'What to include')
     if (edited) assert.equal(state.fields.get('[name="goal"]').value, 'Later unsent brief')
-    else assert.equal(state.fields.get('button[type="submit"]').textContent, 'Request setup')
+    else {
+      assert.equal(state.fields.get('button[type="submit"]').textContent, 'Send another request')
+      assert.equal(state.headings.get('[data-contact-lede]').textContent, 'Reference: '+receipt.request_id+'. Keep this for follow-up.')
+    }
     assert.match(state.fields.get('[data-form-status]').textContent, /Request received: LEAD-/)
   }
 })
