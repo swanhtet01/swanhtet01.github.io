@@ -31,8 +31,27 @@ _READINESS_STAGES = frozenset({
 })
 _READINESS_FAILURES = frozenset({
     "missing_configuration", "driver_unavailable", "contract_not_ready",
-    "unexpected_error",
+    "unexpected_error", "authentication_rejected", "connection_failure",
+    "permission_denied", "connection_capacity",
 })
+
+
+
+def _readiness_exception_category(exc: Exception) -> str:
+    """Map only SQLSTATE to a fixed label; never inspect exception messages."""
+    try:
+        state = getattr(exc, "sqlstate", None)
+        if not isinstance(state, str) or not re.fullmatch(r"[0-9A-Z]{5}", state):
+            return "unexpected_error"
+        if state.startswith("28"):
+            return "authentication_rejected"
+        if state.startswith("08"):
+            return "connection_failure"
+        return {"42501": "permission_denied", "53300": "connection_capacity"}.get(
+            state, "unexpected_error",
+        )
+    except Exception:
+        return "unexpected_error"
 
 
 def _log_readiness_failure(stage: str, category: str) -> None:
@@ -4581,8 +4600,8 @@ class PostgresTrialStore:
                 auth_ready = False
                 membership_ready = False
                 capabilities = frozenset()
-        except Exception:
-            _log_readiness_failure(stage, "unexpected_error")
+        except Exception as exc:
+            _log_readiness_failure(stage, _readiness_exception_category(exc))
             database_ready = False
             role_ready = False
             schema_ready = False

@@ -45,6 +45,37 @@ class ReadinessDiagnosticsTests(unittest.TestCase):
                 self.assertIsNone(record.stack_info)
                 self.assertNotIn(SECRET, str(record.__dict__))
 
+    def test_sqlstate_categories_keep_exception_details_private(self):
+        cases = (("28P01", "authentication_rejected"), ("28000", "authentication_rejected"),
+                 ("08006", "connection_failure"), ("42501", "permission_denied"),
+                 ("53300", "connection_capacity"), ("XX000", "unexpected_error"),
+                 (SECRET, "unexpected_error"), (None, "unexpected_error"))
+        for state, expected in cases:
+            with self.subTest(state=state):
+                store, _ = self.make_store()
+                error = RuntimeError(SECRET)
+                error.sqlstate = state
+                store._connect.side_effect = error
+                with self.assertLogs(LOGGER) as captured:
+                    self.assert_reset(store.readiness(None))
+                record = captured.records[0]
+                self.assertEqual(record.getMessage(),
+                    f"trial_readiness_failure stage=connect category={expected}")
+                self.assertIsNone(record.exc_info)
+                self.assertNotIn(SECRET, str(record.__dict__))
+
+    def test_broken_sqlstate_accessor_does_not_escape(self):
+        class BrokenError(Exception):
+            @property
+            def sqlstate(self):
+                raise RuntimeError(SECRET)
+        store, _ = self.make_store()
+        store._connect.side_effect = BrokenError(SECRET)
+        with self.assertLogs(LOGGER) as captured:
+            self.assert_reset(store.readiness(None))
+        self.assertIn("category=unexpected_error", captured.output[0])
+        self.assertNotIn(SECRET, str(captured.records[0].__dict__))
+
     def test_missing_configuration_and_driver_have_distinct_categories(self):
         store, _ = self.make_store()
         store.database_url = ""
