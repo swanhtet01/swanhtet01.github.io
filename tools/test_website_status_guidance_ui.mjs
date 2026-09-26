@@ -52,13 +52,13 @@ test('draft guidance suppresses saved failures, even in assisted mode', () => {
   }
 })
 
-test('assisted help appears only for saved failures; clear states do not invent work', () => {
+test('checks show actionable failures without redundant setup or publishing copy', () => {
   for (const assisted of [false, true]) {
     const clear = render({ showAssistedWebsitePreview: assisted })
     assert.doesNotMatch(clear, /Needs attention|Request Website setup above|Save or discard/)
     const failed = render({ failingContentChecks: failures, showAssistedWebsitePreview: assisted })
-    assert.equal(failed.includes('Need help with these checks? Request Website setup.'), assisted)
-    assert.equal(failed.includes('Nothing is published automatically.'), assisted)
+    assert.equal(failed.includes('Need help with these checks? Request Website setup.'), false)
+    assert.equal(failed.includes('Nothing is published automatically.'), false)
   }
 })
 

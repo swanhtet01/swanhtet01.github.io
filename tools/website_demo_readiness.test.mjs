@@ -68,7 +68,7 @@ test('assisted Website entry stays local-only and defers to recovery and edit st
   assert.match(websiteProductSource, /!hasUnsavedChanges && !starterSetupActive/)
   const safeLink = 'href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>'
   assert.equal(websiteProductSource.split(safeLink).length - 1, 1, 'operator workspace retains the direct setup route')
-  assert.equal(websiteProductSource.split('<AssistedDeliveryScope product="website" />').length - 1, 1, 'customer preview uses the business-brief entry component')
+  assert.equal(websiteProductSource.split('<BusinessBrief product="website" onOpenWorkspace=').length - 1, 1, 'customer preview uses the business-brief entry component')
   assert.match(websiteProductSource, /canRequestWebsiteSetup && surface === 'work' \? <a/)
   const expression = websiteProductSource.match(/const canRequestWebsiteSetup = ([\s\S]*?)\n\s*const showAssistedWebsitePreview/)?.[1]
   assert.ok(expression)
@@ -104,7 +104,7 @@ test('Website keeps readiness visible while detailed checks collapse before the 
   assert.match(checks, /aria-label="Website today status"/)
   assert.match(checks, /websiteTodayMetrics\.map/)
   assert.match(checks, /<\/details>/)
-  assert.match(websiteProductSource, /<div className="website-today-source" role="status">[\s\S]*?\{showAssistedWebsitePreview \? 'Requesting setup does not publish this preview, connect a domain or approve a release\.' : websiteReviewNote\}/)
+  assert.match(websiteProductSource, /!showAssistedWebsitePreview \? <div className="website-today-source" role="status">[\s\S]*?<small>\{websiteReviewNote\}<\/small>/)
   assert.match(websiteProductCss, /\.website-today-checks > summary \{\s*min-height: 2\.75rem;/)
   assert.match(websiteProductCss, /\.website-today-checks > summary:focus-visible \{ outline: \.125rem solid var\(--website-green\);/)
 })
@@ -113,8 +113,8 @@ test('expanded checks explain failures without inviting assisted customers to pu
   const panel = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))
   assert.match(panel, /hasUnsavedChanges \? \([\s\S]*Save or discard your draft[\s\S]*\) : failingContentChecks.length > 0 \? /)
   assert.match(panel, /failingContentChecks\.map\(\(check\) => <li key=\{check.id\}><strong>\{check.label\}<\/strong><p>\{check.detail\}<\/p><\/li>\)/)
-  assert.match(panel, /showAssistedWebsitePreview \? <p>Need help with these checks\? Request Website setup\./)
-  assert.match(panel, /Nothing is published automatically\./)
+  assert.doesNotMatch(panel, /Need help with these checks|Request Website setup/)
+  assert.doesNotMatch(panel, /Nothing is published automatically\./)
   assert.doesNotMatch(panel, /dangerouslySetInnerHTML|onClick=|<button|<a\s/)
   assert.match(websiteProductCss, /\.website-check-guidance \{[^}]*overflow-wrap: anywhere;/)
 })
