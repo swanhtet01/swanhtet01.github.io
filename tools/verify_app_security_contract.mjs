@@ -579,7 +579,8 @@ requireContract('client demo setup kits are bounded, canonical, and explicitly d
   && /source\.controls\.humanReviewRequired !== true/.test(clientOnboardingModel)
   && /file\.size < 1 \|\| file\.size > CLIENT_DEMO_KIT_MAX_BYTES/.test(settingsPage)
   && /origin === 'created' && blueprint\.products\.some/.test(settingsPage)
-  && /Client records, product packs, and progress were not changed/.test(settingsPage))
+  && /setNotice\(origin === 'loaded'/.test(settingsPage)
+  && /product setup loaded\. Review and prepare data on this device\./.test(settingsPage))
 requireContract('managed Shop location inventory and order allocation are human-only, server-stamped, and digest-chained',
   /commerce\.inventory\.initialized/.test(managedTrialClient)
   && /commerce\.inventory\.master_created/.test(managedTrialClient)
@@ -815,7 +816,7 @@ requireContract('free company backup is encrypted, bounded, customer-owned, excl
   && /MAX_RECORDS/.test(companyBackupClient)
   && /authRecordsIncluded: false/.test(companyBackupClient)
   && /managedWorkspaceRecordsIncluded: false/.test(companyBackupClient)
-  && /restoreValues\(storage, previous,/.test(companyBackupClient)
+  && /restoreValues\(storage, previous\)/.test(companyBackupClient)
   && /valuesMatch\(storage, previous\)/.test(companyBackupClient)
   && /previous company state was restored/.test(companyBackupClient)
   && !/fetch\s*\(/.test(companyBackupClient)
