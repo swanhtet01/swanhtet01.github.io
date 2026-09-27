@@ -144,14 +144,6 @@ details:not([open]) > :not(summary) { display: none; }
 .sidebar-foot .signup-shell-link { background: var(--core-green-soft); border-color: var(--core-green); color: var(--core-ink); }
 .theme-toggle { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 8px; padding: 0 10px; background: transparent; color: var(--core-muted); font-size: 0.6875rem; font-weight: var(--font-weight-bold); cursor: pointer; }
 .theme-toggle:hover { border-color: var(--core-green); color: var(--core-ink); }
-/* Personal app appearance only: semantic success/warning/error colors stay stable. */
-.core-shell[data-skin="slate"] { --core-green: #345575; --core-green-soft: rgba(52,85,117,.1); }
-.core-shell[data-skin="plum"] { --core-green: #704080; --core-green-soft: rgba(112,64,128,.1); }
-.core-shell.theme-dark[data-skin="slate"] { --core-green: #a9ccec; --core-green-soft: rgba(169,204,236,.12); }
-.core-shell.theme-dark[data-skin="plum"] { --core-green: #dfb5ec; --core-green-soft: rgba(223,181,236,.12); }
-.core-shell[data-skin] { --core-accent: var(--core-green); --core-focus: var(--core-green); }
-.skin-select { max-width: 92px; min-height: 44px; padding: 0 8px; border: 1px solid var(--core-field-line); border-radius: 8px; color: var(--core-ink); background: var(--core-panel); font: inherit; font-size: 13px; cursor: pointer; }
-.skin-select:focus-visible { outline: 2px solid var(--core-focus); outline-offset: 2px; }
 .theme-toggle-icon { color: var(--core-green); flex-shrink: 0; }
 .mobile-theme-toggle { width: 44px; min-height: 44px; justify-content: center; padding: 0; }
 

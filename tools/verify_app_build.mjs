@@ -1243,11 +1243,10 @@ if (!coreShellSource.includes("const productsNavigation: NavigationItem = { to: 
   || coreShellSource.includes('const navigation = [')
   || coreShellSource.includes("{ to: '/work/', label: 'HQ'")
   || coreShellSource.includes("{ to: '/operations/', label: 'Products'")) fail('first_run_navigation_not_simple')
-const firstRunThemeContract = coreShellSource.slice(
-  coreShellSource.indexOf('function initialInterfaceTheme()'),
-  coreShellSource.indexOf('function productFromPathname'),
-)
-if (!firstRunThemeContract.includes("return 'light'") || firstRunThemeContract.includes('matchMedia')) fail('first_run_theme_not_readable_by_default')
+if (!coreShellSource.includes("document.documentElement.dataset.supermegaTheme = 'light'")
+  || coreShellSource.includes('initialInterfaceTheme')
+  || coreShellSource.includes('aria-label={themeLabel}')
+  || coreShellSource.includes('App skin (this device)')) fail('fixed_light_appearance_contract_missing')
 if (!coreShellSource.includes('function managedLoginPath(product: string | null)')
   || !coreShellSource.includes("product === 'commerce' ? 'shop'")
   || !coreShellSource.includes("product === 'production' ? 'plant'")
@@ -1306,7 +1305,7 @@ if (!coreShellSource.includes("import { activeCommerceTab, commerceTabs } from '
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(4,minmax(0,1fr)); }')
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav.has-switch { grid-template-columns: repeat(5,minmax(0,1fr)); }')
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }')) fail('shop_mobile_task_nav_missing')
-if (!coreShellSource.includes("theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}")
+if (!coreShellSource.includes("theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}")
   || coreShellSource.includes("theme === 'dark' ? ' shop-shell'")
   || !coreCssSource.includes('.theme-dark {')
   || !coreCssSource.includes('.theme-dark .core-topbar {')

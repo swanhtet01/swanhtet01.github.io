@@ -70,7 +70,7 @@ Current products are Shop/POS, Website and Ecommerce. The public `supermega.dev`
 
 Plant is excluded from new customer acquisition and setup. Preserve retained records and recovery paths. SOL is a separate build: its public experience may inform requested research, but its code, infrastructure and customer data are outside this implementation scope.
 
-The public website keeps the existing white/jade identity and has no theme toggle. Individual products may retain their theme controls. Cards, banners, proposals and social assets should match the brand. Use plain, confident language, short labels such as Login, clear hierarchy and fewer visible decisions. Remove generic AI hype, repeated approval prose and unsupported enterprise claims.
+The public website keeps the existing white/jade identity and has no theme toggle. Individual products also use the fixed light theme; no appearance controls. Cards, banners, proposals and social assets should match the brand. Use plain, confident language, short labels such as Login, clear hierarchy and fewer visible decisions. Remove generic AI hype, repeated approval prose and unsupported enterprise claims.
 
 No trial/demo/sample detours as the primary customer experience. Private synthetic fixtures and isolated staging remain necessary engineering tools. Content review before publication is legitimate; do not confuse it with a fake product demonstration. Never remove provenance labels from existing synthetic records merely to satisfy copy cleanup.
 
@@ -117,11 +117,11 @@ Artifacts are retained under `C:/Users/thesw/.codex/generated_images/01a0d249-2b
 
 These absolute paths are local working references. Preserve the selected source alongside the implementation handoff before moving machines. Generated details such as optional tax rows, decorative branding and catalog imagery require product validation; they are not requirements merely because they appear in an image.
 
-Owner follow-up: the concepts are too similar to warrant separate products. Implement easily changeable skins on one shared interface. This supersedes waiting for a numbered selection. Keep navigation, permissions, business rules, persistence and checkout behavior identical across skins. Default to white/jade; offer a small curated set of accessible palettes and independent light/dark preferences inside the app. Business branding and personal display preferences must be separate: a user's appearance choice must not silently change everyone else's workspace. Start with local device preferences, state that scope honestly, and add account synchronization only when it is implemented and verified. Never allow arbitrary CSS or customer HTML as a skin. Typography and density variants follow after the shared token contract is proven; preserve readable text and touch targets. The public marketing website retains its fixed white/jade theme and no selector.
+Latest owner direction: improve the whole product with Apple-like restraint and polish, not cosmetic choices. Remove the skin dropdown and dark-mode controls. Use one consistent light white/jade interface across the apps and public website. This supersedes the earlier selectable-skins proposal. Keep reusable design tokens internally; do not expose appearance controls without a new user request. Ignore previously saved appearance preferences when rendering the app. Preserve business records.
 
-Implemented locally: CoreShell now offers Jade, Slate and Plum accent skins with device-local persistence, safe default/fallback and separate semantic status colors. Plum selection and reload persistence passed in the in-app browser; no customer records were changed. App build and artifact verification passed. The existing light/dark button did not change visible state in this browser check; dark-mode interaction acceptance remains unresolved. Typography, density and account-synchronized preferences are not yet implemented. These changes are not production-deployed.
+Design priorities: stronger typography and hierarchy, deliberate spacing, fewer borders and redundant labels, natural interaction feedback, and one clear next action. Retain essential status, accessibility and recovery information. Use the supplied SOL references as a quality benchmark; no wholesale brand cloning or new settings panels.
 
-Next design action: investigate the existing theme-toggle interaction, verify skin contrast and mobile layout across both modes, then refine shared layout/density using the SOL craft references. Do not build three divergent applications.
+Next design action: simplify the shared interface and improve the core selling/setup tasks. Verify both the visual result and complete task behavior.
 
 ## 5. Authority, credentials and resource boundaries
 
