@@ -56,6 +56,19 @@ const allPullRequests = source => {
 requireContract('required workflows cover every PR including drafts',
   [ciWorkflow, dependencyAuditWorkflow, kernelWorkflow].every(allPullRequests)
   && ![ciWorkflow, dependencyAuditWorkflow].some(source => source.includes('github.event.pull_request.draft')))
+// Branch pushes must receive the same checks before a PR exists. A source-repository
+// key keeps fork branches from cancelling an unrelated same-named canonical branch.
+const allBranchPushes = source => {
+  const blocks = [...source.matchAll(/^  push:\n([\s\S]*?)(?=^  \S|^\S|$(?![\s\S]))/gm)]
+  return blocks.length === 1 && blocks[0][0] === "  push:\n    branches: ['**']\n"
+}
+requireContract('app CI covers every branch push without path exclusions', allBranchPushes(ciWorkflow))
+requireContract('branch coverage rejects main-only or path-filtered pushes',
+  !allBranchPushes(ciWorkflow.replace("branches: ['**']", "branches: ['main']"))
+  && !allBranchPushes(ciWorkflow.replace("branches: ['**']", "branches: ['**']\n    paths: ['showroom/**']")))
+requireContract('push and PR CI share a fork-isolated source-branch concurrency group',
+  ciWorkflow.includes('group: showroom-ci-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}')
+  && ciWorkflow.includes('  cancel-in-progress: true\n'))
 requireContract('required check display names bind stable job IDs',
   ciWorkflow.includes('  validate:\n    name: SuperMega App CI\n')
   && kernelWorkflow.includes('  verify:\n    name: Kernel Console - Verify & Owner-Gated Release\n'))
