@@ -105,7 +105,7 @@ const seenEvents = new Set()
 /**
  * reconcile — record a verified Stripe event into the data spine, IDEMPOTENTLY and with AMOUNT
  * integrity. Enterprise-hardened:
- *  - Persistent dedup via store.recordPaymentEvent (survives serverless cold starts / many instances).
+ *  - Arrival tracking via store.recordPaymentEvent; duplicates still retry idempotent deposit persistence.
  *  - Amount/currency verified against the value bound into the session metadata at creation (which is
  *    covered by Stripe's signature → a replayer cannot reuse a small payment's event for a big project).
  *  - Conditional mark-paid (store.markDepositPaid only flips an 'unpaid' project) so a re-delivery never
@@ -129,13 +129,15 @@ export async function reconcile(event) {
     // for async/delayed methods, which settle later via checkout.session.async_payment_succeeded).
     const paid = obj.payment_status === 'paid' || obj.payment_status === 'no_payment_required'
 
-    // Persistent idempotency: only the FIRST delivery of this event id does any work.
+    // A receipt proves arrival, not completed persistence. Re-deliveries must still
+    // attempt the idempotent deposit transition after a partial storage failure.
+    let duplicate = false
     if (event.id) {
       const dedup = await store.recordPaymentEvent('stripe', event.id, { ref, amount: obj.amount_total, currency: obj.currency })
-      if (!dedup.fresh) return { ok: true, handled: true, ref, duplicate: true }
+      duplicate = !dedup.fresh
     }
 
-    if (!paid) return { ok: true, handled: true, ref, paid: false }
+    if (!paid) return { ok: true, handled: true, ref, paid: false, duplicate }
 
     // Amount/currency integrity: compare the settled total against what this ref was quoted (bound into
     // metadata at checkout creation). If it doesn't match, do NOT mark paid — log and ack (no retry).
@@ -156,9 +158,16 @@ export async function reconcile(event) {
     if (ref) {
       const flipped = await store.markDepositPaid(String(ref), { method: 'stripe' })
       if (flipped) await store.logActivity({ kind: 'deposit', summary: `Stripe payment confirmed (${ref})`, ref }).catch(() => null)
-      return { ok: true, handled: true, ref, paid: true, alreadyPaid: !flipped }
+      if (!flipped) {
+        const project = await store.getProject(String(ref))
+        if (!project || project.deposit_status !== 'paid') {
+          return { ok: false, handled: false, detail: 'payment_project_not_settled' }
+        }
+      }
+      return { ok: true, handled: true, ref, paid: true, alreadyPaid: !flipped, duplicate }
     }
-    // Paid event with no project ref — record it once (dedup above already gated this to first delivery).
+    // No project transition exists for unassigned events; avoid duplicate activity.
+    if (duplicate) return { ok: true, handled: true, ref: null, paid: true, duplicate: true }
     await store.logActivity({ kind: 'deposit', summary: 'Stripe payment confirmed (no ref)', ref: null }).catch(() => null)
     return { ok: true, handled: true, ref: null, paid: true }
   } catch (e) {

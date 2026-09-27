@@ -140,3 +140,31 @@ test('verifyWebhook rejects signed non-event JSON without throwing', () => {
     assert.equal(verifyWebhook(raw, sig).ok, false)
   }
 })
+
+test('reconcile retries deposit persistence after the event was recorded', async () => {
+  const project = await store.createProject({ offer: 'build' })
+  const event = paidEvent('evt_retry_after_record', project.id, 5000)
+  const original = store.markDepositPaid
+  try {
+    store.markDepositPaid = async () => { throw new Error('synthetic_storage_failure') }
+    assert.equal((await reconcile(event)).ok, false)
+  } finally { store.markDepositPaid = original }
+  const retry = await reconcile(event)
+  assert.equal(retry.ok, true)
+  assert.equal(retry.paid, true)
+  assert.equal((await store.getProject(project.id)).deposit_status, 'paid')
+})
+
+test('reconcile does not acknowledge a missing project as paid', async () => {
+  const result = await reconcile(paidEvent('evt_missing_project', 'missing-project', 5000))
+  assert.equal(result.ok, false)
+  assert.notEqual(result.paid, true)
+})
+
+test('concurrent deliveries settle the project only once', async () => {
+  const project = await store.createProject({ offer: 'build' })
+  const event = paidEvent('evt_concurrent_retry', project.id, 5000)
+  const results = await Promise.all([reconcile(event), reconcile(event)])
+  assert.ok(results.every(result => result.ok && result.paid))
+  assert.equal(results.filter(result => !result.alreadyPaid).length, 1)
+})
