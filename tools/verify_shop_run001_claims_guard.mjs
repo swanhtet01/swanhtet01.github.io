@@ -215,8 +215,9 @@ for (const rule of [
   'Paid pilot only after the owner can name faster close',
   'Spa services vertical pack: package sale, treatment redemption, invalid redemption refusal, daily close, then reload check.',
 ]) requireSnippet(pilotKitReadmeText, rule, files.pilotKitReadme)
-requireSnippet(onboardingText, 'Choose your trade to start with a matching catalog and workflow.', files.onboarding)
-requireSnippet(onboardingText, 'Creates local sample records, then opens the first task.', files.onboarding)
+requireSnippet(onboardingText, 'Name your business, then add your products and prices. Records are saved on this device.', files.onboarding)
+requireSnippet(onboardingText, 'Enter actual prices and opening stock, or import your catalog.', files.onboarding)
+check(!onboardingText.includes('Creates local sample records, then opens the first task.'), 'customer_setup_must_not_promise_automatic_sample_records')
 check(!onboardingText.includes('Shop pilot proof rule'), 'operator_pilot_rules_must_not_crowd_customer_setup')
 
 check(!coreAppText.includes('Spa pilot first sale path') && !coreAppText.includes('Reject bad redemption'), 'internal_pilot_checklist_must_not_crowd_sales_counter')

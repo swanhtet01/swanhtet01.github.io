@@ -128,6 +128,17 @@ type NavigationItem = { to: string; label: string; end?: boolean }
 const productsNavigation: NavigationItem = { to: '/?choose=1', label: 'Switch product', end: true }
 
 const THEME_KEY = 'supermega-interface-theme'
+const SKIN_KEY = 'supermega-interface-skin'
+const interfaceSkins = ['jade', 'slate', 'plum'] as const
+type InterfaceSkin = typeof interfaceSkins[number]
+function initialInterfaceSkin(): InterfaceSkin {
+  try {
+    const saved = window.localStorage.getItem(SKIN_KEY)
+    return interfaceSkins.find((skin) => skin === saved) ?? 'jade'
+  } catch {
+    return 'jade'
+  }
+}
 const SETUP_KEY = 'supermega.setup.v3'
 const setupRequiredFields = ['workspace', 'owner', 'entryPoint', 'currentRecord', 'baseline', 'targetOutcome', 'authorityBoundary', 'acceptanceEvidence'] as const
 type InterfaceTheme = 'light' | 'dark'
@@ -437,6 +448,14 @@ export function CoreLayout() {
   const location = useLocation()
   const runtime = useRuntimeHealth()
   const [theme, setTheme] = useState<InterfaceTheme>(initialInterfaceTheme)
+  const [skin, setSkin] = useState<InterfaceSkin>(initialInterfaceSkin)
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SKIN_KEY, skin)
+    } catch {
+      // Appearance still works for this session when storage is unavailable.
+    }
+  }, [skin])
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
   const customerSettingsRoute = location.pathname.startsWith('/settings/')
@@ -553,7 +572,7 @@ export function CoreLayout() {
   if (sessionChanged) return <PortalAccessPanel title="Account changed in another tab" copy="Reload to verify the current account. Saved records are unchanged; unsaved edits may need to be entered again." action={<button className="core-button primary" onClick={() => window.location.reload()} type="button">Reload workspace</button>} />
 
   return (
-    <div className={`core-shell theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
+    <div data-skin={skin} className={`core-shell theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
@@ -563,7 +582,7 @@ export function CoreLayout() {
         <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{showAssistedSetupLink ? <a className="account-shell-link signup-shell-link" href={assistedSetupHref}>Setup help</a> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{showAssistedSetupLink ? <a className="account-shell-link mobile-signup-topbar-link" href={assistedSetupHref}>Setup help</a> : null}{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta"><select aria-label="App skin (this device)" className="skin-select" value={skin} onChange={(event) => setSkin(interfaceSkins.find((value) => value === event.target.value) ?? 'jade')}><option value="jade">Jade</option><option value="slate">Slate</option><option value="plum">Plum</option></select>{showAssistedSetupLink ? <a className="account-shell-link mobile-signup-topbar-link" href={assistedSetupHref}>Setup help</a> : null}{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button><RuntimeBadge status={runtime.status} /></div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every

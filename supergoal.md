@@ -117,7 +117,11 @@ Artifacts are retained under `C:/Users/thesw/.codex/generated_images/01a0d249-2b
 
 These absolute paths are local working references. Preserve the selected source alongside the implementation handoff before moving machines. Generated details such as optional tax rows, decorative branding and catalog imagery require product validation; they are not requirements merely because they appear in an image.
 
-Next design action: resolve the displayed visual selection, capture the current Shop counter, map the selected structure to existing components, and implement one bounded slice with real empty/populated/error states. Continue independent engineering work while selection is pending.
+Owner follow-up: the concepts are too similar to warrant separate products. Implement easily changeable skins on one shared interface. This supersedes waiting for a numbered selection. Keep navigation, permissions, business rules, persistence and checkout behavior identical across skins. Default to white/jade; offer a small curated set of accessible palettes and independent light/dark preferences inside the app. Business branding and personal display preferences must be separate: a user's appearance choice must not silently change everyone else's workspace. Start with local device preferences, state that scope honestly, and add account synchronization only when it is implemented and verified. Never allow arbitrary CSS or customer HTML as a skin. Typography and density variants follow after the shared token contract is proven; preserve readable text and touch targets. The public marketing website retains its fixed white/jade theme and no selector.
+
+Implemented locally: CoreShell now offers Jade, Slate and Plum accent skins with device-local persistence, safe default/fallback and separate semantic status colors. Plum selection and reload persistence passed in the in-app browser; no customer records were changed. App build and artifact verification passed. The existing light/dark button did not change visible state in this browser check; dark-mode interaction acceptance remains unresolved. Typography, density and account-synchronized preferences are not yet implemented. These changes are not production-deployed.
+
+Next design action: investigate the existing theme-toggle interaction, verify skin contrast and mobile layout across both modes, then refine shared layout/density using the SOL craft references. Do not build three divergent applications.
 
 ## 5. Authority, credentials and resource boundaries
 
