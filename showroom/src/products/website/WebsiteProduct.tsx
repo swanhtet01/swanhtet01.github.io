@@ -288,6 +288,7 @@ export function WebsiteProduct() {
     && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft
     && !hasUnsavedChanges && !starterSetupActive
   const showAssistedWebsitePreview = canRequestWebsiteSetup && surface === 'preview'
+  const assistedWebsiteStorageNotice = storageMode === 'browser-local' ? 'Saved on this device. Not published.' : 'Session only. Download your website file to keep it.'
   const showWebsiteEditorAction = !(showAssistedWebsitePreview && starterAvailable)
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
@@ -1183,7 +1184,7 @@ export function WebsiteProduct() {
           <header className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
-              <p>{showAssistedWebsitePreview ? 'Saved on this device. Not published.' : activeViewCopy.copy}</p>
+              <p>{showAssistedWebsitePreview ? assistedWebsiteStorageNotice : activeViewCopy.copy}</p>
             </div>
             {canRequestWebsiteSetup && surface === 'work' ? <a className="website-button is-secondary" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
             {view === 'publish' ? (

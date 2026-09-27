@@ -726,3 +726,15 @@ test('compact content status preserves storage and draft recovery priority', () 
     }
   }
 })
+
+
+test('assisted Website header never claims durable storage for session-only data', () => {
+  const expression = websiteProductSource.match(/const assistedWebsiteStorageNotice = ([^\r\n]+)/)?.[1]
+  assert.ok(expression)
+  assert.equal(runInNewContext(expression, { storageMode: 'browser-local' }), 'Saved on this device. Not published.')
+  const sessionNotice = runInNewContext(expression, { storageMode: 'session-only' })
+  assert.match(sessionNotice, /Session only/)
+  assert.match(sessionNotice, /Download/)
+  assert.doesNotMatch(sessionNotice, /Saved on this device/)
+  assert.ok(websiteProductSource.includes('showAssistedWebsitePreview ? assistedWebsiteStorageNotice : activeViewCopy.copy'))
+})
