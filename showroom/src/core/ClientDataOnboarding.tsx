@@ -400,7 +400,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                         ? 'Add company and owner'
                         : managedIdentity
                           ? 'Check with company'
-                          : 'Prepare import file'
+                          : catalogHasConflicts ? 'Resolve SKU conflicts' : 'Prepare import file'
                 : 'Upload your CSV'
   const importCoachReason = appliedIsCurrent
     ? 'The company import is confirmed and ready to use.'
@@ -985,7 +985,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.preflighting || state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.preflighting ? 'Running final check...' : state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
           </> : null}
-          {localActivationAvailable && importContextReady && state.preview.readyForStaging && !localAppliedIsCurrent ? <>
+          {localActivationAvailable && !catalogHasConflicts && importContextReady && state.preview.readyForStaging && !localAppliedIsCurrent ? <>
             <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.preview.totals.ready} {localRecordLabel} and approve adding them to this browser's {productName} demo.</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyLocalImport} onClick={() => void activateLocalImport()} type="button">{state.applying ? `Adding ${productName.toLowerCase()} records...` : `Add ${state.preview.totals.ready} ${localActionLabel}`}</button></div>
           </> : null}
@@ -996,6 +996,8 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.${state.applied.shopPack ? ` ${state.applied.shopPack.id} pack revision ${state.applied.shopPack.version} is ready.` : ''}${state.applied.plantPack ? ` ${state.applied.plantPack.id} Plant setup is ready.` : ''}`
               : validationIsCurrent
               ? state.validation?.preflight ? 'Company record check passed. The reviewed import remains bound to this exact receipt.' : 'Checked successfully. Review and confirm above; SuperMega runs one final company record check before writing.'
+              : catalogHasConflicts
+                ? 'Update the existing products separately, or remove conflicting rows from the CSV.'
               : mappingNeedsReview
                 ? 'Choose the required columns above.'
               : !state.preview.readyForStaging
