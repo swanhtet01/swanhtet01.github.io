@@ -51,3 +51,40 @@ test('catalog import rejects a mixed conflicting batch without mutating existing
   assert.equal(importCommerceCatalog(first.state, { ...context, items: [{ ...item, sku: 'CHECK-2' }, { ...item, price: 1200 }] }), null)
   assert.equal(JSON.stringify(first.state), before)
 })
+
+test('managed importer never falls through to local controls while identity is absent', async () => {
+  const { createRequire } = await import('node:module')
+  const { readFileSync } = await import('node:fs')
+  const { runInNewContext } = await import('node:vm')
+  const require = createRequire(new URL('../showroom/package.json', import.meta.url))
+  const ts = require('typescript'), React = require('react')
+  const { renderToStaticMarkup } = require('react-dom/server')
+  const source = readFileSync(new URL('../showroom/src/core/ProductSystemNavigator.tsx', import.meta.url), 'utf8')
+  const component = source.slice(source.indexOf('export function ProductDataImport('), source.indexOf('function WorkflowLink('))
+  assert.ok(component.includes('useManagedIdentity(managed)'))
+  const compiled = ts.transpileModule(component, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
+  const identity = { userId: 'synthetic-user', workspaceId: 'synthetic-workspace' }
+  for (const scenario of [
+    { managed: true, identity: null, settled: false, expected: 'Loading your account...', importer: false },
+    { managed: true, identity: null, settled: true, expected: 'Login to import data.', importer: false },
+    { managed: true, identity, settled: true, expected: 'Import controls', importer: true },
+    { managed: false, identity: null, settled: true, expected: 'Import controls', importer: true },
+  ]) {
+    const exports = {}, seen = []
+    runInNewContext(compiled, { exports, require,
+      useSetupWorkspace: () => [{ product: 'commerce', templateId: 'retail', workspace: 'Synthetic shop', owner: 'Tester' }],
+      useManagedIdentity: enabled => { assert.equal(enabled, scenario.managed); return [scenario.identity, () => {}, scenario.settled] },
+      useState: value => [typeof value === 'function' ? value() : value],
+      readCurrentShopIndustryPackId: () => 'retail', readPlantIndustryPackId: () => 'general',
+      productDetails: { commerce: { label: 'Shop' } }, productContracts: { commerce: { slug: 'shop' } },
+      templateFor: () => ({ id: 'retail' }), shopIndustryPack: () => ({ workflowTemplateId: 'retail' }),
+      Suspense: React.Suspense, Link: props => React.createElement('a', { href: props.to }, props.children),
+      ClientDataOnboarding: props => { seen.push(props); return React.createElement('div', null, 'Import controls') },
+    })
+    const html = renderToStaticMarkup(React.createElement(exports.ProductDataImport, { product: 'commerce', managed: scenario.managed }))
+    assert.ok(html.includes(scenario.expected), html)
+    assert.equal(seen.length, scenario.importer ? 1 : 0)
+    if (seen.length) assert.equal(seen[0].managedIdentity, scenario.identity)
+    if (scenario.managed && scenario.settled && !scenario.identity) assert.ok(html.includes('/login?product=shop'))
+  }
+})
