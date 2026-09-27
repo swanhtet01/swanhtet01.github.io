@@ -171,17 +171,19 @@ check(verifyAncestry(parseSelector('.website-recovery-panel button.is-quiet'), n
 check(verifyAncestry(parseSelector('.theme-dark .website-recovery-actions > button'), nested) === true, 'the ambient theme prefix is satisfied for free')
 check(verifyAncestry(parseSelector('.outer button.is-quiet'), shapeOf('is-quiet', {}, 'button', [])) === null, 'an ancestry running off the top of the file is UNVERIFIABLE, not a match')
 
-// THE AMBIENT ASSUMPTION, pinned against the source. Everything the `.theme-dark X` versus `X`
-// comparison rests on. If the shell stops writing the theme class onto an ancestor of the whole
-// app, those pairs stop being decidable and this must fail rather than keep reporting them.
+// The live app has one light theme. Pin its class to the common ancestor so light-theme
+// comparisons remain valid. Dark rules are retained legacy CSS: the scanner still checks
+// their hypothetical cascade conservatively, but that is not proof of a reachable dark UI.
 const shellSource = read('showroom/src/core/CoreShell.tsx')
 check(
-  /className=\{`core-shell theme-\$\{theme\}/.test(shellSource),
-  'CoreShell still writes `theme-${theme}` onto the shell root. If this moved, the theme classes are no longer an ancestor of every element and ambient-ancestry pairing is invalid',
+  /className=\{`core-shell theme-light\$\{routeProduct/.test(shellSource),
+  'the fixed light theme remains on the common app shell ancestor',
 )
 check(
-  /InterfaceTheme = 'light' \| 'dark'/.test(shellSource),
-  "the theme union is still 'light' | 'dark', which is what makes the ambient class set exhaustive",
+  shellSource.includes("document.documentElement.dataset.supermegaTheme = 'light'")
+    && !shellSource.includes('initialInterfaceTheme')
+    && !shellSource.includes('theme-${theme}'),
+  'saved appearance preferences cannot reactivate an unsupported dark theme',
 )
 
 // ---------------------------------------------------------------------------------------------
