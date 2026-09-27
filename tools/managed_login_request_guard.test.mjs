@@ -26,6 +26,7 @@ function fixture() {
     setActivating: noop, setDirectory: noop, setWorkspaceId: noop, setExistingIdentity: noop, setEmail: noop,
     setClaimCodeFieldError: noop, window: { localStorage: {} }, readTrialSignup: () => null, savedTrial: () => null,
     trialSignupProductChoice: () => ({ id: 'shop' }), productIntent: 'shop', claimCode: 'synthetic', businessName: 'Synthetic',
+    managedPortalEntryPath: value => value === 'commerce' ? '/shop/' : `/${value}/`,
     openWorkspace: async () => {}, alternateManagedWorkspaceId: () => null,
   } }
 }
@@ -443,6 +444,12 @@ test('activation uses saved product only for the entered saved claim', async () 
   ]) {
     const { context } = fixture()
     const calls = []
+    const destinations = []
+    context.portalEntryPath = '/ecommerce/'
+    context.completeManagedWorkspaceSignIn = async () => ({ workspaceId: 'new' })
+    context.loadManagedBootstrap = async () => ({})
+    context.navigate = path => destinations.push(path)
+    context.openWorkspace = handler('openWorkspace', context)
     context.claimCode = enteredClaim
     context.productIntent = 'ecommerce'
     context.savedTrial = () => saved
@@ -453,6 +460,7 @@ test('activation uses saved product only for the entered saved claim', async () 
     assert.equal(calls.length, 1)
     assert.equal(calls[0][0], enteredClaim)
     assert.equal(calls[0][2], expected)
+    assert.deepEqual(destinations, [expected === 'commerce' ? '/shop/' : '/ecommerce/'])
   }
 })
 

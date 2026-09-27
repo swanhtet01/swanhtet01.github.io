@@ -147,11 +147,11 @@ export function ManagedLoginPage() {
     return () => { active = false }
   }, [managedReady, reviewReturnPath])
 
-  async function openWorkspace(signIn: ManagedWorkspaceSignIn, selectedWorkspaceId: string) {
+  async function openWorkspace(signIn: ManagedWorkspaceSignIn, selectedWorkspaceId: string, destination = portalEntryPath) {
     const identity = await completeManagedWorkspaceSignIn(signIn, selectedWorkspaceId)
     await loadManagedBootstrap(identity)
     setExistingIdentity(identity)
-    navigate(portalEntryPath)
+    navigate(destination)
   }
 
   async function submit(event: FormEvent) {
@@ -215,7 +215,7 @@ export function ManagedLoginPage() {
         ? `${workspace.label} is ready. Opening your company...`
         : `${workspace.label} was already activated with this claim. Opening it...`)
       const refreshed = await discoverManagedWorkspacesForCurrentSession()
-      await openWorkspace(refreshed, workspace.workspaceId)
+      await openWorkspace(refreshed, workspace.workspaceId, managedPortalEntryPath(selectedProduct))
     } catch (error) {
       setNoticeTone('error')
       const code = error instanceof Error && 'code' in error ? String((error as { code?: unknown }).code ?? '') : ''
