@@ -1377,7 +1377,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           <div>
             <span className="core-eyebrow">{counterContextLabel}</span>
             <h2>{bi('Tap an item to add it')}</h2>
-            {persistLocalDraft ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Tickets on this device ({parked.length} parked)</button> : null}
+            {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Tickets on this device ({parked.length} parked)</button> : null}
             {businessTemplate && sampleCatalogActive
               ? <p className="shop-pack-context"><span>{packContext}</span></p>
               : industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}
@@ -1450,7 +1450,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
         {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
         <header><div><span className="core-eyebrow">{activeLabel || bi('Current sale')}</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : bi('Ready for the first item')}</h2></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">{bi('Clear')}</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
-        {persistLocalDraft ? <details className="shop-sale-details shop-parked-tickets" open={ticketsOpen} onToggle={event => setTicketsOpen(event.currentTarget.open)}><summary>Parked tickets ({parked.length}) · this device</summary>
+        {persistLocalDraft && (parked.length > 0 || unitCount > 0 || recoveryPaused) ? <details className="shop-sale-details shop-parked-tickets" open={ticketsOpen} onToggle={event => setTicketsOpen(event.currentTarget.open)}><summary>Parked tickets ({parked.length}) · this device</summary>
           <p>Saved here only; not sent to kitchen, paid or stock-reserved. Review current prices when resumed.</p>
           <label>Table or ticket name<input maxLength={40} placeholder={activeLabel || 'Table 1'} value={ticketLabel} onChange={event => setTicketLabel(event.target.value)} /></label>
           <button type="button" disabled={!Object.keys(cart).length || recoveryPaused || !(ticketLabel.trim() || activeLabel)} onClick={() => {
