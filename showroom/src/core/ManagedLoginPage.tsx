@@ -206,7 +206,7 @@ export function ManagedLoginPage() {
     setClaimCodeFieldError(false)
     setNotice('Creating your company from the claim...')
     try {
-      const localTrial = readTrialSignup(window.localStorage)
+      const localTrial = savedTrial()
       const selectedProduct = localTrial?.claimCode === claimCode.trim()
         ? localTrial.product
         : trialSignupProductChoice(productIntent).id

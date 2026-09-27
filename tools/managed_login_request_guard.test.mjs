@@ -24,7 +24,7 @@ function fixture() {
     email: 'synthetic@example.invalid', password: ['synthetic', 'test', 'input'].join('-'), workspaceId: '', existingIdentity: { workspaceId: 'one' },
     setBusy: value => busyStates.push(value), setPassword: value => passwords.push(value), setNoticeTone: noop, setNotice: noop,
     setActivating: noop, setDirectory: noop, setWorkspaceId: noop, setExistingIdentity: noop, setEmail: noop,
-    setClaimCodeFieldError: noop, window: { localStorage: {} }, readTrialSignup: () => null,
+    setClaimCodeFieldError: noop, window: { localStorage: {} }, readTrialSignup: () => null, savedTrial: () => null,
     trialSignupProductChoice: () => ({ id: 'shop' }), productIntent: 'shop', claimCode: 'synthetic', businessName: 'Synthetic',
     openWorkspace: async () => {}, alternateManagedWorkspaceId: () => null,
   } }
@@ -445,7 +445,7 @@ test('activation uses saved product only for the entered saved claim', async () 
     const calls = []
     context.claimCode = enteredClaim
     context.productIntent = 'ecommerce'
-    context.readTrialSignup = () => saved
+    context.savedTrial = () => saved
     context.trialSignupProductChoice = value => ({ id: value })
     context.createSelfServeWorkspace = async (...args) => { calls.push(args); return { created: true, label: 'Synthetic', workspaceId: 'new' } }
     context.discoverManagedWorkspacesForCurrentSession = async () => ({ workspaces: [] })
@@ -454,4 +454,17 @@ test('activation uses saved product only for the entered saved claim', async () 
     assert.equal(calls[0][0], enteredClaim)
     assert.equal(calls[0][2], expected)
   }
+})
+
+test('manually entered activation does not depend on optional browser trial storage', async () => {
+  const { context } = fixture()
+  let activations = 0
+  const deniedWindow = {}
+  Object.defineProperty(deniedWindow, 'localStorage', { get() { throw new Error('storage denied') } })
+  context.window = deniedWindow
+  context.savedTrial = handler('savedTrial', context)
+  context.createSelfServeWorkspace = async () => { activations++; return { created: true, label: 'Synthetic', workspaceId: 'new' } }
+  context.discoverManagedWorkspacesForCurrentSession = async () => ({ workspaces: [] })
+  await handler('activate', context)(event)
+  assert.equal(activations, 1)
 })
