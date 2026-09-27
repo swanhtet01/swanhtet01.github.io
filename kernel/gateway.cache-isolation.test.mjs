@@ -2,6 +2,10 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 
+// These fixtures mock the cloud protocol; never inherit a real local model route.
+process.env.SUPERMEGA_OLLAMA_ENABLED = '0'
+delete process.env.SUPERMEGA_OLLAMA_MODEL
+
 const DATABASE_ENV = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
