@@ -287,14 +287,16 @@ const effectStart = scheduleUi.indexOf('    let active = true')
 const effectEnd = scheduleUi.indexOf('  }, [])', effectStart)
 assert.ok(effectStart > 0 && effectEnd > effectStart)
 const effectBody = scheduleUi.slice(effectStart, effectEnd)
-for (const mode of ['local', 'managed', 'missing', 'failed', 'cancelled']) {
+for (const mode of ['local', 'managed', 'missing', 'failed', 'cancelled', 'signed-out', 'other-company', 'other-user', 'unexpected-company']) {
   let localReads = 0
   const shown = []
   const identity = { workspaceId: 'company-A', userId: 'operator' }
   const local = { services: [], resources: [], privacyPolicy: {}, owner: 'local' }
   const company = { ...local, owner: 'company-A' }
   const deps = {
-    currentManagedIdentity: async () => mode === 'local' ? null : identity,
+    currentManagedIdentity: async () => ['local', 'signed-out'].includes(mode) ? null : identity,
+    allowLocal: ['local', 'unexpected-company'].includes(mode),
+    expectedIdentity: ['local', 'unexpected-company'].includes(mode) ? null : mode === 'other-company' ? { ...identity, workspaceId: 'company-B' } : mode === 'other-user' ? { ...identity, userId: 'other' } : identity,
     initialSchedule: () => { localReads++; return { schedule: local, error: '' } },
     setSchedule: value => shown.push(value),
     setScheduleState: value => shown.push(value),

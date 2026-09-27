@@ -6906,6 +6906,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     </details>
     {confirmedLocalShop || managedIdentity ? <Suspense fallback={null}><ShopServiceSchedule
       key={scheduleScopeKey}
+      allowLocal={confirmedLocalShop && !managedIdentity}
+      expectedIdentity={managedIdentity}
       actor={managedIdentity?.email ?? 'Local Shop operator'}
       commerce={commerce}
       disabled={shopScheduleControlsDisabled}

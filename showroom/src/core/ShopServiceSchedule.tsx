@@ -79,8 +79,10 @@ function initialSchedule() {
   }
 }
 
-export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = emptyMembershipCommerce, disabled: externallyDisabled = false, initiallyOpen = false, onScheduleChange }: {
+export function ShopServiceSchedule({ actor = 'Local Shop operator', allowLocal = false, expectedIdentity, commerce = emptyMembershipCommerce, disabled: externallyDisabled = false, initiallyOpen = false, onScheduleChange }: {
   actor?: string
+  allowLocal?: boolean
+  expectedIdentity: ManagedIdentity | null
   commerce?: SpaMembershipCommerceView
   disabled?: boolean
   initiallyOpen?: boolean
@@ -138,6 +140,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     void currentManagedIdentity().then(async (identity) => {
       if (!active) return
       if (!identity) {
+        if (!allowLocal || expectedIdentity) {
+          setSchedule(null)
+          setNotice('Account changed. Reload to open the current company schedule.')
+          return
+        }
         const local = initialSchedule()
         if (local.schedule) {
           setSchedule(local.schedule)
@@ -145,6 +152,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
           setRetentionDraft(local.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
         }
         setNotice(local.error)
+        return
+      }
+      if (!expectedIdentity || identity.workspaceId !== expectedIdentity.workspaceId || identity.userId !== expectedIdentity.userId) {
+        setSchedule(null)
+        setNotice('Account changed. Reload to open the current company schedule.')
         return
       }
       managedIdentityRef.current = identity
