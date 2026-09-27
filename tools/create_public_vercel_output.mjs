@@ -649,23 +649,23 @@ function assistedDeliverablesHtml(productId) {
     website: {
       title: 'Your business, clearly presented.',
       steps: [
-        ['Share the essentials', 'Share your services, photos and contact details. The starter features up to four offerings; full menu management is not included.'],
-        ['Review your prepared pages', 'We prepare your pages. You check the words, images and business details.'],
-        ['Approve a separate launch', 'You approve the preview. We agree your domain, publishing and ongoing support separately.'],
+        ['Share the essentials', 'Send your services, photos and contact details. Includes up to four featured offerings.'],
+        ['Check your pages', 'We build the pages. You check the content.'],
+        ['Choose your launch date', 'Domain, publishing and maintenance are quoted separately.'],
       ],
     },
     ecommerce: {
       title: 'Your catalog, ready for customers to browse.',
       steps: [
-        ['Share your product list', 'Share your products, photos and prices. We confirm the details with you.'],
-        ['Review the customer journey', 'Check the catalog and request flow. Your team confirms each order and payment.'],
-        ['Agree how requests are handled', 'Agree who handles requests, delivery and manual payment checks before going live.'],
+        ['Share your product list', 'Send your products, photos and prices.'],
+        ['Check your catalog', 'Check product details and order requests.'],
+        ['Receive order requests', 'Your team confirms each order and payment. Arrange delivery with your customer.'],
       ],
     },
   }
   const offer = offers[productId]
   if (!offer) return ''
-  return `<section class="frame section" id="prepared-delivery"><div class="section-head"><span class="eyebrow">Done with SuperMega</span><h2>${escapeHtml(offer.title)}</h2><p>No builder experience needed. Scope, price and timing are agreed before work begins.</p></div><ol class="delivery-steps">${offer.steps.map(([title, body]) => `<li><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></li>`).join('')}</ol><p class="delivery-summary">You approve the content and image rights before launch. Samples are optional and are not a live service.</p></section>`
+  return `<section class="frame section" id="prepared-delivery"><div class="section-head"><span class="eyebrow">Built for your business</span><h2>${escapeHtml(offer.title)}</h2></div><ol class="delivery-steps">${offer.steps.map(([title, body]) => `<li><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></li>`).join('')}</ol></section>`
 }
 
 function productLandingHtml(product, page) {

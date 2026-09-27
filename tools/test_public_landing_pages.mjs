@@ -103,12 +103,10 @@ for (const page of landingPages) {
     check(html.includes(`<a class="button primary" href="${assistedSetupHref}">Request assisted setup</a>`), `landing_service_primary:${page.route}`)
     check(!html.includes(`<a class="button primary" href="${guidedSampleHref}">`), `landing_sample_not_primary:${page.route}`)
     check(html.includes('id="prepared-delivery"'), `landing_prepared_deliverables:${page.route}`)
-    check(html.includes('Scope, price and timing are agreed before work begins.'), `landing_scope_before_work:${page.route}`)
-    check(html.includes('You approve the content and image rights before launch.'), `landing_ai_review_boundary:${page.route}`)
-    check(html.includes('Samples are optional and are not a live service.'), `landing_optional_sample_boundary:${page.route}`)
-    check(html.includes(product.id === 'website' ? 'We agree your domain, publishing and ongoing support separately.' : 'Your team confirms each order and payment.'), `landing_product_delivery_boundary:${page.route}`)
+    check(!html.includes('class="delivery-summary"'), `landing_no_redundant_delivery_summary:${page.route}`)
+    check(html.includes(product.id === 'website' ? 'Domain, publishing and maintenance are quoted separately.' : 'Your team confirms each order and payment. Arrange delivery with your customer.'), `landing_product_delivery_boundary:${page.route}`)
   }
-  const websiteOfferingBoundary = 'The starter features up to four offerings; full menu management is not included.'
+  const websiteOfferingBoundary = 'Includes up to four featured offerings.'
   check(html.includes(websiteOfferingBoundary) === (product.id === 'website'), `landing_website_offering_scope:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
@@ -266,7 +264,7 @@ for (const id of activeIds) {
 const ecommerceLanding = readStatic('ecommerce/index.html')
 for (const token of [
   'Your team confirms each order and payment.',
-  'Agree who handles requests, delivery and manual payment checks before going live.',
+  'Arrange delivery with your customer.',
 ]) {
   check(ecommerceLanding.includes(token), `ecommerce_delivery_boundary:${token}`)
 }

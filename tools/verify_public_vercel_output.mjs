@@ -365,7 +365,7 @@ for (const product of publicProducts) {
     }
   }
   if (product.id === 'ecommerce') {
-    for (const token of ['Your team confirms each order and payment.', 'Agree who handles requests, delivery and manual payment checks before going live.']) {
+    for (const token of ['Your team confirms each order and payment.', 'Arrange delivery with your customer.']) {
       if (!landing.toLowerCase().includes(token.toLowerCase())) fail('ecommerce_delivery_boundary_missing', { token })
     }
     for (const token of ['Storefront from real stock', 'Create a Shop-connected ordering page.', 'Send the reviewed request into Shop.']) {
