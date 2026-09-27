@@ -333,7 +333,15 @@ for (const nextScope of ['B', 'checking', 'local']) {
 const localEffect = parentUi.match(/useEffect\(\(\) => \{\n(    if \(!confirmedLocalShop \|\| managedIdentity\) return[\s\S]*?)  \}, \[confirmedLocalShop, managedIdentity, scheduleScopeKey\]\)/)[1]
 for (const [confirmed, identity, expected] of [[false, null, 0], [true, { workspaceId: 'A' }, 0], [true, null, 1]]) {
   let reads = 0
-  Function('confirmedLocalShop', 'managedIdentity', 'scheduleScopeKey', 'setScheduleSnapshot', 'readLocalShopServiceSchedule', localEffect)(confirmed, identity, 'test', () => {}, () => { reads++; return null })
+  const cleanup = Function('confirmedLocalShop', 'managedIdentity', 'scheduleScopeKey', 'setScheduleSnapshot', 'readLocalShopServiceSchedule', localEffect)(confirmed, identity, 'test', () => {}, () => { reads++; return null })
+  await Promise.resolve()
   assert.equal(reads, expected)
+  cleanup?.()
 }
 console.log('PASS parent schedule boundary: deferred local reads, scoped snapshots, keyed child, null propagation')
+
+let cancelledReads = 0
+const cancelParentRead = Function('confirmedLocalShop', 'managedIdentity', 'scheduleScopeKey', 'setScheduleSnapshot', 'readLocalShopServiceSchedule', localEffect)(true, null, 'local', () => { throw Error('cancelled state update') }, () => { cancelledReads++; return null })
+cancelParentRead()
+await Promise.resolve()
+assert.equal(cancelledReads, 0, 'unmounted or switched local scope must not read or publish')

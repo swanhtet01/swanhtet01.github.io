@@ -1602,7 +1602,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const shopPack = shopSchedule ? shopIndustryPack(shopSchedule.industryPackId) : null
   useEffect(() => {
     if (!confirmedLocalShop || managedIdentity) return
-    setScheduleSnapshot({ key: scheduleScopeKey, schedule: readLocalShopServiceSchedule() })
+    let active = true
+    void Promise.resolve().then(() => {
+      if (!active) return
+      setScheduleSnapshot({ key: scheduleScopeKey, schedule: readLocalShopServiceSchedule() })
+    })
+    return () => { active = false }
   }, [confirmedLocalShop, managedIdentity, scheduleScopeKey])
   const [localWebsiteIntakeRead, setLocalWebsiteIntakeRead] = useState<{
     status: 'checking' | 'ready' | 'error'
