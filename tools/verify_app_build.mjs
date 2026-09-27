@@ -4262,7 +4262,7 @@ if (!websiteSource.includes("storageMode === 'managed' ? canReview && !portalVie
   || !websiteSource.includes('<TrialReadyWorkspace')
   || !websiteSource.includes('Download your website')
   || !websiteSource.includes('Download website')
-  || !websiteSource.includes('Download preview')
+  || !websiteSource.includes('Download website file')
   || !websiteSource.includes(': null : localPreviewReady ? (')
   || !websiteSource.includes('onClick={downloadTrialSite}')
   || !websiteSource.includes('createWebsiteHtmlDownload(createWebsitePreviewArtifact(workspace))')

@@ -249,7 +249,7 @@ export function WebsiteProduct() {
       }
     : view === 'content' && surface === 'preview'
     ? {
-        title: hasUnsavedChanges ? 'Preview unsaved changes' : 'Preview page',
+        title: hasUnsavedChanges ? 'Unsaved changes' : 'Website',
         copy: hasUnsavedChanges
           ? 'This preview is not saved yet. Return to edit, then save or discard it.'
           : selectedPage.stage === 'draft'
@@ -972,7 +972,7 @@ export function WebsiteProduct() {
       : hasUnsavedChanges
         ? 'Review edits'
         : localPreviewReady
-          ? 'Download preview'
+          ? 'Download website file'
         : failingContentChecks.length
           ? 'Fix page checks'
         : leadCounts.new
@@ -1183,7 +1183,7 @@ export function WebsiteProduct() {
           <header className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
-              <p>{showAssistedWebsitePreview ? 'Preview saved on this device. Not published.' : activeViewCopy.copy}</p>
+              <p>{showAssistedWebsitePreview ? 'Saved on this device. Not published.' : activeViewCopy.copy}</p>
             </div>
             {canRequestWebsiteSetup && surface === 'work' ? <a className="website-button is-secondary" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
             {view === 'publish' ? (
@@ -1404,7 +1404,7 @@ export function WebsiteProduct() {
                   </button>
                 ) : null : localPreviewReady ? (
                   <button className="website-button is-primary" onClick={downloadTrialSite} type="button">
-                    Download preview
+                    Download website file
                   </button>
                 ) : null}
                 </div>

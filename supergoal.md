@@ -58,7 +58,7 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 |---|---|---|
 | Source | Branch `codex/site-app-cleanup-20260924`; last verified remote head `94da8674`; subsequent workspace-entry fixes saved locally | Current document may be a later commit; recheck refs before release |
 | Integration | PR #596 in `swanhtet01/swanhtet01.github.io` | Broad accumulated scope requires genuine review; no self-approval |
-| CI | App run 36357848152 at 94da8674 failed in Website offering UI tests: fixtures depended on removed sample defaults and old helper copy. Explicit test input and empty-form rejection now pass 11/11 locally | New exact-head CI required; full pipeline acceptance remains open |
+| CI | Exact-head App run 36358288233 at a94f4400 is in progress (job 108730269289, Lint app at last observation). Previous Website fixture failure repaired with 11/11 local checks | Await terminal result; do not interrupt useful CI for copy-only commits |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
@@ -166,7 +166,7 @@ Do not reinstate hourly scheduled tasks. Corporate automation remains paused unl
 
 Order: active security/data/money incident; release-blocking correctness; complete customer task; reliability/recovery; commercial delivery; measured UX/performance; agent productivity; speculative research. Corporate preparation can progress serially alongside technical work, but must not bury an unresolved product failure under new plans.
 
-1. Push the workspace-entry and Website offering-fixture repairs, then inspect exact-head CI. Fix genuine failures without restoring customer demo defaults.
+1. Inspect App run 36358288233 at a94f4400 to completion, repair any concrete failure, then batch subsequent saved changes into the next candidate.
 2. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries.
 3. Complete one cross-product interface slice using the fixed light design and current references; verify the real task, accessibility and responsive behavior together. Do not reintroduce appearance controls.
 4. Review managed Shop setup and reachable Website/Ecommerce paths for sample-first behavior, misleading activation, dead links and inconsistent terminology.
@@ -331,4 +331,4 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Push the current bounded fixes and inspect that exact revision's CI. Then verify Website valid submit/save/reload in an isolated supported browser context, preserving existing records and the single active server. Local build, artifact and component checks are evidence of implementation only; hosted and customer acceptance remain open. Keep one current blocker and one executable next action here instead of accumulating repeated status logs.
+Inspect App run 36358288233 at a94f4400 when terminal. Website workspace labels now lead with Website, Edit page and Download website file while retaining saved/unpublished status. Local 37 focused tests, app build and artifact verification PASS; browser reload verified labels and preserved the existing Bakery draft. Screenshot: `C:/Users/thesw/OneDrive - BDA/outputs/supermega-website-workspace-labels-20260928.png`. This does not prove fresh onboarding/save or hosted readiness. Batch this local commit into the next CI candidate after the active run completes; then verify valid new-business submit/save/reload in an isolated supported browser context.
