@@ -275,3 +275,44 @@ const booked = (base, startsAt = '2026-09-01T03:00:00.000Z', customerName = 'Daw
 }
 
 console.log(`shop appointment book durability: ${checks} checks passed`)
+
+// Exercise the component's actual identity-loading effect with a foreign local book.
+// Managed loading must neither read that book nor overwrite it with company records.
+const { readFileSync: readScheduleSource } = await import('node:fs')
+const scheduleUi = readScheduleSource('showroom/src/core/ShopServiceSchedule.tsx', 'utf8')
+assert.ok(!scheduleUi.includes('useState(initialSchedule)'))
+assert.ok(!scheduleUi.includes('persistLocal('))
+assert.ok(!scheduleUi.includes('localStorage.setItem'))
+const effectStart = scheduleUi.indexOf('    let active = true')
+const effectEnd = scheduleUi.indexOf('  }, [])', effectStart)
+assert.ok(effectStart > 0 && effectEnd > effectStart)
+const effectBody = scheduleUi.slice(effectStart, effectEnd)
+for (const mode of ['local', 'managed', 'missing', 'failed', 'cancelled']) {
+  let localReads = 0
+  const shown = []
+  const identity = { workspaceId: 'company-A', userId: 'operator' }
+  const local = { services: [], resources: [], privacyPolicy: {}, owner: 'local' }
+  const company = { ...local, owner: 'company-A' }
+  const deps = {
+    currentManagedIdentity: async () => mode === 'local' ? null : identity,
+    initialSchedule: () => { localReads++; return { schedule: local, error: '' } },
+    setSchedule: value => shown.push(value),
+    setScheduleState: value => shown.push(value),
+    setBookingDraft: () => {}, setRetentionDraft: () => {}, setNotice: () => {},
+    managedIdentityRef: { current: null }, managedVersionRef: { current: null },
+    setManagedConnected: () => {}, setManagedPrivacyOwner: () => {}, setManagedLoading: () => {},
+    isCurrentScheduleIdentity: async () => true,
+    loadManagedServiceSchedule: async () => {
+      if (mode === 'failed') throw Error('unavailable')
+      return { schedule: mode === 'missing' ? null : company, version: 1 }
+    },
+  }
+  const cleanup = Function(...Object.keys(deps), effectBody)(...Object.values(deps))
+  if (mode === 'cancelled') cleanup()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(localReads, mode === 'local' ? 1 : 0, `${mode}: local cache access`)
+  assert.equal(shown.includes(local), mode === 'local', `${mode}: foreign schedule displayed`)
+  assert.equal(shown.includes(company), mode === 'managed', `${mode}: company result`)
+  cleanup()
+}
+console.log('PASS schedule identity loading: local, managed, missing, failed, cancelled; no managed local-cache writes')

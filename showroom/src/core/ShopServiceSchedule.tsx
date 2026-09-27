@@ -86,7 +86,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   initiallyOpen?: boolean
   onScheduleChange?: (schedule: ShopServiceSchedule) => void
 }) {
-  const [initial] = useState(initialSchedule)
+  const [initial] = useState<{ schedule: ShopServiceSchedule | null; error: string }>({ schedule: null, error: '' })
   const [schedule, setScheduleState] = useState<ShopServiceSchedule | null>(initial.schedule)
   // Every path that changes the book goes through here, so an observer -- today, the close
   // screen's "completed but not rung up" list -- cannot miss a completion. Notifying is
@@ -136,7 +136,17 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   useEffect(() => {
     let active = true
     void currentManagedIdentity().then(async (identity) => {
-      if (!active || !identity) return
+      if (!active) return
+      if (!identity) {
+        const local = initialSchedule()
+        if (local.schedule) {
+          setSchedule(local.schedule)
+          setBookingDraft((draft) => ({ ...draft, serviceId: local.schedule?.services[0]?.id ?? '', resourceId: local.schedule?.resources[0]?.id ?? '' }))
+          setRetentionDraft(local.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
+        }
+        setNotice(local.error)
+        return
+      }
       managedIdentityRef.current = identity
       setManagedConnected(true)
       setScheduleState(null)
@@ -152,7 +162,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       if (managed.schedule) {
         setSchedule(managed.schedule)
         setRetentionDraft(managed.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
-        try { persistLocal(managed.schedule) } catch { /* Loading the managed copy does not require a device cache. */ }
+
         setNotice('Company schedule loaded.')
       } else {
         setScheduleState(null)
@@ -169,12 +179,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
     return () => { active = false; managedIdentityRef.current = null }
   }, [])
 
-  // Used only where a managed server copy is already authoritative and a failed
-  // local write is survivable. Owner-originated changes go through commit().
-  function persistLocal(next: ShopServiceSchedule) {
-    window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
-  }
-
+  // Company schedules remain server-owned; never copy them into the local appointment book.
   async function isCurrentScheduleIdentity(identity: ManagedIdentity) {
     try {
       const current = await currentManagedIdentity()
@@ -234,7 +239,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       managedVersionRef.current = saved.version
       if (saved.schedule) {
         setSchedule(saved.schedule)
-        try { persistLocal(saved.schedule) } catch { /* The managed copy remains authoritative. */ }
+
       }
       setNotice(`${message} Shared company schedule saved.`)
       return true
@@ -247,7 +252,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
           managedVersionRef.current = current.version
           if (current.schedule) {
             setSchedule(current.schedule)
-            try { persistLocal(current.schedule) } catch { /* The managed copy remains authoritative. */ }
+
           }
           setNotice(`Schedule changed. Latest copy loaded; review and retry.`)
           return false
@@ -299,7 +304,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       if (saved.schedule) {
         setSchedule(saved.schedule)
         setRetentionDraft(saved.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
-        try { persistLocal(saved.schedule) } catch { /* The managed copy remains authoritative. */ }
+
       }
       setNotice(`${message} Shared company schedule saved.`)
       return true
@@ -314,7 +319,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
           if (current.schedule) {
             setSchedule(current.schedule)
             setRetentionDraft(current.schedule.privacyPolicy.clientRetentionDays?.toString() ?? '')
-            try { persistLocal(current.schedule) } catch { /* The managed copy remains authoritative. */ }
+
           }
           setNotice(`Schedule changed. Latest copy loaded; review and retry.`)
           return false
