@@ -138,7 +138,7 @@ export function ManagedLoginPage() {
           setActivating(!reviewReturnPath)
           setNotice(reviewReturnPath
             ? 'Your account is signed in, but no company is assigned. Ask SuperMega to check the account assigned to your review. Creating a company will not unlock it.'
-            : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code from your free trial.`)
+            : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
         } catch {
           // No usable session: stay on the sign-in form.
         }
@@ -177,7 +177,7 @@ export function ManagedLoginPage() {
         setActivating(!reviewReturnPath)
         setNotice(reviewReturnPath
           ? 'Your account is signed in, but no company is assigned. Ask SuperMega to check the account assigned to your review. Creating a company will not unlock it.'
-          : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code from your free trial.`)
+          : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
         return
       }
       setDirectory(signIn)
@@ -305,14 +305,14 @@ export function ManagedLoginPage() {
             <label className="signup-consent"><input checked={acceptedTermsVersion === signupPolicy.termsVersion} disabled={busy} onChange={(event) => setAcceptedTermsVersion(event.target.checked ? signupPolicy.termsVersion : '')} required type="checkbox" /><span>I agree to the <a href={signupPolicy.termsUrl} target="_blank" rel="noopener noreferrer">account terms ({signupPolicy.termsVersion})</a>.</span></label>
           </>}
           <button className="core-button primary" disabled={busy || cooldownSeconds > 0 || (!sentRequest && acceptedTermsVersion !== signupPolicy.termsVersion)} type="submit">{busy ? 'Requesting...' : cooldownSeconds > 0 ? `Wait ${cooldownSeconds}s before another request` : sentRequest ? 'Resend confirmation' : 'Create account'}</button>
-          <p>Creating an account does not activate a company, confirm payment or copy your local demo records.</p>
+          <p>Company setup is a separate step after sign-in.</p>
         </>}
         {notice ? <p className="form-notice" data-tone={noticeTone} id="managed-registration-notice" role="status">{notice}</p> : null}
         <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(false)} type="button">Back to sign in</button>
         {sentRequest ? <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(true)} type="button">Use another email</button> : null}
         <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent, location.search)}>Reset an existing password</Link>
       </form> : managedReady && activating && !reviewReturnPath ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
-        <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Use the claim code from your free trial. The company is created for this signed-in account and only this account owns it.</p></div>
+        <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Enter your claim code to connect your company to this account.</p></div>
         <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
         <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Activating...' : 'Activate my company'}</button>
@@ -329,7 +329,7 @@ export function ManagedLoginPage() {
           <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
           <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent, location.search)}>Forgot password?</Link>
-          {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. No new company or trial is needed.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Request setup</a>}
+          {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. Use your existing account.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Request setup</a>}
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Find my company')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>

@@ -85,7 +85,7 @@ test('unassigned Website reviewers never enter company activation; normal signup
       signInAndDiscoverManagedWorkspaces: async () => ({ workspaces: [], email: context.email }) })
     await handler('submit', context)(event)
     assert.deepEqual(activation, [!reviewing])
-    assert.match(notices.at(-1), reviewing ? /Creating a company will not unlock it/ : /claim code from your free trial/)
+    assert.match(notices.at(-1), reviewing ? /Creating a company will not unlock it/ : /claim code/)
     if (reviewing) assert.ok(!notices.at(-1).includes(context.email))
   }
 })
