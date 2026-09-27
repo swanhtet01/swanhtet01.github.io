@@ -331,7 +331,7 @@ export function SettingsPage() {
   const localWorkspaceOperation = useRef<'restore' | 'reset' | null>(null)
   const [restoreNotice, setRestoreNotice] = useState('')
   const [settingsStep, setSettingsStep] = useState<'workflow' | 'success'>('workflow')
-  const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const [managedIdentity, setManagedIdentity, managedIdentitySettled] = useManagedIdentity(runtime.status === 'enterprise')
   const [managedEmail, setManagedEmail] = useState('')
   const [managedPassword, setManagedPassword] = useState('')
   const [managedWorkspace, setManagedWorkspace] = useState('')
@@ -2139,7 +2139,7 @@ export function SettingsPage() {
               })}</div></details>
             </section> : null}
           </>
-          {demoBlueprint && demoDataSetupOpen ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Load data when ready</h3><p>The working sample is available first. Import the client's matching CSV only when you have it.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
+          {demoBlueprint && demoDataSetupOpen ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Load data when ready</h3><p>The working sample is available first. Import the client's matching CSV only when you have it.</p></div>{runtime.status === 'enterprise' && !managedIdentity ? <p className="form-notice" role="status">{managedIdentitySettled ? <Link to={`/login?product=${selectedProduct.slug}`}>Login to import data</Link> : 'Loading your account...'}</p> : <Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense>}</section> : null}
           {demoBlueprint && demoDataSetupOpen ? <div className="settings-step-actions"><span>Optional: add measurable success criteria after the demo works.</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button></div></div> : null}
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>

@@ -88,3 +88,37 @@ test('managed importer never falls through to local controls while identity is a
     if (scenario.managed && scenario.settled && !scenario.identity) assert.ok(html.includes('/login?product=shop'))
   }
 })
+
+test('settings data import waits for managed identity before exposing local controls', async () => {
+  const { createRequire } = await import('node:module')
+  const { readFileSync } = await import('node:fs')
+  const { runInNewContext } = await import('node:vm')
+  const require = createRequire(new URL('../showroom/package.json', import.meta.url))
+  const ts = require('typescript'), React = require('react')
+  const { renderToStaticMarkup } = require('react-dom/server')
+  const source = readFileSync(new URL('../showroom/src/core/SettingsPage.tsx', import.meta.url), 'utf8')
+  const line = source.split('\n').find(line => line.includes('id="client-data-setup"'))
+  assert.ok(line)
+  const compiled = ts.transpileModule(`export function DataPanel() { return <>${line.trim()}</> }`, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
+  const identity = { userId: 'synthetic', workspaceId: 'synthetic' }
+  for (const [status, managedIdentity, managedIdentitySettled, expected] of [
+    ['enterprise', null, false, 'Loading your account...'],
+    ['enterprise', null, true, 'Login to import data'],
+    ['enterprise', identity, true, 'Import controls'],
+    ['isolated_demo', null, true, 'Import controls'],
+  ]) {
+    const exports = {}, seen = []
+    runInNewContext(compiled, { exports, require, runtime: { status }, managedIdentity, managedIdentitySettled,
+      demoBlueprint: {}, demoDataSetupOpen: true, selectedProduct: { name: 'Shop', slug: 'shop' },
+      setup: { product: 'commerce', owner: 'Tester', workspace: 'Synthetic' }, selectedTemplate: { id: 'retail' },
+      shopIndustryPackId: 'retail', plantIndustryPackId: 'general', recordDemoProductProgress: () => {},
+      Suspense: React.Suspense, Link: props => React.createElement('a', { href: props.to }, props.children),
+      ClientDataOnboarding: props => { seen.push(props); return React.createElement('div', null, 'Import controls') },
+    })
+    const html = renderToStaticMarkup(React.createElement(exports.DataPanel))
+    assert.ok(html.includes(expected), html)
+    assert.equal(seen.length, expected === 'Import controls' ? 1 : 0)
+    if (seen.length) assert.equal(seen[0].managedIdentity, managedIdentity)
+    if (expected === 'Login to import data') assert.ok(html.includes('/login?product=shop'))
+  }
+})
