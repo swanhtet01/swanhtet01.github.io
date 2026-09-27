@@ -1,3 +1,4 @@
+import { managedAuthConfigurationValid } from './managed-login-availability.ts'
 import type { Session } from '@supabase/auth-js'
 import { managedLoginReviewPath } from './account-routes.ts'
 import { validateCreateAccountRequest, type CreateAccountInput } from './signup-account.ts'
@@ -2382,34 +2383,8 @@ type ManagedAuthClient = { auth: InstanceType<typeof import('@supabase/auth-js')
 let clientPromise: Promise<ManagedAuthClient | null> | undefined
 let pendingManagedAccountSetup: Promise<ManagedAccountSetup> | undefined
 
-function validSupabaseUrl(value: string) {
-  try {
-    const parsed = new URL(value)
-    return parsed.protocol === 'https:' || (parsed.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname))
-  } catch {
-    return false
-  }
-}
-
-function decodeLegacyKeyRole(value: string) {
-  try {
-    const parts = value.split('.')
-    if (parts.length !== 3) return ''
-    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    const decoded = JSON.parse(window.atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, '='))) as { role?: string }
-    return decoded.role ?? ''
-  } catch {
-    return ''
-  }
-}
-
-function validPublishableKey(value: string) {
-  if (value.startsWith('sb_publishable_')) return value.length >= 24
-  return decodeLegacyKeyRole(value) === 'anon'
-}
-
 export function managedTrialAuthConfigured() {
-  return validSupabaseUrl(SUPABASE_URL) && validPublishableKey(SUPABASE_PUBLISHABLE_KEY)
+  return managedAuthConfigurationValid(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 }
 
 function authClient(signup = false) {

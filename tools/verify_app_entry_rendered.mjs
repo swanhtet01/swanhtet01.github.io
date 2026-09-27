@@ -912,7 +912,7 @@ function gitHead() {
 const launcherText = [
   'Your workspace',
   'Login',
-  'Sign in to access your business.',
+  'Open saved work on this device, or request setup.',
 ]
 
 const shopSetup = {
@@ -953,7 +953,7 @@ const tests = [
     width: 1280,
     height: 900,
     expectedPath: '/?choose=1',
-    expectedText: ['Your workspace', 'Login', 'Sign in to access your business.'],
+    expectedText: ['Your workspace', 'Login', 'Open saved work on this device, or request setup.'],
     seed: { lastProduct: 'commerce' },
   },
   {
@@ -965,7 +965,7 @@ const tests = [
     height: 844,
     mobile: true,
     expectedPath: '/',
-    expectedText: ['Your workspace', 'Login', 'Sign in to access your business.'],
+    expectedText: ['Your workspace', 'Login', 'Open saved work on this device, or request setup.'],
     screenshotName: 'app-launcher-mobile-390x844',
     seed: { lastProduct: 'ecommerce' },
   },

@@ -1,5 +1,5 @@
 import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
-import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
+import { Link, Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router'
 
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
@@ -652,6 +652,17 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
 }
 
 export function ProductHomePage() {
+  const runtime = useOutletContext<RuntimeHealth | undefined>()
+  const [authConfigured, setAuthConfigured] = useState(false)
+  useEffect(() => {
+    if (runtime?.status !== 'enterprise') return
+    let active = true
+    void import('./managed-login-availability').then(({ managedTrialAuthConfigured }) => {
+      if (active) setAuthConfigured(managedTrialAuthConfigured())
+    }).catch(() => { if (active) setAuthConfigured(false) })
+    return () => { active = false }
+  }, [runtime?.status])
+  const loginAvailable = runtime?.status === 'enterprise' && authConfigured
   const portalAccess = useContext(ManagedPortalAccessContext)
   const managedPortal = portalAccess.status === 'ready'
   const emptyCompany = managedPortal && !customerProducts.some(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
@@ -693,7 +704,7 @@ export function ProductHomePage() {
     <div className="workspace-screen product-home-screen">
       {managedPortal
         ? emptyCompany ? null : <PageHeading copy="Only assigned products are shown." eyebrow="Company portal" title="Company products" />
-        : <PageHeading copy="Sign in to access your business." eyebrow="SuperMega" title="Your workspace" actions={<Link className="core-button primary" to={managedLoginPath(null)}>Login</Link>} />}
+        : <PageHeading copy={loginAvailable ? "Sign in to access your business." : "Open saved work on this device, or request setup."} eyebrow="SuperMega" title="Your workspace" actions={loginAvailable ? <Link className="core-button primary" to={managedLoginPath(null)}>Login</Link> : <a className="core-button primary" href="https://supermega.dev/contact/?product=guide&source=workspace-home">Request setup</a>} />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
           <span>Active company</span>
