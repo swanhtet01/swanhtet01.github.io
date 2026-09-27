@@ -164,7 +164,7 @@ export const APP_SHELL_REQUIREMENTS = [
     id: 'upstream-onboarding-consequence-boundary', authority: 'upstream', file: 'showroom/src/core/ProductOnboardingPage.tsx', tokens: [
       'Stays on this device. Nothing is sent or published.',
       'This setup affects {onboardingProduct.name} only. Your other products stay separate.',
-      'Creates local sample records, then opens the first task.',
+      'Name your business, then add your products and prices. Records are saved on this device.',
       'Ask SuperMega to set up {onboardingProduct.name}',
       'managedTrialRequestUrl(product, onboardingTemplate.id)',
     ],
@@ -194,11 +194,12 @@ export const APP_SHELL_REQUIREMENTS = [
     id: 'candidate-one-step-product-onboarding', authority: 'candidate', file: 'showroom/src/core/ProductOnboardingPage.tsx', tokens: [
       'export function ProductOnboardingPage',
       'async function startGuidedWorkspace',
-      'provisionLocalShopWorkingSample',
+      'Enter your products, prices and opening stock, or import your catalog.',
       'provisionLocalPlantWorkingSample',
-      'activateLocalWebsiteWorkingSample',
+      'Add your business details, services and contact information to prepare your pages.',
+      'Connect your product catalog, set delivery details, and save your storefront.',
       'startPilotOutcome',
-      "firstTaskPath: '/shop/?tab=counter'",
+      "firstTaskPath: '/shop/?tab=inventory'",
     ],
   },
   {

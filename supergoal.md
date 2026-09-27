@@ -58,7 +58,7 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 |---|---|---|
 | Source | Branch `codex/site-app-cleanup-20260924`; implementation head `c2580db1` pushed | Current document may be a later commit; recheck refs before release |
 | Integration | PR #596 in `swanhtet01/swanhtet01.github.io` | Broad accumulated scope requires genuine review; no self-approval |
-| CI | c2580db1 App run 36356658062 failed at CSS contracts step 636/666. Fixed-light ancestry assertion is now updated: local 42 token checks and 88 cascade checks pass; private onboarding fixture checks 267/320 pass | Remaining remote pipeline steps were not proven by that run. Fresh CI must cover the accumulated Website/Ecommerce setup fixes |
+| CI | 157f359c App run 36357262605 failed at release integration step 651/666 after passing the earlier CSS step. Required tokens still demanded sample provisioning and the old counter entry route; updated to real-data setup, with local integration tests 15/15 PASS | Later pipeline steps remain unproven. Next run must include newer Website browser-case, copy and persistence-test changes |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
@@ -330,4 +330,4 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Inspect active App CI run 36357262605 at 157f359c before pushing newer commits. Desktop/mobile Website rendered cases now require business setup rather than the old sample preview; report-validator tests pass 12/12. The alternate 127.0.0.2 origin was refused by the existing server; no second server was started and no existing browser records were cleared. Valid browser submit/save/reload is still unproven and needs an isolated supported test context. Keep design, product and corporate execution tied to one accepted customer outcome.
+Push the repaired release-integration requirements and accumulated Website fixes, then inspect that exact revision's CI. Desktop/mobile Website rendered cases now require business setup; report-validator tests pass 12/12. The alternate 127.0.0.2 origin was refused; no second server was started or existing browser records cleared. Valid browser submit/save/reload remains unproven and needs an isolated supported test context. Keep design, product and corporate execution tied to one accepted customer outcome.
