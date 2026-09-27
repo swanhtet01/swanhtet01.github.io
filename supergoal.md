@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.0.1  
+Version: 1.1.0
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -25,7 +25,7 @@ The absolute path identifies this checkout. If the repository moves, verify the 
 1. Read current state, authority and priorities first. Read the relevant product/system section before implementing work. Avoid reloading the entire archive each turn.
 2. Verify branch, worktree and the precise source/provider state involved. Preserve unrelated changes, active servers and owner-visible applications.
 3. State one concrete outcome and a bounded slice, normally no more than five changed paths. A large milestone can span slices; the slice limit does not shrink the milestone.
-4. Implement behavior. Reuse existing validated modules and maintained tools before creating another framework or parallel system.
+4. For substantial interface changes, follow the visual-first design cycle in section 4 before implementation. Implement behavior using existing validated modules and maintained tools before creating another framework or parallel system.
 5. Verify the actual user outcome: click navigation, save and reload data, reconcile money/stock changes, exercise relevant recovery.
 6. Save and commit scoped source changes. Push through the authorized workflow when appropriate. Avoid cancelling useful active CI merely to generate another progress event.
 7. Record evidence level, result, uncertainty and next executable action. Update this brief when decision-relevant facts change.
@@ -75,6 +75,49 @@ The public website keeps the existing white/jade identity and has no theme toggl
 No trial/demo/sample detours as the primary customer experience. Private synthetic fixtures and isolated staging remain necessary engineering tools. Content review before publication is legitimate; do not confuse it with a fake product demonstration. Never remove provenance labels from existing synthetic records merely to satisfy copy cleanup.
 
 Serve a broad small-business audience with appropriate Myanmar language/payment/context support where implemented. Do not overload every page with country framing. Manual wallet/payment recording must not imply automatic settlement.
+
+### Visual-first design and implementation standard
+
+Owner direction, 28 September 2026: use visual exploration, interface images and deliberate design before substantial UI implementation. Make every product coherent, premium, simple to understand and effective in daily work. This applies to the public site, connected workspace, Shop, Website, Ecommerce and internal operating tools. It is a maintained practice, not a one-off cosmetic redesign.
+
+The three owner-supplied SOL concepts (dashboard, boutique counter and appointment calendar) establish a craft reference: focused navigation, strong hierarchy, useful imagery, calm spacing and task-oriented panels. Transfer those qualities into SuperMega's white/jade identity. Do not copy SOL branding, customer identities, decorative slogans or permanent panels that do not help the task. SOL implementation remains separate.
+
+#### Required cycle for substantial UI work
+
+1. **Frame the task.** Name the intended user, job, starting state, successful outcome and supported devices. Inspect the current journey, relevant components and tokens; capture current screens before changing them. Record concrete friction rather than vague claims that a page looks wrong.
+2. **Explore visually.** Brainstorm distinct information hierarchies and interaction models, then generate high-fidelity interface images grounded in the actual references and brand. Normally compare three independent directions for a substantial redesign. A canvas or design board is useful when comparing flows; it is not an excuse to create another disconnected application.
+3. **Choose a target.** Compare task clarity, speed, density, accessibility, mobile behavior, brand consistency and implementation feasibility. Record the selected image, its rationale and required refinements. When presenting alternatives for owner selection, wait for that selection before building from one. If the owner explicitly delegates selection, record the agent's choice and rationale instead of inventing owner approval.
+4. **Specify the system.** Translate the target into shared typography, spacing, colors, navigation, inputs, tables, drawers, feedback and responsive rules. Reuse existing components and business logic. Avoid unrelated rewrites and one-off styling for each product.
+5. **Implement the real flow.** Use actual account and business data when authorized; new accounts start honestly empty. Private concepts may contain illustrative records, but never install these into customer workspaces or imply they belong to a real customer. Product photos need real supplied assets or an honest absent-image state. Generated logos and artwork are proposals, not automatic brand replacements.
+6. **Cover the states.** Design and implement empty, populated, loading, failure, permission and recovery states. Test desktop, narrow mobile, keyboard navigation, visible focus, readable contrast and practical touch targets. Advanced actions should appear when needed; essential totals, stock constraints and failure information must remain clear.
+7. **Verify fidelity and behavior.** Compare the selected image and implementation screenshot at matching viewport/state. Explain intentional differences, repair unintended ones, and exercise the whole critical journey. A beautiful screenshot does not prove login, persistence, checkout, settlement or delivery works.
+8. **Release and learn.** Save source and design decisions together, follow the existing release authority, verify hosted behavior, and measure customer outcomes. Prefer evidence-backed iteration over repeated aesthetic churn.
+
+Small copy fixes, urgent defect repairs and nonvisual changes do not require three new images. They should preserve the selected design language. Do not make a new design exercise a dependency for restoring broken functionality.
+
+#### Rollout order and acceptance
+
+- **Shop first:** searchable catalog, clear current sale, reliable quantity controls, accurate total and one obvious payment action. Product details, notes and advanced operations appear progressively. Preserve inventory, receipts and recovery behavior.
+- **Connected workspace next:** a clear route into the customer's products and unfinished work, consistent Login/account navigation, no Plant acquisition or trial detours.
+- **Website and Ecommerce:** collect essential business information, use coherent product/content/order management patterns, and carry the customer through actual publishing or fulfillment. Do not expose implementation choices as onboarding homework.
+- **Public site and commercial assets:** use the same brand and language, concise product explanations and a direct path to real setup. Retain white theme without a website theme toggle.
+- **Internal tools:** apply the same clarity to work queues, ownership, evidence, failures and next actions. Operational truth takes priority over decorative dashboards.
+
+Measure success using task completion, avoidable steps, errors, time to first useful outcome, retained usage and support demand. Establish a baseline before setting improvement claims. Visual approval, local functional verification, hosted acceptance and customer acceptance remain separate evidence levels.
+
+#### Current visual exploration record
+
+On 28 September 2026, three independent Shop counter concepts were generated in this chat, in displayed order. They are private design artifacts, not deployed products. Selection and implementation are pending. One bounded read-only design reviewer evaluated the SOL references; no additional build worker or local model was started.
+
+Artifacts are retained under `C:/Users/thesw/.codex/generated_images/01a0d249-2b5d-7d83-a769-79336eeb777c/`:
+
+1. `exec-ee3c486a-5a83-4354-9344-ea9b2ce29e5f.png`
+2. `exec-fa97bc0b-74c2-4723-bcfb-836bd02fb364.png`
+3. `exec-25946d40-dcbd-4f24-992f-ff37b9b76db3.png`
+
+These absolute paths are local working references. Preserve the selected source alongside the implementation handoff before moving machines. Generated details such as optional tax rows, decorative branding and catalog imagery require product validation; they are not requirements merely because they appear in an image.
+
+Next design action: resolve the displayed visual selection, capture the current Shop counter, map the selected structure to existing components, and implement one bounded slice with real empty/populated/error states. Continue independent engineering work while selection is pending.
 
 ## 5. Authority, credentials and resource boundaries
 
