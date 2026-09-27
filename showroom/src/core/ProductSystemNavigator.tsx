@@ -128,7 +128,7 @@ export function ProductSystemNavigator({ product, managed = false }: { product: 
           {workingFlows.map((capability) => <WorkflowLink capability={capability} fallbackPath={details.primaryPath} key={capability.id} />)}
         </div>
         <section aria-label={`${details.label} data`} className="product-system-data">
-          <div><span className="core-eyebrow">Your data</span><h3>{details.dataTitle}</h3><p>Upload a CSV or try a sample. SuperMega matches columns locally and asks before changing {details.label}.</p><small>Only {details.label} is prepared here.</small></div>
+          <div><span className="core-eyebrow">Your data</span><h3>{details.dataTitle}</h3><p>Upload your CSV to review and import your data.</p></div>
           <button aria-controls={dataPanelId} aria-expanded={dataOpen} className="core-button compact" onClick={toggleDataSetup} type="button">{dataOpen ? 'Close data setup' : details.dataAction}</button>
         </section>
         {dataOpen ? <div className="product-system-import" id={dataPanelId}><ProductDataImport details={details} managed={managed} product={product} /></div> : null}
