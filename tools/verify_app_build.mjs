@@ -1317,6 +1317,9 @@ const productSystemNavigatorIndex = coreShellSource.indexOf('<ProductSystemNavig
 if (routeContentIndex < 0
   || productSystemNavigatorIndex < 0
   || productSystemNavigatorIndex < routeContentIndex) fail('product_system_tools_not_secondary')
+if (!productSystemNavigatorSource.includes('if (managed && !managedIdentity)')
+  || !productSystemNavigatorSource.includes('identitySettled')
+  || !productSystemNavigatorSource.includes('Loading your account...')) fail('managed_import_identity_guard_missing')
 if (!productSystemNavigatorSource.includes('Keep working in {details.label}')
   || !productSystemNavigatorSource.includes('Choose another working flow, use your data, or make this sample yours.')
   || !productSystemNavigatorSource.includes('product-system-workflows')

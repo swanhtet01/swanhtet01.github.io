@@ -43,7 +43,7 @@ function readCurrentShopIndustryPackId(): ShopIndustryPackId {
 
 export function ProductDataImport({ product, managed, details = productDetails[product] }: { product: ClientSolutionId; managed: boolean; details?: ProductSystemDetail }) {
   const [setup] = useSetupWorkspace()
-  const [managedIdentity] = useManagedIdentity(managed)
+  const [managedIdentity, , identitySettled] = useManagedIdentity(managed)
   const [shopIndustryPackId] = useState<ShopIndustryPackId>(readCurrentShopIndustryPackId)
   const [plantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const contract = productContracts[product]
@@ -54,6 +54,10 @@ export function ProductDataImport({ product, managed, details = productDetails[p
       : templateFor(product, '')
   const workspace = setup.product === product && setup.workspace.trim() ? setup.workspace.trim() : `My ${details.label}`
   const owner = setup.product === product && setup.owner.trim() ? setup.owner.trim() : 'Business owner'
+
+  if (managed && !managedIdentity) {
+    return <p className="form-notice" role="status">{identitySettled ? <>Login to import data. <Link to={`/login?product=${contract.slug}`}>Login</Link></> : 'Loading your account...'}</p>
+  }
 
   return <Suspense fallback={<p className="form-notice" role="status">Loading {details.label} data tools...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} owner={owner} plantIndustryPackId={product === 'production' ? plantIndustryPackId : undefined} product={product} productName={details.label} productSlug={contract.slug} shopIndustryPackId={product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={workspace} /></Suspense>
 }
