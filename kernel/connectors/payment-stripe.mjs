@@ -188,21 +188,31 @@ export function verifyWebhook(rawBody, sig, { toleranceSec = 300 } = {}) {
   const whsec = webhookSecret()
   if (!whsec) return { ok: false, reason: 'no_webhook_secret' }
   if (!sig) return { ok: false, reason: 'no_signature' }
+  if (typeof sig !== 'string') return { ok: false, reason: 'malformed_signature' }
+  if (!Number.isFinite(toleranceSec) || toleranceSec < 0) return { ok: false, reason: 'invalid_tolerance' }
   const raw = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody || '')
 
-  const parts = Object.fromEntries(sig.split(',').map((p) => p.split('=').map((s) => s.trim())))
-  const t = parts.t
-  const v1 = parts.v1
-  if (!t || !v1) return { ok: false, reason: 'malformed_signature' }
-
+  const parts = sig.split(',').map(part => part.trim().split('='))
+  const timestamps = parts.filter(([key]) => key === 't')
+  const signatures = parts.filter(([key, value, extra]) => key === 'v1' && extra === undefined && /^[a-f0-9]{64}$/.test(value || '')).map(([, value]) => value)
+  if (timestamps.length !== 1 || timestamps[0].length !== 2 || !/^[0-9]+$/.test(timestamps[0][1]) || !signatures.length) {
+    return { ok: false, reason: 'malformed_signature' }
+  }
+  const t = timestamps[0][1]
+  const timestamp = Number(t)
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) return { ok: false, reason: 'malformed_signature' }
   const expected = crypto.createHmac('sha256', whsec).update(`${t}.${raw}`).digest('hex')
-  if (!timingSafeEqualHex(expected, v1)) return { ok: false, reason: 'signature_mismatch' }
+  // Secret rotation can supply several v1 values; any matching HMAC is valid.
+  if (!signatures.some(signature => timingSafeEqualHex(expected, signature))) return { ok: false, reason: 'signature_mismatch' }
 
-  const ageSec = Math.abs(Math.floor(Date.now() / 1000) - Number(t))
-  if (Number.isFinite(ageSec) && ageSec > toleranceSec) return { ok: false, reason: 'timestamp_out_of_tolerance' }
+  const ageSec = Math.abs(Math.floor(Date.now() / 1000) - timestamp)
+  if (ageSec > toleranceSec) return { ok: false, reason: 'timestamp_out_of_tolerance' }
 
   let event
   try { event = JSON.parse(raw) } catch { return { ok: false, reason: 'bad_json' } }
+  if (!event || typeof event !== 'object' || Array.isArray(event) || typeof event.id !== 'string' || !event.id || typeof event.type !== 'string' || !event.type) {
+    return { ok: false, reason: 'invalid_event' }
+  }
 
   if (event.id && seenEvents.has(event.id)) return { ok: true, duplicate: true, event }
   if (event.id) seenEvents.add(event.id)

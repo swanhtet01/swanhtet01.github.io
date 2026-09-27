@@ -107,3 +107,36 @@ test('store.recordPaymentEvent returns fresh only the first time', async () => {
   assert.equal((await store.recordPaymentEvent('stripe', 'uniq_evt_1')).fresh, true)
   assert.equal((await store.recordPaymentEvent('stripe', 'uniq_evt_1')).fresh, false)
 })
+
+// Stripe sends multiple v1 signatures while endpoint secrets rotate.
+test('verifyWebhook accepts a matching signature in either rotation position', () => {
+  const { raw, sig } = signed({ id: 'evt_rotation', type: 'checkout.session.completed' })
+  const other = '0'.repeat(64)
+  assert.equal(verifyWebhook(raw, `${sig},v1=${other}`).ok, true)
+  const [timestamp, signature] = sig.split(',')
+  assert.equal(verifyWebhook(raw, `${timestamp},v1=${other},${signature}`).ok, true)
+  assert.equal(verifyWebhook(raw, `${timestamp},v1=${other},v0=${signature.slice(3)}`).ok, false)
+})
+
+test('verifyWebhook rejects malformed timestamps even when signed', () => {
+  for (const t of ['NaN', 'Infinity', '-1', '1.5', '9007199254740992']) {
+    const { raw, sig } = signed({ id: 'evt_bad_timestamp', type: 'checkout.session.completed' }, { t })
+    assert.equal(verifyWebhook(raw, sig).ok, false, t)
+  }
+})
+
+test('verifyWebhook rejects malformed header values without throwing', () => {
+  const { raw, sig } = signed({ id: 'evt_bad_header', type: 'checkout.session.completed' })
+  for (const header of [[], [sig], {}, 42, `${sig},t=1`]) {
+    assert.doesNotThrow(() => verifyWebhook(raw, header))
+    assert.equal(verifyWebhook(raw, header).ok, false)
+  }
+})
+
+test('verifyWebhook rejects signed non-event JSON without throwing', () => {
+  for (const body of [null, [], 42, 'event', {}, { id: 1, type: 'x' }, { id: 'evt_missing_type' }]) {
+    const { raw, sig } = signed(body)
+    assert.doesNotThrow(() => verifyWebhook(raw, sig))
+    assert.equal(verifyWebhook(raw, sig).ok, false)
+  }
+})
