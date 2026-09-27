@@ -412,7 +412,7 @@ function localStorageStub(entries = {}) {
   }
 }
 
-test('the browser-local lane still installs every trade catalog through the real write boundary', async () => {
+test('the retained sample installer handles explicitly seeded legacy fixtures', async () => {
   // Discover the Commerce storage key by probing a real read rather than hardcoding it, the same
   // way tools/test_plant_business_templates.mjs does.
   const probe = { reads: [], getItem(key) { this.reads.push(key); return null }, setItem() {}, removeItem() {} }
@@ -442,7 +442,7 @@ test('the browser-local lane still installs every trade catalog through the real
     assert.equal(model.shopBusinessTemplates.length, 10, 'all ten shipped trade templates are present')
 
     for (const template of model.shopBusinessTemplates) {
-      const store = localStorageStub()
+      const store = localStorageStub({ [commerceKey]: JSON.stringify(commerceModel.createSeedCommerce()) })
       globalThis.window = { localStorage: store }
       globalThis.localStorage = store
 
@@ -522,6 +522,7 @@ test('the browser-local lane still installs every trade catalog through the real
     protectedStore.map.set('supermega.shop.counter_draft.v1', JSON.stringify({ schema: 'unknown', cart: {} }))
     assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'preserved', 'unknown ticket recovery fails closed')
     protectedStore.map.delete('supermega.shop.counter_draft.v1')
+    protectedStore.map.set(commerceKey, JSON.stringify(commerceModel.createSeedCommerce()))
     assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'installed')
     const ownerChange = await commerceModel.mutateCommerceWorkspace((current) => commerceModel.registerCommerceItem(current, {
       sku: 'OWNER-SKU',
@@ -550,4 +551,12 @@ test('the browser-local lane still installs every trade catalog through the real
     globalThis.localStorage = realLocalStorage
     if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator)
   }
+})
+
+
+test('Shop setup routes to actual catalog entry without sample provisioning', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/core/ProductOnboardingPage.tsx'), 'utf8')
+  assert.doesNotMatch(source, /provisionLocalShop(?:WorkingSample|BusinessTemplateSample|IndustryPack)/)
+  assert.match(source, /firstTaskPath: '\/shop\/\?tab=stock'/)
+  assert.match(source, /Enter your products, prices and opening stock/)
 })

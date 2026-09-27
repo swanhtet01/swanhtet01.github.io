@@ -46,9 +46,6 @@ import {
   managedOnboardingAccountCheckPending,
   managedShopOnboardingNotice,
   provisionLocalPlantWorkingSample,
-  provisionLocalShopBusinessTemplateSample,
-  provisionLocalShopIndustryPack,
-  provisionLocalShopWorkingSample,
   readLocalShopBusinessTemplateId,
   readLocalShopIndustryPackId,
 } from './product-onboarding-runtime'
@@ -87,10 +84,10 @@ type ProductOnboardingPageProps = {
 
 const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: string; actionLabel: string; firstTaskPath: string }> = {
   commerce: {
-    outcome: 'Complete a sample sale',
-    detail: 'A realistic catalog and stock are ready. Tap an item, choose payment, then create the order.',
-    actionLabel: 'Create Shop and start selling',
-    firstTaskPath: '/shop/?tab=counter',
+    outcome: 'Add your first product',
+    detail: 'Enter your products, prices and opening stock, or import your catalog.',
+    actionLabel: 'Continue to catalog',
+    firstTaskPath: '/shop/?tab=stock',
   },
   production: {
     outcome: 'Run a sample production job',
@@ -114,8 +111,8 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
 
 const onboardingFirstRunSteps: Record<SetupProductId, readonly { title: string; detail: string }[]> = {
   commerce: [
-    { title: 'Pick your business type', detail: 'Choose your trade to start with a matching catalog and workflow.' },
-    { title: 'Load starter data or import your services/products', detail: 'SuperMega prepares catalog, stock, appointments, and starter sales locally.' },
+    { title: 'Pick your business type', detail: 'Choose the type of business you operate.' },
+    { title: 'Add your products or services', detail: 'Enter actual prices and opening stock, or import your catalog.' },
     { title: 'Take one sale', detail: 'Use Cash, KBZPay, WavePay, AYA Pay, or MMQR at the counter.' },
     { title: 'Reconcile payment and close day', detail: 'Orders, payment status, stock movement, and daily close stay tied together.' },
   ],
@@ -263,7 +260,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         ? MANAGED_WEBSITE_ONBOARDING_INTRO
         : managedEcommerce
           ? MANAGED_ECOMMERCE_ONBOARDING_INTRO
-          : 'We will add realistic sample records now; replace them with your data whenever you are ready.'
+          : product === 'commerce' ? 'Name your business, then add your products and prices. Records are saved on this device.' : 'Prepare your business content to continue.'
   const managedHint = managedCommerce
     ? managedShopHint
     : managedProduction
@@ -435,24 +432,9 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       // Every provisioner below REPORTS what it did, and every report was thrown away. A no-op
       // then reached the owner stamped as a completed setup: the appointment book left on the old
       // industry, the catalog never installed, the workspace never written -- interface advanced.
-      let carriedOver = false
       let plantProvisionDisposition: SetupProvisionDisposition | null = null
-      // `&& !managedIdentity` mirrors the ecommerce branch below, and the asymmetry between them
-      // WAS the bug: these provisioners write to window.localStorage, a store a managed Shop never
-      // reads, so for a signed-in owner they reported a trade template as installed while the
-      // company workspace stayed at version 0 and rendered 'managed-unprovisioned'. Measured in
-      // hq/research/MANAGED-TEMPLATE-PROVISIONING.md -- disposition 'installed', zero fetch calls.
-      // A named trade is routed to the reviewed server-backed catalog step below; a generic pack
-      // still goes to Shop's one-real-item boundary. Neither browser-local provisioner runs.
-      if (product === 'commerce' && !managedIdentity) {
-        // Returns the pack ACTUALLY in force. An existing appointment keeps its own pack, so the
-        // pack asked for is not always the pack installed, and the sample must follow the real one.
-        const schedule = provisionLocalShopIndustryPack(selectedShopIndustryPack.id)
-        const disposition = selectedBusinessTemplate
-          ? await provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)
-          : await provisionLocalShopWorkingSample(schedule.industryPackId, onboardingTemplate.id)
-        carriedOver = disposition === 'preserved'
-      }
+      // Shop setup saves business preferences only. Catalog entry happens in Stock;
+      // never fabricate products, stock, appointments or sales from a business type.
       // The twin of the commerce guard above, and the same defect: mutateProductionWorkingSample
       // is window.localStorage, which a managed Plant never reads. Re-measured the same way before
       // this guard was added -- disposition 'installed', zero fetch calls, across all five plant
@@ -524,18 +506,6 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         route: onboardingJourney.firstTaskPath,
         detail: onboardingJourney.outcome,
       })
-      // 'preserved' means the catalog was NOT installed, because this device already carries real
-      // Shop data worth keeping. Say so plainly instead of dropping the owner into a workspace
-      // stocked by a previous business and calling it their new setup.
-      if (carriedOver) {
-        setNotice('Your existing Shop data was kept and nothing was overwritten. Open Shop to carry on, or reset this device first to load the starter catalog for this trade.')
-        return
-      }
-      // Same shape as the 'preserved' case above, and for the same reason: nothing was installed,
-      // so say so here rather than letting a navigation stand in for a claim. The workspace is now
-      // started, which relabels the button to "Open my Shop" / "Open my Plant", so each notice's
-      // "Open Shop" / "Open Plant" is the button she is already looking at -- routed onward, not
-      // stuck.
       if (managedCommerce) {
         if (selectedBusinessTemplate) {
           navigate(shopBusinessTemplateManagedCatalogPath(selectedBusinessTemplate.id))
@@ -644,7 +614,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                   every pack, so a spa or school owner -- the ones with no trade template to pick,
                   who are the whole reason this fallback exists -- was told their starter data was
                   retail. */}
-              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : `${selectedShopIndustryPack.name} starter sample`}</small></summary>
+              <summary><span>Business type</span><small>{selectedBusinessTemplate ? selectedBusinessTemplate.name.en : selectedShopIndustryPack.name}</small></summary>
               {/* The signup page's grouped picker, ported so both doors speak one vocabulary.
                   Trades cover shops that sell goods; a spa, gym or school has no trade template,
                   so the service packs are listed directly -- without them, that owner's only
@@ -652,7 +622,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                   client never opens, and they onboarded onto a retail catalog. */}
               <label className="demo-pack-select">What kind of business?
                 <select onChange={(event) => changeBusinessChoice(event.target.value)} value={businessChoiceId}>
-                  <option value="">Use the current starter sample</option>
+                  <option value="">Choose a business type</option>
                   <optgroup label="Shops and trades">
                     {shopBusinessTemplates.map((template) => <option key={template.id} value={`trade:${template.id}`}>{template.name.en} · {template.name.my}</option>)}
                   </optgroup>
@@ -695,7 +665,7 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 so a screen reader landing on the disabled control hears "Enter a business name
                 to continue" instead of an unexplained dead end. */}
             <button aria-describedby="product-onboarding-submit-hint" className="core-button primary" disabled={!workflowReady || workspaceBusy || accountCheckPending} type="submit">{accountCheckPending ? 'Checking company account...' : workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
-            <small id="product-onboarding-submit-hint">{pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack ? 'Choose the saved setup or requested starting point first.' : accountCheckPending ? 'Setup stays paused until account access is known.' : managedHint && workflowReady ? managedHint : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
+            <small id="product-onboarding-submit-hint">{pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack ? 'Choose the saved setup or requested starting point first.' : accountCheckPending ? 'Setup stays paused until account access is known.' : managedHint && workflowReady ? managedHint : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Saves your setup, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
