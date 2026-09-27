@@ -6766,6 +6766,12 @@ export function commerceWorkingSampleSkus(stateValue: CommerceState) {
   return [...skus].sort((left, right) => left.localeCompare(right, 'en'))
 }
 
+export const commerceCatalogImportFields = ['name', 'variant', 'onHand', 'reorderAt', 'price'] as const
+
+export function commerceCatalogImportDifferences(existing: CommerceItem, incoming: CommerceItem): (typeof commerceCatalogImportFields)[number][] {
+  return commerceCatalogImportFields.filter((field) => existing[field] !== incoming[field])
+}
+
 export function importCommerceCatalog(stateValue: CommerceState, input: {
   items: CommerceItem[]
   sourceDigest: string
@@ -6785,11 +6791,7 @@ export function importCommerceCatalog(stateValue: CommerceState, input: {
   for (const [index, item] of input.items.entries()) {
     const existing = state.items.find((candidate) => candidate.sku === item.sku)
     if (existing) {
-      if (existing.name !== item.name
-        || existing.variant !== item.variant
-        || existing.onHand !== item.onHand
-        || existing.reorderAt !== item.reorderAt
-        || existing.price !== item.price) return null
+      if (commerceCatalogImportDifferences(existing, item).length) return null
       alreadyPresent += 1
       continue
     }
