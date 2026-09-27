@@ -16,7 +16,7 @@ test('a trade URL navigates without installing sample catalog records', () => {
   assert.match(coreAppSource, /requestedShopTemplateId && requestedTab === null \? 'counter'/)
   assert.doesNotMatch(coreAppSource, /provisionLocalShopBusinessTemplateSample|shopTradeDemoAttempt|shopTradeDemoCheckoutBlocked/)
   assert.match(coreAppSource, /confirmedLocalShop && !managedIdentity && requestedShopTemplate && !activeShopBusinessTemplate/)
-  assert.match(coreAppSource, /<Link to="\/shop\/\?tab=stock">Manage catalog<\/Link>/)
+  assert.match(coreAppSource, /<Link to="\/shop\/\?tab=inventory">Manage catalog<\/Link>/)
 })
 
 test('a trade URL cannot relabel or operate an existing managed catalog', () => {
@@ -557,6 +557,19 @@ test('the retained sample installer handles explicitly seeded legacy fixtures', 
 test('Shop setup routes to actual catalog entry without sample provisioning', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/ProductOnboardingPage.tsx'), 'utf8')
   assert.doesNotMatch(source, /provisionLocalShop(?:WorkingSample|BusinessTemplateSample|IndustryPack)/)
-  assert.match(source, /firstTaskPath: '\/shop\/\?tab=stock'/)
+  assert.match(source, /firstTaskPath: '\/shop\/\?tab=inventory'/)
   assert.match(source, /Enter your products, prices and opening stock/)
+})
+
+
+test('catalog setup destinations resolve to Stock rather than fallback Sell', async () => {
+  const { activeCommerceTab } = await import('../showroom/src/core/commerce-tabs.ts')
+  const onboarding = await readFile(resolve(root, 'showroom/src/core/ProductOnboardingPage.tsx'), 'utf8')
+  const setupPath = onboarding.match(/commerce: \{[\s\S]*?firstTaskPath: '([^']+)'/)[1]
+  const catalogPath = coreAppSource.match(/<Link to="([^"]+)">Manage catalog<\/Link>/)[1]
+  for (const path of [setupPath, catalogPath]) {
+    const url = new URL(path, 'https://app.supermega.dev')
+    assert.equal(url.pathname, '/shop/')
+    assert.equal(activeCommerceTab(url.searchParams.get('tab')), 'inventory')
+  }
 })

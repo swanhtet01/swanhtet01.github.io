@@ -87,7 +87,7 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
     outcome: 'Add your first product',
     detail: 'Enter your products, prices and opening stock, or import your catalog.',
     actionLabel: 'Continue to catalog',
-    firstTaskPath: '/shop/?tab=stock',
+    firstTaskPath: '/shop/?tab=inventory',
   },
   production: {
     outcome: 'Run a sample production job',

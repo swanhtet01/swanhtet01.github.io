@@ -3243,7 +3243,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const shopCatalogSetupNotice = confirmedLocalShop && !managedIdentity && requestedShopTemplate && !activeShopBusinessTemplate
     ? <div className="production-mode-banner shop-catalog-setup-notice" role="status">
       <p>Add your products and prices to set up your {requestedShopTemplate.name.en.toLowerCase()} catalog.</p>
-      <Link to="/shop/?tab=stock">Manage catalog</Link>
+      <Link to="/shop/?tab=inventory">Manage catalog</Link>
     </div>
     : null
   const orderNotice = notice || commerceStorageError
