@@ -104,7 +104,7 @@ test('Website keeps readiness visible while detailed checks collapse before the 
   assert.match(checks, /aria-label="Website today status"/)
   assert.match(checks, /websiteTodayMetrics\.map/)
   assert.match(checks, /<\/details>/)
-  assert.match(websiteProductSource, /!showAssistedWebsitePreview \? <div className="website-today-source" role="status">[\s\S]*?<small>\{websiteReviewNote\}<\/small>/)
+  assert.match(websiteProductSource, /!compactWebsiteStatus \? <div className="website-today-source" role="status">[\s\S]*?<small>\{websiteReviewNote\}<\/small>/)
   assert.match(websiteProductCss, /\.website-today-checks > summary \{\s*min-height: 2\.75rem;/)
   assert.match(websiteProductCss, /\.website-today-checks > summary:focus-visible \{ outline: \.125rem solid var\(--website-green\);/)
 })
@@ -713,4 +713,16 @@ test('applyWebsiteWorkspaceUpdate and importWebsitePageDrafts behave correctly',
     }),
     null,
   )
+})
+
+
+test('compact content status preserves storage and draft recovery priority', () => {
+  const expression = websiteProductSource.match(/const compactWebsiteStatus = ([^\r\n]+)/)?.[1]
+  assert.ok(expression)
+  for (const view of ['content', 'publish']) {
+    for (const blocker of ['none', 'storage', 'repair', 'draft']) {
+      const context = { view, showAssistedWebsitePreview: false, storageIssue: blocker === 'storage', canRepairLocalStorage: blocker === 'repair', pendingRestoredDraft: blocker === 'draft' }
+      assert.equal(runInNewContext(expression, context), view === 'content' && blocker === 'none')
+    }
+  }
 })
