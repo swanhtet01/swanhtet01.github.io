@@ -12,11 +12,11 @@ const coreAppSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'C
 
 const expectedTemplateIds = ['mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant', 'beauty-spa', 'bakery']
 
-test('a trade URL opens Sell and invokes the guarded local sample boundary', () => {
+test('a trade URL navigates without installing sample catalog records', () => {
   assert.match(coreAppSource, /requestedShopTemplateId && requestedTab === null \? 'counter'/)
-  assert.match(coreAppSource, /provisionLocalShopBusinessTemplateSample\(requestedShopTemplateId\)/)
-  assert.match(coreAppSource, /installedShopSampleId === requestedShopTemplateId/)
-  assert.match(coreAppSource, /Existing Shop kept/)
+  assert.doesNotMatch(coreAppSource, /provisionLocalShopBusinessTemplateSample|shopTradeDemoAttempt|shopTradeDemoCheckoutBlocked/)
+  assert.match(coreAppSource, /confirmedLocalShop && !managedIdentity && requestedShopTemplate && !activeShopBusinessTemplate/)
+  assert.match(coreAppSource, /<Link to="\/shop\/\?tab=stock">Manage catalog<\/Link>/)
 })
 
 test('a trade URL cannot relabel or operate an existing managed catalog', () => {
@@ -29,7 +29,7 @@ test('a trade URL cannot relabel or operate an existing managed catalog', () => 
     'to="/shop/?tab=counter"',
   ]) assert.ok(coreAppSource.includes(token), `managed trade boundary missing: ${token}`)
   assert.ok(coreAppSource.includes('shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))'))
-  assert.ok(coreAppSource.includes('Checking workspace access before applying the ${requestedShopTemplate.name.en} sample. Nothing has been applied.'))
+  assert.ok(coreAppSource.includes('Checking workspace access. Your catalog has not been changed.'))
   assert.match(coreAppSource, /requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate\s*\? `The \$\{requestedShopTemplate\.name\.en\} public request is not applied/)
 })
 

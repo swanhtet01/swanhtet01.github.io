@@ -1144,7 +1144,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     ? requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate
       ? `The ${requestedShopTemplate.name.en} public request is not applied to this company catalog until a separate managed review.`
       : requestedShopTemplateState === 'checking' && requestedShopTemplate
-        ? `Checking workspace access before applying the ${requestedShopTemplate.name.en} sample. Nothing has been applied.`
+        ? `Checking workspace access. Your catalog has not been changed.`
       : requestedShopTemplateState === 'local-active' && requestedShopTemplate && commerceTab === 'counter'
       ? `${requestedShopTemplate.name.en}: choose an item, select a local payment method, and review the sale.`
       : {
@@ -1639,53 +1639,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     installedShopSampleId === shopPack.id
     || shopBusinessTemplates.some((template) => template.id === installedShopSampleId && template.industryPackId === shopPack.id)
   )))
-  const [shopTradeDemoResult, setShopTradeDemoResult] = useState<{
-    templateId: string
-    status: 'preserved' | 'error'
-    error: string
-  } | null>(null)
-  const shopTradeDemoAttempt = useRef('')
-  const requestedShopTemplateId = requestedShopTemplate?.id ?? ''
-  const requestedShopTemplateName = requestedShopTemplate?.name.en ?? ''
-  const shopTradeDemoStatus = activeShopBusinessTemplate
-    ? 'ready'
-    : shopTradeDemoResult?.templateId === requestedShopTemplateId
-      ? shopTradeDemoResult.status
-      : 'loading'
-  const shopTradeDemoError = shopTradeDemoResult?.templateId === requestedShopTemplateId ? shopTradeDemoResult.error : ''
-  const shopTradeDemoCheckoutBlocked = !managedIdentity
-    && Boolean(requestedShopTemplate)
-    && (shopTradeDemoStatus === 'loading' || shopTradeDemoStatus === 'error')
-  useEffect(() => {
-    if (!requestedShopTemplateId) {
-      shopTradeDemoAttempt.current = ''
-      return
-    }
-    if (installedShopSampleId === requestedShopTemplateId) return
-    // Never mistake the first identity frame for a signed-out visitor. The guarded installer
-    // runs only after the server and identity probe confirm this is a local browser workspace,
-    // and only after recovery says writes are safe. The installer itself replaces only the exact
-    // untouched seed (or another guided sample); any operator-edited workspace is preserved.
-    if (!confirmedLocalShop || managedIdentity || !commerceCanWrite || commerceSync.status !== 'ready'
-      || shopTradeDemoAttempt.current === requestedShopTemplateId) return
-    shopTradeDemoAttempt.current = requestedShopTemplateId
-    void import('./product-onboarding-runtime')
-      .then(({ provisionLocalShopBusinessTemplateSample }) => provisionLocalShopBusinessTemplateSample(requestedShopTemplateId))
-      .then((disposition) => {
-        if (disposition === 'installed' || disposition === 'current') {
-          window.location.reload()
-          return
-        }
-        setShopTradeDemoResult({ templateId: requestedShopTemplateId, status: 'preserved', error: '' })
-      })
-      .catch((error: unknown) => {
-        setShopTradeDemoResult({
-          templateId: requestedShopTemplateId,
-          status: 'error',
-          error: error instanceof Error ? error.message : `The ${requestedShopTemplateName} sample could not be loaded.`,
-        })
-      })
-  }, [commerceCanWrite, commerceSync.status, confirmedLocalShop, installedShopSampleId, managedIdentity, requestedShopTemplateId, requestedShopTemplateName])
+  // A URL is navigation, not permission to populate or replace a business catalog.
+  // Retain existing records; actual products are entered or imported in Stock.
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
@@ -3285,15 +3240,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ? storageDurability.state === 'denied' ? 'records-at-risk' as const : 'local' as const
     : null
   const counterBoundary = compactCounterStatus && !notice ? null : commerceBoundary
-  const shopTradeDemoNotice = !managedIdentity && requestedShopTemplate && shopTradeDemoStatus !== 'ready'
-    ? <div className="production-mode-banner shop-trade-demo-notice" data-status={shopTradeDemoStatus} role={shopTradeDemoStatus === 'error' ? 'alert' : 'status'}>
-      <span className={`status-pill ${shopTradeDemoStatus === 'error' ? 'danger' : shopTradeDemoStatus === 'preserved' ? 'pending' : 'bounded'}`}>{shopTradeDemoStatus === 'loading' ? 'Loading trade' : shopTradeDemoStatus === 'preserved' ? 'Existing Shop kept' : 'Trade unavailable'}</span>
-      <p>{shopTradeDemoStatus === 'loading'
-        ? `Preparing the ${requestedShopTemplate.name.en} sample without replacing operator data.`
-        : shopTradeDemoStatus === 'preserved'
-          ? `The ${requestedShopTemplate.name.en} sample was not loaded because this device already has Shop activity. Nothing was overwritten.`
-          : shopTradeDemoError}</p>
-      {shopTradeDemoStatus === 'preserved' ? <Link to={`/settings/?product=shop&template=${encodeURIComponent(requestedShopTemplate.id)}`}>Review setup</Link> : null}
+  const shopCatalogSetupNotice = confirmedLocalShop && !managedIdentity && requestedShopTemplate && !activeShopBusinessTemplate
+    ? <div className="production-mode-banner shop-catalog-setup-notice" role="status">
+      <p>Add your products and prices to set up your {requestedShopTemplate.name.en.toLowerCase()} catalog.</p>
+      <Link to="/shop/?tab=stock">Manage catalog</Link>
     </div>
     : null
   const orderNotice = notice || commerceStorageError
@@ -6798,8 +6748,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
-    {shopTradeDemoNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || shopTradeDemoCheckoutBlocked} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
+    {shopCatalogSetupNotice}
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
