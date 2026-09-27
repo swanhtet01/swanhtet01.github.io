@@ -24,9 +24,9 @@ test('receipt boundary must be visibly sized and inside the viewport', () => {
 
 test('rendered harness follows current assisted Website and Ecommerce entry actions', () => {
   assert.match(renderedVerifierSource, /candidate\.textContent\.trim\(\) === 'Try sample request'/)
-  assert.match(renderedVerifierSource, /'Preview'/)
-  assert.match(renderedVerifierSource, /'Site checks'/)
-  assert.match(renderedVerifierSource, /'Preview saved on this device\. Not published\.'/)
+  assert.match(renderedVerifierSource, /'Make this website yours'/)
+  assert.match(renderedVerifierSource, /'Setup needed'/)
+  assert.match(renderedVerifierSource, /'Prepare private draft'/)
   assert.doesNotMatch(renderedVerifierSource, /'Start sample order'/)
   assert.doesNotMatch(renderedVerifierSource, /'The working sample stays unchanged until you choose Customize demo\.'/)
 })
@@ -274,18 +274,18 @@ function fullCaseMatrixFixture() {
       screenshot: null,
     },
     {
-      name: 'desktop Website shows the local preview boundary',
+      name: 'desktop Website opens real business setup',
       route: '/website/?workspace=1',
       viewport: '1280x900',
       path: '/website/?workspace=1',
-      screenshot: { file: 'website-working-sample-desktop-1280x900.png' },
+      screenshot: { file: 'website-business-setup-desktop-1280x900.png' },
     },
     {
-      name: 'mobile Website shows the local preview boundary',
+      name: 'mobile Website opens real business setup',
       route: '/website/?workspace=1',
       viewport: '390x844 mobile',
       path: '/website/?workspace=1',
-      screenshot: { file: 'website-working-sample-mobile-390x844.png' },
+      screenshot: { file: 'website-business-setup-mobile-390x844.png' },
     },
     {
       name: 'demo ecommerce opens explicit ecommerce route',
@@ -342,8 +342,8 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
     'shop-counter-mini-mart-desktop-1280x900.png',
     'shop-counter-mini-mart-mobile-390x844.png',
     ...RETIRED_PRODUCT_CASES.map(spec => `${spec.id}.png`),
-    'website-working-sample-desktop-1280x900.png',
-    'website-working-sample-mobile-390x844.png',
+    'website-business-setup-desktop-1280x900.png',
+    'website-business-setup-mobile-390x844.png',
     'ecommerce-local-request-desktop-1280x900.png',
     'ecommerce-local-request-mobile-390x844.png',
   ])
@@ -388,9 +388,8 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
     readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8'),
   ])
   const sourceBoundText = [
-    [websiteProduct, 'Preview'],
-    [websiteProduct, 'Site checks'],
-    [websiteProduct, 'Preview saved on this device. Not published.'],
+    [websiteProduct, 'Make this website yours'],
+    [websiteProduct, 'Setup needed'],
     [ecommerceProduct, 'Sample request saved locally'],
     [ecommerceWorkspace, 'This sample order request is saved on this device for Shop review.'],
     [ecommerceWorkspace, 'This browser demo retained the request.'],
@@ -405,7 +404,7 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
   unfinishedRedirect[6].path = '/plant/'
   assert.throws(() => assertRenderedProofCaseMatrix(unfinishedRedirect, 'full'), /case_matrix_mismatch/)
   const expectedTextBodies = [...renderer.matchAll(/expectedText:\s*\[([^\]]*)\]/g)].map((match) => match[1])
-  for (const retired of ['Make this website yours', 'Nothing has been deployed.', 'Try one customer order', 'Start sample order', 'The working sample stays unchanged until you choose Customize demo.']) {
+  for (const retired of ['Edit the ready example', 'Nothing has been deployed.', 'Try one customer order', 'Start sample order', 'The working sample stays unchanged until you choose Customize demo.']) {
     assert.equal(expectedTextBodies.some((body) => body.includes(retired)), false, `retired rendered expectation remains: ${retired}`)
   }
 })

@@ -330,4 +330,4 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Inspect the fresh CI run after pushing the CSS ancestry fix and accumulated setup changes. Verify fresh Website brief submission and reload in an isolated local test context before claiming customer acceptance. Keep design, product and corporate execution tied to one accepted customer outcome.
+Inspect active App CI run 36357262605 at 157f359c before pushing newer commits. Desktop/mobile Website rendered cases now require business setup rather than the old sample preview; report-validator tests pass 12/12. The alternate 127.0.0.2 origin was refused by the existing server; no second server was started and no existing browser records were cleared. Valid browser submit/save/reload is still unproven and needs an isolated supported test context. Keep design, product and corporate execution tied to one accepted customer outcome.
