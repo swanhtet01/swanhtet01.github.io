@@ -56,9 +56,9 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Branch `codex/site-app-cleanup-20260924`; last verified remote head `94da8674`; subsequent workspace-entry fixes saved locally | Current document may be a later commit; recheck refs before release |
+| Source | Branch `codex/site-app-cleanup-20260924`; 50f42938 passed remote CI. Later local verification/record fixes are committed | Recheck refs and exact-candidate checks before release |
 | Integration | PR #596 in `swanhtet01/swanhtet01.github.io` | Broad accumulated scope requires genuine review; no self-approval |
-| CI | a94f4400 App run 36358288233 passed 666/666 verification steps, then failed the final asset guard requiring retired sample onboarding. Guard now requires real setup copy; built-artifact self-test passes 134 checks plus 9 mutation checks | New exact-head CI required; later rendered-browser stages remain unproven |
+| CI | App run 36358817666 / job 108731775778 succeeded for 50f42938, including canonical build and desktop/390px journeys. Kernel, dependency and hosting checks also passed for that revision | Subsequent local visibility-test integration and source-receipt fixes require their own exact-head CI; no hosted/customer acceptance implied |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
@@ -166,7 +166,7 @@ Do not reinstate hourly scheduled tasks. Corporate automation remains paused unl
 
 Order: active security/data/money incident; release-blocking correctness; complete customer task; reliability/recovery; commercial delivery; measured UX/performance; agent productivity; speculative research. Corporate preparation can progress serially alongside technical work, but must not bury an unresolved product failure under new plans.
 
-1. Push accumulated verified fixes and inspect the new exact-head CI. Visibility regressions are repaired and included in public:verify. Refresh derived source receipts using their local generators; provider evidence is a separate acceptance task.
+1. Push the accumulated visibility-test integration and refreshed source receipts, then verify the new exact-head CI. The previous 50f42938 candidate passed all remote checks.
 2. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries.
 3. Complete one cross-product interface slice using the fixed light design and current references; verify the real task, accessibility and responsive behavior together. Do not reintroduce appearance controls.
 4. Review managed Shop setup and reachable Website/Ecommerce paths for sample-first behavior, misleading activation, dead links and inconsistent terminology.
@@ -331,4 +331,4 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Local HQ verification now passes all 37 steps after refreshing the package/source receipts in the technical estate, readiness ledger, rehearsal proposal and protection proposal. Proposal approval flags, six managed activation blockers and historical provider observation dates are unchanged; no external writes occurred. Rebuild the public artifact for the final saved HEAD and run full public:verify, then inspect App CI run 36358817666 for 50f42938 to completion and push the accumulated local commits. Full hosted/customer acceptance and fresh-browser valid save/reload remain open. Do not mistake local HQ PASS for release authorization or hosted readiness.
+Push the accumulated verified changes and inspect their exact-head CI. App CI run 36358817666 passed for 50f42938, including desktop and 390px product journeys; no pending job remains from that candidate. Full local public:verify passed at e40496df, including all 37 HQ checks and the newly integrated 10 visibility tests. This update records those results only. After the next candidate passes, inspect PR review/release authority and prepare the concrete release handoff. Historical managed activation blockers remain unresolved; a green build is not hosted or customer acceptance.
