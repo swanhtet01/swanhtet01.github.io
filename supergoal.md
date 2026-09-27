@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.1.0
+Version: 1.2.0
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -33,15 +33,32 @@ The absolute path identifies this checkout. If the repository moves, verify the 
 
 Classify goal turns as progress, verified wait or no progress. A verified wait requires a confirmed live process/job handle. A planning paragraph alone is not implementation progress. Observation timeout does not establish that a job stopped.
 
+### Balanced delivery contract
+
+Design quality is one dimension of delivery, not a replacement for technical or company work. Every substantial feature must connect a customer task to its interface, business rules, data ownership, persistence, failure recovery, verification, release and operating responsibility. Mark dimensions that are genuinely inapplicable with a reason; do not manufacture checklists for tiny edits.
+
+| Dimension | Required outcome |
+|---|---|
+| Product and design | Clear real-user task, consistent interface, accessible states, responsive behavior and no fake activation |
+| Engineering | Typed boundaries, reusable modules, validated inputs, correct state transitions and maintainable dependencies |
+| Data and security | Verified authentication/tenant isolation, appropriate permissions, protected secrets, safe migrations and recoverability |
+| Money and inventory | Correct totals, currency handling, idempotent/reconciled changes, receipts and explicit settlement status |
+| Reliability and delivery | Meaningful tests, exact-candidate CI, authorized release, rollback path and hosted acceptance |
+| Operations | Useful failure signals, accountable job ownership, bounded retries, support route and measured operating cost |
+| Commercial and corporate | Honest offer, onboarding/delivery process, authorized outreach, support and commercial records |
+| AI and R&D | Measurable useful output, constrained authority, evaluated results and evidence before expanding autonomy |
+
+Prioritize the weakest required part of the customer lifecycle. Do not spend successive turns on visual polish while a known data, checkout or release failure remains actionable. Conversely, passing technical tests does not excuse an unusable interface. Maintain the full scope through successive bounded slices rather than attempting every dimension concurrently.
+
 ## 3. Current baseline and evidence boundaries
 
 This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Branch `codex/site-app-cleanup-20260924`; inspected head `23f4c68a` before this document | Three Shop commits were local; inspect current local/remote state |
+| Source | Branch `codex/site-app-cleanup-20260924`; implementation head `c2580db1` pushed | Current document may be a later commit; recheck refs before release |
 | Integration | PR #596 in `swanhtet01/swanhtet01.github.io` | Broad accumulated scope requires genuine review; no self-approval |
-| CI | f3b15126 App run 36354746388 was live at canonical build verification | Terminal FAIL: desktop/mobile checkout fixtures still expected automatic sample installation; explicit fixture repair prepared |
+| CI | At this update: c2580db1 Public Hosting Guard PASS; App run 36356658062 queued; Kernel 36356658061 and dependency audit 36356658084 in progress | Not overall CI acceptance. Previous sample-wording guard repaired; local 179-check guard and app build/artifact verification passed |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
@@ -149,9 +166,9 @@ Do not reinstate hourly scheduled tasks. Corporate automation remains paused unl
 
 Order: active security/data/money incident; release-blocking correctness; complete customer task; reliability/recovery; commercial delivery; measured UX/performance; agent productivity; speculative research. Corporate preparation can progress serially alongside technical work, but must not bury an unresolved product failure under new plans.
 
-1. Verify CI after explicit checkout-fixture repair. Retain desktop/mobile catalog click checks; fresh tabs now reach Stock, but earlier inconsistent behavior must not be ignored if it recurs.
+1. Resolve the current c2580db1 CI outcome after checkout-fixture, onboarding-claim and fixed-light verifier updates. Inspect the recorded live run rather than starting duplicate jobs. Fix genuine failures without restoring customer demo defaults.
 2. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries.
-3. Reconcile exact CI and local/remote commits. Fix genuine failures and obsolete fixture assumptions without weakening behavioral checks.
+3. Complete one cross-product interface slice using the fixed light design and current references; verify the real task, accessibility and responsive behavior together. Do not reintroduce appearance controls.
 4. Review managed Shop setup and reachable Website/Ecommerce paths for sample-first behavior, misleading activation, dead links and inconsistent terminology.
 5. Finish release prerequisites and hosted login, tenant, persistence and recovery evidence through the authorized path.
 6. Deliver one consented real-business installation with an agreed task and acceptance criteria. Collect actual facts instead of inventing a cafe or shop.
@@ -305,10 +322,12 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Decision log
 
+- 2026-09-28 v1.2.0: Balanced delivery contract explicitly preserves engineering, data/security, money, reliability, operations, commercial and AI/R&D scope alongside design. Removed stale source/CI claims. Owner rejected appearance controls; c2580db1 removes them and uses fixed light/jade. Local build/artifact checks passed; current remote CI is incomplete.
+
 - 2026-09-28 v1.0.1: Fresh desktop/mobile catalog clicks passed; earlier click failure not reproduced. CI failure traced to removed automatic sample creation, with private checkout fixture supplied explicitly. Hosted/fresh-data acceptance remains incomplete.
 
 - 2026-09-28 v1.0.0: Consolidated engineering, customer products, company operations and local AI into one brief. Preserved founder gates. Clarified measured performance, local-only inference versus air-gap claims, and customer experience versus private fixtures. Recorded unresolved catalog navigation and separate hosted/customer acceptance.
 
 ### Next executable action
 
-Verify the repaired CI fixtures and complete fresh real-business setup. Recheck exact CI and local/remote commits before integration. Keep product and corporate execution tied to one accepted customer outcome.
+Inspect App CI run 36356658062 on c2580db1 when it progresses; fix any concrete failure. During a verified wait, prepare or execute fresh real-business setup acceptance without inventing customer data. Then continue the weakest incomplete lifecycle requirement. Keep design, product and corporate execution tied to one accepted customer outcome.
