@@ -122,3 +122,33 @@ test('settings data import waits for managed identity before exposing local cont
     if (expected === 'Login to import data') assert.ok(html.includes('/login?product=shop'))
   }
 })
+
+test('managed next steps does not send an existing workspace to local setup', async () => {
+  const { createRequire } = await import('node:module')
+  const { readFileSync } = await import('node:fs')
+  const { runInNewContext } = await import('node:vm')
+  const require = createRequire(new URL('../showroom/package.json', import.meta.url))
+  const ts = require('typescript'), React = require('react')
+  const { renderToStaticMarkup } = require('react-dom/server')
+  const source = readFileSync(new URL('../showroom/src/core/ProductSystemNavigator.tsx', import.meta.url), 'utf8')
+  const compiled = ts.transpileModule(source.slice(source.indexOf('export function ProductSystemNavigator(')), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
+  for (const product of ['commerce', 'website', 'ecommerce', 'production']) {
+    for (const managed of [false, true]) {
+      const exports = {}
+      runInNewContext(compiled, { exports, require, useState: () => [false, () => {}], useMemo: fn => fn(),
+        productDetails: { [product]: { label: 'Product', primaryPath: '/product/', dataTitle: 'Import data', dataAction: 'Upload' } },
+        productCapabilityCatalog: () => [], clientSetupPath: () => '/settings/?product=example',
+        Link: props => React.createElement('a', { href: props.to }, props.children),
+      })
+      const html = renderToStaticMarkup(React.createElement(exports.ProductSystemNavigator, { product, managed }))
+      if (managed) {
+        assert.ok(!html.includes('/settings/'), html)
+        assert.ok(!html.includes('Request Product setup'), html)
+        assert.ok(!html.includes('sample'), html)
+        assert.ok(html.includes('Choose a workflow or import your data.'), html)
+      } else {
+        assert.ok(html.includes(product === 'production' ? '/settings/' : 'supermega.dev/contact/'), html)
+      }
+    }
+  }
+})
