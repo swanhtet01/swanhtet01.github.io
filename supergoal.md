@@ -56,14 +56,14 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Branch `codex/site-app-cleanup-20260924`; implementation head `c2580db1` pushed | Current document may be a later commit; recheck refs before release |
+| Source | Branch `codex/site-app-cleanup-20260924`; last verified remote head `94da8674`; subsequent workspace-entry fixes saved locally | Current document may be a later commit; recheck refs before release |
 | Integration | PR #596 in `swanhtet01/swanhtet01.github.io` | Broad accumulated scope requires genuine review; no self-approval |
-| CI | 157f359c App run 36357262605 failed at release integration step 651/666 after passing the earlier CSS step. Required tokens still demanded sample provisioning and the old counter entry route; updated to real-data setup, with local integration tests 15/15 PASS | Later pipeline steps remain unproven. Next run must include newer Website browser-case, copy and persistence-test changes |
+| CI | App run 36357848152 at 94da8674 failed in Website offering UI tests: fixtures depended on removed sample defaults and old helper copy. Explicit test input and empty-form rejection now pass 11/11 locally | New exact-head CI required; full pipeline acceptance remains open |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
 | Account entry | Demo fallback removed; business setup retained; recovery checks updated | Full hosted account lifecycle unproven |
-| Website/Ecommerce | Ecommerce onboarding no longer generates a synthetic order. Website brief entry and missing-field validation observed locally: invalid submission stays in setup and focuses Main customers. Saved Bakery draft preserved. Local 15 template/model tests prove explicit save/reload, stale-session refusal and storage-denial failure in isolated memory. Repetitive brief helper text shortened | Browser origins had prior state. Valid UI submit/save, browser durability and hosted persistence remain unproven. Latest copy-only change has focused tests; last build predates it. Trade defaults and remaining sample-led paths still need review |
+| Website/Ecommerce | Setup completion now uses workspace=1, matching the product switcher. Local route tests 22/22, app build and artifact verifier PASS. Website model tests previously passed 15/15; offering component checks now pass 11/11 | Existing browser QA records preserved. Fresh valid UI submit/save/reload and hosted persistence remain unproven. Remaining sample-led paths need review |
 | Payments | Stripe signature/retry tests and prior combined kernel 484 tests passed locally | No live charge or hosted settlement acceptance established |
 | Local AI | Healthy service;15 roles / 11 profiles; idle worker; no loaded models; zero computer workflows | Available workcell, not an autonomous employee fleet |
 | Corporate | Operating materials, acquisition pack and quote check exist | Last recorded Sheets write failed scope; no fresh cloud synchronization |
@@ -166,7 +166,7 @@ Do not reinstate hourly scheduled tasks. Corporate automation remains paused unl
 
 Order: active security/data/money incident; release-blocking correctness; complete customer task; reliability/recovery; commercial delivery; measured UX/performance; agent productivity; speculative research. Corporate preparation can progress serially alongside technical work, but must not bury an unresolved product failure under new plans.
 
-1. Resolve the current c2580db1 CI outcome after checkout-fixture, onboarding-claim and fixed-light verifier updates. Inspect the recorded live run rather than starting duplicate jobs. Fix genuine failures without restoring customer demo defaults.
+1. Push the workspace-entry and Website offering-fixture repairs, then inspect exact-head CI. Fix genuine failures without restoring customer demo defaults.
 2. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries.
 3. Complete one cross-product interface slice using the fixed light design and current references; verify the real task, accessibility and responsive behavior together. Do not reintroduce appearance controls.
 4. Review managed Shop setup and reachable Website/Ecommerce paths for sample-first behavior, misleading activation, dead links and inconsistent terminology.
@@ -331,4 +331,4 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Push the repaired release-integration requirements and accumulated Website fixes, then inspect that exact revision's CI. Desktop/mobile Website rendered cases now require business setup; report-validator tests pass 12/12. The alternate 127.0.0.2 origin was refused; no second server was started or existing browser records cleared. Valid browser submit/save/reload remains unproven and needs an isolated supported test context. Keep design, product and corporate execution tied to one accepted customer outcome.
+Push the current bounded fixes and inspect that exact revision's CI. Then verify Website valid submit/save/reload in an isolated supported browser context, preserving existing records and the single active server. Local build, artifact and component checks are evidence of implementation only; hosted and customer acceptance remain open. Keep one current blocker and one executable next action here instead of accumulating repeated status logs.

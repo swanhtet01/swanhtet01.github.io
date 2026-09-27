@@ -98,13 +98,13 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
     outcome: 'Prepare your business website',
     detail: 'Add your business details, services and contact information to prepare your pages.',
     actionLabel: 'Continue to website setup',
-    firstTaskPath: '/website/',
+    firstTaskPath: '/website/?workspace=1',
   },
   ecommerce: {
     outcome: 'Set up your online store',
     detail: 'Connect your product catalog, set delivery details, and save your storefront.',
     actionLabel: 'Continue to store setup',
-    firstTaskPath: '/ecommerce/',
+    firstTaskPath: '/ecommerce/?workspace=1',
   },
 }
 

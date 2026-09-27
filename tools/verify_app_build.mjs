@@ -5713,8 +5713,8 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingPageSource.includes('const onboardingJourneys: Record<SetupProductId')
   || !productOnboardingPageSource.includes("firstTaskPath: '/shop/?tab=inventory'")
   || !productOnboardingPageSource.includes("firstTaskPath: '/plant/?tab=production'")
-  || !productOnboardingPageSource.includes("firstTaskPath: '/website/'")
-  || !productOnboardingPageSource.includes("firstTaskPath: '/ecommerce/'")
+  || !productOnboardingPageSource.includes("firstTaskPath: '/website/?workspace=1'")
+  || !productOnboardingPageSource.includes("firstTaskPath: '/ecommerce/?workspace=1'")
   // The journey the screen advertises. A company account gets the browser-local journey with the
   // managed overrides applied, because "Complete a sample sale" on "a realistic catalog and stock
   // are ready" -- and "Run a sample production job" on "a scheduled job, materials, and line are

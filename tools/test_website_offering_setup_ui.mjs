@@ -15,7 +15,7 @@ const ts = require('typescript')
 const source = readFileSync(new URL('../showroom/src/products/website/WebsiteStarterSetup.tsx', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 
-function harness() {
+function harness({ fillBusiness = true } = {}) {
   const state = [], created = []
   let cursor = 0, tree
   const exports = {}
@@ -30,7 +30,7 @@ function harness() {
     if (name === './website-offering-import') return offeringImport
     throw new Error('Unexpected component dependency: ' + name)
   } })
-  function render() { cursor = 0; tree = exports.WebsiteStarterSetup({ onCreate: value => created.push(value), onViewSample() {} }); return tree }
+  function render() { cursor = 0; tree = exports.WebsiteStarterSetup({ onCreate: value => created.push(value) }); return tree }
   function nodes(node = tree) {
     if (Array.isArray(node)) return node.flatMap(item => nodes(item))
     if (!node || typeof node !== 'object' || !node.props) return []
@@ -46,8 +46,22 @@ function harness() {
   }
   function submit() { find(node => node.type === 'form').props.onSubmit({ preventDefault() {} }); render() }
   render()
+  // Offering tests supply their own business data; customer defaults stay empty.
+  if (fillBusiness) {
+    for (const [maxLength, value] of [[50, 'Test Cafe'], [70, 'Local coffee customers'], [140, 'Coffee and pastries'], [360, 'Open weekdays from 8am to 4pm']]) {
+      find(node => ['input', 'textarea'].includes(node.type) && node.props.maxLength === maxLength).props.onChange({ target: { value } })
+      render()
+    }
+  }
   return { nodes, find, click, edit, submit, created, render }
 }
+
+test('empty business details block creation', () => {
+  const ui = harness({ fillBusiness: false })
+  ui.submit()
+  assert.equal(ui.created.length, 0)
+  assert.ok(ui.nodes().some(node => node.props['aria-invalid'] === true))
+})
 
 test('business type chooses the layout without a customer template selector', () => {
   const ui = harness()
@@ -105,7 +119,7 @@ test('new/existing business guidance never rewrites entered offerings', () => {
   const ui = harness()
   ui.click('Add featured entry'); ui.edit(0, 'Owner service', 'Confirmed description')
   ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.onChange({ target: { value: 'existing' } }); ui.render()
-  assert.match(ui.find(node => node.props.id === 'website-business-stage-help').props.children, /does not scrape websites/)
+  assert.match(ui.find(node => node.props.id === 'website-business-stage-help').props.children, /Use your current menu, services or product list/)
   ui.submit()
   assert.equal(ui.created[0].offerings, 'Owner service | Confirmed description')
 })

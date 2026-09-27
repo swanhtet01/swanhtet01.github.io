@@ -566,6 +566,12 @@ test('Ecommerce customer onboarding never invokes synthetic order provisioning',
   assert.doesNotMatch(source, /activateLocalEcommerceWorkingSample/)
   assert.doesNotMatch(source, /A storefront and checkout sample are ready/)
   assert.match(source, /Connect your product catalog, set delivery details, and save your storefront/)
+  for (const product of ['website', 'ecommerce']) {
+    const path = source.match(new RegExp(`${product}: \\{[\\s\\S]*?firstTaskPath: '([^']+)'`))[1]
+    const destination = new URL(path, 'https://app.supermega.dev')
+    assert.equal(destination.pathname, `/${product}/`)
+    assert.equal(destination.searchParams.get('workspace'), '1', 'completed setup must open the workspace rather than repeat assisted intake')
+  }
 })
 
 
