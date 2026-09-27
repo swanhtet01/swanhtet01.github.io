@@ -607,7 +607,7 @@ test('signup page branch cannot expose password-reset UI or automatic workspace 
   const page = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')
   assert.ok(page.includes("if (!setup || setup.purpose === 'signup') return"))
   assert.ok(page.includes('Email confirmed without company access'))
-  assert.ok(page.includes('email confirmation does not activate company data or a paid plan'))
+  assert.ok(page.includes('A business workspace still needs to be connected to your account.'))
   assert.ok(page.indexOf("setup?.purpose === 'signup' ? <section") < page.indexOf(': setup ? <form'))
   assert.ok(page.includes('setDirectory(result.directory.workspaces.length ? result.directory : null)'))
   assert.doesNotMatch(page, /createSelfServeWorkspace|requestSelfServeWorkspace/)
@@ -1105,4 +1105,20 @@ test('installed SDK nonpersistent signup cleanup cannot touch workspace storage'
     assert.equal(workspace, 'newer-workspace-session')
     assert.equal(requests, 2)
   } finally { client.dispose() }
+})
+
+
+test('account setup has one business destination and no demo fallback', () => {
+  const page = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')
+  const unavailable = page.slice(page.indexOf('function ManagedUnavailable'), page.indexOf('export function ManagedAccountPage'))
+  assert.doesNotMatch(unavailable, /demo|trial/i)
+  assert.equal((unavailable.match(/href=\{managedAccountRequestUrl\(productIntent\)\}/g) || []).length, 1)
+  assert.match(unavailable, /Set up your business/)
+  for (const product of ['shop', 'website', 'ecommerce']) {
+    const destination = new URL(managedAccountRequestUrl(product))
+    assert.equal(destination.origin, 'https://supermega.dev')
+    assert.equal(destination.pathname, '/contact/')
+    assert.equal(destination.searchParams.get('product'), product)
+    assert.equal(destination.searchParams.get('utm_medium'), 'business_setup')
+  }
 })

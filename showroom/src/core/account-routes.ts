@@ -18,7 +18,7 @@ export function managedAccountRequestUrl(value: string | null) {
     product: accountProductSlug(value) ?? 'guide',
     template: 'managed-account',
     utm_source: 'app',
-    utm_medium: 'guided_trial',
+    utm_medium: 'business_setup',
   })
   return `https://supermega.dev/contact/?${query.toString()}`
 }

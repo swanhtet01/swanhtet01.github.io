@@ -18,8 +18,8 @@ import {
 function ManagedUnavailable({ productIntent, search }: { productIntent: string | null; search: string }) {
   if (managedLoginReviewPath(search)) return <section className="managed-login-panel" aria-label="Review account unavailable"><h2>Review recovery is unavailable here.</h2><p>Keep your original review link. Ask SuperMega in your existing setup conversation to restore access.</p><Link className="core-button" to={managedAccountPath('/login', productIntent, search)}>Back to sign in</Link></section>
   return <section className="managed-login-panel" aria-label="Company account unavailable">
-    <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>
-    <div className="managed-login-actions"><Link className="core-button primary" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
+    <div><span className="core-eyebrow">Business setup</span><h2>Account access is unavailable here.</h2><p>Send your business details to get your workspace set up.</p></div>
+    <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Set up your business</a></div>
   </section>
 }
 
@@ -177,7 +177,7 @@ export function ManagedAccountPage() {
       <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Opening...' : 'Open company'}</button>
       {notice ? <p className="form-notice" role="status">{notice}</p> : null}
     </form> : setup?.purpose === 'signup' ? <section className="managed-login-panel" aria-label="Email confirmed without company access">
-      <div><h2>Email confirmed.</h2><p>No company is assigned yet. Your local demo is unchanged; email confirmation does not activate company data or a paid plan.</p></div>
+      <div><h2>Email confirmed.</h2><p>Your email is verified. A business workspace still needs to be connected to your account.</p></div>
       <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/login', productIntent, location.search)}>Continue to sign in</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company access</a></div>
     </section> : setup ? <form className="managed-login-panel core-form" onSubmit={(event) => void savePassword(event)}>
       <div><span className="core-eyebrow">Secure link confirmed</span><h2>Set your password.</h2><p>{setup.email}. Use at least 12 characters. This link can be used only for account setup.</p></div>
