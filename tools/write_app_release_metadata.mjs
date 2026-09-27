@@ -196,6 +196,18 @@ const serviceWorkerRegisterScript = `if ('serviceWorker' in navigator) window.ad
 const insightsScript = `if (/(^|\\.)supermega\\.dev$/.test(location.hostname)) {
   window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) }
   window.si = window.si || function () { (window.siq = window.siq || []).push(arguments) }
+  // Register before either provider loads: first pageviews can precede React.
+  function safeEvent(event) {
+    if (!event || typeof event.url !== 'string') return null
+    let url
+    try { url = new URL(event.url) } catch { return null }
+    if (url.origin !== location.origin) return null
+    const product = url.pathname.split('/')[1]
+    const path = ['shop', 'website', 'ecommerce', 'login', 'account'].includes(product) ? '/' + product + '/' : '/'
+    return { ...event, url: url.origin + path, ...(event.type === 'vital' ? { route: path } : {}) }
+  }
+  window.va('beforeSend', safeEvent)
+  window.si('beforeSend', safeEvent)
   for (const src of ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js']) {
     const script = document.createElement('script')
     script.defer = true

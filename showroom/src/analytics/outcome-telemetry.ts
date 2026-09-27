@@ -52,6 +52,8 @@ type OutcomeTelemetrySessionState = {
 type VercelBeforeSendEvent = {
   type: 'pageview' | 'event'
   url: string
+  name?: string
+  data?: unknown
 }
 
 export type PilotOutcomeProduct = keyof typeof PILOT_PRODUCT_MAP
@@ -182,11 +184,16 @@ function configureVercelPrivacyBoundary(target: Window): void {
     if (!value || typeof value !== 'object') return null
     const event = value as Partial<VercelBeforeSendEvent>
     if ((event.type !== 'pageview' && event.type !== 'event') || typeof event.url !== 'string') return null
-    if (event.type === 'pageview') return { type: 'pageview', url: event.url }
-    // Vercel's documented beforeSend event exposes only type and URL. Every custom event after
-    // this boundary uses one coarse URL, so the source route, query, and hash do not leave through
-    // that field. Provider-generated time/session/device/referrer metadata remains provider-owned.
-    return { type: 'event', url: redactedUrl }
+    if (event.type === 'pageview') {
+      let url: URL
+      try { url = new URL(event.url) } catch { return null }
+      if (url.hostname !== target.location.hostname || url.protocol !== 'https:') return null
+      const product = url.pathname.split('/')[1]
+      const path = ['shop', 'website', 'ecommerce', 'login', 'account'].includes(product) ? `/${product}/` : '/'
+      return { type: 'pageview', url: url.origin + path }
+    }
+    // Retain the provider's custom-event envelope while replacing its private URL.
+    return { type: 'event', url: redactedUrl, name: event.name, data: event.data }
   }
   target.va?.('beforeSend', beforeSend)
   vercelPrivacyBoundaryConfigured = true
