@@ -197,8 +197,8 @@ export function WebsiteStarterSetup({
               <option value="existing">Existing business</option>
             </select>
             <small id="website-business-stage-help">{businessStage === 'existing'
-              ? 'Reuse your approved menu, service list or catalog in the featured entries below. Check current prices and details first. This form does not scrape websites or import customer records; changing this choice keeps your draft.'
-              : 'Start with the services or products you are ready to describe. Leave unconfirmed prices out. This creates a private draft, not a booking, live store or published Website.'}</small>
+              ? 'Use your current menu, services or product list.'
+              : 'Describe your planned offer. Leave unconfirmed prices out.'}</small>
           </label>
           <label>
             <span>Business name</span>
@@ -272,7 +272,7 @@ export function WebsiteStarterSetup({
               rows={3}
               value={brief.proof}
             />
-            <small id="website-starter-proof-help">Review the suggested wording against the actual business. Use approved public copy only; do not paste customer data. SuperMega will prepare the finished revision for your review.</small>
+            <small id="website-starter-proof-help">Use accurate public details, such as opening hours or service areas.</small>
             {proofIssue ? <small className="website-field-error" id="website-starter-error-proof">{proofIssue.message}</small> : null}
           </label>
         </div>

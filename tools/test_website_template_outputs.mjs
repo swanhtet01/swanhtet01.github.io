@@ -156,7 +156,7 @@ test('operator starter does not prefill an unrelated business contact', () => {
   assert.ok(source.includes('Prepare private draft'))
   assert.ok(!source.includes('View example'))
   assert.ok(!source.includes('onViewSample'))
-  assert.ok(source.includes('Review the suggested wording against the actual business.'))
+  assert.ok(source.includes('Use accurate public details, such as opening hours or service areas.'))
   assert.doesNotMatch(source, /Why should customers trust it\?|same-day neighborhood delivery/)
   assert.match(styles, /\.website-starter-setup input,[\s\S]*?min-height: 2\.75rem;[\s\S]*?font-size: 1rem;/)
   assert.match(styles, /\.website-starter-setup \.website-button \{[\s\S]*?font-size: \.875rem;/)
