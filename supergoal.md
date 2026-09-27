@@ -170,6 +170,7 @@ Order: active security/data/money incident; release-blocking correctness; comple
 2. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries.
 3. Complete one cross-product interface slice using the fixed light design and current references; verify the real task, accessibility and responsive behavior together. Do not reintroduce appearance controls.
 4. Review managed Shop setup and reachable Website/Ecommerce paths for sample-first behavior, misleading activation, dead links and inconsistent terminology.
+   Local Ecommerce's empty-catalog action now opens Shop Stock directly; managed accounts retain their setup/access path. Focused route tests pass 22/22 and local build/artifact checks pass. Browser and hosted acceptance of this transition remain outstanding.
 5. Finish release prerequisites and hosted login, tenant, persistence and recovery evidence through the authorized path.
 6. Deliver one consented real-business installation with an agreed task and acceptance criteria. Collect actual facts instead of inventing a cafe or shop.
 7. Convert accepted capability into one clear offer, marketing assets and support/commercial records.

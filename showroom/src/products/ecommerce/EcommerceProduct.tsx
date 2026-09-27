@@ -1805,7 +1805,7 @@ export function EcommerceProduct() {
       detail: `Order autopilot: ${orderAutopilotStage}`,
     })
     if (importNeeded) {
-      navigate('/settings/?product=ecommerce')
+      navigate(managedIdentity ? '/settings/?product=ecommerce' : '/shop/?tab=inventory')
       return
     }
     if (storefrontSetupRequired) {

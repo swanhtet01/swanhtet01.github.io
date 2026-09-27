@@ -581,6 +581,17 @@ test('catalog setup destinations resolve to Stock rather than fallback Sell', as
   }
 })
 
+test('Ecommerce empty local catalog goes to Stock while managed setup remains separate', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/products/ecommerce/EcommerceProduct.tsx'), 'utf8')
+  const { activeCommerceTab } = await import('../showroom/src/core/commerce-tabs.ts')
+  const action = source.match(/if \(importNeeded\) \{\s*navigate\(managedIdentity \? '([^']+)' : '([^']+)'\)/)
+  assert.ok(action, 'catalog action must distinguish managed and local setup')
+  assert.equal(action[1], '/settings/?product=ecommerce')
+  const local = new URL(action[2], 'https://app.supermega.dev')
+  assert.equal(local.pathname, '/shop/')
+  assert.equal(activeCommerceTab(local.searchParams.get('tab')), 'inventory')
+})
+
 
 test('private counter browser fixture explicitly supplies validated trade data', async () => {
   const { miniMartCounterFixture } = await import('./verify_app_entry_rendered.mjs')
