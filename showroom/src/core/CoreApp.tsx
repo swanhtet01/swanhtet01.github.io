@@ -1176,17 +1176,6 @@ type ShopCounterReview = {
   onCommitted: (orderId: string) => void
 }
 
-function readLocalShopIndustryPack() {
-  if (typeof window === 'undefined') return null
-  const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
-  if (!stored) return null
-  try {
-    return shopIndustryPack(readShopServiceSchedule(stored).industryPackId)
-  } catch {
-    return null
-  }
-}
-
 // Read-only. Commerce never writes this key and must not start: the appointment book owns it,
 // under its own lock. This exists so the close screen can ASK the book a question, which is a
 // different thing from the close screen being able to change it.
@@ -1606,8 +1595,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const navigate = useNavigate()
   const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
-  const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
-  const [shopSchedule, setShopSchedule] = useState<ShopServiceScheduleState | null>(readLocalShopServiceSchedule)
+  const counterDraftContext = shopCounterDraftContext(confirmedLocalShop, managedIdentity)
+  const scheduleScopeKey = counterDraftContext.key
+  const [scheduleSnapshot, setScheduleSnapshot] = useState<{ key: string; schedule: ShopServiceScheduleState | null }>({ key: '', schedule: null })
+  const shopSchedule = scheduleSnapshot.key === scheduleScopeKey ? scheduleSnapshot.schedule : null
+  const shopPack = shopSchedule ? shopIndustryPack(shopSchedule.industryPackId) : null
+  useEffect(() => {
+    if (!confirmedLocalShop || managedIdentity) return
+    setScheduleSnapshot({ key: scheduleScopeKey, schedule: readLocalShopServiceSchedule() })
+  }, [confirmedLocalShop, managedIdentity, scheduleScopeKey])
   const [localWebsiteIntakeRead, setLocalWebsiteIntakeRead] = useState<{
     status: 'checking' | 'ready' | 'error'
     intake: WebsiteEcommerceHandoffContext | null
@@ -1689,7 +1685,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
-  const counterDraftContext = shopCounterDraftContext(confirmedLocalShop, managedIdentity)
   // Money-path isolation (payment-qr-store.ts scope note): the QR lookup key must
   // carry which company this browser is operating as, or a later workspace could
   // show an earlier merchant's bank QR at its counter.
@@ -6904,13 +6899,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule
+    {confirmedLocalShop || managedIdentity ? <Suspense fallback={null}><ShopServiceSchedule
+      key={scheduleScopeKey}
       actor={managedIdentity?.email ?? 'Local Shop operator'}
       commerce={commerce}
       disabled={shopScheduleControlsDisabled}
       initiallyOpen={commerceLocation.hash === '#shop-service-schedule'}
-      onScheduleChange={setShopSchedule}
-    /></Suspense>
+      onScheduleChange={(schedule) => setScheduleSnapshot({ key: scheduleScopeKey, schedule })}
+    /></Suspense> : null}
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)

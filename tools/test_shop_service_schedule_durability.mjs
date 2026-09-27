@@ -316,3 +316,24 @@ for (const mode of ['local', 'managed', 'missing', 'failed', 'cancelled']) {
   cleanup()
 }
 console.log('PASS schedule identity loading: local, managed, missing, failed, cancelled; no managed local-cache writes')
+
+const parentUi = readScheduleSource('showroom/src/core/CoreApp.tsx', 'utf8').replace(/\r\n/g, '\n')
+assert.ok(!parentUi.includes('useState<ShopServiceScheduleState | null>(readLocalShopServiceSchedule)'))
+assert.ok(!parentUi.includes('readLocalShopIndustryPack'))
+assert.ok(parentUi.includes('key={scheduleScopeKey}'))
+assert.ok(parentUi.includes('{confirmedLocalShop || managedIdentity ? <Suspense fallback={null}><ShopServiceSchedule'))
+assert.ok(parentUi.includes('onScheduleChange={(schedule) => setScheduleSnapshot({ key: scheduleScopeKey, schedule })}'))
+const selection = parentUi.match(/const shopSchedule = (.+)/)[1]
+const selectSchedule = Function('scheduleSnapshot', 'scheduleScopeKey', `return ${selection}`)
+const oldBook = { owner: 'old company' }
+assert.equal(selectSchedule({ key: 'A', schedule: oldBook }, 'A'), oldBook)
+for (const nextScope of ['B', 'checking', 'local']) {
+  assert.equal(selectSchedule({ key: 'A', schedule: oldBook }, nextScope), null)
+}
+const localEffect = parentUi.match(/useEffect\(\(\) => \{\n(    if \(!confirmedLocalShop \|\| managedIdentity\) return[\s\S]*?)  \}, \[confirmedLocalShop, managedIdentity, scheduleScopeKey\]\)/)[1]
+for (const [confirmed, identity, expected] of [[false, null, 0], [true, { workspaceId: 'A' }, 0], [true, null, 1]]) {
+  let reads = 0
+  Function('confirmedLocalShop', 'managedIdentity', 'scheduleScopeKey', 'setScheduleSnapshot', 'readLocalShopServiceSchedule', localEffect)(confirmed, identity, 'test', () => {}, () => { reads++; return null })
+  assert.equal(reads, expected)
+}
+console.log('PASS parent schedule boundary: deferred local reads, scoped snapshots, keyed child, null propagation')

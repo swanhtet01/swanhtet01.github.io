@@ -84,14 +84,14 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   commerce?: SpaMembershipCommerceView
   disabled?: boolean
   initiallyOpen?: boolean
-  onScheduleChange?: (schedule: ShopServiceSchedule) => void
+  onScheduleChange?: (schedule: ShopServiceSchedule | null) => void
 }) {
   const [initial] = useState<{ schedule: ShopServiceSchedule | null; error: string }>({ schedule: null, error: '' })
   const [schedule, setScheduleState] = useState<ShopServiceSchedule | null>(initial.schedule)
   // Every path that changes the book goes through here, so an observer -- today, the close
   // screen's "completed but not rung up" list -- cannot miss a completion. Notifying is
   // strictly read-only: observers receive the book, they do not get to change it.
-  function setSchedule(next: ShopServiceSchedule) {
+  function setSchedule(next: ShopServiceSchedule | null) {
     setScheduleState(next)
     onScheduleChange?.(next)
   }
@@ -149,7 +149,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       }
       managedIdentityRef.current = identity
       setManagedConnected(true)
-      setScheduleState(null)
+      setSchedule(null)
       const managed = await loadManagedServiceSchedule(identity)
       if (!active) return
       if (!await isCurrentScheduleIdentity(identity)) {
@@ -165,12 +165,12 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
 
         setNotice('Company schedule loaded.')
       } else {
-        setScheduleState(null)
+        setSchedule(null)
         setNotice('Set up your company schedule in onboarding, then reload.')
       }
     }).catch((error) => {
       if (active) {
-        setScheduleState(null)
+        setSchedule(null)
         setNotice(error instanceof Error ? `${error.message} Reload to try again.` : 'Schedule unavailable. Reload to try again.')
       }
     }).finally(() => {
