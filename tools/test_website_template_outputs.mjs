@@ -103,13 +103,16 @@ test('explicit owner contact is preserved and existing work cannot be replaced',
 test('operator starter does not prefill an unrelated business contact', () => {
   const source = readFileSync(new URL('../showroom/src/products/website/WebsiteStarterSetup.tsx', import.meta.url), 'utf8')
   const styles = readFileSync(new URL('../showroom/src/products/website/website-product.css', import.meta.url), 'utf8')
-  assert.match(source, /const SAMPLE_BRIEF:[\s\S]*?contactHref: ''/)
+  for (const field of ['businessName', 'audience', 'offer', 'proof', 'contactHref']) {
+    assert.match(source, new RegExp(`const EMPTY_BRIEF:[\\s\\S]*?${field}: ''`))
+  }
   assert.doesNotMatch(source, /https:\/\/m\.me\/mingalarfreshmart/)
   assert.ok(source.includes('What should customers know before contacting you?'))
   assert.ok(source.includes('Your business, online.'))
   assert.ok(source.includes('Add your business details to prepare a private draft.'))
   assert.ok(source.includes('Prepare private draft'))
-  assert.ok(source.includes('View example'))
+  assert.ok(!source.includes('View example'))
+  assert.ok(!source.includes('onViewSample'))
   assert.ok(source.includes('Review the suggested wording against the actual business.'))
   assert.doesNotMatch(source, /Why should customers trust it\?|same-day neighborhood delivery/)
   assert.match(styles, /\.website-starter-setup input,[\s\S]*?min-height: 2\.75rem;[\s\S]*?font-size: 1rem;/)

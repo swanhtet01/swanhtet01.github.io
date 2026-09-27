@@ -245,7 +245,7 @@ export function WebsiteProduct() {
     : starterSetupActive
     ? {
         title: 'Make this website yours',
-        copy: 'Edit the ready example, then preview it before anything is saved.',
+        copy: 'Add your business details to prepare your pages.',
       }
     : view === 'content' && surface === 'preview'
     ? {
@@ -270,7 +270,7 @@ export function WebsiteProduct() {
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
   const saveStateLabel = starterAvailable
-    ? 'Sample only'
+    ? 'Setup needed'
     : editConflict
     ? 'Saved version changed'
     : hasUnsavedChanges
