@@ -300,6 +300,16 @@ export function WebsiteProduct() {
     && repairConfirmationRevision === repairCandidateRevision
 
   useEffect(() => {
+    if (!hasUnsavedChanges || typeof window === 'undefined') return
+    function warnBeforeLeaving(event: BeforeUnloadEvent) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeLeaving)
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }, [hasUnsavedChanges])
+
+  useEffect(() => {
     document.title = 'Website | SuperMega'
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])

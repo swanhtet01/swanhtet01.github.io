@@ -58,7 +58,7 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 |---|---|---|
 | Source | Branch `codex/site-app-cleanup-20260924`; last verified remote head `94da8674`; subsequent workspace-entry fixes saved locally | Current document may be a later commit; recheck refs before release |
 | Integration | PR #596 in `swanhtet01/swanhtet01.github.io` | Broad accumulated scope requires genuine review; no self-approval |
-| CI | Exact-head App run 36358288233 at a94f4400 is in progress (job 108730269289, Build and verify canonical app at last detailed observation). Previous Website fixture failure repaired with 11/11 local checks | Await terminal result; do not interrupt useful CI for copy-only commits |
+| CI | a94f4400 App run 36358288233 passed 666/666 verification steps, then failed the final asset guard requiring retired sample onboarding. Guard now requires real setup copy; built-artifact self-test passes 134 checks plus 9 mutation checks | New exact-head CI required; later rendered-browser stages remain unproven |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
@@ -166,7 +166,7 @@ Do not reinstate hourly scheduled tasks. Corporate automation remains paused unl
 
 Order: active security/data/money incident; release-blocking correctness; complete customer task; reliability/recovery; commercial delivery; measured UX/performance; agent productivity; speculative research. Corporate preparation can progress serially alongside technical work, but must not bury an unresolved product failure under new plans.
 
-1. Inspect App run 36358288233 at a94f4400 to completion, repair any concrete failure, then batch subsequent saved changes into the next candidate.
+1. Push accumulated verified fixes and inspect the new exact-head CI. Reconcile the four product_visibility.test.mjs mismatches with current intended behavior without restoring demo entry points.
 2. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries.
 3. Complete one cross-product interface slice using the fixed light design and current references; verify the real task, accessibility and responsive behavior together. Do not reintroduce appearance controls.
 4. Review managed Shop setup and reachable Website/Ecommerce paths for sample-first behavior, misleading activation, dead links and inconsistent terminology.
@@ -331,4 +331,4 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Inspect App run 36358288233 at a94f4400 when terminal. Website workspace labels now lead with Website, Edit page and Download website file while retaining saved/unpublished status. Session-only storage now receives an explicit temporary-data notice and download guidance rather than a false saved-on-device claim. Local 38 focused tests, app build and artifact verification PASS; browser reload verified labels and preserved the existing Bakery draft. Screenshot: `C:/Users/thesw/OneDrive - BDA/outputs/supermega-website-workspace-labels-20260928.png`. This does not prove fresh onboarding/save or hosted readiness. Batch the saved workspace-label and storage-notice commits into the next CI candidate after the active run completes; then verify valid new-business submit/save/reload in an isolated supported browser context.
+Push the saved workspace-label, session-storage notice, unsaved-tab-exit safeguard and release-asset repairs as one candidate. Local Website tests 39/39, build and artifact verifier PASS; release asset self-test 134 checks and 9 mutation checks PASS. The separate product_visibility.test.mjs suite is 6 PASS / 4 FAIL: obsolete login sample expectations, release login contract, launcher source shape and generated public trades section. Inspect and reconcile those next; do not claim all checks passed. Full fresh-browser save/reload and hosted acceptance remain open. Unsaved-exit behavior is verified at handler level; native browser dialog acceptance is not yet observed.

@@ -738,3 +738,28 @@ test('assisted Website header never claims durable storage for session-only data
   assert.doesNotMatch(sessionNotice, /Saved on this device/)
   assert.ok(websiteProductSource.includes('showAssistedWebsitePreview ? assistedWebsiteStorageNotice : activeViewCopy.copy'))
 })
+
+
+test('unsaved Website edits warn on tab exit and remove the warning after cleanup', () => {
+  const effect = websiteProductSource.match(/useEffect\(\(\) => \{(\s+if \(!hasUnsavedChanges[\s\S]+?)\}, \[hasUnsavedChanges\]\)/)?.[1]
+  assert.ok(effect)
+  const executable = effect.replace(': BeforeUnloadEvent', '')
+  const listeners = new Map()
+  const window = {
+    addEventListener: (name, handler) => listeners.set(name, handler),
+    removeEventListener: (name, handler) => { if (listeners.get(name) === handler) listeners.delete(name) },
+  }
+  const runEffect = (hasUnsavedChanges) => runInNewContext(`(() => {${executable}})()`, { window, hasUnsavedChanges })
+  assert.equal(runEffect(false), undefined)
+  assert.equal(listeners.size, 0)
+  const cleanup = runEffect(true)
+  let prevented = false
+  const event = { preventDefault() { prevented = true }, returnValue: undefined }
+  listeners.get('beforeunload')(event)
+  assert.equal(prevented, true)
+  assert.equal(event.returnValue, '')
+  cleanup()
+  assert.equal(listeners.size, 0)
+  assert.equal(runEffect(false), undefined)
+  assert.equal(listeners.size, 0)
+})
