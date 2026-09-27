@@ -317,12 +317,6 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     && !state.applying
     && !localAppliedIsCurrent,
   )
-  const importStageRows = [
-    ['Read file', state.preview ? `${state.preview.totals.rows} rows` : state.busy ? 'Reading' : 'Waiting'],
-    ['Match columns', state.preview ? mappingNeedsReview ? 'Review' : `${matchedFieldCount}/${state.preview.fields.length}` : 'Auto'],
-    ['Check company', appliedIsCurrent || localAppliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Checked' : state.validating ? 'Checking' : managedIdentity ? 'Ready' : localActivationAvailable ? `Local ${productName}` : 'Local file'],
-    ['Confirm import', appliedIsCurrent || localAppliedIsCurrent ? 'Done' : state.preflighting ? 'Final check' : state.applying ? 'Writing' : canApplyManagedImport || canApplyLocalImport ? 'Ready' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
-  ] as const
   const importStageMessage = localAppliedIsCurrent
     ? `${state.localApplied?.created ?? 0} ${localRecordLabel} added; ${state.localApplied?.alreadyPresent ?? 0} were already current.`
     : appliedIsCurrent
@@ -897,9 +891,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
         <div aria-label={`${productName} import next step`} className="catalog-import-next-step">
           <div><span className="core-eyebrow">Next</span><strong>{importCoachAction}</strong><small>{importStageMessage}</small></div>
-          {state.preview ? <div className="catalog-import-stage-list">
-            {importStageRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
-          </div> : null}
+
         </div>
         {state.preview ? <details className="catalog-import-advanced">
           <summary><span>Import details</span><small>Setup checks and review</small></summary>
@@ -952,12 +944,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               })}
             </fieldset>
           </details>
-          {!state.preview.readyForStaging ? <div className="catalog-import-totals">
-            <span><strong>{state.preview.totals.rows}</strong><small>Rows</small></span>
-            <span data-result="ready"><strong>{state.preview.totals.ready}</strong><small>Ready</small></span>
-            <span data-result="issue"><strong>{state.preview.totals.issueRows}</strong><small>Fix first</small></span>
-            <span><strong>{state.preview.totals.duplicates}</strong><small>Duplicates</small></span>
-          </div> : null}
+
           {state.preview.fileIssues.length ? <ul className="catalog-import-file-issues">{state.preview.fileIssues.map((issue) => <li key={`${issue.code}-${issue.field}`}>{issue.message}</li>)}</ul> : null}
           <details className="catalog-import-row-review" open={state.preview.totals.issueRows > 0 || undefined}>
             <summary><span>Review rows</span><small>{state.preview.totals.issueRows ? `${state.preview.totals.issueRows} need attention` : 'All rows passed'}</small></summary>
