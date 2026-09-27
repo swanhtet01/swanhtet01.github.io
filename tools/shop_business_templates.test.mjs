@@ -573,3 +573,13 @@ test('catalog setup destinations resolve to Stock rather than fallback Sell', as
     assert.equal(activeCommerceTab(url.searchParams.get('tab')), 'inventory')
   }
 })
+
+
+test('private counter browser fixture explicitly supplies validated trade data', async () => {
+  const { miniMartCounterFixture } = await import('./verify_app_entry_rendered.mjs')
+  const fixture = miniMartCounterFixture()
+  const state = commerceModel.validateCommerceState(JSON.parse(fixture.retained[commerceModel.COMMERCE_KEY]))
+  assert.equal(commerceModel.commerceWorkingSampleCatalogId(state), 'mini-mart')
+  assert.ok(state.items.some(item => item.name === 'Premium rice 25kg'))
+  assert.deepEqual(miniMartCounterFixture(), fixture)
+})

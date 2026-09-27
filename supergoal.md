@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.0.0  
+Version: 1.0.1  
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -41,9 +41,9 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 |---|---|---|
 | Source | Branch `codex/site-app-cleanup-20260924`; inspected head `23f4c68a` before this document | Three Shop commits were local; inspect current local/remote state |
 | Integration | PR #596 in `swanhtet01/swanhtet01.github.io` | Broad accumulated scope requires genuine review; no self-approval |
-| CI | f3b15126 App run 36354746388 was live at canonical build verification | Terminal result is not established by this snapshot |
+| CI | f3b15126 App run 36354746388 was live at canonical build verification | Terminal FAIL: desktop/mobile checkout fixtures still expected automatic sample installation; explicit fixture repair prepared |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
-| Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Clicking Manage catalog still did not settle at inventory in the browser; unresolved |
+| Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
 | Account entry | Demo fallback removed; business setup retained; recovery checks updated | Full hosted account lifecycle unproven |
 | Website/Ecommerce | Implemented product/delivery flows exist | Reachable sample assumptions and assisted paths need review; self-serve completeness unproven |
@@ -102,7 +102,7 @@ Do not reinstate hourly scheduled tasks. Corporate automation remains paused unl
 
 Order: active security/data/money incident; release-blocking correctness; complete customer task; reliability/recovery; commercial delivery; measured UX/performance; agent productivity; speculative research. Corporate preparation can progress serially alongside technical work, but must not bury an unresolved product failure under new plans.
 
-1. Fix Manage catalog navigation from the Shop template counter. A correct href is insufficient: clicking must reach the right screen and remain there.
+1. Verify CI after explicit checkout-fixture repair. Retain desktop/mobile catalog click checks; fresh tabs now reach Stock, but earlier inconsistent behavior must not be ignored if it recurs.
 2. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries.
 3. Reconcile exact CI and local/remote commits. Fix genuine failures and obsolete fixture assumptions without weakening behavioral checks.
 4. Review managed Shop setup and reachable Website/Ecommerce paths for sample-first behavior, misleading activation, dead links and inconsistent terminology.
@@ -258,8 +258,10 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Decision log
 
+- 2026-09-28 v1.0.1: Fresh desktop/mobile catalog clicks passed; earlier click failure not reproduced. CI failure traced to removed automatic sample creation, with private checkout fixture supplied explicitly. Hosted/fresh-data acceptance remains incomplete.
+
 - 2026-09-28 v1.0.0: Consolidated engineering, customer products, company operations and local AI into one brief. Preserved founder gates. Clarified measured performance, local-only inference versus air-gap claims, and customer experience versus private fixtures. Recorded unresolved catalog navigation and separate hosted/customer acceptance.
 
 ### Next executable action
 
-Fix and browser-verify Manage catalog navigation, then complete fresh real-business setup. Recheck exact CI and local/remote commits before integration. Keep product and corporate execution tied to one accepted customer outcome.
+Verify the repaired CI fixtures and complete fresh real-business setup. Recheck exact CI and local/remote commits before integration. Keep product and corporate execution tied to one accepted customer outcome.

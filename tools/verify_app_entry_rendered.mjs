@@ -7,6 +7,8 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { startBrowser } from './browser_startup.mjs'
+import { COMMERCE_KEY, createSeedCommerce, installCommerceWorkingSampleCatalog } from '../showroom/src/core/commerce-workspace.ts'
+import { shopBusinessTemplate, shopBusinessTemplateCommerceItems } from '../showroom/src/products/shop/business-templates.ts'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
 import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
@@ -239,6 +241,19 @@ async function evalInPage(cdp, sessionId, expression) {
     throw new Error(`page eval failed: ${String(detail).replace(/\s+/g, ' ').trim()}${location}`)
   }
   return result.value
+}
+
+// Explicit private fixture: customer navigation must never install these records.
+export function miniMartCounterFixture() {
+  const template = shopBusinessTemplate('mini-mart')
+  const state = installCommerceWorkingSampleCatalog(createSeedCommerce(), {
+    sampleId: template.id,
+    sampleName: template.name.en,
+    items: shopBusinessTemplateCommerceItems(template.id),
+    capturedAt: '2026-09-28T00:00:00.000Z',
+  })
+  if (!state) throw new Error('mini_mart_counter_fixture_invalid')
+  return { retained: { [COMMERCE_KEY]: JSON.stringify(state) } }
 }
 
 export function seedScript(seed) {
@@ -991,7 +1006,7 @@ const tests = [
     noHorizontalOverflow: true,
     screenshotName: 'shop-counter-mini-mart-desktop-1280x900',
     timeoutMs: 60_000,
-    seed: {},
+    seed: miniMartCounterFixture(),
   },
   {
     name: 'mobile trade link keeps the complete mini-mart checkout in view',
@@ -1006,7 +1021,7 @@ const tests = [
     noHorizontalOverflow: true,
     screenshotName: 'shop-counter-mini-mart-mobile-390x844',
     timeoutMs: 60_000,
-    seed: {},
+    seed: miniMartCounterFixture(),
   },
   ...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,
     retirementCaseId: spec.id, requireLauncherProducts: true,
