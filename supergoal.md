@@ -63,7 +63,7 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
 | Account entry | Demo fallback removed; business setup retained; recovery checks updated | Full hosted account lifecycle unproven |
-| Website/Ecommerce | Implemented product/delivery flows exist | Reachable sample assumptions and assisted paths need review; self-serve completeness unproven |
+| Website/Ecommerce | Ecommerce onboarding no longer invokes the sample initializer that generated a synthetic order; opens store configuration instead. Local 21 focused tests and build passed | Website sample initialization and remaining Ecommerce sample-led copy still need review; full fresh setup and hosted self-serve acceptance unproven |
 | Payments | Stripe signature/retry tests and prior combined kernel 484 tests passed locally | No live charge or hosted settlement acceptance established |
 | Local AI | Healthy service;15 roles / 11 profiles; idle worker; no loaded models; zero computer workflows | Available workcell, not an autonomous employee fleet |
 | Corporate | Operating materials, acquisition pack and quote check exist | Last recorded Sheets write failed scope; no fresh cloud synchronization |

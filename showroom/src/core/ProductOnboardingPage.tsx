@@ -102,9 +102,9 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
     firstTaskPath: '/website/',
   },
   ecommerce: {
-    outcome: 'Open a working online store',
-    detail: 'A storefront and checkout sample are ready. Review the store, then send an order into Shop.',
-    actionLabel: 'Create Ecommerce and open the store',
+    outcome: 'Set up your online store',
+    detail: 'Connect your product catalog, set delivery details, and save your storefront.',
+    actionLabel: 'Continue to store setup',
     firstTaskPath: '/ecommerce/',
   },
 }
@@ -131,7 +131,7 @@ const onboardingFirstRunSteps: Record<SetupProductId, readonly { title: string; 
   ecommerce: [
     { title: 'Name the storefront', detail: 'Start from a small product list that can be governed by Shop.' },
     { title: 'Review products and fulfilment', detail: 'Check SKUs, pickup/delivery promise, and payment instructions.' },
-    { title: 'Create one customer request', detail: 'Turn storefront demand into a reviewed order path.' },
+    { title: 'Receive customer orders', detail: 'Review incoming requests before confirming fulfillment.' },
     { title: 'Send approved orders into Shop', detail: 'Inventory, payment, and support decisions stay connected.' },
   ],
 }
@@ -465,15 +465,6 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         // was never prepared, and told them it was ready.
         const activated = await activateLocalWebsiteWorkingSample({
           templateId: onboardingTemplate.id as 'business-presence' | 'lead-generation' | 'catalog-showcase',
-          businessName: setup.workspace,
-          capturedAt: new Date().toISOString(),
-        })
-        if (!activated.ok) throw new Error(activated.error)
-      }
-      if (product === 'ecommerce' && !managedIdentity) {
-        const { activateLocalEcommerceWorkingSample } = await import('./local-client-import')
-        const activated = await activateLocalEcommerceWorkingSample({
-          templateId: onboardingTemplate.id as 'social-storefront' | 'pickup-preorder' | 'wholesale-request',
           businessName: setup.workspace,
           capturedAt: new Date().toISOString(),
         })

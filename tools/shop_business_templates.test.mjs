@@ -561,6 +561,13 @@ test('Shop setup routes to actual catalog entry without sample provisioning', as
   assert.match(source, /Enter your products, prices and opening stock/)
 })
 
+test('Ecommerce customer onboarding never invokes synthetic order provisioning', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/core/ProductOnboardingPage.tsx'), 'utf8')
+  assert.doesNotMatch(source, /activateLocalEcommerceWorkingSample/)
+  assert.doesNotMatch(source, /A storefront and checkout sample are ready/)
+  assert.match(source, /Connect your product catalog, set delivery details, and save your storefront/)
+})
+
 
 test('catalog setup destinations resolve to Stock rather than fallback Sell', async () => {
   const { activeCommerceTab } = await import('../showroom/src/core/commerce-tabs.ts')
