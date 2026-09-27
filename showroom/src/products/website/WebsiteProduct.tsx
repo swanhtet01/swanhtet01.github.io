@@ -898,6 +898,7 @@ export function WebsiteProduct() {
               : releaseRecordRequired && !publishIsCurrent
                 ? 'file'
                 : 'ready'
+  const compactWebsiteStatus = showAssistedWebsitePreview || (view === 'content' && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft)
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
     : pendingRestoredDraft
@@ -1216,8 +1217,8 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <section aria-label="Website status" className="website-today" data-preview={showAssistedWebsitePreview || undefined} data-state={websiteTodayState} data-step={websiteTodayStep}>
-            {!showAssistedWebsitePreview ? <div className="website-today-priority">
+          {!starterSetupActive ? <section aria-label="Website status" className="website-today" data-preview={compactWebsiteStatus || undefined} data-state={websiteTodayState} data-step={websiteTodayStep}>
+            {!compactWebsiteStatus ? <div className="website-today-priority">
               <span className="core-eyebrow">Start here</span>
               <h2 id="website-today-title">{websiteAgentJob}</h2>
               <p>{websiteAgentReason}</p>
@@ -1239,7 +1240,7 @@ export function WebsiteProduct() {
                 </div>
               ) : null}
             </details>
-            {!showAssistedWebsitePreview ? <div className="website-today-source" role="status">
+            {!compactWebsiteStatus ? <div className="website-today-source" role="status">
               <span>{websiteTodayContext}</span>
               <small>{websiteReviewNote}</small>
             </div> : null}
