@@ -492,7 +492,8 @@ requireContract('managed Shop appointments are tenant-scoped, human-only, identi
   && /_service_client_export_csv/.test(commerceRuntime)
   && /contains overlapping bookings/.test(commerceRuntime))
 requireContract('runtime exposes bounded health truth', /operating_mode = "managed_trial" if not requirements else "isolated_demo"/.test(runtime) && /"operating_mode": operating_mode/.test(runtime) && /"browser_service_role_exposed": False/.test(runtime))
-requireContract('managed browser auth is readiness gated and cannot accept a secret key', /runtime\.status === 'enterprise' && managedTrialAuthConfigured\(\)/.test(settingsPage) && /validPublishableKey/.test(managedTrialClient) && !/VITE_SUPABASE_(?:SERVICE_ROLE|SECRET)/.test(managedTrialClient))
+const loginAvailability = await read('showroom/src/core/managed-login-availability.ts')
+requireContract('managed browser auth is readiness gated and cannot accept a secret key', /runtime\.status === 'enterprise' && managedTrialAuthConfigured\(\)/.test(settingsPage) && managedTrialClient.includes('return managedAuthConfigurationValid(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)') && managedTrialClient.includes("from './managed-login-availability.ts'") && loginAvailability.includes('return validSupabaseUrl(url) && validPublishableKey(key)') && loginAvailability.includes("return decodeLegacyKeyRole(value) === 'anon'") && loginAvailability.includes("value.startsWith('sb_publishable_')") && !/VITE_SUPABASE_(?:SERVICE_ROLE|SECRET)/.test(managedTrialClient + loginAvailability))
 requireContract('managed approval evidence is never persisted in demo storage', /localApprovalsOnly/.test(workspaceRuntime) && /persist \? persist\(normalizedState\)/.test(workspaceRuntime) && /current\.filter\(\(approval\) => !approval\.managed\)/.test(settingsPage))
 requireContract('production CORS is bounded',
   /https:\/\/app\.supermega\.dev,https:\/\/supermega\.dev/.test(runtime)
