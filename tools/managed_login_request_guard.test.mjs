@@ -434,3 +434,24 @@ test('directory timeout releases sign-in for a deliberate retry while retaining 
     assert.equal(context.reviewReturnPath, reviewPath)
   }
 })
+
+test('activation uses saved product only for the entered saved claim', async () => {
+  for (const [enteredClaim, saved, expected] of [
+    ['SM-ABCD-2345', { claimCode: 'SM-ABCD-2345', product: 'commerce' }, 'commerce'],
+    ['SM-WXYZ-7890', { claimCode: 'SM-ABCD-2345', product: 'commerce' }, 'ecommerce'],
+    ['SM-WXYZ-7890', null, 'ecommerce'],
+  ]) {
+    const { context } = fixture()
+    const calls = []
+    context.claimCode = enteredClaim
+    context.productIntent = 'ecommerce'
+    context.readTrialSignup = () => saved
+    context.trialSignupProductChoice = value => ({ id: value })
+    context.createSelfServeWorkspace = async (...args) => { calls.push(args); return { created: true, label: 'Synthetic', workspaceId: 'new' } }
+    context.discoverManagedWorkspacesForCurrentSession = async () => ({ workspaces: [] })
+    await handler('activate', context)(event)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0][0], enteredClaim)
+    assert.equal(calls[0][2], expected)
+  }
+})

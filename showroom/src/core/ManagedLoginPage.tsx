@@ -207,7 +207,9 @@ export function ManagedLoginPage() {
     setNotice('Creating your company from the claim...')
     try {
       const localTrial = readTrialSignup(window.localStorage)
-      const selectedProduct = localTrial?.product ?? trialSignupProductChoice(productIntent).id
+      const selectedProduct = localTrial?.claimCode === claimCode.trim()
+        ? localTrial.product
+        : trialSignupProductChoice(productIntent).id
       const workspace = await createSelfServeWorkspace(claimCode, businessName, selectedProduct)
       setNotice(workspace.created
         ? `${workspace.label} is ready. Opening your company...`
