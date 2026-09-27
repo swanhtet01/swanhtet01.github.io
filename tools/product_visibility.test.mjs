@@ -29,12 +29,12 @@ test('new trial choices consume active products and reject retired query selecti
   assert.doesNotMatch(source, /TRIAL_SIGNUP_PRODUCT_CHOICES\.map\(/)
 })
 
-test('unavailable sign-in has one no-account sample path, separate from assisted setup', async () => {
+test('unavailable sign-in offers saved work and assisted setup without demo entry', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/ManagedLoginPage.tsx'), 'utf8')
-  const unavailable = source.slice(source.indexOf('<section className="managed-login-panel" aria-label="Company account unavailable">'))
-  assert.match(unavailable, /to="\/\?choose=1">Try a sample — no account/)
-  assert.match(unavailable, /Ask SuperMega to set me up/)
-  assert.doesNotMatch(unavailable, /Free trial|Try free demo/)
+  const unavailable = source.slice(source.indexOf('<section className="managed-login-panel" aria-label="Login unavailable">'))
+  assert.match(unavailable, /to="\/\?choose=1">Saved work on this device/)
+  assert.match(unavailable, /Request setup/)
+  assert.doesNotMatch(unavailable, /Free trial|Try free demo|Try a sample/)
   assert.match(source, /Date\.now\(\) < cooldownUntil/)
 })
 
@@ -52,11 +52,11 @@ test('release assets require the current login choices and local workspace bound
   for (const [, key, required] of groups) input[key] += `${required.join('\n')}\n`
   assert.doesNotThrow(() => validate(input))
   const requiredLogin = groups.find(([name]) => name === 'company_login')[2]
-  for (const label of ['Try a sample — no account', 'Ask SuperMega to set me up', 'Sample records stay on this device; they are not a shared company workspace.']) {
+  for (const label of ['Saved work on this device', 'Request setup', 'Request setup for your business, or open work already saved on this device.']) {
     assert.ok(requiredLogin.includes(label), `missing login contract: ${label}`)
   }
   for (const label of requiredLogin) {
-    assert.throws(() => validate({ ...input, managedLoginChunk: input.managedLoginChunk.replace(label, '') }), /missing_current_release_asset:company_login:/)
+    assert.throws(() => validate({ ...input, managedLoginChunk: input.managedLoginChunk.replaceAll(label, '') }), /missing_current_release_asset:company_login:/)
   }
   assert.throws(() => validate({ ...input, managedLoginChunk: 'Open your company. Try free demo Request company account' }), /missing_current_release_asset:company_login:/)
 })
@@ -64,10 +64,10 @@ test('release assets require the current login choices and local workspace bound
 test('launcher consumes active policy without discarding retained or assigned access', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/CoreShell.tsx'), 'utf8')
   assert.match(source, /setActiveSetupIds\(activeSetupProductContracts\.map\(product => product\.id\)\)/)
-  assert.match(source, /activeSetupIds\.includes\(id\) && !productSetups\[id\]\?\.startedAt/)
+  assert.ok(source.includes("Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]?.startedAt) || (name === 'Website' && Boolean(savedWebsiteName))"), 'local cards require saved work')
   assert.match(source, /!managedPortal && !activeSetupIds\.includes\(setupKey\) && !setup/)
   assert.match(source, /managedPortal && !managedProductIsVisible\(portalAccess\.products, setupKey\)/)
-  assert.match(source, /Retained workspace/)
+  assert.match(source, /readProductSetup\(window\.localStorage, 'production'\)/)
   assert.match(source, /setSetupLoadFailed\(true\)/)
   assert.match(source, /\[managedPortal, setupLoadAttempt\]/)
   assert.match(source, /setSetupLoadAttempt\(attempt => attempt \+ 1\)/)
@@ -117,7 +117,12 @@ test('generated public home and contact offer only active products', async () =>
   assert.deepEqual([...contact.matchAll(/<option value="([^"]+)">/g)].map(m=>m[1]), ['guide','shop','ecommerce','website'])
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
-    assert.match(page, product.id === 'shop' ? /id="trades"/ : /id="first-job-templates"/)
+    const links = [...page.matchAll(/href="([^"]+)"/g)].map(match => match[1])
+    assert.ok(links.some(href => {
+      const target = new URL(href, 'https://supermega.dev')
+      return target.origin === 'https://app.supermega.dev' && (target.pathname === `/${product.id}/` || (target.pathname === '/login' && target.searchParams.get('product') === product.id))
+    }), `${product.id} must link to its actual app`)
+    assert.ok(links.some(href => href.includes(`/contact/?product=${product.id}`)), 'assisted setup remains reachable')
     assert.doesNotMatch(page, /product=plant|href="\/plant\//)
   }
 })
