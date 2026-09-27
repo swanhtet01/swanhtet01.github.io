@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { createInitialWorkspace, createWebsitePreviewArtifact, restoreWorkspace } from '../showroom/src/products/website/website-model.ts'
+import { createInitialWorkspace, createWebsitePreviewArtifact, restoreWorkspace, createWebsiteEditSession, updateWebsiteEditSession, commitWebsiteEditSession, mutateWebsiteWorkspace, loadWebsiteWorkspace } from '../showroom/src/products/website/website-model.ts'
 import { buildWebsiteHtml } from '../showroom/src/products/website/website-export.ts'
 import { applyWebsiteStarterBrief, installWebsiteWorkingSample, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
 import { websiteTradeBrief, websiteTradeBriefOptions } from '../showroom/src/products/website/website-trade-brief.ts'
@@ -13,6 +13,49 @@ const expected = {
   'lead-generation': { slug: '/services', label: 'Discuss your requirements', need: 'scope of the work' },
   'catalog-showcase': { slug: '/catalog', label: 'Ask about an item', need: 'preferred variant' },
 }
+
+test('business brief stays unsaved until commit and survives reload without release evidence', async () => {
+  const values = new Map()
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }
+  const locks = { request: async (_name, _options, callback) => callback() }
+  const loaded = loadWebsiteWorkspace(storage)
+  assert.equal(loaded.ok, true)
+  const staged = updateWebsiteEditSession(createWebsiteEditSession(loaded.workspace), current =>
+    applyWebsiteStarterBrief(current, { ...brief, templateId: 'business-presence' }, capturedAt))
+  assert.equal(staged.ok, true)
+  assert.equal(staged.changed, true)
+  assert.equal(values.size, 0, 'preparing content must not silently save it')
+  const saved = await mutateWebsiteWorkspace(current => commitWebsiteEditSession(current, staged.session),
+    loaded.workspace.revision, loaded.workspace.contentRevision, storage, locks)
+  assert.equal(saved.ok, true)
+  assert.equal(saved.changed, true)
+  const reloaded = loadWebsiteWorkspace(storage)
+  assert.equal(reloaded.ok, true)
+  assert.deepEqual(reloaded.workspace, saved.workspace)
+  assert.equal(reloaded.workspace.siteName, brief.businessName)
+  assert.ok(reloaded.workspace.pages.every(page => page.stage === 'draft'))
+  assert.equal(reloaded.workspace.approvals.length, 0)
+  assert.equal(reloaded.workspace.localPublishes.length, 0)
+  const beforeRetry = new Map(values)
+  const stale = await mutateWebsiteWorkspace(current => commitWebsiteEditSession(current, staged.session),
+    loaded.workspace.revision, loaded.workspace.contentRevision, storage, locks)
+  assert.equal(stale.ok, false, 'a stale setup tab cannot overwrite the saved revision')
+  assert.deepEqual(values, beforeRetry)
+})
+
+test('business brief save reports denied storage rather than claiming persistence', async () => {
+  const loaded = createInitialWorkspace()
+  const staged = updateWebsiteEditSession(createWebsiteEditSession(loaded), current =>
+    applyWebsiteStarterBrief(current, { ...brief, templateId: 'lead-generation' }, capturedAt))
+  assert.equal(staged.ok, true)
+  const storage = { getItem: () => null, setItem: () => { throw new Error('Storage unavailable') } }
+  const locks = { request: async (_name, _options, callback) => callback() }
+  const result = await mutateWebsiteWorkspace(current => commitWebsiteEditSession(current, staged.session),
+    0, 0, storage, locks)
+  assert.equal(result.ok, false)
+  assert.match(result.error, /write failed/)
+  assert.equal(loadWebsiteWorkspace(storage).workspace.siteName, loaded.siteName)
+})
 test('reviewed menu and service entries become exported content without invented prices', () => {
   for (const template of websiteStarterTemplates) {
     const output = applyWebsiteStarterBrief(createInitialWorkspace(), { ...brief, templateId: template.id, offerings: 'လက်ဖက်ရည် | 2,000 MMK, hot or iced\nConsultation | 30 minutes; price confirmed on inquiry\n<script> | Owner text <b>not markup</b>' }, capturedAt)
