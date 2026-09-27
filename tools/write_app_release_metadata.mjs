@@ -177,15 +177,10 @@ const rasterIcons = [
 // intended property ("the built shell emits no inline script") -- it just had nothing
 // checking it. These three files restore that property; the checks now enforce it.
 //
-// Keep the theme key in sync with THEME_KEY in showroom/src/core/CoreShell.tsx. This runs
-// as a render-blocking classic script in <head>, so it still lands before first paint and
-// a returning dark-theme user does not get a light flash.
-const themeRestoreScript = `try {
-  if (window.localStorage.getItem('supermega-interface-theme') === 'dark') {
-    document.documentElement.dataset.supermegaTheme = 'dark'
-    document.querySelector('meta[name="theme-color"]').setAttribute('content', '#05080d')
-  }
-} catch (e) {}
+// Apply the fixed light palette before first paint, independent of legacy preferences.
+const themeRestoreScript = `document.documentElement.dataset.supermegaTheme = 'light'
+const themeMeta = document.querySelector('meta[name="theme-color"]')
+if (themeMeta) themeMeta.setAttribute('content', '#f6f4ee')
 `
 const serviceWorkerRegisterScript = `if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))
 `

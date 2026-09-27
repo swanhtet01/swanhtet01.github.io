@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import { readdir, readFile as readRawFile, stat } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
@@ -577,6 +578,20 @@ for (const shellScript of ['/theme-restore.js', '/sw-register.js', '/vercel-insi
   if (!indexSource.includes(`<script src="${shellScript}"></script>`)
     || !rootPageSource.includes(`<script src="${shellScript}"></script>`)) fail(`missing_shell_script_tag:${shellScript}`)
   if (!await exists(resolve(dist, shellScript.replace(/^\//, '')))) fail(`missing_shell_script_file:${shellScript}`)
+}
+const themeBootstrap = await readFile(resolve(dist, 'theme-restore.js'), 'utf8')
+for (const hasMeta of [true, false]) {
+  const dataset = { supermegaTheme: 'dark' }
+  let themeColor = '#05080d'
+  let storageTouched = false
+  runInNewContext(themeBootstrap, {
+    window: { get localStorage() { storageTouched = true; throw new Error('storage unavailable') } },
+    document: {
+      documentElement: { dataset },
+      querySelector: () => hasMeta ? { setAttribute: (_name, value) => { themeColor = value } } : null,
+    },
+  }, { timeout: 1000 })
+  if (dataset.supermegaTheme !== 'light' || storageTouched || (hasMeta && themeColor !== '#f6f4ee')) fail('fixed_light_startup_theme_invalid')
 }
 const insightsBootstrapSource = await readFile(resolve(dist, 'vercel-insights.js'), 'utf8').catch(() => '')
 if (!insightsBootstrapSource.includes("/(^|\\.)supermega\\.dev$/.test(location.hostname)")
