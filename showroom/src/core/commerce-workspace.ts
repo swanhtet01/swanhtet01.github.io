@@ -4619,7 +4619,8 @@ export function loadCommerceWorkspace(storage = browserStorage()): CommerceWorks
     }
   }
   if (invalidLegacyFound) return { state: createEmptyCommerce(), source: 'recovery', error: 'Legacy Commerce data is malformed. Migration failed closed and did not create v2 data.' }
-  return persistInitialState(storage, createSeedCommerce(Date.now()), 'seed')
+  // First use starts with the owner's catalog, not fabricated products or sales.
+  return persistInitialState(storage, createEmptyCommerce(), 'current')
 }
 
 export function commerceWorkspaceCanWrite(
