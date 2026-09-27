@@ -168,10 +168,10 @@ export function WebsiteProduct() {
   } = useWebsiteWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedView = searchParams.get('view')
-  const [surface, setSurface] = useState<'work' | 'preview'>('preview')
+  const [surface, setSurface] = useState<'work' | 'preview'>(() => isUntouchedWebsiteStarter(workspace) ? 'work' : 'preview')
   const [selectedPageId, setSelectedPageId] = useState(workspace.selectedPageId)
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
-  const [starterDismissed, setStarterDismissed] = useState(true)
+  const [starterDismissed, setStarterDismissed] = useState(() => !isUntouchedWebsiteStarter(workspace))
   const [editSessionState, setEditSessionState] = useState<WebsiteEditSessionState | null>(null)
   const [restoredDraftState, setRestoredDraftState] = useState<WebsiteEditSessionState | null>(null)
   const [savingDraft, setSavingDraft] = useState(false)
@@ -708,11 +708,6 @@ export function WebsiteProduct() {
     setSurface('work')
     setSiteSettingsOpen(false)
     requestHeadingFocus()
-  }
-
-  function viewWebsiteSample() {
-    setStarterDismissed(true)
-    openContentSurface('preview')
   }
 
   function copySelectedPage() {
@@ -1463,7 +1458,6 @@ export function WebsiteProduct() {
                     initialBusinessName={shopBusinessName}
                     initialTradeId={shopTradeId}
                     onCreate={startWithBusiness}
-                    onViewSample={viewWebsiteSample}
                   />
                 ) : (
                   <ContentWorkspace

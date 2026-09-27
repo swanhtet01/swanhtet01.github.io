@@ -58,12 +58,12 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 |---|---|---|
 | Source | Branch `codex/site-app-cleanup-20260924`; implementation head `c2580db1` pushed | Current document may be a later commit; recheck refs before release |
 | Integration | PR #596 in `swanhtet01/swanhtet01.github.io` | Broad accumulated scope requires genuine review; no self-approval |
-| CI | At this update: c2580db1 Public Hosting Guard PASS; App run 36356658062 queued; Kernel 36356658061 and dependency audit 36356658084 in progress | Not overall CI acceptance. Previous sample-wording guard repaired; local 179-check guard and app build/artifact verification passed |
+| CI | c2580db1 App run 36356658062 terminal FAIL at CSS contracts step 636/666: cascade test still requires dynamic theme class; fixed-light shell needs the ancestry assertion updated | Remaining pipeline steps did not run. Public Hosting Guard passed; other checks need refresh before release |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
 | Account entry | Demo fallback removed; business setup retained; recovery checks updated | Full hosted account lifecycle unproven |
-| Website/Ecommerce | Ecommerce onboarding no longer invokes the sample initializer that generated a synthetic order; opens store configuration instead. Local 21 focused tests and build passed | Website sample initialization and remaining Ecommerce sample-led copy still need review; full fresh setup and hosted self-serve acceptance unproven |
+| Website/Ecommerce | Ecommerce onboarding no longer generates a synthetic order. Website onboarding no longer installs a working sample; untouched sites open the business brief, with blank fallback facts and no View example action. Local builds and artifact verifier passed | Persisted older sample data remains untouched. Full fresh-browser setup, Website brief trade defaults, remaining sample-led paths and hosted self-serve acceptance still need review |
 | Payments | Stripe signature/retry tests and prior combined kernel 484 tests passed locally | No live charge or hosted settlement acceptance established |
 | Local AI | Healthy service;15 roles / 11 profiles; idle worker; no loaded models; zero computer workflows | Available workcell, not an autonomous employee fleet |
 | Corporate | Operating materials, acquisition pack and quote check exist | Last recorded Sheets write failed scope; no fresh cloud synchronization |
@@ -330,4 +330,4 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Inspect App CI run 36356658062 on c2580db1 when it progresses; fix any concrete failure. During a verified wait, prepare or execute fresh real-business setup acceptance without inventing customer data. Then continue the weakest incomplete lifecycle requirement. Keep design, product and corporate execution tied to one accepted customer outcome.
+Fix the CSS cascade ancestry assertion to recognize the fixed-light root without weakening selector/contrast checks, then run the focused CSS checks. Verify fresh Website brief submission and reload in an isolated local test context before claiming customer acceptance. Keep design, product and corporate execution tied to one accepted customer outcome.

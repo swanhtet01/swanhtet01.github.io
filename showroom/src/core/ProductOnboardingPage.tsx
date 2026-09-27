@@ -1,7 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
-import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { recordBehaviorSignal } from './behavior-trail'
 import { shopPlanGuideForTemplate } from './capability-tiers'
 import { emitOutcomeTelemetry } from '../analytics/outcome-telemetry'
@@ -96,9 +95,9 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
     firstTaskPath: '/plant/?tab=production',
   },
   website: {
-    outcome: 'Preview a business website',
-    detail: 'A responsive homepage is ready. Check desktop and mobile, then edit the page.',
-    actionLabel: 'Create Website and preview it',
+    outcome: 'Prepare your business website',
+    detail: 'Add your business details, services and contact information to prepare your pages.',
+    actionLabel: 'Continue to website setup',
     firstTaskPath: '/website/',
   },
   ecommerce: {
@@ -459,16 +458,6 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       if (product === 'production' && plantPackSaveAllowed(Boolean(managedIdentity), plantProvisionDisposition)) {
         savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
         setPlantPackChangeSelected(false)
-      }
-      if (product === 'website' && !managedIdentity) {
-        // Returns { ok, error } instead of throwing. Ignoring it sent the owner into a Website that
-        // was never prepared, and told them it was ready.
-        const activated = await activateLocalWebsiteWorkingSample({
-          templateId: onboardingTemplate.id as 'business-presence' | 'lead-generation' | 'catalog-showcase',
-          businessName: setup.workspace,
-          capturedAt: new Date().toISOString(),
-        })
-        if (!activated.ok) throw new Error(activated.error)
       }
       const startedAt = new Date().toISOString()
       setSetup((current) => ({ ...current, product, owner: workspaceOwner, startedAt, savedAt: undefined }))

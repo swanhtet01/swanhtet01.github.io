@@ -9,7 +9,6 @@ import type { ShopBusinessTemplateId } from '../shop/business-templates'
 
 type WebsiteStarterSetupProps = {
   onCreate: (brief: WebsiteStarterBrief) => void
-  onViewSample: () => void
   // The trade this device's Shop was set up as, or null when it is not known.
   //
   // Passed in rather than read here on purpose. This component is required to be free of
@@ -22,12 +21,12 @@ type WebsiteStarterSetupProps = {
   initialBusinessName?: string | null
 }
 
-const SAMPLE_BRIEF: WebsiteStarterBrief = {
+const EMPTY_BRIEF: WebsiteStarterBrief = {
   templateId: 'catalog-showcase',
-  businessName: 'Mingalar Fresh Mart',
-  audience: 'families and office buyers in Yangon',
-  offer: 'Ask about daily groceries and pantry packs for your next shopping trip.',
-  proof: 'Share your list and quantities. Confirm current prices, availability and pickup or delivery options with the business.',
+  businessName: '',
+  audience: '',
+  offer: '',
+  proof: '',
   contactHref: '',
 }
 
@@ -45,20 +44,20 @@ function openingState(
   // The owner's own name wins over the sample's whenever we have one.
   const businessName = initialBusinessName && initialBusinessName.trim()
     ? initialBusinessName
-    : SAMPLE_BRIEF.businessName
-  if (!initialTradeId) return { tradeId: '', brief: { ...SAMPLE_BRIEF, businessName }, detected: false }
+    : EMPTY_BRIEF.businessName
+  if (!initialTradeId) return { tradeId: '', brief: { ...EMPTY_BRIEF, businessName }, detected: false }
   const drafted = websiteTradeBrief({
     tradeId: initialTradeId,
     businessName,
-    contactHref: SAMPLE_BRIEF.contactHref,
+    contactHref: EMPTY_BRIEF.contactHref,
   })
   return drafted
     ? { tradeId: initialTradeId as string, brief: drafted, detected: true }
-    : { tradeId: '', brief: { ...SAMPLE_BRIEF, businessName }, detected: false }
+    : { tradeId: '', brief: { ...EMPTY_BRIEF, businessName }, detected: false }
 }
 
 export function WebsiteStarterSetup({
-  onCreate, onViewSample, initialTradeId, initialBusinessName,
+  onCreate, initialTradeId, initialBusinessName,
 }: WebsiteStarterSetupProps) {
   const [opening] = useState(() => openingState(initialTradeId, initialBusinessName))
   const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
@@ -171,7 +170,6 @@ export function WebsiteStarterSetup({
 
       <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit} ref={starterFormRef}>
         <footer className="website-starter-actions">
-          <button className="website-button is-secondary" onClick={onViewSample} type="button">View example</button>
           <button className="website-button is-primary" type="submit" disabled={importBusy || Boolean(importPreview)} aria-describedby={importBusy || importPreview ? 'website-import-pending' : undefined}>Prepare private draft</button>
           {importBusy || importPreview ? <p id="website-import-pending" role="status">{importBusy ? 'File preview is loading. Wait or cancel it before preparing your draft.' : 'Review and use the imported entries, or discard the preview before preparing your draft.'}</p> : null}
         </footer>
@@ -179,7 +177,7 @@ export function WebsiteStarterSetup({
         <label className="website-starter-trade">
           <span>Business type</span>
           <select onChange={(event) => chooseTrade(event.target.value)} value={tradeId}>
-            <option value="">Start from the sample</option>
+            <option value="">Choose business type</option>
             {websiteTradeBriefOptions().map((trade) => (
               <option key={trade.id} value={trade.id}>{trade.label}</option>
             ))}
