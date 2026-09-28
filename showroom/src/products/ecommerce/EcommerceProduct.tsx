@@ -284,6 +284,11 @@ const CatalogReviewPreparation = lazy(() => import('./CatalogReviewPreparation')
 
 export function EcommerceProduct() {
   const [workspaceOpened, setWorkspaceOpened] = useState(false)
+  const [orderOpsNow, setOrderOpsNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setOrderOpsNow(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
   const navigate = useNavigate()
   const location = useLocation()
   const [initialState] = useState(initialEcommerceState)
@@ -960,7 +965,7 @@ export function EcommerceProduct() {
       : 'Current Shop defaults were restored. The storefront is still not saved.')
   }
 
-  function addToCart(sku: string) {
+  const addToCart = useCallback((sku: string) => {
     if (catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)) return
     if (!buyingCart.some((line) => line.sku === sku)) emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'cart.built', ts: Date.now() })
     setBuyingCart((current) => current.some((line) => line.sku === sku)
@@ -972,7 +977,7 @@ export function EcommerceProduct() {
       workspace?.scrollIntoView({ block: 'start' })
       workspace?.focus({ preventScroll: true })
     })
-  }
+  }, [catalogHydrating, previewResult.preview, digest, managedIdentity, savedDraftIsCurrent, buyingCart])
 
   function prepareQuoteRecovery() {
     if (pendingManagedRequests[0]) {
@@ -1233,7 +1238,6 @@ export function EcommerceProduct() {
     ? managedReturnedUnits
     : localEcommerceOrders.reduce((total, order) => total + (order.returns ?? []).reduce((returned, record) => returned + record.quantity, 0), 0)
   const importNeeded = catalog.source === 'unavailable' || catalog.items.length === 0
-  const orderOpsNow = Date.now()
   const orderOpsAgingCount = pendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
   const orderOpsExpiringCount = pendingManagedRequests.filter((request) => {
     const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
