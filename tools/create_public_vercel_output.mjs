@@ -1122,7 +1122,7 @@ async function sendWebhook(record) {
 
 function acknowledgementPlan(workflow) {
   const plans = {
-    commerce: 'For Shop, we prepare a your catalog, stock and sales workflow.',
+    commerce: 'For Shop, we prepare your catalog, stock and sales workflow.',
     website: 'For Sites, we prepare your pages, content and responsive layout for your review.',
     ecommerce: 'For Commerce, we prepare your catalog, storefront and order workflow for your review.',
     production: 'For Plant, we prepare the operating workflow and role boundaries for your review.',
