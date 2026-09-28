@@ -78,6 +78,7 @@ jobs:
           node tools/verify_app_deploy_workflow.mjs
           node tools/verify_public_deploy_guard.mjs
           node --test tools/verify_public_deploy_guard.test.mjs
+          node --test tools/verify_acceptance_runtime_environment.test.mjs
 
       - name: Install dependencies
         working-directory: showroom
