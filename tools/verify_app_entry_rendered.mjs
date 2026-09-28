@@ -1170,6 +1170,12 @@ async function main() {
       const result = await verifyCase(cdp, origin, testCase)
       cases.push(result)
       console.error(JSON.stringify({ event: 'rendered_case_finished', case: index + 1, durationMs: Date.now() - startedAt, failures: result.failures.length }))
+      if (process.env.GITHUB_ACTIONS === 'true' && result.failures.length) {
+        // Only the source-defined case name and count belong in public annotations.
+        // Page content, URLs, console messages and raw failure details stay out.
+        const caseName = testCase.name.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
+        console.error(`::error::Rendered journey ${index + 1}/${selectedTests.length}: ${caseName} (${result.failures.length} failed checks)`)
+      }
     }
     const failures = cases.flatMap((entry) => entry.failures.map((failure) => `${entry.name}: ${failure}`))
     const provenanceAfter = await collectRenderedProofProvenance({ root, distDir, verifierPath })
