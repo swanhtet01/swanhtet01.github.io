@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.19
+Version: 1.2.20
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -65,16 +65,16 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Pushed `1447b982`; local `b34f01fd` adds the Sites palette override correction on `codex/site-app-cleanup-20260924` | Batch pending work after current CI; recheck exact head before release |
+| Source | Pushed `5171800d`; four local commits through `1988ea79` add exact-byte webhook verification, bounded request handling, error redaction and a lint repair on `codex/site-app-cleanup-20260924` | Batch pending work after current CI; recheck exact head before release |
 | Integration | PR #596 is open, non-draft and mergeable; 573 changed files at af3e7ab7. Review API shows a COMMENTED review, no approval. Analytics findings match existing fix be64785c, verified locally by 71 telemetry checks plus initial-bootstrap assertions | Broad accumulated scope still needs genuine review; code verification is not independent approval |
-| CI | Full CI `36430761564` on `6017a08a` passed, including desktop/390px journeys and bounded browser commands | Current candidate CI `36441894279` remains pending completion; hosted/customer acceptance remains outstanding |
+| CI | Historical full CI `36430761564` on `6017a08a` passed. Latest pushed candidate `5171800d` is being verified by run `36454087525`, observed in progress at Build and verify canonical app | Await this exact run; local payment changes need their own candidate verification. Hosted/customer acceptance remains outstanding |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
 | Account entry | Live browser on 28 September: /login?product=shop shows Login unavailable and legacy sample entry. Live /api/health: status=ready, operating_mode=isolated_demo, enterprise_db_ready=false, security_ready=true, trial_backend.write_enabled=false | This is deployed runtime configuration/readiness, not proof the database itself is broken. UI-only release cannot establish managed login/persistence |
 | Website/Ecommerce | Setup completion now uses workspace=1, matching the product switcher. Local route tests 22/22, app build and artifact verifier PASS. Website model tests previously passed 15/15; offering component checks now pass 11/11 | Existing browser QA records preserved. Fresh valid UI submit/save/reload and hosted persistence remain unproven. Remaining sample-led paths need review |
-| Payments | Stripe signature/retry tests and prior combined kernel 484 tests passed locally | No live charge or hosted settlement acceptance established |
+| Payments | 24 focused Stripe tests and full kernel verification with490 tests passed locally, including exact raw-byte signatures, interrupted/oversized requests, redacted persistence errors and successful retry. Kernel lint has0 errors and61 warnings after the outreach regex repair | No live charge or hosted settlement acceptance established; warnings remain to assess |
 | Local AI | Healthy service;15 roles / 11 profiles; idle worker; no loaded models; zero computer workflows | Available workcell, not an autonomous employee fleet |
 | Corporate | Operating materials, acquisition pack and quote check exist | Last recorded Sheets write failed scope; no fresh cloud synchronization |
 | Commercial | No accepted installation or paid conversion established in this review | Global customer/revenue totals are unknown, not assumed zero |
