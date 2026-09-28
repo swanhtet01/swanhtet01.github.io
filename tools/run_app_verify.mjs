@@ -133,6 +133,12 @@ function finishFailure(result) {
   process.stdout.write(result.stdout || '')
   process.stderr.write(result.stderr || '')
   console.error(JSON.stringify({ ok: false, failedStep: result.step.label, stepIndex: result.step.index, totalSteps }))
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    // Only repository-defined step metadata belongs in annotations, never captured output.
+    const message = `Step ${result.step.index}/${totalSteps}: ${result.step.label}`
+      .replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A')
+    console.error(`::error title=Canonical verification failed::${message}`)
+  }
   process.exit(1)
 }
 
