@@ -56,7 +56,7 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Branch `codex/site-app-cleanup-20260924`; 50f42938 passed remote CI. Later local verification/record fixes are committed | Recheck refs and exact-candidate checks before release |
+| Source | Branch `codex/site-app-cleanup-20260924`; pushed source `7a6fff17`, with saved local evidence reconciliation | Recheck refs and exact-candidate checks before release |
 | Integration | PR #596 is open, non-draft and mergeable; 573 changed files at af3e7ab7. Review API shows a COMMENTED review, no approval. Analytics findings match existing fix be64785c, verified locally by 71 telemetry checks plus initial-bootstrap assertions | Broad accumulated scope still needs genuine review; code verification is not independent approval |
 | CI | Full App CI on `3805b4b2` passed build verification, disposable PostgreSQL tests and desktop/390px journeys | Newer `7a6fff17` has its own active CI; no production/customer acceptance implied |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
@@ -167,7 +167,7 @@ Do not reinstate hourly scheduled tasks. Corporate automation remains paused unl
 
 Order: active security/data/money incident; release-blocking correctness; complete customer task; reliability/recovery; commercial delivery; measured UX/performance; agent productivity; speculative research. Corporate preparation can progress serially alongside technical work, but must not bury an unresolved product failure under new plans.
 
-1. Push the accumulated visibility-test integration and refreshed source receipts, then verify the new exact-head CI. The previous 50f42938 candidate passed all remote checks.
+1. Finish exact-head CI for the pushed candidate, then publish saved reconciliation notes. Use the current release-state table below; do not repeat already completed source fixes or credential probes.
 2. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries.
 3. Complete one cross-product interface slice using the fixed light design and current references; verify the real task, accessibility and responsive behavior together. Do not reintroduce appearance controls.
 4. Review managed Shop setup and reachable Website/Ecommerce paths for sample-first behavior, misleading activation, dead links and inconsistent terminology.
