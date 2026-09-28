@@ -1,17 +1,17 @@
 .website-product {
-  --website-bg: var(--core-bg, #f6f4ee);
+  --website-bg: var(--core-bg, #f7f8fc);
   --website-panel: var(--core-panel, #ffffff);
-  --website-panel-raised: var(--core-panel-raised, #eef4ef);
-  --website-ink: var(--core-ink, #17231d);
-  --website-muted: var(--core-muted, #56665d);
+  --website-panel-raised: var(--core-panel-raised, #f0f3fa);
+  --website-ink: var(--core-ink, #171b26);
+  --website-muted: var(--core-muted, #526078);
   --website-quiet: var(--core-quiet, #5f6f67); /* Design phase 1: was #7b8980 = 3.66:1 on white (AA fail); now matches --core-quiet, 5.31:1 */
-  --website-line: var(--core-line, rgba(31, 68, 51, .12));
-  --website-line-strong: var(--core-line-strong, rgba(31, 68, 51, .2));
-  --website-green: var(--core-green, #0b745e);
-  --website-green-soft: var(--core-green-soft, rgba(11, 116, 94, .1));
+  --website-line: var(--core-line, rgba(37,48,74, .12));
+  --website-line-strong: var(--core-line-strong, rgba(37,48,74, .2));
+  --website-green: var(--core-green, #2454e6);
+  --website-green-soft: var(--core-green-soft, rgba(36,84,230, .1));
   /* Design phase 1: was consumed at the primary-action hover but never defined,
      making the hover declaration invalid (Save vanished on the white bar). */
-  --website-green-dark: #075c4b;
+  --website-green-dark: #173bb0;
   --website-warn: var(--core-warn, #946200);
   --website-danger: var(--core-danger, #b42336);
   --website-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -23,8 +23,8 @@
   overflow-x: hidden;
   overflow-y: auto;
   background:
-    radial-gradient(circle at 82% -18%, rgba(11, 116, 94, .1), transparent 31%),
-    linear-gradient(180deg, #fbfaf6, var(--website-bg) 62%);
+    radial-gradient(circle at 82% -18%, rgba(36,84,230, .1), transparent 31%),
+    linear-gradient(180deg, #fafbff, var(--website-bg) 62%);
   color: var(--website-ink);
   font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color-scheme: light;
@@ -89,7 +89,7 @@
 }
 
 .website-product ::selection {
-  background: rgba(11, 116, 94, .18);
+  background: rgba(36,84,230, .18);
 }
 
 .website-brand,
@@ -237,7 +237,7 @@
 }
 
 .website-preview-controls > button[aria-pressed="true"] {
-  border-color: rgba(11, 116, 94, .2);
+  border-color: rgba(36,84,230, .2);
   background: var(--website-green-soft);
   color: var(--website-green);
 }
@@ -295,7 +295,7 @@
 }
 
 .website-status.is-ready {
-  border-color: rgba(11, 116, 94, .2);
+  border-color: rgba(36,84,230, .2);
   background: var(--website-green-soft);
   color: var(--website-green);
 }
@@ -315,7 +315,7 @@
   flex: 1;
   overflow: auto;
   padding: 14px;
-  scrollbar-color: rgba(11, 116, 94, .26) transparent;
+  scrollbar-color: rgba(36,84,230, .26) transparent;
 }
 
 .website-fieldset {
@@ -398,7 +398,7 @@
 .website-product select:focus,
 .website-product textarea:focus {
   border-color: var(--website-green);
-  box-shadow: 0 0 0 3px rgba(11, 116, 94, .1);
+  box-shadow: 0 0 0 3px rgba(36,84,230, .1);
 }
 
 .website-product input:disabled,
@@ -540,7 +540,7 @@
 
 .website-page-check.is-complete {
   border-left-color: var(--website-green);
-  background: rgba(11, 116, 94, .06);
+  background: rgba(36,84,230, .06);
 }
 
 .website-page-check > div {
@@ -618,11 +618,11 @@
 }
 
 .website-button.is-primary:hover:not(:disabled) {
-  border-color: #075c4b;
-  background: #075c4b;
+  border-color: #173bb0;
+  background: #173bb0;
 }
 
-/* --website-green is a dark green (#0b745e) in light, where white text reads cleanly, and
+/* --website-green is a dark green (#2454e6) in light, where white text reads cleanly, and
    a bright mint (#56f0c1) in dark, where white text measures 1.44:1 -- the primary action
    in this product, effectively unreadable. The fill is what carries the brand here, so the
    text flips to the dark background colour instead (13.4:1) rather than the fill changing.
@@ -783,10 +783,10 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
   margin-top: 12px;
-  border: 1px solid rgba(11, 116, 94, .18);
+  border: 1px solid rgba(36,84,230, .18);
   border-radius: 5px;
   padding: 11px;
-  background: rgba(11, 116, 94, .06);
+  background: rgba(36,84,230, .06);
 }
 
 .website-boundary-note strong {
@@ -831,7 +831,7 @@
   min-height: 23px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(11, 116, 94, .2);
+  border: 1px solid rgba(36,84,230, .2);
   border-radius: 4px;
   color: var(--website-green);
   font-family: var(--website-mono);
@@ -908,8 +908,8 @@
 }
 
 .website-evidence-status > article.is-current {
-  border-color: rgba(11, 116, 94, .2);
-  background: rgba(11, 116, 94, .06);
+  border-color: rgba(36,84,230, .2);
+  background: rgba(36,84,230, .06);
 }
 
 .website-evidence-status > article > span {
@@ -969,7 +969,7 @@
   margin: 10px 10px 0;
   border-left: 2px solid var(--website-green);
   padding: 8px 10px;
-  background: rgba(11, 116, 94, .06);
+  background: rgba(36,84,230, .06);
 }
 
 .website-approval-record.is-stale {
@@ -1016,8 +1016,8 @@
 }
 
 .website-local-publish {
-  border-color: rgba(11, 116, 94, .2);
-  background: linear-gradient(120deg, rgba(11, 116, 94, .08), rgba(255, 255, 255, .82) 48%);
+  border-color: rgba(36,84,230, .2);
+  background: linear-gradient(120deg, rgba(36,84,230, .08), rgba(255, 255, 255, .82) 48%);
 }
 
 .website-local-publish-action {
@@ -1123,7 +1123,7 @@
 }
 
 .website-window-dots > i:last-child {
-  background: rgba(11, 116, 94, .65);
+  background: rgba(36,84,230, .65);
 }
 
 .website-preview-toolbar > div:nth-child(2) {
@@ -1159,11 +1159,11 @@
   overflow: auto;
   padding: 14px;
   background:
-    linear-gradient(rgba(31, 68, 51, .035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(31, 68, 51, .035) 1px, transparent 1px),
+    linear-gradient(rgba(37,48,74, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37,48,74, .035) 1px, transparent 1px),
     #edf2ed;
   background-size: 18px 18px;
-  scrollbar-color: rgba(11, 116, 94, .26) transparent;
+  scrollbar-color: rgba(36,84,230, .26) transparent;
 }
 
 .website-preview-frame {
@@ -1359,7 +1359,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  border: 1px solid rgba(11, 116, 94, .2);
+  border: 1px solid rgba(36,84,230, .2);
   border-radius: 5px;
   padding: 9px 11px;
   background: rgba(255, 255, 255, .96);
@@ -1709,7 +1709,7 @@
   --website-quiet: #5f6d65;
   --website-line: #dce3de;
   --website-line-strong: #c7d1ca;
-  --website-green: #0b745e; /* Design phase 1: was #08745d, a silent fork of the manifest accent */
+  --website-green: #2454e6; /* Design phase 1: was #08745d, a silent fork of the manifest accent */
   --website-green-soft: #e8f4ef;
   --website-warn: #8a5a00;
   --website-danger: #aa273b;
@@ -3663,19 +3663,19 @@
          stay byte-identical in place (Rules 3 and 6). */
 
   /* Overrides :2 (gen-one alias onto --core-bg) and :1704 (live literal, the
-     pre-P3.2 winner; differs from --core-bg #f6f4ee, so the literal is parked). */
+     pre-P3.2 winner; differs from --core-bg #f7f8fc, so the literal is parked). */
   --website-bg: var(--website-bg-authored, #f3f5f2);
   /* Overrides :3 (gen-one alias) and :1705 (live literal #ffffff, the pre-P3.2
      winner). --core-panel is #ffffff in light — token-equal, so the alias is
      value-preserving. */
   --website-panel: var(--core-panel, #ffffff);
-  /* Overrides :4 (gen-one alias onto --core-panel-raised #eef4ef) and :1706
+  /* Overrides :4 (gen-one alias onto --core-panel-raised #f0f3fa) and :1706
      (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-panel-raised: var(--website-panel-raised-authored, #f7f9f7);
-  /* Overrides :5 (gen-one alias onto --core-ink #17231d) and :1707 (live
+  /* Overrides :5 (gen-one alias onto --core-ink #171b26) and :1707 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-ink: var(--website-ink-authored, #17211c);
-  /* Overrides :6 (gen-one alias onto --core-muted #56665d) and :1708 (live
+  /* Overrides :6 (gen-one alias onto --core-muted #526078) and :1708 (live
      literal, the pre-P3.2 winner; differs from core, parked). */
   --website-muted: var(--website-muted-authored, #4d5d54);
   /* Overrides :8 (gen-one alias onto --core-line, an rgba value) and :1710
@@ -3684,10 +3684,10 @@
   /* Overrides :9 (gen-one alias onto --core-line-strong, an rgba value) and
      :1711 (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-line-strong: var(--website-line-strong-authored, #c7d1ca);
-  /* Overrides :10 (gen-one alias) and :1712 (live literal #0b745e, the
-     pre-P3.2 winner). --core-green is #0b745e in light — token-equal, so the
+  /* Overrides :10 (gen-one alias) and :1712 (live literal #2454e6, the
+     pre-P3.2 winner). --core-green is #2454e6 in light — token-equal, so the
      alias is value-preserving. */
-  --website-green: var(--core-green, #0b745e);
+  --website-green: var(--core-green, #2454e6);
   /* Overrides :11 (gen-one alias onto --core-green-soft, an rgba value) and
      :1713 (live literal, the pre-P3.2 winner; differs from core, parked). */
   --website-green-soft: var(--website-green-soft-authored, #e8f4ef);

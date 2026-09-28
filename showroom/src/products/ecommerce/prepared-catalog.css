@@ -28,7 +28,7 @@
 .prepared-catalog footer { margin-top: 1.5rem; font-size: .875rem; line-height: 1.7; }
 
 
-.catalog-review-page { --core-bg: #f6f4ee; --core-ink: #17231d; --core-muted: #56665d; --core-panel: #fff; --core-line: #d4dcd5; --core-field-line: #7d9185; min-height: 100vh; background: var(--core-bg, #f6f4ee); color: var(--core-ink, #17231d); }
+.catalog-review-page { --core-bg: #f7f8fc; --core-ink: #171b26; --core-muted: #526078; --core-panel: #fff; --core-line: #d4dcd5; --core-field-line: #7d9185; min-height: 100vh; background: var(--core-bg, #f7f8fc); color: var(--core-ink, #171b26); }
 .catalog-review-page button, .catalog-review-page a {
   display: inline-flex; align-items: center; min-height: 44px; box-sizing: border-box;
   margin: 12px 8px 0 0; padding: 8px 16px; border: 1px solid var(--core-field-line);
