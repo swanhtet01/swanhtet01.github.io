@@ -69,7 +69,7 @@ test('actual send route uses durable guard across provider success and status fa
   const {runInNewContext}=await import('node:vm')
   const source=await readFile(new URL('./console/api.mjs',import.meta.url),'utf8')
   const start=source.indexOf("      if (method === 'POST' && seg[1] && !seg[2] && query.action === 'send')")
-  const route=source.slice(start,source.indexOf('\n    // ---- STRIPE PAYMENT LINK',start)).trim().replace(/\n    \}$/, '')
+  const route=source.slice(start,source.indexOf('\n    // ---- STRIPE PAYMENT LINK',start)).trim().replace(/\n {4}\}$/, '')
   const f=fixture();let sends=0
   f.store.listDeals=async()=>[{id:'deal-1',status:'approved',packet:{headline:'Synthetic',outreach_en:'Review only'}}]
   const context={method:'POST',seg:['deals','deal-1'],query:{action:'send'},body:{to:message.to},store:f.store,sendOutreachOnce,
