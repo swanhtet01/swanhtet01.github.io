@@ -258,7 +258,7 @@ function unavailableAnswer(
 ): BusinessCommandAnswer {
   const productLabel = ({ shop: 'Shop', plant: 'Plant', website: 'Sites', ecommerce: 'Commerce' })[product]
   const invalid = status === 'invalid'
-  const samplePath = product === 'shop'
+  const workspacePath = product === 'shop'
     ? '/shop/?tab=counter'
     : product === 'plant'
       ? '/plant/?tab=production'
@@ -272,16 +272,16 @@ function unavailableAnswer(
     title: invalid ? `${productLabel} data needs repair` : `${productLabel} needs source data`,
     summary: invalid
       ? `Saved ${productLabel} data failed validation. SuperMega left it unchanged and will not infer an answer from it.`
-      : `No saved ${productLabel} workspace is available yet. Open its working sample or import real records to get a grounded answer.`,
+      : `No saved ${productLabel} workspace is available yet. Add your business records in the workspace to see an accurate summary.`,
     facts: [
       { label: 'Source', value: invalid ? 'Validation failed' : 'Not connected', detail: invalid ? 'Original browser data remains untouched.' : 'No product records were read.' },
       { label: 'Evidence', value: 'Not enough', detail: 'SuperMega will not invent operational facts.' },
-      { label: 'Action', value: invalid ? 'Repair data' : 'Open sample', detail: invalid ? 'Review the saved source without replacing it.' : 'Start with a working local product before managed activation.' },
+      { label: 'Action', value: invalid ? 'Repair data' : 'Add records', detail: invalid ? 'Review the saved source without replacing it.' : 'Add your business records in the product workspace.' },
       { label: 'Write gate', value: 'Blocked', detail: 'No external or product write can run from this answer.' },
     ],
     nextAction: invalid
       ? { label: `Repair ${productLabel} data`, path: `/settings/?product=${product}`, product }
-      : { label: `Open ${productLabel} sample`, path: samplePath, product },
+      : { label: `Open ${productLabel}`, path: workspacePath, product },
     boundary,
   }
 }
@@ -425,14 +425,14 @@ function attentionAnswer(snapshot: LocalBusinessSnapshot): BusinessCommandAnswer
       intent: 'attention',
       sourceCount: 0,
       title: 'Start with one business source',
-      summary: 'No validated product workspace is saved yet. Open the working Shop sample or import your own catalog to create the first grounded operating answer.',
+      summary: 'No validated product workspace is saved yet. Add your catalog in Shop to see your first operating summary.',
       facts: [
         { label: 'Shop', value: 'No source', detail: 'Catalog, stock, orders, and money review are unavailable.' },
         { label: 'Plant', value: 'No source', detail: 'Jobs, issues, quality, and equipment state are unavailable.' },
         { label: 'Sites', value: 'No source', detail: 'Pages, readiness, approval, and release evidence are unavailable.' },
         { label: 'Commerce', value: 'No source', detail: 'Store draft and Shop review are unavailable.' },
       ],
-      nextAction: { label: 'Open Shop sample', path: '/shop/?tab=counter', product: 'shop' },
+      nextAction: { label: 'Open Shop', path: '/shop/?tab=counter', product: 'shop' },
       boundary,
     }
   }

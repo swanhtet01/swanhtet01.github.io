@@ -1620,8 +1620,8 @@ if (!ownerControlSource.includes('supermega.local_owner_control_run.v1')
   || !managedTrialSource.includes('export async function assertManagedOwnerControlIntegrity')
   || !ownerControlSource.includes('Owner control needs validated source evidence before acknowledgement.')
   || !businessCommandSource.includes('export function rankBusinessAttention')
-  || !businessCommandSource.includes("{ label: 'Open Shop sample', path: '/shop/?tab=counter', product: 'shop' }")
-  || !businessCommandSource.includes('Open its working sample or import real records to get a grounded answer.')) fail('owner_control_contract_missing')
+  || !businessCommandSource.includes("{ label: 'Open Shop', path: '/shop/?tab=counter', product: 'shop' }")
+  || !businessCommandSource.includes('Add your business records in the workspace to see an accurate summary.')) fail('owner_control_contract_missing')
 if (!appLiveVerifierSource.includes('retired_product_home_readiness_chunk_present')
   || appLiveVerifierSource.includes('productHomeReadinessCorpus')
   || appLiveVerifierSource.includes('businessCommandChunkName')
@@ -19845,13 +19845,13 @@ async function verifyBusinessCommandRuntime() {
     const emptyAnswer = command.buildBusinessCommandAnswer(empty, 'attention')
     assert(emptyAnswer.contract === 'supermega.local_business_answer.v1'
       && emptyAnswer.sourceCount === 0
-      && emptyAnswer.nextAction.label === 'Open Shop sample'
+      && emptyAnswer.nextAction.label === 'Open Shop'
       && emptyAnswer.nextAction.path === '/shop/?tab=counter', 'business_command_empty_answer_not_actionable')
     for (const [intent, label, path] of [
-      ['shop_inventory', 'Open Shop sample', '/shop/?tab=counter'],
-      ['plant_control', 'Open Plant sample', '/plant/?tab=production'],
-      ['website_readiness', 'Open Sites sample', '/website/'],
-      ['ecommerce_readiness', 'Open Commerce sample', '/ecommerce/'],
+      ['shop_inventory', 'Open Shop', '/shop/?tab=counter'],
+      ['plant_control', 'Open Plant', '/plant/?tab=production'],
+      ['website_readiness', 'Open Sites', '/website/'],
+      ['ecommerce_readiness', 'Open Commerce', '/ecommerce/'],
     ]) {
       const answer = command.buildBusinessCommandAnswer(empty, intent)
       assert(answer.nextAction.label === label && answer.nextAction.path === path, `business_command_missing_source_sample_route_wrong:${intent}`)
