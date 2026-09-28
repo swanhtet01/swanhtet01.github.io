@@ -4,23 +4,25 @@
 // never logs secret values.
 //
 // Env: TELEGRAM_BOT_TOKEN, TELEGRAM_ALERT_CHAT_ID (or TELEGRAM_CHAT_ID)
-export async function captureError(context, detail, meta = {}) {
+export async function captureError(context, detail, meta = {}, options = {}) {
   const msg = String(detail && detail.message ? detail.message : detail || '').slice(0, 300)
   const line = `[supermega] ${context}: ${msg}`
   try { console.error(line, meta && Object.keys(meta).length ? meta : '') } catch { /* logging must never throw */ }
 
-  const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim()
-  const chat = String(process.env.TELEGRAM_ALERT_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '').trim()
+  const env = options.env || process.env
+  const request = options.fetch || fetch
+  const token = String(env.TELEGRAM_BOT_TOKEN || '').trim()
+  const chat = String(env.TELEGRAM_ALERT_CHAT_ID || env.TELEGRAM_CHAT_ID || '').trim()
   if (!token || !chat) return false
   try {
     const extras = Object.entries(meta || {}).map(([k, v]) => `${k}: ${String(v).slice(0, 80)}`).join('\n')
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const response = await request(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chat_id: chat, text: `🚨 ${line}${extras ? '\n' + extras : ''}`, disable_web_page_preview: true }),
       signal: AbortSignal.timeout(5000),
     })
-    return true
+    return response?.ok === true
   } catch { return false }
 }
 
