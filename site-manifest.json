@@ -1001,7 +1001,8 @@
     {
       "route": "/shop/",
       "file": "shop/index.html",
-      "title": "Shop Profit Control | POS-independent daily action | SuperMega",
+      "title": "Shop | Sales and stock | SuperMega",
+      "description": "Keep sales, orders and stock together. See product availability, track orders and manage replenishment with SuperMega Shop.",
       "productId": "shop",
       "liveGate": "post-release"
     },
@@ -1016,6 +1017,7 @@
       "route": "/website/",
       "file": "website/index.html",
       "title": "Website | Your business online | SuperMega",
+      "description": "Manage business pages, content and inquiries in one place with SuperMega Website.",
       "productId": "website",
       "liveGate": "post-release",
       "description": "A clear website for your services, photos and contact details. Review a prepared preview before agreeing to launch."
@@ -1024,6 +1026,7 @@
       "route": "/ecommerce/",
       "file": "ecommerce/index.html",
       "title": "Ecommerce | Your product catalog | SuperMega",
+      "description": "Present products and prices, collect customer order requests and manage follow-through with SuperMega Ecommerce.",
       "productId": "ecommerce",
       "liveGate": "post-release",
       "description": "Help customers browse your products and prepare a request. Your team confirms availability, orders and payment."
