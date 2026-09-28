@@ -306,14 +306,14 @@ check(appSource.includes("managedAccountPath('/login', product, location.search)
 
 const shellSource = readFileSync('showroom/src/core/CoreShell.tsx', 'utf8')
 const loginSource = readFileSync('showroom/src/core/ManagedLoginPage.tsx', 'utf8')
-check(shellSource.split('href={assistedSetupHref}').length - 1 === 2, 'desktop and mobile entry offer assisted setup instead of a trial detour')
-check(shellSource.includes("portalAccess.status !== 'ready'") && !shellSource.includes('>Free trial</Link>'), 'assigned company portal does not advertise a trial')
+check(!shellSource.includes('href={assistedSetupHref}') && !shellSource.includes('>Setup help</a>'), 'desktop and mobile entry omit setup detours')
+check(!shellSource.includes('>Free trial</Link>'), 'assigned company portal does not advertise a trial')
 check(!loginSource.includes('to={signupPath}') && !loginSource.includes('Try the local demo'), 'managed login avoids local demo detours')
-check(loginSource.includes('href={managedAccountRequestUrl(productIntent)}>Request setup</a>'), 'managed login offers product-specific setup when self serve is unavailable')
+check(loginSource.includes('href={managedAccountRequestUrl(productIntent)}>Contact support</a>'), 'managed login offers product-specific setup when self serve is unavailable')
 const unavailableLogin = loginSource.slice(loginSource.indexOf('aria-label="Login unavailable"'))
 check(unavailableLogin.includes('to="/?choose=1">Saved work on this device</Link>'), 'unavailable login preserves access to existing device work')
 check(!unavailableLogin.includes('to={signupPath}'), 'unavailable login does not duplicate sample access with a signup detour')
-check(unavailableLogin.includes('Request setup for your business, or open work already saved on this device.'), 'saved-work access keeps the device boundary visible')
+check(unavailableLogin.includes('Contact support for account access. Your saved work is still available on this device.'), 'saved-work access keeps the device boundary visible')
 check(unavailableLogin.includes('href={managedAccountRequestUrl(productIntent)}'), 'assisted setup preserves product intent separately from samples')
 
 const coreCss = readFileSync('showroom/src/core/core-app.css', 'utf8')
@@ -363,5 +363,5 @@ check(submission.includes('...identity,') && submission.includes('shopIndustryPa
 
 console.log(`signup trial contract: ${checks} checks passed`)
 
-check(unavailableLogin.includes('className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Request setup</a>'), 'unavailable login has product-aware setup as primary action')
+check(unavailableLogin.includes('className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>'), 'unavailable login has product-aware setup as primary action')
 check(!unavailableLogin.includes('Try a sample'), 'unavailable login does not promise a removed sample chooser')

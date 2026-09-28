@@ -33,7 +33,7 @@ test('unavailable sign-in offers saved work and assisted setup without demo entr
   const source = await readFile(resolve(root, 'showroom/src/core/ManagedLoginPage.tsx'), 'utf8')
   const unavailable = source.slice(source.indexOf('<section className="managed-login-panel" aria-label="Login unavailable">'))
   assert.match(unavailable, /to="\/\?choose=1">Saved work on this device/)
-  assert.match(unavailable, /Request setup/)
+  assert.match(unavailable, /Contact support/)
   assert.doesNotMatch(unavailable, /Free trial|Try free demo|Try a sample/)
   assert.match(source, /Date\.now\(\) < cooldownUntil/)
 })
@@ -52,7 +52,7 @@ test('release assets require the current login choices and local workspace bound
   for (const [, key, required] of groups) input[key] += `${required.join('\n')}\n`
   assert.doesNotThrow(() => validate(input))
   const requiredLogin = groups.find(([name]) => name === 'company_login')[2]
-  for (const label of ['Saved work on this device', 'Request setup', 'Request setup for your business, or open work already saved on this device.']) {
+  for (const label of ['Saved work on this device', 'Contact support', 'Contact support for account access. Your saved work is still available on this device.']) {
     assert.ok(requiredLogin.includes(label), `missing login contract: ${label}`)
   }
   for (const label of requiredLogin) {
