@@ -66,10 +66,11 @@ def _object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, An
 
 
 def _read_regular_file(path_value: str | Path, label: str) -> bytes:
-    path = Path(path_value).resolve()
+    path = Path(path_value)
     if path.is_symlink() or not path.is_file():
         raise ClientOwnerIdentityError(f"{label} must be a regular file.")
-    raw = path.read_bytes()
+    with path.open("rb") as stream:
+        raw = stream.read(MAX_INPUT_BYTES + 1)
     if not raw or len(raw) > MAX_INPUT_BYTES:
         raise ClientOwnerIdentityError(f"{label} size is invalid.")
     return raw

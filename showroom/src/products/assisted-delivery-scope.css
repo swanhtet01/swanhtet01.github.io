@@ -1,0 +1,36 @@
+.assisted-delivery-scope { display: flex; flex-wrap: wrap; align-items: start; gap: .5rem 1.25rem; min-width: 0; margin-block: .5rem; overflow-wrap: anywhere; }
+.assisted-delivery-scope p { margin: 0 0 .5rem; }
+.assisted-delivery-scope details { min-width: 0; max-width: 42rem; }
+.assisted-delivery-scope details[open] { flex-basis: 100%; }
+.assisted-delivery-scope summary { min-height: 2.75rem; align-content: center; cursor: pointer; }
+.assisted-delivery-request { display: inline-flex; justify-self: start; align-items: center; min-height: 2.75rem; padding: .5rem 1rem; box-sizing: border-box; border: 1px solid currentColor; border-radius: .5rem; color: inherit; font-weight: 700; text-decoration: none; }
+.assisted-delivery-scope :is(select, a, summary):focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+.website-today:has(.assisted-delivery-scope) { grid-template-columns: minmax(0, 1fr); }
+.ecommerce-today[data-density] .ecommerce-today-priority:has(> .assisted-delivery-scope) { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; align-items: start; }
+.ecommerce-today[data-density] .ecommerce-today-priority:has(> .assisted-delivery-scope) > :is(.core-eyebrow, h2, p, details, section, div) { grid-area: auto; max-width: 100%; }
+
+.business-brief { width: min(100%, 620px); margin: clamp(1rem, 5vw, 5rem) auto; padding: 0 1.25rem 3rem; box-sizing: border-box; color: var(--core-ink); }
+.business-brief-kicker { font-size: .8rem; letter-spacing: .04em; text-transform: none; }
+.business-brief h1 { font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.08; letter-spacing: -.045em; margin: 1rem 0; font-weight: 600; }
+.business-brief header p { line-height: 1.6; margin-bottom: 2.5rem; }
+.business-brief form { display: grid; gap: .65rem; }
+.business-brief label { margin-top: .85rem; font-size: .9rem; font-weight: 600; }
+.business-brief label span { font-weight: 400; margin-left: .5rem; }
+.business-brief-reference summary { min-height: 44px; align-content: center; cursor: pointer; font-size: .9rem; }
+.business-brief-reference summary span { color: var(--core-muted); margin-left: .5rem; }
+.business-brief-reference label { display: block; margin: .25rem 0 .65rem; }
+.business-brief :is(input, textarea) { width: 100%; box-sizing: border-box; min-height: 48px; padding: .9rem 1rem; border: 1px solid var(--core-field-line); background: var(--core-panel); color: inherit; border-radius: 10px; font: inherit; resize: vertical; }
+.business-brief button { font: inherit; cursor: pointer; }
+.business-brief button[type=submit] { margin-top: 1rem; padding: 1rem; border: 0; border-radius: 10px; background: var(--core-green); color: var(--core-on-accent); font-weight: 600; min-height: 48px; }
+.business-brief button:disabled { opacity: .45; cursor: default; }
+.business-brief small { font-size: .78rem; line-height: 1.5; }
+.business-brief footer { border-top: 1px solid var(--core-line); margin-top: 2rem; padding-top: 1.25rem; display: grid; gap: 1rem; font-size: .8rem; }
+.business-brief footer button { min-height: 44px; justify-self: start; border: 0; padding: .5rem 0; background: transparent; color: var(--core-ink); text-decoration: underline; }
+.business-brief :is(input, textarea, button, summary):focus-visible { outline: 3px solid var(--core-green); outline-offset: 3px; }
+
+.business-brief :is(.business-brief-kicker, header p, label span, small, footer) { color: var(--core-muted); }
+
+/* The initial business brief is customer intake, not the operator workspace. */
+.core-main:has(> .core-route-content .business-brief) > .product-tools-disclosure {
+  display: none;
+}

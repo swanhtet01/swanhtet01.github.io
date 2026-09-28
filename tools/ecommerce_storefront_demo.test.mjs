@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import './test_ecommerce_confirmed_next_action.mjs'
 
 import {
   COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
@@ -2657,7 +2658,7 @@ test('loadCommerceWorkspace and restoreBrowserLocalSamplePaymentPolicies cover w
   assert.equal(nullResult.source, 'recovery')
   assert.ok(nullResult.error.length > 0)
 
-  // Empty storage (no existing data) → seeds and returns 'seed'.
+  // Empty storage starts a real empty catalog without fabricated activity.
   const emptyMap = new Map()
   const emptyAdapter = {
     getItem: (key) => emptyMap.has(key) ? emptyMap.get(key) : null,
@@ -2665,9 +2666,13 @@ test('loadCommerceWorkspace and restoreBrowserLocalSamplePaymentPolicies cover w
     removeItem: (key) => { emptyMap.delete(key) },
   }
   const seedResult = loadCommerceWorkspace(emptyAdapter)
-  assert.equal(seedResult.source, 'seed')
+  assert.equal(seedResult.source, 'current')
   assert.equal(seedResult.error, '')
-  assert.ok(emptyMap.has(COMMERCE_KEY), 'seed state must be persisted to storage')
+  assert.ok(emptyMap.has(COMMERCE_KEY), 'empty state must be persisted to storage')
+  for (const key of ['items', 'orders', 'movements', 'closes', 'catalogBaselines', 'paymentPolicies']) {
+    assert.deepEqual(seedResult.state[key], [], `fresh workspace must not invent ${key}`)
+  }
+  assert.deepEqual(loadCommerceWorkspace(emptyAdapter).state, seedResult.state, 'reload stays empty')
 
   // Storage with valid v2 data → 'current'.
   const storedState = createSeedCommerce()
@@ -2680,6 +2685,8 @@ test('loadCommerceWorkspace and restoreBrowserLocalSamplePaymentPolicies cover w
   const currentResult = loadCommerceWorkspace(currentAdapter)
   assert.equal(currentResult.source, 'current')
   assert.equal(currentResult.error, '')
+  assert.deepEqual(currentResult.state.items, storedState.items, 'saved catalog is preserved')
+  assert.deepEqual(currentResult.state.orders, storedState.orders, 'saved orders are preserved')
 
   // Storage with malformed JSON → recovery.
   const badMap = new Map([[COMMERCE_KEY, 'not-valid-json{{{'] ])

@@ -105,7 +105,7 @@ const seenEvents = new Set()
 /**
  * reconcile — record a verified Stripe event into the data spine, IDEMPOTENTLY and with AMOUNT
  * integrity. Enterprise-hardened:
- *  - Persistent dedup via store.recordPaymentEvent (survives serverless cold starts / many instances).
+ *  - Arrival tracking via store.recordPaymentEvent; duplicates still retry idempotent deposit persistence.
  *  - Amount/currency verified against the value bound into the session metadata at creation (which is
  *    covered by Stripe's signature → a replayer cannot reuse a small payment's event for a big project).
  *  - Conditional mark-paid (store.markDepositPaid only flips an 'unpaid' project) so a re-delivery never
@@ -129,17 +129,26 @@ export async function reconcile(event) {
     // for async/delayed methods, which settle later via checkout.session.async_payment_succeeded).
     const paid = obj.payment_status === 'paid' || obj.payment_status === 'no_payment_required'
 
-    // Persistent idempotency: only the FIRST delivery of this event id does any work.
+    // A receipt proves arrival, not completed persistence. Re-deliveries must still
+    // attempt the idempotent deposit transition after a partial storage failure.
+    let duplicate = false
     if (event.id) {
       const dedup = await store.recordPaymentEvent('stripe', event.id, { ref, amount: obj.amount_total, currency: obj.currency })
-      if (!dedup.fresh) return { ok: true, handled: true, ref, duplicate: true }
+      duplicate = !dedup.fresh
     }
 
-    if (!paid) return { ok: true, handled: true, ref, paid: false }
+    if (!paid) return { ok: true, handled: true, ref, paid: false, duplicate }
 
     // Amount/currency integrity: compare the settled total against what this ref was quoted (bound into
     // metadata at checkout creation). If it doesn't match, do NOT mark paid — log and ack (no retry).
     const expectedCents = Number(obj.metadata?.expected_cents)
+    const expectedCurrency = obj.metadata?.currency
+    if (!Number.isSafeInteger(expectedCents) || expectedCents <= 0
+      || typeof expectedCurrency !== 'string' || !/^[a-zA-Z]{3}$/.test(expectedCurrency)
+      || !Number.isSafeInteger(obj.amount_total) || obj.amount_total < 0
+      || typeof obj.currency !== 'string' || !/^[a-zA-Z]{3}$/.test(obj.currency)) {
+      return { ok: false, handled: false, detail: 'payment_integrity_metadata_invalid' }
+    }
     if (Number.isFinite(expectedCents) && expectedCents > 0) {
       const gotCents = Number(obj.amount_total)
       const expCur = String(obj.metadata?.currency || '').toLowerCase()
@@ -156,9 +165,16 @@ export async function reconcile(event) {
     if (ref) {
       const flipped = await store.markDepositPaid(String(ref), { method: 'stripe' })
       if (flipped) await store.logActivity({ kind: 'deposit', summary: `Stripe payment confirmed (${ref})`, ref }).catch(() => null)
-      return { ok: true, handled: true, ref, paid: true, alreadyPaid: !flipped }
+      if (!flipped) {
+        const project = await store.getProject(String(ref))
+        if (!project || project.deposit_status !== 'paid') {
+          return { ok: false, handled: false, detail: 'payment_project_not_settled' }
+        }
+      }
+      return { ok: true, handled: true, ref, paid: true, alreadyPaid: !flipped, duplicate }
     }
-    // Paid event with no project ref — record it once (dedup above already gated this to first delivery).
+    // No project transition exists for unassigned events; avoid duplicate activity.
+    if (duplicate) return { ok: true, handled: true, ref: null, paid: true, duplicate: true }
     await store.logActivity({ kind: 'deposit', summary: 'Stripe payment confirmed (no ref)', ref: null }).catch(() => null)
     return { ok: true, handled: true, ref: null, paid: true }
   } catch (e) {
@@ -188,21 +204,32 @@ export function verifyWebhook(rawBody, sig, { toleranceSec = 300 } = {}) {
   const whsec = webhookSecret()
   if (!whsec) return { ok: false, reason: 'no_webhook_secret' }
   if (!sig) return { ok: false, reason: 'no_signature' }
-  const raw = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody || '')
+  if (typeof sig !== 'string') return { ok: false, reason: 'malformed_signature' }
+  if (!Number.isFinite(toleranceSec) || toleranceSec < 0) return { ok: false, reason: 'invalid_tolerance' }
+  if (!Buffer.isBuffer(rawBody) && typeof rawBody !== 'string') return { ok: false, reason: 'invalid_body' }
+  const raw = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody, 'utf8')
 
-  const parts = Object.fromEntries(sig.split(',').map((p) => p.split('=').map((s) => s.trim())))
-  const t = parts.t
-  const v1 = parts.v1
-  if (!t || !v1) return { ok: false, reason: 'malformed_signature' }
+  const parts = sig.split(',').map(part => part.trim().split('='))
+  const timestamps = parts.filter(([key]) => key === 't')
+  const signatures = parts.filter(([key, value, extra]) => key === 'v1' && extra === undefined && /^[a-f0-9]{64}$/.test(value || '')).map(([, value]) => value)
+  if (timestamps.length !== 1 || timestamps[0].length !== 2 || !/^[0-9]+$/.test(timestamps[0][1]) || !signatures.length) {
+    return { ok: false, reason: 'malformed_signature' }
+  }
+  const t = timestamps[0][1]
+  const timestamp = Number(t)
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) return { ok: false, reason: 'malformed_signature' }
+  const expected = crypto.createHmac('sha256', whsec).update(`${t}.`).update(raw).digest('hex')
+  // Secret rotation can supply several v1 values; any matching HMAC is valid.
+  if (!signatures.some(signature => timingSafeEqualHex(expected, signature))) return { ok: false, reason: 'signature_mismatch' }
 
-  const expected = crypto.createHmac('sha256', whsec).update(`${t}.${raw}`).digest('hex')
-  if (!timingSafeEqualHex(expected, v1)) return { ok: false, reason: 'signature_mismatch' }
-
-  const ageSec = Math.abs(Math.floor(Date.now() / 1000) - Number(t))
-  if (Number.isFinite(ageSec) && ageSec > toleranceSec) return { ok: false, reason: 'timestamp_out_of_tolerance' }
+  const ageSec = Math.abs(Math.floor(Date.now() / 1000) - timestamp)
+  if (ageSec > toleranceSec) return { ok: false, reason: 'timestamp_out_of_tolerance' }
 
   let event
-  try { event = JSON.parse(raw) } catch { return { ok: false, reason: 'bad_json' } }
+  try { event = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw)) } catch { return { ok: false, reason: 'bad_json' } }
+  if (!event || typeof event !== 'object' || Array.isArray(event) || typeof event.id !== 'string' || !event.id || typeof event.type !== 'string' || !event.type) {
+    return { ok: false, reason: 'invalid_event' }
+  }
 
   if (event.id && seenEvents.has(event.id)) return { ok: true, duplicate: true, event }
   if (event.id) seenEvents.add(event.id)

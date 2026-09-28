@@ -1,15 +1,15 @@
 # Generates the per-product 1200x630 social share cards committed at
 # tools/public-assets/og-card-<productId>.png, one for each customer product in
 # site-manifest.json. The layout reproduces the committed generic og-card.png
-# (jade-v2 brand) measured pixel-by-pixel:
+# (cobalt-v1 brand) measured pixel-by-pixel:
 #   - #f6f4ee background with the 3px #e5e4de/#d3d3ce ink border
-#   - green ">_" mark (Consolas Bold 46px) + "SUPERMEGA" (Segoe UI Bold 36px)
+#   - cobalt ">_" mark (Consolas Bold 46px) + "SUPERMEGA" (Segoe UI Bold 36px)
 #   - 119x9 accent rule at (72, 246)
 #   - headline slot (Segoe UI Bold 66px, ink) -> carries the product name
 #   - one-line product description (Segoe UI 31px, muted) under the name
-#   - footer "supermega.dev" (Consolas 30px, green) + the brand tagline (muted)
+#   - footer "supermega.dev" (Consolas 30px, accent) + the brand tagline (muted)
 # Regenerate after changing a product name or headline in site-manifest.json,
-# then rerun npm run public:prebuilt. The generic og-card.png is not touched.
+# then rerun npm run public:prebuilt. The generic og-card.png is regenerated too.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
@@ -28,10 +28,13 @@ function ColorFromHex([string]$hex) {
 $background = ColorFromHex $manifest.brand.colors.background   # #f6f4ee
 $ink = ColorFromHex $manifest.brand.colors.ink                 # #17231d
 $accent = ColorFromHex $manifest.brand.colors.accent           # #0b745e
-$muted = ColorFromHex '#56665d'                                # --muted in the shared page style
-$borderOuter = ColorFromHex '#e5e4de'                          # measured from the committed og-card.png
-$borderCore = ColorFromHex '#d3d3ce'
-$tagline = 'Accountable company software.'
+$muted = ColorFromHex '#526078'                                # --muted in the shared page style
+$borderOuter = ColorFromHex '#e1e6f0'                          # measured from the committed og-card.png
+$borderCore = ColorFromHex '#cbd3e3'
+$tagline = (@('shop', 'website', 'ecommerce') | ForEach-Object {
+  $productId = $_
+  ($manifest.customerProducts | Where-Object { $_.id -eq $productId }).name
+}) -join ' / '
 
 function New-OgCard {
   param([string]$Name, [string]$Headline, [string]$OutPath)
@@ -74,7 +77,7 @@ function New-OgCard {
       # One-line product description.
       $g.DrawString($Headline, $descriptionFont, $mutedBrush, 74, 404, $fmt)
 
-      # Footer: green domain plus the brand tagline.
+      # Footer: accent domain plus the brand tagline.
       $g.DrawString('supermega.dev', $footerFont, $accentBrush, 74, 512, $fmt)
       $domainWidth = $g.MeasureString('supermega.dev', $footerFont, [System.Drawing.PointF]::new(0, 0), $fmt).Width
       $g.DrawString(([char]0x00B7).ToString() + ' ' + $tagline, $footerFont, $mutedBrush, [single](74 + $domainWidth + 17), 512, $fmt)
@@ -93,3 +96,5 @@ function New-OgCard {
 foreach ($product in $manifest.customerProducts) {
   New-OgCard -Name $product.name -Headline $product.headline -OutPath (Join-Path $assetDir ('og-card-' + $product.id + '.png'))
 }
+
+New-OgCard -Name 'Less busywork.' -Headline 'More business.' -OutPath (Join-Path $assetDir 'og-card.png')

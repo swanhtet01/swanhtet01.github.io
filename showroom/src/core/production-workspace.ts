@@ -290,6 +290,12 @@ export type ProductionWorkspaceSnapshot = {
   error: string
 }
 
+export type ProductionWorkspaceReadSnapshot = {
+  state: ProductionState
+  source: 'current' | 'legacy' | 'absent' | 'recovery'
+  error: string
+}
+
 export type ProductionMutationResult =
   | { ok: true; state: ProductionState; replayed: boolean }
   | { ok: false; error: string }
@@ -600,17 +606,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function assertOnlyFields(value: Record<string, unknown>, allowedFields: string[], field: string) {
   const unexpected = Object.keys(value).filter((key) => !allowedFields.includes(key))
-  if (unexpected.length) throw new Error(`${field} has unsupported fields: ${unexpected.sort().join(', ')}.`)
+  if (unexpected.length) rejectInvalid(`${field} has unsupported fields: ${unexpected.sort().join(', ')}.`)
 }
 
 function requiredText(value: unknown, field: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} must be a non-empty string.`)
+  if (typeof value !== 'string' || !value.trim()) rejectInvalid(`${field} must be a non-empty string.`)
   return value.trim()
 }
 
 function canonicalText(value: unknown, field: string, maximum = 180) {
   const text = requiredText(value, field)
-  if (value !== text || text.length > maximum) throw new Error(`${field} must be canonical text of at most ${maximum} characters.`)
+  if (value !== text || text.length > maximum) rejectInvalid(`${field} must be canonical text of at most ${maximum} characters.`)
   return text
 }
 
@@ -721,37 +727,37 @@ function validDowntimeTimestamp(value: unknown) {
 }
 
 function assertSafeInteger(value: unknown, field: string, minimum = 0) {
-  if (!Number.isSafeInteger(value) || Number(value) < minimum) throw new Error(`${field} must be a safe integer of at least ${minimum}.`)
+  if (!Number.isSafeInteger(value) || Number(value) < minimum) rejectInvalid(`${field} must be a safe integer of at least ${minimum}.`)
 }
 
 function assertUnique(values: string[], field: string) {
-  if (new Set(values).size !== values.length) throw new Error(`${field} values must be unique.`)
+  if (new Set(values).size !== values.length) rejectInvalid(`${field} values must be unique.`)
 }
 
 function validateProductionMaintenanceFindingSource(value: unknown, field: string): ProductionMaintenanceFindingSource {
-  if (!isRecord(value)) throw new Error(`${field} is invalid.`)
-  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionMaintenanceFindingSourceFields].sort())) throw new Error(`${field} fields are invalid.`)
-  if (value.contract !== 'supermega.production.maintenance-finding-source.v1') throw new Error(`${field}.contract is invalid.`)
+  if (!isRecord(value)) rejectInvalid(`${field} is invalid.`)
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionMaintenanceFindingSourceFields].sort())) rejectInvalid(`${field} fields are invalid.`)
+  if (value.contract !== 'supermega.production.maintenance-finding-source.v1') rejectInvalid(`${field}.contract is invalid.`)
   canonicalText(value.equipmentId, `${field}.equipmentId`, 80)
   canonicalText(value.equipmentName, `${field}.equipmentName`, 120)
   canonicalText(value.maintenanceOwner, `${field}.maintenanceOwner`, 120)
   canonicalText(value.completionActionId, `${field}.completionActionId`, 160)
-  if (!validDowntimeTimestamp(value.completedAt)) throw new Error(`${field}.completedAt is invalid.`)
+  if (!validDowntimeTimestamp(value.completedAt)) rejectInvalid(`${field}.completedAt is invalid.`)
   canonicalText(value.strategyActionId, `${field}.strategyActionId`, 160)
   assertSafeInteger(value.strategyRevision, `${field}.strategyRevision`, 1)
-  if (value.returnToService !== 'restricted' && value.returnToService !== 'not_recommended') throw new Error(`${field}.returnToService is invalid.`)
+  if (value.returnToService !== 'restricted' && value.returnToService !== 'not_recommended') rejectInvalid(`${field}.returnToService is invalid.`)
   canonicalText(value.findings, `${field}.findings`, 360)
   canonicalText(value.evidenceReference, `${field}.evidenceReference`)
   return value as unknown as ProductionMaintenanceFindingSource
 }
 
 function validateProductionMaintenanceCorrectiveAction(value: unknown, field: string): ProductionMaintenanceCorrectiveAction {
-  if (!isRecord(value)) throw new Error(`${field} is invalid.`)
-  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionMaintenanceCorrectiveActionFields].sort())) throw new Error(`${field} fields are invalid.`)
-  if (value.contract !== 'supermega.production.maintenance-corrective-action.v1') throw new Error(`${field}.contract is invalid.`)
+  if (!isRecord(value)) rejectInvalid(`${field} is invalid.`)
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionMaintenanceCorrectiveActionFields].sort())) rejectInvalid(`${field} fields are invalid.`)
+  if (value.contract !== 'supermega.production.maintenance-corrective-action.v1') rejectInvalid(`${field}.contract is invalid.`)
   canonicalText(value.correctiveAction, `${field}.correctiveAction`, 360)
   canonicalText(value.verificationResult, `${field}.verificationResult`, 360)
-  if (!productionMaintenanceReturnToServiceValues.includes(value.finalDisposition as ProductionMaintenanceReturnToService)) throw new Error(`${field}.finalDisposition is invalid.`)
+  if (!productionMaintenanceReturnToServiceValues.includes(value.finalDisposition as ProductionMaintenanceReturnToService)) rejectInvalid(`${field}.finalDisposition is invalid.`)
   return value as unknown as ProductionMaintenanceCorrectiveAction
 }
 
@@ -768,19 +774,19 @@ function productionQualityRecurrenceKey(failureMode: string, causeCategory: Prod
 }
 
 function validateProductionQualityCorrectiveAction(value: unknown, field: string): ProductionQualityCorrectiveAction {
-  if (!isRecord(value)) throw new Error(`${field} is invalid.`)
-  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionQualityCorrectiveActionFields].sort())) throw new Error(`${field} fields are invalid.`)
-  if (value.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA) throw new Error(`${field}.contract is invalid.`)
+  if (!isRecord(value)) rejectInvalid(`${field} is invalid.`)
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionQualityCorrectiveActionFields].sort())) rejectInvalid(`${field} fields are invalid.`)
+  if (value.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA) rejectInvalid(`${field}.contract is invalid.`)
   const failureMode = canonicalText(value.failureMode, `${field}.failureMode`, 120)
-  if (!productionQualityCauseCategories.includes(value.causeCategory as ProductionQualityCauseCategory)) throw new Error(`${field}.causeCategory is invalid.`)
+  if (!productionQualityCauseCategories.includes(value.causeCategory as ProductionQualityCauseCategory)) rejectInvalid(`${field}.causeCategory is invalid.`)
   canonicalText(value.rootCause, `${field}.rootCause`, 360)
   canonicalText(value.correctiveAction, `${field}.correctiveAction`, 360)
   canonicalText(value.verificationResult, `${field}.verificationResult`, 360)
   canonicalText(value.effectivenessOwner, `${field}.effectivenessOwner`, 120)
-  if (!validTimestamp(value.effectivenessDue)) throw new Error(`${field}.effectivenessDue is invalid.`)
+  if (!validTimestamp(value.effectivenessDue)) rejectInvalid(`${field}.effectivenessDue is invalid.`)
   const recurrenceKey = canonicalText(value.recurrenceKey, `${field}.recurrenceKey`, 160)
-  if (!productionQualityRecurrenceToken(failureMode) || recurrenceKey !== productionQualityRecurrenceKey(failureMode, value.causeCategory as ProductionQualityCauseCategory)) throw new Error(`${field}.recurrenceKey is invalid.`)
-  if (!Array.isArray(value.priorIssueIds) || value.priorIssueIds.length > 500) throw new Error(`${field}.priorIssueIds is invalid.`)
+  if (!productionQualityRecurrenceToken(failureMode) || recurrenceKey !== productionQualityRecurrenceKey(failureMode, value.causeCategory as ProductionQualityCauseCategory)) rejectInvalid(`${field}.recurrenceKey is invalid.`)
+  if (!Array.isArray(value.priorIssueIds) || value.priorIssueIds.length > 500) rejectInvalid(`${field}.priorIssueIds is invalid.`)
   const priorIssueIds = value.priorIssueIds.map((issueId, index) => canonicalText(issueId, `${field}.priorIssueIds[${index}]`, 80))
   assertUnique(priorIssueIds, `${field}.priorIssueIds`)
   return value as unknown as ProductionQualityCorrectiveAction
@@ -834,20 +840,20 @@ export function isCapaEffectivenessOverdue(capa: ProductionQualityCorrectiveActi
 }
 
 function validateProductionShopDemandSource(value: unknown, field: string): ProductionShopDemandSource {
-  if (!isRecord(value)) throw new Error(`${field} is invalid.`)
+  if (!isRecord(value)) rejectInvalid(`${field} is invalid.`)
   assertOnlyFields(value, productionShopDemandSourceFields, field)
-  if (value.contract !== PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT) throw new Error(`${field}.contract is invalid.`)
-  if (!isRecord(value.snapshot)) throw new Error(`${field}.snapshot is invalid.`)
+  if (value.contract !== PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT) rejectInvalid(`${field}.contract is invalid.`)
+  if (!isRecord(value.snapshot)) rejectInvalid(`${field}.snapshot is invalid.`)
   const snapshot = value.snapshot
   assertOnlyFields(snapshot, productionShopDemandSnapshotFields, `${field}.snapshot`)
-  if (snapshot.schema !== 'supermega.shop_production_demand.v1') throw new Error(`${field}.snapshot.schema is invalid.`)
-  if (snapshot.operatingUnitLocationId !== 'LOC-MAIN') throw new Error(`${field}.snapshot operating unit is invalid.`)
+  if (snapshot.schema !== 'supermega.shop_production_demand.v1') rejectInvalid(`${field}.snapshot.schema is invalid.`)
+  if (snapshot.operatingUnitLocationId !== 'LOC-MAIN') rejectInvalid(`${field}.snapshot operating unit is invalid.`)
   const sku = canonicalText(snapshot.sku, `${field}.snapshot.sku`, 80)
   const productName = canonicalText(snapshot.productName, `${field}.snapshot.productName`)
-  if (!Array.isArray(snapshot.sourceOrderIds) || snapshot.sourceOrderIds.length > 100) throw new Error(`${field}.snapshot.sourceOrderIds is invalid.`)
+  if (!Array.isArray(snapshot.sourceOrderIds) || snapshot.sourceOrderIds.length > 100) rejectInvalid(`${field}.snapshot.sourceOrderIds is invalid.`)
   const sourceOrderIds = snapshot.sourceOrderIds.map((id, index) => canonicalText(id, `${field}.snapshot.sourceOrderIds[${index}]`, 80))
   assertUnique(sourceOrderIds, `${field}.snapshot.sourceOrderIds`)
-  if (JSON.stringify(sourceOrderIds) !== JSON.stringify([...sourceOrderIds].sort((left, right) => left.localeCompare(right)))) throw new Error(`${field}.snapshot.sourceOrderIds must be sorted.`)
+  if (JSON.stringify(sourceOrderIds) !== JSON.stringify([...sourceOrderIds].sort((left, right) => left.localeCompare(right)))) rejectInvalid(`${field}.snapshot.sourceOrderIds must be sorted.`)
   const metricFields = ['activeDemandUnits', 'uncoveredDemandUnits', 'availableToPromiseUnits', 'reorderAtUnits', 'replenishmentGapUnits', 'recommendedBatchUnits'] as const
   for (const metric of metricFields) assertSafeInteger(snapshot[metric], `${field}.snapshot.${metric}`, metric === 'recommendedBatchUnits' ? 1 : 0)
   const activeDemandUnits = Number(snapshot.activeDemandUnits)
@@ -858,7 +864,7 @@ function validateProductionShopDemandSource(value: unknown, field: string): Prod
   const recommendedBatchUnits = Number(snapshot.recommendedBatchUnits)
   if (uncoveredDemandUnits !== Math.max(0, activeDemandUnits - availableToPromiseUnits)
     || replenishmentGapUnits !== Math.max(0, reorderAtUnits - availableToPromiseUnits)
-    || recommendedBatchUnits !== Math.max(1, uncoveredDemandUnits, replenishmentGapUnits)) throw new Error(`${field}.snapshot demand metrics are inconsistent.`)
+    || recommendedBatchUnits !== Math.max(1, uncoveredDemandUnits, replenishmentGapUnits)) rejectInvalid(`${field}.snapshot demand metrics are inconsistent.`)
   const canonicalSnapshot: ShopProductionDemandSourceSnapshot = {
     schema: 'supermega.shop_production_demand.v1',
     operatingUnitLocationId: 'LOC-MAIN',
@@ -873,9 +879,9 @@ function validateProductionShopDemandSource(value: unknown, field: string): Prod
     recommendedBatchUnits,
   }
   const sourceDigest = canonicalText(value.sourceDigest, `${field}.sourceDigest`, 71)
-  if (!/^sha256:[0-9a-f]{64}$/.test(sourceDigest) || sourceDigest !== plantOrderEvidenceDigest(canonicalSnapshot)) throw new Error(`${field}.sourceDigest does not match its canonical snapshot.`)
+  if (!/^sha256:[0-9a-f]{64}$/.test(sourceDigest) || sourceDigest !== plantOrderEvidenceDigest(canonicalSnapshot)) rejectInvalid(`${field}.sourceDigest does not match its canonical snapshot.`)
   const evidenceReference = canonicalText(value.evidenceReference, `${field}.evidenceReference`)
-  if (evidenceReference !== `SHOP-DEMAND:${sourceDigest}:LOC-MAIN`) throw new Error(`${field}.evidenceReference is invalid.`)
+  if (evidenceReference !== `SHOP-DEMAND:${sourceDigest}:LOC-MAIN`) rejectInvalid(`${field}.evidenceReference is invalid.`)
   return { contract: PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT, sourceDigest, evidenceReference, snapshot: canonicalSnapshot }
 }
 
@@ -975,10 +981,10 @@ export function productionSeedAnchor(state: ProductionState) {
 }
 
 export function validateProductionState(value: unknown): ProductionState {
-  if (!isRecord(value) || value.schema !== PRODUCTION_WORKSPACE_SCHEMA) throw new Error('Production workspace schema is not v2.')
+  if (!isRecord(value) || value.schema !== PRODUCTION_WORKSPACE_SCHEMA) rejectInvalid('Production workspace schema is not v2.')
   assertOnlyFields(value, productionStateFields, 'Production workspace')
   assertSafeInteger(value.revision, 'Production workspace revision')
-  if (!Array.isArray(value.jobs) || !Array.isArray(value.issues) || !Array.isArray(value.machines) || !Array.isArray(value.events)) throw new Error('Production workspace collections are incomplete.')
+  if (!Array.isArray(value.jobs) || !Array.isArray(value.issues) || !Array.isArray(value.machines) || !Array.isArray(value.events)) rejectInvalid('Production workspace collections are incomplete.')
 
   const jobs = value.jobs as unknown[]
   const issues = value.issues as unknown[]
@@ -997,7 +1003,7 @@ export function validateProductionState(value: unknown): ProductionState {
   const materialShiftTotals = new Map<string, number>()
 
   for (const [index, candidate] of jobs.entries()) {
-    if (!isRecord(candidate)) throw new Error(`jobs[${index}] is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`jobs[${index}] is invalid.`)
     assertOnlyFields(candidate, productionJobFields, `jobs[${index}]`)
     jobIds.push(canonicalText(candidate.id, `jobs[${index}].id`, 80))
     canonicalText(candidate.line, `jobs[${index}].line`, 120)
@@ -1007,139 +1013,139 @@ export function validateProductionState(value: unknown): ProductionState {
     if (candidate.owner !== undefined) canonicalText(candidate.owner, `jobs[${index}].owner`, 120)
     const scheduleFields = ['priority', 'dueAt'] as const
     const scheduleFieldCount = scheduleFields.filter((field) => candidate[field] !== undefined).length
-    if (scheduleFieldCount !== 0 && scheduleFieldCount !== scheduleFields.length) throw new Error(`jobs[${index}] schedule fields must be complete or absent for legacy records.`)
+    if (scheduleFieldCount !== 0 && scheduleFieldCount !== scheduleFields.length) rejectInvalid(`jobs[${index}] schedule fields must be complete or absent for legacy records.`)
     if (scheduleFieldCount === scheduleFields.length) {
-      if (!productionJobPriorities.includes(candidate.priority as ProductionJobPriority)) throw new Error(`jobs[${index}].priority is invalid.`)
-      if (!validTimestamp(candidate.dueAt)) throw new Error(`jobs[${index}].dueAt is invalid.`)
+      if (!productionJobPriorities.includes(candidate.priority as ProductionJobPriority)) rejectInvalid(`jobs[${index}].priority is invalid.`)
+      if (!validTimestamp(candidate.dueAt)) rejectInvalid(`jobs[${index}].dueAt is invalid.`)
     }
     if (candidate.scrap !== undefined) assertSafeInteger(candidate.scrap, `jobs[${index}].scrap`)
     const accounted = Number(candidate.output) + Number(candidate.scrap ?? 0)
-    if (!Number.isSafeInteger(accounted) || accounted > Number(candidate.target)) throw new Error(`jobs[${index}] good plus scrap exceeds target.`)
+    if (!Number.isSafeInteger(accounted) || accounted > Number(candidate.target)) rejectInvalid(`jobs[${index}] good plus scrap exceeds target.`)
     if (candidate.shopDemandSource !== undefined) {
       const source = validateProductionShopDemandSource(candidate.shopDemandSource, `jobs[${index}].shopDemandSource`)
       const product = String(candidate.product).toLocaleLowerCase('en-US')
       if (source.snapshot.productName.toLocaleLowerCase('en-US') !== product
-        && source.snapshot.sku.toLocaleLowerCase('en-US') !== product) throw new Error(`jobs[${index}] product does not match its Shop demand source.`)
-      if (source.snapshot.recommendedBatchUnits !== Number(candidate.target)) throw new Error(`jobs[${index}] target does not match its Shop demand source.`)
+        && source.snapshot.sku.toLocaleLowerCase('en-US') !== product) rejectInvalid(`jobs[${index}] product does not match its Shop demand source.`)
+      if (source.snapshot.recommendedBatchUnits !== Number(candidate.target)) rejectInvalid(`jobs[${index}] target does not match its Shop demand source.`)
     }
     if (candidate.qualityHold !== undefined) {
-      if (!isRecord(candidate.qualityHold)) throw new Error(`jobs[${index}].qualityHold is invalid.`)
+      if (!isRecord(candidate.qualityHold)) rejectInvalid(`jobs[${index}].qualityHold is invalid.`)
       const qualityHold = candidate.qualityHold
       const qualityHoldFields = ['actionId', 'heldAt', 'heldBy', 'reason', 'evidenceReference']
-      if (JSON.stringify(Object.keys(qualityHold).sort()) !== JSON.stringify([...qualityHoldFields].sort())) throw new Error(`jobs[${index}].qualityHold fields are invalid.`)
+      if (JSON.stringify(Object.keys(qualityHold).sort()) !== JSON.stringify([...qualityHoldFields].sort())) rejectInvalid(`jobs[${index}].qualityHold fields are invalid.`)
       canonicalText(qualityHold.actionId, `jobs[${index}].qualityHold.actionId`, 160)
-      if (!validTimestamp(qualityHold.heldAt)) throw new Error(`jobs[${index}].qualityHold.heldAt is invalid.`)
+      if (!validTimestamp(qualityHold.heldAt)) rejectInvalid(`jobs[${index}].qualityHold.heldAt is invalid.`)
       canonicalText(qualityHold.heldBy, `jobs[${index}].qualityHold.heldBy`)
       canonicalText(qualityHold.reason, `jobs[${index}].qualityHold.reason`)
       canonicalText(qualityHold.evidenceReference, `jobs[${index}].qualityHold.evidenceReference`)
     }
     if (candidate.closure !== undefined) {
-      if (!isRecord(candidate.closure)) throw new Error(`jobs[${index}].closure is invalid.`)
+      if (!isRecord(candidate.closure)) rejectInvalid(`jobs[${index}].closure is invalid.`)
       const closure = candidate.closure
       const closureFields = ['actionId', 'closedAt', 'closedBy', 'reason', 'evidenceReference', 'shiftRef', 'remainingUnits']
-      if (JSON.stringify(Object.keys(closure).sort()) !== JSON.stringify([...closureFields].sort())) throw new Error(`jobs[${index}].closure fields are invalid.`)
+      if (JSON.stringify(Object.keys(closure).sort()) !== JSON.stringify([...closureFields].sort())) rejectInvalid(`jobs[${index}].closure fields are invalid.`)
       canonicalText(closure.actionId, `jobs[${index}].closure.actionId`, 160)
-      if (!validTimestamp(closure.closedAt)) throw new Error(`jobs[${index}].closure.closedAt is invalid.`)
+      if (!validTimestamp(closure.closedAt)) rejectInvalid(`jobs[${index}].closure.closedAt is invalid.`)
       canonicalText(closure.closedBy, `jobs[${index}].closure.closedBy`)
       canonicalText(closure.reason, `jobs[${index}].closure.reason`)
       canonicalText(closure.evidenceReference, `jobs[${index}].closure.evidenceReference`)
       canonicalText(closure.shiftRef, `jobs[${index}].closure.shiftRef`, 80)
       assertSafeInteger(closure.remainingUnits, `jobs[${index}].closure.remainingUnits`, 1)
-      if (Number(closure.remainingUnits) !== Number(candidate.target) - accounted) throw new Error(`jobs[${index}].closure remaining units do not match its output.`)
+      if (Number(closure.remainingUnits) !== Number(candidate.target) - accounted) rejectInvalid(`jobs[${index}].closure remaining units do not match its output.`)
     }
   }
   assertUnique(jobIds, 'Production job ID')
 
   for (const [index, candidate] of issues.entries()) {
-    if (!isRecord(candidate)) throw new Error(`issues[${index}] is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`issues[${index}] is invalid.`)
     assertOnlyFields(candidate, productionIssueFields, `issues[${index}]`)
     issueIds.push(canonicalText(candidate.id, `issues[${index}].id`, 80))
-    if (!validTimestamp(candidate.createdAt)) throw new Error(`issues[${index}].createdAt is invalid.`)
+    if (!validTimestamp(candidate.createdAt)) rejectInvalid(`issues[${index}].createdAt is invalid.`)
     canonicalText(candidate.area, `issues[${index}].area`, 120)
     canonicalText(candidate.summary, `issues[${index}].summary`, 240)
-    if (!issueKinds.includes(candidate.kind as ProductionIssueKind)) throw new Error(`issues[${index}].kind is invalid.`)
-    if (candidate.status !== 'open' && candidate.status !== 'resolved') throw new Error(`issues[${index}].status is invalid.`)
+    if (!issueKinds.includes(candidate.kind as ProductionIssueKind)) rejectInvalid(`issues[${index}].kind is invalid.`)
+    if (candidate.status !== 'open' && candidate.status !== 'resolved') rejectInvalid(`issues[${index}].status is invalid.`)
     const actionFields = ['severity', 'owner', 'dueAt', 'containment'] as const
     const actionFieldCount = actionFields.filter((field) => candidate[field] !== undefined).length
-    if (actionFieldCount !== 0 && actionFieldCount !== actionFields.length) throw new Error(`issues[${index}] action fields must be complete or absent for legacy records.`)
+    if (actionFieldCount !== 0 && actionFieldCount !== actionFields.length) rejectInvalid(`issues[${index}] action fields must be complete or absent for legacy records.`)
     if (actionFieldCount === actionFields.length) {
-      if (!productionIssueSeverities.includes(candidate.severity as ProductionIssueSeverity)) throw new Error(`issues[${index}].severity is invalid.`)
+      if (!productionIssueSeverities.includes(candidate.severity as ProductionIssueSeverity)) rejectInvalid(`issues[${index}].severity is invalid.`)
       canonicalText(candidate.owner, `issues[${index}].owner`, 120)
-      if (!validTimestamp(candidate.dueAt)) throw new Error(`issues[${index}].dueAt is invalid.`)
-      if (timestampAtOrBefore(candidate.dueAt as string, candidate.createdAt as string)) throw new Error(`issues[${index}].dueAt must follow its creation time.`)
+      if (!validTimestamp(candidate.dueAt)) rejectInvalid(`issues[${index}].dueAt is invalid.`)
+      if (timestampAtOrBefore(candidate.dueAt as string, candidate.createdAt as string)) rejectInvalid(`issues[${index}].dueAt must follow its creation time.`)
       canonicalText(candidate.containment, `issues[${index}].containment`, 240)
     }
     if (candidate.maintenanceFindingSource !== undefined) {
       const source = validateProductionMaintenanceFindingSource(candidate.maintenanceFindingSource, `issues[${index}].maintenanceFindingSource`)
-      if (candidate.kind !== 'maintenance') throw new Error(`issues[${index}] maintenance finding source requires a maintenance issue.`)
-      if (timestampBefore(candidate.createdAt as string, source.completedAt)) throw new Error(`issues[${index}] cannot predate its maintenance finding.`)
+      if (candidate.kind !== 'maintenance') rejectInvalid(`issues[${index}] maintenance finding source requires a maintenance issue.`)
+      if (timestampBefore(candidate.createdAt as string, source.completedAt)) rejectInvalid(`issues[${index}] cannot predate its maintenance finding.`)
     }
-    if (candidate.status === 'open' && candidate.resolution !== undefined) throw new Error(`issues[${index}] is open but has resolution evidence.`)
+    if (candidate.status === 'open' && candidate.resolution !== undefined) rejectInvalid(`issues[${index}] is open but has resolution evidence.`)
     if (candidate.resolution !== undefined) {
-      if (!isRecord(candidate.resolution)) throw new Error(`issues[${index}].resolution is invalid.`)
+      if (!isRecord(candidate.resolution)) rejectInvalid(`issues[${index}].resolution is invalid.`)
       const resolution = candidate.resolution
       assertOnlyFields(resolution, productionIssueResolutionFields, `issues[${index}].resolution`)
       canonicalText(resolution.actionId, `issues[${index}].resolution.actionId`, 160)
-      if (!validTimestamp(resolution.resolvedAt)) throw new Error(`issues[${index}].resolution.resolvedAt is invalid.`)
+      if (!validTimestamp(resolution.resolvedAt)) rejectInvalid(`issues[${index}].resolution.resolvedAt is invalid.`)
       canonicalText(resolution.resolvedBy, `issues[${index}].resolution.resolvedBy`)
       canonicalText(resolution.reason, `issues[${index}].resolution.reason`)
       canonicalText(resolution.evidenceReference, `issues[${index}].resolution.evidenceReference`)
       const correctiveAction = resolution.maintenanceCorrectiveAction === undefined ? undefined : validateProductionMaintenanceCorrectiveAction(resolution.maintenanceCorrectiveAction, `issues[${index}].resolution.maintenanceCorrectiveAction`)
       const qualityCorrectiveAction = resolution.qualityCorrectiveAction === undefined ? undefined : validateProductionQualityCorrectiveAction(resolution.qualityCorrectiveAction, `issues[${index}].resolution.qualityCorrectiveAction`)
-      if (Boolean(candidate.maintenanceFindingSource) !== Boolean(correctiveAction)) throw new Error(`issues[${index}] maintenance finding resolution requires one structured corrective action only.`)
-      if (candidate.kind === 'quality' && candidate.status === 'resolved' && actionFieldCount === actionFields.length && !qualityCorrectiveAction) throw new Error(`issues[${index}] actionable quality resolution requires structured CAPA evidence.`)
-      if (qualityCorrectiveAction && candidate.kind !== 'quality') throw new Error(`issues[${index}] quality corrective action requires a quality issue.`)
-      if (correctiveAction && qualityCorrectiveAction) throw new Error(`issues[${index}] cannot carry maintenance and quality corrective actions together.`)
+      if (Boolean(candidate.maintenanceFindingSource) !== Boolean(correctiveAction)) rejectInvalid(`issues[${index}] maintenance finding resolution requires one structured corrective action only.`)
+      if (candidate.kind === 'quality' && candidate.status === 'resolved' && actionFieldCount === actionFields.length && !qualityCorrectiveAction) rejectInvalid(`issues[${index}] actionable quality resolution requires structured CAPA evidence.`)
+      if (qualityCorrectiveAction && candidate.kind !== 'quality') rejectInvalid(`issues[${index}] quality corrective action requires a quality issue.`)
+      if (correctiveAction && qualityCorrectiveAction) rejectInvalid(`issues[${index}] cannot carry maintenance and quality corrective actions together.`)
     }
   }
   assertUnique(issueIds, 'Production issue ID')
 
   for (const [index, candidate] of machines.entries()) {
-    if (!isRecord(candidate)) throw new Error(`machines[${index}] is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`machines[${index}] is invalid.`)
     assertOnlyFields(candidate, productionMachineFields, `machines[${index}]`)
     machineIds.push(canonicalText(candidate.id, `machines[${index}].id`, 80))
     canonicalText(candidate.name, `machines[${index}].name`)
-    if (!productionMachineStates.includes(candidate.state as ProductionMachineState)) throw new Error(`machines[${index}].state is invalid.`)
+    if (!productionMachineStates.includes(candidate.state as ProductionMachineState)) rejectInvalid(`machines[${index}].state is invalid.`)
   }
   assertUnique(machineIds, 'Production machine ID')
 
   if (Object.hasOwn(value, 'equipmentMaster')) {
-    if (!isRecord(value.equipmentMaster)) throw new Error('Production equipment master is invalid.')
+    if (!isRecord(value.equipmentMaster)) rejectInvalid('Production equipment master is invalid.')
     assertOnlyFields(value.equipmentMaster, productionEquipmentMasterFields, 'Production equipment master')
-    if (JSON.stringify(Object.keys(value.equipmentMaster).sort()) !== JSON.stringify([...productionEquipmentMasterFields].sort())) throw new Error('Production equipment master fields are incomplete.')
-    if (value.equipmentMaster.contract !== 'supermega.production.equipment-master.v1') throw new Error('Production equipment master contract is invalid.')
-    if (!Array.isArray(value.equipmentMaster.assets) || value.equipmentMaster.assets.length < 1 || value.equipmentMaster.assets.length > 100) throw new Error('Production equipment master assets are invalid.')
+    if (JSON.stringify(Object.keys(value.equipmentMaster).sort()) !== JSON.stringify([...productionEquipmentMasterFields].sort())) rejectInvalid('Production equipment master fields are incomplete.')
+    if (value.equipmentMaster.contract !== 'supermega.production.equipment-master.v1') rejectInvalid('Production equipment master contract is invalid.')
+    if (!Array.isArray(value.equipmentMaster.assets) || value.equipmentMaster.assets.length < 1 || value.equipmentMaster.assets.length > 100) rejectInvalid('Production equipment master assets are invalid.')
     equipmentAssets = value.equipmentMaster.assets.map((candidate, index) => {
-      if (!isRecord(candidate)) throw new Error(`equipmentMaster.assets[${index}] is invalid.`)
+      if (!isRecord(candidate)) rejectInvalid(`equipmentMaster.assets[${index}] is invalid.`)
       const commissioningStatus = candidate.commissioningStatus
       const expectedAssetFields = commissioningStatus === 'commissioned'
         ? [...productionEquipmentAssetFields, 'commissioning', ...(candidate.maintenanceStrategy === undefined ? [] : ['maintenanceStrategy'])]
         : productionEquipmentAssetFields
-      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedAssetFields].sort())) throw new Error(`equipmentMaster.assets[${index}] fields are invalid.`)
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedAssetFields].sort())) rejectInvalid(`equipmentMaster.assets[${index}] fields are invalid.`)
       const equipmentId = canonicalText(candidate.id, `equipmentMaster.assets[${index}].id`, 80)
       const workCentreId = canonicalText(candidate.workCentreId, `equipmentMaster.assets[${index}].workCentreId`, 80)
-      if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(equipmentId) || !/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`equipmentMaster.assets[${index}] IDs are invalid.`)
+      if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(equipmentId) || !/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) rejectInvalid(`equipmentMaster.assets[${index}] IDs are invalid.`)
       canonicalText(candidate.name, `equipmentMaster.assets[${index}].name`, 180)
       canonicalText(candidate.owner, `equipmentMaster.assets[${index}].owner`, 120)
-      if (!productionEquipmentCriticalities.includes(candidate.criticality as ProductionEquipmentCriticality)) throw new Error(`equipmentMaster.assets[${index}].criticality is invalid.`)
-      if (commissioningStatus !== 'not_commissioned' && commissioningStatus !== 'commissioned') throw new Error(`equipmentMaster.assets[${index}].commissioningStatus is invalid.`)
+      if (!productionEquipmentCriticalities.includes(candidate.criticality as ProductionEquipmentCriticality)) rejectInvalid(`equipmentMaster.assets[${index}].criticality is invalid.`)
+      if (commissioningStatus !== 'not_commissioned' && commissioningStatus !== 'commissioned') rejectInvalid(`equipmentMaster.assets[${index}].commissioningStatus is invalid.`)
       canonicalText(candidate.sourceActionId, `equipmentMaster.assets[${index}].sourceActionId`, 160)
-      if (typeof candidate.sourcePackageDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.sourcePackageDigest)) throw new Error(`equipmentMaster.assets[${index}].sourcePackageDigest is invalid.`)
-      if (!validDowntimeTimestamp(candidate.importedAt)) throw new Error(`equipmentMaster.assets[${index}].importedAt is invalid.`)
+      if (typeof candidate.sourcePackageDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.sourcePackageDigest)) rejectInvalid(`equipmentMaster.assets[${index}].sourcePackageDigest is invalid.`)
+      if (!validDowntimeTimestamp(candidate.importedAt)) rejectInvalid(`equipmentMaster.assets[${index}].importedAt is invalid.`)
       if (commissioningStatus === 'commissioned') {
-        if (!isRecord(candidate.commissioning)) throw new Error(`equipmentMaster.assets[${index}].commissioning is invalid.`)
+        if (!isRecord(candidate.commissioning)) rejectInvalid(`equipmentMaster.assets[${index}].commissioning is invalid.`)
         const commissioning = candidate.commissioning
-        if (JSON.stringify(Object.keys(commissioning).sort()) !== JSON.stringify([...productionEquipmentCommissioningFields].sort())) throw new Error(`equipmentMaster.assets[${index}].commissioning fields are invalid.`)
+        if (JSON.stringify(Object.keys(commissioning).sort()) !== JSON.stringify([...productionEquipmentCommissioningFields].sort())) rejectInvalid(`equipmentMaster.assets[${index}].commissioning fields are invalid.`)
         canonicalText(commissioning.actionId, `equipmentMaster.assets[${index}].commissioning.actionId`, 160)
         canonicalText(commissioning.commissionedBy, `equipmentMaster.assets[${index}].commissioning.commissionedBy`, 120)
         canonicalText(commissioning.safetyBaselineReference, `equipmentMaster.assets[${index}].commissioning.safetyBaselineReference`, 240)
-        if (!validDowntimeTimestamp(commissioning.commissionedAt) || !validDowntimeTimestamp(commissioning.installedAt)) throw new Error(`equipmentMaster.assets[${index}].commissioning timestamps are invalid.`)
-        if (timestampBefore(commissioning.commissionedAt as string, candidate.importedAt as string) || timestampBefore(commissioning.commissionedAt as string, commissioning.installedAt as string)) throw new Error(`equipmentMaster.assets[${index}].commissioning chronology is invalid.`)
-        if (!productionMachineStates.includes(commissioning.initialState as ProductionMachineState)) throw new Error(`equipmentMaster.assets[${index}].commissioning.initialState is invalid.`)
+        if (!validDowntimeTimestamp(commissioning.commissionedAt) || !validDowntimeTimestamp(commissioning.installedAt)) rejectInvalid(`equipmentMaster.assets[${index}].commissioning timestamps are invalid.`)
+        if (timestampBefore(commissioning.commissionedAt as string, candidate.importedAt as string) || timestampBefore(commissioning.commissionedAt as string, commissioning.installedAt as string)) rejectInvalid(`equipmentMaster.assets[${index}].commissioning chronology is invalid.`)
+        if (!productionMachineStates.includes(commissioning.initialState as ProductionMachineState)) rejectInvalid(`equipmentMaster.assets[${index}].commissioning.initialState is invalid.`)
         if (candidate.maintenanceStrategy !== undefined) {
-          if (!isRecord(candidate.maintenanceStrategy)) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy is invalid.`)
+          if (!isRecord(candidate.maintenanceStrategy)) rejectInvalid(`equipmentMaster.assets[${index}].maintenanceStrategy is invalid.`)
           const strategy = candidate.maintenanceStrategy
-          if (JSON.stringify(Object.keys(strategy).sort()) !== JSON.stringify([...productionEquipmentMaintenanceStrategyFields].sort())) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy fields are invalid.`)
+          if (JSON.stringify(Object.keys(strategy).sort()) !== JSON.stringify([...productionEquipmentMaintenanceStrategyFields].sort())) rejectInvalid(`equipmentMaster.assets[${index}].maintenanceStrategy fields are invalid.`)
           assertSafeInteger(strategy.revision, `equipmentMaster.assets[${index}].maintenanceStrategy.revision`, 1)
           canonicalText(strategy.actionId, `equipmentMaster.assets[${index}].maintenanceStrategy.actionId`, 160)
           canonicalText(strategy.savedBy, `equipmentMaster.assets[${index}].maintenanceStrategy.savedBy`, 120)
@@ -1147,268 +1153,268 @@ export function validateProductionState(value: unknown): ProductionState {
           canonicalText(strategy.procedureReference, `equipmentMaster.assets[${index}].maintenanceStrategy.procedureReference`, 240)
           canonicalText(strategy.safetyBaselineReference, `equipmentMaster.assets[${index}].maintenanceStrategy.safetyBaselineReference`, 240)
           assertSafeInteger(strategy.intervalDays, `equipmentMaster.assets[${index}].maintenanceStrategy.intervalDays`, 1)
-          if (Number(strategy.intervalDays) > 3650) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy.intervalDays is too large.`)
-          if (!validDowntimeTimestamp(strategy.savedAt) || !validDowntimeTimestamp(strategy.nextDueAt)) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy timestamps are invalid.`)
-          if (timestampAtOrBefore(strategy.nextDueAt as string, strategy.savedAt as string)) throw new Error(`equipmentMaster.assets[${index}].maintenanceStrategy.nextDueAt must follow strategy save time.`)
+          if (Number(strategy.intervalDays) > 3650) rejectInvalid(`equipmentMaster.assets[${index}].maintenanceStrategy.intervalDays is too large.`)
+          if (!validDowntimeTimestamp(strategy.savedAt) || !validDowntimeTimestamp(strategy.nextDueAt)) rejectInvalid(`equipmentMaster.assets[${index}].maintenanceStrategy timestamps are invalid.`)
+          if (timestampAtOrBefore(strategy.nextDueAt as string, strategy.savedAt as string)) rejectInvalid(`equipmentMaster.assets[${index}].maintenanceStrategy.nextDueAt must follow strategy save time.`)
         }
       } else if (candidate.maintenanceStrategy !== undefined) {
-        throw new Error(`equipmentMaster.assets[${index}] cannot retain a maintenance strategy before commissioning.`)
+        rejectInvalid(`equipmentMaster.assets[${index}] cannot retain a maintenance strategy before commissioning.`)
       }
       equipmentIds.push(equipmentId)
       return candidate
     })
     assertUnique(equipmentIds, 'Production equipment ID')
-    if (equipmentAssets.some((asset) => asset.commissioningStatus === 'not_commissioned' && machineIds.includes(String(asset.id)))) throw new Error('Uncommissioned equipment cannot appear as a runtime machine.')
+    if (equipmentAssets.some((asset) => asset.commissioningStatus === 'not_commissioned' && machineIds.includes(String(asset.id)))) rejectInvalid('Uncommissioned equipment cannot appear as a runtime machine.')
   }
 
   if (Object.hasOwn(value, 'openingPlan')) {
-    if (!isRecord(value.openingPlan)) throw new Error('Production opening plan is invalid.')
+    if (!isRecord(value.openingPlan)) rejectInvalid('Production opening plan is invalid.')
     const openingPlan = value.openingPlan
     assertOnlyFields(openingPlan, productionOpeningPlanFields, 'Production opening plan')
-    if (openingPlan.contract !== 'supermega.production.opening-plan.v1') throw new Error('Production opening plan contract is invalid.')
-    if (typeof openingPlan.packageDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(openingPlan.packageDigest)) throw new Error('Production opening plan package digest is invalid.')
-    if (!validDowntimeTimestamp(openingPlan.confirmedAt)) throw new Error('Production opening plan confirmation time is invalid.')
+    if (openingPlan.contract !== 'supermega.production.opening-plan.v1') rejectInvalid('Production opening plan contract is invalid.')
+    if (typeof openingPlan.packageDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(openingPlan.packageDigest)) rejectInvalid('Production opening plan package digest is invalid.')
+    if (!validDowntimeTimestamp(openingPlan.confirmedAt)) rejectInvalid('Production opening plan confirmation time is invalid.')
     if (openingPlan.industryPackId !== undefined) plantIndustryPack(String(openingPlan.industryPackId))
     if (!Array.isArray(openingPlan.jobIds)
       || !openingPlan.jobIds.length
       || openingPlan.jobIds.length > 100
       || !Array.isArray(openingPlan.machineIds)
-      || openingPlan.machineIds.length > 100) throw new Error('Production opening plan record IDs are invalid.')
+      || openingPlan.machineIds.length > 100) rejectInvalid('Production opening plan record IDs are invalid.')
     const planJobIds = openingPlan.jobIds.map((id, index) => canonicalText(id, `openingPlan.jobIds[${index}]`, 80))
     const planMachineIds = openingPlan.machineIds.map((id, index) => canonicalText(id, `openingPlan.machineIds[${index}]`, 80))
     assertUnique(planJobIds, 'Production opening job ID')
     assertUnique(planMachineIds, 'Production opening machine ID')
-    if (JSON.stringify(jobIds.slice(-planJobIds.length)) !== JSON.stringify(planJobIds)) throw new Error('Production opening jobs are not the immutable job suffix.')
-    if (JSON.stringify(machineIds.slice(0, planMachineIds.length)) !== JSON.stringify(planMachineIds)) throw new Error('Production opening machines are not the immutable machine prefix.')
+    if (JSON.stringify(jobIds.slice(-planJobIds.length)) !== JSON.stringify(planJobIds)) rejectInvalid('Production opening jobs are not the immutable job suffix.')
+    if (JSON.stringify(machineIds.slice(0, planMachineIds.length)) !== JSON.stringify(planMachineIds)) rejectInvalid('Production opening machines are not the immutable machine prefix.')
     openingJobIds = planJobIds
     openingMachineIds = planMachineIds
   }
 
   if (Object.hasOwn(value, 'orderExecution')) {
-    if (!isRecord(value.orderExecution)) throw new Error('Production order execution is invalid.')
+    if (!isRecord(value.orderExecution)) rejectInvalid('Production order execution is invalid.')
     const execution = value.orderExecution
     assertOnlyFields(execution, ['schema', 'revision', 'headDigest', 'commands'], 'Production order execution')
-    if (execution.schema !== 'supermega.plant.order_foundation.v1') throw new Error('Production order execution contract is invalid.')
+    if (execution.schema !== 'supermega.plant.order_foundation.v1') rejectInvalid('Production order execution contract is invalid.')
     assertSafeInteger(execution.revision, 'Production order execution revision')
-    if (!Array.isArray(execution.commands) || execution.commands.length > 2_000 || execution.commands.length !== execution.revision) throw new Error('Production order execution command count is invalid.')
-    if (typeof execution.headDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(execution.headDigest)) throw new Error('Production order execution head digest is invalid.')
-    if (execution.revision === 0 && execution.headDigest !== `sha256:${'0'.repeat(64)}`) throw new Error('Empty Production order execution digest is invalid.')
+    if (!Array.isArray(execution.commands) || execution.commands.length > 2_000 || execution.commands.length !== execution.revision) rejectInvalid('Production order execution command count is invalid.')
+    if (typeof execution.headDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(execution.headDigest)) rejectInvalid('Production order execution head digest is invalid.')
+    if (execution.revision === 0 && execution.headDigest !== `sha256:${'0'.repeat(64)}`) rejectInvalid('Empty Production order execution digest is invalid.')
     const lastCommand = execution.commands.at(-1)
-    if (lastCommand !== undefined && (!isRecord(lastCommand) || lastCommand.digest !== execution.headDigest)) throw new Error('Production order execution head does not match its latest command.')
+    if (lastCommand !== undefined && (!isRecord(lastCommand) || lastCommand.digest !== execution.headDigest)) rejectInvalid('Production order execution head does not match its latest command.')
   }
 
   for (const [index, candidate] of events.entries()) {
-    if (!isRecord(candidate)) throw new Error(`events[${index}] is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`events[${index}] is invalid.`)
     const eventId = canonicalText(candidate.id, `events[${index}].id`, 164)
     const actionId = canonicalText(candidate.actionId, `events[${index}].actionId`, 160)
     eventIds.push(eventId)
     actionIds.push(actionId)
-    if (eventId !== `EVT-${actionId}`) throw new Error(`events[${index}].id does not match its action.`)
-    if (!validTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt is invalid.`)
+    if (eventId !== `EVT-${actionId}`) rejectInvalid(`events[${index}].id does not match its action.`)
+    if (!validTimestamp(candidate.createdAt)) rejectInvalid(`events[${index}].createdAt is invalid.`)
     for (const field of ['actor', 'reason', 'evidenceReference'] as const) canonicalText(candidate[field], `events[${index}].${field}`)
     canonicalText(candidate.subjectId, `events[${index}].subjectId`, 80)
     canonicalText(candidate.summary, `events[${index}].summary`, 360)
-    if (!eventKinds.includes(candidate.kind as ProductionEventKind)) throw new Error(`events[${index}].kind is invalid.`)
+    if (!eventKinds.includes(candidate.kind as ProductionEventKind)) rejectInvalid(`events[${index}].kind is invalid.`)
     assertOnlyFields(candidate, eventFieldsByKind[candidate.kind as ProductionEventKind], `events[${index}]`)
     const issueSnapshotFields = ['issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment'] as const
     const issueSnapshotFieldCount = issueSnapshotFields.filter((field) => candidate[field] !== undefined).length
     const materialFieldCount = ['materialRef', 'materialLot', 'materialUnit'].filter((field) => candidate[field] !== undefined).length
     const maintenanceFieldCount = ['maintenanceOwner', 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, ...maintenanceResultFields, 'nextDueAt'].filter((field) => candidate[field] !== undefined).length
     if (candidate.kind === 'equipment_master_imported') {
-      if (candidate.subjectId !== 'equipment-master') throw new Error(`events[${index}] must reference the equipment master authority.`)
-      if (!Array.isArray(candidate.equipmentIds) || candidate.equipmentIds.length < 1 || candidate.equipmentIds.length > 100) throw new Error(`events[${index}].equipmentIds are invalid.`)
+      if (candidate.subjectId !== 'equipment-master') rejectInvalid(`events[${index}] must reference the equipment master authority.`)
+      if (!Array.isArray(candidate.equipmentIds) || candidate.equipmentIds.length < 1 || candidate.equipmentIds.length > 100) rejectInvalid(`events[${index}].equipmentIds are invalid.`)
       const importedEquipmentIds = candidate.equipmentIds.map((id, position) => canonicalText(id, `events[${index}].equipmentIds[${position}]`, 80))
       assertUnique(importedEquipmentIds, 'Production equipment import ID')
-      if (importedEquipmentIds.some((id) => !equipmentIds.includes(id))) throw new Error(`events[${index}] references unknown equipment.`)
-      if (candidate.summary !== `Imported ${importedEquipmentIds.length} equipment master records`) throw new Error(`events[${index}] equipment import summary is not canonical.`)
-      if (typeof candidate.evidenceReference !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.evidenceReference)) throw new Error(`events[${index}] equipment import evidence is invalid.`)
+      if (importedEquipmentIds.some((id) => !equipmentIds.includes(id))) rejectInvalid(`events[${index}] references unknown equipment.`)
+      if (candidate.summary !== `Imported ${importedEquipmentIds.length} equipment master records`) rejectInvalid(`events[${index}] equipment import summary is not canonical.`)
+      if (typeof candidate.evidenceReference !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.evidenceReference)) rejectInvalid(`events[${index}] equipment import evidence is invalid.`)
     } else if (candidate.kind === 'equipment_commissioned') {
-      if (!equipmentIds.includes(candidate.subjectId as string) || !machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] must reference one retained equipment runtime.`)
-      if (!validDowntimeTimestamp(candidate.installedAt) || timestampBefore(candidate.createdAt as string, candidate.installedAt as string)) throw new Error(`events[${index}] equipment installation timestamp is invalid.`)
-      if (!productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}].toState is invalid.`)
+      if (!equipmentIds.includes(candidate.subjectId as string) || !machineIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] must reference one retained equipment runtime.`)
+      if (!validDowntimeTimestamp(candidate.installedAt) || timestampBefore(candidate.createdAt as string, candidate.installedAt as string)) rejectInvalid(`events[${index}] equipment installation timestamp is invalid.`)
+      if (!productionMachineStates.includes(candidate.toState as ProductionMachineState)) rejectInvalid(`events[${index}].toState is invalid.`)
       const workCentreId = canonicalText(candidate.workCentreId, `events[${index}].workCentreId`, 80)
-      if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`events[${index}].workCentreId is invalid.`)
+      if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) rejectInvalid(`events[${index}].workCentreId is invalid.`)
     } else if (candidate.kind === 'equipment_maintenance_strategy_saved') {
-      if (!equipmentIds.includes(candidate.subjectId as string) || !machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] must reference one commissioned equipment runtime.`)
+      if (!equipmentIds.includes(candidate.subjectId as string) || !machineIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] must reference one commissioned equipment runtime.`)
       assertSafeInteger(candidate.strategyRevision, `events[${index}].strategyRevision`, 1)
       assertSafeInteger(candidate.intervalDays, `events[${index}].intervalDays`, 1)
-      if (Number(candidate.intervalDays) > 3650) throw new Error(`events[${index}].intervalDays is too large.`)
+      if (Number(candidate.intervalDays) > 3650) rejectInvalid(`events[${index}].intervalDays is too large.`)
       canonicalText(candidate.maintenanceOwner, `events[${index}].maintenanceOwner`, 120)
       canonicalText(candidate.procedureReference, `events[${index}].procedureReference`, 240)
-      if (!validDowntimeTimestamp(candidate.createdAt) || !validDowntimeTimestamp(candidate.nextDueAt)) throw new Error(`events[${index}] maintenance strategy timestamps are invalid.`)
+      if (!validDowntimeTimestamp(candidate.createdAt) || !validDowntimeTimestamp(candidate.nextDueAt)) rejectInvalid(`events[${index}] maintenance strategy timestamps are invalid.`)
       if (timestampAtOrBefore(candidate.nextDueAt as string, candidate.createdAt as string)
-        || Date.parse(candidate.nextDueAt as string) > Date.parse(candidate.createdAt as string) + Number(candidate.intervalDays) * 86_400_000) throw new Error(`events[${index}].nextDueAt is outside its interval.`)
-      if (candidate.summary !== `Saved maintenance strategy R${candidate.strategyRevision} for ${candidate.subjectId}`) throw new Error(`events[${index}] maintenance strategy summary is not canonical.`)
+        || Date.parse(candidate.nextDueAt as string) > Date.parse(candidate.createdAt as string) + Number(candidate.intervalDays) * 86_400_000) rejectInvalid(`events[${index}].nextDueAt is outside its interval.`)
+      if (candidate.summary !== `Saved maintenance strategy R${candidate.strategyRevision} for ${candidate.subjectId}`) rejectInvalid(`events[${index}] maintenance strategy summary is not canonical.`)
     } else if (candidate.kind === 'job_created' || candidate.kind === 'job_schedule_updated') {
-      if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
+      if (!jobIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown job.`)
       const scheduleSnapshotFields = ['jobPriority', 'jobDueAt'] as const
       const scheduleSnapshotFieldCount = scheduleSnapshotFields.filter((field) => candidate[field] !== undefined).length
-      if (candidate.kind === 'job_schedule_updated' && scheduleSnapshotFieldCount !== scheduleSnapshotFields.length) throw new Error(`events[${index}] updated job schedule fields are incomplete.`)
-      if (candidate.kind === 'job_created' && scheduleSnapshotFieldCount !== 0 && scheduleSnapshotFieldCount !== scheduleSnapshotFields.length) throw new Error(`events[${index}] job schedule fields must be complete or absent for legacy events.`)
+      if (candidate.kind === 'job_schedule_updated' && scheduleSnapshotFieldCount !== scheduleSnapshotFields.length) rejectInvalid(`events[${index}] updated job schedule fields are incomplete.`)
+      if (candidate.kind === 'job_created' && scheduleSnapshotFieldCount !== 0 && scheduleSnapshotFieldCount !== scheduleSnapshotFields.length) rejectInvalid(`events[${index}] job schedule fields must be complete or absent for legacy events.`)
       if (scheduleSnapshotFieldCount === scheduleSnapshotFields.length) {
-        if (!productionJobPriorities.includes(candidate.jobPriority as ProductionJobPriority)) throw new Error(`events[${index}].jobPriority is invalid.`)
-        if (!validTimestamp(candidate.jobDueAt)) throw new Error(`events[${index}].jobDueAt is invalid.`)
-        if (timestampAtOrBefore(candidate.jobDueAt as string, candidate.createdAt as string)) throw new Error(`events[${index}].jobDueAt must follow confirmation.`)
+        if (!productionJobPriorities.includes(candidate.jobPriority as ProductionJobPriority)) rejectInvalid(`events[${index}].jobPriority is invalid.`)
+        if (!validTimestamp(candidate.jobDueAt)) rejectInvalid(`events[${index}].jobDueAt is invalid.`)
+        if (timestampAtOrBefore(candidate.jobDueAt as string, candidate.createdAt as string)) rejectInvalid(`events[${index}].jobDueAt must follow confirmation.`)
       }
       if (candidate.jobOwner !== undefined) canonicalText(candidate.jobOwner, `events[${index}].jobOwner`, 120)
-      if (candidate.kind === 'job_created' && candidate.jobOwner !== undefined && scheduleSnapshotFieldCount !== scheduleSnapshotFields.length) throw new Error(`events[${index}] a job owner requires the complete opening plan.`)
+      if (candidate.kind === 'job_created' && candidate.jobOwner !== undefined && scheduleSnapshotFieldCount !== scheduleSnapshotFields.length) rejectInvalid(`events[${index}] a job owner requires the complete opening plan.`)
       if (candidate.kind === 'job_schedule_updated') {
         const previousScheduleFields = ['fromJobPriority', 'fromJobDueAt'] as const
         const previousScheduleFieldCount = previousScheduleFields.filter((field) => candidate[field] !== undefined).length
-        if (previousScheduleFieldCount !== 0 && previousScheduleFieldCount !== previousScheduleFields.length) throw new Error(`events[${index}] previous job schedule fields are incomplete.`)
+        if (previousScheduleFieldCount !== 0 && previousScheduleFieldCount !== previousScheduleFields.length) rejectInvalid(`events[${index}] previous job schedule fields are incomplete.`)
         if (previousScheduleFieldCount === previousScheduleFields.length) {
-          if (!productionJobPriorities.includes(candidate.fromJobPriority as ProductionJobPriority)) throw new Error(`events[${index}].fromJobPriority is invalid.`)
-          if (!validTimestamp(candidate.fromJobDueAt)) throw new Error(`events[${index}].fromJobDueAt is invalid.`)
+          if (!productionJobPriorities.includes(candidate.fromJobPriority as ProductionJobPriority)) rejectInvalid(`events[${index}].fromJobPriority is invalid.`)
+          if (!validTimestamp(candidate.fromJobDueAt)) rejectInvalid(`events[${index}].fromJobDueAt is invalid.`)
         }
         if (candidate.fromJobOwner !== undefined) canonicalText(candidate.fromJobOwner, `events[${index}].fromJobOwner`, 120)
-        if (candidate.fromJobOwner !== undefined && candidate.jobOwner === undefined) throw new Error(`events[${index}] previous job owner cannot exist without a current owner.`)
+        if (candidate.fromJobOwner !== undefined && candidate.jobOwner === undefined) rejectInvalid(`events[${index}] previous job owner cannot exist without a current owner.`)
         const job = jobs.find((entry): entry is Record<string, unknown> => isRecord(entry) && entry.id === candidate.subjectId)
-        if (!job) throw new Error(`events[${index}] references an unknown job.`)
+        if (!job) rejectInvalid(`events[${index}] references an unknown job.`)
         const expectedSummary = candidate.jobOwner === undefined
           ? `Updated ${String(job.product)} schedule for ${String(job.line)}`
           : `Updated ${String(job.product)} plan for ${String(job.line)}`
-        if (candidate.summary !== expectedSummary) throw new Error(`events[${index}] job plan summary is not canonical.`)
+        if (candidate.summary !== expectedSummary) rejectInvalid(`events[${index}] job plan summary is not canonical.`)
       }
-      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] job event has unrelated fields.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) rejectInvalid(`events[${index}] job event has unrelated fields.`)
     } else if (candidate.kind === 'job_closed') {
-      if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
-      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...jobClosedEventFields].sort())) throw new Error(`events[${index}] job close event fields are invalid.`)
+      if (!jobIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown job.`)
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...jobClosedEventFields].sort())) rejectInvalid(`events[${index}] job close event fields are invalid.`)
       canonicalText(candidate.shiftRef, `events[${index}].shiftRef`, 80)
       assertSafeInteger(candidate.remainingQuantity, `events[${index}].remainingQuantity`, 1)
     } else if (candidate.kind === 'output_recorded') {
-      if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
+      if (!jobIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown job.`)
       assertSafeInteger(candidate.quantity, `events[${index}].quantity`, 1)
       const outputKind = candidate.outputKind === undefined ? 'good' : candidate.outputKind
-      if (outputKind !== 'good' && outputKind !== 'scrap') throw new Error(`events[${index}].outputKind is invalid.`)
+      if (outputKind !== 'good' && outputKind !== 'scrap') rejectInvalid(`events[${index}].outputKind is invalid.`)
       if (candidate.shiftRef !== undefined) {
         const shiftRef = canonicalText(candidate.shiftRef, `events[${index}].shiftRef`, 80)
         const currentShiftTotal = shiftTotals.get(shiftRef) ?? { goodUnits: 0, scrapUnits: 0 }
         const nextShiftTotal = currentShiftTotal[outputKind === 'scrap' ? 'scrapUnits' : 'goodUnits'] + Number(candidate.quantity)
-        if (!Number.isSafeInteger(nextShiftTotal)) throw new Error(`Output total for ${shiftRef} exceeds the safe integer limit.`)
+        if (!Number.isSafeInteger(nextShiftTotal)) rejectInvalid(`Output total for ${shiftRef} exceeds the safe integer limit.`)
         shiftTotals.set(shiftRef, {
           ...currentShiftTotal,
           [outputKind === 'scrap' ? 'scrapUnits' : 'goodUnits']: nextShiftTotal,
         })
       }
-      if (candidate.remainingQuantity !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] output event has unrelated fields.`)
+      if (candidate.remainingQuantity !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) rejectInvalid(`events[${index}] output event has unrelated fields.`)
     } else if (candidate.kind === 'material_consumed') {
-      if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
+      if (!jobIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown job.`)
       const expectedFields = candidate.materialLot === undefined ? materialEventFields : [...materialEventFields, ...materialOptionalEventFields]
-      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`events[${index}] material event fields are invalid.`)
-      if (!validMaterialQuantity(candidate.quantity)) throw new Error(`events[${index}].quantity must be positive with at most three decimal places.`)
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) rejectInvalid(`events[${index}] material event fields are invalid.`)
+      if (!validMaterialQuantity(candidate.quantity)) rejectInvalid(`events[${index}].quantity must be positive with at most three decimal places.`)
       const shiftRef = canonicalText(candidate.shiftRef, `events[${index}].shiftRef`, 80)
       const materialRef = canonicalText(candidate.materialRef, `events[${index}].materialRef`, 120)
       if (candidate.materialLot !== undefined) canonicalText(candidate.materialLot, `events[${index}].materialLot`, 120)
-      if (!productionMaterialUnits.includes(candidate.materialUnit as ProductionMaterialUnit)) throw new Error(`events[${index}].materialUnit is invalid.`)
+      if (!productionMaterialUnits.includes(candidate.materialUnit as ProductionMaterialUnit)) rejectInvalid(`events[${index}].materialUnit is invalid.`)
       const quantityMilli = materialQuantityMilli(candidate.quantity)
       const materialTotalKey = JSON.stringify([shiftRef, materialRef, candidate.materialUnit])
       const materialTotal = (materialShiftTotals.get(materialTotalKey) ?? 0) + (quantityMilli ?? 0)
-      if (!Number.isSafeInteger(materialTotal)) throw new Error(`Material total for ${materialRef} in ${shiftRef} exceeds the safe fixed-precision limit.`)
+      if (!Number.isSafeInteger(materialTotal)) rejectInvalid(`Material total for ${materialRef} in ${shiftRef} exceeds the safe fixed-precision limit.`)
       materialShiftTotals.set(materialTotalKey, materialTotal)
     } else if (candidate.kind === 'quality_hold_placed' || candidate.kind === 'quality_hold_released') {
-      if (!jobIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown job.`)
-      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...qualityHoldEventFields].sort())) throw new Error(`events[${index}] quality hold event fields are invalid.`)
-      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) throw new Error(`events[${index}] quality hold event has unrelated fields.`)
+      if (!jobIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown job.`)
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...qualityHoldEventFields].sort())) rejectInvalid(`events[${index}] quality hold event fields are invalid.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined) rejectInvalid(`events[${index}] quality hold event has unrelated fields.`)
     } else if (candidate.kind === 'machine_state_changed') {
-      if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
-      if (!productionMachineStates.includes(candidate.fromState as ProductionMachineState) || !productionMachineStates.includes(candidate.toState as ProductionMachineState)) throw new Error(`events[${index}] has invalid machine states.`)
-      if (candidate.fromState === candidate.toState) throw new Error(`events[${index}] must record a distinct machine observation.`)
-      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] machine event has unrelated fields.`)
+      if (!machineIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown machine.`)
+      if (!productionMachineStates.includes(candidate.fromState as ProductionMachineState) || !productionMachineStates.includes(candidate.toState as ProductionMachineState)) rejectInvalid(`events[${index}] has invalid machine states.`)
+      if (candidate.fromState === candidate.toState) rejectInvalid(`events[${index}] must record a distinct machine observation.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.downtimeStartActionId !== undefined) rejectInvalid(`events[${index}] machine event has unrelated fields.`)
     } else if (candidate.kind === 'downtime_started' || candidate.kind === 'downtime_ended') {
-      if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
-      if (!validDowntimeTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt must be a canonical UTC millisecond timestamp for downtime.`)
+      if (!machineIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown machine.`)
+      if (!validDowntimeTimestamp(candidate.createdAt)) rejectInvalid(`events[${index}].createdAt must be a canonical UTC millisecond timestamp for downtime.`)
       const expectedFields = candidate.kind === 'downtime_ended' ? downtimeEndEventFields : baseEventFields
-      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`events[${index}] downtime event fields are invalid.`)
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) rejectInvalid(`events[${index}] downtime event fields are invalid.`)
       if (candidate.kind === 'downtime_ended') canonicalText(candidate.downtimeStartActionId, `events[${index}].downtimeStartActionId`, 160)
     } else if (candidate.kind === 'maintenance_started' || candidate.kind === 'maintenance_completed') {
-      if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
-      if (!validDowntimeTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt must be a canonical UTC millisecond timestamp for maintenance.`)
+      if (!machineIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown machine.`)
+      if (!validDowntimeTimestamp(candidate.createdAt)) rejectInvalid(`events[${index}].createdAt must be a canonical UTC millisecond timestamp for maintenance.`)
       const bindingFieldCount = maintenanceStrategyBindingFields.filter((field) => candidate[field] !== undefined).length
       const strategyBound = bindingFieldCount === maintenanceStrategyBindingFields.length
-      if (bindingFieldCount !== 0 && !strategyBound) throw new Error(`events[${index}] maintenance strategy binding is incomplete.`)
+      if (bindingFieldCount !== 0 && !strategyBound) rejectInvalid(`events[${index}] maintenance strategy binding is incomplete.`)
       const resultFieldCount = maintenanceResultFields.filter((field) => candidate[field] !== undefined).length
       const hasResult = resultFieldCount === maintenanceResultFields.length
-      if (resultFieldCount !== 0 && !hasResult) throw new Error(`events[${index}] maintenance result is incomplete.`)
-      if (hasResult && (candidate.kind !== 'maintenance_completed' || !strategyBound)) throw new Error(`events[${index}] maintenance result requires strategy-bound completion.`)
+      if (resultFieldCount !== 0 && !hasResult) rejectInvalid(`events[${index}] maintenance result is incomplete.`)
+      if (hasResult && (candidate.kind !== 'maintenance_completed' || !strategyBound)) rejectInvalid(`events[${index}] maintenance result requires strategy-bound completion.`)
       const expectedFields = candidate.kind === 'maintenance_started'
         ? (strategyBound ? maintenanceStartEventFields : [...baseEventFields, 'maintenanceOwner'])
         : (strategyBound
             ? (hasResult ? maintenanceCompleteEventFields : maintenanceHistoricalCompleteEventFields)
             : [...baseEventFields, 'maintenanceStartActionId'])
-      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`events[${index}] maintenance event fields are invalid.`)
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) rejectInvalid(`events[${index}] maintenance event fields are invalid.`)
       if (candidate.kind === 'maintenance_started') canonicalText(candidate.maintenanceOwner, `events[${index}].maintenanceOwner`, 120)
       else canonicalText(candidate.maintenanceStartActionId, `events[${index}].maintenanceStartActionId`, 160)
       if (strategyBound) {
         canonicalText(candidate.maintenanceStrategyActionId, `events[${index}].maintenanceStrategyActionId`, 160)
         assertSafeInteger(candidate.maintenanceStrategyRevision, `events[${index}].maintenanceStrategyRevision`, 1)
         canonicalText(candidate.maintenanceProcedureReference, `events[${index}].maintenanceProcedureReference`, 240)
-        if (!validDowntimeTimestamp(candidate.maintenancePlannedDueAt)) throw new Error(`events[${index}].maintenancePlannedDueAt is invalid.`)
+        if (!validDowntimeTimestamp(candidate.maintenancePlannedDueAt)) rejectInvalid(`events[${index}].maintenancePlannedDueAt is invalid.`)
         if (candidate.kind === 'maintenance_completed') {
-          if (!validDowntimeTimestamp(candidate.nextDueAt) || timestampAtOrBefore(candidate.nextDueAt as string, candidate.createdAt as string)) throw new Error(`events[${index}].nextDueAt must follow reviewed completion.`)
+          if (!validDowntimeTimestamp(candidate.nextDueAt) || timestampAtOrBefore(candidate.nextDueAt as string, candidate.createdAt as string)) rejectInvalid(`events[${index}].nextDueAt must follow reviewed completion.`)
           if (hasResult) {
-            if (!productionMaintenanceOutcomes.includes(candidate.maintenanceOutcome as ProductionMaintenanceOutcome)) throw new Error(`events[${index}].maintenanceOutcome is invalid.`)
+            if (!productionMaintenanceOutcomes.includes(candidate.maintenanceOutcome as ProductionMaintenanceOutcome)) rejectInvalid(`events[${index}].maintenanceOutcome is invalid.`)
             canonicalText(candidate.maintenanceFindings, `events[${index}].maintenanceFindings`, 360)
-            if (candidate.maintenanceProcedureCompleted !== true) throw new Error(`events[${index}].maintenanceProcedureCompleted must be confirmed.`)
-            if (!productionMaintenanceReturnToServiceValues.includes(candidate.maintenanceReturnToService as ProductionMaintenanceReturnToService)) throw new Error(`events[${index}].maintenanceReturnToService is invalid.`)
-            if (candidate.maintenanceOutcome === 'completed' && candidate.maintenanceReturnToService !== 'recommended') throw new Error(`events[${index}] completed maintenance must recommend return to service.`)
+            if (candidate.maintenanceProcedureCompleted !== true) rejectInvalid(`events[${index}].maintenanceProcedureCompleted must be confirmed.`)
+            if (!productionMaintenanceReturnToServiceValues.includes(candidate.maintenanceReturnToService as ProductionMaintenanceReturnToService)) rejectInvalid(`events[${index}].maintenanceReturnToService is invalid.`)
+            if (candidate.maintenanceOutcome === 'completed' && candidate.maintenanceReturnToService !== 'recommended') rejectInvalid(`events[${index}] completed maintenance must recommend return to service.`)
           }
         }
       }
     } else if (candidate.kind === 'shift_closed') {
-      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...shiftClosedEventFields].sort())) throw new Error(`events[${index}] shift close event fields are invalid.`)
+      if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...shiftClosedEventFields].sort())) rejectInvalid(`events[${index}] shift close event fields are invalid.`)
       const shiftRef = canonicalText(candidate.shiftRef, `events[${index}].shiftRef`, 80)
-      if (candidate.subjectId !== shiftRef) throw new Error(`events[${index}] shift close subject must match its shift reference.`)
+      if (candidate.subjectId !== shiftRef) rejectInvalid(`events[${index}] shift close subject must match its shift reference.`)
       assertSafeInteger(candidate.sourceRevision, `events[${index}].sourceRevision`)
-      if (candidate.sourceRevision !== events.length - index - 1) throw new Error(`events[${index}] shift close source revision does not match its append position.`)
-      if (typeof candidate.sourceDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.sourceDigest)) throw new Error(`events[${index}].sourceDigest is invalid.`)
+      if (candidate.sourceRevision !== events.length - index - 1) rejectInvalid(`events[${index}] shift close source revision does not match its append position.`)
+      if (typeof candidate.sourceDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.sourceDigest)) rejectInvalid(`events[${index}].sourceDigest is invalid.`)
       assertSafeInteger(candidate.goodUnits, `events[${index}].goodUnits`, 1)
       assertSafeInteger(candidate.scrapUnits, `events[${index}].scrapUnits`)
       assertSafeInteger(candidate.outputEntryCount, `events[${index}].outputEntryCount`, 1)
       assertSafeInteger(candidate.materialEntryCount, `events[${index}].materialEntryCount`, 1)
       const expectedSummary = `Closed shift ${shiftRef} with ${candidate.goodUnits} good, ${candidate.scrapUnits} scrap, ${candidate.outputEntryCount} output entries, ${candidate.materialEntryCount} material entries`
-      if (candidate.summary !== expectedSummary) throw new Error(`events[${index}] shift close summary is not canonical.`)
+      if (candidate.summary !== expectedSummary) rejectInvalid(`events[${index}] shift close summary is not canonical.`)
     } else if (candidate.kind === 'issue_opened') {
-      if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
-      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
-      if (issueSnapshotFieldCount !== 0 && issueSnapshotFieldCount !== issueSnapshotFields.length) throw new Error(`events[${index}] issue snapshot fields must be complete or absent for legacy events.`)
+      if (!issueIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown issue.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) rejectInvalid(`events[${index}] issue event has unrelated fields.`)
+      if (issueSnapshotFieldCount !== 0 && issueSnapshotFieldCount !== issueSnapshotFields.length) rejectInvalid(`events[${index}] issue snapshot fields must be complete or absent for legacy events.`)
       if (issueSnapshotFieldCount === issueSnapshotFields.length) {
-        if (!productionIssueSeverities.includes(candidate.issueSeverity as ProductionIssueSeverity)) throw new Error(`events[${index}].issueSeverity is invalid.`)
+        if (!productionIssueSeverities.includes(candidate.issueSeverity as ProductionIssueSeverity)) rejectInvalid(`events[${index}].issueSeverity is invalid.`)
         canonicalText(candidate.issueOwner, `events[${index}].issueOwner`, 120)
-        if (!validTimestamp(candidate.issueDueAt)) throw new Error(`events[${index}].issueDueAt is invalid.`)
-        if (timestampAtOrBefore(candidate.issueDueAt as string, candidate.createdAt as string)) throw new Error(`events[${index}].issueDueAt must follow confirmation.`)
+        if (!validTimestamp(candidate.issueDueAt)) rejectInvalid(`events[${index}].issueDueAt is invalid.`)
+        if (timestampAtOrBefore(candidate.issueDueAt as string, candidate.createdAt as string)) rejectInvalid(`events[${index}].issueDueAt must follow confirmation.`)
         canonicalText(candidate.issueContainment, `events[${index}].issueContainment`, 240)
       }
       if (candidate.maintenanceFindingSource !== undefined) validateProductionMaintenanceFindingSource(candidate.maintenanceFindingSource, `events[${index}].maintenanceFindingSource`)
     } else if (candidate.kind === 'issue_resolved') {
-      if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
-      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
+      if (!issueIds.includes(candidate.subjectId as string)) rejectInvalid(`events[${index}] references an unknown issue.`)
+      if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) rejectInvalid(`events[${index}] issue event has unrelated fields.`)
       if (candidate.maintenanceCorrectiveAction !== undefined) validateProductionMaintenanceCorrectiveAction(candidate.maintenanceCorrectiveAction, `events[${index}].maintenanceCorrectiveAction`)
       if (candidate.qualityCorrectiveAction !== undefined) validateProductionQualityCorrectiveAction(candidate.qualityCorrectiveAction, `events[${index}].qualityCorrectiveAction`)
-      if (candidate.maintenanceCorrectiveAction !== undefined && candidate.qualityCorrectiveAction !== undefined) throw new Error(`events[${index}] cannot carry maintenance and quality corrective actions together.`)
+      if (candidate.maintenanceCorrectiveAction !== undefined && candidate.qualityCorrectiveAction !== undefined) rejectInvalid(`events[${index}] cannot carry maintenance and quality corrective actions together.`)
     }
   }
   assertUnique(eventIds, 'Production event ID')
   assertUnique(actionIds, 'Production action ID')
-  if (Number(value.revision) !== events.length) throw new Error('Production revision must equal the append-only event count.')
+  if (Number(value.revision) !== events.length) rejectInvalid('Production revision must equal the append-only event count.')
   const equipmentImportEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'equipment_master_imported')
   const equipmentAssetsWithEvidence = new Set<string>()
   for (const event of equipmentImportEvents) {
     const matchingAssets = equipmentAssets.filter((asset) => asset.sourceActionId === event.actionId)
     const matchingIds = matchingAssets.map((asset) => String(asset.id))
-    if (!matchingAssets.length || JSON.stringify(matchingIds) !== JSON.stringify(event.equipmentIds)) throw new Error('Equipment master records do not match their immutable import event.')
+    if (!matchingAssets.length || JSON.stringify(matchingIds) !== JSON.stringify(event.equipmentIds)) rejectInvalid('Equipment master records do not match their immutable import event.')
     for (const asset of matchingAssets) {
-      if (asset.sourcePackageDigest !== event.evidenceReference || asset.importedAt !== event.createdAt) throw new Error('Equipment master source evidence does not match its import event.')
-      if (equipmentAssetsWithEvidence.has(String(asset.id))) throw new Error('Equipment master records cannot reuse import evidence.')
+      if (asset.sourcePackageDigest !== event.evidenceReference || asset.importedAt !== event.createdAt) rejectInvalid('Equipment master source evidence does not match its import event.')
+      if (equipmentAssetsWithEvidence.has(String(asset.id))) rejectInvalid('Equipment master records cannot reuse import evidence.')
       equipmentAssetsWithEvidence.add(String(asset.id))
     }
   }
 
   if (Object.hasOwn(value, 'orderPortfolio')) {
-    if (Object.hasOwn(value, 'orderExecution')) throw new Error('Production cannot retain both legacy order execution and the order portfolio.')
+    if (Object.hasOwn(value, 'orderExecution')) rejectInvalid('Production cannot retain both legacy order execution and the order portfolio.')
     const portfolio = validateProductionOrderPortfolio(value.orderPortfolio)
-    if (portfolio.entries.some((entry) => !jobIds.includes(entry.jobId))) throw new Error('Production order portfolio references an unknown job.')
+    if (portfolio.entries.some((entry) => !jobIds.includes(entry.jobId))) rejectInvalid('Production order portfolio references an unknown job.')
   }
-  if (equipmentAssetsWithEvidence.size !== equipmentAssets.length) throw new Error('Every equipment master record requires one immutable import event.')
+  if (equipmentAssetsWithEvidence.size !== equipmentAssets.length) rejectInvalid('Every equipment master record requires one immutable import event.')
   const equipmentCommissionEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'equipment_commissioned')
   const commissionedIds = new Set<string>()
   for (const asset of equipmentAssets) {
@@ -1416,10 +1422,10 @@ export function validateProductionState(value: unknown): ProductionState {
     const matches = equipmentCommissionEvents.filter((event) => event.subjectId === equipmentId)
     const machine = machines.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.id === equipmentId)
     if (asset.commissioningStatus === 'not_commissioned') {
-      if (matches.length || machine) throw new Error('Uncommissioned equipment cannot retain runtime commissioning history.')
+      if (matches.length || machine) rejectInvalid('Uncommissioned equipment cannot retain runtime commissioning history.')
       continue
     }
-    if (matches.length !== 1 || !machine || !isRecord(asset.commissioning)) throw new Error('Commissioned equipment requires one runtime machine and one immutable event.')
+    if (matches.length !== 1 || !machine || !isRecord(asset.commissioning)) rejectInvalid('Commissioned equipment requires one runtime machine and one immutable event.')
     const event = matches[0]
     const commissioning = asset.commissioning
     if (commissioning.actionId !== event.actionId
@@ -1430,17 +1436,17 @@ export function validateProductionState(value: unknown): ProductionState {
       || commissioning.safetyBaselineReference !== event.evidenceReference
       || asset.workCentreId !== event.workCentreId
       || machine.name !== asset.name
-      || event.summary !== `Commissioned ${String(asset.name)} at ${String(asset.workCentreId)}`) throw new Error('Equipment commissioning record does not match its immutable event.')
+      || event.summary !== `Commissioned ${String(asset.name)} at ${String(asset.workCentreId)}`) rejectInvalid('Equipment commissioning record does not match its immutable event.')
     const laterLifecycle = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate)
       && candidate.subjectId === equipmentId
       && ['machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'equipment_maintenance_strategy_saved'].includes(String(candidate.kind)))
-    if (laterLifecycle.some((candidate) => timestampBefore(candidate.createdAt as string, event.createdAt as string))) throw new Error('Equipment lifecycle history cannot predate commissioning.')
+    if (laterLifecycle.some((candidate) => timestampBefore(candidate.createdAt as string, event.createdAt as string))) rejectInvalid('Equipment lifecycle history cannot predate commissioning.')
     commissionedIds.add(equipmentId)
   }
-  if (equipmentCommissionEvents.length !== commissionedIds.size) throw new Error('Equipment commissioning history contains an unknown or duplicate event.')
+  if (equipmentCommissionEvents.length !== commissionedIds.size) rejectInvalid('Equipment commissioning history contains an unknown or duplicate event.')
   if (openingMachineIds) {
     const postOpeningIds = machineIds.slice(openingMachineIds.length)
-    if (postOpeningIds.length !== commissionedIds.size || postOpeningIds.some((id) => !commissionedIds.has(id))) throw new Error('Every runtime machine added after opening requires equipment commissioning.')
+    if (postOpeningIds.length !== commissionedIds.size || postOpeningIds.some((id) => !commissionedIds.has(id))) rejectInvalid('Every runtime machine added after opening requires equipment commissioning.')
   }
   const equipmentMaintenanceStrategyEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'equipment_maintenance_strategy_saved')
   const equipmentMaintenanceEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && (event.kind === 'maintenance_started' || event.kind === 'maintenance_completed'))
@@ -1449,30 +1455,30 @@ export function validateProductionState(value: unknown): ProductionState {
     const equipmentId = String(asset.id)
     const matches = equipmentMaintenanceStrategyEvents.filter((event) => event.subjectId === equipmentId)
     if (asset.maintenanceStrategy === undefined) {
-      if (matches.length) throw new Error('Equipment without a maintenance strategy cannot retain strategy history.')
+      if (matches.length) rejectInvalid('Equipment without a maintenance strategy cannot retain strategy history.')
       continue
     }
-    if (asset.commissioningStatus !== 'commissioned' || !isRecord(asset.commissioning) || !isRecord(asset.maintenanceStrategy)) throw new Error('Only commissioned equipment can retain a maintenance strategy.')
+    if (asset.commissioningStatus !== 'commissioned' || !isRecord(asset.commissioning) || !isRecord(asset.maintenanceStrategy)) rejectInvalid('Only commissioned equipment can retain a maintenance strategy.')
     const commissioning = asset.commissioning
     const strategy = asset.maintenanceStrategy
     const expectedRevisions = Array.from({ length: Number(strategy.revision) }, (_, index) => Number(strategy.revision) - index)
-    if (JSON.stringify(matches.map((event) => event.strategyRevision)) !== JSON.stringify(expectedRevisions)) throw new Error('Equipment maintenance strategy revisions must be complete and newest first.')
-    if (matches.some((event) => timestampBefore(event.createdAt as string, commissioning.commissionedAt as string))) throw new Error('Equipment maintenance strategy history cannot predate commissioning.')
+    if (JSON.stringify(matches.map((event) => event.strategyRevision)) !== JSON.stringify(expectedRevisions)) rejectInvalid('Equipment maintenance strategy revisions must be complete and newest first.')
+    if (matches.some((event) => timestampBefore(event.createdAt as string, commissioning.commissionedAt as string))) rejectInvalid('Equipment maintenance strategy history cannot predate commissioning.')
     const latest = matches[0]
     const assetMaintenanceEvents = equipmentMaintenanceEvents.filter((event) => event.subjectId === equipmentId)
     for (const maintenanceEvent of assetMaintenanceEvents) {
       const applicableStrategy = matches.find((strategyEvent) => !timestampBefore(maintenanceEvent.createdAt as string, strategyEvent.createdAt as string))
       const isBound = maintenanceEvent.maintenanceStrategyActionId !== undefined
-      if (Boolean(applicableStrategy) !== isBound) throw new Error('Commissioned equipment maintenance must bind the strategy active at execution time.')
+      if (Boolean(applicableStrategy) !== isBound) rejectInvalid('Commissioned equipment maintenance must bind the strategy active at execution time.')
       if (!applicableStrategy) continue
       if (maintenanceEvent.maintenanceStrategyActionId !== applicableStrategy.actionId
         || maintenanceEvent.maintenanceStrategyRevision !== applicableStrategy.strategyRevision
         || maintenanceEvent.maintenanceProcedureReference !== applicableStrategy.procedureReference
         || maintenanceEvent.maintenancePlannedDueAt !== applicableStrategy.nextDueAt
-        || (maintenanceEvent.kind === 'maintenance_started' && maintenanceEvent.maintenanceOwner !== applicableStrategy.maintenanceOwner)) throw new Error('Equipment maintenance execution does not match its immutable strategy revision.')
+        || (maintenanceEvent.kind === 'maintenance_started' && maintenanceEvent.maintenanceOwner !== applicableStrategy.maintenanceOwner)) rejectInvalid('Equipment maintenance execution does not match its immutable strategy revision.')
       if (maintenanceEvent.kind === 'maintenance_completed') {
         const expectedNextDueAt = new Date(Date.parse(maintenanceEvent.createdAt as string) + Number(applicableStrategy.intervalDays) * 86_400_000).toISOString()
-        if (maintenanceEvent.nextDueAt !== expectedNextDueAt) throw new Error('Equipment maintenance completion next due does not match its strategy interval.')
+        if (maintenanceEvent.nextDueAt !== expectedNextDueAt) rejectInvalid('Equipment maintenance completion next due does not match its strategy interval.')
       }
     }
     const latestCompletion = assetMaintenanceEvents.find((event) => event.kind === 'maintenance_completed'
@@ -1486,29 +1492,29 @@ export function validateProductionState(value: unknown): ProductionState {
       || strategy.intervalDays !== latest.intervalDays
       || strategy.nextDueAt !== expectedCurrentNextDueAt
       || strategy.procedureReference !== latest.procedureReference
-      || strategy.safetyBaselineReference !== latest.evidenceReference) throw new Error('Equipment maintenance strategy does not match its latest immutable event.')
+      || strategy.safetyBaselineReference !== latest.evidenceReference) rejectInvalid('Equipment maintenance strategy does not match its latest immutable event.')
     retainedEquipmentMaintenanceStrategyEvents += matches.length
   }
-  if (retainedEquipmentMaintenanceStrategyEvents !== equipmentMaintenanceStrategyEvents.length) throw new Error('Equipment maintenance strategy history contains an unknown event.')
+  if (retainedEquipmentMaintenanceStrategyEvents !== equipmentMaintenanceStrategyEvents.length) rejectInvalid('Equipment maintenance strategy history contains an unknown event.')
   if (openingJobIds) {
     const openingJobIdSet = new Set(openingJobIds)
     const creationEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_created')
-    if (creationEvents.length !== jobs.length - openingJobIds.length) throw new Error('Every job after the Production opening plan requires one creation event.')
+    if (creationEvents.length !== jobs.length - openingJobIds.length) rejectInvalid('Every job after the Production opening plan requires one creation event.')
     for (const jobId of jobIds) {
       const matches = creationEvents.filter((event) => event.subjectId === jobId)
-      if (openingJobIdSet.has(jobId) ? matches.length !== 0 : matches.length !== 1) throw new Error(`Production job ${jobId} does not match its opening history.`)
+      if (openingJobIdSet.has(jobId) ? matches.length !== 0 : matches.length !== 1) rejectInvalid(`Production job ${jobId} does not match its opening history.`)
     }
   }
 
   for (const [index, candidate] of jobs.entries()) {
     if (!isRecord(candidate)) continue
     const creationEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_created' && event.subjectId === candidate.id)
-    if (creationEvents.length > 1) throw new Error(`jobs[${index}] has duplicate creation events.`)
+    if (creationEvents.length > 1) rejectInvalid(`jobs[${index}] has duplicate creation events.`)
     const creationEvent = creationEvents[0]
     if (candidate.shopDemandSource !== undefined) {
       const source = validateProductionShopDemandSource(candidate.shopDemandSource, `jobs[${index}].shopDemandSource`)
-      if (!creationEvent) throw new Error(`jobs[${index}] Shop demand source requires immutable creation evidence.`)
-      if (creationEvent.evidenceReference !== source.evidenceReference) throw new Error(`jobs[${index}] Shop demand source does not match its creation evidence.`)
+      if (!creationEvent) rejectInvalid(`jobs[${index}] Shop demand source requires immutable creation evidence.`)
+      if (creationEvent.evidenceReference !== source.evidenceReference) rejectInvalid(`jobs[${index}] Shop demand source does not match its creation evidence.`)
     }
     const scheduleEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_schedule_updated' && event.subjectId === candidate.id)
     if (!creationEvent && !scheduleEvents.length) continue
@@ -1544,30 +1550,30 @@ export function validateProductionState(value: unknown): ProductionState {
     }
     for (const event of [...scheduleEvents].reverse()) {
       const activityAt = timestampMicros(event.createdAt as string)
-      if (activityAt === null) throw new Error(`jobs[${index}] schedule update timestamp is invalid.`)
-      if (creationEvent && events.indexOf(event) >= events.indexOf(creationEvent)) throw new Error(`jobs[${index}] schedule update predates job creation.`)
-      if (previousActivityAt !== undefined && activityAt < previousActivityAt) throw new Error(`jobs[${index}] schedule update timestamps contradict lifecycle order.`)
+      if (activityAt === null) rejectInvalid(`jobs[${index}] schedule update timestamp is invalid.`)
+      if (creationEvent && events.indexOf(event) >= events.indexOf(creationEvent)) rejectInvalid(`jobs[${index}] schedule update predates job creation.`)
+      if (previousActivityAt !== undefined && activityAt < previousActivityAt) rejectInvalid(`jobs[${index}] schedule update timestamps contradict lifecycle order.`)
       previousActivityAt = activityAt
       const previousFieldCount = ['fromJobPriority', 'fromJobDueAt'].filter((field) => event[field] !== undefined).length
       const expectedFieldCount = [expectedPriority, expectedDueAt].filter((field) => field !== undefined).length
       if (previousFieldCount !== expectedFieldCount
         || (expectedFieldCount === 2
           && (event.fromJobPriority !== expectedPriority || event.fromJobDueAt !== expectedDueAt))) {
-        throw new Error(`jobs[${index}] schedule update does not continue its immutable history.`)
+        rejectInvalid(`jobs[${index}] schedule update does not continue its immutable history.`)
       }
       const scheduleUnchanged = event.jobPriority === expectedPriority && event.jobDueAt === expectedDueAt
       if (event.jobOwner === undefined) {
-        if (ownerHistoryStarted) throw new Error(`jobs[${index}] plan update drops its immutable owner history.`)
-        if (scheduleUnchanged) throw new Error(`jobs[${index}] schedule update does not change the plan.`)
-        if (event.summary !== `Updated ${String(candidate.product)} schedule for ${String(candidate.line)}`) throw new Error(`jobs[${index}] legacy schedule update summary is not canonical.`)
+        if (ownerHistoryStarted) rejectInvalid(`jobs[${index}] plan update drops its immutable owner history.`)
+        if (scheduleUnchanged) rejectInvalid(`jobs[${index}] schedule update does not change the plan.`)
+        if (event.summary !== `Updated ${String(candidate.product)} schedule for ${String(candidate.line)}`) rejectInvalid(`jobs[${index}] legacy schedule update summary is not canonical.`)
       } else {
         if (expectedOwner !== undefined) {
-          if (event.fromJobOwner !== expectedOwner) throw new Error(`jobs[${index}] plan update does not continue its immutable owner history.`)
+          if (event.fromJobOwner !== expectedOwner) rejectInvalid(`jobs[${index}] plan update does not continue its immutable owner history.`)
         } else if (event.fromJobOwner !== undefined) {
-          throw new Error(`jobs[${index}] first owner assignment invents a previous owner.`)
+          rejectInvalid(`jobs[${index}] first owner assignment invents a previous owner.`)
         }
-        if (scheduleUnchanged && ownerHistoryStarted && event.jobOwner === expectedOwner) throw new Error(`jobs[${index}] plan update does not change the plan.`)
-        if (event.summary !== `Updated ${String(candidate.product)} plan for ${String(candidate.line)}`) throw new Error(`jobs[${index}] plan update summary is not canonical.`)
+        if (scheduleUnchanged && ownerHistoryStarted && event.jobOwner === expectedOwner) rejectInvalid(`jobs[${index}] plan update does not change the plan.`)
+        if (event.summary !== `Updated ${String(candidate.product)} plan for ${String(candidate.line)}`) rejectInvalid(`jobs[${index}] plan update summary is not canonical.`)
         expectedOwner = event.jobOwner
         ownerHistoryStarted = true
       }
@@ -1578,12 +1584,12 @@ export function validateProductionState(value: unknown): ProductionState {
     if (scheduleFieldCount !== expectedFieldCount
       || (expectedFieldCount === 2
         && (candidate.priority !== expectedPriority || candidate.dueAt !== expectedDueAt))) {
-      throw new Error(`jobs[${index}] schedule does not match its immutable event history.`)
+      rejectInvalid(`jobs[${index}] schedule does not match its immutable event history.`)
     }
     if (ownerHistoryStarted) {
-      if (candidate.owner !== expectedOwner) throw new Error(`jobs[${index}] owner does not match its immutable plan history.`)
+      if (candidate.owner !== expectedOwner) rejectInvalid(`jobs[${index}] owner does not match its immutable plan history.`)
     } else if (candidate.owner !== undefined) {
-      throw new Error(`jobs[${index}] legacy history cannot acquire an owner without a plan update.`)
+      rejectInvalid(`jobs[${index}] legacy history cannot acquire an owner without a plan update.`)
     }
   }
 
@@ -1591,12 +1597,12 @@ export function validateProductionState(value: unknown): ProductionState {
     if (!isRecord(candidate)) continue
     const openingEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'issue_opened' && event.subjectId === candidate.id)
     const resolutionEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'issue_resolved' && event.subjectId === candidate.id)
-    if (openingEvents.length > 1) throw new Error(`issues[${index}] has duplicate opening events.`)
+    if (openingEvents.length > 1) rejectInvalid(`issues[${index}] has duplicate opening events.`)
     const openingEvent = openingEvents[0]
     const actionFieldCount = ['severity', 'owner', 'dueAt', 'containment'].filter((field) => candidate[field] !== undefined).length
     if (openingEvent) {
       if (timestampBefore(openingEvent.createdAt as string, candidate.createdAt as string)) {
-        throw new Error(`issues[${index}] opening event predates the issue record.`)
+        rejectInvalid(`issues[${index}] opening event predates the issue record.`)
       }
       const snapshotFieldCount = ['issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment'].filter((field) => openingEvent[field] !== undefined).length
       if (snapshotFieldCount === 4) {
@@ -1605,14 +1611,14 @@ export function validateProductionState(value: unknown): ProductionState {
           || openingEvent.issueOwner !== candidate.owner
           || openingEvent.issueDueAt !== candidate.dueAt
           || openingEvent.issueContainment !== candidate.containment) {
-          throw new Error(`issues[${index}] action fields do not match their immutable opening event.`)
+          rejectInvalid(`issues[${index}] action fields do not match their immutable opening event.`)
         }
       } else if (actionFieldCount !== 0) {
-        throw new Error(`issues[${index}] legacy opening event cannot acquire action fields.`)
+        rejectInvalid(`issues[${index}] legacy opening event cannot acquire action fields.`)
       }
       const issueSource = candidate.maintenanceFindingSource === undefined ? undefined : validateProductionMaintenanceFindingSource(candidate.maintenanceFindingSource, `issues[${index}].maintenanceFindingSource`)
       const eventSource = openingEvent.maintenanceFindingSource === undefined ? undefined : validateProductionMaintenanceFindingSource(openingEvent.maintenanceFindingSource, `issues[${index}] opening maintenanceFindingSource`)
-      if (Boolean(issueSource) !== Boolean(eventSource) || (issueSource && JSON.stringify(issueSource) !== JSON.stringify(eventSource))) throw new Error(`issues[${index}] maintenance finding source does not match its immutable opening event.`)
+      if (Boolean(issueSource) !== Boolean(eventSource) || (issueSource && JSON.stringify(issueSource) !== JSON.stringify(eventSource))) rejectInvalid(`issues[${index}] maintenance finding source does not match its immutable opening event.`)
       if (issueSource) {
         const completionEvent = events.find((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'maintenance_completed' && event.actionId === issueSource.completionActionId)
         const startEvent = completionEvent === undefined ? undefined : events.find((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'maintenance_started' && event.actionId === completionEvent.maintenanceStartActionId)
@@ -1626,25 +1632,25 @@ export function validateProductionState(value: unknown): ProductionState {
           || completionEvent.maintenanceStrategyRevision !== issueSource.strategyRevision
           || completionEvent.maintenanceReturnToService !== issueSource.returnToService
           || completionEvent.maintenanceFindings !== issueSource.findings
-          || completionEvent.evidenceReference !== issueSource.evidenceReference) throw new Error(`issues[${index}] maintenance finding source does not match reviewed completion evidence.`)
-        if (events.indexOf(openingEvent) >= events.indexOf(completionEvent)) throw new Error(`issues[${index}] maintenance finding problem must follow its reviewed completion.`)
-        if (issues.filter((entry): entry is Record<string, unknown> => isRecord(entry) && isRecord(entry.maintenanceFindingSource) && entry.maintenanceFindingSource.completionActionId === issueSource.completionActionId).length !== 1) throw new Error(`issues[${index}] duplicates a maintenance finding problem.`)
+          || completionEvent.evidenceReference !== issueSource.evidenceReference) rejectInvalid(`issues[${index}] maintenance finding source does not match reviewed completion evidence.`)
+        if (events.indexOf(openingEvent) >= events.indexOf(completionEvent)) rejectInvalid(`issues[${index}] maintenance finding problem must follow its reviewed completion.`)
+        if (issues.filter((entry): entry is Record<string, unknown> => isRecord(entry) && isRecord(entry.maintenanceFindingSource) && entry.maintenanceFindingSource.completionActionId === issueSource.completionActionId).length !== 1) rejectInvalid(`issues[${index}] duplicates a maintenance finding problem.`)
       }
     } else if (actionFieldCount !== 0 || candidate.maintenanceFindingSource !== undefined) {
-      throw new Error(`issues[${index}] action fields and maintenance source require an immutable opening event.`)
+      rejectInvalid(`issues[${index}] action fields and maintenance source require an immutable opening event.`)
     }
 
     if (candidate.status === 'open') {
-      if (resolutionEvents.length) throw new Error(`issues[${index}] is open but has a resolution event.`)
+      if (resolutionEvents.length) rejectInvalid(`issues[${index}] is open but has a resolution event.`)
       continue
     }
     if (!isRecord(candidate.resolution)) {
-      if (openingEvent || resolutionEvents.length) throw new Error(`issues[${index}] is resolved without matching proof.`)
+      if (openingEvent || resolutionEvents.length) rejectInvalid(`issues[${index}] is resolved without matching proof.`)
       continue
     }
     const resolution = candidate.resolution
     const matchingEvents = resolutionEvents.filter((event) => isRecord(event) && event.actionId === resolution.actionId)
-    if (resolutionEvents.length !== 1 || matchingEvents.length !== 1) throw new Error(`issues[${index}] resolution is not backed by exactly one event.`)
+    if (resolutionEvents.length !== 1 || matchingEvents.length !== 1) rejectInvalid(`issues[${index}] resolution is not backed by exactly one event.`)
     const resolutionEvent = matchingEvents[0]
     if (!isRecord(resolutionEvent)
       || resolutionEvent.createdAt !== resolution.resolvedAt
@@ -1653,15 +1659,15 @@ export function validateProductionState(value: unknown): ProductionState {
       || resolutionEvent.evidenceReference !== resolution.evidenceReference
       || JSON.stringify(resolutionEvent.maintenanceCorrectiveAction) !== JSON.stringify(resolution.maintenanceCorrectiveAction)
       || JSON.stringify(resolutionEvent.qualityCorrectiveAction) !== JSON.stringify(resolution.qualityCorrectiveAction)) {
-      throw new Error(`issues[${index}] resolution proof does not match its immutable event.`)
+      rejectInvalid(`issues[${index}] resolution proof does not match its immutable event.`)
     }
     const qualityCorrectiveAction = resolution.qualityCorrectiveAction === undefined ? undefined : validateProductionQualityCorrectiveAction(resolution.qualityCorrectiveAction, `issues[${index}].resolution.qualityCorrectiveAction`)
     if (qualityCorrectiveAction) {
       const expectedPriorIssueIds = productionQualityPriorIssueIds(issues as ProductionIssue[], candidate.id as string, qualityCorrectiveAction.recurrenceKey, resolution.resolvedAt as string)
-      if (JSON.stringify(qualityCorrectiveAction.priorIssueIds) !== JSON.stringify(expectedPriorIssueIds)) throw new Error(`issues[${index}] quality recurrence links do not match prior CAPA evidence.`)
+      if (JSON.stringify(qualityCorrectiveAction.priorIssueIds) !== JSON.stringify(expectedPriorIssueIds)) rejectInvalid(`issues[${index}] quality recurrence links do not match prior CAPA evidence.`)
     }
     if (openingEvent && events.indexOf(resolutionEvent) >= events.indexOf(openingEvent)) {
-      throw new Error(`issues[${index}] resolution must follow its opening event.`)
+      rejectInvalid(`issues[${index}] resolution must follow its opening event.`)
     }
   }
   for (const jobId of jobIds) {
@@ -1674,20 +1680,20 @@ export function validateProductionState(value: unknown): ProductionState {
       if (!isRecord(candidate) || candidate.kind !== 'output_recorded' || candidate.subjectId !== jobId || candidate.outputKind !== 'scrap') return total
       return total + Number(candidate.quantity)
     }, 0)
-    if (!isRecord(job) || recordedGood > Number(job.output)) throw new Error(`Good output events exceed the stored output for ${jobId}.`)
-    if (recordedScrap !== Number(job.scrap ?? 0)) throw new Error(`Scrap events do not match the stored scrap for ${jobId}.`)
+    if (!isRecord(job) || recordedGood > Number(job.output)) rejectInvalid(`Good output events exceed the stored output for ${jobId}.`)
+    if (recordedScrap !== Number(job.scrap ?? 0)) rejectInvalid(`Scrap events do not match the stored scrap for ${jobId}.`)
   }
   for (const jobId of jobIds) {
     const job = jobs.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.id === jobId)
     if (!job) continue
     const closeEvents = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'job_closed' && candidate.subjectId === jobId)
     if (!isRecord(job.closure)) {
-      if (closeEvents.length) throw new Error(`Job ${jobId} has a close event without closure proof.`)
+      if (closeEvents.length) rejectInvalid(`Job ${jobId} has a close event without closure proof.`)
       continue
     }
     const closure = job.closure
     const matchingEvents = closeEvents.filter((event) => event.actionId === closure.actionId)
-    if (closeEvents.length !== 1 || matchingEvents.length !== 1) throw new Error(`Job ${jobId} closure is not backed by exactly one event.`)
+    if (closeEvents.length !== 1 || matchingEvents.length !== 1) rejectInvalid(`Job ${jobId} closure is not backed by exactly one event.`)
     const closeEvent = matchingEvents[0]
     if (closeEvent.createdAt !== closure.closedAt
       || closeEvent.actor !== closure.closedBy
@@ -1695,39 +1701,39 @@ export function validateProductionState(value: unknown): ProductionState {
       || closeEvent.evidenceReference !== closure.evidenceReference
       || closeEvent.shiftRef !== closure.shiftRef
       || closeEvent.remainingQuantity !== closure.remainingUnits) {
-      throw new Error(`Job ${jobId} closure proof does not match its immutable event.`)
+      rejectInvalid(`Job ${jobId} closure proof does not match its immutable event.`)
     }
-    if (closeEvent.summary !== `Closed ${String(job.product)} short with ${Number(closure.remainingUnits)} units remaining`) throw new Error(`Job ${jobId} close summary is not canonical.`)
+    if (closeEvent.summary !== `Closed ${String(job.product)} short with ${Number(closure.remainingUnits)} units remaining`) rejectInvalid(`Job ${jobId} close summary is not canonical.`)
     const closeIndex = events.indexOf(closeEvent)
     const creationEvent = events.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'job_created' && candidate.subjectId === jobId)
-    if (creationEvent && closeIndex >= events.indexOf(creationEvent)) throw new Error(`Job ${jobId} closure predates job creation.`)
-    if (creationEvent && timestampBefore(closeEvent.createdAt as string, creationEvent.createdAt as string)) throw new Error(`Job ${jobId} closure timestamp predates job creation.`)
+    if (creationEvent && closeIndex >= events.indexOf(creationEvent)) rejectInvalid(`Job ${jobId} closure predates job creation.`)
+    if (creationEvent && timestampBefore(closeEvent.createdAt as string, creationEvent.createdAt as string)) rejectInvalid(`Job ${jobId} closure timestamp predates job creation.`)
     const laterActivity = events.some((candidate, eventIndex) => isRecord(candidate)
       && eventIndex < closeIndex
       && candidate.subjectId === jobId
       && (candidate.kind === 'job_schedule_updated' || candidate.kind === 'output_recorded' || candidate.kind === 'material_consumed' || candidate.kind === 'quality_hold_placed'))
-    if (laterActivity) throw new Error(`Job ${jobId} has scheduling, output, material use, or a new quality hold after closure.`)
+    if (laterActivity) rejectInvalid(`Job ${jobId} has scheduling, output, material use, or a new quality hold after closure.`)
     const laterEventHasEarlierTimestamp = events.some((candidate, eventIndex) => isRecord(candidate)
       && eventIndex < closeIndex
       && candidate.subjectId === jobId
       && timestampBefore(candidate.createdAt as string, closeEvent.createdAt as string))
-    if (laterEventHasEarlierTimestamp) throw new Error(`Job ${jobId} activity appended after closure predates the close timestamp.`)
+    if (laterEventHasEarlierTimestamp) rejectInvalid(`Job ${jobId} activity appended after closure predates the close timestamp.`)
     const priorActivityHasLaterTimestamp = events.some((candidate, eventIndex) => isRecord(candidate)
       && eventIndex > closeIndex
       && candidate.subjectId === jobId
       && candidate.kind !== 'job_created'
       && timestampBefore(closeEvent.createdAt as string, candidate.createdAt as string))
-    if (priorActivityHasLaterTimestamp) throw new Error(`Job ${jobId} closure timestamp contradicts earlier activity.`)
+    if (priorActivityHasLaterTimestamp) rejectInvalid(`Job ${jobId} closure timestamp contradicts earlier activity.`)
   }
   for (const event of events) {
     if (!isRecord(event) || event.kind !== 'material_consumed') continue
     const job = jobs.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.id === event.subjectId)
-    if (!job) throw new Error(`Material use for ${String(event.subjectId)} references an unknown job.`)
+    if (!job) rejectInvalid(`Material use for ${String(event.subjectId)} references an unknown job.`)
     const materialLotSummary = event.materialLot === undefined ? '' : ` · lot ${String(event.materialLot)}`
-    if (event.summary !== `Used ${materialQuantityText(event.quantity as number)} ${String(event.materialUnit)} ${String(event.materialRef)}${materialLotSummary}`) throw new Error(`Material use summary for ${String(event.subjectId)} is not canonical.`)
+    if (event.summary !== `Used ${materialQuantityText(event.quantity as number)} ${String(event.materialUnit)} ${String(event.materialRef)}${materialLotSummary}`) rejectInvalid(`Material use summary for ${String(event.subjectId)} is not canonical.`)
     const creationEvent = events.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'job_created' && candidate.subjectId === event.subjectId)
-    if (creationEvent && events.indexOf(event) >= events.indexOf(creationEvent)) throw new Error(`Material use for ${String(event.subjectId)} predates job creation.`)
-    if (creationEvent && timestampBefore(event.createdAt as string, creationEvent.createdAt as string)) throw new Error(`Material use timestamp for ${String(event.subjectId)} predates job creation.`)
+    if (creationEvent && events.indexOf(event) >= events.indexOf(creationEvent)) rejectInvalid(`Material use for ${String(event.subjectId)} predates job creation.`)
+    if (creationEvent && timestampBefore(event.createdAt as string, creationEvent.createdAt as string)) rejectInvalid(`Material use timestamp for ${String(event.subjectId)} predates job creation.`)
   }
   for (const jobId of jobIds) {
     const job = jobs.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.id === jobId)
@@ -1741,14 +1747,14 @@ export function validateProductionState(value: unknown): ProductionState {
     const recordedScrap = jobEvents.reduce((total, event) => total + (event.kind === 'output_recorded' && event.outputKind === 'scrap' ? Number(event.quantity) : 0), 0)
     let goodAtEvent = Number(job.output) - recordedGood
     let scrapAtEvent = Number(job.scrap ?? 0) - recordedScrap
-    if (!Number.isSafeInteger(goodAtEvent) || goodAtEvent < 0 || !Number.isSafeInteger(scrapAtEvent) || scrapAtEvent < 0) throw new Error(`Job activity history for ${jobId} has an invalid opening balance.`)
+    if (!Number.isSafeInteger(goodAtEvent) || goodAtEvent < 0 || !Number.isSafeInteger(scrapAtEvent) || scrapAtEvent < 0) rejectInvalid(`Job activity history for ${jobId} has an invalid opening balance.`)
     for (const event of jobEvents) {
       if (event.kind === 'job_schedule_updated') {
-        if (goodAtEvent + scrapAtEvent >= Number(job.target)) throw new Error(`Job schedule for ${jobId} changed after the job reached target.`)
+        if (goodAtEvent + scrapAtEvent >= Number(job.target)) rejectInvalid(`Job schedule for ${jobId} changed after the job reached target.`)
         continue
       }
       if (event.kind === 'material_consumed') {
-        if (goodAtEvent + scrapAtEvent >= Number(job.target)) throw new Error(`Material use for ${jobId} occurred after the job reached target.`)
+        if (goodAtEvent + scrapAtEvent >= Number(job.target)) rejectInvalid(`Material use for ${jobId} occurred after the job reached target.`)
         continue
       }
       if (event.outputKind === 'scrap') scrapAtEvent += Number(event.quantity)
@@ -1762,22 +1768,22 @@ export function validateProductionState(value: unknown): ProductionState {
       && (candidate.kind === 'quality_hold_placed' || candidate.kind === 'quality_hold_released')
       && candidate.subjectId === jobId)
     const creationEvent = events.find((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'job_created' && candidate.subjectId === jobId)
-    if (creationEvent && holdEvents.some((event) => events.indexOf(event) >= events.indexOf(creationEvent))) throw new Error(`Quality hold history for ${jobId} predates job creation.`)
-    if (creationEvent && holdEvents.some((event) => timestampBefore(event.createdAt as string, creationEvent.createdAt as string))) throw new Error(`Quality hold timestamp for ${jobId} predates job creation.`)
+    if (creationEvent && holdEvents.some((event) => events.indexOf(event) >= events.indexOf(creationEvent))) rejectInvalid(`Quality hold history for ${jobId} predates job creation.`)
+    if (creationEvent && holdEvents.some((event) => timestampBefore(event.createdAt as string, creationEvent.createdAt as string))) rejectInvalid(`Quality hold timestamp for ${jobId} predates job creation.`)
     let activeHoldEvent: Record<string, unknown> | undefined
     let previousActivityAt: bigint | undefined
     for (const event of [...holdEvents].reverse()) {
       const activityAt = timestampMicros(event.createdAt as string)
-      if (activityAt === null) throw new Error(`Quality hold timestamp for ${jobId} is invalid.`)
-      if (previousActivityAt !== undefined && activityAt < previousActivityAt) throw new Error(`Quality hold timestamps for ${jobId} contradict lifecycle order.`)
+      if (activityAt === null) rejectInvalid(`Quality hold timestamp for ${jobId} is invalid.`)
+      if (previousActivityAt !== undefined && activityAt < previousActivityAt) rejectInvalid(`Quality hold timestamps for ${jobId} contradict lifecycle order.`)
       previousActivityAt = activityAt
       if (event.kind === 'quality_hold_placed') {
-        if (activeHoldEvent) throw new Error(`Quality hold history for ${jobId} places a second active hold.`)
-        if (event.summary !== `Held ${job.product} for quality review`) throw new Error(`Quality hold summary for ${jobId} is not canonical.`)
+        if (activeHoldEvent) rejectInvalid(`Quality hold history for ${jobId} places a second active hold.`)
+        if (event.summary !== `Held ${job.product} for quality review`) rejectInvalid(`Quality hold summary for ${jobId} is not canonical.`)
         activeHoldEvent = event
       } else {
-        if (!activeHoldEvent) throw new Error(`Quality hold history for ${jobId} releases an unheld job.`)
-        if (event.summary !== `Released ${job.product} from quality hold`) throw new Error(`Quality release summary for ${jobId} is not canonical.`)
+        if (!activeHoldEvent) rejectInvalid(`Quality hold history for ${jobId} releases an unheld job.`)
+        if (event.summary !== `Released ${job.product} from quality hold`) rejectInvalid(`Quality release summary for ${jobId} is not canonical.`)
         activeHoldEvent = undefined
       }
     }
@@ -1788,10 +1794,10 @@ export function validateProductionState(value: unknown): ProductionState {
         || job.qualityHold.heldBy !== activeHoldEvent.actor
         || job.qualityHold.reason !== activeHoldEvent.reason
         || job.qualityHold.evidenceReference !== activeHoldEvent.evidenceReference) {
-        throw new Error(`Current quality hold for ${jobId} does not match its immutable event.`)
+        rejectInvalid(`Current quality hold for ${jobId} does not match its immutable event.`)
       }
     } else if (job.qualityHold !== undefined) {
-      throw new Error(`Current quality hold for ${jobId} has no unmatched hold event.`)
+      rejectInvalid(`Current quality hold for ${jobId} has no unmatched hold event.`)
     }
   }
   for (const machineId of machineIds) {
@@ -1800,13 +1806,13 @@ export function validateProductionState(value: unknown): ProductionState {
     const machineEvents = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate) && candidate.kind === 'machine_state_changed' && candidate.subjectId === machineId)
     const initialState = commissioningEvent?.toState ?? (machineEvents.length ? 'running' : isRecord(machine) ? machine.state : 'running')
     const latestEvent = machineEvents[0]
-    if (latestEvent && (!isRecord(machine) || latestEvent.toState !== machine.state)) throw new Error(`Latest machine event does not match ${machineId}.`)
-    if (!latestEvent && (!isRecord(machine) || machine.state !== initialState)) throw new Error(`Machine ${machineId} does not match its initial observed state.`)
+    if (latestEvent && (!isRecord(machine) || latestEvent.toState !== machine.state)) rejectInvalid(`Latest machine event does not match ${machineId}.`)
+    if (!latestEvent && (!isRecord(machine) || machine.state !== initialState)) rejectInvalid(`Machine ${machineId} does not match its initial observed state.`)
     const oldestFirst = [...machineEvents].reverse()
-    if (oldestFirst.length && oldestFirst[0].fromState !== initialState) throw new Error(`Machine history for ${machineId} does not begin from its initial observed state.`)
-    if (oldestFirst.length && commissioningEvent && timestampBefore(oldestFirst[0].createdAt as string, commissioningEvent.createdAt as string)) throw new Error(`Machine history for ${machineId} predates commissioning.`)
+    if (oldestFirst.length && oldestFirst[0].fromState !== initialState) rejectInvalid(`Machine history for ${machineId} does not begin from its initial observed state.`)
+    if (oldestFirst.length && commissioningEvent && timestampBefore(oldestFirst[0].createdAt as string, commissioningEvent.createdAt as string)) rejectInvalid(`Machine history for ${machineId} predates commissioning.`)
     for (let index = 1; index < oldestFirst.length; index += 1) {
-      if (oldestFirst[index - 1].toState !== oldestFirst[index].fromState) throw new Error(`Machine history for ${machineId} contains a state gap.`)
+      if (oldestFirst[index - 1].toState !== oldestFirst[index].fromState) rejectInvalid(`Machine history for ${machineId} contains a state gap.`)
     }
   }
   deriveProductionDowntimeIntervals(
@@ -1832,11 +1838,11 @@ function deriveProductionDowntimeIntervals(
     let previousActivityAt: number | undefined
     for (const event of [...downtimeEvents].reverse()) {
       const activityAt = Date.parse(event.createdAt)
-      if (previousActivityAt !== undefined && activityAt < previousActivityAt) throw new Error(`Downtime timestamps for ${machine.id} contradict lifecycle order.`)
+      if (previousActivityAt !== undefined && activityAt < previousActivityAt) rejectInvalid(`Downtime timestamps for ${machine.id} contradict lifecycle order.`)
       previousActivityAt = activityAt
       if (event.kind === 'downtime_started') {
-        if (activeInterval) throw new Error(`Downtime history for ${machine.id} starts a second open interval.`)
-        if (event.summary !== `Started downtime for ${machine.name}`) throw new Error(`Downtime start summary for ${machine.id} is not canonical.`)
+        if (activeInterval) rejectInvalid(`Downtime history for ${machine.id} starts a second open interval.`)
+        if (event.summary !== `Started downtime for ${machine.name}`) rejectInvalid(`Downtime start summary for ${machine.id} is not canonical.`)
         activeInterval = {
           startActionId: event.actionId,
           machineId: machine.id,
@@ -1849,11 +1855,11 @@ function deriveProductionDowntimeIntervals(
         intervals.push(activeInterval)
         continue
       }
-      if (!activeInterval) throw new Error(`Downtime history for ${machine.id} ends an interval that is not open.`)
-      if (event.downtimeStartActionId !== activeInterval.startActionId) throw new Error(`Downtime end for ${machine.id} does not reference its open interval.`)
-      if (event.summary !== `Ended downtime for ${machine.name}`) throw new Error(`Downtime end summary for ${machine.id} is not canonical.`)
+      if (!activeInterval) rejectInvalid(`Downtime history for ${machine.id} ends an interval that is not open.`)
+      if (event.downtimeStartActionId !== activeInterval.startActionId) rejectInvalid(`Downtime end for ${machine.id} does not reference its open interval.`)
+      if (event.summary !== `Ended downtime for ${machine.name}`) rejectInvalid(`Downtime end summary for ${machine.id} is not canonical.`)
       const durationMs = activityAt - Date.parse(activeInterval.startedAt)
-      if (!Number.isSafeInteger(durationMs) || durationMs < 0) throw new Error(`Downtime duration for ${machine.id} is invalid.`)
+      if (!Number.isSafeInteger(durationMs) || durationMs < 0) rejectInvalid(`Downtime duration for ${machine.id} is invalid.`)
       activeInterval.end = {
         actionId: event.actionId,
         endedAt: event.createdAt,
@@ -1884,11 +1890,11 @@ function deriveProductionMaintenanceRecords(
     let previousActivityAt: number | undefined
     for (const event of [...maintenanceEvents].reverse()) {
       const activityAt = Date.parse(event.createdAt)
-      if (previousActivityAt !== undefined && activityAt < previousActivityAt) throw new Error(`Maintenance timestamps for ${machine.id} contradict lifecycle order.`)
+      if (previousActivityAt !== undefined && activityAt < previousActivityAt) rejectInvalid(`Maintenance timestamps for ${machine.id} contradict lifecycle order.`)
       previousActivityAt = activityAt
       if (event.kind === 'maintenance_started') {
-        if (activeRecord) throw new Error(`Maintenance history for ${machine.id} starts a second open record.`)
-        if (event.summary !== `Started maintenance for ${machine.name}`) throw new Error(`Maintenance start summary for ${machine.id} is not canonical.`)
+        if (activeRecord) rejectInvalid(`Maintenance history for ${machine.id} starts a second open record.`)
+        if (event.summary !== `Started maintenance for ${machine.name}`) rejectInvalid(`Maintenance start summary for ${machine.id} is not canonical.`)
         activeRecord = {
           startActionId: event.actionId,
           machineId: machine.id,
@@ -1910,14 +1916,14 @@ function deriveProductionMaintenanceRecords(
         records.push(activeRecord)
         continue
       }
-      if (!activeRecord) throw new Error(`Maintenance history for ${machine.id} completes work that is not open.`)
-      if (event.maintenanceStartActionId !== activeRecord.startActionId) throw new Error(`Maintenance completion for ${machine.id} does not reference its open record.`)
-      if (event.summary !== `Completed maintenance for ${machine.name}`) throw new Error(`Maintenance completion summary for ${machine.id} is not canonical.`)
-      if (Boolean(event.maintenanceStrategyActionId) !== Boolean(activeRecord.strategy)) throw new Error(`Maintenance completion for ${machine.id} has a mismatched strategy binding.`)
+      if (!activeRecord) rejectInvalid(`Maintenance history for ${machine.id} completes work that is not open.`)
+      if (event.maintenanceStartActionId !== activeRecord.startActionId) rejectInvalid(`Maintenance completion for ${machine.id} does not reference its open record.`)
+      if (event.summary !== `Completed maintenance for ${machine.name}`) rejectInvalid(`Maintenance completion summary for ${machine.id} is not canonical.`)
+      if (Boolean(event.maintenanceStrategyActionId) !== Boolean(activeRecord.strategy)) rejectInvalid(`Maintenance completion for ${machine.id} has a mismatched strategy binding.`)
       if (activeRecord.strategy && (event.maintenanceStrategyActionId !== activeRecord.strategy.actionId
         || event.maintenanceStrategyRevision !== activeRecord.strategy.revision
         || event.maintenanceProcedureReference !== activeRecord.strategy.procedureReference
-        || event.maintenancePlannedDueAt !== activeRecord.strategy.plannedDueAt)) throw new Error(`Maintenance completion for ${machine.id} does not match its reviewed strategy.`)
+        || event.maintenancePlannedDueAt !== activeRecord.strategy.plannedDueAt)) rejectInvalid(`Maintenance completion for ${machine.id} does not match its reviewed strategy.`)
       activeRecord.completion = {
         actionId: event.actionId,
         completedAt: event.createdAt,
@@ -1945,9 +1951,9 @@ function deriveProductionMaintenanceRecords(
 }
 
 function migrateLegacyProduction(value: unknown): ProductionState {
-  if (!isRecord(value) || !Array.isArray(value.jobs) || !Array.isArray(value.issues) || !Array.isArray(value.machines)) throw new Error('Legacy Production workspace collections are incomplete.')
+  if (!isRecord(value) || !Array.isArray(value.jobs) || !Array.isArray(value.issues) || !Array.isArray(value.machines)) rejectInvalid('Legacy Production workspace collections are incomplete.')
   const jobs = value.jobs.map((candidate, index): ProductionJob => {
-    if (!isRecord(candidate)) throw new Error(`Legacy job ${index + 1} is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`Legacy job ${index + 1} is invalid.`)
     const id = requiredText(candidate.id, `Legacy jobs[${index}].id`)
     const line = requiredText(candidate.line, `Legacy jobs[${index}].line`)
     const product = requiredText(candidate.product, `Legacy jobs[${index}].product`)
@@ -1955,14 +1961,14 @@ function migrateLegacyProduction(value: unknown): ProductionState {
     assertSafeInteger(candidate.output, `Legacy jobs[${index}].output`)
     const target = Number(candidate.target)
     const output = Number(candidate.output)
-    if (output > target) throw new Error(`Legacy job ${index + 1} output exceeds target.`)
+    if (output > target) rejectInvalid(`Legacy job ${index + 1} output exceeds target.`)
     return { id, line, product, target, output }
   })
   const issues = value.issues.map((candidate, index): ProductionIssue => {
-    if (!isRecord(candidate)) throw new Error(`Legacy issue ${index + 1} is invalid.`)
-    if (!issueKinds.includes(candidate.kind as ProductionIssueKind)) throw new Error(`Legacy issue ${index + 1} kind is invalid.`)
-    if (!validTimestamp(candidate.createdAt)) throw new Error(`Legacy issue ${index + 1} timestamp is invalid.`)
-    if (candidate.status !== 'open' && candidate.status !== 'resolved') throw new Error(`Legacy issue ${index + 1} status is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`Legacy issue ${index + 1} is invalid.`)
+    if (!issueKinds.includes(candidate.kind as ProductionIssueKind)) rejectInvalid(`Legacy issue ${index + 1} kind is invalid.`)
+    if (!validTimestamp(candidate.createdAt)) rejectInvalid(`Legacy issue ${index + 1} timestamp is invalid.`)
+    if (candidate.status !== 'open' && candidate.status !== 'resolved') rejectInvalid(`Legacy issue ${index + 1} status is invalid.`)
     const kind = candidate.kind as ProductionIssueKind
     return {
       id: requiredText(candidate.id, `Legacy issues[${index}].id`),
@@ -1974,8 +1980,8 @@ function migrateLegacyProduction(value: unknown): ProductionState {
     }
   })
   const machines = value.machines.map((candidate, index): ProductionMachine => {
-    if (!isRecord(candidate)) throw new Error(`Legacy machine ${index + 1} is invalid.`)
-    if (!productionMachineStates.includes(candidate.state as ProductionMachineState)) throw new Error(`Legacy machine ${index + 1} state is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`Legacy machine ${index + 1} is invalid.`)
+    if (!productionMachineStates.includes(candidate.state as ProductionMachineState)) rejectInvalid(`Legacy machine ${index + 1} state is invalid.`)
     const state = candidate.state as ProductionMachineState
     return {
       id: requiredText(candidate.id, `Legacy machines[${index}].id`),
@@ -1999,11 +2005,36 @@ function persistInitialState(storage: ProductionStorage, state: ProductionState,
   try {
     const serialized = JSON.stringify(state)
     storage.setItem(PRODUCTION_KEY, serialized)
-    if (storage.getItem(PRODUCTION_KEY) !== serialized) throw new Error('write_not_confirmed')
+    if (storage.getItem(PRODUCTION_KEY) !== serialized) rejectInvalid('write_not_confirmed')
     return { state, source, error: '' }
   } catch {
     return { state, source, error: 'Production storage is unavailable. This workspace is read-only until browser storage is restored.' }
   }
+}
+
+export function readProductionWorkspace(storage = browserStorage()): ProductionWorkspaceReadSnapshot {
+  if (!storage) return { state: createEmptyProduction(), source: 'recovery', error: 'Production storage is unavailable. No local data was changed.' }
+  let currentRaw: string | null
+  try { currentRaw = storage.getItem(PRODUCTION_KEY) } catch { return { state: createEmptyProduction(), source: 'recovery', error: 'Production storage could not be read. No local data was changed.' } }
+  if (currentRaw !== null) {
+    try {
+      return { state: validateProductionState(JSON.parse(currentRaw)), source: 'current', error: '' }
+    } catch {
+      return { state: createEmptyProduction(), source: 'recovery', error: 'Production v2 data is malformed. The read failed closed without replacing data.' }
+    }
+  }
+
+  for (const legacyKey of LEGACY_PRODUCTION_KEYS) {
+    let legacyRaw: string | null
+    try { legacyRaw = storage.getItem(legacyKey) } catch { return { state: createEmptyProduction(), source: 'recovery', error: 'Legacy Production data could not be read. The read failed closed without creating v2 data.' } }
+    if (legacyRaw === null) continue
+    try {
+      return { state: migrateLegacyProduction(JSON.parse(legacyRaw)), source: 'legacy', error: '' }
+    } catch {
+      return { state: createEmptyProduction(), source: 'recovery', error: 'Legacy Production data is malformed. The read failed closed without creating v2 data.' }
+    }
+  }
+  return { state: createEmptyProduction(), source: 'absent', error: '' }
 }
 
 export function loadProductionWorkspace(storage = browserStorage()): ProductionWorkspaceSnapshot {
@@ -2273,7 +2304,7 @@ export function productionMaintenanceDueQueue(
   asOf: string,
 ): ProductionMaintenanceDueQueue {
   const current = validateProductionState(state)
-  if (!validDowntimeTimestamp(asOf)) throw new Error('Maintenance due queue requires a canonical UTC millisecond as-of time.')
+  if (!validDowntimeTimestamp(asOf)) rejectInvalid('Maintenance due queue requires a canonical UTC millisecond as-of time.')
   const asOfTime = Date.parse(asOf)
   const criticalityRank: Record<ProductionEquipmentCriticality, number> = { critical: 0, high: 1, medium: 2, low: 3 }
   const items = (current.equipmentMaster?.assets ?? []).flatMap((asset): ProductionMaintenanceDueItem[] => {
@@ -2347,7 +2378,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
     const key = JSON.stringify([entry.materialRef, entry.materialUnit])
     const currentTotal = materialTotalMap.get(key) ?? { materialRef: entry.materialRef, materialUnit: entry.materialUnit, quantityMilli: 0, entryCount: 0 }
     const quantityMilli = currentTotal.quantityMilli + (materialQuantityMilli(entry.quantity) ?? 0)
-    if (!Number.isSafeInteger(quantityMilli)) throw new Error(`Material total for ${entry.materialRef} exceeds the safe fixed-precision limit.`)
+    if (!Number.isSafeInteger(quantityMilli)) rejectInvalid(`Material total for ${entry.materialRef} exceeds the safe fixed-precision limit.`)
     materialTotalMap.set(key, { ...currentTotal, quantityMilli, entryCount: currentTotal.entryCount + 1 })
   }
   const materialTotals = [...materialTotalMap.values()]
@@ -2362,7 +2393,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
     .filter((event) => event.kind === 'job_closed' && event.shiftRef === shiftRef)
     .map((event) => {
       const job = current.jobs.find((candidate) => candidate.id === event.subjectId)
-      if (!job?.closure) throw new Error(`Short close for ${event.subjectId} has no matching job closure.`)
+      if (!job?.closure) rejectInvalid(`Short close for ${event.subjectId} has no matching job closure.`)
       return {
         actionId: event.actionId,
         jobId: job.id,
@@ -2381,7 +2412,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
     const projection = projectPlantOrder(execution)
     const plan = projection.plan
     const job = current.jobs.find((candidate) => candidate.id === jobId)
-    if (!plan || !job || projection.status === 'unplanned') throw new Error(`Controlled shift order ${jobId} is missing its reviewed plan or Production job.`)
+    if (!plan || !job || projection.status === 'unplanned') rejectInvalid(`Controlled shift order ${jobId} is missing its reviewed plan or Production job.`)
     const nextOperation = projection.operations.find((operation) => operation.status !== 'complete')
     const bindingCurrent = productionJobPlanSourceDigest(plantOrderScope, job) === plan.sourceDigest
       && job.product === plan.job.product
@@ -2504,7 +2535,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
     })
     .map((issue) => {
       const openingEvent = current.events.find((event) => event.kind === 'issue_opened' && event.subjectId === issue.id)
-      if (!openingEvent) throw new Error(`Priority problem ${issue.id} has no immutable opening evidence.`)
+      if (!openingEvent) rejectInvalid(`Priority problem ${issue.id} has no immutable opening evidence.`)
       return {
         id: issue.id,
         severity: issue.severity,
@@ -2902,7 +2933,7 @@ export type ProductionBatchGenealogy = NonNullable<ReturnType<typeof buildProduc
 
 export function formatProductionBatchGenealogy(report: ProductionBatchGenealogy) {
   const { digest, ...payload } = report
-  if (digest !== plantOrderEvidenceDigest(payload)) throw new Error('Production batch genealogy digest does not match its evidence.')
+  if (digest !== plantOrderEvidenceDigest(payload)) rejectInvalid('Production batch genealogy digest does not match its evidence.')
   return `${JSON.stringify(report, null, 2)}\n`
 }
 
@@ -3050,7 +3081,7 @@ export type ProductionRecallTrace = NonNullable<ReturnType<typeof buildProductio
 
 export function formatProductionRecallTrace(report: ProductionRecallTrace) {
   const { digest, ...payload } = report
-  if (digest !== plantOrderEvidenceDigest(payload)) throw new Error('Production recall trace digest does not match its evidence.')
+  if (digest !== plantOrderEvidenceDigest(payload)) rejectInvalid('Production recall trace digest does not match its evidence.')
   return `${JSON.stringify(report, null, 2)}\n`
 }
 
@@ -3124,7 +3155,7 @@ export type ProductionCertificateOfConformance = NonNullable<ReturnType<typeof b
 
 export function formatProductionCertificateOfConformance(certificate: ProductionCertificateOfConformance) {
   const { digest, ...payload } = certificate
-  if (digest !== plantOrderEvidenceDigest(payload)) throw new Error('Production certificate of conformance digest does not match its evidence.')
+  if (digest !== plantOrderEvidenceDigest(payload)) rejectInvalid('Production certificate of conformance digest does not match its evidence.')
   return `${JSON.stringify(certificate, null, 2)}\n`
 }
 
@@ -4048,4 +4079,9 @@ export function appendGuidedSampleProductionActivity(stateValue: ProductionState
     if (!next) return null
   }
   try { return validateProductionState(next) } catch { return null }
+}
+
+// Keep rejection messages and synchronous failure behavior identical across checks.
+function rejectInvalid(message: string): never {
+  throw new Error(message)
 }

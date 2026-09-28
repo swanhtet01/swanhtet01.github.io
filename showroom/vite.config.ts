@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
+import { clientSetupManifestPlugin } from './scripts/client-setup-manifest.ts'
 
 const projectRoot = realpathSync(dirname(fileURLToPath(import.meta.url)))
 const localApi = process.env.SUPERMEGA_LOCAL_API?.trim()
@@ -62,7 +63,7 @@ function localHealthPlugin(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: projectRoot,
   publicDir: resolve(projectRoot, 'public-app'),
   // Dependencies can be supplied through a read-only/junctioned node_modules on the
@@ -70,8 +71,18 @@ export default defineConfig({
   // directory atomically, so keep generated cache in this checkout's ignored .tmp
   // directory instead of trying to write through the dependency junction.
   cacheDir: resolve(projectRoot, '../.tmp/vite-cache'),
+  // Preserve field-level tree shaking instead of retaining entire large JSON blobs.
+  json: { stringify: false },
+  // Compact production JSX without changing source components or the development
+  // runtime. Explicit aliases avoid requiring a React namespace in every TSX file.
+  esbuild: command === 'build' ? {
+    jsxFactory: '__supermegaCreateElement',
+    jsxFragment: '__supermegaFragment',
+    jsxInject: `import { productionElement as __supermegaCreateElement, productionFragment as __supermegaFragment } from ${JSON.stringify(resolve(projectRoot, 'src/core/production-jsx.ts').replaceAll('\\', '/'))}`,
+  } : undefined,
   plugins: [
-    react(),
+    clientSetupManifestPlugin(projectRoot),
+    react({ jsxRuntime: command === 'build' ? 'classic' : 'automatic' }),
     localHealthPlugin(),
     shouldAnalyzeBundle
       ? visualizer({
@@ -96,6 +107,11 @@ export default defineConfig({
       output: {
         onlyExplicitManualChunks: true,
         manualChunks(id) {
+          // Keep lightweight login/recovery routing separate even when the
+          // managed Auth transport also consumes the strict review-return parser.
+          if (id.includes('/src/core/account-routes.ts')) {
+            return 'account-routes'
+          }
           if (id.includes('vite/preload-helper')) {
             return 'preload-helper'
           }
@@ -109,6 +125,7 @@ export default defineConfig({
           if (id.includes('/src/core/production-workspace.ts')
             || id.includes('/src/core/channel-order-intake.ts')
             || id.includes('/src/core/managed-trial.ts')
+            || id.includes('/src/core/managed-portal-client.ts')
             || id.includes('/src/core/team-work.ts')) {
             return 'operating-models'
           }
@@ -126,4 +143,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

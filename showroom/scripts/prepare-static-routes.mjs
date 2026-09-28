@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 async function main() {
   const rootDir = await realpath(process.cwd())
-  const distDir = resolve(rootDir, 'dist')
+  const distDir = resolve(process.env.SUPERMEGA_BUILD_OUTPUT || resolve(rootDir, 'dist'))
   const indexHtml = await readFile(resolve(distDir, 'index.html'), 'utf8')
 
   await writeFile(resolve(distDir, '404.html'), indexHtml, 'utf8')

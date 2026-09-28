@@ -23,6 +23,7 @@ import {
 
 export const OPERATIONAL_REPORT_CONTRACT = 'supermega.operational_report.v2' as const
 export const OPERATIONAL_REPORT_EXPORT_CONTRACT = 'supermega.operational_report_export.v2' as const
+export const OPERATIONAL_REPORT_ACTION_PACKET_CONTRACT = 'supermega.operational_report_action_packet.v1' as const
 export const SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT = 'supermega.shared_master_data_review_packet.v1' as const
 export const SHARED_MASTER_DATA_DECISION_CONTRACT = 'supermega.shared_master_data_decision.v1' as const
 export const SHARED_MASTER_DATA_DRY_RUN_CONTRACT = 'supermega.shared_master_data_dry_run.v1' as const
@@ -42,6 +43,15 @@ export type OperationalSource = {
   updatedAt: string | null
 }
 
+export type OperationalActionability = {
+  workOrderRequired: boolean
+  ownerReviewRequired: boolean
+  ownerDueRequiredBeforeClosure: boolean
+  evidenceRequiredBeforeClosure: boolean
+  externalEffectAllowed: false
+  managedWriteAllowed: false
+}
+
 export type OperationalReportEntry = {
   id: string
   product: OperationalProduct
@@ -50,6 +60,7 @@ export type OperationalReportEntry = {
   detail: string
   count: number
   route: string
+  actionability: OperationalActionability
   sourceSurface: OperationalSurface
   sourceRevision: number | null
 }
@@ -106,6 +117,12 @@ export type OperationalReport = {
 export type OperationalReportView = {
   product: 'all' | OperationalProduct
   urgency: 'all' | 'attention' | 'critical'
+}
+
+export type OperationalReportActionPacketInput = {
+  ownerRole: string
+  dueDate: string
+  openedAt?: string
 }
 
 export type SharedMasterDataResolution = 'retain_separate_roles' | 'link_shared_party' | 'retain_separate_locations' | 'merge_in_owner'
@@ -192,8 +209,56 @@ const masterDimensionKinds: Record<string, readonly SharedMasterDataKind[]> = {
   'ecommerce.documents': ['document'],
 }
 
+const customerProductIds = ['shop', 'plant', 'website', 'ecommerce'] as const
+const customerProductByOperationalProduct: Record<OperationalProduct, typeof customerProductIds[number]> = {
+  commerce: 'shop',
+  production: 'plant',
+  website: 'website',
+  ecommerce: 'ecommerce',
+}
+const actionSeverityByOperationalSeverity: Record<Exclude<OperationalSeverity, 'ready'>, 'critical' | 'high' | 'medium'> = {
+  critical: 'critical',
+  warning: 'high',
+  action: 'medium',
+}
+const actionImpactByOperationalProduct: Record<OperationalProduct, 'quality' | 'revenue' | 'trust'> = {
+  commerce: 'revenue',
+  production: 'quality',
+  website: 'trust',
+  ecommerce: 'revenue',
+}
+const sensitiveTextPatterns = [
+  /sk-[A-Za-z0-9_-]{20,}/,
+  /sk-proj-[A-Za-z0-9_-]{20,}/,
+  /ghp_[A-Za-z0-9]{20,}/,
+  /github_pat_[A-Za-z0-9_]{20,}/,
+  /sb_secret_[A-Za-z0-9_-]{20,}/,
+  /postgres(?:ql)?:\/\/[^"\s]+/i,
+  /https?:\/\/[^/\s:@]+:[^/\s@]+@/i,
+  /-----BEGIN (?:RSA |OPENSSH |EC |DSA |PRIVATE )?PRIVATE KEY-----/,
+]
+
 function exactIso(value: string) {
   try { return new Date(value).toISOString() === value } catch { return false }
+}
+
+function exactDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = Date.parse(`${value}T00:00:00.000Z`)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value
+}
+
+function safeLine(value: unknown, maximum: number, reason: string) {
+  const normalized = String(value || '').trim()
+  if (!normalized || normalized.length > maximum || normalized.normalize('NFC') !== normalized
+    || Array.from(normalized).some((char) => {
+      const code = char.codePointAt(0) || 0
+      return code < 32 || code === 127
+    })
+    || sensitiveTextPatterns.some((pattern) => pattern.test(normalized))) {
+    domainError(reason)
+  }
+  return normalized
 }
 
 function canonicalProducts(value: readonly OperationalProduct[]) {
@@ -209,12 +274,24 @@ function validateSources(value: readonly OperationalSource[], allowedProducts: r
       || seen.has(source.surface)
       || source.revision !== null && (!Number.isSafeInteger(source.revision) || source.revision < 0)
       || source.updatedAt !== null && !exactIso(source.updatedAt)) {
-      throw new Error('Operational report source is invalid.')
+      domainError('Operational report source is invalid.')
     }
     seen.add(source.surface)
   }
-  if ([...required].some((surface) => !seen.has(surface))) throw new Error('Operational report source coverage is incomplete.')
+  if ([...required].some((surface) => !seen.has(surface))) domainError('Operational report source coverage is incomplete.')
   return value.filter((source) => required.has(source.surface)).map((source) => ({ ...source }))
+}
+
+function actionabilityFor(severity: OperationalSeverity): OperationalActionability {
+  const workOrderRequired = severity !== 'ready'
+  return {
+    workOrderRequired,
+    ownerReviewRequired: workOrderRequired,
+    ownerDueRequiredBeforeClosure: workOrderRequired,
+    evidenceRequiredBeforeClosure: workOrderRequired,
+    externalEffectAllowed: false,
+    managedWriteAllowed: false,
+  }
 }
 
 function task(
@@ -227,8 +304,8 @@ function task(
   count: number,
   route: string,
 ): OperationalReportEntry {
-  if (!Number.isSafeInteger(count) || count < 0) throw new Error('Operational report count is invalid.')
-  return { id, product, severity, label, detail, count, route, sourceSurface: source.surface, sourceRevision: source.revision }
+  if (!Number.isSafeInteger(count) || count < 0) domainError('Operational report count is invalid.')
+  return { id, product, severity, label, detail, count, route, actionability: actionabilityFor(severity), sourceSurface: source.surface, sourceRevision: source.revision }
 }
 
 function masterDimension(
@@ -240,7 +317,7 @@ function masterDimension(
   recordCount: number,
   sourceAvailable: boolean,
 ): OperationalMasterDataDimension {
-  if (!Number.isSafeInteger(recordCount) || recordCount < 0) throw new Error('Operational master-data count is invalid.')
+  if (!Number.isSafeInteger(recordCount) || recordCount < 0) domainError('Operational master-data count is invalid.')
   return {
     id,
     product,
@@ -356,12 +433,12 @@ function ecommerceEntries(input: OperationalReportInput, source: OperationalSour
 }
 
 export function buildOperationalReport(input: OperationalReportInput): OperationalReport {
-  if (!Number.isFinite(input.now)) throw new Error('Operational report time is invalid.')
+  if (!Number.isFinite(input.now)) domainError('Operational report time is invalid.')
   const observedAt = new Date(input.now).toISOString()
-  if (input.mode !== 'local' && input.mode !== 'managed') throw new Error('Operational report mode is invalid.')
+  if (input.mode !== 'local' && input.mode !== 'managed') domainError('Operational report mode is invalid.')
   const allowedProducts = canonicalProducts(input.allowedProducts)
   if (!allowedProducts.length || allowedProducts.length !== input.allowedProducts.length || new Set(input.allowedProducts).size !== input.allowedProducts.length
-    || JSON.stringify(allowedProducts) !== JSON.stringify(input.allowedProducts)) throw new Error('Operational report permissions are invalid.')
+    || JSON.stringify(allowedProducts) !== JSON.stringify(input.allowedProducts)) domainError('Operational report permissions are invalid.')
   const sources = validateSources(input.sources, allowedProducts)
   const bySurface = new Map(sources.map((source) => [source.surface, source]))
   const entries = allowedProducts.flatMap((product) => {
@@ -433,11 +510,11 @@ function exactKeys(value: unknown, keys: readonly string[]) {
 const reviewAuthorityOrder = ['shop_inventory_command_chain', 'commerce_workspace', 'plant_workspace', 'website_workspace'] as const
 
 function validateProjectedDuplicateReview(value: unknown, allowedProducts: readonly OperationalProduct[]) {
-  if (!exactKeys(value, ['candidates', 'automaticMergeAllowed', 'mergePerformed', 'externalWritesPerformed'])) throw new Error('Operational report duplicate review is invalid.')
+  if (!exactKeys(value, ['candidates', 'automaticMergeAllowed', 'mergePerformed', 'externalWritesPerformed'])) domainError('Operational report duplicate review is invalid.')
   const review = value as SharedMasterDataRegistry['duplicateReview']
   if (!Array.isArray(review.candidates) || review.candidates.length > 2_000
     || review.automaticMergeAllowed !== false || review.mergePerformed !== false || review.externalWritesPerformed !== false) {
-    throw new Error('Operational report duplicate review is invalid.')
+    domainError('Operational report duplicate review is invalid.')
   }
   const usedRecordIds = new Set<string>()
   for (const [index, candidate] of review.candidates.entries()) {
@@ -452,7 +529,7 @@ function validateProjectedDuplicateReview(value: unknown, allowedProducts: reado
       || JSON.stringify(candidate.ownerProducts) !== JSON.stringify(operationalProducts.filter((product) => allowedProducts.includes(product) && recordOwners.includes(product)))
       || !Array.isArray(candidate.sourceAuthorities) || JSON.stringify(candidate.sourceAuthorities) !== JSON.stringify(reviewAuthorityOrder.filter((authority) => candidate.sourceAuthorities.includes(authority)))
       || candidate.sourceAuthorities.some((authority) => !reviewAuthorityOrder.includes(authority))) {
-      throw new Error('Operational report duplicate candidate is invalid.')
+      domainError('Operational report duplicate candidate is invalid.')
     }
     candidate.recordIds.forEach((id) => usedRecordIds.add(id))
   }
@@ -460,15 +537,15 @@ function validateProjectedDuplicateReview(value: unknown, allowedProducts: reado
 }
 
 function validateExportMasterData(value: unknown, allowedProducts: readonly OperationalProduct[], sources: readonly OperationalSource[]) {
-  if (!exactKeys(value, ['registryContract', 'duplicateCandidates', 'duplicateReview', 'dimensions', 'totalRecords', 'attentionDimensions', 'controls'])) throw new Error('Operational report export master data is invalid.')
+  if (!exactKeys(value, ['registryContract', 'duplicateCandidates', 'duplicateReview', 'dimensions', 'totalRecords', 'attentionDimensions', 'controls'])) domainError('Operational report export master data is invalid.')
   const masterData = value as OperationalMasterData
   if (masterData.registryContract !== SHARED_MASTER_DATA_CONTRACT || !Number.isSafeInteger(masterData.duplicateCandidates) || masterData.duplicateCandidates < 0 || !Array.isArray(masterData.dimensions)
     || !exactKeys(masterData.controls, ['countsOnly', 'customerValuesExcluded', 'permissionFiltered'])
     || masterData.controls.countsOnly !== true || masterData.controls.customerValuesExcluded !== true || masterData.controls.permissionFiltered !== true) {
-    throw new Error('Operational report export master data is invalid.')
+    domainError('Operational report export master data is invalid.')
   }
   const duplicateReview = validateProjectedDuplicateReview(masterData.duplicateReview, allowedProducts)
-  if (masterData.duplicateCandidates !== duplicateReview.candidates.length) throw new Error('Operational report duplicate-review total is invalid.')
+  if (masterData.duplicateCandidates !== duplicateReview.candidates.length) domainError('Operational report duplicate-review total is invalid.')
   const expectedIds = allowedProducts.flatMap((product) => masterDimensionIds[product])
   const bySurface = new Map(sources.map((source) => [source.surface, source]))
   for (const [index, dimension] of masterData.dimensions.entries()) {
@@ -484,13 +561,13 @@ function validateExportMasterData(value: unknown, allowedProducts: readonly Oper
       || dimension.status !== expectedStatus || !sourceAvailable && dimension.recordCount !== 0
       || !Array.isArray(dimension.consumers)
       || JSON.stringify(dimension.consumers) !== JSON.stringify(operationalProducts.filter((product) => allowedProducts.includes(product) && masterConsumers[dimension.id]?.includes(product)))) {
-      throw new Error('Operational report export master-data dimension is invalid.')
+      domainError('Operational report export master-data dimension is invalid.')
     }
   }
   if (masterData.dimensions.length !== expectedIds.length
     || masterData.totalRecords !== masterData.dimensions.reduce((total, dimension) => total + dimension.recordCount, 0)
     || masterData.attentionDimensions !== masterData.dimensions.filter((dimension) => dimension.status !== 'ready').length) {
-    throw new Error('Operational report export master-data totals are invalid.')
+    domainError('Operational report export master-data totals are invalid.')
   }
   return masterData
 }
@@ -499,9 +576,196 @@ async function digestPayload(value: unknown) {
   return `sha256:${hex(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))))}`
 }
 
+function actionIdForEntry(entry: OperationalReportEntry) {
+  const [, ...rest] = entry.id.split('.')
+  return `operational-${[customerProductByOperationalProduct[entry.product], ...rest].join('-').replace(/[^a-z0-9]+/g, '-')}`
+}
+
+function buildActionEvidenceRef(report: OperationalReport, entry: OperationalReportEntry) {
+  return `${OPERATIONAL_REPORT_CONTRACT}:${report.observedAt}:${customerProductByOperationalProduct[entry.product]}:${actionIdForEntry(entry)}`
+}
+
+function validateOperationalAction(value: unknown, packet: { openedAt: string, dueDate: string, ownerRole: string }) {
+  if (!exactKeys(value, ['id', 'openedAt', 'productIds', 'sourceFinding', 'recommendation', 'severity', 'businessImpact', 'owner', 'dueDate', 'status', 'authority', 'acceptance', 'closure'])) {
+    domainError('Operational report action is invalid.')
+  }
+  const action = value as {
+    id: string
+    openedAt: string
+    productIds: string[]
+    sourceFinding: { sourceType: string, label: string, evidenceRef: string, evidenceDigest: string }
+    recommendation: string
+    severity: string
+    businessImpact: { kind: string, estimateLabel: string, measured: boolean }
+    owner: { role: string, namedPrivate: boolean }
+    dueDate: string
+    status: string
+    authority: { ownerApprovalRequired: boolean, externalWriteAllowed: boolean }
+    acceptance: { evidenceRequired: string[], tests: string[] }
+    closure: { closedAt: null, closureNote: null, measuredResult: null }
+  }
+  if (!/^operational-[a-z0-9][a-z0-9-]{2,96}$/.test(action.id)
+    || action.openedAt !== packet.openedAt
+    || action.dueDate !== packet.dueDate
+    || !Array.isArray(action.productIds) || action.productIds.length !== 1 || !customerProductIds.includes(action.productIds[0] as typeof customerProductIds[number])
+    || !['critical', 'high', 'medium'].includes(action.severity)
+    || action.status !== 'owner-gated') domainError('Operational report action is invalid.')
+  if (!exactKeys(action.sourceFinding, ['sourceType', 'label', 'evidenceRef', 'evidenceDigest'])
+    || action.sourceFinding.sourceType !== 'runtime_metric'
+    || !action.sourceFinding.evidenceRef.startsWith(`${OPERATIONAL_REPORT_CONTRACT}:`)
+    || !/^sha256:[0-9a-f]{64}$/.test(action.sourceFinding.evidenceDigest)) domainError('Operational report action source is invalid.')
+  safeLine(action.sourceFinding.label, 160, 'Operational report action source is invalid.')
+  safeLine(action.sourceFinding.evidenceRef, 240, 'Operational report action source is invalid.')
+  if (!exactKeys(action.businessImpact, ['kind', 'estimateLabel', 'measured'])
+    || !['quality', 'revenue', 'trust'].includes(action.businessImpact.kind)
+    || action.businessImpact.measured !== false) domainError('Operational report action impact is invalid.')
+  safeLine(action.businessImpact.estimateLabel, 180, 'Operational report action impact is invalid.')
+  if (!exactKeys(action.owner, ['role', 'namedPrivate'])
+    || action.owner.role !== packet.ownerRole
+    || action.owner.namedPrivate !== false) domainError('Operational report action owner is invalid.')
+  if (!exactKeys(action.authority, ['ownerApprovalRequired', 'externalWriteAllowed'])
+    || action.authority.ownerApprovalRequired !== true
+    || action.authority.externalWriteAllowed !== false) domainError('Operational report action authority is invalid.')
+  if (!exactKeys(action.acceptance, ['evidenceRequired', 'tests'])
+    || !Array.isArray(action.acceptance.evidenceRequired) || action.acceptance.evidenceRequired.length < 2 || action.acceptance.evidenceRequired.length > 6
+    || !Array.isArray(action.acceptance.tests) || action.acceptance.tests.length < 1 || action.acceptance.tests.length > 6) domainError('Operational report action acceptance is invalid.')
+  action.acceptance.evidenceRequired.forEach((entry) => safeLine(entry, 160, 'Operational report action acceptance is invalid.'))
+  action.acceptance.tests.forEach((entry) => safeLine(entry, 160, 'Operational report action acceptance is invalid.'))
+  if (!exactKeys(action.closure, ['closedAt', 'closureNote', 'measuredResult'])
+    || action.closure.closedAt !== null || action.closure.closureNote !== null || action.closure.measuredResult !== null) {
+    domainError('Operational report action closure is invalid.')
+  }
+  return structuredClone(action)
+}
+
+export async function exportOperationalReportActionPacket(
+  report: OperationalReport,
+  view: OperationalReportView,
+  input: OperationalReportActionPacketInput,
+) {
+  const safeView = restoreOperationalReportView(view, report.allowedProducts)
+  const openedAt = input.openedAt === undefined ? report.observedAt : String(input.openedAt)
+  const dueDate = String(input.dueDate || '').trim()
+  const ownerRole = safeLine(input.ownerRole, 80, 'Operational report action owner is invalid.')
+  if (!exactIso(openedAt)) domainError('Operational report action opened time is invalid.')
+  if (!exactDate(dueDate)) domainError('Operational report action due date is invalid.')
+  const sourceEntries = filterOperationalReport(report, safeView).filter((entry) => entry.actionability.workOrderRequired)
+  const actions = await Promise.all(sourceEntries.map(async (entry) => {
+    if (entry.severity === 'ready'
+      || entry.actionability.ownerReviewRequired !== true
+      || entry.actionability.ownerDueRequiredBeforeClosure !== true
+      || entry.actionability.evidenceRequiredBeforeClosure !== true
+      || entry.actionability.externalEffectAllowed !== false
+      || entry.actionability.managedWriteAllowed !== false) {
+      domainError('Operational report actionability cannot create a work order.')
+    }
+    const sourceFinding = {
+      sourceType: 'runtime_metric' as const,
+      label: entry.label,
+      evidenceRef: buildActionEvidenceRef(report, entry),
+      evidenceDigest: await digestPayload({
+        reportContract: report.contract,
+        observedAt: report.observedAt,
+        entryId: entry.id,
+        product: entry.product,
+        severity: entry.severity,
+        count: entry.count,
+        route: entry.route,
+        sourceSurface: entry.sourceSurface,
+        sourceRevision: entry.sourceRevision,
+      }),
+    }
+    return {
+      id: actionIdForEntry(entry),
+      openedAt,
+      productIds: [customerProductByOperationalProduct[entry.product]],
+      sourceFinding,
+      recommendation: safeLine(`${entry.detail} Review ${entry.route} and record closure evidence before changing source data.`, 240, 'Operational report action recommendation is invalid.'),
+      severity: actionSeverityByOperationalSeverity[entry.severity],
+      businessImpact: {
+        kind: actionImpactByOperationalProduct[entry.product],
+        estimateLabel: `${customerProductByOperationalProduct[entry.product]} operating exception requires owner-reviewed closure.`,
+        measured: false as const,
+      },
+      owner: {
+        role: ownerRole,
+        namedPrivate: false as const,
+      },
+      dueDate,
+      status: 'owner-gated' as const,
+      authority: {
+        ownerApprovalRequired: true as const,
+        externalWriteAllowed: false as const,
+      },
+      acceptance: {
+        evidenceRequired: [
+          'Owner-reviewed due date before closure',
+          'Source-backed evidence reference before closure',
+        ],
+        tests: ['npm run app:verify'],
+      },
+      closure: {
+        closedAt: null,
+        closureNote: null,
+        measuredResult: null,
+      },
+    }
+  }))
+  const payload = {
+    contract: OPERATIONAL_REPORT_ACTION_PACKET_CONTRACT,
+    reportContract: report.contract,
+    observedAt: report.observedAt,
+    mode: report.mode,
+    view: safeView,
+    openedAt,
+    dueDate,
+    ownerRole,
+    actions,
+    controls: {
+      reviewOnly: true as const,
+      operatingActionBoardReady: true as const,
+      allActionsOwnerGated: true as const,
+      externalWritesPerformed: false as const,
+      managedWritesPerformed: false as const,
+      privateIdentityExposed: false as const,
+    },
+  }
+  return { ...payload, digest: await digestPayload(payload) }
+}
+
+export async function validateOperationalReportActionPacket(value: unknown) {
+  if (!exactKeys(value, ['contract', 'reportContract', 'observedAt', 'mode', 'view', 'openedAt', 'dueDate', 'ownerRole', 'actions', 'controls', 'digest'])) {
+    domainError('Operational report action packet is invalid.')
+  }
+  const packet = value as Awaited<ReturnType<typeof exportOperationalReportActionPacket>>
+  if (packet.contract !== OPERATIONAL_REPORT_ACTION_PACKET_CONTRACT
+    || packet.reportContract !== OPERATIONAL_REPORT_CONTRACT
+    || !exactIso(packet.observedAt)
+    || !['local', 'managed'].includes(packet.mode)
+    || !exactIso(packet.openedAt)
+    || !exactDate(packet.dueDate)
+    || JSON.stringify(packet.view) !== JSON.stringify(restoreOperationalReportView(packet.view, operationalProducts))
+    || !Array.isArray(packet.actions) || packet.actions.length > 2_000
+    || !exactKeys(packet.controls, ['reviewOnly', 'operatingActionBoardReady', 'allActionsOwnerGated', 'externalWritesPerformed', 'managedWritesPerformed', 'privateIdentityExposed'])
+    || packet.controls.reviewOnly !== true || packet.controls.operatingActionBoardReady !== true || packet.controls.allActionsOwnerGated !== true
+    || packet.controls.externalWritesPerformed !== false || packet.controls.managedWritesPerformed !== false || packet.controls.privateIdentityExposed !== false) {
+    domainError('Operational report action packet contract is invalid.')
+  }
+  const ownerRole = safeLine(packet.ownerRole, 80, 'Operational report action owner is invalid.')
+  const seen = new Set<string>()
+  for (const action of packet.actions) {
+    const validated = validateOperationalAction(action, { openedAt: packet.openedAt, dueDate: packet.dueDate, ownerRole })
+    if (seen.has(validated.id)) domainError('Operational report action id is duplicated.')
+    seen.add(validated.id)
+  }
+  const { digest, ...payload } = packet
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) domainError('Operational report action packet digest is invalid.')
+  return structuredClone(packet)
+}
+
 export async function exportSharedMasterDataReviewPacket(report: OperationalReport) {
   const review = validateProjectedDuplicateReview(report.masterData.duplicateReview, report.allowedProducts)
-  if (!review.candidates.length) throw new Error('No duplicate master-data review is required.')
+  if (!review.candidates.length) domainError('No duplicate master-data review is required.')
   const payload = {
     contract: SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT,
     reportContract: report.contract,
@@ -528,7 +792,7 @@ export async function exportSharedMasterDataReviewPacket(report: OperationalRepo
 }
 
 export async function validateSharedMasterDataReviewPacket(value: unknown) {
-  if (!exactKeys(value, ['contract', 'reportContract', 'observedAt', 'mode', 'allowedProducts', 'registryContract', 'candidates', 'controls', 'digest'])) throw new Error('Shared master-data review packet is invalid.')
+  if (!exactKeys(value, ['contract', 'reportContract', 'observedAt', 'mode', 'allowedProducts', 'registryContract', 'candidates', 'controls', 'digest'])) domainError('Shared master-data review packet is invalid.')
   const packet = value as Awaited<ReturnType<typeof exportSharedMasterDataReviewPacket>>
   if (packet.contract !== SHARED_MASTER_DATA_REVIEW_PACKET_CONTRACT || packet.reportContract !== OPERATIONAL_REPORT_CONTRACT
     || !exactIso(packet.observedAt) || !['local', 'managed'].includes(packet.mode)
@@ -538,7 +802,7 @@ export async function validateSharedMasterDataReviewPacket(value: unknown) {
     || !exactKeys(packet.controls, ['reviewOnly', 'humanDecisionRequired', 'automaticMergeAllowed', 'mergePerformed', 'sourceMutationPerformed', 'externalWritesPerformed'])
     || packet.controls.reviewOnly !== true || packet.controls.humanDecisionRequired !== true || packet.controls.automaticMergeAllowed !== false
     || packet.controls.mergePerformed !== false || packet.controls.sourceMutationPerformed !== false || packet.controls.externalWritesPerformed !== false) {
-    throw new Error('Shared master-data review packet contract is invalid.')
+    domainError('Shared master-data review packet contract is invalid.')
   }
   const projectedReview = {
     candidates: packet.candidates.map((candidate) => ({
@@ -558,17 +822,17 @@ export async function validateSharedMasterDataReviewPacket(value: unknown) {
   for (const candidate of packet.candidates) {
     const expected = candidate.kind === 'business_partner' ? ['retain_separate_roles', 'link_shared_party'] : ['retain_separate_locations', 'merge_in_owner']
     if (!exactKeys(candidate, ['id', 'kind', 'recordIds', 'ownerProducts', 'sourceAuthorities', 'reason', 'reviewRequired', 'allowedResolutions'])
-      || JSON.stringify(candidate.allowedResolutions) !== JSON.stringify(expected)) throw new Error('Shared master-data review resolution is invalid.')
+      || JSON.stringify(candidate.allowedResolutions) !== JSON.stringify(expected)) domainError('Shared master-data review resolution is invalid.')
   }
   const { digest, ...payload } = packet
-  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error('Shared master-data review packet digest is invalid.')
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) domainError('Shared master-data review packet digest is invalid.')
   return structuredClone(packet)
 }
 
 function decisionText(value: unknown, label: string, maximum: number) {
   if (typeof value !== 'string' || value !== value.trim() || value.normalize('NFC') !== value || value.length < 2 || value.length > maximum
     || [...value].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
-    throw new Error(`Shared master-data ${label} is invalid.`)
+    domainError(`Shared master-data ${label} is invalid.`)
   }
   return value
 }
@@ -590,18 +854,18 @@ export async function buildSharedMasterDataDecisionPacket(
   const decidedBy = decisionText(input.decidedBy, 'decision owner', 120)
   const evidenceReference = decisionText(input.evidenceReference, 'decision evidence', 240)
   if (!exactIso(decidedAt) || !Array.isArray(input.decisions) || input.decisions.length !== reviewPacket.candidates.length) {
-    throw new Error(invalidMasterDecision)
+    domainError(invalidMasterDecision)
   }
   const supplied = new Map<string, SharedMasterDataResolution>()
   for (const decision of input.decisions) {
     if (!exactKeys(decision, ['candidateId', 'resolution']) || typeof decision.candidateId !== 'string' || supplied.has(decision.candidateId)) {
-      throw new Error(invalidMasterDecision)
+      domainError(invalidMasterDecision)
     }
     supplied.set(decision.candidateId, decision.resolution)
   }
   const decisions = reviewPacket.candidates.map((candidate) => {
     const resolution = supplied.get(candidate.id)
-    if (!resolution || !allowedResolutions(candidate.kind).includes(resolution)) throw new Error(invalidMasterDecision)
+    if (!resolution || !allowedResolutions(candidate.kind).includes(resolution)) domainError(invalidMasterDecision)
     return { candidateId: candidate.id, resolution }
   })
   const payload = {
@@ -624,31 +888,31 @@ export async function buildSharedMasterDataDecisionPacket(
 }
 
 export async function validateSharedMasterDataDecisionPacket(value: unknown) {
-  if (!exactKeys(value, ['contract', 'decidedAt', 'decidedBy', 'evidenceReference', 'reviewPacket', 'decisions', 'controls', 'digest'])) throw new Error(invalidMasterDecision)
+  if (!exactKeys(value, ['contract', 'decidedAt', 'decidedBy', 'evidenceReference', 'reviewPacket', 'decisions', 'controls', 'digest'])) domainError(invalidMasterDecision)
   const packet = value as Awaited<ReturnType<typeof buildSharedMasterDataDecisionPacket>>
   if (packet.contract !== SHARED_MASTER_DATA_DECISION_CONTRACT || !exactIso(packet.decidedAt)
     || !exactKeys(packet.controls, ['complete', 'humanConfirmed', 'decisionOnly', 'automaticMergeAllowed', 'sourceMutationPerformed', 'externalWritesPerformed'])
     || packet.controls.complete !== true || packet.controls.humanConfirmed !== true || packet.controls.decisionOnly !== true
     || packet.controls.automaticMergeAllowed !== false || packet.controls.sourceMutationPerformed !== false || packet.controls.externalWritesPerformed !== false
-    || !Array.isArray(packet.decisions)) throw new Error(invalidMasterDecision)
+    || !Array.isArray(packet.decisions)) domainError(invalidMasterDecision)
   decisionText(packet.decidedBy, 'decision owner', 120)
   decisionText(packet.evidenceReference, 'decision evidence', 240)
   const reviewPacket = await validateSharedMasterDataReviewPacket(packet.reviewPacket)
-  if (packet.decisions.length !== reviewPacket.candidates.length) throw new Error(invalidMasterDecision)
+  if (packet.decisions.length !== reviewPacket.candidates.length) domainError(invalidMasterDecision)
   for (const [index, decision] of packet.decisions.entries()) {
     const candidate = reviewPacket.candidates[index]
     if (!exactKeys(decision, ['candidateId', 'resolution']) || decision.candidateId !== candidate.id
-      || !allowedResolutions(candidate.kind).includes(decision.resolution)) throw new Error(invalidMasterDecision)
+      || !allowedResolutions(candidate.kind).includes(decision.resolution)) domainError(invalidMasterDecision)
   }
   const { digest, ...payload } = packet
-  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error(invalidMasterDecision)
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) domainError(invalidMasterDecision)
   return structuredClone(packet)
 }
 
 function buildSharedMasterDataDryRunRoutes(decisionPacket: Awaited<ReturnType<typeof buildSharedMasterDataDecisionPacket>>) {
   return decisionPacket.decisions.map((decision, index) => {
     const candidate = decisionPacket.reviewPacket.candidates[index]
-    if (candidate.ownerProducts.length !== 1 || candidate.sourceAuthorities.length !== 1) throw new Error('Shared master-data decision has no exclusive owner route.')
+    if (candidate.ownerProducts.length !== 1 || candidate.sourceAuthorities.length !== 1) domainError('Shared master-data decision has no exclusive owner route.')
     const retain = decision.resolution === 'retain_separate_roles' || decision.resolution === 'retain_separate_locations'
     const merge = decision.resolution === 'merge_in_owner'
     return {
@@ -693,20 +957,20 @@ export async function buildSharedMasterDataDryRunPlan(
 }
 
 export async function validateSharedMasterDataDryRunPlan(value: unknown) {
-  if (!exactKeys(value, ['contract', 'decisionPacket', 'routes', 'controls', 'digest'])) throw new Error(invalidMasterDryRun)
+  if (!exactKeys(value, ['contract', 'decisionPacket', 'routes', 'controls', 'digest'])) domainError(invalidMasterDryRun)
   const plan = value as Awaited<ReturnType<typeof buildSharedMasterDataDryRunPlan>>
   if (plan.contract !== SHARED_MASTER_DATA_DRY_RUN_CONTRACT || !Array.isArray(plan.routes)
     || !exactKeys(plan.controls, ['reviewOnly', 'recordValuesExcluded', 'sourceBackupRequiredBeforeExecution', 'executionAllowed', 'mutationsPerformed', 'externalWritesPerformed'])
     || plan.controls.reviewOnly !== true || plan.controls.recordValuesExcluded !== true || plan.controls.executionAllowed !== false
-    || plan.controls.mutationsPerformed !== false || plan.controls.externalWritesPerformed !== false) throw new Error(invalidMasterDryRun)
+    || plan.controls.mutationsPerformed !== false || plan.controls.externalWritesPerformed !== false) domainError(invalidMasterDryRun)
   const decisionPacket = await validateSharedMasterDataDecisionPacket(plan.decisionPacket)
   const expectedRoutes = buildSharedMasterDataDryRunRoutes(decisionPacket)
   if (JSON.stringify(plan.routes) !== JSON.stringify(expectedRoutes)
     || plan.controls.sourceBackupRequiredBeforeExecution !== expectedRoutes.some((route) => route.consequence !== 'none')) {
-    throw new Error(invalidMasterDryRun)
+    domainError(invalidMasterDryRun)
   }
   const { digest, ...payload } = plan
-  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error(invalidMasterDryRun)
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) domainError(invalidMasterDryRun)
   return structuredClone(plan)
 }
 
@@ -764,20 +1028,20 @@ export async function buildSharedMasterDataRehearsalPlan(dryRunValue: unknown) {
 }
 
 export async function validateSharedMasterDataRehearsalPlan(value: unknown) {
-  if (!exactKeys(value, ['contract', 'dryRunPlan', 'workOrders', 'controls', 'digest'])) throw new Error(invalidMasterRehearsal)
+  if (!exactKeys(value, ['contract', 'dryRunPlan', 'workOrders', 'controls', 'digest'])) domainError(invalidMasterRehearsal)
   const plan = value as Awaited<ReturnType<typeof buildSharedMasterDataRehearsalPlan>>
   if (plan.contract !== SHARED_MASTER_DATA_REHEARSAL_CONTRACT || !Array.isArray(plan.workOrders)
     || !exactKeys(plan.controls, ['templateOnly', 'allApprovalsPending', 'isolatedRehearsalOnly', 'productionTargetAllowed', 'sourceWriteAllowed', 'executionPerformed', 'externalWritesPerformed'])
     || plan.controls.templateOnly !== true || plan.controls.allApprovalsPending !== true || plan.controls.isolatedRehearsalOnly !== true
     || plan.controls.productionTargetAllowed !== false || plan.controls.sourceWriteAllowed !== false
     || plan.controls.executionPerformed !== false || plan.controls.externalWritesPerformed !== false) {
-    throw new Error(invalidMasterRehearsal)
+    domainError(invalidMasterRehearsal)
   }
   const dryRunPlan = await validateSharedMasterDataDryRunPlan(plan.dryRunPlan)
   const expectedWorkOrders = buildSharedMasterDataRehearsalWorkOrders(dryRunPlan)
-  if (JSON.stringify(plan.workOrders) !== JSON.stringify(expectedWorkOrders)) throw new Error(invalidMasterRehearsal)
+  if (JSON.stringify(plan.workOrders) !== JSON.stringify(expectedWorkOrders)) domainError(invalidMasterRehearsal)
   const { digest, ...payload } = plan
-  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error(invalidMasterRehearsal)
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) domainError(invalidMasterRehearsal)
   return structuredClone(plan)
 }
 
@@ -800,7 +1064,7 @@ export async function exportOperationalReport(report: OperationalReport, view: O
 }
 
 export async function validateOperationalReportExport(value: unknown) {
-  if (!exactKeys(value, ['contract', 'reportContract', 'observedAt', 'mode', 'allowedProducts', 'sources', 'view', 'entries', 'masterData', 'controls', 'digest'])) throw new Error('Operational report export is invalid.')
+  if (!exactKeys(value, ['contract', 'reportContract', 'observedAt', 'mode', 'allowedProducts', 'sources', 'view', 'entries', 'masterData', 'controls', 'digest'])) domainError('Operational report export is invalid.')
   const artifact = value as Awaited<ReturnType<typeof exportOperationalReport>>
   if (artifact.contract !== OPERATIONAL_REPORT_EXPORT_CONTRACT || artifact.reportContract !== OPERATIONAL_REPORT_CONTRACT
     || !exactIso(artifact.observedAt) || !['local', 'managed'].includes(artifact.mode)
@@ -811,12 +1075,13 @@ export async function validateOperationalReportExport(value: unknown) {
     || !exactKeys(artifact.controls, ['permissionFiltered', 'sourceBacked', 'readOnly', 'containsCustomerValues', 'externalWritesPerformed', 'safeToShareExternally'])
     || artifact.controls.permissionFiltered !== true || artifact.controls.sourceBacked !== true || artifact.controls.readOnly !== true
     || artifact.controls.containsCustomerValues !== false || artifact.controls.externalWritesPerformed !== false || artifact.controls.safeToShareExternally !== false) {
-    throw new Error('Operational report export contract is invalid.')
+    domainError('Operational report export contract is invalid.')
   }
   const sources = validateSources(artifact.sources, artifact.allowedProducts)
   const bySurface = new Map(sources.map((source) => [source.surface, source]))
   for (const entry of artifact.entries) {
-    if (!exactKeys(entry, ['id', 'product', 'severity', 'label', 'detail', 'count', 'route', 'sourceSurface', 'sourceRevision'])
+    const workOrderRequired = entry.severity !== 'ready'
+    if (!exactKeys(entry, ['id', 'product', 'severity', 'label', 'detail', 'count', 'route', 'actionability', 'sourceSurface', 'sourceRevision'])
       || !artifact.allowedProducts.includes(entry.product) || entry.sourceSurface !== productSurface[entry.product]
       || entry.sourceRevision !== bySurface.get(entry.sourceSurface)?.revision
       || typeof entry.id !== 'string' || !/^[a-z]+[.][a-z_]+$/.test(entry.id)
@@ -824,12 +1089,21 @@ export async function validateOperationalReportExport(value: unknown) {
       || typeof entry.label !== 'string' || !entry.label || entry.label.length > 160
       || typeof entry.detail !== 'string' || !entry.detail || entry.detail.length > 240
       || !Number.isSafeInteger(entry.count) || entry.count < 0
-      || typeof entry.route !== 'string' || !entry.route.startsWith('/') || entry.route.startsWith('//')) {
-      throw new Error('Operational report export entry is invalid.')
+      || typeof entry.route !== 'string' || !entry.route.startsWith('/') || entry.route.startsWith('//')
+      || !exactKeys(entry.actionability, ['workOrderRequired', 'ownerReviewRequired', 'ownerDueRequiredBeforeClosure', 'evidenceRequiredBeforeClosure', 'externalEffectAllowed', 'managedWriteAllowed'])
+      || entry.actionability.workOrderRequired !== workOrderRequired
+      || entry.actionability.ownerReviewRequired !== workOrderRequired
+      || entry.actionability.ownerDueRequiredBeforeClosure !== workOrderRequired
+      || entry.actionability.evidenceRequiredBeforeClosure !== workOrderRequired
+      || entry.actionability.externalEffectAllowed !== false
+      || entry.actionability.managedWriteAllowed !== false) {
+      domainError('Operational report export entry is invalid.')
     }
   }
   validateExportMasterData(artifact.masterData, artifact.allowedProducts, sources)
   const { digest, ...payload } = artifact
-  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) throw new Error('Operational report export digest is invalid.')
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest) || await digestPayload(payload) !== digest) domainError('Operational report export digest is invalid.')
   return structuredClone(artifact)
 }
+
+function domainError(message: string): never { throw new Error(message) }

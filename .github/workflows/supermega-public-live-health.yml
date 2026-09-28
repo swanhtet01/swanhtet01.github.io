@@ -51,7 +51,10 @@ jobs:
       # release the exact commit is asserted, and on the daily schedule the
       # verifier runs in availability_and_contract scope (no release context
       # required).
+      # Keep surface checks independent: a public failure must not hide app or
+      # database reachability evidence. User cancellation still stops the work.
       - name: Verify current app release
+        if: ${{ !cancelled() }}
         env:
           APP_BASE_URL: https://app.supermega.dev
           EXPECTED_RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || '' }}
@@ -62,6 +65,7 @@ jobs:
       # healthy response: any HTTP answer proves the endpoint is reachable, and
       # only a network failure or a platform 5xx fails this step.
       - name: Verify production database reachability
+        if: ${{ !cancelled() }}
         run: |
           status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --retry 3 --retry-delay 5 --retry-all-errors https://zvtzwcimpvvtkowflhda.supabase.co/rest/v1/ || true)"
           echo "Supabase REST endpoint answered HTTP ${status:-000}"

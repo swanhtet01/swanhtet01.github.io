@@ -86,8 +86,8 @@ export class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, Route
     const explanation = offline
       ? 'You are offline and this part of SuperMega has not been saved on this device. Connect to the internet, then reload to open it.'
       : stale
-        ? 'SuperMega was updated while this tab was open, so part of it is missing. Reload to get the current version.'
-        : 'Something in this screen failed to start. Your other products are unaffected.'
+        ? 'Part of this page did not load. Check your connection, then reload.'
+        : 'This screen could not start. Try reloading, or return to your products.'
 
     return (
       <div className="route-error" role="alert">

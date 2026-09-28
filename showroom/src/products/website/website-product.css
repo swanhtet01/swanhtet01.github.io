@@ -1,30 +1,30 @@
 .website-product {
-  --website-bg: var(--core-bg, #f6f4ee);
+  --website-bg: var(--core-bg, #f7f8fc);
   --website-panel: var(--core-panel, #ffffff);
-  --website-panel-raised: var(--core-panel-raised, #eef4ef);
-  --website-ink: var(--core-ink, #17231d);
-  --website-muted: var(--core-muted, #56665d);
+  --website-panel-raised: var(--core-panel-raised, #f0f3fa);
+  --website-ink: var(--core-ink, #171b26);
+  --website-muted: var(--core-muted, #526078);
   --website-quiet: var(--core-quiet, #5f6f67); /* Design phase 1: was #7b8980 = 3.66:1 on white (AA fail); now matches --core-quiet, 5.31:1 */
-  --website-line: var(--core-line, rgba(31, 68, 51, .12));
-  --website-line-strong: var(--core-line-strong, rgba(31, 68, 51, .2));
-  --website-green: var(--core-green, #0b745e);
-  --website-green-soft: var(--core-green-soft, rgba(11, 116, 94, .1));
+  --website-line: var(--core-line, rgba(37,48,74, .12));
+  --website-line-strong: var(--core-line-strong, rgba(37,48,74, .2));
+  --website-green: var(--core-green, #2454e6);
+  --website-green-soft: var(--core-green-soft, rgba(36,84,230, .1));
   /* Design phase 1: was consumed at the primary-action hover but never defined,
      making the hover declaration invalid (Save vanished on the white bar). */
-  --website-green-dark: #075c4b;
+  --website-green-dark: #173bb0;
   --website-warn: var(--core-warn, #946200);
   --website-danger: var(--core-danger, #b42336);
   --website-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   position: relative;
   width: 100%;
   height: 100svh;
-  min-width: 320px;
+  min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   background:
-    radial-gradient(circle at 82% -18%, rgba(11, 116, 94, .1), transparent 31%),
-    linear-gradient(180deg, #fbfaf6, var(--website-bg) 62%);
+    radial-gradient(circle at 82% -18%, rgba(36,84,230, .1), transparent 31%),
+    linear-gradient(180deg, #fafbff, var(--website-bg) 62%);
   color: var(--website-ink);
   font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color-scheme: light;
@@ -85,11 +85,11 @@
 
 .website-product :where(button, input, select, textarea, summary, a):focus-visible {
   outline: 2px solid var(--website-green);
-  outline-offset: 2px;
+  outline-offset: .125rem;
 }
 
 .website-product ::selection {
-  background: rgba(11, 116, 94, .18);
+  background: rgba(36,84,230, .18);
 }
 
 .website-brand,
@@ -237,7 +237,7 @@
 }
 
 .website-preview-controls > button[aria-pressed="true"] {
-  border-color: rgba(11, 116, 94, .2);
+  border-color: rgba(36,84,230, .2);
   background: var(--website-green-soft);
   color: var(--website-green);
 }
@@ -295,7 +295,7 @@
 }
 
 .website-status.is-ready {
-  border-color: rgba(11, 116, 94, .2);
+  border-color: rgba(36,84,230, .2);
   background: var(--website-green-soft);
   color: var(--website-green);
 }
@@ -315,7 +315,7 @@
   flex: 1;
   overflow: auto;
   padding: 14px;
-  scrollbar-color: rgba(11, 116, 94, .26) transparent;
+  scrollbar-color: rgba(36,84,230, .26) transparent;
 }
 
 .website-fieldset {
@@ -398,7 +398,7 @@
 .website-product select:focus,
 .website-product textarea:focus {
   border-color: var(--website-green);
-  box-shadow: 0 0 0 3px rgba(11, 116, 94, .1);
+  box-shadow: 0 0 0 3px rgba(36,84,230, .1);
 }
 
 .website-product input:disabled,
@@ -540,7 +540,7 @@
 
 .website-page-check.is-complete {
   border-left-color: var(--website-green);
-  background: rgba(11, 116, 94, .06);
+  background: rgba(36,84,230, .06);
 }
 
 .website-page-check > div {
@@ -618,11 +618,11 @@
 }
 
 .website-button.is-primary:hover:not(:disabled) {
-  border-color: #075c4b;
-  background: #075c4b;
+  border-color: #173bb0;
+  background: #173bb0;
 }
 
-/* --website-green is a dark green (#0b745e) in light, where white text reads cleanly, and
+/* --website-green is a dark green (#2454e6) in light, where white text reads cleanly, and
    a bright mint (#56f0c1) in dark, where white text measures 1.44:1 -- the primary action
    in this product, effectively unreadable. The fill is what carries the brand here, so the
    text flips to the dark background colour instead (13.4:1) rather than the fill changing.
@@ -783,10 +783,10 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
   margin-top: 12px;
-  border: 1px solid rgba(11, 116, 94, .18);
+  border: 1px solid rgba(36,84,230, .18);
   border-radius: 5px;
   padding: 11px;
-  background: rgba(11, 116, 94, .06);
+  background: rgba(36,84,230, .06);
 }
 
 .website-boundary-note strong {
@@ -831,7 +831,7 @@
   min-height: 23px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(11, 116, 94, .2);
+  border: 1px solid rgba(36,84,230, .2);
   border-radius: 4px;
   color: var(--website-green);
   font-family: var(--website-mono);
@@ -908,8 +908,8 @@
 }
 
 .website-evidence-status > article.is-current {
-  border-color: rgba(11, 116, 94, .2);
-  background: rgba(11, 116, 94, .06);
+  border-color: rgba(36,84,230, .2);
+  background: rgba(36,84,230, .06);
 }
 
 .website-evidence-status > article > span {
@@ -969,7 +969,7 @@
   margin: 10px 10px 0;
   border-left: 2px solid var(--website-green);
   padding: 8px 10px;
-  background: rgba(11, 116, 94, .06);
+  background: rgba(36,84,230, .06);
 }
 
 .website-approval-record.is-stale {
@@ -1016,8 +1016,8 @@
 }
 
 .website-local-publish {
-  border-color: rgba(11, 116, 94, .2);
-  background: linear-gradient(120deg, rgba(11, 116, 94, .08), rgba(255, 255, 255, .82) 48%);
+  border-color: rgba(36,84,230, .2);
+  background: linear-gradient(120deg, rgba(36,84,230, .08), rgba(255, 255, 255, .82) 48%);
 }
 
 .website-local-publish-action {
@@ -1089,7 +1089,7 @@
 
 .website-preview-panel {
   display: grid;
-  grid-template-rows: 47px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .website-preview-toolbar {
@@ -1123,7 +1123,7 @@
 }
 
 .website-window-dots > i:last-child {
-  background: rgba(11, 116, 94, .65);
+  background: rgba(36,84,230, .65);
 }
 
 .website-preview-toolbar > div:nth-child(2) {
@@ -1159,11 +1159,11 @@
   overflow: auto;
   padding: 14px;
   background:
-    linear-gradient(rgba(31, 68, 51, .035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(31, 68, 51, .035) 1px, transparent 1px),
+    linear-gradient(rgba(37,48,74, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37,48,74, .035) 1px, transparent 1px),
     #edf2ed;
   background-size: 18px 18px;
-  scrollbar-color: rgba(11, 116, 94, .26) transparent;
+  scrollbar-color: rgba(36,84,230, .26) transparent;
 }
 
 .website-preview-frame {
@@ -1359,7 +1359,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  border: 1px solid rgba(11, 116, 94, .2);
+  border: 1px solid rgba(36,84,230, .2);
   border-radius: 5px;
   padding: 9px 11px;
   background: rgba(255, 255, 255, .96);
@@ -1709,7 +1709,7 @@
   --website-quiet: #5f6d65;
   --website-line: #dce3de;
   --website-line-strong: #c7d1ca;
-  --website-green: #0b745e; /* Design phase 1: was #08745d, a silent fork of the manifest accent */
+  --website-green: #2454e6; /* Design phase 1: was #08745d, a silent fork of the manifest accent */
   --website-green-soft: #e8f4ef;
   --website-warn: #8a5a00;
   --website-danger: #aa273b;
@@ -1848,7 +1848,7 @@
 .website-today {
   order: 1;
   display: grid;
-  grid-template-columns: minmax(260px, .9fr) minmax(420px, 1.45fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
   gap: 12px;
   border: 1px solid var(--website-line-strong);
   border-radius: 14px;
@@ -1866,10 +1866,26 @@
 .website-today-priority p { margin: 0; color: var(--website-muted); font-size: 0.6875rem; line-height: 1.5; }
 .website-today-priority > .website-button { width: max-content; margin-top: 3px; }
 
+.website-today-checks { min-width: 0; align-self: start; }
+.website-today-checks > summary {
+  min-height: 2.75rem;
+  padding: .75rem;
+  border: .0625rem solid var(--website-line-strong);
+  border-radius: .625rem;
+  color: var(--website-ink);
+  background: var(--website-panel);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.website-today-checks > summary:focus-visible { outline: .125rem solid var(--website-green); outline-offset: .125rem; }
+.website-today-checks[open] > summary { margin-bottom: .5rem; }
+
 .website-today-metrics {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
   align-self: start;
   gap: 1px;
   overflow: hidden;
@@ -1880,7 +1896,13 @@
 
 .website-today-metrics span { min-width: 0; display: grid; gap: 3px; padding: 10px 8px; background: var(--website-panel); }
 .website-today-metrics small { color: var(--website-quiet); font-family: var(--website-mono); font-size: 0.5rem; text-transform: uppercase; }
-.website-today-metrics strong { overflow: hidden; color: var(--website-ink); font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }
+.website-today-metrics strong { color: var(--website-ink); font-size: 0.6875rem; white-space: normal; overflow-wrap: anywhere; }
+
+.website-check-guidance { margin: .75rem 0 0; color: var(--website-ink); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.website-check-guidance h3 { margin: 0 0 .5rem; font-size: inherit; }
+.website-check-guidance ul { margin: 0; padding-inline-start: 1.25rem; }
+.website-check-guidance li + li { margin-top: .75rem; }
+.website-check-guidance p { margin: .375rem 0 0; }
 
 .website-today-source {
   grid-column: 1 / -1;
@@ -2009,8 +2031,8 @@
   .website-lead-inbox > header { display: grid; }
   .website-lead-counts { width: 100%; max-width: none; }
   .website-lead-capture-form,
-  .website-lead-review-controls { grid-template-columns: 1fr; }
-  .website-lead-list article { grid-template-columns: 1fr; }
+  .website-lead-review-controls,
+.website-lead-list article { grid-template-columns: 1fr; }
   .website-lead-list article > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .website-lead-list article > div:last-child > button { width: 100%; }
   .website-lead-export { width: 100%; }
@@ -2047,7 +2069,7 @@
 
 .website-preview-surface {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -2100,7 +2122,7 @@
 
 .website-preview-controls > button {
   min-width: 76px;
-  min-height: 36px;
+  min-height: 2.75rem;
   border-radius: 6px;
   padding: 0 10px;
   color: var(--website-muted);
@@ -2342,7 +2364,7 @@
 }
 
 .website-preview-panel {
-  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .website-preview-toolbar {
@@ -2451,11 +2473,8 @@
     display: block;
   }
 
-  .website-workspace-grid[data-surface="work"] > .website-preview-surface {
-    display: none;
-  }
-
-  .website-workspace-grid[data-surface="preview"] > .website-work-surface {
+  .website-workspace-grid[data-surface="work"] > .website-preview-surface,
+.website-workspace-grid[data-surface="preview"] > .website-work-surface {
     display: none;
   }
 
@@ -2696,6 +2715,46 @@
 .website-start-tools > summary b { text-transform: uppercase; }
 .website-start-tools > div { display: grid; gap: 12px; border-top: 1px solid var(--website-line); padding: 12px; }
 
+/* The Website starter is a customer-facing brief, not a dense operator console. Keep the
+   few decisions it asks for comfortably readable on a counter tablet and a phone. */
+.website-starter-setup .website-panel-head p {
+  max-width: 58ch;
+  font-size: .875rem;
+  line-height: 1.45;
+}
+
+.website-starter-setup .website-status {
+  min-height: 1.75rem;
+  font-size: .75rem;
+}
+
+.website-starter-setup label {
+  gap: .4375rem;
+  font-size: .875rem;
+}
+
+.website-starter-setup input,
+.website-starter-setup select,
+.website-starter-setup textarea {
+  min-height: 2.75rem;
+  font-size: 1rem;
+}
+
+.website-starter-setup textarea {
+  min-height: 5.5rem;
+}
+
+.website-starter-setup label small,
+.website-starter-setup #website-starter-proof-help,
+.website-starter-setup .website-field-error {
+  font-size: .8125rem;
+  line-height: 1.4;
+}
+
+.website-starter-setup .website-button {
+  font-size: .875rem;
+}
+
 @media screen and (max-width: 900px) {
   .website-product {
     height: auto;
@@ -2721,7 +2780,7 @@
   z-index: 20;
   min-height: 60px;
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) auto auto;
+  grid-template-columns: minmax(150px, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   border: 1px solid var(--website-line);
@@ -3158,7 +3217,7 @@
   min-height: 50px;
 }
 
-@media screen and (max-width: 900px) {
+@media screen and (max-width: 1100px) {
   .website-action-bar {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 10px;
@@ -3274,6 +3333,15 @@
     min-width: 0;
   }
 
+  /* Three compact actions must not clip labels such as Download preview. */
+  .website-primary-actions > .website-button {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+    padding-block: .5rem;
+    text-align: center;
+  }
+
   .website-site-settings-content {
     top: calc(100% + 6px);
     right: 0;
@@ -3302,6 +3370,17 @@
 
   .website-recovery-actions > button {
     width: 100%;
+  }
+}
+
+/* Narrow phones need two readable actions per row, not broken words. */
+@media screen and (max-width: 22.5rem) {
+  .website-primary-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .website-action-bar[data-surface="work"][data-editing="false"] .website-primary-actions > .website-button.is-primary {
+    grid-column: 1 / -1;
   }
 }
 
@@ -3505,8 +3584,7 @@
    website island and the owner-content preview surfaces; floors the preview
    hero (was .95/-.055em, which clips Burmese diacritics in the owner's own
    headline). */
-.website-product { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif; }
-.website-preview-site, .storefront-preview { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif; }
+.website-product, .website-preview-site, .storefront-preview { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif; }
 .website-product :lang(my), .website-product [lang="my"] { line-height: 1.65; letter-spacing: 0; }
 .preview-hero > h1 { line-height: 1.3; letter-spacing: 0; }
 
@@ -3515,9 +3593,7 @@
 .website-today-metrics small, .website-lead-counts small { font-size: var(--font-size-xs); }
 .website-today-metrics strong { font-size: var(--font-size-display); }
 .website-today-priority p, .website-lead-inbox p { font-size: var(--font-size-base); }
-.website-today-source { font-size: var(--font-size-sm); }
-.website-lead-list article small { font-size: var(--font-size-sm); }
-.website-lead-capture-form label, .website-lead-review-controls label { font-size: var(--font-size-sm); }
+.website-today-source, .website-lead-list article small, .website-lead-capture-form label, .website-lead-review-controls label { font-size: var(--font-size-sm); }
 .website-business-controls > summary small, .website-start-tools > summary small, .website-start-tools > summary b { font-size: var(--font-size-xs); }
 
 /* Design phase 1: un-trap the editor scroll on phones — mirrors the
@@ -3534,95 +3610,93 @@
    owner data: natural case, zero tracking, Myanmar-safe line-height. */
 .preview-site-header > strong { font-size: var(--font-size-display); font-weight: var(--font-weight-black); letter-spacing: 0; line-height: 1.3; text-transform: none; }
 
-/* ============================================================================
-   Design phase 2 — item 12 repair: the inert --website-quiet duplicate.
-   Three `.website-product` blocks declare this file's aliases at identical
-   specificity (0,0,1,0): the phase-1 block at :1-69, the live "Task-first
-   workspace shell" block at :1703-1723, and this shell block at :2648-2655
-   (which does not touch --website-quiet at all). For a property declared on
-   the SAME selector more than once at equal specificity, the cascade takes
-   the LAST one in source order — so :7's `var(--core-quiet, #5f6f67)` (the
-   WCAG-AA-fixing tokenization) loses to :1709's hardcoded `#5f6d65` in light
-   mode. (An earlier read of this bug named .theme-dark's #7a8a9c override at
-   :42 as the second declaration; that is a different, higher-specificity
-   selector -- .theme-dark .website-product -- that legitimately wins in dark
-   mode on its own merits and was not the defect. The live light-mode
-   collision is between :7 and :1709, both bare `.website-product`.)
-   #5f6d65 and #5f6f67 read as nearly the same grey, so this was never a
-   visible regression -- but it is exactly the var()-resolves-at-declaration-
-   site trap the shadow ramp hit once already (see the .theme-dark override
-   at EOF of core-app.css), and it makes the token silently dead. Rule 6
-   fences deletion of the phase-1 "generation-one" block (:1-2145; :1-1929 since P3.3 re-homed the live movers; :1-1439 since P3.4 deleted the catalogued-dead remainder) until
-   phase 3's pin cataloguing, so :1709's `#5f6d65` stays byte-identical in
-   place; this later same-specificity declaration is what actually wins the
-   cascade and restores the token. */
+/* Final workspace palette follows the shared brand tokens. Customer-authored
+   website styles remain inside their own preview/export surfaces. */
 .website-product {
-  --website-quiet: var(--core-quiet, #5f6f67);
-
-  /* --------------------------------------------------------------------------
-     Design phase 3 — P3.2: `.website-product` triplication reconciliation
-     (DESIGN-REVIEW-2026-08-18 finding 1, executed per DESIGN-PROGRAM's P3.2).
-     The earlier bare `.website-product` blocks disagree on the twelve custom
-     properties below (thirteen counting --website-quiet above): the gen-one
-     block at :1-31 declares core aliases, the live "Task-first workspace
-     shell" block at :1703-1723 redeclares each as a literal 1,702 lines later (post-P3.4 numbering)
-     and wins on cascade order — which is why token edits applied to the :1
-     block silently no-op. This EOF block is now the single authoritative
-     declaration site: it restates every disputed property with the value that
-     already wins, so resolved styles are byte-identical in both themes.
-     Dark mode is owned by the higher-specificity `.theme-dark .website-product`
-     block at :33-51, which mirrors all twelve colour properties (Rule 4
-     checked per property; --website-mono is a font stack and carries no
-     theme). Two shapes appear below:
-       - the item-12 core-alias shape where the authored literal EQUALS the
-         core token's light value (panel, green — and quiet above), making the
-         phase-1 tokenization real at zero visual cost;
-       - the parked-literal shape where the authored value DIFFERS from core:
-         `var(--website-<name>-authored, <literal>)`. The --website-*-authored
-         tokens are deliberately undefined, so each line computes to its
-         fallback — the exact :1703-1723 value — while the literal sits in the
-         P3.0 ratchet's var()-fallback carve-out. Actually retiring one of
-         these literals onto a core token is a later batch's visual decision:
-         make it by editing THIS block (it is unpinned); the originals above
-         stay byte-identical in place (Rules 3 and 6). */
-
-  /* Overrides :2 (gen-one alias onto --core-bg) and :1704 (live literal, the
-     pre-P3.2 winner; differs from --core-bg #f6f4ee, so the literal is parked). */
-  --website-bg: var(--website-bg-authored, #f3f5f2);
-  /* Overrides :3 (gen-one alias) and :1705 (live literal #ffffff, the pre-P3.2
-     winner). --core-panel is #ffffff in light — token-equal, so the alias is
-     value-preserving. */
+  --website-bg: var(--core-bg, #f7f8fc);
   --website-panel: var(--core-panel, #ffffff);
-  /* Overrides :4 (gen-one alias onto --core-panel-raised #eef4ef) and :1706
-     (live literal, the pre-P3.2 winner; differs from core, parked). */
-  --website-panel-raised: var(--website-panel-raised-authored, #f7f9f7);
-  /* Overrides :5 (gen-one alias onto --core-ink #17231d) and :1707 (live
-     literal, the pre-P3.2 winner; differs from core, parked). */
-  --website-ink: var(--website-ink-authored, #17211c);
-  /* Overrides :6 (gen-one alias onto --core-muted #56665d) and :1708 (live
-     literal, the pre-P3.2 winner; differs from core, parked). */
-  --website-muted: var(--website-muted-authored, #4d5d54);
-  /* Overrides :8 (gen-one alias onto --core-line, an rgba value) and :1710
-     (live literal, the pre-P3.2 winner; differs from core, parked). */
-  --website-line: var(--website-line-authored, #dce3de);
-  /* Overrides :9 (gen-one alias onto --core-line-strong, an rgba value) and
-     :1711 (live literal, the pre-P3.2 winner; differs from core, parked). */
-  --website-line-strong: var(--website-line-strong-authored, #c7d1ca);
-  /* Overrides :10 (gen-one alias) and :1712 (live literal #0b745e, the
-     pre-P3.2 winner). --core-green is #0b745e in light — token-equal, so the
-     alias is value-preserving. */
-  --website-green: var(--core-green, #0b745e);
-  /* Overrides :11 (gen-one alias onto --core-green-soft, an rgba value) and
-     :1713 (live literal, the pre-P3.2 winner; differs from core, parked). */
-  --website-green-soft: var(--website-green-soft-authored, #e8f4ef);
-  /* Overrides :15 (gen-one alias onto --core-warn #946200) and :1714 (live
-     literal, the pre-P3.2 winner; differs from core, parked). */
-  --website-warn: var(--website-warn-authored, #8a5a00);
-  /* Overrides :16 (gen-one alias onto --core-danger #b42336) and :1715 (live
-     literal, the pre-P3.2 winner; differs from core, parked). */
-  --website-danger: var(--website-danger-authored, #aa273b);
-  /* Overrides :17 (gen-one literal mono stack) and :1718 (live alias onto
-     --website-sans, the pre-P3.2 winner — the de-terminal-look decision).
-     --website-sans itself is undisputed: it is declared only at :1716. */
-  --website-mono: var(--website-sans);
+  --website-panel-raised: var(--core-panel-raised, #f0f3fa);
+  --website-ink: var(--core-ink, #171b26);
+  --website-muted: var(--core-muted, #526078);
+  --website-quiet: var(--core-quiet, #526078);
+  --website-line: var(--core-line, rgba(37,48,74, .12));
+  --website-line-strong: var(--core-line-strong, rgba(37,48,74, .2));
+  --website-green: var(--core-green, #2454e6);
+  --website-green-soft: var(--core-green-soft, rgba(36,84,230, .1));
+  --website-warn: var(--core-warn, #946200);
+  --website-danger: var(--core-danger, #b42336);
 }
+
+.website-restored-draft-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.125rem;
+  border: .0625rem solid var(--website-warn);
+  border-radius: var(--radius-lg);
+  background: var(--website-panel);
+  padding: var(--space-4) 1.125rem;
+}
+
+.website-restored-draft-choice h2 {
+  margin: .1875rem 0 .3125rem;
+  font-size: var(--font-size-lg);
+}
+
+.website-restored-draft-choice p,
+.website-restored-draft-choice small {
+  display: block;
+  margin: 0;
+  color: var(--website-muted);
+  line-height: 1.45;
+}
+
+.website-restored-draft-choice small { margin-top: var(--space-1); }
+
+.website-restored-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (max-width: 47.5rem) {
+  .website-restored-draft-choice { grid-template-columns: 1fr; }
+  .website-restored-draft-actions { display: grid; justify-content: stretch; }
+  .website-restored-draft-actions .website-button { width: 100%; }
+}
+
+/* Keep the customer preview in view; operator guidance retains its full layout. */
+.website-today[data-preview='true'] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem 1rem;
+  padding: .5rem .75rem;
+  box-shadow: none;
+}
+.website-today[data-preview='true'] .website-today-priority {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem 1rem;
+}
+.website-today[data-preview='true'] .website-today-priority h2 { font-size: 1rem; }
+.website-today[data-preview='true'] .assisted-delivery-scope { margin: 0; }
+.website-today[data-preview='true'] .assisted-delivery-request {
+  border-color: transparent;
+  padding-inline: .25rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: .2em;
+}
+.website-today[data-preview='true'] .website-today-checks { flex: 1 1 12rem; }
+.website-today[data-preview='true'] .website-today-checks[open] { flex-basis: 100%; }
+.website-today[data-preview='true'] .website-today-source {
+  flex-basis: 100%;
+  border: 0;
+  padding: 0;
+}
+
+.website-primary-actions > .compact-disclosure { position: relative; }
+.website-primary-actions > .compact-disclosure > .website-preview-controls { position: absolute; right: 0; top: 100%; z-index: 30; min-width: 240px; padding: 8px; border: 1px solid var(--website-line); border-radius: 8px; background: var(--website-panel); }

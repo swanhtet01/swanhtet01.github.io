@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
+import { APP_DESCRIPTION } from './app_metadata.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 'utf8'))
@@ -25,7 +26,7 @@ const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" rol
 const webmanifest = {
   name: manifest.brand.name,
   short_name: manifest.brand.name,
-  description: manifest.company.supporting,
+  description: APP_DESCRIPTION,
   start_url: '/',
   display: 'standalone',
   background_color: manifest.brand.colors.background,
@@ -176,22 +177,39 @@ const rasterIcons = [
 // intended property ("the built shell emits no inline script") -- it just had nothing
 // checking it. These three files restore that property; the checks now enforce it.
 //
-// Keep the theme key in sync with THEME_KEY in showroom/src/core/CoreShell.tsx. This runs
-// as a render-blocking classic script in <head>, so it still lands before first paint and
-// a returning dark-theme user does not get a light flash.
-const themeRestoreScript = `try {
-  if (window.localStorage.getItem('supermega-interface-theme') === 'dark') {
-    document.documentElement.dataset.supermegaTheme = 'dark'
-    document.querySelector('meta[name="theme-color"]').setAttribute('content', '#05080d')
-  }
-} catch (e) {}
+// Apply the fixed light palette before first paint, independent of legacy preferences.
+const themeRestoreScript = `document.documentElement.dataset.supermegaTheme = 'light'
+const themeMeta = document.querySelector('meta[name="theme-color"]')
+if (themeMeta) themeMeta.setAttribute('content', '#f6f4ee')
 `
 const serviceWorkerRegisterScript = `if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))
 `
-// Vercel Web Analytics: cookieless aggregate pageviews, no PII. Loaded dynamically because
-// /_vercel/insights/ exists only on the deployment edge, never in dist/, and only on the
-// production host so local/dev stays beacon-free.
-const insightsScript = `if (/(^|\\.)supermega\\.dev$/.test(location.hostname)) { const insights = document.createElement('script'); insights.defer = true; insights.src = '/_vercel/insights/script.js'; document.head.append(insights) }
+// Vercel Web Analytics and Speed Insights. Both use same-origin Vercel endpoints and load
+// only on a SuperMega production hostname, so local development and immutable preview URLs
+// remain beacon-free. The queue stubs follow Vercel's framework-agnostic bootstrap contract;
+// they also let the bounded client-error lane enqueue an event before Analytics finishes.
+const insightsScript = `if (/(^|\\.)supermega\\.dev$/.test(location.hostname)) {
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments) }
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments) }
+  // Register before either provider loads: first pageviews can precede React.
+  function safeEvent(event) {
+    if (!event || typeof event.url !== 'string') return null
+    let url
+    try { url = new URL(event.url) } catch { return null }
+    if (url.origin !== location.origin) return null
+    const product = url.pathname.split('/')[1]
+    const path = ['shop', 'website', 'ecommerce', 'login', 'account'].includes(product) ? '/' + product + '/' : '/'
+    return { ...event, url: url.origin + path, ...(event.type === 'vital' ? { route: path } : {}) }
+  }
+  window.va('beforeSend', safeEvent)
+  window.si('beforeSend', safeEvent)
+  for (const src of ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js']) {
+    const script = document.createElement('script')
+    script.defer = true
+    script.src = src
+    document.head.append(script)
+  }
+}
 `
 
 // SHELL is what the worker can name before the build exists: the document plus the icon and

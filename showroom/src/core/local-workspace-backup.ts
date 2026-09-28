@@ -1,6 +1,6 @@
 import { isLocalWorkspaceKey, listLocalWorkspaceStorageKeys } from './local-workspace-storage.ts'
-import { COMMERCE_KEY, COMMERCE_LOCK } from './commerce-workspace.ts'
-import { PRODUCTION_KEY, PRODUCTION_LOCK } from './production-workspace.ts'
+import { COMMERCE_LOCK } from './commerce-workspace.ts'
+import { PRODUCTION_LOCK } from './production-workspace.ts'
 
 export { isLocalWorkspaceKey, listLocalWorkspaceStorageKeys }
 
@@ -451,22 +451,8 @@ export function localWorkspaceBackupHeadroomDetail(headroom: LocalWorkspaceBacku
   return [`${(headroom.bytes / 1048576).toFixed(2)} MB of ${(headroom.maxBytes / 1048576).toFixed(2)} MB used`, ...parts].join(' · ')
 }
 
-function lockNameForWorkspaceKey(key: string): string | null {
-  if (key === COMMERCE_KEY) return COMMERCE_LOCK
-  if (key === PRODUCTION_KEY) return PRODUCTION_LOCK
-  return null
-}
-
-async function withWorkspaceLock<T>(key: string, lockManager: BackupLockManager | undefined, run: () => T): Promise<T> {
-  const lockName = lockNameForWorkspaceKey(key)
-  if (lockName && lockManager?.request) return lockManager.request(lockName, { mode: 'exclusive' }, run)
-  return run()
-}
-
-async function removeLocalWorkspaceRecords(storage: StorageWriter, lockManager: BackupLockManager | undefined) {
-  for (const key of listLocalWorkspaceStorageKeys(storage)) {
-    await withWorkspaceLock(key, lockManager, () => storage.removeItem(key))
-  }
+function removeLocalWorkspaceRecords(storage: StorageWriter) {
+  for (const key of listLocalWorkspaceStorageKeys(storage)) storage.removeItem(key)
 }
 
 export async function applyLocalWorkspaceBackup(
@@ -475,21 +461,29 @@ export async function applyLocalWorkspaceBackup(
   lockManager = globalThis.navigator?.locks as unknown as BackupLockManager | undefined,
 ) {
   const backup = checkedBackup(value)
-  const previous = collectLocalWorkspaceBackup(storage)
-  if (!backup || !previous) throw new Error('The local workspace backup is invalid or too large.')
-  try {
-    await removeLocalWorkspaceRecords(storage, lockManager)
-    const entries = Object.entries(backup.records).sort(([left], [right]) => left.localeCompare(right))
-    for (const [key, raw] of entries) {
-      await withWorkspaceLock(key, lockManager, () => storage.setItem(key, raw))
-    }
-  } catch (error) {
+  if (!backup) throw new Error('The local workspace backup is invalid or too large.')
+  const restore = () => {
+    const previous = collectLocalWorkspaceBackup(storage)
+    if (!previous) throw new Error('The local workspace backup is invalid or too large.')
     try {
-      await removeLocalWorkspaceRecords(storage, lockManager)
-      for (const [key, raw] of Object.entries(previous.records)) {
-        await withWorkspaceLock(key, lockManager, () => storage.setItem(key, raw))
+      removeLocalWorkspaceRecords(storage)
+      const entries = Object.entries(backup.records).sort(([left], [right]) => left.localeCompare(right))
+      for (const [key, raw] of entries) storage.setItem(key, raw)
+    } catch (error) {
+      try {
+        removeLocalWorkspaceRecords(storage)
+        for (const [key, raw] of Object.entries(previous.records)) storage.setItem(key, raw)
+      } catch {
+        throw new Error('Restore failed and the previous records could not be fully recovered. Keep your backup file and do not reset this device.')
       }
-    } catch { /* Preserve the original failure. */ }
-    throw error
+      throw error
+    }
   }
+  // Acquire in a fixed order, before reading the rollback snapshot. Keep both locks
+  // through replacement and recovery so participating writers never see a half-restore.
+  if (lockManager?.request) {
+    return lockManager.request(COMMERCE_LOCK, { mode: 'exclusive' }, () =>
+      lockManager.request(PRODUCTION_LOCK, { mode: 'exclusive' }, async () => restore()))
+  }
+  return restore()
 }

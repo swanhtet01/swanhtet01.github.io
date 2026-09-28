@@ -277,7 +277,7 @@ test('acknowledgement settles the intent into a durable idempotent receipt', () 
 
 test('abandonment records an abandoned receipt that later settlement cannot flip', () => withOutbox(async () => {
   await stageLocalCommerceSyncIntent(stageInput())
-  const abandoned = await abandonLocalCommerceSyncIntent('CMD-OUTBOX-1')
+  const abandoned = await abandonLocalCommerceSyncIntent('CMD-OUTBOX-1', serialLocks(), memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]]))
   assert.equal(abandoned.replayed, false)
   assert.equal(abandoned.receipt.status, 'abandoned')
   assert.equal((await readLocalCommerceSyncIntents()).length, 0)
@@ -310,12 +310,22 @@ test('crash recovery replays the pending change onto the exact matching base wor
 test('crash recovery after the workspace write but before acknowledgement does not duplicate it', () => withOutbox(async () => {
   const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(candidateState)]])
   await stageLocalCommerceSyncIntent(stageInput())
+  let writes = 0
+  storage.setItem = () => { writes += 1; throw new Error('Ledger must not be rewritten after a confirmed save') }
   const status = await recoverLocalCommerceSyncOutbox(storage, serialLocks())
   assert.equal(status.status, 'ready')
   assert.equal(status.recoveredCount, 1)
   assert.equal(status.replayedCount, 0)
+  assert.equal(writes, 0)
   assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(candidateState))
   assert.equal((await readLocalCommerceSyncIntents()).length, 0)
+  const receipt = await acknowledgeLocalCommerceSyncIntent('CMD-OUTBOX-1')
+  assert.equal(receipt.replayed, true)
+  assert.equal(receipt.receipt.recovered, true)
+  const again = await recoverLocalCommerceSyncOutbox(storage, serialLocks())
+  assert.equal(again.status, 'ready')
+  assert.equal(again.recoveredCount, 0)
+  assert.equal(writes, 0)
 }))
 
 test('recovery never overwrites a diverged workspace and keeps the intent pending', () => withOutbox(async () => {
@@ -411,3 +421,87 @@ test('a blocked database open closes the connection it still receives', async ()
     restore()
   }
 })
+
+
+test('confirmation retry recovers only its exact pending command', () => withOutbox(async () => {
+  const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]])
+  const locks = serialLocks()
+  const staged = await stageLocalCommerceSyncIntent(stageInput())
+  const expected = { ...staged.intent }
+  for (const mismatch of [
+    { commandId: 'OTHER' }, { eventType: 'commerce.order.created' },
+    { candidateRaw: canonicalRaw(divergedState) },
+    ...['actionId', 'actor', 'capturedAt', 'reason', 'evidenceReference'].map(key => ({ evidence: { ...expected.evidence, [key]: 'different' } })),
+  ]) {
+    await assert.rejects(() => recoverLocalCommerceSyncOutbox(storage, locks, { ...expected, ...mismatch }), /does not match/)
+    assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(baseState))
+    assert.equal((await readLocalCommerceSyncIntents()).length, 1)
+  }
+  const result = await recoverLocalCommerceSyncOutbox(storage, locks, expected)
+  assert.equal(result.status, 'ready')
+  assert.equal(result.replayedCount, 1)
+  assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(candidateState))
+  await assert.rejects(() => recoverLocalCommerceSyncOutbox(storage, locks, expected), /does not match/)
+}))
+
+test('confirmation retry refuses multiple pending commands', () => withOutbox(async () => {
+  const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]])
+  const first = await stageLocalCommerceSyncIntent(stageInput())
+  await stageLocalCommerceSyncIntent(stageInput({ commandId: 'CMD-SECOND', evidence: proof({ actionId: 'ACT-SECOND' }) }))
+  await assert.rejects(() => recoverLocalCommerceSyncOutbox(storage, serialLocks(), first.intent), /does not match/)
+  assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(baseState))
+  assert.equal((await readLocalCommerceSyncIntents()).length, 2)
+}))
+
+
+test('retry rechecks pending command after waiting for the workspace lock', () => withOutbox(async () => {
+  const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]])
+  const staged = await stageLocalCommerceSyncIntent(stageInput())
+  const locks = { request: async (_name, _options, callback) => {
+    await abandonLocalCommerceSyncIntent(staged.intent.commandId, serialLocks(), storage)
+    return callback()
+  } }
+  await assert.rejects(() => recoverLocalCommerceSyncOutbox(storage, locks, staged.intent), /does not match/)
+  assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(baseState))
+  const settled = await acknowledgeLocalCommerceSyncIntent(staged.intent.commandId)
+  assert.equal(settled.receipt.status, 'abandoned')
+}))
+
+
+test('discard waits behind recovery on the same workspace lock', () => withOutbox(async () => {
+  const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(baseState)]])
+  const staged = await stageLocalCommerceSyncIntent(stageInput())
+  const locks = serialLocks()
+  let release
+  const held = locks.request('held', {}, () => new Promise(resolve => { release = resolve }))
+  await Promise.resolve()
+  const recovery = recoverLocalCommerceSyncOutbox(storage, locks, staged.intent)
+  const discard = abandonLocalCommerceSyncIntent(staged.intent.commandId, locks, storage)
+  const outcomes = Promise.allSettled([recovery, discard])
+  assert.equal(locks.requests, 3, 'discard must queue behind recovery')
+  release()
+  await held
+  const [recovered, discarded] = await outcomes
+  assert.equal(recovered.status, 'fulfilled')
+  assert.equal(discarded.status, 'fulfilled')
+  assert.equal(discarded.value.receipt.status, 'local_applied')
+  assert.equal(discarded.value.replayed, true)
+  assert.equal(storage.getItem(COMMERCE_KEY), canonicalRaw(candidateState))
+}))
+
+
+test('discard reconciles an already-saved candidate without rewriting the ledger', () => withOutbox(async () => {
+  const storage = memoryStorage([[COMMERCE_KEY, canonicalRaw(candidateState)]])
+  storage.setItem = () => { throw Error('No ledger writes allowed') }
+  await stageLocalCommerceSyncIntent(stageInput())
+  const result = await abandonLocalCommerceSyncIntent('CMD-OUTBOX-1', serialLocks(), storage)
+  assert.equal(result.receipt.status, 'local_applied')
+  assert.equal(result.receipt.recovered, true)
+  assert.equal((await readLocalCommerceSyncIntents()).length, 0)
+}))
+
+test('discard refuses missing current records and retains recovery evidence', () => withOutbox(async () => {
+  await stageLocalCommerceSyncIntent(stageInput())
+  await assert.rejects(() => abandonLocalCommerceSyncIntent('CMD-OUTBOX-1', serialLocks(), memoryStorage()), /Nothing discarded/)
+  assert.equal((await readLocalCommerceSyncIntents()).length, 1)
+}))

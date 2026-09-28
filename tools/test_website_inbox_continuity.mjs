@@ -313,8 +313,12 @@ const websiteProductSource = await readFile(resolve(root, 'showroom', 'src', 'pr
 const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
 
 check(
-  (websiteProductSource.match(/websiteEditSessionStorageKey\(/g) ?? []).length === 3,
-  'the builder restores, persists and clears the preview through the one shared key builder',
+  (websiteProductSource.match(/websiteEditSessionStorageKey\(/g) ?? []).length === 4
+    && websiteProductSource.includes('const storageKey = websiteEditSessionStorageKey(editSessionScope)')
+    && websiteProductSource.includes('sessionStorage.setItem(websiteEditSessionStorageKey(next.scope)')
+    && websiteProductSource.includes('sessionStorage.removeItem(websiteEditSessionStorageKey(target.scope))')
+    && websiteProductSource.includes('sessionStorage.removeItem(websiteEditSessionStorageKey(pendingRestoredDraft.scope))'),
+  'restore, persist, active-discard and held-draft choice all use the one shared key builder',
 )
 check(
   !/function\s+editSessionStorageKey/.test(websiteProductSource)

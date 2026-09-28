@@ -117,7 +117,7 @@ export function WebsiteCommerceIntake({
       promisedAt: canonicalPromisedAt,
     })
     setNotice(queued
-      ? `${pendingManaged.id} is ready for accountable order confirmation below.`
+      ? `${pendingManaged.id} is ready to confirm below.`
       : `${pendingManaged.id} was not queued. Resolve the Shop notice, then retry.`)
   }
 
@@ -143,7 +143,7 @@ export function WebsiteCommerceIntake({
     if (disabled || !context || context.handoff.state !== 'accepted') return
     const drafted = await createDraftFromAcceptedIntake(context, catalog)
     if (!drafted?.draft) {
-      setNotice('Draft creation failed closed. Recheck the Website evidence and matching inventory item.')
+      setNotice('Could not create the draft. Check the Website request and matching stock item.')
       return
     }
     setContext(drafted)
@@ -163,13 +163,13 @@ export function WebsiteCommerceIntake({
     })
     setSubmitting(false)
     if (!completed?.order) {
-      setNotice('Completion failed closed. The source, operator, or evidence reference could not be verified.')
+      setNotice('Could not complete the draft. Check the request, operator ID and evidence reference.')
       return
     }
 
     setContext(completed)
     setConfirmed(false)
-    setNotice(`${completed.order.id} is ready for accountable confirmation in Shop.`)
+    setNotice(`${completed.order.id} is ready to confirm in Shop.`)
   }
 
   const stateLabel = !context
@@ -187,7 +187,7 @@ export function WebsiteCommerceIntake({
       <section aria-label="Website order review" className="website-intake">
         <header className="website-intake-head">
           <div><span className="core-eyebrow">Website orders</span><strong>{pendingManaged ? `${pendingManagedIntakes.length} waiting` : 'No intake waiting'}</strong></div>
-          <div><Link className="text-link" to="/website/">Open Website</Link></div>
+          <div><Link className="text-link" to="/website/">Open Sites</Link></div>
         </header>
 
         {pendingManaged ? (
@@ -208,7 +208,7 @@ export function WebsiteCommerceIntake({
           <div className="website-intake-ready"><div><strong>Nothing to process</strong><small>Send an approved SKU and quantity from Website when a real request is ready.</small></div></div>
         )}
 
-        <p aria-live="polite" className="form-notice">{notice || 'Review only. Stock moves and orders are created only after a signed-in person confirms.'}</p>
+        <p aria-live="polite" className="form-notice">{notice || (pendingManaged ? 'Confirm the order below to update stock.' : '')}</p>
       </section>
     )
   }
@@ -217,7 +217,7 @@ export function WebsiteCommerceIntake({
     <section aria-label="Website order intake" className="website-intake">
       <header className="website-intake-head">
         <div><span className="core-eyebrow">Website orders</span><strong>{stateLabel}</strong></div>
-        <div><Link className="text-link" to="/website/">Open Website</Link></div>
+        <div><Link className="text-link" to="/website/">Open Sites</Link></div>
       </header>
 
       {context && !item ? <p className="form-notice warning-text">SKU {context.handoff.intake.sku} does not match exactly one Shop stock item. Intake is blocked.</p> : null}
@@ -259,7 +259,7 @@ export function WebsiteCommerceIntake({
         </div>
       ) : null}
 
-      {context || notice ? <p aria-live="polite" className="form-notice">{notice || 'Browser-local evidence only. No customer message, payment, delivery request, or external write occurs.'}</p> : null}
+      {context || notice ? <p aria-live="polite" className="form-notice">{notice || 'Saved on this device. No payment collected.'}</p> : null}
     </section>
   )
 }

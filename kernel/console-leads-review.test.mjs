@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import realStore from './store.mjs'
 import {
   LEAD_REVIEW_RECORD_PREFIX,
@@ -16,6 +17,61 @@ import {
 } from './console/leads-review.mjs'
 
 const HASH_RE = /^[a-f0-9]{64}$/
+
+test('real REST store sends bounded keyset queries and rejects cursor injection before fetch', () => {
+  const source = `
+    import assert from 'node:assert/strict';
+    const calls = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input);
+      assert.equal(url.origin, 'https://fixture.invalid');
+      assert.equal(url.pathname, '/rest/v1/supermega_leads');
+      assert.equal(init.method, 'GET');
+      assert.equal(init.body, undefined);
+      calls.push(url);
+      return new Response(JSON.stringify([{lead_id:'lead-002',email:'qa@example.com',goal:'retained brief'}]), {status:200});
+    };
+    const store = await import(${JSON.stringify(new URL('./store.mjs', import.meta.url).href)});
+    const first = await store.listLeads(50, {after:''});
+    assert.equal(first[0].message, 'retained brief');
+    assert.equal(calls[0].searchParams.get('order'), 'lead_id.asc');
+    assert.equal(calls[0].searchParams.get('limit'), '50');
+    assert.equal(calls[0].searchParams.has('lead_id'), false);
+    await store.listLeads(200, {after:'lead-001'});
+    assert.equal(calls[1].searchParams.get('lead_id'), 'gt.lead-001');
+    assert.equal(calls[1].searchParams.get('limit'), '200');
+    for(const after of ['x&limit=999','x,or=(lead_id.gt.a)','a'.repeat(81)]) await assert.rejects(store.listLeads(50,{after}), /invalid_leads_page/);
+    await assert.rejects(store.listLeads(201,{after:''}), /invalid_leads_page/);
+    assert.equal(calls.length,2);
+    await store.listLeads(10);
+    assert.equal(calls[2].searchParams.get('order'), 'submitted_at.desc.nullslast,created_at.desc');
+    const conversionCalls = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input);
+      assert.equal(url.origin, 'https://fixture.invalid');
+      assert.equal(url.pathname, '/rest/v1/supermega_console_projects');
+      assert.equal(init.method, 'GET');
+      assert.equal(url.searchParams.get('limit'), '1');
+      assert.equal(url.searchParams.get('select'), 'lead_id');
+      const filter = url.searchParams.get('lead_id');
+      conversionCalls.push(filter);
+      // Provider row cap of one; even many duplicate projects cannot hide another ID.
+      return new Response(JSON.stringify(filter === 'eq.lead-002' ? [{lead_id:'lead-002'}] : []), {status:200});
+    };
+    assert.deepEqual(await store.convertedLeadIds(['lead-001','lead-002','lead-002']), ['lead-002']);
+    assert.deepEqual(conversionCalls, ['eq.lead-001','eq.lead-002']);
+    assert.deepEqual(await store.convertedLeadIds([]), []);
+    await assert.rejects(store.convertedLeadIds(['x&limit=999']), /invalid_conversion_page/);
+    assert.equal(conversionCalls.length, 2);
+    globalThis.fetch = async () => new Response('unavailable', {status:503});
+    await assert.rejects(store.convertedLeadIds(['lead-002']), /supabase_503/);
+  `
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', source], {
+    encoding: 'utf8', timeout: 10000,
+    env: { SystemRoot: process.env.SystemRoot || '', SUPABASE_URL: 'https://fixture.invalid', SUPABASE_SERVICE_ROLE_KEY: 'synthetic-test-only' },
+  })
+  assert.equal(result.status, 0, result.stderr || String(result.error || 'child failed'))
+})
 
 // Fixture addresses must NOT use RFC 2606 reserved names: those are exactly what
 // isSyntheticLead filters out, and these cases are about review mechanics, not classification.
@@ -31,7 +87,7 @@ function fakeStore({ leads = LEADS, converted = [], mode = 'supabase', putResult
     mode,
     calls,
     controlRecords,
-    async listLeads(limit) { calls.push('listLeads'); return leads.slice(0, limit) },
+    async listLeads(limit, page) { calls.push('listLeads'); return page ? [...leads].filter(l => !page.after || l.id > page.after).sort((a,b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).slice(0,limit) : leads.slice(0, limit) },
     async getLead(id) { calls.push('getLead'); return leads.find((l) => l.id === id) || null },
     async convertedLeadIds() { calls.push('convertedLeadIds'); return converted },
     async listControlRecords({ prefix, clientId, status, limit }) {
@@ -133,6 +189,22 @@ test('smoke-test leads are hidden by default, counted, and never crowd out a rea
   assert.equal((await listLeadsForReview({ includeSynthetic: 'yes' }, store)).reason, 'invalid_leads_review_query')
 })
 
+test('a full synthetic scan exposes continuation to an older real enquiry', async () => {
+  const smoke = Array.from({ length: 200 }, (_, i) => ({
+    ...LEADS[0], id: `smoke-${i}`, lead_id: `smoke-${i}`, contact: 'qa@example.com',
+  }))
+  const real = { ...LEADS[0], id: 'z-older-real', lead_id: 'z-older-real' }
+  const store = fakeStore({ leads: [...smoke, real] })
+  const first = await listLeadsForReview({}, store)
+  assert.equal(first.ok, true)
+  assert.equal(first.leads.length, 0)
+  assert.equal(first.scanTruncated, true)
+  assert.ok(first.nextCursor, 'a full filtered page must offer continuation, not a dead end')
+  const next = await listLeadsForReview({ cursor: first.nextCursor }, store)
+  assert.equal(next.ok, true)
+  assert.ok(next.leads.some((lead) => lead.id === real.id), 'the older enquiry must be discoverable')
+})
+
 test('review records are tenant-scoped: a foreign-tenant record never marks a lead reviewed', async () => {
   const store = fakeStore()
   store.controlRecords.set(leadReviewRecordKey('lead-2'), {
@@ -145,6 +217,50 @@ test('review records are tenant-scoped: a foreign-tenant record never marks a le
   const mark = await markLeadReviewed({ leadId: 'lead-2' }, store)
   assert.equal(mark.ok, false)
   assert.equal(mark.reason, 'lead_review_conflict')
+})
+
+test('all real enquiries are reachable without skips across display limits', async () => {
+  const leads = Array.from({ length: 461 }, (_, i) => ({ ...LEADS[0], id: `lead-${String(i).padStart(4, '0')}` }))
+  const store = fakeStore({ leads })
+  const seen = []
+  let cursor = ''
+  do {
+    const page = await listLeadsForReview({ cursor }, store)
+    seen.push(...page.leads.map(lead => lead.id))
+    assert.equal(page.hasMore, Boolean(page.nextCursor))
+    cursor = page.nextCursor
+  } while (cursor)
+  assert.deepEqual(seen, leads.map(lead => lead.id))
+  assert.equal(new Set(seen).size, 461)
+  for (const invalid of ['x&limit=999', {}, 12, 'a'.repeat(81)]) assert.equal((await listLeadsForReview({ cursor: invalid }, store)).ok, false)
+})
+
+test('unavailable conversion or review state fails rather than returning false labels', async () => {
+  const store = fakeStore()
+  store.convertedLeadIds = async () => { throw new Error('conversion_unavailable') }
+  await assert.rejects(listLeadsForReview({}, store), /conversion_unavailable/)
+  store.convertedLeadIds = async () => []
+  store.getControlRecord = async () => { throw new Error('review_unavailable') }
+  await assert.rejects(listLeadsForReview({}, store), /review_unavailable/)
+})
+
+test('conversion state requests only the visible page instead of trusting a truncated global result', async () => {
+  const store = fakeStore()
+  store.convertedLeadIds = async ids => {
+    if (!ids) return ['unrelated-project-lead'] // A successful but truncated global response.
+    assert.deepEqual(ids, ['lead-1', 'lead-2'])
+    return ['lead-2']
+  }
+  const result = await listLeadsForReview({}, store)
+  assert.equal(result.leads.find(lead => lead.id === 'lead-2').converted, true)
+})
+
+test('review lookup uses exact page keys, not a capped global scan', async () => {
+  const store = fakeStore()
+  store.listControlRecords = async () => { throw new Error('global_scan_forbidden') }
+  await markLeadReviewed({ leadId: 'lead-1' }, store)
+  const result = await listLeadsForReview({}, store)
+  assert.equal(result.leads.find(lead => lead.id === 'lead-1').reviewed, true)
 })
 
 test('mark-reviewed stores a well-formed lead_review control record and is idempotent', async () => {
@@ -222,7 +338,9 @@ test('console API exposes the review surface behind the ops key and fails closed
 
 test('console UI wires the review surface: fail-closed banner, reviewed pill, mark-reviewed action', async () => {
   const html = await readFile(new URL('./public/index.html', import.meta.url), 'utf8')
-  assert.match(html, /api\('GET','\/api\/leads\/review'\)/)
+  assert.ok(html.includes("api('GET','/api/leads/review'+(cursor?'?cursor='+encodeURIComponent(cursor):''))"))
+  assert.ok(html.includes("next.onclick=()=>loadLeads(r.nextCursor)"))
+  assert.ok(html.includes('No customer enquiries in this page. Continue to the next page.'))
   assert.match(html, /leads_source_not_configured/)
   assert.match(html, /SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY/)
   assert.match(html, /data-review="\$\{esc\(l\.id\)\}">Mark reviewed<\/button>/)

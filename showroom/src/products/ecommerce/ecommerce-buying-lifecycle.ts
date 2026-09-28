@@ -75,21 +75,21 @@ function taxTimestampMicros(value: unknown, field: string) {
 }
 
 function ecommerceTaxConfiguration(value: unknown, index: number, count: number): CommerceTaxConfiguration {
-  if (!isRecord(value)) throw new Error(`taxConfigurations[${index}] must be an object.`)
+  if (!isRecord(value)) rejectInvalid(`taxConfigurations[${index}] must be an object.`)
   const legacyKeys = ['revision', 'code', 'label', 'rateBasisPoints', 'mode', 'proof']
   const scheduledKeys = [...legacyKeys.slice(0, -1), 'jurisdictionCode', 'effectiveFrom', 'proof']
   const actualKeys = Object.keys(value)
   const hasExactShape = (keys: string[]) => actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key))
   if (!hasExactShape(legacyKeys) && !hasExactShape(scheduledKeys)) {
-    throw new Error(`taxConfigurations[${index}] fields do not match the contract.`)
+    rejectInvalid(`taxConfigurations[${index}] fields do not match the contract.`)
   }
   const revision = safeInteger(value.revision, `taxConfigurations[${index}].revision`, 1)
-  if (revision !== count - index) throw new Error(`taxConfigurations[${index}].revision breaks the newest-first sequence.`)
+  if (revision !== count - index) rejectInvalid(`taxConfigurations[${index}].revision breaks the newest-first sequence.`)
   const code = canonicalText(value.code, `taxConfigurations[${index}].code`, 12)
-  if (!/^[A-Z0-9][A-Z0-9_-]{0,11}$/.test(code)) throw new Error(`taxConfigurations[${index}].code is invalid.`)
+  if (!/^[A-Z0-9][A-Z0-9_-]{0,11}$/.test(code)) rejectInvalid(`taxConfigurations[${index}].code is invalid.`)
   const label = canonicalText(value.label, `taxConfigurations[${index}].label`, 80)
   const rateBasisPoints = safeInteger(value.rateBasisPoints, `taxConfigurations[${index}].rateBasisPoints`, 0, 10_000)
-  if (value.mode !== 'exclusive' && value.mode !== 'inclusive') throw new Error(`taxConfigurations[${index}].mode is invalid.`)
+  if (value.mode !== 'exclusive' && value.mode !== 'inclusive') rejectInvalid(`taxConfigurations[${index}].mode is invalid.`)
   const proof = exactObject(value.proof, `taxConfigurations[${index}].proof`, [
     'actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference',
   ])
@@ -111,12 +111,12 @@ function ecommerceTaxConfiguration(value: unknown, index: number, count: number)
   if (hasExactShape(scheduledKeys)) {
     const jurisdictionCode = canonicalText(value.jurisdictionCode, `taxConfigurations[${index}].jurisdictionCode`, 16)
     if (!/^[A-Z0-9][A-Z0-9_-]{1,15}$/.test(jurisdictionCode)) {
-      throw new Error(`taxConfigurations[${index}].jurisdictionCode is invalid.`)
+      rejectInvalid(`taxConfigurations[${index}].jurisdictionCode is invalid.`)
     }
     const effectiveFrom = canonicalTimestamp(value.effectiveFrom, `taxConfigurations[${index}].effectiveFrom`)
     if (taxTimestampMicros(effectiveFrom, `taxConfigurations[${index}].effectiveFrom`)
       < taxTimestampMicros(capturedAt, `taxConfigurations[${index}].proof.capturedAt`)) {
-      throw new Error(`taxConfigurations[${index}].effectiveFrom precedes its review proof.`)
+      rejectInvalid(`taxConfigurations[${index}].effectiveFrom precedes its review proof.`)
     }
     configuration.jurisdictionCode = jurisdictionCode
     configuration.effectiveFrom = effectiveFrom
@@ -141,7 +141,7 @@ export function reviewEcommerceTax(
       < taxTimestampMicros(candidate.proof.capturedAt, `taxConfigurations[${index}].proof.capturedAt`)
       || taxTimestampMicros(newer.effectiveFrom ?? newer.proof.capturedAt, `taxConfigurations[${index - 1}].effectiveFrom`)
       < taxTimestampMicros(candidate.effectiveFrom ?? candidate.proof.capturedAt, `taxConfigurations[${index}].effectiveFrom`))) {
-      throw new Error(`taxConfigurations[${index}] breaks newest-first chronology.`)
+      rejectInvalid(`taxConfigurations[${index}] breaks newest-first chronology.`)
     }
   })
   const configuration = rows.find((candidate) => {
@@ -174,7 +174,7 @@ export function reviewEcommerceTax(
   const subtotal = configuration.mode === 'exclusive' ? listed : listed - tax
   const total = configuration.mode === 'exclusive' ? listed + tax : listed
   if (subtotal < 0n || tax < 0n || total < 1n || total > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error('The Shop tax decision exceeds the safe whole-MMK boundary.')
+    rejectInvalid('The Shop tax decision exceeds the safe whole-MMK boundary.')
   }
   return {
     schema: 'supermega.ecommerce.tax-decision.v1',
@@ -212,7 +212,7 @@ export function validateEcommerceTaxDecision(
   const taxMode = source.taxMode
   if ((status !== 'configured' && status !== 'not_configured')
     || (taxMode !== 'exclusive' && taxMode !== 'inclusive' && taxMode !== 'not_configured')) {
-    throw new Error('The Ecommerce tax decision status is invalid.')
+    rejectInvalid('The Ecommerce tax decision status is invalid.')
   }
   const decision: EcommerceTaxDecision = {
     schema: source.schema as EcommerceTaxDecision['schema'],
@@ -240,7 +240,7 @@ export function validateEcommerceTaxDecision(
     reviewedAt: canonicalTimestamp(source.reviewedAt, 'taxDecision.reviewedAt'),
   }
   if (decision.schema !== 'supermega.ecommerce.tax-decision.v1') {
-    throw new Error('The Ecommerce tax decision schema is invalid.')
+    rejectInvalid('The Ecommerce tax decision schema is invalid.')
   }
   const listed = BigInt(decision.listedSubtotalMmk)
   const rate = BigInt(decision.taxRateBasisPoints)
@@ -271,12 +271,12 @@ export function validateEcommerceTaxDecision(
     && decision.taxMmk === 0
     && decision.totalMmk === decision.listedSubtotalMmk
   if (!configured && !notConfigured) {
-    throw new Error('The Ecommerce tax decision calculation is invalid.')
+    rejectInvalid('The Ecommerce tax decision calculation is invalid.')
   }
   if (configurations === undefined) return decision
   const expected = reviewEcommerceTax(configurations, decision.listedSubtotalMmk, decision.reviewedAt, decision.catalogRevision)
   if (canonicalJson(decision) !== canonicalJson(expected)) {
-    throw new Error('The Ecommerce tax decision is stale, forged, or inconsistent with the Shop tax schedule.')
+    rejectInvalid('The Ecommerce tax decision is stale, forged, or inconsistent with the Shop tax schedule.')
   }
   return decision
 }
@@ -842,10 +842,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function exactObject(value: unknown, field: string, keys: string[]) {
-  if (!isRecord(value)) throw new Error(`${field} must be an object.`)
+  if (!isRecord(value)) rejectInvalid(`${field} must be an object.`)
   const actual = Object.keys(value)
   if (actual.length !== keys.length || !keys.every((key) => actual.includes(key))) {
-    throw new Error(`${field} fields do not match the contract.`)
+    rejectInvalid(`${field} fields do not match the contract.`)
   }
   return value
 }
@@ -860,7 +860,7 @@ function canonicalText(value: unknown, field: string, maximum = 240, allowBlank 
       return code <= 31 || code === 127
     })
     || value.length > maximum) {
-    throw new Error(`${field} must be canonical visible text of at most ${maximum} characters.`)
+    rejectInvalid(`${field} must be canonical visible text of at most ${maximum} characters.`)
   }
   return value
 }
@@ -871,27 +871,27 @@ function optionalText(value: unknown, field: string, maximum: number) {
 
 function canonicalToken(value: unknown, field: string) {
   const candidate = canonicalText(value, field, 180)
-  if (!tokenPattern.test(candidate)) throw new Error(`${field} must be a canonical token.`)
+  if (!tokenPattern.test(candidate)) rejectInvalid(`${field} must be a canonical token.`)
   return candidate
 }
 
 function safeInteger(value: unknown, field: string, minimum = 0, maximum = maxSafeInteger) {
   if (!Number.isSafeInteger(value) || Number(value) < minimum || Number(value) > maximum) {
-    throw new Error(`${field} must be a supported integer.`)
+    rejectInvalid(`${field} must be a supported integer.`)
   }
   return Number(value)
 }
 
 function canonicalDigest(value: unknown, field: string) {
   const candidate = canonicalText(value, field, 71)
-  if (!digestPattern.test(candidate)) throw new Error(`${field} must be a SHA-256 digest.`)
+  if (!digestPattern.test(candidate)) rejectInvalid(`${field} must be a SHA-256 digest.`)
   return candidate
 }
 
 function canonicalTimestamp(value: unknown, field: string) {
   const candidate = canonicalText(value, field, 40)
   if (!timestampPattern.test(candidate) || !Number.isFinite(Date.parse(candidate))) {
-    throw new Error(`${field} must be a real ISO timestamp with an explicit offset.`)
+    rejectInvalid(`${field} must be a real ISO timestamp with an explicit offset.`)
   }
   return candidate
 }
@@ -910,7 +910,7 @@ function canonicalValue(value: unknown): unknown {
 
 function canonicalJson(value: unknown) {
   const serialized = JSON.stringify(canonicalValue(value))
-  if (typeof serialized !== 'string') throw new Error('Ecommerce lifecycle evidence is not canonical JSON.')
+  if (typeof serialized !== 'string') rejectInvalid('Ecommerce lifecycle evidence is not canonical JSON.')
   return serialized
 }
 
@@ -919,7 +919,7 @@ function canonicalCopy<T>(value: T): T {
 }
 
 export async function ecommerceLifecycleDigest(value: unknown) {
-  if (!globalThis.crypto?.subtle) throw new Error('Secure SHA-256 is unavailable.')
+  if (!globalThis.crypto?.subtle) rejectInvalid('Secure SHA-256 is unavailable.')
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson(value)))
   return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }
@@ -948,7 +948,7 @@ export function ecommerceBuyingStateStorageKey(scope: string) {
 function pimItem(value: unknown, field: string): EcommercePimItem {
   const source = exactObject(value, field, ['sku', 'name', 'variant', 'unitPriceMmk', 'availability'])
   if (source.availability !== 'available' && source.availability !== 'sold_out') {
-    throw new Error(`${field}.availability is unsupported.`)
+    rejectInvalid(`${field}.availability is unsupported.`)
   }
   return {
     sku: canonicalToken(source.sku, `${field}.sku`),
@@ -967,7 +967,7 @@ export async function buildEcommercePimProjection(
   const preview = validateStorefrontPreview(previewValue)
   const canonicalSourceDigest = canonicalDigest(sourcePreviewDigest, 'sourcePreviewDigest')
   if (await storefrontPreviewDigest(preview) !== canonicalSourceDigest) {
-    throw new Error('Storefront preview digest is stale or invalid.')
+    rejectInvalid('Storefront preview digest is stale or invalid.')
   }
   const core = {
     schema: ECOMMERCE_PIM_SCHEMA,
@@ -982,7 +982,7 @@ export async function buildEcommercePimProjection(
     }, `items.${item.sku}`)).sort((left, right) => left.sku.localeCompare(right.sku)),
   }
   if (new Set(core.items.map((item) => item.sku)).size !== core.items.length) {
-    throw new Error('PIM item SKUs must be unique.')
+    rejectInvalid('PIM item SKUs must be unique.')
   }
   return { ...core, pimDigest: await ecommerceLifecycleDigest(core) }
 }
@@ -990,11 +990,11 @@ export async function buildEcommercePimProjection(
 export async function validateEcommercePimProjection(value: unknown): Promise<EcommercePimProjection> {
   const source = exactObject(value, 'PIM projection', ['schema', 'scope', 'sourcePreviewDigest', 'items', 'pimDigest'])
   if (source.schema !== ECOMMERCE_PIM_SCHEMA || !Array.isArray(source.items) || source.items.length < 1 || source.items.length > 100) {
-    throw new Error('PIM projection contract is invalid.')
+    rejectInvalid('PIM projection contract is invalid.')
   }
   const items = source.items.map((item, index) => pimItem(item, `PIM projection.items[${index}]`))
   if (items.some((item, index) => index > 0 && items[index - 1].sku >= item.sku)) {
-    throw new Error('PIM projection items must use unique canonical SKU order.')
+    rejectInvalid('PIM projection items must use unique canonical SKU order.')
   }
   const core = {
     schema: ECOMMERCE_PIM_SCHEMA,
@@ -1003,7 +1003,7 @@ export async function validateEcommercePimProjection(value: unknown): Promise<Ec
     items,
   }
   const digest = canonicalDigest(source.pimDigest, 'PIM projection.pimDigest')
-  if (await ecommerceLifecycleDigest(core) !== digest) throw new Error('PIM projection digest is invalid.')
+  if (await ecommerceLifecycleDigest(core) !== digest) rejectInvalid('PIM projection digest is invalid.')
   return { ...core, pimDigest: digest }
 }
 
@@ -1011,7 +1011,7 @@ function customerPhone(value: unknown, field: string) {
   const phone = canonicalText(value, field, 32)
   const digitCount = phone.replace(/\D/g, '').length
   if (!phonePattern.test(phone) || digitCount < 6 || digitCount > 15) {
-    throw new Error(`${field} must be a usable phone number.`)
+    rejectInvalid(`${field} must be a usable phone number.`)
   }
   return phone
 }
@@ -1022,7 +1022,7 @@ function customerProfileSnapshotShape(value: unknown, field = 'customer profile'
   ])
   const id = canonicalText(source.id, `${field}.id`, 40)
   if (source.schema !== ECOMMERCE_CUSTOMER_PROFILE_SCHEMA || !customerIdPattern.test(id)) {
-    throw new Error(`${field} identity is invalid.`)
+    rejectInvalid(`${field} identity is invalid.`)
   }
   const core = {
     schema: ECOMMERCE_CUSTOMER_PROFILE_SCHEMA,
@@ -1040,7 +1040,7 @@ function customerProfileSnapshotShape(value: unknown, field = 'customer profile'
 async function customerProfileSnapshot(value: unknown, field = 'customer profile'): Promise<EcommerceCustomerProfileSnapshot> {
   const profile = customerProfileSnapshotShape(value, field)
   const { profileDigest, ...core } = profile
-  if (await ecommerceLifecycleDigest(core) !== profileDigest) throw new Error(`${field} digest is invalid.`)
+  if (await ecommerceLifecycleDigest(core) !== profileDigest) rejectInvalid(`${field} digest is invalid.`)
   return profile
 }
 
@@ -1051,7 +1051,7 @@ function deliveryAddressSnapshotShape(value: unknown, field = 'delivery address'
   ])
   const id = canonicalText(source.id, `${field}.id`, 40)
   if (source.schema !== ECOMMERCE_DELIVERY_ADDRESS_SCHEMA || !addressIdPattern.test(id)) {
-    throw new Error(`${field} identity is invalid.`)
+    rejectInvalid(`${field} identity is invalid.`)
   }
   const core = {
     schema: ECOMMERCE_DELIVERY_ADDRESS_SCHEMA,
@@ -1071,7 +1071,7 @@ function deliveryAddressSnapshotShape(value: unknown, field = 'delivery address'
 async function deliveryAddressSnapshot(value: unknown, field = 'delivery address'): Promise<EcommerceDeliveryAddressSnapshot> {
   const address = deliveryAddressSnapshotShape(value, field)
   const { addressDigest, ...core } = address
-  if (await ecommerceLifecycleDigest(core) !== addressDigest) throw new Error(`${field} digest is invalid.`)
+  if (await ecommerceLifecycleDigest(core) !== addressDigest) rejectInvalid(`${field} digest is invalid.`)
   return address
 }
 
@@ -1083,7 +1083,7 @@ export async function buildEcommerceCustomerProfileSnapshot(input: {
   previous?: EcommerceCustomerProfileSnapshot | null
 }) {
   const key = canonicalText(input.idempotencyKey, 'customer profile.idempotencyKey', 40)
-  if (!checkoutKeyPattern.test(key)) throw new Error('Customer profile checkout identity is invalid.')
+  if (!checkoutKeyPattern.test(key)) rejectInvalid('Customer profile checkout identity is invalid.')
   const name = canonicalText(input.name, 'customer profile.name', 80)
   const phone = customerPhone(input.phone, 'customer profile.phone')
   const savedAt = canonicalTimestamp(input.savedAt, 'customer profile.savedAt')
@@ -1111,7 +1111,7 @@ export async function buildEcommerceDeliveryAddressSnapshot(input: {
   previous?: EcommerceDeliveryAddressSnapshot | null
 }) {
   const key = canonicalText(input.idempotencyKey, 'delivery address.idempotencyKey', 40)
-  if (!checkoutKeyPattern.test(key)) throw new Error('Delivery address checkout identity is invalid.')
+  if (!checkoutKeyPattern.test(key)) rejectInvalid('Delivery address checkout identity is invalid.')
   const values = {
     line1: canonicalText(input.line1, 'delivery address.line1', 120),
     township: canonicalText(input.township, 'delivery address.township', 80),
@@ -1141,7 +1141,7 @@ function quoteLine(value: unknown, field: string): EcommerceQuoteLine {
   const quantity = safeInteger(source.quantity, `${field}.quantity`, 1, maxQuantity)
   const unitPriceMmk = safeInteger(source.unitPriceMmk, `${field}.unitPriceMmk`, 1)
   const lineTotalMmk = safeInteger(source.lineTotalMmk, `${field}.lineTotalMmk`, 1)
-  if (lineTotalMmk !== quantity * unitPriceMmk) throw new Error(`${field}.lineTotalMmk is invalid.`)
+  if (lineTotalMmk !== quantity * unitPriceMmk) rejectInvalid(`${field}.lineTotalMmk is invalid.`)
   return {
     sku: canonicalToken(source.sku, `${field}.sku`),
     name: canonicalText(source.name, `${field}.name`, 180),
@@ -1165,32 +1165,32 @@ async function quoteCore(value: unknown): Promise<Omit<EcommerceCheckoutQuote, '
   const idempotencyKey = canonicalText(source.idempotencyKey, 'checkout quote.idempotencyKey', 40)
   if (!quoteIdPattern.test(quoteId)
     || !checkoutKeyPattern.test(idempotencyKey)
-    || quoteId.slice(4) !== idempotencyKey.slice(4)) throw new Error('Checkout quote identity is invalid.')
+    || quoteId.slice(4) !== idempotencyKey.slice(4)) rejectInvalid('Checkout quote identity is invalid.')
   const quotedAt = canonicalTimestamp(source.quotedAt, 'checkout quote.quotedAt')
   const expiresAt = canonicalTimestamp(source.expiresAt, 'checkout quote.expiresAt')
   const duration = Date.parse(expiresAt) - Date.parse(quotedAt)
-  if (duration <= 0 || duration > 30 * 60 * 1000) throw new Error('Checkout quote expiry is invalid.')
-  if (!fulfilmentMethods.includes(source.fulfilment as EcommerceFulfilment)) throw new Error('Checkout fulfilment is unsupported.')
+  if (duration <= 0 || duration > 30 * 60 * 1000) rejectInvalid('Checkout quote expiry is invalid.')
+  if (!fulfilmentMethods.includes(source.fulfilment as EcommerceFulfilment)) rejectInvalid('Checkout fulfilment is unsupported.')
   if (!Array.isArray(source.lines) || source.lines.length < 1 || source.lines.length > maxLines) {
-    throw new Error('Checkout quote lines are invalid.')
+    rejectInvalid('Checkout quote lines are invalid.')
   }
   const lines = source.lines.map((line, index) => quoteLine(line, `checkout quote.lines[${index}]`))
   if (lines.some((line, index) => index > 0 && lines[index - 1].sku >= line.sku)) {
-    throw new Error('Checkout quote lines must use unique canonical SKU order.')
+    rejectInvalid('Checkout quote lines must use unique canonical SKU order.')
   }
   const subtotalMmk = safeInteger(source.subtotalMmk, 'checkout quote.subtotalMmk', 1)
   if (subtotalMmk !== lines.reduce((total, line) => total + line.lineTotalMmk, 0)) {
-    throw new Error('Checkout quote subtotal is invalid.')
+    rejectInvalid('Checkout quote subtotal is invalid.')
   }
   const promotion = exactObject(source.promotion, 'checkout quote.promotion', ['adapter', 'status', 'code', 'amountMmk'])
   const promotionCode = optionalText(promotion.code, 'checkout quote.promotion.code', 40)
   const promotionStatus = promotionCode ? 'pending_shop_review' : 'not_requested'
   if (promotion.adapter !== 'shop_promotion_review' || promotion.status !== promotionStatus || promotion.amountMmk !== 0) {
-    throw new Error('Checkout promotion boundary is invalid.')
+    rejectInvalid('Checkout promotion boundary is invalid.')
   }
   const tax = exactObject(source.tax, 'checkout quote.tax', ['adapter', 'status', 'amountMmk'])
   if (tax.adapter !== 'price_inclusive' || tax.status !== 'included' || tax.amountMmk !== 0) {
-    throw new Error('Checkout tax boundary is invalid.')
+    rejectInvalid('Checkout tax boundary is invalid.')
   }
   const fulfilment = source.fulfilment as EcommerceFulfilment
   const customerProfile = structured
@@ -1205,23 +1205,23 @@ async function quoteCore(value: unknown): Promise<Omit<EcommerceCheckoutQuote, '
     && (Date.parse(customerProfile!.savedAt) > Date.parse(quotedAt)
       || (deliveryAddress && Date.parse(deliveryAddress.savedAt) > Date.parse(quotedAt))
       || (fulfilment === 'delivery') !== Boolean(deliveryAddress))) {
-    throw new Error('Checkout customer and delivery identity are inconsistent.')
+    rejectInvalid('Checkout customer and delivery identity are inconsistent.')
   }
   const shipping = exactObject(source.shipping, 'checkout quote.shipping', ['adapter', 'status', 'amountMmk'])
   const expectedShipping = fulfilment === 'pickup'
     ? { adapter: 'pickup', status: 'included', amountMmk: 0 }
     : { adapter: 'shop_delivery_review', status: 'pending_shop_review', amountMmk: 0 }
-  if (canonicalJson(shipping) !== canonicalJson(expectedShipping)) throw new Error('Checkout shipping boundary is invalid.')
+  if (canonicalJson(shipping) !== canonicalJson(expectedShipping)) rejectInvalid('Checkout shipping boundary is invalid.')
   const payment = exactObject(source.payment, 'checkout quote.payment', ['adapter', 'status', 'amountMmk'])
   if (!paymentAdapters.includes(payment.adapter as EcommercePaymentAdapter)
     || payment.status !== 'not_authorized'
-    || payment.amountMmk !== 0) throw new Error('Checkout payment boundary is invalid.')
+    || payment.amountMmk !== 0) rejectInvalid('Checkout payment boundary is invalid.')
   if (!ecommercePaymentMatchesFulfilment(fulfilment, payment.adapter as EcommercePaymentAdapter)) {
-    throw new Error('Checkout payment does not match how the customer receives the order.')
+    rejectInvalid('Checkout payment does not match how the customer receives the order.')
   }
   const totalMmk = safeInteger(source.totalMmk, 'checkout quote.totalMmk', 1)
-  if (totalMmk !== subtotalMmk) throw new Error('Checkout total must remain the product subtotal until Shop review.')
-  if (source.currency !== 'MMK') throw new Error('Checkout currency must be MMK.')
+  if (totalMmk !== subtotalMmk) rejectInvalid('Checkout total must remain the product subtotal until Shop review.')
+  if (source.currency !== 'MMK') rejectInvalid('Checkout currency must be MMK.')
   return {
     schema: ECOMMERCE_QUOTE_SCHEMA,
     scope: canonicalToken(source.scope, 'checkout quote.scope'),
@@ -1269,28 +1269,28 @@ export async function buildEcommerceCheckoutQuote(input: {
 }): Promise<EcommerceCheckoutQuote> {
   const pim = await validateEcommercePimProjection(input.pim)
   const key = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
-  if (!checkoutKeyPattern.test(key)) throw new Error('Checkout idempotency key is invalid.')
-  if (!fulfilmentMethods.includes(input.fulfilment)) throw new Error('Checkout fulfilment is unsupported.')
-  if (!paymentAdapters.includes(input.paymentAdapter)) throw new Error('Checkout payment adapter is unsupported.')
+  if (!checkoutKeyPattern.test(key)) rejectInvalid('Checkout idempotency key is invalid.')
+  if (!fulfilmentMethods.includes(input.fulfilment)) rejectInvalid('Checkout fulfilment is unsupported.')
+  if (!paymentAdapters.includes(input.paymentAdapter)) rejectInvalid('Checkout payment adapter is unsupported.')
   if (!ecommercePaymentMatchesFulfilment(input.fulfilment, input.paymentAdapter)) {
-    throw new Error('Checkout payment does not match how the customer receives the order.')
+    rejectInvalid('Checkout payment does not match how the customer receives the order.')
   }
   const code = optionalText(input.promotionCode, 'promotionCode', 40)
-  if (!Array.isArray(input.cart) || input.cart.length < 1 || input.cart.length > maxLines) throw new Error('Cart is empty or too large.')
+  if (!Array.isArray(input.cart) || input.cart.length < 1 || input.cart.length > maxLines) rejectInvalid('Cart is empty or too large.')
   const quantities = new Map<string, number>()
   input.cart.forEach((candidate, index) => {
     const row = exactObject(candidate, `cart[${index}]`, ['sku', 'quantity'])
     const sku = canonicalToken(row.sku, `cart[${index}].sku`)
-    if (quantities.has(sku)) throw new Error('Cart SKUs must be unique.')
+    if (quantities.has(sku)) rejectInvalid('Cart SKUs must be unique.')
     quantities.set(sku, safeInteger(row.quantity, `cart[${index}].quantity`, 1, maxQuantity))
   })
   const itemBySku = new Map(pim.items.map((item) => [item.sku, item]))
   const lines = [...quantities.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([sku, quantity]) => {
     const item = itemBySku.get(sku)
-    if (!item) throw new Error(`Cart SKU ${sku} is not in the PIM projection.`)
-    if (item.availability !== 'available') throw new Error(`Cart SKU ${sku} is sold out.`)
+    if (!item) rejectInvalid(`Cart SKU ${sku} is not in the PIM projection.`)
+    if (item.availability !== 'available') rejectInvalid(`Cart SKU ${sku} is sold out.`)
     const lineTotalMmk = item.unitPriceMmk * quantity
-    if (!Number.isSafeInteger(lineTotalMmk)) throw new Error('Cart line exceeds the supported whole-MMK range.')
+    if (!Number.isSafeInteger(lineTotalMmk)) rejectInvalid('Cart line exceeds the supported whole-MMK range.')
     return {
       sku,
       name: item.name,
@@ -1301,7 +1301,7 @@ export async function buildEcommerceCheckoutQuote(input: {
     }
   })
   const subtotalMmk = lines.reduce((total, line) => total + line.lineTotalMmk, 0)
-  if (!Number.isSafeInteger(subtotalMmk)) throw new Error('Cart exceeds the supported whole-MMK range.')
+  if (!Number.isSafeInteger(subtotalMmk)) rejectInvalid('Cart exceeds the supported whole-MMK range.')
   const customerProfile = input.customerProfile
     ? await buildEcommerceCustomerProfileSnapshot({
         ...input.customerProfile,
@@ -1361,7 +1361,7 @@ export async function validateEcommerceCheckoutQuote(value: unknown): Promise<Ec
   const { quoteDigest: rawDigest, ...rawCore } = source
   const core = await quoteCore(rawCore)
   const quoteDigest = canonicalDigest(rawDigest, 'checkout quote.quoteDigest')
-  if (await ecommerceLifecycleDigest(core) !== quoteDigest) throw new Error('Checkout quote digest is invalid.')
+  if (await ecommerceLifecycleDigest(core) !== quoteDigest) rejectInvalid('Checkout quote digest is invalid.')
   return { ...core, quoteDigest }
 }
 
@@ -1406,14 +1406,14 @@ export async function validateEcommerceOrderRequestV2(value: unknown): Promise<E
   const source = exactObject(value, 'Ecommerce request', structured ? [...baseFields, ...structuredFields] : baseFields)
   if (source.schema !== ECOMMERCE_REQUEST_SCHEMA_V2
     || source.mode !== 'browser-local-request'
-    || source.state !== 'pending_shop_review') throw new Error('Ecommerce request boundary is invalid.')
+    || source.state !== 'pending_shop_review') rejectInvalid('Ecommerce request boundary is invalid.')
   const id = canonicalText(source.id, 'Ecommerce request.id', 40)
   const idempotencyKey = canonicalText(source.idempotencyKey, 'Ecommerce request.idempotencyKey', 40)
   if (!requestIdPattern.test(id)
     || !checkoutKeyPattern.test(idempotencyKey)
-    || id.slice(4) !== idempotencyKey.slice(4)) throw new Error('Ecommerce request identity is invalid.')
+    || id.slice(4) !== idempotencyKey.slice(4)) rejectInvalid('Ecommerce request identity is invalid.')
   const quote = await validateEcommerceCheckoutQuote(source.quote)
-  if (!Array.isArray(source.lines) || source.lines.length < 1 || source.lines.length > maxLines) throw new Error('Ecommerce request lines are invalid.')
+  if (!Array.isArray(source.lines) || source.lines.length < 1 || source.lines.length > maxLines) rejectInvalid('Ecommerce request lines are invalid.')
   const lines = source.lines.map((line, index) => quoteLine(line, `Ecommerce request.lines[${index}]`))
   const revision = source.sourceStorefrontRevision === null
     ? null
@@ -1421,7 +1421,7 @@ export async function validateEcommerceOrderRequestV2(value: unknown): Promise<E
   const actionId = source.sourceStorefrontActionId === null
     ? null
     : canonicalToken(source.sourceStorefrontActionId, 'sourceStorefrontActionId')
-  if ((revision === null) !== (actionId === null)) throw new Error('Ecommerce request storefront provenance is incomplete.')
+  if ((revision === null) !== (actionId === null)) rejectInvalid('Ecommerce request storefront provenance is incomplete.')
   const customerProfile = structured
     ? await customerProfileSnapshot(source.customerProfile, 'Ecommerce request.customerProfile')
     : undefined
@@ -1459,7 +1459,7 @@ export async function validateEcommerceOrderRequestV2(value: unknown): Promise<E
     || request.fulfilment !== quote.fulfilment
     || request.currency !== 'MMK'
     || canonicalJson(request.lines) !== canonicalJson(quote.lines)
-    || request.totalMmk !== quote.totalMmk) throw new Error('Ecommerce request does not preserve its exact quote.')
+    || request.totalMmk !== quote.totalMmk) rejectInvalid('Ecommerce request does not preserve its exact quote.')
   return request
 }
 
@@ -1488,7 +1488,7 @@ async function validateBuyingEvent(value: unknown, field: string): Promise<Ecomm
   ])
   if (source.schema !== ECOMMERCE_BUYING_EVENT_SCHEMA
     || !['request_recorded', 'return_intent_recorded', 'support_intent_recorded', 'correction_intent_recorded', 'cancellation_intent_recorded', 'cancellation_decision_recorded', 'order_amendment_intent_recorded', 'order_reschedule_intent_recorded'].includes(String(source.action))) {
-    throw new Error(`${field} boundary is invalid.`)
+    rejectInvalid(`${field} boundary is invalid.`)
   }
   const core = {
     schema: ECOMMERCE_BUYING_EVENT_SCHEMA,
@@ -1500,12 +1500,12 @@ async function validateBuyingEvent(value: unknown, field: string): Promise<Ecomm
     previousDigest: canonicalDigest(source.previousDigest, `${field}.previousDigest`),
   } as Omit<EcommerceBuyingEvent, 'eventDigest'>
   const eventDigest = canonicalDigest(source.eventDigest, `${field}.eventDigest`)
-  if (await ecommerceLifecycleDigest(core) !== eventDigest) throw new Error(`${field}.eventDigest is invalid.`)
+  if (await ecommerceLifecycleDigest(core) !== eventDigest) rejectInvalid(`${field}.eventDigest is invalid.`)
   return { ...core, eventDigest }
 }
 
 export async function validateEcommerceBuyingState(value: unknown, expectedScope?: string): Promise<EcommerceBuyingState> {
-  if (!isRecord(value)) throw new Error('Buying state must be an object.')
+  if (!isRecord(value)) rejectInvalid('Buying state must be an object.')
   const legacyKeys = ['schema', 'scope', 'revision', 'headDigest', 'requests', 'returnIntents', 'events']
   const currentKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'events']
   const cancellationKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'cancellationIntents', 'events']
@@ -1515,7 +1515,7 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   const latestKeys = [...legacyKeys.slice(0, 6), 'supportIntents', 'correctionIntents', 'cancellationIntents', 'cancellationDecisions', 'amendmentIntents', 'rescheduleIntents', 'events']
   const actualKeys = Object.keys(value)
   const hasExactShape = (keys: string[]) => actualKeys.length === keys.length && keys.every((key) => actualKeys.includes(key))
-  if (!hasExactShape(legacyKeys) && !hasExactShape(currentKeys) && !hasExactShape(cancellationKeys) && !hasExactShape(decisionKeys) && !hasExactShape(amendmentKeys) && !hasExactShape(rescheduleKeys) && !hasExactShape(latestKeys)) throw new Error('Buying state fields do not match the contract.')
+  if (!hasExactShape(legacyKeys) && !hasExactShape(currentKeys) && !hasExactShape(cancellationKeys) && !hasExactShape(decisionKeys) && !hasExactShape(amendmentKeys) && !hasExactShape(rescheduleKeys) && !hasExactShape(latestKeys)) rejectInvalid('Buying state fields do not match the contract.')
   const source = value
   if (source.schema !== ECOMMERCE_BUYING_STATE_SCHEMA
     || !Array.isArray(source.requests)
@@ -1535,9 +1535,9 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
     || (source.cancellationDecisions?.length ?? 0) > maxRecords
     || (source.amendmentIntents?.length ?? 0) > maxRecords
     || (source.rescheduleIntents?.length ?? 0) > maxRecords
-    || source.events.length > maxRecords * 8) throw new Error('Buying state contract is invalid.')
+    || source.events.length > maxRecords * 8) rejectInvalid('Buying state contract is invalid.')
   const scope = canonicalToken(source.scope, 'buying state.scope')
-  if (expectedScope && scope !== canonicalToken(expectedScope, 'expectedScope')) throw new Error('Buying state belongs to a different workspace.')
+  if (expectedScope && scope !== canonicalToken(expectedScope, 'expectedScope')) rejectInvalid('Buying state belongs to a different workspace.')
   const requests = await Promise.all(source.requests.map((request) => validateEcommerceOrderRequestV2(request)))
   const returnIntents = source.returnIntents.map((intent) => validateEcommerceReturnIntent(intent))
   const supportIntents = (source.supportIntents ?? []).map((intent) => validateEcommerceSupportIntent(intent))
@@ -1548,38 +1548,38 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   const rescheduleIntents = (source.rescheduleIntents ?? []).map((intent) => validateEcommerceOrderRescheduleIntent(intent))
   const events = await Promise.all(source.events.map((event, index) => validateBuyingEvent(event, `buying state.events[${index}]`)))
   const revision = safeInteger(source.revision, 'buying state.revision')
-  if (revision !== events.length) throw new Error('Buying state revision does not match its history.')
+  if (revision !== events.length) rejectInvalid('Buying state revision does not match its history.')
   let previousDigest = EMPTY_ECOMMERCE_BUYING_DIGEST
   events.forEach((event, index) => {
-    if (event.sequence !== index + 1 || event.previousDigest !== previousDigest) throw new Error('Buying state event chain is invalid.')
+    if (event.sequence !== index + 1 || event.previousDigest !== previousDigest) rejectInvalid('Buying state event chain is invalid.')
     previousDigest = event.eventDigest
   })
   const headDigest = canonicalDigest(source.headDigest, 'buying state.headDigest')
-  if (headDigest !== previousDigest) throw new Error('Buying state head digest is invalid.')
+  if (headDigest !== previousDigest) rejectInvalid('Buying state head digest is invalid.')
   const records: EcommerceBuyingRecord[] = [...requests, ...returnIntents, ...supportIntents, ...correctionIntents, ...cancellationIntents, ...cancellationDecisions, ...amendmentIntents, ...rescheduleIntents]
   if (records.some((record) => record.scope !== scope)
     || new Set(records.map((record) => record.id)).size !== records.length
     || new Set(records.map((record) => record.idempotencyKey)).size !== records.length
-    || events.length !== records.length) throw new Error('Buying state records are not unique and scope-bound.')
+    || events.length !== records.length) rejectInvalid('Buying state records are not unique and scope-bound.')
   const requestIds = new Set(requests.map((request) => request.id))
   if (returnIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
-    throw new Error('Return intent is not attributable to one recovered Ecommerce request.')
+    rejectInvalid('Return intent is not attributable to one recovered Ecommerce request.')
   }
   if (supportIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
-    throw new Error('Support intent is not attributable to one recovered Ecommerce request.')
+    rejectInvalid('Support intent is not attributable to one recovered Ecommerce request.')
   }
   if (correctionIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
-    throw new Error('Correction intent is not attributable to one recovered Ecommerce request.')
+    rejectInvalid('Correction intent is not attributable to one recovered Ecommerce request.')
   }
   if (cancellationIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
-    throw new Error('Cancellation intent is not attributable to one recovered Ecommerce request.')
+    rejectInvalid('Cancellation intent is not attributable to one recovered Ecommerce request.')
   }
   if (new Set(cancellationIntents.map((intent) => intent.orderId)).size !== cancellationIntents.length) {
-    throw new Error('Only one cancellation request may exist for an Ecommerce order.')
+    rejectInvalid('Only one cancellation request may exist for an Ecommerce order.')
   }
   const cancellationIntentById = new Map(cancellationIntents.map((intent) => [intent.id, intent]))
   if (new Set(cancellationDecisions.map((decision) => decision.intentId)).size !== cancellationDecisions.length) {
-    throw new Error('Only one Shop decision may exist for an Ecommerce cancellation request.')
+    rejectInvalid('Only one Shop decision may exist for an Ecommerce cancellation request.')
   }
   for (const decision of cancellationDecisions) {
     const intent = cancellationIntentById.get(decision.intentId)
@@ -1594,11 +1594,11 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
       || decision.totalMmk !== intent.totalMmk
       || decision.evidenceReference !== intent.evidenceReference
       || decision.intentDigest !== await ecommerceLifecycleDigest(intent)) {
-      throw new Error('Cancellation decision is not bound to its exact recovered request.')
+      rejectInvalid('Cancellation decision is not bound to its exact recovered request.')
     }
   }
   if (new Set(amendmentIntents.map((intent) => intent.orderId)).size !== amendmentIntents.length) {
-    throw new Error('Only one amendment request may exist for an Ecommerce order.')
+    rejectInvalid('Only one amendment request may exist for an Ecommerce order.')
   }
   const requestById = new Map(requests.map((request) => [request.id, request]))
   for (const intent of amendmentIntents) {
@@ -1613,17 +1613,17 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
       || !replacementIdentityIsBound(sourceRequest, replacementRequest)
       || sourceRequest.fulfilment !== intent.fromFulfilment
       || replacementRequest.fulfilment !== intent.toFulfilment) {
-      throw new Error('Order amendment is not bound to its original and replacement Ecommerce requests.')
+      rejectInvalid('Order amendment is not bound to its original and replacement Ecommerce requests.')
     }
   }
   if (new Set(rescheduleIntents.map((intent) => intent.orderId)).size !== rescheduleIntents.length) {
-    throw new Error('Only one reschedule request may exist for an Ecommerce order.')
+    rejectInvalid('Only one reschedule request may exist for an Ecommerce order.')
   }
   if (new Set([...amendmentIntents, ...rescheduleIntents].map((intent) => intent.orderId)).size !== amendmentIntents.length + rescheduleIntents.length) {
-    throw new Error('Only one replacement workflow may exist for an Ecommerce order.')
+    rejectInvalid('Only one replacement workflow may exist for an Ecommerce order.')
   }
   if (new Set([...cancellationIntents, ...amendmentIntents, ...rescheduleIntents].map((intent) => intent.orderId)).size !== cancellationIntents.length + amendmentIntents.length + rescheduleIntents.length) {
-    throw new Error('A cancellation request and a replacement workflow may not both exist for an Ecommerce order.')
+    rejectInvalid('A cancellation request and a replacement workflow may not both exist for an Ecommerce order.')
   }
   for (const intent of rescheduleIntents) {
     const sourceRequest = requestById.get(intent.sourceRequestId)
@@ -1638,7 +1638,7 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
       || sourceRequest.customerProfile?.phone !== replacementRequest.customerProfile?.phone
       || sourceRequest.fulfilment !== intent.fulfilment
       || replacementRequest.fulfilment !== intent.fulfilment) {
-      throw new Error('Order reschedule is not bound to its original and replacement Ecommerce requests.')
+      rejectInvalid('Order reschedule is not bound to its original and replacement Ecommerce requests.')
     }
   }
   const byId = new Map(records.map((record) => [record.id, record]))
@@ -1646,7 +1646,7 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
     const record = byId.get(event.subjectId)
     if (!record
       || record.idempotencyKey !== event.idempotencyKey
-      || await ecommerceLifecycleDigest(record) !== event.payloadDigest) throw new Error('Buying event does not match its record.')
+      || await ecommerceLifecycleDigest(record) !== event.payloadDigest) rejectInvalid('Buying event does not match its record.')
   }
   return { schema: ECOMMERCE_BUYING_STATE_SCHEMA, scope, revision, headDigest, requests, returnIntents, supportIntents, correctionIntents, cancellationIntents, cancellationDecisions, amendmentIntents, rescheduleIntents, events }
 }
@@ -1661,15 +1661,15 @@ async function appendBuyingRecord(
   expectedHeadDigest: string,
 ) {
   const state = await validateEcommerceBuyingState(stateValue)
-  if (canonicalDigest(expectedHeadDigest, 'expectedHeadDigest') !== state.headDigest) throw new Error('Buying state changed before this record was applied.')
-  if (record.scope !== state.scope) throw new Error('Buying record belongs to a different workspace.')
+  if (canonicalDigest(expectedHeadDigest, 'expectedHeadDigest') !== state.headDigest) rejectInvalid('Buying state changed before this record was applied.')
+  if (record.scope !== state.scope) rejectInvalid('Buying record belongs to a different workspace.')
   const allRecords: EcommerceBuyingRecord[] = [...state.requests, ...state.returnIntents, ...state.supportIntents, ...state.correctionIntents, ...state.cancellationIntents, ...state.cancellationDecisions, ...state.amendmentIntents, ...state.rescheduleIntents]
   const existing = allRecords.find((candidate) => candidate.id === record.id || candidate.idempotencyKey === record.idempotencyKey)
   if (existing) {
-    if (canonicalJson(existing) !== canonicalJson(record)) throw new Error('Buying idempotency key conflicts with a different record.')
+    if (canonicalJson(existing) !== canonicalJson(record)) rejectInvalid('Buying idempotency key conflicts with a different record.')
     return state
   }
-  if (state[collection].length >= maxRecords) throw new Error('Buying record limit is reached.')
+  if (state[collection].length >= maxRecords) rejectInvalid('Buying record limit is reached.')
   const core: Omit<EcommerceBuyingEvent, 'eventDigest'> = {
     schema: ECOMMERCE_BUYING_EVENT_SCHEMA,
     sequence: state.revision + 1,
@@ -1716,28 +1716,28 @@ export function buildEcommerceReturnIntent(input: {
     || !Array.isArray(order.lines)
     || order.lines.length < 1
     || order.lines.length > maxLines) {
-    throw new Error('Returns require a completed Shop order with completion proof and exact sold lines.')
+    rejectInvalid('Returns require a completed Shop order with completion proof and exact sold lines.')
   }
   const orderId = canonicalToken(order.id, 'orderSnapshot.id')
   const sourceRequestId = canonicalText(order.sourceRecordId, 'orderSnapshot.sourceRecordId', 40)
-  if (!requestIdPattern.test(sourceRequestId)) throw new Error('Return order is not attributable to an Ecommerce request.')
+  if (!requestIdPattern.test(sourceRequestId)) rejectInvalid('Return order is not attributable to an Ecommerce request.')
   const lines = order.lines.map((line, index) => ({
     sku: canonicalToken(line?.sku, `orderSnapshot.lines[${index}].sku`),
     quantity: safeInteger(line?.quantity, `orderSnapshot.lines[${index}].quantity`, 1, maxQuantity),
   }))
   const sku = canonicalToken(input.sku, 'sku')
   const matching = lines.filter((line) => line.sku === sku)
-  if (matching.length !== 1) throw new Error('Return SKU is not one exact sold line.')
+  if (matching.length !== 1) rejectInvalid('Return SKU is not one exact sold line.')
   const returned = (order.returns ?? []).reduce((total, record, index) => {
     const recordSku = canonicalToken(record?.sku, `orderSnapshot.returns[${index}].sku`)
     const recordQuantity = safeInteger(record?.quantity, `orderSnapshot.returns[${index}].quantity`, 1, maxQuantity)
     return recordSku === sku ? total + recordQuantity : total
   }, 0)
   const quantity = safeInteger(input.quantity, 'quantity', 1, maxQuantity)
-  if (quantity > matching[0].quantity - returned) throw new Error('Return quantity exceeds the remaining sold quantity.')
-  if (!returnDispositions.includes(input.disposition)) throw new Error('Return disposition is unsupported.')
+  if (quantity > matching[0].quantity - returned) rejectInvalid('Return quantity exceeds the remaining sold quantity.')
+  if (!returnDispositions.includes(input.disposition)) rejectInvalid('Return disposition is unsupported.')
   const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
-  if (!returnKeyPattern.test(idempotencyKey)) throw new Error('Return idempotency key is invalid.')
+  if (!returnKeyPattern.test(idempotencyKey)) rejectInvalid('Return idempotency key is invalid.')
   return validateEcommerceReturnIntent({
     schema: ECOMMERCE_RETURN_INTENT_SCHEMA,
     state: 'pending_shop_review',
@@ -1774,7 +1774,7 @@ export function validateEcommerceReturnIntent(value: unknown): EcommerceReturnIn
     || !requestIdPattern.test(sourceRequestId)
     || source.refundStatus !== 'not_started'
     || !returnDispositions.includes(source.disposition as EcommerceReturnDisposition)
-    || source.evidenceReference !== evidenceReference) throw new Error('Return intent boundary is invalid.')
+    || source.evidenceReference !== evidenceReference) rejectInvalid('Return intent boundary is invalid.')
   return {
     schema: ECOMMERCE_RETURN_INTENT_SCHEMA,
     state: 'pending_shop_review',
@@ -1876,14 +1876,14 @@ export function buildEcommerceSupportIntent(input: {
 }): EcommerceSupportIntent {
   const order = input.orderSnapshot
   if (!isRecord(order) || order.status !== 'completed' || !isRecord(order.completion)) {
-    throw new Error('Support requests require a completed Shop order with completion proof.')
+    rejectInvalid('Support requests require a completed Shop order with completion proof.')
   }
   const orderId = canonicalToken(order.id, 'orderSnapshot.id')
   const sourceRequestId = canonicalText(order.sourceRecordId, 'orderSnapshot.sourceRecordId', 40)
-  if (!requestIdPattern.test(sourceRequestId)) throw new Error('Support order is not attributable to an Ecommerce request.')
-  if (!supportCategories.includes(input.category)) throw new Error('Support category is unsupported.')
+  if (!requestIdPattern.test(sourceRequestId)) rejectInvalid('Support order is not attributable to an Ecommerce request.')
+  if (!supportCategories.includes(input.category)) rejectInvalid('Support category is unsupported.')
   const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
-  if (!supportKeyPattern.test(idempotencyKey)) throw new Error('Support idempotency key is invalid.')
+  if (!supportKeyPattern.test(idempotencyKey)) rejectInvalid('Support idempotency key is invalid.')
   return validateEcommerceSupportIntent({
     schema: ECOMMERCE_SUPPORT_INTENT_SCHEMA,
     state: 'pending_shop_review',
@@ -1920,7 +1920,7 @@ export function validateEcommerceSupportIntent(value: unknown): EcommerceSupport
     || !supportCategories.includes(source.category as EcommerceSupportCategory)
     || source.externalMessageSent !== false
     || source.refundStarted !== false
-    || source.evidenceReference !== evidenceReference) throw new Error('Support intent boundary is invalid.')
+    || source.evidenceReference !== evidenceReference) rejectInvalid('Support intent boundary is invalid.')
   return {
     schema: ECOMMERCE_SUPPORT_INTENT_SCHEMA,
     state: 'pending_shop_review',
@@ -2038,15 +2038,15 @@ export function buildEcommerceCorrectionIntent(input: {
     || !isRecord(order.completion)
     || !sourceCalculationDigest
     || originalBalanceMmk === null) {
-    throw new Error('Corrections require a calculated, reconciled, completed Shop order.')
+    rejectInvalid('Corrections require a calculated, reconciled, completed Shop order.')
   }
   const orderId = canonicalToken(order.id, 'orderSnapshot.id')
   const sourceRequestId = canonicalText(order.sourceRecordId, 'orderSnapshot.sourceRecordId', 40)
-  if (!requestIdPattern.test(sourceRequestId)) throw new Error('Correction order is not attributable to an Ecommerce request.')
-  if (!correctionKinds.includes(input.requestedKind)) throw new Error('Correction type is unsupported.')
-  if (!correctionReasonCodes.includes(input.reasonCode)) throw new Error('Correction reason is unsupported.')
+  if (!requestIdPattern.test(sourceRequestId)) rejectInvalid('Correction order is not attributable to an Ecommerce request.')
+  if (!correctionKinds.includes(input.requestedKind)) rejectInvalid('Correction type is unsupported.')
+  if (!correctionReasonCodes.includes(input.reasonCode)) rejectInvalid('Correction reason is unsupported.')
   const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
-  if (!correctionKeyPattern.test(idempotencyKey)) throw new Error('Correction idempotency key is invalid.')
+  if (!correctionKeyPattern.test(idempotencyKey)) rejectInvalid('Correction idempotency key is invalid.')
   const sourceCorrectionCount = safeInteger(order.corrections?.length ?? 0, 'orderSnapshot.corrections.length', 0, maxRecords)
   return validateEcommerceCorrectionIntent({
     schema: ECOMMERCE_CORRECTION_INTENT_SCHEMA,
@@ -2108,7 +2108,7 @@ export function validateEcommerceCorrectionIntent(value: unknown): EcommerceCorr
     || source.taxFiled !== false
     || source.customerMessageSent !== false
     || source.providerCalled !== false
-    || source.evidenceReference !== evidenceReference) throw new Error('Correction intent boundary is invalid.')
+    || source.evidenceReference !== evidenceReference) rejectInvalid('Correction intent boundary is invalid.')
   return {
     schema: ECOMMERCE_CORRECTION_INTENT_SCHEMA,
     state: 'pending_shop_review',
@@ -2230,16 +2230,16 @@ export function buildEcommerceCancellationIntent(input: {
     || acknowledgement.payment.status !== order.paymentStatus
     || acknowledgement.payment.refundStatus !== 'none'
     || acknowledgement.totalMmk !== order.total) {
-    throw new Error('Cancellation requests require one attributable active Shop order acknowledgement.')
+    rejectInvalid('Cancellation requests require one attributable active Shop order acknowledgement.')
   }
   const sourceRequestId = canonicalText(acknowledgement.evidence.sourceRecordId, 'order acknowledgement sourceRecordId', 40)
-  if (!requestIdPattern.test(sourceRequestId)) throw new Error('Cancellation order is not attributable to an Ecommerce request.')
-  if (!cancellationReasonCodes.includes(input.reasonCode)) throw new Error('Cancellation reason code is unsupported.')
+  if (!requestIdPattern.test(sourceRequestId)) rejectInvalid('Cancellation order is not attributable to an Ecommerce request.')
+  if (!cancellationReasonCodes.includes(input.reasonCode)) rejectInvalid('Cancellation reason code is unsupported.')
   const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
-  if (!cancellationKeyPattern.test(idempotencyKey)) throw new Error('Cancellation idempotency key is invalid.')
+  if (!cancellationKeyPattern.test(idempotencyKey)) rejectInvalid('Cancellation idempotency key is invalid.')
   const createdAt = canonicalTimestamp(input.createdAt, 'createdAt')
   if (taxTimestampMicros(createdAt, 'createdAt') < taxTimestampMicros(order.createdAt, 'order.createdAt')) {
-    throw new Error('Cancellation request cannot predate the Shop order.')
+    rejectInvalid('Cancellation request cannot predate the Shop order.')
   }
   return validateEcommerceCancellationIntent({
     schema: ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
@@ -2290,7 +2290,7 @@ export function validateEcommerceCancellationIntent(value: unknown): EcommerceCa
     || source.customerMessageSent !== false
     || source.orderCancelled !== false
     || source.refundStarted !== false
-    || source.evidenceReference !== evidenceReference) throw new Error('Cancellation intent boundary is invalid.')
+    || source.evidenceReference !== evidenceReference) rejectInvalid('Cancellation intent boundary is invalid.')
   return {
     schema: ECOMMERCE_CANCELLATION_INTENT_SCHEMA,
     state: 'pending_shop_review',
@@ -2342,18 +2342,18 @@ export async function buildEcommerceCancellationDecision(input: {
   proof: CommerceActionProof
 }): Promise<EcommerceCancellationDecision> {
   const intent = validateEcommerceCancellationIntent(input.intent)
-  if (canonicalToken(input.scope, 'scope') !== intent.scope) throw new Error('Cancellation decision belongs to a different Ecommerce workspace.')
+  if (canonicalToken(input.scope, 'scope') !== intent.scope) rejectInvalid('Cancellation decision belongs to a different Commerce workspace.')
   if (!ecommerceCancellationMatchesCurrentShop(input.commerceState, intent)) {
-    throw new Error('Cancellation decision requires the exact active Shop order reviewed by the customer request.')
+    rejectInvalid('Cancellation decision requires the exact active Shop order reviewed by the customer request.')
   }
   const proof = exactObject(input.proof, 'cancellation decision proof', [
     'actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference',
   ])
   const createdAt = canonicalTimestamp(proof.capturedAt, 'cancellation decision proof.capturedAt')
   if (taxTimestampMicros(createdAt, 'cancellation decision proof.capturedAt') < taxTimestampMicros(intent.createdAt, 'cancellation intent.createdAt')) {
-    throw new Error('Cancellation decision cannot predate the customer request.')
+    rejectInvalid('Cancellation decision cannot predate the customer request.')
   }
-  if (proof.evidenceReference !== intent.evidenceReference) throw new Error('Cancellation decision evidence must remain fixed to the customer request.')
+  if (proof.evidenceReference !== intent.evidenceReference) rejectInvalid('Cancellation decision evidence must remain fixed to the customer request.')
   const suffix = intent.id.slice(4)
   return validateEcommerceCancellationDecision({
     schema: ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
@@ -2405,7 +2405,7 @@ export function validateEcommerceCancellationDecision(value: unknown): Ecommerce
     || source.customerMessageSent !== false
     || source.orderCancelled !== false
     || source.refundStarted !== false
-    || source.providerCalled !== false) throw new Error('Cancellation decision boundary is invalid.')
+    || source.providerCalled !== false) rejectInvalid('Cancellation decision boundary is invalid.')
   return {
     schema: ECOMMERCE_CANCELLATION_DECISION_SCHEMA,
     state: 'kept_by_shop',
@@ -2457,17 +2457,17 @@ export async function buildEcommerceOrderAmendmentIntent(input: {
     || acknowledgement.cancellation.state !== 'not_cancelled'
     || acknowledgement.totalMmk !== order.total
     || !commerceOrderHasReleasableReservation(input.commerceState, orderId)) {
-    throw new Error('Order changes require one confirmed, unpaid, uncancelled Ecommerce order with exact reserved stock.')
+    rejectInvalid('Order changes require one confirmed, unpaid, uncancelled Ecommerce order with exact reserved stock.')
   }
   const sourceRequestId = canonicalText(acknowledgement.evidence.sourceRecordId, 'order acknowledgement sourceRecordId', 40)
   if (!requestIdPattern.test(sourceRequestId)
     || replacementRequest.scope !== scope
-    || replacementRequest.id === sourceRequestId) throw new Error('Order change is not attributable to distinct Ecommerce requests in one workspace.')
+    || replacementRequest.id === sourceRequestId) rejectInvalid('Order change is not attributable to distinct Ecommerce requests in one workspace.')
   const originalLines = acknowledgement.lines.map((line) => ({ sku: line.sku, name: line.name, quantity: line.quantity })).sort((left, right) => left.sku.localeCompare(right.sku))
   const replacementLines = replacementRequest.lines.map((line) => ({ sku: line.sku, name: line.name, quantity: line.quantity })).sort((left, right) => left.sku.localeCompare(right.sku))
   if (originalLines.length !== replacementLines.length
     || originalLines.some((line, index) => line.sku !== replacementLines[index]?.sku)) {
-    throw new Error('This amendment version can change quantities or fulfilment, but cannot add or remove SKUs.')
+    rejectInvalid('This amendment version can change quantities or fulfilment, but cannot add or remove SKUs.')
   }
   const lineChanges = originalLines.flatMap((line, index): EcommerceOrderAmendmentLineChange[] => {
     const replacement = replacementLines[index]
@@ -2484,18 +2484,18 @@ export async function buildEcommerceOrderAmendmentIntent(input: {
     : false
   if (sourceRequest?.schema === ECOMMERCE_REQUEST_SCHEMA_V2
     && !replacementIdentityIsBound(sourceRequest, replacementRequest)) {
-    throw new Error('Contact or delivery corrections must advance the exact prior customer and address snapshots.')
+    rejectInvalid('Contact or delivery corrections must advance the exact prior customer and address snapshots.')
   }
   if (!fulfilmentMethods.includes(fromFulfilment)
     || (!lineChanges.length && fromFulfilment === replacementRequest.fulfilment && !identityChanged)) {
-    throw new Error('Change a quantity, fulfilment method, contact, or delivery detail before Shop review.')
+    rejectInvalid('Change a quantity, fulfilment method, contact, or delivery detail before Shop review.')
   }
   const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
-  if (!amendmentKeyPattern.test(idempotencyKey)) throw new Error('Order amendment idempotency key is invalid.')
+  if (!amendmentKeyPattern.test(idempotencyKey)) rejectInvalid('Order amendment idempotency key is invalid.')
   const createdAt = canonicalTimestamp(input.createdAt, 'createdAt')
   if (taxTimestampMicros(createdAt, 'createdAt') < taxTimestampMicros(order.createdAt, 'order.createdAt')
     || taxTimestampMicros(createdAt, 'createdAt') < taxTimestampMicros(replacementRequest.createdAt, 'replacementRequest.createdAt')) {
-    throw new Error('Order amendment cannot predate its order or replacement request.')
+    rejectInvalid('Order amendment cannot predate its order or replacement request.')
   }
   const replacementRequestDigest = await ecommerceLifecycleDigest(replacementRequest)
   return validateEcommerceOrderAmendmentIntent({
@@ -2543,12 +2543,12 @@ export function validateEcommerceOrderAmendmentIntent(value: unknown): Ecommerce
   const sourceRequestId = canonicalText(source.sourceRequestId, 'order amendment intent.sourceRequestId', 40)
   const replacementRequestId = canonicalText(source.replacementRequestId, 'order amendment intent.replacementRequestId', 40)
   const replacementRequestDigest = canonicalDigest(source.replacementRequestDigest, 'order amendment intent.replacementRequestDigest')
-  if (!Array.isArray(source.lineChanges) || source.lineChanges.length > maxLines) throw new Error('Order amendment line changes are invalid.')
+  if (!Array.isArray(source.lineChanges) || source.lineChanges.length > maxLines) rejectInvalid('Order amendment line changes are invalid.')
   const lineChanges = source.lineChanges.map((candidate, index): EcommerceOrderAmendmentLineChange => {
     const line = exactObject(candidate, `order amendment intent.lineChanges[${index}]`, ['sku', 'name', 'fromQuantity', 'toQuantity'])
     const fromQuantity = safeInteger(line.fromQuantity, `order amendment intent.lineChanges[${index}].fromQuantity`, 1, maxQuantity)
     const toQuantity = safeInteger(line.toQuantity, `order amendment intent.lineChanges[${index}].toQuantity`, 1, maxQuantity)
-    if (fromQuantity === toQuantity) throw new Error('Order amendment line change must alter quantity.')
+    if (fromQuantity === toQuantity) rejectInvalid('Order amendment line change must alter quantity.')
     return {
       sku: canonicalToken(line.sku, `order amendment intent.lineChanges[${index}].sku`),
       name: canonicalText(line.name, `order amendment intent.lineChanges[${index}].name`, 180),
@@ -2579,7 +2579,7 @@ export function validateEcommerceOrderAmendmentIntent(value: unknown): Ecommerce
     || source.paymentChanged !== false
     || source.refundStarted !== false
     || source.providerCalled !== false
-    || source.evidenceReference !== evidenceReference) throw new Error('Order amendment intent boundary is invalid.')
+    || source.evidenceReference !== evidenceReference) rejectInvalid('Order amendment intent boundary is invalid.')
   return {
     schema: ECOMMERCE_ORDER_AMENDMENT_INTENT_SCHEMA,
     state: 'pending_shop_review',
@@ -2620,7 +2620,7 @@ export async function recordEcommerceOrderAmendment(
   const intent = validateEcommerceOrderAmendmentIntent(intentValue)
   if (intent.replacementRequestId !== replacementRequest.id
     || intent.replacementRequestDigest !== await ecommerceLifecycleDigest(replacementRequest)) {
-    throw new Error('Order amendment does not match its replacement request.')
+    rejectInvalid('Order amendment does not match its replacement request.')
   }
   const withRequest = await appendBuyingRecord(state, replacementRequest, 'requests', 'request_recorded', expectedHeadDigest)
   return appendBuyingRecord(withRequest, intent, 'amendmentIntents', 'order_amendment_intent_recorded', withRequest.headDigest)
@@ -2653,20 +2653,20 @@ export async function buildEcommerceOrderRescheduleIntent(input: {
     || acknowledgement.totalMmk !== order.total
     || !order.promisedAt
     || !commerceOrderHasReleasableReservation(input.commerceState, orderId)) {
-    throw new Error('Rescheduling requires one confirmed, unpaid, uncancelled Ecommerce order with exact reserved stock and promise evidence.')
+    rejectInvalid('Rescheduling requires one confirmed, unpaid, uncancelled Ecommerce order with exact reserved stock and promise evidence.')
   }
   const sourceRequestId = canonicalText(acknowledgement.evidence.sourceRecordId, 'order acknowledgement sourceRecordId', 40)
   if (!requestIdPattern.test(sourceRequestId)
     || replacementRequest.scope !== scope
-    || replacementRequest.id === sourceRequestId) throw new Error('Order reschedule is not attributable to distinct Ecommerce requests in one workspace.')
+    || replacementRequest.id === sourceRequestId) rejectInvalid('Order reschedule is not attributable to distinct Ecommerce requests in one workspace.')
   const originalLines = acknowledgement.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })).sort((left, right) => left.sku.localeCompare(right.sku))
   const replacementLines = replacementRequest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })).sort((left, right) => left.sku.localeCompare(right.sku))
   if (canonicalJson(originalLines) !== canonicalJson(replacementLines)
     || replacementRequest.fulfilment !== order.fulfilment) {
-    throw new Error('A reschedule must preserve every SKU, quantity, and fulfilment method; use Change order for other corrections.')
+    rejectInvalid('A reschedule must preserve every SKU, quantity, and fulfilment method; use Change order for other corrections.')
   }
   const idempotencyKey = canonicalText(input.idempotencyKey, 'idempotencyKey', 40)
-  if (!rescheduleKeyPattern.test(idempotencyKey)) throw new Error('Order reschedule idempotency key is invalid.')
+  if (!rescheduleKeyPattern.test(idempotencyKey)) rejectInvalid('Order reschedule idempotency key is invalid.')
   const createdAt = canonicalTimestamp(input.createdAt, 'createdAt')
   const originalPromisedAt = canonicalTimestamp(order.promisedAt, 'order.promisedAt')
   const requestedPromisedAt = canonicalTimestamp(input.requestedPromisedAt, 'requestedPromisedAt')
@@ -2674,7 +2674,7 @@ export async function buildEcommerceOrderRescheduleIntent(input: {
     || taxTimestampMicros(createdAt, 'createdAt') < taxTimestampMicros(replacementRequest.createdAt, 'replacementRequest.createdAt')
     || taxTimestampMicros(requestedPromisedAt, 'requestedPromisedAt') <= taxTimestampMicros(createdAt, 'createdAt')
     || requestedPromisedAt === originalPromisedAt) {
-    throw new Error('Requested promise must be a different future time and the request cannot predate its order or replacement quote.')
+    rejectInvalid('Requested promise must be a different future time and the request cannot predate its order or replacement quote.')
   }
   const replacementRequestDigest = await ecommerceLifecycleDigest(replacementRequest)
   return validateEcommerceOrderRescheduleIntent({
@@ -2728,7 +2728,7 @@ export function validateEcommerceOrderRescheduleIntent(value: unknown): Ecommerc
   const requestedPromisedAt = canonicalTimestamp(source.requestedPromisedAt, 'order reschedule intent.requestedPromisedAt')
   const fulfilment = source.fulfilment as EcommerceFulfilment
   if (taxTimestampMicros(requestedPromisedAt, 'order reschedule intent.requestedPromisedAt') <= taxTimestampMicros(createdAt, 'order reschedule intent.createdAt')) {
-    throw new Error('Order reschedule requested promise must remain after its request.')
+    rejectInvalid('Order reschedule requested promise must remain after its request.')
   }
   const evidenceReference = `ECOMMERCE-RESCHEDULE:${idempotencyKey.slice(4)}:${orderId}:${sourceRequestId}:${replacementRequestId}:${replacementRequestDigest.slice(7, 15)}:${requestedPromisedAt}`
   if (source.schema !== ECOMMERCE_ORDER_RESCHEDULE_INTENT_SCHEMA
@@ -2751,7 +2751,7 @@ export function validateEcommerceOrderRescheduleIntent(value: unknown): Ecommerc
     || source.refundStarted !== false
     || source.riderBooked !== false
     || source.providerCalled !== false
-    || source.evidenceReference !== evidenceReference) throw new Error('Order reschedule intent boundary is invalid.')
+    || source.evidenceReference !== evidenceReference) rejectInvalid('Order reschedule intent boundary is invalid.')
   return {
     schema: ECOMMERCE_ORDER_RESCHEDULE_INTENT_SCHEMA,
     state: 'pending_shop_review',
@@ -2793,7 +2793,7 @@ export async function recordEcommerceOrderReschedule(
   const intent = validateEcommerceOrderRescheduleIntent(intentValue)
   if (intent.replacementRequestId !== replacementRequest.id
     || intent.replacementRequestDigest !== await ecommerceLifecycleDigest(replacementRequest)) {
-    throw new Error('Order reschedule does not match its replacement request.')
+    rejectInvalid('Order reschedule does not match its replacement request.')
   }
   const withRequest = await appendBuyingRecord(state, replacementRequest, 'requests', 'request_recorded', expectedHeadDigest)
   return appendBuyingRecord(withRequest, intent, 'rescheduleIntents', 'order_reschedule_intent_recorded', withRequest.headDigest)
@@ -2836,13 +2836,13 @@ export async function saveEcommerceOrderRequestV2(
   const canonicalScope = canonicalToken(scope, 'scope')
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser recovery is unavailable. The quote receipt was not saved.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The quote receipt was not saved.')
+  if (!storage) rejectInvalid('Browser recovery is unavailable. The quote receipt was not saved.')
+  if (!locks) rejectInvalid('Safe browser locking is unavailable. The quote receipt was not saved.')
   const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
   return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
     const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
     if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
-      throw new Error(currentRead.error || 'Saved checkout recovery cannot be updated safely.')
+      rejectInvalid(currentRead.error || 'Saved checkout recovery cannot be updated safely.')
     }
     const next = await recordEcommerceOrderRequestV2(currentRead.state, request, expectedHeadDigest)
     if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
@@ -2850,7 +2850,7 @@ export async function saveEcommerceOrderRequestV2(
     const nextRaw = canonicalJson(next)
     try {
       storage.setItem(storageKey, nextRaw)
-      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Checkout recovery write could not be confirmed.')
+      if (storage.getItem(storageKey) !== nextRaw) rejectInvalid('Checkout recovery write could not be confirmed.')
       return next
     } catch (error) {
       try {
@@ -2908,13 +2908,13 @@ export async function saveEcommerceReturnIntent(
   const canonicalScope = canonicalToken(scope, 'scope')
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser recovery is unavailable. The return request was not saved.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The return request was not saved.')
+  if (!storage) rejectInvalid('Browser recovery is unavailable. The return request was not saved.')
+  if (!locks) rejectInvalid('Safe browser locking is unavailable. The return request was not saved.')
   const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
   return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
     const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
     if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
-      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+      rejectInvalid(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
     }
     const next = await recordEcommerceReturnIntent(currentRead.state, intent, expectedHeadDigest)
     if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
@@ -2922,7 +2922,7 @@ export async function saveEcommerceReturnIntent(
     const nextRaw = canonicalJson(next)
     try {
       storage.setItem(storageKey, nextRaw)
-      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Return request recovery write could not be confirmed.')
+      if (storage.getItem(storageKey) !== nextRaw) rejectInvalid('Return request recovery write could not be confirmed.')
       return next
     } catch (error) {
       try {
@@ -2948,13 +2948,13 @@ export async function saveEcommerceSupportIntent(
   const canonicalScope = canonicalToken(scope, 'scope')
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser recovery is unavailable. The support request was not saved.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The support request was not saved.')
+  if (!storage) rejectInvalid('Browser recovery is unavailable. The support request was not saved.')
+  if (!locks) rejectInvalid('Safe browser locking is unavailable. The support request was not saved.')
   const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
   return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
     const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
     if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
-      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+      rejectInvalid(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
     }
     const next = await recordEcommerceSupportIntent(currentRead.state, intent, expectedHeadDigest)
     if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
@@ -2962,7 +2962,7 @@ export async function saveEcommerceSupportIntent(
     const nextRaw = canonicalJson(next)
     try {
       storage.setItem(storageKey, nextRaw)
-      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Support request recovery write could not be confirmed.')
+      if (storage.getItem(storageKey) !== nextRaw) rejectInvalid('Support request recovery write could not be confirmed.')
       return next
     } catch (error) {
       try {
@@ -2988,13 +2988,13 @@ export async function saveEcommerceCorrectionIntent(
   const canonicalScope = canonicalToken(scope, 'scope')
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser recovery is unavailable. The correction request was not saved.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The correction request was not saved.')
+  if (!storage) rejectInvalid('Browser recovery is unavailable. The correction request was not saved.')
+  if (!locks) rejectInvalid('Safe browser locking is unavailable. The correction request was not saved.')
   const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
   return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
     const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
     if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
-      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+      rejectInvalid(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
     }
     const next = await recordEcommerceCorrectionIntent(currentRead.state, intent, expectedHeadDigest)
     if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
@@ -3002,7 +3002,7 @@ export async function saveEcommerceCorrectionIntent(
     const nextRaw = canonicalJson(next)
     try {
       storage.setItem(storageKey, nextRaw)
-      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Correction request recovery write could not be confirmed.')
+      if (storage.getItem(storageKey) !== nextRaw) rejectInvalid('Correction request recovery write could not be confirmed.')
       return next
     } catch (error) {
       try {
@@ -3028,13 +3028,13 @@ export async function saveEcommerceCancellationIntent(
   const canonicalScope = canonicalToken(scope, 'scope')
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser recovery is unavailable. The cancellation request was not saved.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The cancellation request was not saved.')
+  if (!storage) rejectInvalid('Browser recovery is unavailable. The cancellation request was not saved.')
+  if (!locks) rejectInvalid('Safe browser locking is unavailable. The cancellation request was not saved.')
   const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
   return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
     const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
     if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
-      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+      rejectInvalid(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
     }
     const next = await recordEcommerceCancellationIntent(currentRead.state, intent, expectedHeadDigest)
     if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
@@ -3042,7 +3042,7 @@ export async function saveEcommerceCancellationIntent(
     const nextRaw = canonicalJson(next)
     try {
       storage.setItem(storageKey, nextRaw)
-      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Cancellation request recovery write could not be confirmed.')
+      if (storage.getItem(storageKey) !== nextRaw) rejectInvalid('Cancellation request recovery write could not be confirmed.')
       return next
     } catch (error) {
       try {
@@ -3068,13 +3068,13 @@ export async function saveEcommerceCancellationDecision(
   const canonicalScope = canonicalToken(scope, 'scope')
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser recovery is unavailable. The cancellation decision was not saved.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The cancellation decision was not saved.')
+  if (!storage) rejectInvalid('Browser recovery is unavailable. The cancellation decision was not saved.')
+  if (!locks) rejectInvalid('Safe browser locking is unavailable. The cancellation decision was not saved.')
   const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
   return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
     const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
     if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
-      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+      rejectInvalid(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
     }
     const next = await recordEcommerceCancellationDecision(currentRead.state, decision, expectedHeadDigest)
     if (next === currentRead.state || canonicalJson(next) === canonicalJson(currentRead.state)) return next
@@ -3082,7 +3082,7 @@ export async function saveEcommerceCancellationDecision(
     const nextRaw = canonicalJson(next)
     try {
       storage.setItem(storageKey, nextRaw)
-      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Cancellation decision recovery write could not be confirmed.')
+      if (storage.getItem(storageKey) !== nextRaw) rejectInvalid('Cancellation decision recovery write could not be confirmed.')
       return next
     } catch (error) {
       try {
@@ -3109,20 +3109,20 @@ export async function saveEcommerceOrderAmendment(
   const canonicalScope = canonicalToken(scope, 'scope')
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser recovery is unavailable. The order change was not saved.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The order change was not saved.')
+  if (!storage) rejectInvalid('Browser recovery is unavailable. The order change was not saved.')
+  if (!locks) rejectInvalid('Safe browser locking is unavailable. The order change was not saved.')
   const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
   return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
     const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
     if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
-      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+      rejectInvalid(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
     }
     const next = await recordEcommerceOrderAmendment(currentRead.state, replacementRequest, intent, expectedHeadDigest)
     const previousRaw = storage.getItem(storageKey)
     const nextRaw = canonicalJson(next)
     try {
       storage.setItem(storageKey, nextRaw)
-      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Order amendment recovery write could not be confirmed.')
+      if (storage.getItem(storageKey) !== nextRaw) rejectInvalid('Order amendment recovery write could not be confirmed.')
       return next
     } catch (error) {
       try {
@@ -3149,20 +3149,20 @@ export async function saveEcommerceOrderReschedule(
   const canonicalScope = canonicalToken(scope, 'scope')
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser recovery is unavailable. The reschedule request was not saved.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The reschedule request was not saved.')
+  if (!storage) rejectInvalid('Browser recovery is unavailable. The reschedule request was not saved.')
+  if (!locks) rejectInvalid('Safe browser locking is unavailable. The reschedule request was not saved.')
   const storageKey = ecommerceBuyingStateStorageKey(canonicalScope)
   return locks.request(`supermega:ecommerce:buying-lifecycle:${encodeURIComponent(canonicalScope)}`, { mode: 'exclusive' }, async () => {
     const currentRead = await readEcommerceBuyingState(canonicalScope, storage)
     if (!currentRead.state || currentRead.status === 'invalid' || currentRead.status === 'unavailable') {
-      throw new Error(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
+      rejectInvalid(currentRead.error || 'Saved Ecommerce recovery cannot be updated safely.')
     }
     const next = await recordEcommerceOrderReschedule(currentRead.state, replacementRequest, intent, expectedHeadDigest)
     const previousRaw = storage.getItem(storageKey)
     const nextRaw = canonicalJson(next)
     try {
       storage.setItem(storageKey, nextRaw)
-      if (storage.getItem(storageKey) !== nextRaw) throw new Error('Order reschedule recovery write could not be confirmed.')
+      if (storage.getItem(storageKey) !== nextRaw) rejectInvalid('Order reschedule recovery write could not be confirmed.')
       return next
     } catch (error) {
       try {
@@ -3207,20 +3207,20 @@ export async function prepareEcommerceShopDraftV2(input: {
 }): Promise<EcommerceShopDraftV2> {
   const request = await validateEcommerceOrderRequestV2(input.request)
   const state = await validateEcommerceBuyingState(input.state, request.scope)
-  if (!ecommerceBuyingStateContains(state, request)) throw new Error('The quote receipt is not the exact recovered Ecommerce record.')
+  if (!ecommerceBuyingStateContains(state, request)) rejectInvalid('The quote receipt is not the exact recovered Ecommerce record.')
   const confirmedAt = canonicalTimestamp(input.confirmedAt, 'confirmedAt')
-  if (Date.parse(confirmedAt) < Date.parse(request.createdAt)) throw new Error('Shop handoff confirmation precedes the request.')
-  if (Date.parse(confirmedAt) > Date.parse(request.quote.expiresAt)) throw new Error('Checkout quote expired before Shop review.')
+  if (Date.parse(confirmedAt) < Date.parse(request.createdAt)) rejectInvalid('Shop handoff confirmation precedes the request.')
+  if (Date.parse(confirmedAt) > Date.parse(request.quote.expiresAt)) rejectInvalid('Checkout quote expired before Shop review.')
   const catalog = input.currentCatalog.map(currentCatalogItem)
   const bySku = new Map(catalog.map((item) => [item.sku, item]))
-  if (bySku.size !== catalog.length) throw new Error('Current Shop catalog SKUs must be unique.')
+  if (bySku.size !== catalog.length) rejectInvalid('Current Shop catalog SKUs must be unique.')
   request.lines.forEach((line) => {
     const item = bySku.get(line.sku)
     if (!item
       || item.name !== line.name
       || item.variant !== line.variant
       || item.price !== line.unitPriceMmk
-      || item.onHand < line.quantity) throw new Error('A quoted item, variant, price, or availability changed.')
+      || item.onHand < line.quantity) rejectInvalid('A quoted item, variant, price, or availability changed.')
   })
   const promotion = commercePromotionDecision(
     input.currentPromotionPolicies,
@@ -3228,17 +3228,17 @@ export async function prepareEcommerceShopDraftV2(input: {
     request.quote.subtotalMmk,
     confirmedAt,
   )
-  if (!promotion) throw new Error('The Shop promotion decision is invalid.')
+  if (!promotion) rejectInvalid('The Shop promotion decision is invalid.')
   const shipping = commerceShippingDecision(
     input.currentShippingPolicies,
     request.fulfilment,
     request.deliveryAddress?.township ?? null,
     confirmedAt,
   )
-  if (!shipping) throw new Error('The Shop shipping decision is invalid.')
-  if (shipping.status === 'rejected') throw new Error(`Shop delivery is unavailable for ${shipping.township ?? 'this township'} (${shipping.reason}).`)
+  if (!shipping) rejectInvalid('The Shop shipping decision is invalid.')
+  if (shipping.status === 'rejected') rejectInvalid(`Shop delivery is unavailable for ${shipping.township ?? 'this township'} (${shipping.reason}).`)
   const listedSubtotalMmk = promotion.netSubtotalMmk + shipping.feeMmk
-  if (!Number.isSafeInteger(listedSubtotalMmk) || listedSubtotalMmk < 1) throw new Error('The Shop total exceeds the safe MMK boundary.')
+  if (!Number.isSafeInteger(listedSubtotalMmk) || listedSubtotalMmk < 1) rejectInvalid('The Shop total exceeds the safe MMK boundary.')
   const tax = reviewEcommerceTax(
     input.currentTaxConfigurations,
     listedSubtotalMmk,
@@ -3253,8 +3253,8 @@ export async function prepareEcommerceShopDraftV2(input: {
     totalMmk,
     confirmedAt,
   )
-  if (!payment) throw new Error('The Shop payment decision is invalid.')
-  if (payment.status === 'rejected') throw new Error(`Shop payment method is unavailable (${payment.reason}).`)
+  if (!payment) rejectInvalid('The Shop payment decision is invalid.')
+  if (payment.status === 'rejected') rejectInvalid(`Shop payment method is unavailable (${payment.reason}).`)
   return {
     schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V7,
     mode: 'browser-memory-shop-draft',
@@ -3344,11 +3344,11 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || source.state !== 'review_required'
     || !Array.isArray(source.lines)
     || source.lines.length < 1
-    || source.lines.length > maxLines) throw new Error('Shop draft boundary is invalid.')
+    || source.lines.length > maxLines) rejectInvalid('Shop draft boundary is invalid.')
   const sourceRequestId = canonicalText(source.sourceRequestId, 'Shop draft.sourceRequestId', 40)
   const id = canonicalText(source.id, 'Shop draft.id', 40)
   if (!requestIdPattern.test(sourceRequestId) || id !== `ESD-${sourceRequestId.slice(4)}`) {
-    throw new Error('Shop draft identity is invalid.')
+    rejectInvalid('Shop draft identity is invalid.')
   }
   const sourcePreviewDigest = canonicalDigest(source.sourcePreviewDigest, 'Shop draft.sourcePreviewDigest')
   const quoteDigest = canonicalDigest(source.quoteDigest, 'Shop draft.quoteDigest')
@@ -3356,10 +3356,10 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   const confirmedAt = canonicalTimestamp(source.confirmedAt, 'Shop draft.confirmedAt')
   const quoteExpiresAt = canonicalTimestamp(source.quoteExpiresAt, 'Shop draft.quoteExpiresAt')
   if (Date.parse(createdAt) > Date.parse(confirmedAt) || Date.parse(confirmedAt) > Date.parse(quoteExpiresAt)) {
-    throw new Error('Shop draft timing is invalid.')
+    rejectInvalid('Shop draft timing is invalid.')
   }
   const fulfilment = source.fulfilment
-  if (!fulfilmentMethods.includes(fulfilment as EcommerceFulfilment)) throw new Error('Shop draft fulfilment is invalid.')
+  if (!fulfilmentMethods.includes(fulfilment as EcommerceFulfilment)) rejectInvalid('Shop draft fulfilment is invalid.')
   const customerProfile = structured
     ? customerProfileSnapshotShape(source.customerProfile, 'Shop draft.customerProfile')
     : undefined
@@ -3369,9 +3369,9 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
       : deliveryAddressSnapshotShape(source.deliveryAddress, 'Shop draft.deliveryAddress')
     : undefined
   if (structured && (fulfilment === 'delivery') !== Boolean(deliveryAddress)) {
-    throw new Error('Shop draft customer and delivery identity are invalid.')
+    rejectInvalid('Shop draft customer and delivery identity are invalid.')
   }
-  if (source.currency !== 'MMK') throw new Error('Shop draft currency is invalid.')
+  if (source.currency !== 'MMK') rejectInvalid('Shop draft currency is invalid.')
   const operatingContext = exactObject(source.operatingContext, 'Shop draft.operatingContext', [
     'organizationScope', 'operatingUnitLocationId', 'sourceAuthority', 'targetAuthority', 'recordType', 'writePolicy',
   ])
@@ -3380,10 +3380,10 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || operatingContext.sourceAuthority !== 'ecommerce'
     || operatingContext.targetAuthority !== 'commerce'
     || operatingContext.recordType !== 'order_request'
-    || operatingContext.writePolicy !== 'human_review_required') throw new Error('Shop draft operating authority is invalid.')
+    || operatingContext.writePolicy !== 'human_review_required') rejectInvalid('Shop draft operating authority is invalid.')
   const lines = source.lines.map((line, index) => quoteLine(line, `Shop draft.lines[${index}]`))
   if (lines.some((line, index) => index > 0 && lines[index - 1].sku >= line.sku)) {
-    throw new Error('Shop draft lines must use unique canonical SKU order.')
+    rejectInvalid('Shop draft lines must use unique canonical SKU order.')
   }
   const productTotal = lines.reduce((total, line) => total + line.lineTotalMmk, 0)
   const pricing = exactObject(source.pricing, 'Shop draft.pricing', [
@@ -3392,7 +3392,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   const subtotalMmk = safeInteger(pricing.subtotalMmk, 'Shop draft.pricing.subtotalMmk', 1)
   const totalMmk = safeInteger(source.totalMmk, 'Shop draft.totalMmk', 1)
   const pricingTotal = safeInteger(pricing.totalMmk, 'Shop draft.pricing.totalMmk', 1)
-  if (subtotalMmk !== productTotal) throw new Error('Shop draft pricing subtotal is invalid.')
+  if (subtotalMmk !== productTotal) rejectInvalid('Shop draft pricing subtotal is invalid.')
   const promotion = exactObject(pricing.promotion, 'Shop draft.pricing.promotion', [
     'schema', 'status', 'code', 'policyRevision', 'policyActionId', 'discountBasisPoints',
     'grossSubtotalMmk', 'discountMmk', 'netSubtotalMmk', 'reviewedAt', 'reason',
@@ -3431,7 +3431,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || grossSubtotalMmk !== subtotalMmk
     || netSubtotalMmk !== grossSubtotalMmk - discountMmk
     || reviewedAt !== confirmedAt
-    ) throw new Error('Shop draft promotion boundary is invalid.')
+    ) rejectInvalid('Shop draft promotion boundary is invalid.')
   const tax = validateEcommerceTaxDecision(pricing.tax)
   const shipping = exactObject(pricing.shipping, 'Shop draft.pricing.shipping', [
     'schema', 'status', 'reason', 'township', 'zoneCode', 'policyRevision', 'policyActionId', 'feeMmk', 'promiseMinutes', 'reviewedAt',
@@ -3455,11 +3455,11 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || shippingReviewedAt !== confirmedAt
     || tax.listedSubtotalMmk !== netSubtotalMmk + shippingFeeMmk
     || pricingTotal !== tax.totalMmk
-    || totalMmk !== pricingTotal) throw new Error('Shop draft shipping boundary is invalid.')
+    || totalMmk !== pricingTotal) rejectInvalid('Shop draft shipping boundary is invalid.')
   const payment = exactObject(pricing.payment, 'Shop draft.pricing.payment', [
     'schema', 'status', 'reason', 'adapter', 'policyRevision', 'policyActionId', 'maximumOrderMmk', 'instructions', 'reviewedAt', 'authorized',
   ])
-  if (!paymentAdapters.includes(payment.adapter as EcommercePaymentAdapter)) throw new Error('Shop draft payment boundary is invalid.')
+  if (!paymentAdapters.includes(payment.adapter as EcommercePaymentAdapter)) rejectInvalid('Shop draft payment boundary is invalid.')
   const paymentPolicyRevision = payment.policyRevision === null ? null : safeInteger(payment.policyRevision, 'Shop draft.pricing.payment.policyRevision', 1)
   const paymentPolicyActionId = payment.policyActionId === null ? null : canonicalText(payment.policyActionId, 'Shop draft.pricing.payment.policyActionId', 160)
   const paymentMaximumOrderMmk = payment.maximumOrderMmk === null ? null : safeInteger(payment.maximumOrderMmk, 'Shop draft.pricing.payment.maximumOrderMmk', 1)
@@ -3470,10 +3470,10 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || paymentPolicyRevision === null || paymentPolicyActionId === null || paymentInstructions === null
     || paymentReviewedAt !== confirmedAt || payment.authorized !== false
     || !ecommercePaymentMatchesFulfilment(fulfilment as EcommerceFulfilment, payment.adapter as EcommercePaymentAdapter)
-    || paymentMaximumOrderMmk !== null && totalMmk > paymentMaximumOrderMmk) throw new Error('Shop draft payment boundary is invalid.')
-  if (tax.reviewedAt !== confirmedAt) throw new Error('Shop draft tax review time is invalid.')
+    || paymentMaximumOrderMmk !== null && totalMmk > paymentMaximumOrderMmk) rejectInvalid('Shop draft payment boundary is invalid.')
+  if (tax.reviewedAt !== confirmedAt) rejectInvalid('Shop draft tax review time is invalid.')
   const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotionStatus}:${policyRevision ?? 'none'}:${discountMmk}:shipping:${shipping.status}:${shippingPolicyRevision ?? 'none'}:${shippingFeeMmk}:tax:${tax.status}:${tax.taxConfigurationRevision ?? 'none'}:${tax.policyActionId ?? 'none'}:${tax.taxMode}:${tax.taxMmk}:${tax.totalMmk}:payment:${payment.status}:${paymentPolicyRevision}:${payment.adapter}`
-  if (source.evidenceReference !== evidenceReference) throw new Error('Shop draft evidence reference is invalid.')
+  if (source.evidenceReference !== evidenceReference) rejectInvalid('Shop draft evidence reference is invalid.')
   return {
     schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V7,
     mode: 'browser-memory-shop-draft',
@@ -3549,4 +3549,9 @@ export function ecommercePaymentLabel(adapter: EcommercePaymentAdapter) {
   if (adapter === 'cash_on_delivery') return 'Cash on delivery'
   if (adapter === 'kbzpay_manual') return 'KBZPay'
   return 'Cash'
+}
+
+// Keep rejection messages and synchronous failure behavior identical across checks.
+function rejectInvalid(message: string): never {
+  throw new Error(message)
 }

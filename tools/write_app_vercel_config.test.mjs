@@ -52,6 +52,11 @@ test('generated Content-Security-Policy locks down clickjacking and script execu
     assert.equal(catchAll.headers['X-Frame-Options'], 'DENY', 'X-Frame-Options must be DENY')
     assert.equal(catchAll.headers['X-Content-Type-Options'], 'nosniff', 'X-Content-Type-Options must be nosniff')
     assert.equal(catchAll.headers['Referrer-Policy'], 'no-referrer', 'Referrer-Policy must be no-referrer')
+    assert.equal(
+      catchAll.headers['Permissions-Policy'],
+      'camera=(self), geolocation=(), microphone=(), payment=(), usb=()',
+      'Permissions-Policy must allow only same-origin camera scanning and deny other sensitive capabilities',
+    )
   } finally {
     await rm(workspace, { recursive: true, force: true })
   }

@@ -1,19 +1,19 @@
 # HQ now
 
-Updated: 2026-08-21
+Updated: 2026-09-02
 Owner: founder / CEO
-Mode: Codex-only guarded production release; managed operation remains isolated
+Mode: Codex-only guarded local release candidate; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `a8fad84e96ada08d2dcb923eec203cdff1604a73`
-Live state observed: `2026-08-21T04:58:02.649Z`
+Live release commit: `6647a2b241aa198a490643c5d38f6edb6e4caddc`
+Live state observed: `2026-08-25T18:44:13.180Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
 Live managed persistence ready: `false`
 Live security ready: `false`
 
-Product checkpoint: current tenant-activation work passed 651/651; release requires current HEAD and a fresh handoff.
-Live freshness: `supermega.release-handoff.v2` refreshed paired identity and remote main on 2026-08-21. Operations stay fail-closed pending post-deploy proof.
+Candidate: `6e4cc119145c3d25e506fd82b5668387978b6533` passed v264; main protection is healthy. Current gate: one owner-clicked, lease-enforced review push from `2741ae1201a6af1ce69d9bdecc32084fc4913fc6`.
+Live remains `6647a2b241aa198a490643c5d38f6edb6e4caddc`; merge and deployment authority is false.
 
 ## North-star outcome
 
@@ -55,11 +55,11 @@ Research decisions are in `hq/research/`; roadmap: `hq/TIMELINE.md`; agent plan:
 
 ## Verified baseline
 
-- Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
+- Product: four-product setup handoff, recovery, and Plant CAPA release gates pass. Action-packet gates also pass.
 - Tenant activation passed 651/651 after readiness refresh; the prior Spa packet passed an independent 651/651. Earlier 390 px Shop QA had no overflow, overlay, or console warning. None proves deployment.
 - The deterministic 12-profile rehearsal passes 24 rows. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero.
-- Both domains serve deployed `a8fad84e96ada08d2dcb923eec203cdff1604a73`; the handoff proved paired brand, context, and catalog identities match. Retained prior evidence says the scheduler ceiling is one job, and exact live verification passes. The fresh identity packet did not re-run scheduler proof.
+- Both domains serve deployed `6647a2b241aa198a490643c5d38f6edb6e4caddc`; paired brand, context, and catalog identities match. Retained prior evidence says the scheduler ceiling is one job, and exact live verification passes.
 - Working-set trim is non-terminating and stops no process. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -72,7 +72,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack live product activation proof; model calls fail closed.
 - The digest-bound managed readiness ledger records protected PostgreSQL 17 at schema v11 with zero local-target drift, metadata RLS, browser-role denial, and a clear Security Advisor. It does not authorize a tenant or production release.
 - Storage privacy, managed persistence, and self-serve isolation have bounded proof records, but the live products remain isolated samples and no named customer tenant is activated.
-- Live HQ and both domains agree on `a8fad84e`; no release drift is present. Hosted safety proofs are ready, but one production-activation decision blocks a named tenant and live claim; external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `6647a2b2`; no release drift is present. Main protection is verified, but `6e4cc119` is not pushed, reviewed, merged, or deployed; external handoffs require `release:handoff:verify`.
 - No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
 - The deleted isolated-v11 self-serve proof covers six RLS and replay controls. A real tenant still awaits the founder `production_activation` decision in `hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md`.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
@@ -90,11 +90,9 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Owner-review the normal initial branch push for the exact freshly verified candidate.
-2. Review the published branch, then separately owner-review merge and paired production workflow as
-   separate gates; never infer them from the green local candidate.
-3. Run post-deploy desktop/mobile and tenant-isolation proof on the exact release.
-4. Replace the Spa sample identities with one named owner and reviewed business
-   data, then activate exactly one isolated portal and measure setup and daily use.
-5. Custom work and further SaaS follow that client through the governed extension
-   contract instead of a code fork or another product shell.
+1. With the owner present: fresh `b85d96f4` Spa preview, 16 hosted checks, then v4 pack. Never reuse a timed-out plan.
+2. Owner-review one lease-enforced review-branch push of exact `6e4cc119145c3d25e506fd82b5668387978b6533`.
+3. Bind PR #561 to that head, finish CI/review, then separately gate merge and paired production release.
+4. Require four-route mobile/desktop, isolation, recovery, rollback, runtime-log, and observability receipts.
+5. Replace Spa samples with reviewed owner data and enable one counter only after live-readiness acceptance.
+6. Measure setup, daily work, exception closure, recovery, and owner review; scale the other products from that evidence.

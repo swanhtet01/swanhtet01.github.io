@@ -147,4 +147,37 @@ assert.throws(
 )
 checks += 1
 
+// Exported document IDs share one namespace, including the skip-link target
+// and section headings. Path links must resolve to their own page in any order.
+for (const slugs of [
+  ['/', '/content', '/home', '/home-section-1'],
+  ['/', '/home-section-1', '/content', '/home'],
+  ['/', '/a/b', '/a-b', '/a-b-2'],
+  ['/', '/home-title', '/contact', '/contact-title'],
+  ['/', '/contact-title', '/contact'],
+]) {
+  const artifact = {
+    ...englishArtifact,
+    pages: slugs.map((slug, index) => ({
+      ...englishArtifact.pages[0], slug,
+      navigation: { visible: true, label: `Page ${index}` },
+      hero: { ...englishArtifact.pages[0].hero, ctaLabel: `Open ${index}`, ctaHref: slug },
+    })),
+  }
+  const html = buildWebsiteHtml(artifact)
+  const ids = [...html.matchAll(/<[a-z][^>]*\sid="([^"]+)"/g)].map(match => match[1])
+  check(new Set(ids).size === ids.length, `unique document IDs for ${slugs.join(', ')}`)
+  const articles = [...html.matchAll(/<article\b[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/article>/g)]
+  check(articles.length === slugs.length, 'every page remains available')
+  articles.forEach((article, index) => {
+    check(html.includes(`data-page="${article[1]}" href="#${article[1]}">Skip to content</a>`), `page ${index} skip link keeps the current page selected`)
+    check(html.includes(`body:has(.site-page[id="${article[1]}"]:target) .skip-link[data-page="${article[1]}"] { display: block; }`), `page ${index} activates only its own skip link`)
+    check(article[2].includes(`href="#${article[1]}"`), `page ${index} CTA resolves to its own article`)
+    check(html.includes(`href="#${article[1]}">Page ${index}</a>`), `page ${index} navigation resolves correctly`)
+  })
+  check(buildWebsiteHtml(artifact) === html, 'anchor allocation is deterministic')
+  check(!html.includes('href="#content"'), 'skip navigation never clears the selected page')
+  check(html.includes('body:not(:has(.site-page:target)) .skip-link[data-home="true"] { display: block; }'), 'home skip link is available without a selected page')
+}
+
 console.log(`website export contract: ${checks} checks passed`)

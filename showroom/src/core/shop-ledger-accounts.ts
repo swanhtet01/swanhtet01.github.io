@@ -64,6 +64,8 @@ const CORE_ACCOUNTS: readonly LedgerAccount[] = [
   { code: 'cash_drawer', role: 'payment_clearing', type: 'asset', name: 'Cash drawer', nameMy: 'ငွေအံ' },
   { code: 'cash_kbz_wallet', role: 'payment_clearing', type: 'asset', name: 'KBZPay wallet', nameMy: 'KBZPay ပိုက်ဆံအိတ်' },
   { code: 'cash_wave_wallet', role: 'payment_clearing', type: 'asset', name: 'WavePay wallet', nameMy: 'WavePay ပိုက်ဆံအိတ်' },
+  { code: 'cash_aya_wallet', role: 'payment_clearing', type: 'asset', name: 'AYA Pay wallet', nameMy: 'AYA Pay ပိုက်ဆံအိတ်' },
+  { code: 'cash_mmqr_clearing', role: 'payment_clearing', type: 'asset', name: 'MMQR wallet clearing', nameMy: 'MMQR ငွေလက်ခံ' },
   { code: 'cash_other_clearing', role: 'payment_clearing', type: 'asset', name: 'Other payment clearing', nameMy: 'အခြား ငွေလက်ခံ' },
   { code: 'accounts_receivable', role: 'accounts_receivable', type: 'asset', name: 'Customers owe you', nameMy: 'ဖောက်သည် ကြွေးကျန်' },
   { code: 'correction_receivable', role: 'correction_receivable', type: 'asset', name: 'Invoice corrections owed to you', nameMy: 'ပြင်ဆင်ချက် ရရန်' },
@@ -88,6 +90,8 @@ export function cashAccountCodeForMethod(paymentMethod: string): string {
   const label = paymentMethod.toLowerCase()
   if (label.includes('kbz')) return 'cash_kbz_wallet'
   if (label.includes('wave')) return 'cash_wave_wallet'
+  if (label.includes('aya')) return 'cash_aya_wallet'
+  if (label.includes('mmqr')) return 'cash_mmqr_clearing'
   if (label.includes('cash')) return 'cash_drawer'
   return 'cash_other_clearing'
 }

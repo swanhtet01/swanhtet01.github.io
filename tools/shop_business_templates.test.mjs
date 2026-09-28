@@ -8,8 +8,30 @@ const root = resolve(import.meta.dirname, '..')
 const modulePath = resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')
 const moduleHref = pathToFileURL(modulePath).href
 const model = await import(moduleHref)
+const coreAppSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8')
 
 const expectedTemplateIds = ['mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant', 'beauty-spa', 'bakery']
+
+test('a trade URL navigates without installing sample catalog records', () => {
+  assert.match(coreAppSource, /requestedShopTemplateId && requestedTab === null \? 'counter'/)
+  assert.doesNotMatch(coreAppSource, /provisionLocalShopBusinessTemplateSample|shopTradeDemoAttempt|shopTradeDemoCheckoutBlocked/)
+  assert.match(coreAppSource, /confirmedLocalShop && !managedIdentity && requestedShopTemplate && !activeShopBusinessTemplate/)
+  assert.match(coreAppSource, /<Link to="\/shop\/\?tab=inventory">Manage catalog<\/Link>/)
+})
+
+test('a trade URL cannot relabel or operate an existing managed catalog', () => {
+  for (const token of [
+    'managedTemplateDoorRequiresReview(Boolean(managedIdentity), effectiveMode, managedTemplateId)',
+    'data-template-request="blocked"',
+    'was requested, not applied',
+    'The public trade link did not replace, merge, or relabel it',
+    'Continue existing managed Shop',
+    'to="/shop/?tab=counter"',
+  ]) assert.ok(coreAppSource.includes(token), `managed trade boundary missing: ${token}`)
+  assert.ok(coreAppSource.includes('shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))'))
+  assert.ok(coreAppSource.includes('Checking workspace access. Your catalog has not been changed.'))
+  assert.match(coreAppSource, /requestedShopTemplateState === 'managed-unapplied' && requestedShopTemplate\s*\? `The \$\{requestedShopTemplate\.name\.en\} public request is not applied/)
+})
 
 test('registry carries exactly the 10 supported Myanmar business types', () => {
   assert.deepEqual(model.shopBusinessTemplates.map((template) => template.id), expectedTemplateIds)
@@ -390,7 +412,7 @@ function localStorageStub(entries = {}) {
   }
 }
 
-test('the browser-local lane still installs every trade catalog through the real write boundary', async () => {
+test('the retained sample installer handles explicitly seeded legacy fixtures', async () => {
   // Discover the Commerce storage key by probing a real read rather than hardcoding it, the same
   // way tools/test_plant_business_templates.mjs does.
   const probe = { reads: [], getItem(key) { this.reads.push(key); return null }, setItem() {}, removeItem() {} }
@@ -414,22 +436,19 @@ test('the browser-local lane still installs every trade catalog through the real
   })
 
   try {
-    // The current clean-start contract replaces the generic seed catalog with the selected trade
-    // catalog. Keeping both would put unrelated demo goods beside a spa, pharmacy, or restaurant's
-    // real starter items. The earlier contract test in this file pins that same invariant at the
-    // pure installer; this one proves the browser-local write boundary preserves it.
+    // The clean-start contract replaces the generic seed catalog with the selected trade catalog.
+    // Keeping both would put unrelated demo goods beside a spa, pharmacy, or restaurant's real
+    // starter items. A non-empty till draft is tested separately below and must fail closed.
     assert.equal(model.shopBusinessTemplates.length, 10, 'all ten shipped trade templates are present')
 
     for (const template of model.shopBusinessTemplates) {
-      const store = localStorageStub({
-        'supermega.shop.counter_draft.v1': JSON.stringify({ cart: { 'OLD-SKU': 1 }, customer: 'Previous sale', payment: 'Cash' }),
-      })
+      const store = localStorageStub({ [commerceKey]: JSON.stringify(commerceModel.createSeedCommerce()) })
       globalThis.window = { localStorage: store }
       globalThis.localStorage = store
 
       const disposition = await onboardingRuntime.provisionLocalShopBusinessTemplateSample(template.id)
       assert.equal(disposition, 'installed', `${template.id}: a signed-out install still reports 'installed'`)
-      assert.equal(store.map.has('supermega.shop.counter_draft.v1'), false, `${template.id}: installing a new catalog clears the previous till draft`)
+      assert.equal(store.map.has('supermega.shop.counter_draft.v1'), false, `${template.id}: clean install does not invent a till draft`)
 
       const written = store.map.get(commerceKey)
       assert.ok(typeof written === 'string' && written.length > 0, `${template.id}: the browser-local Shop workspace was written`)
@@ -479,6 +498,52 @@ test('the browser-local lane still installs every trade catalog through the real
       assert.ok(commerceModel.validateCommerceState(state), `${template.id}: the installed workspace is a valid commerce state`)
     }
 
+    // A trade link may replace the exact generic seed or another untouched guided sample, but
+    // it must stop once an operator has added their own catalog evidence. This drives the same
+    // public provisioner the route calls and compares the complete stored record byte-for-byte.
+    const protectedStore = localStorageStub({
+      'supermega.shop.counter_draft.v1': JSON.stringify({ cart: { 'OWNER-SKU': 1 }, customer: 'Current sale', payment: 'Cash' }),
+    })
+    globalThis.window = { localStorage: protectedStore }
+    globalThis.localStorage = protectedStore
+    const draftOnlyBefore = protectedStore.map.get(commerceKey)
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'preserved')
+    assert.equal(protectedStore.map.get(commerceKey), draftOnlyBefore, 'a draft-only operator workspace was not replaced')
+    assert.equal(protectedStore.map.has('supermega.shop.counter_draft.v1'), true, 'the in-progress sale was retained')
+    const ticketsModel = await import('../showroom/src/core/shop-parked-tickets.ts')
+    const active = ticketsModel.transitionCounterTickets(ticketsModel.parseCounterTickets(null), {
+      kind: 'save', basket: { cart: { 'OWNER-SKU': 1 }, customer: '', payment: 'Cash', outcome: 'paid_handoff' },
+    })
+    const parkedOnly = JSON.stringify(ticketsModel.transitionCounterTickets(active, { kind: 'park', id: 'table-one', label: 'Table 1' }))
+    protectedStore.map.set('supermega.shop.counter_draft.v1', parkedOnly)
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'preserved')
+    assert.equal(protectedStore.map.get('supermega.shop.counter_draft.v1'), parkedOnly, 'parked-only work survives a different trade door byte-for-byte')
+    assert.equal(protectedStore.map.get(commerceKey), draftOnlyBefore, 'parked work cannot authorize a catalog replacement')
+    protectedStore.map.set('supermega.shop.counter_draft.v1', JSON.stringify({ schema: 'unknown', cart: {} }))
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'preserved', 'unknown ticket recovery fails closed')
+    protectedStore.map.delete('supermega.shop.counter_draft.v1')
+    protectedStore.map.set(commerceKey, JSON.stringify(commerceModel.createSeedCommerce()))
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('mini-mart'), 'installed')
+    const ownerChange = await commerceModel.mutateCommerceWorkspace((current) => commerceModel.registerCommerceItem(current, {
+      sku: 'OWNER-SKU',
+      name: 'Owner product',
+      onHand: 3,
+      reorderAt: 1,
+      price: 2500,
+    }, {
+      actionId: 'ACT-OWNER-CATALOG-001',
+      capturedAt: new Date().toISOString(),
+      actor: 'Owner',
+      reason: 'Add an operator-owned product before following another trade link.',
+      evidenceReference: 'OWNER-CATALOG-001',
+    }) ?? current)
+    assert.equal(ownerChange.ok, true, 'the owner catalog evidence was stored')
+    protectedStore.map.set('supermega.shop.counter_draft.v1', JSON.stringify({ cart: { 'OWNER-SKU': 1 }, customer: 'Current sale', payment: 'Cash' }))
+    const protectedBefore = protectedStore.map.get(commerceKey)
+    assert.equal(await onboardingRuntime.provisionLocalShopBusinessTemplateSample('pharmacy'), 'preserved')
+    assert.equal(protectedStore.map.get(commerceKey), protectedBefore, 'the second trade link did not alter the owner workspace')
+    assert.equal(protectedStore.map.has('supermega.shop.counter_draft.v1'), true, 'a preserved workspace keeps its in-progress sale')
+
     assert.equal(fetchCalls.length, 0, `the browser-local lane made no network calls, got ${JSON.stringify(fetchCalls)}`)
   } finally {
     globalThis.fetch = realFetch
@@ -486,4 +551,59 @@ test('the browser-local lane still installs every trade catalog through the real
     globalThis.localStorage = realLocalStorage
     if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator)
   }
+})
+
+
+test('Shop setup routes to actual catalog entry without sample provisioning', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/core/ProductOnboardingPage.tsx'), 'utf8')
+  assert.doesNotMatch(source, /provisionLocalShop(?:WorkingSample|BusinessTemplateSample|IndustryPack)/)
+  assert.match(source, /firstTaskPath: '\/shop\/\?tab=inventory'/)
+  assert.match(source, /Enter your products, prices and opening stock/)
+})
+
+test('Ecommerce customer onboarding never invokes synthetic order provisioning', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/core/ProductOnboardingPage.tsx'), 'utf8')
+  assert.doesNotMatch(source, /activateLocalEcommerceWorkingSample/)
+  assert.doesNotMatch(source, /A storefront and checkout sample are ready/)
+  assert.match(source, /Connect your product catalog, set delivery details, and save your storefront/)
+  for (const product of ['website', 'ecommerce']) {
+    const path = source.match(new RegExp(`${product}: \\{[\\s\\S]*?firstTaskPath: '([^']+)'`))[1]
+    const destination = new URL(path, 'https://app.supermega.dev')
+    assert.equal(destination.pathname, `/${product}/`)
+    assert.equal(destination.searchParams.get('workspace'), '1', 'completed setup must open the workspace rather than repeat assisted intake')
+  }
+})
+
+
+test('catalog setup destinations resolve to Stock rather than fallback Sell', async () => {
+  const { activeCommerceTab } = await import('../showroom/src/core/commerce-tabs.ts')
+  const onboarding = await readFile(resolve(root, 'showroom/src/core/ProductOnboardingPage.tsx'), 'utf8')
+  const setupPath = onboarding.match(/commerce: \{[\s\S]*?firstTaskPath: '([^']+)'/)[1]
+  const catalogPath = coreAppSource.match(/<Link to="([^"]+)">Manage catalog<\/Link>/)[1]
+  for (const path of [setupPath, catalogPath]) {
+    const url = new URL(path, 'https://app.supermega.dev')
+    assert.equal(url.pathname, '/shop/')
+    assert.equal(activeCommerceTab(url.searchParams.get('tab')), 'inventory')
+  }
+})
+
+test('Ecommerce empty local catalog goes to Stock while managed setup remains separate', async () => {
+  const source = await readFile(resolve(root, 'showroom/src/products/ecommerce/EcommerceProduct.tsx'), 'utf8')
+  const { activeCommerceTab } = await import('../showroom/src/core/commerce-tabs.ts')
+  const action = source.match(/if \(importNeeded\) \{\s*navigate\(managedIdentity \? '([^']+)' : '([^']+)'\)/)
+  assert.ok(action, 'catalog action must distinguish managed and local setup')
+  assert.equal(action[1], '/settings/?product=ecommerce')
+  const local = new URL(action[2], 'https://app.supermega.dev')
+  assert.equal(local.pathname, '/shop/')
+  assert.equal(activeCommerceTab(local.searchParams.get('tab')), 'inventory')
+})
+
+
+test('private counter browser fixture explicitly supplies validated trade data', async () => {
+  const { miniMartCounterFixture } = await import('./verify_app_entry_rendered.mjs')
+  const fixture = miniMartCounterFixture()
+  const state = commerceModel.validateCommerceState(JSON.parse(fixture.retained[commerceModel.COMMERCE_KEY]))
+  assert.equal(commerceModel.commerceWorkingSampleCatalogId(state), 'mini-mart')
+  assert.ok(state.items.some(item => item.name === 'Premium rice 25kg'))
+  assert.deepEqual(miniMartCounterFixture(), fixture)
 })

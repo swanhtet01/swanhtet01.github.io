@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 
+import { emitOutcomeTelemetry, type OutcomeTelemetryStage } from '../analytics/outcome-telemetry'
 import { recordBehaviorSignal } from './behavior-trail'
 import {
   acceptPilotOutcome,
@@ -83,7 +84,12 @@ export function PilotOutcomePanel({
   function start() {
     if (!metric) return
     try {
-      startPilotOutcome(window.localStorage, setup, metric)
+      const checkpoint = startPilotOutcome(window.localStorage, setup, metric)
+      emitOutcomeTelemetry({
+        pilotProduct: setup.product,
+        stage: 'workflow_started',
+        evidenceDigest: checkpoint.checkpointDigest,
+      })
       recordChoice(`Start ${label} outcome proof`)
       setNotice('Starting checkpoint saved from validated aggregate data. Run one real workflow, then return here.')
       onChanged()
@@ -97,6 +103,18 @@ export function PilotOutcomePanel({
     try {
       const review = acceptPilotOutcome(window.localStorage, report, setup.owner)
       onAccepted?.(report, review)
+      // This explicit owner action is the first point where all four claims are true at once:
+      // the source revision completed, the improved/clear report was accepted, its accountable
+      // decision closed, and the named owner reviewed the exact result. Never infer them on render.
+      const acceptedStages: readonly OutcomeTelemetryStage[] = [
+        'workflow_completed',
+        'proof_accepted',
+        ...(onAccepted ? ['action_closed' as const] : []),
+        'result_reviewed',
+      ]
+      for (const stage of acceptedStages) {
+        emitOutcomeTelemetry({ pilotProduct: setup.product, stage, evidenceDigest: review.reportDigest })
+      }
       recordChoice(`Accept ${label} pilot outcome`)
       setNotice('Named-owner acceptance and its exact decision proof were saved. New product evidence will reopen the proof.')
       onChanged()

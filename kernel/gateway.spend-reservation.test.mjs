@@ -1,5 +1,9 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
+
+// These fixtures mock the cloud protocol; never inherit a real local model route.
+process.env.SUPERMEGA_OLLAMA_ENABLED = '0'
+delete process.env.SUPERMEGA_OLLAMA_MODEL
 import { readFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'

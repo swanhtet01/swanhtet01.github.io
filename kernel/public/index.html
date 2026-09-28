@@ -56,8 +56,9 @@
   .bars{display:grid;gap:7px}.bar{display:grid;grid-template-columns:90px 1fr auto;gap:9px;align-items:center;font-size:12.5px}
   .bar i{height:8px;border-radius:999px;background:var(--accent);display:block;min-width:4px}
   /* leads */
-  .lead{display:grid;grid-template-columns:1fr auto;gap:10px;border:1px solid var(--line);border-radius:8px;padding:13px 15px;background:var(--surf-2)}
-  .lead h3{font-size:16px}.lead .meta{color:var(--muted);font-size:12.5px;margin-top:3px}.lead .msg{margin-top:8px;font-size:13px}
+  .lead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;border:1px solid var(--line);border-radius:8px;padding:13px 15px;background:var(--surf-2)}
+  .lead>div{min-width:0;overflow-wrap:anywhere}
+  .lead h3{font-size:16px}.lead .meta{color:var(--muted);font-size:12.5px;margin-top:3px}.lead .msg{margin-top:8px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
   .pill{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-2)}
   .pill.won{background:rgba(52,211,153,.10);color:var(--good)}
   /* pipeline */
@@ -142,6 +143,7 @@
   @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
   .err-banner{background:rgba(248,113,113,.09);border:1px solid rgba(248,113,113,.35);border-radius:8px;padding:14px 16px;color:var(--bad);font-size:13px}
   @media(max-width:820px){
+    .lead{grid-template-columns:minmax(0,1fr)}
     header{display:grid;grid-template-columns:minmax(0,max-content) minmax(0,1fr) max-content;gap:8px 10px;padding:12px 16px}
     .brand{grid-column:1/-1;white-space:nowrap}.grow{display:none}#modeBadge,#aiBadge{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.key{grid-column:1/-1;max-width:none}
     nav{display:block;position:static;padding:10px 16px 0;overflow:visible}.nav-primary{width:100%;max-width:100%;min-width:0;overflow-x:auto;scrollbar-width:thin}.nav-more{border-top:1px solid var(--line)}.nav-more summary{width:max-content}.nav-menu{position:static;width:100%;max-width:100%;grid-template-columns:repeat(5,minmax(150px,1fr));overflow-x:auto;min-width:0;margin-bottom:8px;box-shadow:none}.nav-menu button{min-height:44px}
@@ -449,7 +451,7 @@ const getOpsKey=()=>$('#opsKey').value.trim()
 const hasOpsKey=()=>getOpsKey().length>0
 let consoleAccessGranted=false
 let requestedConsoleView=location.hash==='#company'?'company':location.hash==='#activation'?'workcells':'overview'
-let dealLead=null, lastPacket=null
+let dealLead=null, lastPacket=null, dealGeneration=0
 let companyRoster=[], companyDraft=null, companyAgentLimit=1, companyWorkOrders=[], companyOperations=null, companyOpenWorkOrder=null, companyCeoCycle=null
 let companyPlaybooks=[], companyPlaybookPlan=null, companyPreparedPlaybookStage=null, companyMissions=[], companyOpenMission=null
 let companyAuth=null, companyAccessInventory=null
@@ -1562,15 +1564,20 @@ async function loadOverview(){
   renderOverview(r)
 }
 
-async function loadLeads(){
+async function loadLeads(cursor=''){
   const box=$('#leads');box.innerHTML='<div class="loading-pulse">Loading leads…</div>'
   let r
-  try{r=await api('GET','/api/leads/review')}catch(e){box.innerHTML=`<div class="err-banner">Could not load leads — ${esc(String(e.message||'network error'))}</div>`;return}
+  try{r=await api('GET','/api/leads/review'+(cursor?'?cursor='+encodeURIComponent(cursor):''))}catch(e){box.innerHTML=`<div class="err-banner">Could not load leads — ${esc(String(e.message||'network error'))}</div>`;return}
   if(r.reason==='leads_source_not_configured'){$('#addLead').hidden=true;box.innerHTML=`<div class="err-banner">Leads source not configured — this console cannot see contact-form leads. Set ${esc((r.requiredEnv||['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY']).join(' + '))} on the kernel deployment (the same Supabase project the /contact/ form writes to), then reload.</div>`;return}
   if(!r.ok){box.innerHTML=`<div class="err-banner">Could not load leads — ${esc(String(r.reason||'error'))}</div>`;return}
   $('#addLead').hidden=(r.mode!=='memory')
   box.innerHTML=''
-  if(!r.leads||!r.leads.length){box.innerHTML='<div class="empty">No leads yet. They arrive here from the /contact/ form.</div>';return}
+  const navigation=document.createElement('div');navigation.className='row'
+  navigation.innerHTML='<span class="muted">Enquiries ordered by reference. Restart to include newly arrived records.</span>'
+  if(cursor){const restart=document.createElement('button');restart.textContent='Restart enquiry list';restart.onclick=()=>loadLeads();navigation.appendChild(restart)}
+  if(r.nextCursor){const next=document.createElement('button');next.textContent='Next enquiries';next.onclick=()=>loadLeads(r.nextCursor);navigation.appendChild(next)}
+  box.appendChild(navigation)
+  if(!r.leads||!r.leads.length){const empty=document.createElement('div');empty.className='empty';empty.textContent=r.hasMore?'No customer enquiries in this page. Continue to the next page.':cursor?'End of enquiry list.':'No customer enquiries found.';box.appendChild(empty);return}
   for(const l of r.leads){
     const el=document.createElement('div');el.className='lead'
     const stage=l.stage?`<span class="pill">${esc(l.stage)}</span>`:''
@@ -1587,7 +1594,7 @@ async function loadLeads(){
   }
   box.querySelectorAll('[data-review]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.review)+'/review',{});if(x.ok){toast('Review recorded');loadLeads()}})
   box.querySelectorAll('[data-conv]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.conv)+'?action=convert',{});if(x.ok){toast('Project created');loadLeads()}})
-  box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealLead=l;openConsoleView('deal');$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'request')})
+  box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealGeneration++;dealLead=l;lastPacket=null;$('#dealOut').innerHTML='';$('#d-run').disabled=false;$('#d-run').textContent='Generate';openConsoleView('deal');$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'request')})
 }
 
 const P_COLS=[['scoping','Scoping'],['deposit','Deposit'],['building','Building'],['live','Live'],['care','Support']]
@@ -1619,35 +1626,62 @@ async function loadProjects(){
   box.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{const d=(dl.deals||[]).find(x=>x.id===b.dataset.prop);if(d)openProposal(d)})
 }
 
-async function loadOutreach(){
-  const r=await api('GET','/api/deals')
+async function loadOutreach(focus=''){
+  const r=await api('GET','/api/deals'+(focus?'?send_status_id='+encodeURIComponent(focus):''))
   const box=$('#outreach');box.innerHTML=''
   if(!r.deals||!r.deals.length){box.innerHTML='<div class="empty">No saved deals yet. Run a deal and click “Save”, and it lands here.</div>';return}
   for(const d of r.deals){
     const p=d.packet||{}
     const el=document.createElement('div');el.className='deal'
     el.innerHTML=`<div class="row" style="justify-content:space-between"><b style="font-size:15px">${esc(p.headline||'(deal)')}</b><span class="pill ${d.status==='sent'?'won':''}">${esc(d.status)}</span></div>
-      <div class="muted" style="font-size:12.5px;margin:4px 0 10px">fit ${p.fit_score||'—'}/100 · ${esc(p.segment||'')} · ${esc((p.pricing&&p.pricing.build_fee_mmk)||'')} MMK</div>
+      <div class="muted" style="font-size:12.5px;margin:4px 0 10px">fit ${p.fit_score||'—'}/100 · ${esc(p.segment||'')} · ${p.pricing?.build_fee_mmk?esc(p.pricing.build_fee_mmk)+' MMK':'Pricing pending review'}</div>
       ${p.outreach_en?`<div class="draft" id="ot-${d.id}">${esc(p.outreach_en)}</div>`:'<div class="muted" style="font-size:12px">No outreach draft.</div>'}
+      <p class="muted" data-send-status="${esc(d.id)}" role="status">${esc(({unconfirmed:'Send outcome is unconfirmed. Check the provider record before further outreach.',accepted:d.status==='sent'?'Accepted by email provider. Delivery is not yet confirmed.':'Provider accepted the email. Saved deal status needs reconciliation.',not_loaded:'Send status has not been checked.',unavailable:'Send status could not be verified. Check again when the service is available.'})[d.outreach_send_state]||(d.outreach_send_state==='none'?'':'Send status could not be verified. Refresh before continuing.'))}</p>
       <div class="row" style="margin-top:10px">
         ${p.outreach_en?`<button class="sm" data-copy="${d.id}">Copy draft</button>`:''}
         <button class="sm" data-prop2="${d.id}">Proposal</button>
         ${d.status!=='approved'&&d.status!=='sent'?`<button class="sm" data-app="${d.id}">Approve</button>`:''}
-        ${d.status==='approved'?`<button class="sm primary" data-emailsend="${d.id}">Send email</button>`:''}
-        ${d.status!=='sent'?`<button class="sm" data-sent="${d.id}">Mark sent</button>`:''}
+        ${['not_loaded','unavailable'].includes(d.outreach_send_state)?`<button class="sm" data-checksend="${esc(d.id)}">Check send status</button>`:''}
+        ${d.status==='approved'&&d.outreach_send_state==='accepted'?`<button class="sm" data-reconcilesend="${esc(d.id)}">Recover sent status</button>`:''}
+        ${d.status==='approved'&&d.outreach_send_state==='none'?`<button class="sm primary" data-emailsend="${d.id}">Send email</button>`:''}
       </div>`
     box.appendChild(el)
   }
+  box.querySelectorAll('[data-reconcilesend]').forEach(b=>b.onclick=async()=>{
+    if(b.disabled)return
+    b.disabled=true
+    const status=b.closest('.deal').querySelector('[data-send-status]')
+    status.textContent='Recovering saved status…'
+    let x
+    try{x=await api('POST','/api/deals/'+encodeURIComponent(b.dataset.reconcilesend)+'?action=reconcile-send',{})}catch{x={ok:false}}
+    if(x.ok){toast('Sent status recovered; no new email sent');loadOutreach(b.dataset.reconcilesend)}
+    else{status.textContent='Status recovery was not confirmed. Check the retained receipt and try again; this action never sends email.';b.disabled=false}
+  })
+  box.querySelectorAll('[data-checksend]').forEach(b=>b.onclick=()=>loadOutreach(b.dataset.checksend))
   box.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.copy);navigator.clipboard.writeText(d.packet.outreach_en||'');toast('Copied draft')})
   box.querySelectorAll('[data-prop2]').forEach(b=>b.onclick=()=>{const d=r.deals.find(x=>x.id===b.dataset.prop2);openProposal(d)})
   box.querySelectorAll('[data-app]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.app,{status:'approved'});loadOutreach()})
   box.querySelectorAll('[data-emailsend]').forEach(b=>b.onclick=async()=>{
-    const d=r.deals.find(x=>x.id===b.dataset.emailsend);const defTo=(d&&d.packet&&d.packet.outreach_en)?'':''
-    const to=prompt('Send to email address:',defTo);if(!to||!to.includes('@'))return
-    const x=await api('POST','/api/deals/'+b.dataset.emailsend+'?action=send',{to})
-    if(x.ok){toast('Email sent → '+to);loadOutreach()}else toast('Error: '+(x.reason||'failed'))
+    if(b.disabled)return
+    const status=b.closest('.deal').querySelector('[data-send-status]')
+    const to=b.dataset.retryTo||prompt('Send to email address:','');if(!to||!to.includes('@'))return
+    b.disabled=true;status.textContent='Submitting…'
+    let x
+    try{x=await api('POST','/api/deals/'+b.dataset.emailsend+'?action=send',{to})}catch{x={ok:false,reason:'outreach_send_unconfirmed'}}
+    if(x.ok){status.textContent='Accepted by email provider. Delivery is not yet confirmed.';toast('Provider accepted email');loadOutreach();return}
+    const messages={
+      outreach_sent_status_unconfirmed:'The provider accepted the email, but its saved status is unconfirmed. Retry saving status; this will not send again.',
+      outreach_send_unconfirmed:'Send outcome is unconfirmed. Check the provider record before any further outreach.',
+      outreach_receipt_unconfirmed:'The send receipt could not be saved. Check the provider record before any further outreach.',
+      outreach_payload_conflict:'This deal has a send reservation for different content or a different recipient. Reconcile it before continuing.',
+      outreach_claim_unavailable:'The send reservation could not be verified. Check service availability before trying again.'
+    }
+    status.textContent=messages[x.reason]||'Email was not confirmed. Review the deal and service status before trying again.'
+    if(x.reason==='outreach_sent_status_unconfirmed'){b.dataset.retryTo=to;b.textContent='Retry saving status';b.disabled=false}
+    else if(['outreach_send_unconfirmed','outreach_receipt_unconfirmed','outreach_payload_conflict'].includes(x.reason)){b.textContent='Needs review'}
+    else{b.disabled=false}
+
   })
-  box.querySelectorAll('[data-sent]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/deals/'+b.dataset.sent,{status:'sent'});loadOutreach();toast('Marked sent')})
 }
 
 function openProposal(d){
@@ -1655,16 +1689,17 @@ function openProposal(d){
   const modules=(p.modules||[]).map(m=>`<li><b>${esc(m.name)}</b> — ${esc(m.why)}</li>`).join('')
   const phases=(p.phases||[]).map((s,i)=>`<li>Phase ${i+1}: ${esc(s)}</li>`).join('')
   const w=window.open('','_blank');if(!w){toast('Allow popups for proposals');return}
-  w.document.write(`<!doctype html><meta charset=utf-8><title>Proposal — ${esc(p.headline||'')}</title>
+  w.document.write(`<!doctype html><meta charset=utf-8><title>Proposal draft — ${esc(p.headline||'')}</title>
   <style>body{font-family:Inter,"Segoe UI",sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#0B0F17;line-height:1.6}h1{font-family:"Space Grotesk",Inter,sans-serif;font-size:26px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#2563EB;margin-top:26px}.muted{color:#5A6478}ul{padding-left:20px}.box{border:1px solid rgba(11,15,23,.14);border-radius:8px;padding:16px;margin-top:8px}@media print{a{display:none}}</style>
-  <h1>SUPERMEGA.dev — Proposal</h1>
+  <h1>SuperMega — Proposal draft</h1>
+  <p class=muted>For review. Scope, pricing and terms require founder approval before a customer commitment.</p>
   <p class=muted>${esc(p.segment||'')} · ${new Date().toLocaleDateString()}</p>
   <h2>The problem</h2><p>${esc(p.pain||'')}</p>
-  <h2>What we'll build</h2><ul>${modules}</ul>
-  <h2>How it works for you</h2><p>Built for Myanmar — MMK, KBZPay / MMQR, bilingual, offline-ready. You own it. AI-native: it drafts, you approve anything that sends, pays, or changes records.${p.operator?' '+esc(p.operator):''}</p>
-  <h2>Timeline</h2><ul>${phases}</ul><p class=muted>Two rounds of revisions included.</p>
-  <h2>Price</h2><div class=box><b>Build:</b> ${esc((p.pricing&&p.pricing.build_fee_mmk)||'')} MMK${p.pricing&&p.pricing.pro_mrr_mmk?` · <b>Care:</b> ${esc(p.pricing.pro_mrr_mmk)} MMK/month`:''}<br><span class=muted>${esc((p.pricing&&p.pricing.rationale)||'')}</span><br><br>To start: <b>50% deposit by KBZPay / MMQR</b>. Balance on go-live + your sign-off.</div>
-  <h2>Next step</h2><p>${esc(p.next_action||'Reply to confirm and we send the KBZPay/MMQR details to start.')}</p>
+  <h2>Proposed work</h2><ul>${modules}</ul>
+  <h2>How it works for you</h2><p>SuperMega prepares the agreed result from your approved business facts. You review it before any separately approved launch.${p.operator?' '+esc(p.operator):''}</p>
+  <h2>Proposed steps</h2><ul>${phases}</ul><p class=muted>Dates and revision scope are agreed before work begins.</p>
+  <h2>Price</h2><div class=box><b>Build:</b> ${p.pricing?.build_fee_mmk?esc(p.pricing.build_fee_mmk)+' MMK':'Pricing pending review'}${p.pricing&&p.pricing.pro_mrr_mmk?` · <b>Care:</b> ${esc(p.pricing.pro_mrr_mmk)} MMK/month`:''}<br><span class=muted>${esc((p.pricing&&p.pricing.rationale)||'')}</span><br><br>Payment terms require founder approval after scoping.</div>
+  <h2>Next step</h2><p>${esc(p.next_action||'Review the business facts and confirm the scope with SuperMega.')}</p>
   <p class=muted>— Swan Htet · swanhtet@supermega.dev · +95 9 500 0721</p>
   <a href="javascript:print()" style="display:inline-block;margin-top:20px;padding:10px 16px;background:#2563EB;color:#fff;border-radius:8px;text-decoration:none">Print / Save PDF</a>`)
   w.document.close()
@@ -1678,9 +1713,13 @@ $('#l-add').onclick=async()=>{
 }
 
 $('#d-run').onclick=async()=>{
+  const generation=++dealGeneration, leadId=dealLead?dealLead.id:null
+  lastPacket=null
   const btn=$('#d-run');btn.disabled=true;btn.textContent='Generating…'
   const out=$('#dealOut');out.innerHTML='<div class="panel muted">Thinking… (drafts only)</div>'
-  const r=await api('POST','/api/deal',{name:$('#d-name').value,company:$('#d-company').value,contact:$('#d-contact').value,workflow:$('#d-workflow').value})
+  let r
+  try{r=await api('POST','/api/deal',{name:$('#d-name').value,company:$('#d-company').value,contact:$('#d-contact').value,workflow:$('#d-workflow').value})}catch{r={ok:false,reason:'Request failed. Try again.'}}
+  if(generation!==dealGeneration)return
   btn.disabled=false;btn.textContent='Generate'
   if(!r.ok){out.innerHTML=`<div class="panel"><b>Could not generate.</b><p class="muted">${esc(r.reason||'error')}${r.reason==='ai_not_configured'?' — set ANTHROPIC_API_KEY.':''}</p></div>`;return}
   lastPacket=r.packet;const p=r.packet
@@ -1690,13 +1729,15 @@ $('#d-run').onclick=async()=>{
     <div class="kv"><dt>Pain</dt><dd>${esc(p.pain||'')}</dd><dt>Operator</dt><dd>${esc(p.operator||'')}</dd></div>
     <div><b>Build:</b> ${(p.modules||[]).map(m=>`<span class="chip">${esc(m.name)}</span>`).join('')}</div>
     <div style="margin:10px 0"><b>Phases:</b> ${(p.phases||[]).map(esc).join(' → ')}</div>
-    <div class="kv"><dt>Build fee</dt><dd>${esc(p.pricing?.build_fee_mmk||'')} MMK</dd><dt>Care / mo</dt><dd>${esc(p.pricing?.pro_mrr_mmk||'')} MMK</dd></div>
+    <div class="kv"><dt>Build fee</dt><dd>${p.pricing?.build_fee_mmk?esc(p.pricing.build_fee_mmk)+' MMK':'Pending review'}</dd><dt>Care / mo</dt><dd>${p.pricing?.pro_mrr_mmk?esc(p.pricing.pro_mrr_mmk)+' MMK':'Pending review'}</dd></div>
     ${p.outreach_en?`<div style="margin-top:10px"><b>Outreach draft</b><div class="draft">${esc(p.outreach_en)}</div></div>`:''}
     <div class="muted" style="margin-top:10px"><b>Next:</b> ${esc(p.next_action||'')}</div>
     <div class="row" style="margin-top:14px"><button class="primary" id="d-save">Save deal${dealLead?' to '+esc(dealLead.company||dealLead.name):''}</button></div>
   </div>`
   $('#d-save').onclick=async()=>{
-    const x=await api('POST','/api/deals',{lead_id:dealLead?dealLead.id:null,packet:lastPacket})
+    if(generation!==dealGeneration)return
+    const x=await api('POST','/api/deals',{lead_id:leadId,packet:p})
+    if(generation!==dealGeneration)return
     if(x.ok){toast('Deal saved → Outreach');$('#d-save').textContent='Saved ✓';$('#d-save').disabled=true}
   }
 }

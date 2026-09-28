@@ -33,10 +33,9 @@ async function rest(method, pathAndQuery, body) {
 let pool
 async function pg() {
   if (!pool) {
+    const { postgresPoolConfig } = await import('./store-postgres-config.mjs')
     const pgmod = (await import('pg')).default
-    let ssl = { rejectUnauthorized: false }
-    try { const u = new URL(CONN); if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.searchParams.get('sslmode') === 'disable') ssl = false } catch { /* keep ssl */ }
-    pool = new pgmod.Pool({ connectionString: CONN, ssl, max: 3, idleTimeoutMillis: 10_000 })
+    pool = new pgmod.Pool(postgresPoolConfig(CONN, process.env.SUPERMEGA_POSTGRES_CA_CERT || ''))
   }
   return pool
 }
@@ -298,7 +297,14 @@ const LEAD_COLS = 'lead_id,source,name,email,company,requested_package,goal,lead
 function mapLead(r) {
   return { id: r.lead_id, lead_id: r.lead_id, source: r.source || 'website', name: r.name || '', company: r.company || '', contact: r.email || '', package: r.requested_package || '', message: r.goal || '', score: Number(r.lead_score) || 0, stage: r.lead_stage || '', created_at: r.submitted_at || r.created_at || null }
 }
-export async function listLeads(limit = 150) {
+export async function listLeads(limit = 150, page = null) {
+  if (page) {
+    const after = page.after || ''
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200 || (after && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(after))) throw new Error('invalid_leads_page')
+    if (mode === 'supabase') return (await rest('GET', `supermega_leads?select=${LEAD_COLS}&order=lead_id.asc&limit=${limit}${after ? '&lead_id=gt.' + encodeURIComponent(after) : ''}`)).map(mapLead)
+    if (mode === 'postgres') return (await q(`select ${LEAD_COLS} from public.supermega_leads ${after ? 'where lead_id > $2' : ''} order by lead_id asc limit $1`, after ? [limit, after] : [limit])).map(mapLead)
+    return [...mem.lead.values()].filter((lead) => !after || lead.id > after).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).slice(0, limit)
+  }
   if (mode === 'supabase') return (await rest('GET', `supermega_leads?select=${LEAD_COLS}&order=submitted_at.desc.nullslast,created_at.desc&limit=${limit}`)).map(mapLead)
   if (mode === 'postgres') return (await q(`select ${LEAD_COLS} from public.supermega_leads order by submitted_at desc nulls last, created_at desc limit $1`, [limit])).map(mapLead)
   return memSort([...mem.lead.values()])
@@ -361,6 +367,34 @@ export async function updateLead(id, patch) {
   const cur = mem.lead.get(id); if (!cur) return null; const next = { ...cur, ...patch }; mem.lead.set(id, next); return next
 }
 
+export async function markLeadWon(id) {
+  if (!id) return null
+  if (mode === 'supabase') {
+    const changed = await rest('PATCH', `supermega_leads?lead_id=eq.${encodeURIComponent(id)}&or=(lead_stage.neq.won,lead_stage.is.null)`, { lead_stage: 'won' })
+    if (changed?.[0]) {
+      const lead = mapLead(changed[0])
+      return lead.stage === 'won' ? { lead, changed: true } : null
+    }
+    const lead = await getLead(id)
+    return lead?.stage === 'won' ? { lead, changed: false } : null
+  }
+  if (mode === 'postgres') {
+    const changed = await q(`update public.supermega_leads set lead_stage='won' where lead_id=$1 and lead_stage is distinct from 'won' returning ${LEAD_COLS}`, [id])
+    if (changed[0]) {
+      const lead = mapLead(changed[0])
+      return lead.stage === 'won' ? { lead, changed: true } : null
+    }
+    const lead = await getLead(id)
+    return lead?.stage === 'won' ? { lead, changed: false } : null
+  }
+  const current = mem.lead.get(id)
+  if (!current) return null
+  if (current.stage === 'won') return { lead: current, changed: false }
+  const lead = { ...current, stage: 'won' }
+  mem.lead.set(id, lead)
+  return { lead, changed: true }
+}
+
 // ---------- pipeline: clients + projects ----------
 export async function listProjects() {
   if (mode === 'supabase') return rest('GET', 'supermega_console_projects?order=created_at.desc')
@@ -382,6 +416,7 @@ export async function createClient(c) {
     }
   }
   if (mode === 'postgres') { await ensurePgTables(); return (await q('insert into supermega_console_clients (id,name,plan,contacts,channels,notes) values ($1,$2,$3,$4,$5,$6) returning *', [row.id, row.name, row.plan, JSON.stringify(row.contacts), JSON.stringify(row.channels), row.notes]))[0] }
+  if (mem.client.has(row.id)) throw new Error('console_client_id_conflict')
   const rec = { ...row, created_at: new Date().toISOString() }; mem.client.set(rec.id, rec); return rec
 }
 // Fetch a single client/tenant by id (used by the gateway's server-side plan resolution).
@@ -392,9 +427,10 @@ export async function getClient(id) {
   return mem.client.get(id) || null
 }
 export async function createProject(p) {
-  const row = { id: randomUUID(), client_id: p.client_id || null, lead_id: p.lead_id || null, offer: p.offer || 'build', scope_summary: p.scope_summary || '', status: p.status || 'scoping', deposit_status: p.deposit_status || 'unpaid' }
+  const row = { id: String(p.id || randomUUID()), client_id: p.client_id || null, lead_id: p.lead_id || null, offer: p.offer || 'build', scope_summary: p.scope_summary || '', status: p.status || 'scoping', deposit_status: p.deposit_status || 'unpaid' }
   if (mode === 'supabase') return (await rest('POST', 'supermega_console_projects', row))[0]
   if (mode === 'postgres') { await ensurePgTables(); return (await q('insert into supermega_console_projects (id,client_id,lead_id,offer,scope_summary,status,deposit_status) values ($1,$2,$3,$4,$5,$6,$7) returning *', [row.id, row.client_id, row.lead_id, row.offer, row.scope_summary, row.status, row.deposit_status]))[0] }
+  if (mem.project.has(row.id)) throw new Error('console_project_id_conflict')
   const rec = { ...row, created_at: new Date().toISOString() }; mem.project.set(rec.id, rec); return rec
 }
 export async function updateProject(id, patch) {
@@ -423,7 +459,24 @@ export async function markDepositPaid(id, { method = null } = {}) {
   if (mode === 'postgres') { await ensurePgTables(); return (await q(`update supermega_console_projects set deposit_status='paid', deposit_method=$2 where id=$1 and deposit_status='unpaid' returning *`, [id, method]))[0] || null }
   const cur = mem.project.get(id); if (!cur || cur.deposit_status === 'paid') return null; const next = { ...cur, deposit_status: 'paid', deposit_method: method }; mem.project.set(id, next); return next
 }
-export async function convertedLeadIds() {
+export async function convertedLeadIds(leadIds = null) {
+  if (leadIds !== null) {
+    if (!Array.isArray(leadIds) || leadIds.length > 200 || leadIds.some(id => typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(id))) throw new Error('invalid_conversion_page')
+    const ids = [...new Set(leadIds)]
+    if (!ids.length) return []
+    if (mode === 'supabase') {
+      const converted = []
+      // Existence per ID is complete even when duplicate projects exceed the REST row ceiling.
+      for (let start = 0; start < ids.length; start += 5) {
+        const batch = ids.slice(start, start + 5)
+        const found = await Promise.all(batch.map(id => rest('GET', `supermega_console_projects?select=lead_id&lead_id=eq.${encodeURIComponent(id)}&limit=1`)))
+        found.forEach((rows, i) => { if (rows.some(row => row.lead_id === batch[i])) converted.push(batch[i]) })
+      }
+      return converted
+    }
+    if (mode === 'postgres') { await ensurePgTables(); return (await q('select distinct lead_id from supermega_console_projects where lead_id = any($1::text[])', [ids])).map(row => row.lead_id) }
+    return [...new Set([...mem.project.values()].map(project => project.lead_id).filter(id => ids.includes(id)))]
+  }
   if (mode === 'supabase') return [...new Set((await rest('GET', 'supermega_console_projects?select=lead_id&lead_id=not.is.null')).map((r) => r.lead_id))]
   if (mode === 'postgres') { await ensurePgTables(); return (await q('select distinct lead_id from supermega_console_projects where lead_id is not null')).map((r) => r.lead_id) }
   return [...mem.project.values()].map((p) => p.lead_id).filter(Boolean)
@@ -1933,4 +1986,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, reserveAiBudget, getAiBudgetUsage, settleAiBudgetReservation, reserveTokenSpend, markTokenSpendDispatched, markTokenSpendIndeterminate, settleTokenSpend, releaseTokenSpend, reconcileTokenSpend, getResponseCache, putResponseCache, getControlRecord, putControlRecord, listControlRecords, transitionControlRecord, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, markLeadWon, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, reserveAiBudget, getAiBudgetUsage, settleAiBudgetReservation, reserveTokenSpend, markTokenSpendDispatched, markTokenSpendIndeterminate, settleTokenSpend, releaseTokenSpend, reconcileTokenSpend, getResponseCache, putResponseCache, getControlRecord, putControlRecord, listControlRecords, transitionControlRecord, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }

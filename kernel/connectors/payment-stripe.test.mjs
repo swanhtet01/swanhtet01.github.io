@@ -107,3 +107,184 @@ test('store.recordPaymentEvent returns fresh only the first time', async () => {
   assert.equal((await store.recordPaymentEvent('stripe', 'uniq_evt_1')).fresh, true)
   assert.equal((await store.recordPaymentEvent('stripe', 'uniq_evt_1')).fresh, false)
 })
+
+// Stripe sends multiple v1 signatures while endpoint secrets rotate.
+test('verifyWebhook accepts a matching signature in either rotation position', () => {
+  const { raw, sig } = signed({ id: 'evt_rotation', type: 'checkout.session.completed' })
+  const other = '0'.repeat(64)
+  assert.equal(verifyWebhook(raw, `${sig},v1=${other}`).ok, true)
+  const [timestamp, signature] = sig.split(',')
+  assert.equal(verifyWebhook(raw, `${timestamp},v1=${other},${signature}`).ok, true)
+  assert.equal(verifyWebhook(raw, `${timestamp},v1=${other},v0=${signature.slice(3)}`).ok, false)
+})
+
+test('verifyWebhook rejects malformed timestamps even when signed', () => {
+  for (const t of ['NaN', 'Infinity', '-1', '1.5', '9007199254740992']) {
+    const { raw, sig } = signed({ id: 'evt_bad_timestamp', type: 'checkout.session.completed' }, { t })
+    assert.equal(verifyWebhook(raw, sig).ok, false, t)
+  }
+})
+
+test('verifyWebhook rejects malformed header values without throwing', () => {
+  const { raw, sig } = signed({ id: 'evt_bad_header', type: 'checkout.session.completed' })
+  for (const header of [[], [sig], {}, 42, `${sig},t=1`]) {
+    assert.doesNotThrow(() => verifyWebhook(raw, header))
+    assert.equal(verifyWebhook(raw, header).ok, false)
+  }
+})
+
+test('verifyWebhook rejects signed non-event JSON without throwing', () => {
+  for (const body of [null, [], 42, 'event', {}, { id: 1, type: 'x' }, { id: 'evt_missing_type' }]) {
+    const { raw, sig } = signed(body)
+    assert.doesNotThrow(() => verifyWebhook(raw, sig))
+    assert.equal(verifyWebhook(raw, sig).ok, false)
+  }
+})
+
+test('reconcile retries deposit persistence after the event was recorded', async () => {
+  const project = await store.createProject({ offer: 'build' })
+  const event = paidEvent('evt_retry_after_record', project.id, 5000)
+  const original = store.markDepositPaid
+  try {
+    store.markDepositPaid = async () => { throw new Error('synthetic_storage_failure') }
+    assert.equal((await reconcile(event)).ok, false)
+  } finally { store.markDepositPaid = original }
+  const retry = await reconcile(event)
+  assert.equal(retry.ok, true)
+  assert.equal(retry.paid, true)
+  assert.equal((await store.getProject(project.id)).deposit_status, 'paid')
+})
+
+test('reconcile does not acknowledge a missing project as paid', async () => {
+  const result = await reconcile(paidEvent('evt_missing_project', 'missing-project', 5000))
+  assert.equal(result.ok, false)
+  assert.notEqual(result.paid, true)
+})
+
+test('concurrent deliveries settle the project only once', async () => {
+  const project = await store.createProject({ offer: 'build' })
+  const event = paidEvent('evt_concurrent_retry', project.id, 5000)
+  const results = await Promise.all([reconcile(event), reconcile(event)])
+  assert.ok(results.every(result => result.ok && result.paid))
+  assert.equal(results.filter(result => !result.alreadyPaid).length, 1)
+})
+
+test('verifyWebhook never authenticates normalized bytes in place of the received body', () => {
+  const t = Math.floor(Date.now() / 1000)
+  const raw = Buffer.concat([Buffer.from('{"id":"evt_bytes","type":"'), Buffer.from([0x80]), Buffer.from('"}')])
+  const normalizedSignature = crypto.createHmac('sha256', process.env.STRIPE_WEBHOOK_SECRET)
+    .update(`${t}.${raw.toString('utf8')}`).digest('hex')
+  assert.deepEqual(verifyWebhook(raw, `t=${t},v1=${normalizedSignature}`), { ok: false, reason: 'signature_mismatch' })
+  const exactSignature = crypto.createHmac('sha256', process.env.STRIPE_WEBHOOK_SECRET)
+    .update(`${t}.`).update(raw).digest('hex')
+  assert.deepEqual(verifyWebhook(raw, `t=${t},v1=${exactSignature}`), { ok: false, reason: 'bad_json' })
+})
+
+test('verifyWebhook accepts exact UTF-8 bytes for multilingual event data', () => {
+  const { raw, sig } = signed({ id: 'evt_unicode_bytes', type: 'unhandled', label: 'မြန်မာ café' })
+  assert.equal(verifyWebhook(Buffer.from(raw, 'utf8'), sig).ok, true)
+})
+
+test('HTTP webhook preserves incoming bytes through signature verification', async () => {
+  const { Readable } = await import('node:stream')
+  const { default: handler } = await import('../api/stripe-webhook.mjs')
+  const t = Math.floor(Date.now() / 1000)
+  const raw = Buffer.concat([Buffer.from('{"id":"evt_http_bytes","type":"'), Buffer.from([0x80]), Buffer.from('"}')])
+  const digest = crypto.createHmac('sha256', process.env.STRIPE_WEBHOOK_SECRET)
+    .update(`${t}.${raw.toString('utf8')}`).digest('hex')
+  const req = Readable.from([raw.subarray(0, 10), raw.subarray(10)])
+  req.method = 'POST'
+  req.headers = { 'stripe-signature': `t=${t},v1=${digest}` }
+  const res = { status(code) { this.code = code; return this }, json(body) { this.body = body } }
+  await handler(req, res)
+  assert.equal(res.code, 400)
+  assert.deepEqual(res.body, { ok: false, reason: 'signature_mismatch' })
+})
+
+test('HTTP webhook bounds streamed bodies without trusting Content-Length', async () => {
+  const { Readable } = await import('node:stream')
+  const { default: handler } = await import('../api/stripe-webhook.mjs')
+  const req = Readable.from([Buffer.alloc(1024 * 1024), Buffer.from('x')])
+  req.method = 'POST'
+  req.headers = { 'content-length': '1' }
+  const res = { status(code) { this.code = code; return this }, json(body) { this.body = body } }
+  await handler(req, res)
+  assert.equal(res.code, 413)
+  assert.deepEqual(res.body, { ok: false, reason: 'body_too_large' })
+})
+
+test('HTTP webhook settles aborted requests rather than waiting forever for end', async () => {
+  const { EventEmitter } = await import('node:events')
+  const { default: handler } = await import('../api/stripe-webhook.mjs')
+  for (const termination of ['aborted', 'close', 'error']) {
+    const req = new EventEmitter()
+    req.method = 'POST'
+    req.headers = {}
+    const res = { status(code) { this.code = code; return this }, json(body) { this.body = body } }
+    const pending = handler(req, res)
+    req.emit('data', Buffer.from('{'))
+    req.emit(termination, new Error('private transport detail'))
+    await pending
+    assert.equal(res.code, 400)
+    assert.deepEqual(res.body, { ok: false, reason: 'body_read_error' })
+  }
+})
+
+test('HTTP webhook redacts persistence errors and leaves the event retryable', async () => {
+  const { Readable } = await import('node:stream')
+  const { default: handler } = await import('../api/stripe-webhook.mjs')
+  const original = store.recordPaymentEvent
+  const originalLog = console.error
+  const originalToken = process.env.TELEGRAM_BOT_TOKEN
+  delete process.env.TELEGRAM_BOT_TOKEN
+  const logs = []
+  console.error = (...args) => logs.push(args)
+  const project = await store.createProject({ offer: 'build' })
+  const { raw, sig } = signed(paidEvent('evt_private_failure', project.id, 5000))
+  const deliver = async () => {
+    const req = Readable.from([Buffer.from(raw)])
+    req.method = 'POST'
+    req.headers = { 'stripe-signature': sig }
+    const res = { status(code) { this.code = code; return this }, json(body) { this.body = body } }
+    await handler(req, res)
+    return res
+  }
+  try {
+    store.recordPaymentEvent = async () => { throw new Error('postgres://private-user:private-password@host/private-customer') }
+    const failed = await deliver()
+    assert.equal(failed.code, 500)
+    assert.deepEqual(failed.body, { ok: false, reason: 'reconcile_failed' })
+    assert.equal(JSON.stringify(logs).includes('private-password'), false)
+    assert.equal(JSON.stringify(logs).includes('private-customer'), false)
+    store.recordPaymentEvent = original
+    assert.equal((await deliver()).code, 200)
+    assert.equal((await store.getProject(project.id)).deposit_status, 'paid')
+  } finally {
+    store.recordPaymentEvent = original
+    console.error = originalLog
+    if (originalToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN
+    else process.env.TELEGRAM_BOT_TOKEN = originalToken
+  }
+})
+
+test('reconcile cannot settle payments with absent or malformed integrity metadata', async () => {
+  const variants = [
+    object => { delete object.metadata.expected_cents },
+    object => { object.metadata.expected_cents = 'NaN' },
+    object => { object.metadata.expected_cents = '0' },
+    object => { object.metadata.expected_cents = '1.5' },
+    object => { delete object.metadata.currency },
+    object => { object.metadata.currency = '' },
+    object => { object.amount_total = '5000' },
+    object => { object.currency = null },
+  ]
+  for (const [index, mutate] of variants.entries()) {
+    const project = await store.createProject({ offer: 'build' })
+    const event = paidEvent(`evt_integrity_${index}`, project.id, 5000)
+    mutate(event.data.object)
+    const result = await reconcile(event)
+    assert.equal(result.ok, false)
+    assert.equal(result.detail, 'payment_integrity_metadata_invalid')
+    assert.equal((await store.getProject(project.id)).deposit_status, 'unpaid')
+  }
+})

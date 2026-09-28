@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -73,6 +74,35 @@ import {
   EMPTY_PLANT_ORDER_DIGEST,
 } from '../showroom/src/core/plant-order-foundation.ts'
 import { upsertProductionOrderExecution } from '../showroom/src/core/production-order-portfolio.ts'
+
+const coreAppSource = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+const coreAppCssSource = await readFile(new URL('../showroom/src/core/core-app.css', import.meta.url), 'utf8')
+
+test('the Plant status identifies historical sample dates and uses readable singular copy', () => {
+  assert.match(coreAppSource, /Historical sample date/)
+  assert.match(coreAppSource, /These dates belong to this browser-local sample, not today's production\./)
+  assert.match(coreAppSource, /aria-label=\{managedIdentity \? 'Plant today status' : 'Plant sample status'\}/)
+  assert.match(
+    coreAppSource,
+    /currentShiftMaterialEntries\.length === 1 \? 'record' : 'records'/,
+    'one material row must read as one record',
+  )
+  assert.match(
+    coreAppCssSource,
+    /\.plant-today-source small \{[^}]*color: var\(--core-muted\)[^}]*font-size: var\(--font-size-xs\)[^}]*line-height: 1\.45/s,
+    'the accountable-review note must use readable body-sized contrast instead of the tiny status-label treatment',
+  )
+  assert.match(
+    coreAppCssSource,
+    /\.plant-today-source small \{ display: block; margin-left: 0; text-align: left; \}/,
+    'the accountable-review note must remain visible and readable on mobile',
+  )
+  assert.match(coreAppSource, /\? 'Recover saved Plant data'/)
+  assert.match(coreAppSource, /\? 'Open data recovery'/)
+  assert.match(coreAppSource, /navigate\('\/settings\/#workspace-recovery'\)/)
+  assert.match(coreAppSource, /No Plant record was replaced; use workspace recovery\./)
+  assert.doesNotMatch(coreAppSource, /Restore Plant write access|Restore write access/)
+})
 
 const PLANNING_DAY = '2026-08-07'
 const INSTALLED_AT = `${PLANNING_DAY}T01:00:00.000Z`

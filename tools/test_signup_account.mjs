@@ -1,8 +1,7 @@
-// Guard: the create-account groundwork keeps its promises before any of it is reachable.
+// Guard: pure account validation remains separate from the default-closed Auth helper.
 //
 // PR-1 of hq/strategy/SELF-SERVE-IDENTITY-DESIGN.md ships pure client groundwork for self-serve
-// identity creation, and it must be DEAD CODE: no auth surface, no supabase.auth.signUp (PR-2),
-// nothing reachable from any rendered route. Signup itself stays dark behind the founder-held
+// identity creation. Only managed-trial may now consume validation. Signup stays dark behind the founder-held
 // SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW runtime flag and the provider-side signup toggle, so the
 // dangerous property to guard here is not what this code does -- it is what it must NOT do yet.
 //
@@ -12,8 +11,7 @@
 //      trial's consent pattern
 //   3. the panel machine has no path to `verified` that skips `sent`
 //   4. the sent copy is enumeration-safe: "already registered" is indistinguishable from success
-//   5. the module is pure AND unreferenced -- no fetch, no supabase, no window, and no import
-//      from any other showroom source (PR-2 deletes the unreferenced check when it wires the panel)
+//   5. the module is pure and consumed only by the default-closed Auth helper
 //   6. the third signup door exists only behind the default-off parameter, and both existing
 //      doors are byte-identical with it open or closed -- the founder-conversation door never
 //      disappears
@@ -219,8 +217,7 @@ for (const [pattern, label] of [[/\$\s?\d/, 'a dollar amount'], [/\d[\d,_]*\s*MM
   check(!pattern.test(body), `signup-account.ts ships no pricing surface -- found ${label}`)
 }
 
-// DEAD CODE until PR-2: no file under showroom/src may import this module. PR-2 wires the panel
-// and DELETES this check in the same commit it adds the import.
+// The public panel has not been wired: the guarded helper is the sole consumer.
 function sourceFiles(dir) {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name)
@@ -231,8 +228,8 @@ function sourceFiles(dir) {
 const importers = sourceFiles('showroom/src').filter((path) =>
   !path.endsWith('signup-account.ts') && readFileSync(path, 'utf8').includes('signup-account'))
 check(
-  importers.length === 0,
-  `NOTHING IN showroom/src REFERENCES signup-account YET -- PR-1 is dead code by design, found: ${importers.join(', ')}`,
+  importers.length === 1 && importers[0].replaceAll('\\', '/').endsWith('/core/managed-trial.ts'),
+  `Only the guarded Auth helper may consume account validation, found: ${importers.join(', ')}`,
 )
 
 // --- the third door exists only behind the default-off parameter ----------------------

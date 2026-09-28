@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 
 const mkRes = () => ({ _s: 200, status(s) { this._s = s; return this }, setHeader() {}, json(j) { this._out = { status: this._s, body: j } } })
 async function handlerWith(env) {
-  for (const k of ['SUPERMEGA_OPS_KEY', 'ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'OPENROUTER_API_KEY']) delete process.env[k]
+  for (const k of ['SUPERMEGA_OLLAMA_ENABLED', 'SUPERMEGA_OLLAMA_MODEL', 'SUPERMEGA_OPS_KEY', 'ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'OPENROUTER_API_KEY']) delete process.env[k]
   Object.assign(process.env, env || {})
   return (await import(`./crew.mjs?t=${Math.random()}`)).default
 }

@@ -16,6 +16,7 @@ const root = resolve(import.meta.dirname, '..')
 const appWorkflow = await readFile(resolve(root, '.github/workflows/supermega-app-deploy.yml'), 'utf8')
 const workflow = await readFile(resolve(root, '.github/workflows/supermega-public-release.yml'), 'utf8')
 const ciWorkflow = await readFile(resolve(root, '.github/workflows/showroom-ci.yml'), 'utf8')
+const renderedJourneyVerifier = await readFile(resolve(root, 'tools/verify_app_entry_rendered.mjs'), 'utf8')
 const dependencyAuditWorkflow = await readFile(resolve(root, '.github/workflows/dependency-security.yml'), 'utf8')
 const publicHealthWorkflow = await readFile(resolve(root, '.github/workflows/supermega-public-live-health.yml'), 'utf8')
 const kernelWorkflow = await readFile(resolve(root, '.github/workflows/kernel-deploy.yml'), 'utf8')
@@ -47,6 +48,79 @@ const agentConnectorMap = previewServer.slice(
 const failures = []
 const checks = []
 
+// Exact supported PR event shape has no path, branch, or draft exclusions.
+const allPullRequests = source => {
+  const blocks = [...source.matchAll(/^  pull_request:\n([\s\S]*?)(?=^  \S|^\S|$(?![\s\S]))/gm)]
+  return blocks.length === 1 && blocks[0][0] === '  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n'
+}
+requireContract('required workflows cover every PR including drafts',
+  [ciWorkflow, dependencyAuditWorkflow, kernelWorkflow].every(allPullRequests)
+  && ![ciWorkflow, dependencyAuditWorkflow].some(source => source.includes('github.event.pull_request.draft')))
+// Branch pushes must receive the same checks before a PR exists. A source-repository
+// key keeps fork branches from cancelling an unrelated same-named canonical branch.
+const allBranchPushes = source => {
+  const blocks = [...source.matchAll(/^  push:\n([\s\S]*?)(?=^  \S|^\S|$(?![\s\S]))/gm)]
+  return blocks.length === 1 && blocks[0][0] === "  push:\n    branches: ['**']\n"
+}
+requireContract('app CI covers every branch push without path exclusions', allBranchPushes(ciWorkflow))
+requireContract('branch coverage rejects main-only or path-filtered pushes',
+  !allBranchPushes(ciWorkflow.replace("branches: ['**']", "branches: ['main']"))
+  && !allBranchPushes(ciWorkflow.replace("branches: ['**']", "branches: ['**']\n    paths: ['showroom/**']")))
+requireContract('push and PR CI share a fork-isolated source-branch concurrency group',
+  ciWorkflow.includes('group: showroom-ci-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}')
+  && ciWorkflow.includes('  cancel-in-progress: true\n'))
+const budgetSqlStep = ciWorkflow.split('      - name: Verify durable signup budgets on disposable PostgreSQL\n')[1]?.split('      - name:')[0] || ''
+requireContract('app CI executes real disposable PostgreSQL signup budget tests',
+  budgetSqlStep.includes("SUPERMEGA_TEST_DISPOSABLE_PG17: '1'")
+  && budgetSqlStep.includes('run: python -m unittest tests.test_self_serve_durable_budget -v')
+  && !/^        (?:if|continue-on-error):/m.test(budgetSqlStep))
+requireContract('required check display names bind stable job IDs',
+  ciWorkflow.includes('  validate:\n    name: SuperMega App CI\n')
+  && kernelWorkflow.includes('  verify:\n    name: Kernel Console - Verify & Owner-Gated Release\n'))
+requireContract('required verification jobs cannot be skipped or forgive errors',
+  [[ciWorkflow, 'validate'], [kernelWorkflow, 'verify']].every(([source, id]) => {
+    const header = source.split(`  ${id}:\n`)[1]?.split('    steps:\n')[0]
+    return header && !/^    (?:if|continue-on-error):/m.test(header)
+  }))
+requireContract('all dependency audit packages remain covered',
+  ['platform\n            directory: .\n', 'app\n            directory: showroom\n', 'kernel\n            directory: kernel\n']
+    .every(entry => dependencyAuditWorkflow.includes(`          - package: ${entry}`))
+  && dependencyAuditWorkflow.includes('      fail-fast: false\n')
+  && dependencyAuditWorkflow.includes('run: pip-audit -r requirements-test.txt'))
+
+for (const filter of ['paths', 'paths-ignore', 'branches', 'branches-ignore']) {
+  requireContract(`all-PR guard rejects ${filter}`, !allPullRequests(ciWorkflow.replace('  workflow_dispatch:', `    ${filter}: [main]\n  workflow_dispatch:`)))
+}
+requireContract('all-PR guard rejects missing or duplicate trigger',
+  !allPullRequests(ciWorkflow.replace('  pull_request:', '  push:'))
+  && !allPullRequests(ciWorkflow.replace('  workflow_dispatch:', '  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n  workflow_dispatch:')))
+const aggregate = dependencyAuditWorkflow.split('  required-audits:\n')[1]
+const aggregateScript = aggregate?.match(/^        run: node -e "([^\n]+)"$/m)?.[1]
+requireContract('audit aggregate always requires both actual results',
+  Boolean(aggregateScript)
+  && aggregate.includes('    name: Dependency Security Audit\n')
+  && aggregate.includes('    needs: [npm-audit, pip-audit]\n')
+  && aggregate.includes('    if: ${{ always() }}\n')
+  && aggregate.includes('      NPM_RESULT: ${{ needs.npm-audit.result }}\n')
+  && aggregate.includes('      PIP_RESULT: ${{ needs.pip-audit.result }}\n')
+  && aggregate.includes('    timeout-minutes: 2\n')
+  && !dependencyAuditWorkflow.includes('continue-on-error:')
+  && !dependencyAuditWorkflow.includes('secrets.'))
+if (aggregateScript) {
+  for (const npmResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
+    for (const pipResult of ['success', 'failure', 'cancelled', 'skipped', '', 'null']) {
+      const result = spawnSync(process.execPath, ['-e', aggregateScript], { env: { ...process.env, NPM_RESULT: npmResult, PIP_RESULT: pipResult }, timeout: 5000 })
+      requireContract(`audit aggregate truth table ${npmResult || 'missing'}/${pipResult || 'missing'}`,
+        result.status === (npmResult === 'success' && pipResult === 'success' ? 0 : 1))
+    }
+  }
+}
+for (const name of ['SuperMega App CI', 'Dependency Security Audit', 'Kernel Console - Verify & Owner-Gated Release']) {
+  requireContract(`unique required job ${name}`, [ciWorkflow, dependencyAuditWorkflow, kernelWorkflow]
+    .join('\n').split('\n').filter(line => line === `    name: ${name}`).length === 1)
+}
+
+
 function requireContract(name, condition) {
   checks.push(name)
   if (!condition) failures.push(name)
@@ -56,9 +130,9 @@ requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
 requireContract('dependency audit is read-only, scheduled, and covers every npm lockfile',
   packageJson.scripts?.['security:dependencies'] === 'npm audit --audit-level=low && npm --prefix showroom audit --audit-level=low && npm --prefix kernel audit --audit-level=low'
-  && dependencyAuditWorkflow.includes("- 'package-lock.json'")
-  && dependencyAuditWorkflow.includes("- 'showroom/package-lock.json'")
-  && dependencyAuditWorkflow.includes("- 'kernel/package-lock.json'")
+  && allPullRequests(dependencyAuditWorkflow) && dependencyAuditWorkflow.includes('directory: .')
+  && dependencyAuditWorkflow.includes('directory: showroom')
+  && dependencyAuditWorkflow.includes('directory: kernel')
   && dependencyAuditWorkflow.includes('workflow_dispatch:')
   && dependencyAuditWorkflow.includes("cron: '25 3 * * 1'")
   && dependencyAuditWorkflow.includes('contents: read')
@@ -120,7 +194,8 @@ requireContract('ordered integration batches preserve production safeguards and 
   && releaseIntegrationBatch.includes('createClientDemoWorkspace')
   && releaseIntegrationBatch.includes("file: 'showroom/src/core/client-onboarding.ts'")
   && releaseIntegrationBatch.includes('function managedLoginPath(product: string | null)')
-  && releaseIntegrationBatch.includes('Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser.')
+  && releaseIntegrationBatch.includes('Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.')
+  && releaseIntegrationBatch.includes('Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.')
   && releaseIntegrationBatch.includes('loadManagedOwnerControlRun')
   && releaseIntegrationBatch.includes('const ProductSystemNavigator = lazy(')
   && releaseIntegrationBatch.includes('Choose what you want to run.')
@@ -150,6 +225,16 @@ function runRollbackResolver(args, payload) {
   )
 }
 
+function selectedPython() {
+  const overridePython = process.env.SUPERMEGA_LOCAL_PYTHON?.trim()
+  const localPython = process.platform === 'win32'
+    ? resolve(root, '.venv/Scripts/python.exe')
+    : resolve(root, '.venv/bin/python')
+  return overridePython || (existsSync(localPython)
+    ? localPython
+    : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3')))
+}
+
 async function verifyCanonicalPythonBundle() {
   const bundleRoot = await mkdtemp(join(tmpdir(), 'supermega-vercel-python-'))
   try {
@@ -162,13 +247,7 @@ async function verifyCanonicalPythonBundle() {
     ]) {
       await copyFile(resolve(root, relativePath), resolve(bundleRoot, relativePath))
     }
-    const overridePython = process.env.SUPERMEGA_LOCAL_PYTHON?.trim()
-    const localPython = process.platform === 'win32'
-      ? resolve(root, '.venv/Scripts/python.exe')
-      : resolve(root, '.venv/bin/python')
-    const python = overridePython || (existsSync(localPython)
-      ? localPython
-      : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3')))
+    const python = selectedPython()
     return spawnSync(
       python,
       ['-c', [
@@ -218,6 +297,31 @@ const invalidDeploymentResolution = runRollbackResolver(
   ['deployment', fixtureUrl, 'dpl_fixture123'],
   { id: 'dpl_different', url: 'megaos-release-fixture.vercel.app', target: 'production', readyState: 'READY' },
 )
+// Run the real CLI: invalid provider state must never yield a rollback URL.
+for (const [name, patch, reason] of [
+  ['different project', { projectId: 'prj_other' }, 'project'],
+  ['different alias', { alias: 'supermega.dev' }, 'live_alias'],
+  ['redirect alias', { redirect: 'https://example.com' }, 'redirect'],
+  ['external deployment URL', { deployment: { ...aliasFixture.deployment, url: 'example.com' } }, 'url'],
+]) {
+  const result = runRollbackResolver(
+    ['alias', aliasFixture.alias, aliasFixture.projectId], { ...aliasFixture, ...patch },
+  )
+  requireContract(`rollback rejects ${name}`, result.status === 1
+    && result.stdout === '' && result.stderr.trim() === `vercel_rollback_target_invalid:${reason}`)
+}
+for (const [name, patch, reason] of [
+  ['preview target', { target: 'preview' }, 'target'],
+  ['unready artifact', { readyState: 'BUILDING' }, 'state'],
+  ['different artifact URL', { url: 'other-release.vercel.app' }, 'deployment_url'],
+]) {
+  const result = runRollbackResolver(['deployment', fixtureUrl, aliasFixture.deploymentId], {
+    id: aliasFixture.deploymentId, url: aliasFixture.deployment.url,
+    target: 'production', readyState: 'READY', ...patch,
+  })
+  requireContract(`rollback rejects ${name}`, result.status === 1
+    && result.stdout === '' && result.stderr.trim() === `vercel_rollback_target_invalid:${reason}`)
+}
 const releaseBarrierSelfTest = spawnSync(
   process.execPath,
   [resolve(root, 'tools/verify_coordinated_release_live.mjs'), '--self-test'],
@@ -228,7 +332,28 @@ const appVerifierSelfTest = spawnSync(
   [resolve(root, 'tools/verify_app_release_live.mjs'), '--self-test'],
   { encoding: 'utf8' },
 )
+const releaseTransportTests = spawnSync(
+  process.execPath,
+  ['--test', '--test-concurrency=1',
+    resolve(root, 'tools/verify_coordinated_release_transport.test.mjs'),
+    resolve(root, 'tools/verify_release_transport.test.mjs')],
+  { cwd: root, encoding: 'utf8', timeout: 30000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024 },
+)
+requireContract('offline release transport regression suites pass', releaseTransportTests.status === 0)
+if (releaseTransportTests.status !== 0) {
+  console.error(String(releaseTransportTests.stderr || releaseTransportTests.stdout || releaseTransportTests.error || 'Transport tests failed').slice(-4000))
+}
 const canonicalPythonBundle = await verifyCanonicalPythonBundle()
+const appRuntimeBundle = spawnSync(selectedPython(), [resolve(root, 'tools/test_app_runtime_bundle.py')],
+  { cwd: root, encoding: 'utf8', timeout: 75000, maxBuffer: 1024 * 1024 })
+let appRuntimeEvidence
+try { appRuntimeEvidence = JSON.parse(appRuntimeBundle.stdout) } catch { /* Missing evidence fails closed. */ }
+requireContract('actual app entrypoint imports from isolated source with pinned dependencies',
+  appRuntimeBundle.status === 0 && appRuntimeEvidence?.ok === true
+  && appRuntimeEvidence.evidence === 'isolated_source_cold_import'
+  && appRuntimeEvidence.requiredRoutes === 8 && appRuntimeEvidence.dependencyPins === 9
+  && appRuntimeEvidence.providerPackage === false && appRuntimeEvidence.hostedAcceptance === false)
+if (appRuntimeBundle.status !== 0) console.error('Isolated app runtime probe failed; run tools/test_app_runtime_bundle.py for details.')
 
 requireContract('canonical app project id', workflow.includes('APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'))
 requireContract('canonical public project id', workflow.includes('VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR'))
@@ -238,9 +363,49 @@ requireContract('app build contract',
   config.buildCommand === 'npm run app:build'
   && generator.includes("buildCommand: 'npm run app:build'")
   && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
-  && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
+  && packageJson.scripts?.['app:build:checked'] === 'npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && ciWorkflow.includes('run: npm run app:build:checked'))
+const canonicalVerifySteps = packageJson.scripts?.['app:verify:steps']?.split(' && ') ?? []
+requireContract('checked build produces a fresh artifact exactly once before verification',
+  packageJson.scripts?.['app:verify'] === 'node tools/run_app_verify.mjs --serial'
+  && canonicalVerifySteps[0] === 'npm run app:build'
+  && canonicalVerifySteps.filter((step) => step === 'npm run app:build').length === 1
+  && canonicalVerifySteps.indexOf('node tools/verify_app_build.mjs') > 0)
+requireContract('CI verifies exact-source desktop and 390px journeys for three active products and retired Plant safety',
+  ciWorkflow.includes('timeout-minutes: 15')
+  && ciWorkflow.includes("SUPERMEGA_CI_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
+  && ciWorkflow.includes("ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
+  && ciWorkflow.includes('Verify exact source checkout')
+  && ciWorkflow.includes('test "$(git rev-parse HEAD)" = "$SUPERMEGA_CI_SOURCE_SHA"')
+  && ciWorkflow.includes("SUPERMEGA_RELEASE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
+  && ciWorkflow.includes('Verify desktop and 390px product journeys')
+  && ciWorkflow.includes('SUPERMEGA_RENDERED_EVIDENCE_DIR: ${{ runner.temp }}/supermega-app-entry-rendered-${{ github.run_id }}-${{ github.run_attempt }}')
+  && ciWorkflow.includes('node tools/verify_app_entry_rendered.mjs')
+  && ciWorkflow.includes('--out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json"')
+  && ciWorkflow.includes('--screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR"')
+  && ciWorkflow.includes('--expected-head "$SUPERMEGA_CI_SOURCE_SHA"')
+  && !ciWorkflow.includes('--expected-head "$GITHUB_SHA"')
+  && ciWorkflow.indexOf('Build and verify canonical app') < ciWorkflow.indexOf('Verify desktop and 390px product journeys')
+  && ['shop', 'website', 'ecommerce'].every((product) => renderedJourneyVerifier.includes(`route: '/${product}/`))
+  && renderedJourneyVerifier.includes('...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,')
+  && renderedJourneyVerifier.includes('retirementCaseId: spec.id, requireLauncherProducts: true,')
+  && renderedJourneyVerifier.includes('isolatedBrowserContext: true, noHorizontalOverflow: true,')
+  && renderedJourneyVerifier.includes('seed: { retained: Object.fromEntries(RETIRED_STORAGE_KEYS.map(key => [key,')
+  && renderedJourneyVerifier.includes('retirement = validateRetiredProductObservation({ policy: RETIRED_PRODUCT_PREVIEW_POLICY,')
+  && renderedJourneyVerifier.includes('...(retirementFailure ? [retirementFailure] : []),')
+  && renderedJourneyVerifier.includes('width: 390')
+  && renderedJourneyVerifier.includes('height: 844')
+  && renderedJourneyVerifier.includes('noHorizontalOverflow: true')
+  && renderedJourneyVerifier.includes("getComputedStyle(currentSale).transform === 'none'")
+  && renderedJourneyVerifier.includes('Number.parseFloat(getComputedStyle(currentSale).opacity) === 1')
+  && renderedJourneyVerifier.includes('const drawerSettled = !mobile || state?.drawerTransitionSettled === true')
+  && renderedJourneyVerifier.includes('ok: missingText.length === 0 && drawerSettled && Boolean(state?.payment && state?.openOrderChoice && state?.total && state?.reviewButton)')
+  && !ciWorkflow.includes('actions/upload-artifact'))
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
+requireContract('coordinated release avoids redundant local app install',
+  !workflow.includes('Install app dependencies')
+  && !workflow.includes('working-directory: showroom\n        run: npm ci')
+  && workflow.includes('npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"'))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
 requireContract('canonical SPA routes use one filesystem-first fallback behind the header floor',
@@ -258,7 +423,8 @@ requireContract('app is served with a security header floor',
   appSecurityHeaders['X-Frame-Options'] === 'DENY'
   && appSecurityHeaders['X-Content-Type-Options'] === 'nosniff'
   && appSecurityHeaders['Referrer-Policy'] === 'no-referrer'
-  && String(appSecurityHeaders['Permissions-Policy'] || '').includes('camera=()')
+  && appSecurityHeaders['Permissions-Policy'] === 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()'
+  && generator.includes("'Permissions-Policy': 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()'")
   && generator.includes('appContentSecurityPolicy'))
 requireContract('app content policy refuses framing, injection and unexpected egress',
   [
@@ -294,36 +460,37 @@ requireContract('app shell carries no inline script the policy would refuse',
 requireContract('canonical API function', config.routes?.[1]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
+requireContract('Python dependencies and entrypoint probe trigger app review',
+  ['requirements.txt', 'requirements-test.txt', 'tools/test_app_runtime_bundle.py'].every(path => appWorkflow.includes("- '" + path + "'")))
 requireContract('deployment control files trigger non-mutating review gates',
-  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'vercel.json'") && source.includes("- '.vercelignore'")))
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'vercel.json'") && source.includes("- '.vercelignore'")))
 requireContract('remote app build includes kernel release contract', generator.includes("['.github', 'kernel', 'supabase']"))
-requireContract('retired alias control triggers non-mutating review gates', [ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_retired_vercel_alias_state.mjs')))
+requireContract('retired alias control triggers non-mutating review gates', allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes('tools/verify_retired_vercel_alias_state.mjs')))
 requireContract('app and public changes trigger non-mutating review before manual release',
-  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'showroom/**'") && source.includes('tools/create_public_vercel_output.mjs') && source.includes('tools/verify_coordinated_release_live.mjs')))
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'showroom/**'") && source.includes('tools/create_public_vercel_output.mjs') && source.includes('tools/verify_coordinated_release_live.mjs')))
 requireContract('HQ-only evidence validates without redeploying unchanged products',
   !workflow.includes("- 'hq/**'")
   && !workflow.includes('tools/verify_hq_contract.mjs')
-  && ciWorkflow.includes("- 'hq/**'")
-  && ciWorkflow.includes("- 'tools/verify_hq_contract.mjs'"))
+  && allPullRequests(ciWorkflow))
 requireContract('all API tests trigger review and execute before manual release',
-  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'tests/**'"))
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'tests/**'"))
   && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
-requireContract('runtime package changes trigger non-mutating review', [ciWorkflow, appWorkflow].every((source) => source.includes("- 'supermega_runtime/**'")))
+requireContract('runtime package changes trigger non-mutating review', allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'supermega_runtime/**'")))
 requireContract('database activation controls trigger non-mutating review',
-  [ciWorkflow, appWorkflow].every((source) => source.includes('tools/validate_supermega_database_url.py') && source.includes('tools/activate_supermega_database.ps1')))
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes('tools/validate_supermega_database_url.py') && source.includes('tools/activate_supermega_database.ps1')))
 requireContract('rehearsal packet changes trigger both reviews and keep operator files ignored',
-  [ciWorkflow, appWorkflow].every((source) =>
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) =>
     source.includes('tools/prepare_supabase_rehearsal_packet.mjs')
     && source.includes('tools/prepare_supabase_rehearsal_packet.test.mjs'))
   && appWorkflow.includes("- '.gitignore'")
   && appWorkflow.includes("- '.github/workflows/showroom-ci.yml'")
   && /^\.tmp\/$/m.test(gitIgnore))
 requireContract('PostgreSQL 17 rehearsal changes trigger every non-mutating database review',
-  [ciWorkflow, appWorkflow].every((source) =>
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) =>
     source.includes('tools/rehearse_supermega_postgres17.py')
     && source.includes('tools/run_postgres17_rehearsal.mjs')))
 requireContract('migration proof changes trigger every database-aware workflow',
-  [workflow, ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_private_trial_migrations.mjs') && source.includes('package-lock.json')))
+  allPullRequests(ciWorkflow) && [workflow, appWorkflow].every((source) => source.includes('tools/verify_private_trial_migrations.mjs') && source.includes('package-lock.json')))
 requireContract('real migration proof precedes every production candidate',
   workflow.includes('npm ci --ignore-scripts')
   && workflow.includes('node tools/verify_private_trial_migrations.mjs')
@@ -335,9 +502,13 @@ requireContract('real migration proof precedes every production candidate',
   && migrationVerifier.includes('unsafe role rejected before foundation grants')
   && migrationVerifier.includes('hosted_postgres_17_proof_required: true'))
 requireContract('app guard remains non-mutating but runs API tests', appWorkflow.includes("- 'supermega_runtime/**'") && appWorkflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && !/vercel@56\.1\.0\s+(?:deploy|promote|rollback)\b/.test(appWorkflow) && !appWorkflow.includes('VERCEL_TOKEN') && !/environment:\s*production/.test(appWorkflow))
+requireContract('canonical verification includes Ecommerce customer review identity and recovery',
+  packageJson.scripts['app:verify:steps'].split(' && ').includes('node --test tools/test_ecommerce_customer_review_ui.mjs'))
+requireContract('canonical verification includes managed Ecommerce handoff races',
+  packageJson.scripts['app:verify:steps'].split(' && ').includes('node --test tools/test_ecommerce_managed_request_identity.mjs'))
 requireContract('protected app candidate verification', workflow.includes("VERCEL_PROTECTED_PREVIEW: '1'") && appVerifier.includes("'curl', path, '--deployment'") && appVerifier.includes('deploymentFunctions') && appVerifier.includes("JSON.stringify(['api/app'])") && appVerifier.includes('hosted_agent_runtime_contract_wrong'))
 requireContract('current app asset contract gates local build and protected candidate',
-  packageJson.scripts['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
+  packageJson.scripts['app:build:checked'] === 'npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && workflow.includes('Verify immutable app asset contract')
   && workflow.includes('node tools/verify_app_release_live.mjs --artifact-self-test')
   && workflow.indexOf('Verify immutable app asset contract') < workflow.indexOf('Deploy isolated app production candidate')
@@ -362,14 +533,12 @@ requireContract('release barrier fixtures pass', releaseBarrierSelfTest.status =
 requireContract('app release evidence fixtures pass', appVerifierSelfTest.status === 0 && appVerifierSelfTest.stdout.includes('"ok": true') && appVerifierSelfTest.stdout.includes('supermega_app_live_evidence_extractor.v1'))
 requireContract('cross-platform protected deployment requests', !appVerifier.includes("'--silent'") && !appVerifier.includes("'--show-error'") && !appVerifier.includes("'--location'") && !appVerifier.includes("'--token'") && appVerifier.includes('describeCliFailure'))
 requireContract('both project controls are verified', workflow.includes('verify_vercel_project_state.mjs app') && workflow.includes('verify_vercel_project_state.mjs public') && workflow.includes('verify_vercel_domain_state.mjs app') && workflow.includes('verify_vercel_domain_state.mjs public') && workflow.includes('verify_vercel_environment_state.mjs app') && workflow.includes('verify_vercel_environment_state.mjs public'))
-requireContract('canonical domains are reasserted before domain verification',
-  workflow.includes('Reassert canonical app domain ownership')
-  && workflow.includes('vercel@56.1.0 domains add app.supermega.dev megaos --force --token="$VERCEL_TOKEN"')
-  && workflow.includes('Reassert canonical public domain ownership')
-  && workflow.includes('vercel@56.1.0 domains add supermega.dev supermega-public --force --token="$VERCEL_TOKEN"')
-  && workflow.includes('vercel@56.1.0 domains add www.supermega.dev supermega-public --force --token="$VERCEL_TOKEN"')
-  && workflow.indexOf('Reassert canonical app domain ownership') < workflow.indexOf('verify_vercel_domain_state.mjs app')
-  && workflow.indexOf('Reassert canonical public domain ownership') < workflow.indexOf('verify_vercel_domain_state.mjs public'))
+requireContract('release verifies domain ownership without assigning domains',
+  !/\bdomains?\s+(?:add|rm|remove|move|transfer)\b/.test(workflow)
+  && workflow.includes('verify_vercel_domain_state.mjs app')
+  && workflow.includes('verify_vercel_domain_state.mjs public')
+  && workflow.indexOf('verify_vercel_domain_state.mjs app') < workflow.indexOf('Deploy isolated app production candidate')
+  && workflow.indexOf('verify_vercel_domain_state.mjs public') < workflow.indexOf('Deploy isolated production candidate'))
 requireContract('retired POS alias blocks release before and after promotion', (workflow.match(/api "\/v4\/aliases\?domain=pos\.supermega\.dev&teamId=\$VERCEL_ORG_ID"/g) || []).length === 2
   && (workflow.match(/verify_retired_vercel_alias_state\.mjs pos\.supermega\.dev/g) || []).length === 2
   && retiredAliasVerifier.includes("failures = liveRetiredAliases.length ? ['retired_alias_still_live'] : []")
@@ -452,6 +621,10 @@ requireContract('core workflows use Node 24 action revisions',
   && (coreWorkflowActions.match(/actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/g) || []).length === 6
   && (coreWorkflowActions.match(/actions\/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97/g) || []).length === 3
   && !/(?:11d5960a326750d5838078e36cf38b85af677262|49933ea5288caeca8642d1e84afbd3f7d6820020|a26af69be951a213d495a4c3e4e4022e16d87065)/.test(coreWorkflowActions))
+requireContract('coordinated release caches python verifier dependencies',
+  workflow.includes("cache: 'pip'")
+  && workflow.includes('cache-dependency-path: requirements-test.txt')
+  && workflow.indexOf("cache: 'pip'") < workflow.indexOf('python -m pip install --disable-pip-version-check -r requirements-test.txt'))
 requireContract('uv build tool is immutable', workflow.includes('astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9') && workflow.includes("version: '0.11.30'"))
 requireContract('stale Cloud Run release authority is retired', !existsSync(resolve(root, '.github/workflows/supermega-app-cloud-run.yml')))
 requireContract('orphan enterprise and free-mode gates are retired',
@@ -552,7 +725,7 @@ requireContract('public live health follows the canonical release workflow',
   publicHealthWorkflow.includes('SuperMega - Coordinated Verified Release')
   && !publicHealthWorkflow.includes('SuperMega Public - Verified Prebuilt Release'))
 requireContract('scheduler authority changes trigger every non-mutating review gate',
-  [appWorkflow, ciWorkflow].every((source) =>
+  allPullRequests(ciWorkflow) && [appWorkflow].every((source) =>
     source.includes('tools/supermega_scheduler_authority.json')
     && source.includes('tools/verify_vercel_project_state.mjs')
     && source.includes('tools/test_vercel_project_state.mjs')))
@@ -562,7 +735,11 @@ requireContract('no POS route', !/\/pos\/login/i.test(combined))
 requireContract('no YTF schedule', !/\/api\/cron\/ytf/i.test(combined))
 
 const orderedSteps = [
+  'Build the immutable app artifact',
+  'Verify generated app Python function contract',
+  'Verify immutable app asset contract',
   'Enforce exact app runtime database and RLS gate',
+  'Deploy isolated app production candidate',
   'Inspect and verify app candidate',
   'Verify protected candidate content',
   'Verify candidate release identity barrier',
@@ -572,6 +749,10 @@ const orderedSteps = [
   'Verify production project controls',
   'Roll back a failed production verification',
 ]
+requireContract('generated Python package checks run before managed schema writes',
+  workflow.includes('node tools/verify_generated_python_function.mjs')
+  && workflow.includes('python tools/verify_packaged_app_import.py')
+  && workflow.indexOf('python tools/verify_packaged_app_import.py') < workflow.indexOf('--ensure-schema --require-ready'))
 const positions = orderedSteps.map((step) => workflow.indexOf(step))
 requireContract('coordinated release steps are ordered', positions.every((position) => position >= 0) && positions.every((position, index) => index === 0 || position > positions[index - 1]))
 

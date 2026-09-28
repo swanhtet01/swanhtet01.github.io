@@ -6,7 +6,7 @@ const COMMERCE_ORDER_DRAFT_RESET_LOCK = 'supermega:shop:order-draft:reset'
 const COMMERCE_ORDER_DRAFT_MAX_BYTES = 16_384
 
 export const commerceOrderDraftChannels = ['Messenger', 'Viber', 'Phone', 'Website', 'Ecommerce', 'Walk-in'] as const
-export const commerceOrderDraftPayments = ['KBZPay', 'WavePay', 'Cash on delivery', 'Cash', 'Card'] as const
+export const commerceOrderDraftPayments = ['KBZPay', 'WavePay', 'AYA Pay', 'MMQR', 'Cash on delivery', 'Cash', 'Card'] as const
 
 export type CommerceOrderDraftChannel = typeof commerceOrderDraftChannels[number]
 export type CommerceOrderDraftPayment = '' | typeof commerceOrderDraftPayments[number]
@@ -103,14 +103,14 @@ function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
 
 function canonicalScope(value: unknown) {
   if (typeof value !== 'string' || value.length < 1 || value.length > 160 || value.trim() !== value) {
-    throw new Error('Order draft scope is invalid.')
+    domainError('Order draft scope is invalid.')
   }
   return value
 }
 
 function canonicalText(value: unknown, label: string, maxLength: number) {
   if (typeof value !== 'string' || value.length > maxLength || value.trim() !== value) {
-    throw new Error(`${label} is invalid.`)
+    domainError(`${label} is invalid.`)
   }
   return value
 }
@@ -118,18 +118,18 @@ function canonicalText(value: unknown, label: string, maxLength: number) {
 function canonicalTimestamp(value: unknown) {
   if (typeof value !== 'string'
     || !/^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
-    throw new Error('Order draft timestamp must use canonical UTC milliseconds.')
+    domainError('Order draft timestamp must use canonical UTC milliseconds.')
   }
   const timestamp = new Date(value)
   if (Number.isNaN(timestamp.getTime()) || timestamp.toISOString() !== value) {
-    throw new Error('Order draft timestamp is invalid.')
+    domainError('Order draft timestamp is invalid.')
   }
   return value
 }
 
 export function commerceOrderDraftUtf8Bytes(value: string) {
   if (typeof value !== 'string' || typeof TextEncoder !== 'function') {
-    throw new Error('UTF-8 size verification is unavailable.')
+    domainError('UTF-8 size verification is unavailable.')
   }
   return new TextEncoder().encode(value).byteLength
 }
@@ -148,7 +148,7 @@ function unreadableDraftFingerprint(value: string) {
 function canonicalLine(value: unknown): CommerceOrderDraftLine {
   if (!isRecord(value)
     || !hasExactKeys(value, ['sku', 'quantity', 'unitPriceMmk', 'availableAtSave'])) {
-    throw new Error('Order draft line is invalid.')
+    domainError('Order draft line is invalid.')
   }
   const sku = canonicalText(value.sku, 'Order draft SKU', 80)
   const quantity = Number(value.quantity)
@@ -158,7 +158,7 @@ function canonicalLine(value: unknown): CommerceOrderDraftLine {
     || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 9_999
     || !Number.isSafeInteger(unitPriceMmk) || unitPriceMmk < 1
     || !Number.isSafeInteger(availableAtSave) || availableAtSave < 0) {
-    throw new Error('Order draft line values are invalid.')
+    domainError('Order draft line values are invalid.')
   }
   return { sku, quantity, unitPriceMmk, availableAtSave }
 }
@@ -168,18 +168,18 @@ function canonicalInput(value: CommerceOrderDraftInput): CommerceOrderDraftInput
   const fulfilmentReference = canonicalText(value.fulfilmentReference, 'Order draft handoff reference', 160)
   const promisedAt = value.promisedAt === '' ? '' : canonicalTimestamp(value.promisedAt)
   const paymentTermsDays = Number(value.paymentTermsDays)
-  if (!commerceOrderDraftChannels.includes(value.channel)) throw new Error('Order draft channel is invalid.')
+  if (!commerceOrderDraftChannels.includes(value.channel)) domainError('Order draft channel is invalid.')
   if (value.payment !== '' && !commerceOrderDraftPayments.includes(value.payment)) {
-    throw new Error('Order draft payment is invalid.')
+    domainError('Order draft payment is invalid.')
   }
-  if (!['', 'pickup', 'delivery'].includes(value.fulfilment)) throw new Error('Order draft fulfilment is invalid.')
-  if (![0, 7, 30].includes(paymentTermsDays)) throw new Error('Order draft payment terms are invalid.')
+  if (!['', 'pickup', 'delivery'].includes(value.fulfilment)) domainError('Order draft fulfilment is invalid.')
+  if (![0, 7, 30].includes(paymentTermsDays)) domainError('Order draft payment terms are invalid.')
   if (!Array.isArray(value.lines) || value.lines.length < 1 || value.lines.length > 20) {
-    throw new Error('Order draft must contain between 1 and 20 item lines.')
+    domainError('Order draft must contain between 1 and 20 item lines.')
   }
   const lines = value.lines.map(canonicalLine)
   if (new Set(lines.map((line) => line.sku)).size !== lines.length) {
-    throw new Error('Order draft item lines must use unique SKUs.')
+    domainError('Order draft item lines must use unique SKUs.')
   }
   return {
     customer,
@@ -233,15 +233,15 @@ export function commerceOrderDraftMatchesInput(left: CommerceOrderDraft, right: 
 function canonicalResetEpoch(value: unknown) {
   if (value === null) return 0
   if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) {
-    throw new Error('Order draft reset marker is invalid.')
+    domainError('Order draft reset marker is invalid.')
   }
   const epoch = Number(value)
-  if (!Number.isSafeInteger(epoch) || epoch < 0) throw new Error('Order draft reset marker is invalid.')
+  if (!Number.isSafeInteger(epoch) || epoch < 0) domainError('Order draft reset marker is invalid.')
   return epoch
 }
 
 export function commerceOrderDraftResetEpoch(storage = browserStorage()) {
-  if (!storage) throw new Error('Browser storage is unavailable. Order recovery cannot be coordinated safely.')
+  if (!storage) domainError('Browser storage is unavailable. Order recovery cannot be coordinated safely.')
   return canonicalResetEpoch(storage.getItem(COMMERCE_ORDER_DRAFT_RESET_EPOCH_KEY))
 }
 
@@ -273,11 +273,11 @@ export function validateCommerceOrderDraft(value: unknown, expectedScope?: strin
     || value.schema !== COMMERCE_ORDER_DRAFT_SCHEMA
     || !Number.isSafeInteger(value.revision)
     || Number(value.revision) < 1) {
-    throw new Error('Saved order draft is invalid.')
+    domainError('Saved order draft is invalid.')
   }
   const scope = canonicalScope(value.scope)
   if (expectedScope !== undefined && scope !== canonicalScope(expectedScope)) {
-    throw new Error('Saved order draft belongs to a different workspace.')
+    domainError('Saved order draft belongs to a different workspace.')
   }
   return {
     schema: COMMERCE_ORDER_DRAFT_SCHEMA,
@@ -362,43 +362,43 @@ export async function saveCommerceOrderDraft(
   options: CommerceOrderDraftMutationOptions = {},
 ): Promise<CommerceOrderDraft> {
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
-    throw new Error('Expected order draft revision is invalid.')
+    domainError('Expected order draft revision is invalid.')
   }
   if (options.expectedResetEpoch !== undefined
     && (!Number.isSafeInteger(options.expectedResetEpoch) || options.expectedResetEpoch < 0)) {
-    throw new Error('Expected order draft reset marker is invalid.')
+    domainError('Expected order draft reset marker is invalid.')
   }
   if (options.expectedInvalidFingerprint !== undefined) {
-    throw new Error('Unreadable-draft fingerprints are not valid for save operations.')
+    domainError('Unreadable-draft fingerprints are not valid for save operations.')
   }
   const canonicalDraftScope = canonicalScope(scope)
   const candidate = canonicalInput(input)
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser storage is unavailable. The unfinished order was not saved.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The unfinished order was not saved.')
+  if (!storage) domainError('Browser storage is unavailable. The unfinished order was not saved.')
+  if (!locks) domainError('Safe browser locking is unavailable. The unfinished order was not saved.')
   const storageKey = commerceOrderDraftStorageKey(canonicalDraftScope)
 
   const expectedResetEpoch = options.expectedResetEpoch ?? commerceOrderDraftResetEpoch(storage)
   return locks.request(COMMERCE_ORDER_DRAFT_RESET_LOCK, { mode: 'exclusive' }, async () => {
     if (commerceOrderDraftResetEpoch(storage) !== expectedResetEpoch) {
-      throw new Error('Local Shop recovery was reset while this order was open. Review the current workspace before saving.')
+      domainError('Local Shop recovery was reset while this order was open. Review the current workspace before saving.')
     }
     return locks.request(`${COMMERCE_ORDER_DRAFT_LOCK_PREFIX}${encodeURIComponent(canonicalDraftScope)}`, { mode: 'exclusive' }, async () => {
       if (commerceOrderDraftResetEpoch(storage) !== expectedResetEpoch) {
-        throw new Error('Local Shop recovery was reset while this order was open. Review the current workspace before saving.')
+        domainError('Local Shop recovery was reset while this order was open. Review the current workspace before saving.')
       }
       const currentResult = readCommerceOrderDraft(canonicalDraftScope, storage)
       if (currentResult.status === 'invalid' || currentResult.status === 'unavailable') {
-        throw new Error(currentResult.error || 'The current order draft cannot be updated safely.')
+        domainError(currentResult.error || 'The current order draft cannot be updated safely.')
       }
       const current = currentResult.draft
       const currentRevision = current?.revision ?? 0
       if (currentRevision !== expectedRevision) {
-        throw new Error('The saved order draft changed in another tab. Review it before saving again.')
+        domainError('The saved order draft changed in another tab. Review it before saving again.')
       }
       if (current && commerceOrderDraftMatchesInput(current, candidate)) return current
-      if (currentRevision >= Number.MAX_SAFE_INTEGER) throw new Error('Order draft revision cannot advance safely.')
+      if (currentRevision >= Number.MAX_SAFE_INTEGER) domainError('Order draft revision cannot advance safely.')
       const savedAt = canonicalTimestamp((options.now ?? (() => new Date().toISOString()))())
       const next = validateCommerceOrderDraft({
         schema: COMMERCE_ORDER_DRAFT_SCHEMA,
@@ -409,12 +409,12 @@ export async function saveCommerceOrderDraft(
       }, canonicalDraftScope)
       const nextRaw = JSON.stringify(next)
       if (commerceOrderDraftUtf8Bytes(nextRaw) > COMMERCE_ORDER_DRAFT_MAX_BYTES) {
-        throw new Error('The unfinished order is too large to save safely.')
+        domainError('The unfinished order is too large to save safely.')
       }
       const beforeRaw = storage.getItem(storageKey)
       try {
         storage.setItem(storageKey, nextRaw)
-        if (storage.getItem(storageKey) !== nextRaw) throw new Error('write_not_confirmed')
+        if (storage.getItem(storageKey) !== nextRaw) domainError('write_not_confirmed')
         return next
       } catch {
         let restored = false
@@ -425,7 +425,7 @@ export async function saveCommerceOrderDraft(
         } catch {
           // The original false value reports that rollback could not be confirmed.
         }
-        throw new Error(restored
+        domainError(restored
           ? 'The unfinished order was not saved. The previous recovery value was restored.'
           : 'The unfinished order write failed and recovery could not be confirmed. Stop editing and export local evidence.')
       }
@@ -440,39 +440,39 @@ export async function discardCommerceOrderDraft(
 ): Promise<void> {
   if (expectedRevision !== undefined
     && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)) {
-    throw new Error('Expected order draft revision is invalid.')
+    domainError('Expected order draft revision is invalid.')
   }
   if (expectedRevision !== undefined && options.expectedInvalidFingerprint !== undefined) {
-    throw new Error('Choose either a revision or an unreadable-draft fingerprint before discarding.')
+    domainError('Choose either a revision or an unreadable-draft fingerprint before discarding.')
   }
   if (expectedRevision === undefined
     && (typeof options.expectedInvalidFingerprint !== 'string'
       || !/^[0-9]+:[0-9a-f]{8}:[0-9a-f]{8}$/.test(options.expectedInvalidFingerprint))) {
-    throw new Error('The unreadable order draft fingerprint is missing or invalid.')
+    domainError('The unreadable order draft fingerprint is missing or invalid.')
   }
   if (options.expectedResetEpoch !== undefined
     && (!Number.isSafeInteger(options.expectedResetEpoch) || options.expectedResetEpoch < 0)) {
-    throw new Error('Expected order draft reset marker is invalid.')
+    domainError('Expected order draft reset marker is invalid.')
   }
   const canonicalDraftScope = canonicalScope(scope)
   const storage = options.storage ?? browserStorage()
   const locks = options.locks ?? browserLocks()
-  if (!storage) throw new Error('Browser storage is unavailable. The saved order draft was not discarded.')
-  if (!locks) throw new Error('Safe browser locking is unavailable. The saved order draft was not discarded.')
+  if (!storage) domainError('Browser storage is unavailable. The saved order draft was not discarded.')
+  if (!locks) domainError('Safe browser locking is unavailable. The saved order draft was not discarded.')
   const storageKey = commerceOrderDraftStorageKey(canonicalDraftScope)
   const expectedResetEpoch = options.expectedResetEpoch ?? commerceOrderDraftResetEpoch(storage)
   await locks.request(COMMERCE_ORDER_DRAFT_RESET_LOCK, { mode: 'exclusive' }, async () => {
     if (commerceOrderDraftResetEpoch(storage) !== expectedResetEpoch) {
-      throw new Error('Local Shop recovery was reset while this order was open. Review the current workspace before discarding.')
+      domainError('Local Shop recovery was reset while this order was open. Review the current workspace before discarding.')
     }
     await locks.request(`${COMMERCE_ORDER_DRAFT_LOCK_PREFIX}${encodeURIComponent(canonicalDraftScope)}`, { mode: 'exclusive' }, async () => {
       if (commerceOrderDraftResetEpoch(storage) !== expectedResetEpoch) {
-        throw new Error('Local Shop recovery was reset while this order was open. Review the current workspace before discarding.')
+        domainError('Local Shop recovery was reset while this order was open. Review the current workspace before discarding.')
       }
       if (expectedRevision !== undefined) {
         const current = readCommerceOrderDraft(canonicalDraftScope, storage)
         if (current.status !== 'ready' || current.draft?.revision !== expectedRevision) {
-          throw new Error('The saved order draft changed in another tab. Review it before discarding.')
+          domainError('The saved order draft changed in another tab. Review it before discarding.')
         }
       } else {
         const currentRaw = storage.getItem(storageKey)
@@ -480,11 +480,11 @@ export async function discardCommerceOrderDraft(
         if (currentRaw === null
           || current.status !== 'invalid'
           || unreadableDraftFingerprint(currentRaw) !== options.expectedInvalidFingerprint) {
-          throw new Error('The unreadable order draft changed in another tab. Review it before discarding.')
+          domainError('The unreadable order draft changed in another tab. Review it before discarding.')
         }
       }
       storage.removeItem(storageKey)
-      if (storage.getItem(storageKey) !== null) throw new Error('The saved order draft could not be discarded.')
+      if (storage.getItem(storageKey) !== null) domainError('The saved order draft could not be discarded.')
     })
   })
 }
@@ -495,9 +495,9 @@ export async function resetCommerceOrderDraftRecovery(
   const storage = options.storage ?? browserStorage() as CommerceOrderDraftEnumerableStorage | undefined
   const locks = options.locks ?? browserLocks()
   if (!storage || typeof storage.key !== 'function' || !Number.isSafeInteger(storage.length)) {
-    throw new Error('Browser storage cannot enumerate unfinished Shop orders safely.')
+    domainError('Browser storage cannot enumerate unfinished Shop orders safely.')
   }
-  if (!locks) throw new Error('Safe browser locking is unavailable. Unfinished Shop orders were not reset.')
+  if (!locks) domainError('Safe browser locking is unavailable. Unfinished Shop orders were not reset.')
 
   return locks.request(COMMERCE_ORDER_DRAFT_RESET_LOCK, { mode: 'exclusive' }, async () => {
     let currentEpoch = 0
@@ -506,7 +506,7 @@ export async function resetCommerceOrderDraftRecovery(
     } catch {
       // Explicit reset may replace a malformed marker while preserving fail-closed saves.
     }
-    if (currentEpoch >= Number.MAX_SAFE_INTEGER) throw new Error('Order draft reset marker cannot advance safely.')
+    if (currentEpoch >= Number.MAX_SAFE_INTEGER) domainError('Order draft reset marker cannot advance safely.')
     const nextEpoch = currentEpoch + 1
     const beforeEpoch = storage.getItem(COMMERCE_ORDER_DRAFT_RESET_EPOCH_KEY)
     const draftKeys = Array.from({ length: storage.length }, (_, index) => storage.key(index))
@@ -515,11 +515,11 @@ export async function resetCommerceOrderDraftRecovery(
     try {
       storage.setItem(COMMERCE_ORDER_DRAFT_RESET_EPOCH_KEY, String(nextEpoch))
       if (storage.getItem(COMMERCE_ORDER_DRAFT_RESET_EPOCH_KEY) !== String(nextEpoch)) {
-        throw new Error('reset_epoch_not_confirmed')
+        domainError('reset_epoch_not_confirmed')
       }
       for (const key of draftKeys) {
         storage.removeItem(key)
-        if (storage.getItem(key) !== null) throw new Error('draft_reset_not_confirmed')
+        if (storage.getItem(key) !== null) domainError('draft_reset_not_confirmed')
       }
       return nextEpoch
     } catch {
@@ -536,7 +536,7 @@ export async function resetCommerceOrderDraftRecovery(
       } catch {
         // The original false value reports that rollback could not be confirmed.
       }
-      throw new Error(restored
+      domainError(restored
         ? 'Unfinished Shop orders were not reset. Their previous recovery values were restored.'
         : 'Shop order reset failed and recovery could not be confirmed. Stop editing and export local evidence.')
     }
@@ -548,10 +548,10 @@ export function commerceOrderDraftCatalogState(
   catalog: CommerceOrderDraftCatalogItem[],
 ): CommerceOrderDraftCatalogState {
   const validated = validateCommerceOrderDraft(draft, draft.scope)
-  if (!Array.isArray(catalog) || catalog.length > 10_000) throw new Error('Shop catalog is invalid.')
+  if (!Array.isArray(catalog) || catalog.length > 10_000) domainError('Shop catalog is invalid.')
   const bySku = new Map<string, CommerceOrderDraftCatalogItem>()
   for (const candidate of catalog) {
-    if (!isRecord(candidate)) throw new Error('Shop catalog item is invalid.')
+    if (!isRecord(candidate)) domainError('Shop catalog item is invalid.')
     const sku = canonicalText(candidate.sku, 'Shop catalog SKU', 80)
     const price = Number(candidate.price)
     const onHand = Number(candidate.onHand)
@@ -559,7 +559,7 @@ export function commerceOrderDraftCatalogState(
       || bySku.has(sku)
       || !Number.isSafeInteger(price) || price < 1
       || !Number.isSafeInteger(onHand) || onHand < 0) {
-      throw new Error('Shop catalog item is invalid.')
+      domainError('Shop catalog item is invalid.')
     }
     bySku.set(sku, { sku, price, onHand })
   }
@@ -589,7 +589,7 @@ export function rebindCommerceOrderDraft(
   catalog: CommerceOrderDraftCatalogItem[],
 ): CommerceOrderDraftInput {
   const state = commerceOrderDraftCatalogState(draft, catalog)
-  if (!state.canRebind) throw new Error('Every recovered item must exist and have enough available stock before review.')
+  if (!state.canRebind) domainError('Every recovered item must exist and have enough available stock before review.')
   const bySku = new Map(catalog.map((item) => [item.sku, item]))
   return {
     customer: draft.customer,
@@ -601,7 +601,7 @@ export function rebindCommerceOrderDraft(
     paymentTermsDays: draft.paymentTermsDays,
     lines: draft.lines.map((line) => {
       const item = bySku.get(line.sku)
-      if (!item) throw new Error('Recovered Shop item is missing.')
+      if (!item) domainError('Recovered Shop item is missing.')
       return {
         sku: line.sku,
         quantity: line.quantity,
@@ -611,3 +611,5 @@ export function rebindCommerceOrderDraft(
     }),
   }
 }
+
+function domainError(message: string): never { throw new Error(message) }

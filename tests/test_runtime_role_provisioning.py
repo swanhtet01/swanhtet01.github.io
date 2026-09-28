@@ -4,7 +4,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +23,17 @@ class RuntimeRoleProvisioningTests(unittest.TestCase):
     REF = "abcdefghijklmnopqrst"
     PROD = "zvtzwcimpvvtkowflhda"
     APPROVAL = "123e4567-e89b-42d3-a456-426614174000"
+
+    def test_temporary_expiry_rejects_unbounded_or_ambiguous_deadlines(self):
+        from datetime import datetime, timezone
+        now = datetime(2026, 9, 26, tzinfo=timezone.utc)
+        for value in ["infinity", "2026-09-26T12:00:00", "2026-09-26T00:00:00Z", "2026-09-27T00:00:01Z"]:
+            with self.assertRaises(MODULE.ProvisioningFailure):
+                MODULE.validate_runtime_expiry(value, now)
+        self.assertEqual(MODULE.validate_runtime_expiry("2026-09-27T00:00:00Z", now).day, 27)
+        source = (TOOLS / "provision_supermega_runtime_role.py").read_text()
+        self.assertIn("runtime_expiry_postcondition_failed", source)
+        self.assertIn("valid_until=args.valid_until", source)
 
     def guard(self, status: str = "protected-unapproved"):
         return MODULE.TargetGuard(self.PROD, status)
@@ -114,6 +125,47 @@ class RuntimeRoleProvisioningTests(unittest.TestCase):
         with self.assertRaises(MODULE.ProvisioningFailure) as caught:
             MODULE.apply_runtime_role(object(), "short")
         self.assertEqual(str(caught.exception), "runtime_password_length_invalid")
+
+    def test_create_only_rechecks_collision_under_lock_before_any_ddl(self):
+        # A role can appear after the initial preflight; never rotate it.
+        for present in (True, None):
+            connection = MagicMock()
+            cursor = connection.cursor.return_value.__enter__.return_value
+            cursor.fetchone.return_value = {"present": present}
+            with patch.dict(sys.modules, {"psycopg": MagicMock()}), patch.object(
+                MODULE, "inspect_runtime_role", return_value={"runtime_exists": False, "failed_checks": []}
+            ):
+                with self.assertRaisesRegex(MODULE.ProvisioningFailure, "runtime_role_creation_collision"):
+                    MODULE.apply_runtime_role(connection, "synthetic-password-for-local-test", create_only=True)
+            statements = [call.args[0] for call in cursor.execute.call_args_list]
+            self.assertEqual(len(statements), 2)
+            self.assertIn("pg_advisory_xact_lock", statements[0])
+            self.assertIn("select exists", statements[1])
+            connection.transaction.return_value.__exit__.assert_called_once()
+
+    def test_create_only_rejects_preexisting_role_without_transaction(self):
+        connection = MagicMock()
+        with patch.object(MODULE, "inspect_runtime_role", return_value={"runtime_exists": True, "failed_checks": []}):
+            with self.assertRaisesRegex(MODULE.ProvisioningFailure, "runtime_role_creation_collision"):
+                MODULE.apply_runtime_role(connection, "synthetic-password-for-local-test", create_only=True)
+        connection.transaction.assert_not_called()
+
+    def test_create_only_creates_restricted_role_and_checks_expiry(self):
+        from datetime import datetime, timezone, timedelta
+        expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+        connection = MagicMock()
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.side_effect = [{"present": False}, {"rolvaliduntil": expiry}]
+        with patch.object(MODULE, "inspect_runtime_role", return_value={"runtime_exists": False, "failed_checks": []}), patch.object(
+            MODULE, "_assert_runtime_role_postconditions"
+        ) as postconditions:
+            MODULE.apply_runtime_role(connection, "synthetic-password-for-local-test", create_only=True, valid_until=expiry.isoformat())
+        statements = [call.args[0] if isinstance(call.args[0], str) else call.args[0].as_string() for call in cursor.execute.call_args_list]
+        self.assertTrue(any(statement.startswith('create role "supermega_trial_login" login inherit nosuperuser') for statement in statements))
+        self.assertFalse(any('reset all' in statement or statement.startswith('alter role "supermega_trial_login" login') for statement in statements))
+        self.assertTrue(any('with inherit true, set false, admin false' in statement for statement in statements))
+        self.assertTrue(any('valid until' in statement for statement in statements))
+        postconditions.assert_called_once_with(cursor)
 
     def test_atomic_postcondition_fails_inside_transaction(self):
         class Cursor:

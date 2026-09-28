@@ -252,6 +252,7 @@ export function useWebsiteWorkspace(): {
   storageMode: StorageMode
   storageIssue: string
   managedActorId: string
+  managedWorkspaceId: string
   canWrite: boolean
 } {
   const [initialWorkspace] = useState(loadInitialWorkspace)
@@ -259,6 +260,7 @@ export function useWebsiteWorkspace(): {
   const [storageMode, setStorageMode] = useState<StorageMode>(initialWorkspace.storageMode)
   const [storageIssue, setStorageIssue] = useState(initialWorkspace.storageIssue)
   const [managedActorId, setManagedActorId] = useState('')
+  const [managedWorkspaceId, setManagedWorkspaceId] = useState('')
   const [canWrite, setCanWrite] = useState(true)
   const [repairAvailable, setRepairAvailable] = useState(Boolean(initialWorkspace.invalidCandidate))
   const [repairCandidateRevision, setRepairCandidateRevision] = useState(initialWorkspace.invalidCandidate ? 1 : 0)
@@ -321,7 +323,7 @@ export function useWebsiteWorkspace(): {
                   actionId: initializationId,
                   capturedAt,
                   actor: bootstrap.identity.actor_id,
-                  reason: 'Initialize managed Website workspace',
+                  reason: 'Initialize managed Sites workspace',
                   evidenceReference: 'website:revision:0',
                 },
                 state: seed,
@@ -355,6 +357,7 @@ export function useWebsiteWorkspace(): {
         managedCanWriteRef.current = managedCanWrite
         setCanWrite(managedCanWrite)
         setManagedActorId(bootstrap.identity.actor_id)
+        setManagedWorkspaceId(bootstrap.identity.workspace_id)
         managedVersionRef.current = managedVersion
         workspaceRef.current = managedWorkspace
         setWorkspace(managedWorkspace)
@@ -373,6 +376,7 @@ export function useWebsiteWorkspace(): {
           managedIdentityRef.current = null
           managedVersionRef.current = 0
           setManagedActorId('')
+          setManagedWorkspaceId('')
           workspaceRef.current = hiddenLocalWorkspace
           setWorkspace(hiddenLocalWorkspace)
           updateRepairCandidate(null)
@@ -419,7 +423,7 @@ export function useWebsiteWorkspace(): {
         storageModeRef.current = 'browser-local'
         setStorageMode('browser-local')
         updateRepairCandidate(null)
-        setStorageIssue('Website workspace refreshed from another tab.')
+        setStorageIssue('Sites workspace refreshed from another tab.')
       } catch {
         setStorageIssue('Another tab supplied malformed Website data. The current valid screen was preserved.')
         updateRepairCandidate({
@@ -441,7 +445,7 @@ export function useWebsiteWorkspace(): {
     new Promise<WebsiteMutationResult>((resolve) => {
       queueRef.current = queueRef.current.then(async () => {
         if (!hydratedRef.current) {
-          resolve({ ok: false, error: 'Website workspace is still loading. Try the change again.' })
+          resolve({ ok: false, error: 'Sites workspace is still loading. Try the change again.' })
           return
         }
         const current = workspaceRef.current
@@ -503,6 +507,7 @@ export function useWebsiteWorkspace(): {
                 const refreshed = restoreWorkspace(record.state)
                 if (!refreshed) throw new Error('The newer managed Website state is invalid.', { cause: error })
                 setManagedActorId(bootstrap.identity.actor_id)
+                setManagedWorkspaceId(bootstrap.identity.workspace_id)
                 managedCanWriteRef.current = refreshedCanWrite
                 setCanWrite(refreshedCanWrite)
                 managedVersionRef.current = record.version
@@ -562,7 +567,7 @@ export function useWebsiteWorkspace(): {
           replacementConfirmed: false,
         })
         if (!hydratedRef.current) {
-          resolve(fail('stale_candidate', 'Website workspace is still loading. Nothing was replaced.'))
+          resolve(fail('stale_candidate', 'Sites workspace is still loading. Nothing was replaced.'))
           return
         }
         if (storageModeRef.current === 'managed') {
@@ -622,6 +627,7 @@ export function useWebsiteWorkspace(): {
     storageMode,
     storageIssue,
     managedActorId,
+    managedWorkspaceId,
     canWrite: storageMode !== 'managed' || canWrite,
   }
 }

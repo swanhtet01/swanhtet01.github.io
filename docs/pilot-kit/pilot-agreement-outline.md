@@ -4,7 +4,7 @@ NOT LEGAL ADVICE. This is an outline of talking points to align on with the desi
 
 ## What the partner gets
 
-- The working Shop product, free, on their own device. The approved framing is `Free product. Managed intelligence.` — the free lane needs `No account or model call required`, and the pilot runs entirely in it.
+- A scoped browser-local Shop rehearsal on their own device. This outline does not promise a free product tier, hosted account or paid subscription. Agree the service scope separately; no payment is taken by this rehearsal.
 - Five founder-led days rehearsing reviewed client import, prepaid package sale, matching treatment redemption, daily close, and recovery, with the founder on-site per the [acceptance checklist](acceptance-checklist.md).
 - Their own measured numbers, before and after: the operating baseline plus `client_import_minutes`, `package_sale_minutes`, `treatment_redemption_minutes`, `package_balance_result`, `close_minutes_per_day`, `operator_corrections`, and `reload_and_retry_result`. The numbers belong to them.
 - A backup of their workspace at the end (`Download workspace backup`), whatever they decide.
@@ -29,11 +29,11 @@ NOT LEGAL ADVICE. This is an outline of talking points to align on with the desi
 
 ## What the pilot never does
 
-Read the app's own gate line together — it is the whole boundary in one sentence: `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
+Read the app's own routine-sale gate line together — it is the whole boundary in one sentence: `Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.`
 
 In the handoff generator's words: `This pilot does not include automatic customer messages, provider payment, accounting posting, deployment, or production activation.` And on results: `no improvement is guaranteed before the final review`.
 
-Managed activation afterward is gated, not implied: `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.`
+Managed activation afterward is gated, not implied: Managed activation requires verified identity, tenant isolation, recovery and write controls for the named company.
 
 ## Stopping
 

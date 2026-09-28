@@ -20,6 +20,9 @@ Client-specific deployments, legacy demos, and old product names are not part of
 
 ## Source authority
 
+- `DESIGN.md` — portable product-door, design-loop, review-rubric, and
+  rendered-evidence contract for agents and human reviewers; detailed design
+  history remains in `hq/strategy/DESIGN-PROGRAM.md`.
 - `CURRENT.md` — company, product, domain, context, and release authority.
 - `site-manifest.json` — canonical four-product registry, workflow templates, shared-capability boundary, versioning, and legacy redirects.
 - `showroom/src/core/CoreApp.tsx` — canonical application experience.

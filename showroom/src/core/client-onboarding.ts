@@ -1,3 +1,4 @@
+import { productDisplayName } from './product-setup.ts'
 import { shopIndustryPack, type ShopIndustryPackId } from './shop-service-scheduling.ts'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
 import {
@@ -450,10 +451,10 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     },
     fields: [
       { id: 'sku', label: 'SKU', required: true, kind: 'sku', aliases: ['sku', 'item_sku', 'product_sku', 'stock_code', 'item_code', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },
-      { id: 'name', label: 'Item name', required: true, kind: 'text', aliases: ['item_name', 'name', 'product_name', 'title', 'description', 'ပစ္စည်းအမည်'], maximum: 180 },
-      { id: 'onHand', label: 'Opening stock', required: true, kind: 'integer', aliases: ['opening_stock', 'on_hand', 'available_stock', 'stock', 'quantity', 'qty', 'opening_quantity', 'လက်ကျန်'], minimum: 0 },
+      { id: 'name', label: 'Item name', required: true, kind: 'text', aliases: ['item_name', 'name', 'product_name', 'item', 'menu_item', 'title', 'description', 'ပစ္စည်းအမည်'], maximum: 180 },
+      { id: 'onHand', label: 'Opening stock', required: true, kind: 'integer', aliases: ['opening_stock', 'on_hand', 'stock_on_hand', 'available_stock', 'stock', 'quantity', 'qty', 'opening_quantity', 'လက်ကျန်'], minimum: 0 },
       { id: 'reorderAt', label: 'Reorder at', required: true, kind: 'integer', aliases: ['reorder_at', 'reorder_level', 'reorder_point', 'low_stock_at', 'minimum_stock', 'min_stock'], minimum: 0 },
-      { id: 'price', label: 'Price (MMK)', required: true, kind: 'integer', aliases: ['price_mmk', 'price', 'unit_price', 'selling_price', 'mmk_price', 'စျေးနှုန်း'], minimum: 1 },
+      { id: 'price', label: 'Price (MMK)', required: true, kind: 'integer', aliases: ['price_mmk', 'price', 'unit_price', 'selling_price', 'unit_price_mmk', 'selling_price_mmk', 'mmk_price', 'စျေးနှုန်း'], minimum: 1 },
     ],
   },
   production: {
@@ -605,10 +606,10 @@ export type ClientDemoPreparationSource = {
 const clientDemoProductOrder: readonly ClientSolutionId[] = ['commerce', 'production', 'website', 'ecommerce']
 
 const clientDemoProductDetails: Record<ClientSolutionId, { label: string; demoPath: string; setupPath: string }> = {
-  commerce: { label: 'Shop', demoPath: '/shop/?tab=counter', setupPath: '/settings/?product=shop' },
-  production: { label: 'Plant', demoPath: '/plant/?tab=production', setupPath: '/settings/?product=plant' },
-  website: { label: 'Website', demoPath: '/website/', setupPath: '/settings/?product=website' },
-  ecommerce: { label: 'Ecommerce', demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
+  commerce: { label: productDisplayName('commerce'), demoPath: '/shop/?tab=counter', setupPath: '/settings/?product=shop' },
+  production: { label: productDisplayName('production'), demoPath: '/plant/?tab=production', setupPath: '/settings/?product=plant' },
+  website: { label: productDisplayName('website'), demoPath: '/website/', setupPath: '/settings/?product=website' },
+  ecommerce: { label: productDisplayName('ecommerce'), demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
 }
 
 const clientDemoPreparationReviewChecklist = [
@@ -866,8 +867,9 @@ function suggestMapping(object: ClientImportObject, headers: string[], normalize
       const rank = aliases.indexOf(header)
       return rank < 0 ? [] : [{ header: headers[index], rank }]
     }).sort((left, right) => left.rank - right.rank || compareCodePoints(left.header, right.header))
-    const best = ranked[0]
-    const ambiguous = Boolean(best && ranked.filter((candidate) => candidate.rank === best.rank).length > 1)
+    const canonical = ranked.find(candidate => normalizeHeader(candidate.header) === normalizeHeader(field.id))
+    const best = canonical ?? ranked[0]
+    const ambiguous = !canonical && ranked.length > 1
     mapping[field.id] = best && !ambiguous ? best.header : ''
     suggestions.push({
       field: field.id,
@@ -1174,6 +1176,19 @@ export async function createClientImportPreview(
   const fileIssues = mappingIssues(object, headers, mapping)
   const minimumProductionDueDate = product === 'production' ? clientImportPlanningDate(planningDate) : undefined
   const rows = parsed.rows.slice(1).map((row) => rowFromMapping(row, object, headers, mapping, fileIssues, minimumProductionDueDate))
+  // Shop stores MMK amounts. Never discard an explicit source currency.
+  if (product === 'commerce') {
+    const currencyHeaders = headers.filter((header) => ['currency', 'currency_code', 'price_currency'].includes(normalizeHeader(header)))
+    const priceHeader = mapping.price ?? ''
+    const foreignPriceHeader = /(?:^|_)(?:usd|thb|eur|gbp|sgd|cny|rmb|jpy|aud|cad|inr|krw|hkd|vnd|idr|myr|php|chf)(?:_|$)/.test(normalizeHeader(priceHeader))
+      || /[$€£¥฿₹₩]/.test(priceHeader)
+    for (const row of rows) {
+      if (foreignPriceHeader || currencyHeaders.some((header) => row.source[header]?.trim().toUpperCase() !== 'MMK')) {
+        row.status = 'invalid'
+        row.issues.push({ code: 'unsupported_currency', field: 'price', message: 'Shop imports prices in MMK. Confirm the source currency and provide MMK prices; no automatic conversion is performed.' })
+      }
+    }
+  }
   if (!rows.length) fileIssues.push({ code: 'data_rows_required', field: 'file', message: 'Add at least one data row below the header.' })
   if (rows.length > object.maximumRows) fileIssues.push({ code: 'object_row_limit', field: 'file', message: `${object.label} accepts at most ${object.maximumRows} rows in one accountable import.` })
   classifyDuplicates(rows)

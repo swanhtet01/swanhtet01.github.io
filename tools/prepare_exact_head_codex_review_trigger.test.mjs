@@ -1,0 +1,233 @@
+import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import test from 'node:test'
+
+import {
+  EXACT_HEAD_CODEX_REVIEW_BODY,
+  EXACT_HEAD_CODEX_REVIEW_PLAN_TTL_MS,
+  collectExactHeadCodexReviewPlan,
+  fetchGitHubJson,
+  main,
+  validateExactHeadCodexReviewPlan,
+} from './prepare_exact_head_codex_review_trigger.mjs'
+
+const head = 'a'.repeat(40)
+const base = 'b'.repeat(40)
+const tree = 'c'.repeat(40)
+const now = new Date('2026-08-31T10:00:00.000Z')
+const authority = { handoff: { candidate: head, branch: 'codex/release-stack-integration-rehearsal-20260825', origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', mainCommit: base, fileDigest: `sha256:${'1'.repeat(64)}`, bodyDigest: `sha256:${'2'.repeat(64)}` }, protection: { mainCommit: base, healthy: true, fileDigest: `sha256:${'3'.repeat(64)}`, bodyDigest: `sha256:${'4'.repeat(64)}` } }
+const gitState = { branch: 'codex/release-stack-integration-rehearsal-20260825', head, tree, origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git', clean: true }
+const tools = [{ path: 'tools/prepare_exact_head_codex_review_trigger.mjs', digest: `sha256:${'5'.repeat(64)}` }, { path: 'tools/apply_exact_head_codex_review_trigger.mjs', digest: `sha256:${'6'.repeat(64)}` }]
+
+function state(overrides = {}) {
+  const value = {
+    pr: { number: 561, state: 'open', draft: false, updated_at: '2026-08-31T09:48:04Z', base: { ref: 'main', sha: base, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } }, head: { ref: 'codex/release-stack-integration-rehearsal-20260825', sha: head, repo: { full_name: 'swanhtet01/swanhtet01.github.io' } } },
+    checks: { check_runs: [{ id: 1, name: 'validate', status: 'completed', conclusion: 'success' }] },
+    reviews: [], comments: [], timeline: [{ event: 'committed', sha: head }], ...overrides,
+  }
+  if (!Object.hasOwn(overrides, 'timeline')) value.timeline = [{ event: 'committed', sha: head }, ...value.comments.map((comment) => ({ event: 'commented', id: comment.id }))]
+  return value
+}
+function fetcher(value) { return async (path) => path.startsWith('/pulls/') && path.endsWith('/reviews?per_page=100') ? value.reviews : path.includes('/timeline?') ? value.timeline : path.startsWith('/issues/') ? value.comments : path.startsWith('/commits/') ? value.checks : value.pr }
+async function plan(value = state()) { return collectExactHeadCodexReviewPlan({ authority, fetchJson: fetcher(value), gitState, now, toolDigests: Promise.resolve(tools) }) }
+function response(status, json, link = null) { return { ok: status >= 200 && status < 300, status, headers: { get: (name) => name.toLowerCase() === 'link' ? link : null }, async json() { return json } } }
+function digest(value) { return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}` }
+function sealed(body) { return { ...body, digest: digest(JSON.stringify(body)) } }
+
+test('sealed branch authority supports paired preview and rejects ref, fork, base and PR substitution', async () => {
+  const branch = 'codex/paired-preview-navigation-20260919'
+  const auth = { ...authority, handoff: { ...authority.handoff, branch } }
+  const local = { ...gitState, branch }
+  const current = state()
+  current.pr.number = 594
+  current.pr.head.ref = branch
+  const collect = (value = current, a = auth, g = local) => collectExactHeadCodexReviewPlan({ prNumber: 594, authority: a, fetchJson: fetcher(value), gitState: g, now, toolDigests: Promise.resolve(tools) })
+  const accepted = await collect()
+  assert.equal(validateExactHeadCodexReviewPlan(accepted, { now }), accepted)
+  for (const mutate of [
+    p => { p.head.ref = 'codex/other' },
+    p => { p.head.repo.full_name = 'attacker/fork' },
+    p => { p.base.ref = 'codex/other' },
+    p => { p.base.repo.full_name = 'attacker/fork' },
+    p => { p.base.sha = 'e'.repeat(40) },
+    p => { p.number = 595 },
+  ]) {
+    const changed = structuredClone(current); mutate(changed.pr)
+    await assert.rejects(collect(changed), /exact_head_codex_review_(ref_binding_invalid|pr_number_mismatch)/)
+  }
+  await assert.rejects(collect(current, auth, { ...local, branch: 'codex/other' }), /ref_binding_invalid/)
+  for (const field of ['branch', 'origin', 'mainCommit']) {
+    const altered = structuredClone(accepted); delete altered.authority.handoff[field]
+    const { digest: ignored, ...body } = altered
+    assert.throws(() => validateExactHeadCodexReviewPlan(sealed(body), { now }), /ref_binding_invalid/)
+  }
+  for (const field of ['headRef', 'baseRef', 'headRepository', 'baseRepository']) {
+    const altered = structuredClone(accepted); altered.pullRequest[field] = 'codex/other'
+    const { digest: ignored, ...body } = altered
+    assert.throws(() => validateExactHeadCodexReviewPlan(sealed(body), { now }), /ref_binding_invalid/)
+  }
+  for (const branch of ['main', 'HEAD', 'codex/a..b', 'codex/a.lock', 'codex/.hidden', 'codex/a//b']) {
+    await assert.rejects(collect(current, auth, { ...local, branch }), /local_state_invalid/)
+  }
+})
+
+test('plan is read-only, digest-bound, exact-head, and hard-codes the sole comment body', async () => {
+  const packet = await plan()
+  assert.equal(packet.ok, true)
+  assert.equal(packet.action.body, EXACT_HEAD_CODEX_REVIEW_BODY)
+  assert.equal(packet.readiness.executeReady, false)
+  assert.equal(packet.controls.githubWritesPerformed, false)
+  assert.equal(packet.controls.issueCommentPosted, false)
+  assert.equal(packet.observed.currentHeadTriggerCount, 0)
+  assert.deepEqual(packet.observed.headTimeline, { headCommit: head, headCommitOrdinal: 1, eventCount: 1, codexReviewCommentRelations: [] })
+  assert.equal(packet.pullRequest.headUpdatedAt, '2026-08-31T09:48:04.000Z')
+  assert.equal(validateExactHeadCodexReviewPlan(packet, { now }), packet)
+})
+
+test('plan binds trigger suppression to timeline head changes rather than general PR updates', async () => {
+  const trigger = { id: 44, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-31T09:49:00.000Z' }
+  await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-08-31T09:59:00Z' }, comments: [trigger], timeline: [{ event: 'committed', sha: head }, { event: 'commented', id: 44 }, { event: 'labeled', id: 90 }] })), /exact_head_codex_review_current_head_trigger_exists/)
+  const priorHeadTrigger = await plan(state({ comments: [trigger], timeline: [{ event: 'commented', id: 44 }, { event: 'committed', sha: head }] }))
+  assert.deepEqual(priorHeadTrigger.observed.headTimeline.codexReviewCommentRelations, [{ id: 44, afterHead: false }])
+  await assert.rejects(plan(state({ comments: [trigger], timeline: [{ event: 'committed', sha: head }] })), /exact_head_codex_review_head_timeline_invalid/)
+  await assert.rejects(plan(state({ timeline: [{ event: 'committed', sha: 'd'.repeat(40) }] })), /exact_head_codex_review_head_timeline_invalid/)
+  await assert.rejects(plan(state({ timeline: [{ event: 'committed', sha: head }, { event: 'committed', sha: 'd'.repeat(40) }] })), /exact_head_codex_review_head_timeline_invalid/)
+})
+
+test('plan fails closed for head/base/check/review drift and stale or changed packets', async () => {
+  await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-08-31T09:48:04+00:00' } })), /exact_head_codex_review_pr_updated_at_invalid/)
+  await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-02-29T09:48:04Z' } })), /exact_head_codex_review_pr_updated_at_invalid/)
+  await assert.rejects(plan(state({ pr: { ...state().pr, updated_at: '2026-08-31T09:48:04.12Z' } })), /exact_head_codex_review_pr_updated_at_invalid/)
+  await assert.rejects(plan(state({ checks: { check_runs: [] } })), /exact_head_codex_review_checks_missing/)
+  await assert.rejects(plan(state({ checks: { check_runs: [{ id: 1, name: 'validate', status: 'in_progress', conclusion: null }] } })), /exact_head_codex_review_checks_not_terminal_green/)
+  await assert.rejects(plan(state({ checks: { check_runs: [{ id: 1, name: 'Codex review', status: 'completed', conclusion: 'success' }] } })), /exact_head_codex_review_named_check_exists/)
+  await assert.rejects(plan(state({ reviews: [{ id: 9, commit_id: head }] })), /exact_head_codex_review_exists/)
+  const packet = await plan()
+  assert.throws(() => validateExactHeadCodexReviewPlan({ ...packet, pullRequest: { ...packet.pullRequest, base: 'd'.repeat(40) } }, { now }), /exact_head_codex_review_plan_digest_invalid/)
+  assert.throws(() => validateExactHeadCodexReviewPlan(packet, { now: new Date(now.getTime() + EXACT_HEAD_CODEX_REVIEW_PLAN_TTL_MS) }), /exact_head_codex_review_plan_expired/)
+})
+
+test('plan rejects non-canonical local state and malformed authority without exposing credentials', async () => {
+  await assert.rejects(collectExactHeadCodexReviewPlan({ authority, fetchJson: fetcher(state()), gitState: { ...gitState, clean: false }, now, toolDigests: Promise.resolve(tools) }), /exact_head_codex_review_local_state_invalid/)
+  await assert.rejects(collectExactHeadCodexReviewPlan({ authority: { ...authority, protection: { ...authority.protection, healthy: false } }, fetchJson: fetcher(state()), gitState, now, toolDigests: Promise.resolve(tools) }), /exact_head_codex_review_authority_invalid/)
+})
+
+test('default GitHub collector exhausts later pages before accepting checks, reviews, or prior triggers', async () => {
+  const originalFetch = globalThis.fetch
+  const link = (path) => `<https://api.github.com/repos/swanhtet01/swanhtet01.github.io${path}?per_page=100${path.endsWith('/check-runs') ? '&filter=latest' : ''}&page=2>; rel="next"`
+  const oldComments = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-30T20:00:00.000Z' }))
+  const oldCommentEvents = oldComments.map((comment) => ({ event: 'commented', id: comment.id }))
+  const oldReviews = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, commit_id: 'd'.repeat(40) }))
+  const greenChecks = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `check-${index}`, status: 'completed', conclusion: 'success' }))
+  async function expectLatePageFailure(kind, code) {
+    globalThis.fetch = async (url) => {
+      const parsed = new URL(String(url)); const page = parsed.searchParams.get('page'); const path = parsed.pathname
+      if (path.endsWith('/pulls/561')) return response(200, state().pr)
+      if (path.includes('/check-runs')) return response(200, { check_runs: kind === 'checks' && page === '2' ? [{ id: 300, name: 'check-late', status: 'completed', conclusion: 'failure' }] : kind === 'checks' ? greenChecks : state().checks.check_runs }, kind === 'checks' && !page ? link('/commits/' + head + '/check-runs') : null)
+      if (path.endsWith('/reviews')) return response(200, kind === 'reviews' && page === '2' ? [{ id: 300, commit_id: head }] : kind === 'reviews' ? oldReviews : [], kind === 'reviews' && !page ? link('/pulls/561/reviews') : null)
+      if (path.endsWith('/comments')) return response(200, kind === 'comments' && page === '2' ? [{ id: 300, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-31T09:49:00.000Z' }] : kind === 'comments' ? oldComments : [], kind === 'comments' && !page ? link('/issues/561/comments') : null)
+      if (path.endsWith('/timeline')) return response(200, kind === 'comments' && page === '2' ? [{ event: 'committed', sha: head }, { event: 'commented', id: 300 }] : kind === 'comments' ? oldCommentEvents : [{ event: 'committed', sha: head }], kind === 'comments' && !page ? link('/issues/561/timeline') : null)
+      throw new Error(`unexpected path ${path}`)
+    }
+    await assert.rejects(collectExactHeadCodexReviewPlan({ authority, fetchJson: fetchGitHubJson, gitState, now, toolDigests: Promise.resolve(tools) }), code)
+  }
+  try {
+    await expectLatePageFailure('checks', /exact_head_codex_review_checks_not_terminal_green/)
+    await expectLatePageFailure('reviews', /exact_head_codex_review_exists/)
+    await expectLatePageFailure('comments', /exact_head_codex_review_current_head_trigger_exists/)
+  } finally { globalThis.fetch = originalFetch }
+})
+
+test('numeric repository pagination binds fresh identity and never follows an untrusted endpoint', async () => {
+  const original = globalThis.fetch
+  const base = 'https://api.github.com/repos/swanhtet01/swanhtet01.github.io'
+  const numeric = 'https://api.github.com/repositories/1034056731'
+  const suffix = '/issues/561/timeline'
+  let nextUrl = numeric + suffix + '?per_page=100&page=2'
+  let repository = { id: 1034056731, full_name: 'swanhtet01/swanhtet01.github.io' }
+  let requests = []
+  globalThis.fetch = async (url, options) => {
+    requests.push(String(url))
+    assert.equal(options.redirect, 'error')
+    assert.ok(options.signal)
+    assert.ok(String(url).startsWith(base), 'alias is validated then fetched through named repository')
+    if (String(url) === base) return response(200, repository)
+    const page = new URL(url).searchParams.get('page')
+    return response(200, [{ page: page || '1' }], page ? null : '<' + nextUrl + '>; rel="next"')
+  }
+  try {
+    assert.deepEqual(await fetchGitHubJson(suffix + '?per_page=100'), [{ page: '1' }, { page: '2' }])
+    assert.equal(requests.filter(url => url === base).length, 1)
+    for (const bad of [
+      numeric.replace('1034056731', '99') + suffix + '?per_page=100&page=2',
+      numeric + '/issues/562/timeline?per_page=100&page=2',
+      base + '-other' + suffix + '?per_page=100&page=2',
+      nextUrl.replace('api.github.com', 'example.com'),
+      nextUrl.replace('https:', 'http:'),
+      nextUrl + '#private',
+      nextUrl.replace('https://', 'https://user@'),
+      nextUrl.replace('page=2', 'page=1'),
+      nextUrl.replace('page=2', 'page=3'),
+      nextUrl + '&page=2',
+      nextUrl.replace('per_page=100', 'per_page=1'),
+      nextUrl + '&state=all',
+    ]) {
+      const good = nextUrl; nextUrl = bad; requests = []
+      await assert.rejects(fetchGitHubJson(suffix + '?per_page=100'), /exact_head_codex_review_pagination_invalid/)
+      assert.ok(requests.length <= 2, 'no page-two fetch after failed binding')
+      nextUrl = good
+    }
+    for (const bad of [{ ...repository, full_name: 'other/repository' }, { ...repository, id: '1034056731' }]) {
+      const good = repository; repository = bad
+      await assert.rejects(fetchGitHubJson(suffix + '?per_page=100'), /exact_head_codex_review_repository_identity_invalid/)
+      repository = good
+    }
+  } finally { globalThis.fetch = original }
+})
+
+test('CLI main uses the exhaustive GET-only collector to write an exact no-write plan', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'supermega-exact-head-codex-review-'))
+  const handoffPath = join(directory, 'handoff.json')
+  const protectionPath = join(directory, 'protection.json')
+  const outputPath = join(directory, 'plan.json')
+  const handoff = sealed({ contract: 'supermega.release-handoff.v2', repository: 'swanhtet01/swanhtet01.github.io', candidate: { branch: gitState.branch, commit: head, clean: true }, remote: { origin: gitState.origin, mainCommit: base }, verification: { passed: true, verifiedCommit: head }, authority: { pushApproved: false, mergeApproved: false, workflowDispatchApproved: false, deploymentApproved: false, domainChangeApproved: false, providerMutationApproved: false, remoteWritesPerformed: false, providerWritesPerformed: false, credentialValuesInspected: false } })
+  const protection = sealed({ contract: 'supermega.github-main-protection-snapshot.v1', branch: { name: 'main', commit: { sha: base } }, repository: 'swanhtet01/swanhtet01.github.io', assessment: { ok: true, failures: [] }, controls: { githubApiMethods: ['GET'], githubWritesPerformed: false, repositorySettingsMutated: false, branchMutated: false, pullRequestCreated: false, mergePerformed: false, deploymentPerformed: false, supabaseMutated: false, credentialValueExposed: false } })
+  await writeFile(handoffPath, JSON.stringify(handoff), 'utf8')
+  await writeFile(protectionPath, JSON.stringify(protection), 'utf8')
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const link = (path) => `<https://api.github.com/repos/swanhtet01/swanhtet01.github.io${path}?per_page=100${path.endsWith('/check-runs') ? '&filter=latest' : ''}&page=2>; rel="next"`
+  const greenChecks = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `check-${index}`, status: 'completed', conclusion: 'success' }))
+  const oldReviews = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, commit_id: 'd'.repeat(40) }))
+  const oldComments = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, body: EXACT_HEAD_CODEX_REVIEW_BODY, created_at: '2026-08-30T20:00:00.000Z' }))
+  const oldCommentEvents = oldComments.map((comment) => ({ event: 'commented', id: comment.id }))
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(String(url)); const path = parsed.pathname; const page = parsed.searchParams.get('page')
+    calls.push(path)
+    if (path.endsWith('/pulls/561')) return response(200, state().pr)
+    if (path.includes('/check-runs')) return response(200, page === '2' ? state().checks : { check_runs: greenChecks }, page ? null : link(`/commits/${head}/check-runs`))
+    if (path.endsWith('/reviews')) return response(200, page === '2' ? [] : oldReviews, page ? null : link('/pulls/561/reviews'))
+    if (path.endsWith('/comments')) return response(200, page === '2' ? [] : oldComments, page ? null : link('/issues/561/comments'))
+    if (path.endsWith('/timeline')) return response(200, page === '2' ? [{ event: 'committed', sha: head }] : oldCommentEvents, page ? null : link('/issues/561/timeline'))
+    throw new Error(`unexpected path ${path}`)
+  }
+  try {
+    await main(['--pr', '561', '--handoff', handoffPath, '--protection', protectionPath, '--output', outputPath], { gitState, now, toolDigests: Promise.resolve(tools) })
+    const output = JSON.parse(await readFile(outputPath, 'utf8'))
+    assert.equal(output.action.body, EXACT_HEAD_CODEX_REVIEW_BODY)
+    assert.equal(output.pullRequest.head, head)
+    assert.equal(output.controls.githubWritesPerformed, false)
+    assert.equal(output.observed.exactHeadChecks.length, 101)
+    assert.equal(output.observed.codexReviewComments.length, 100)
+    assert.equal(calls.filter((path) => path.includes('/check-runs')).length, 2)
+    assert.equal(calls.filter((path) => path.endsWith('/reviews')).length, 2)
+    assert.equal(calls.filter((path) => path.endsWith('/comments')).length, 2)
+    assert.equal(calls.filter((path) => path.endsWith('/timeline')).length, 2)
+  } finally {
+    globalThis.fetch = originalFetch
+    await rm(directory, { recursive: true, force: true })
+  }
+})

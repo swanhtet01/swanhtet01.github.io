@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
 const verifyCurrentHead = process.argv.includes('--current-head')
 const configuredExpectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
@@ -27,6 +29,8 @@ if (configuredExpectedCommit && currentHeadCommit && configuredExpectedCommit !=
 const expectedCommit = configuredExpectedCommit || currentHeadCommit
 const verificationScope = expectedCommit ? 'exact_release' : 'availability_and_contract'
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
+const publicProducts = activeProductContracts(manifest)
+const activeLandingPages = manifest.pages.filter(page => publicProducts.some(product => product.id === page.productId))
 const baseUrl = String(process.env.PUBLIC_BASE_URL || manifest.release.productionDomain).replace(/\/$/, '')
 const attempts = Number(process.env.PUBLIC_VERIFY_ATTEMPTS || (verifyCurrentHead ? 1 : 6))
 const retryDelayMs = Number(process.env.PUBLIC_VERIFY_RETRY_MS || 5000)
@@ -46,7 +50,7 @@ function url(path, origin = baseUrl) {
 
 async function request(path, options = {}) {
   return fetch(url(path, options.origin), {
-    redirect: options.redirect || 'follow',
+    redirect: options.redirect || 'error',
     cache: 'no-store',
     headers: {
       accept: options.accept || 'text/html,application/json',
@@ -70,7 +74,7 @@ async function readPage(route) {
     && /style-src 'self' 'sha256-[A-Za-z0-9+/=]+'/.test(csp)
     && !csp.includes("'unsafe-inline'")
     && !csp.includes("'unsafe-eval'"), 'page_csp_wrong', { route, csp })
-  for (const [name, value] of Object.entries({ 'cross-origin-opener-policy': 'same-origin', 'cross-origin-resource-policy': 'same-origin', 'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()', 'referrer-policy': 'strict-origin-when-cross-origin', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY' })) {
+  for (const [name, value] of Object.entries({ 'cross-origin-opener-policy': 'same-origin', 'cross-origin-resource-policy': 'same-origin', 'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY' })) {
     assert(response.headers.get(name) === value, 'page_security_header_wrong', { route, name, expected: value, actual: response.headers.get(name) })
   }
   const html = await response.text()
@@ -79,12 +83,10 @@ async function readPage(route) {
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
     'aria-label="SuperMega home"',
     '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
-    'href="https://app.supermega.dev/login">Company sign in</a>',
+    'href="https://app.supermega.dev/login">Login</a>',
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
-  const contactRouteToken = route === '/'
-    ? 'href="/contact/?product=guide&amp;source=managed-intelligence">Request managed pilot</a>'
-    : 'href="/contact/">Contact</a>'
+  const contactRouteToken = 'href="/contact/">Contact</a>'
   assert(html.includes(contactRouteToken), 'page_contact_route_missing', { route, token: contactRouteToken })
   for (const token of manifest.retiredPublicNames) assert(!html.toLowerCase().includes(token.toLowerCase()), 'retired_context_live', { route, token })
   return html
@@ -125,35 +127,46 @@ async function verifyOnce() {
   const pendingRoutes = new Set()
   const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map(pageResults)
-  assert(pages.get('/')?.includes(manifest.company.headline), 'homepage_headline_wrong')
-  assert(pages.get('/')?.includes('href="#products">Choose a product</a>'), 'homepage_product_cta_missing')
+  assert(pages.get('/')?.includes('Less busywork.<br>More business.'), 'homepage_headline_wrong')
+  assert(pages.get('/')?.includes('href="https://app.supermega.dev/login">Login</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
-  for (const token of ['id="model" aria-label="Free and managed SuperMega"', 'Free product. Managed intelligence.', 'Approved AI context across all four products', 'Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.']) {
+  for (const token of ['class="platform-image"', 'id="website"', 'id="ecommerce"']) {
     assert(homepage.includes(token), 'homepage_offer_contract_missing', { token })
   }
-  for (const product of manifest.customerProducts) {
-    const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  const shop = publicProducts.find(product => product.id === 'shop')
+  const shopAction = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
+  assert(homepage.includes('id="shop"'), 'homepage_shop_action_missing')
+  for (const product of publicProducts) {
+    const guidedSampleRoute = 'https://app.supermega.dev/login'
     assert(homepage.includes(`href="${guidedSampleRoute}"`), 'guided_product_route_missing', { product: product.id, guidedSampleRoute })
-    assert(!homepage.includes(`href="${product.appRoute}"`), 'direct_product_route_remains_primary', { product: product.id, appRoute: product.appRoute })
-    for (const template of product.templates) assert(!homepage.includes(template.name), 'template_catalog_exposed', { template: template.id })
+    const guidedLabel = 'Login'
+    assert(homepage.includes(`href="${guidedSampleRoute}">${guidedLabel}</a>`), 'guided_product_label_wrong', { product: product.id })
     const landingRoute = `/${product.id}/`
     const landing = pages.get(landingRoute)
     if (pendingRoutes.has(landingRoute) || landing == null) continue
-    assert(landing.includes(product.headline), 'landing_headline_missing', { product: product.id })
+    assert(landing.includes('class="platform-image"'), 'landing_headline_missing', { product: product.id })
     assert(landing.includes(`href="${guidedSampleRoute}"`), 'landing_guided_product_route_missing', { product: product.id })
-    assert(!landing.includes(`href="${product.appRoute}"`), 'landing_direct_product_route_present', { product: product.id })
-    assert(landing.includes(`href="/contact/?product=${product.id}"`), 'landing_contact_route_missing', { product: product.id })
-    assert(homepage.includes(`href="${landingRoute}"`), 'landing_route_link_missing_on_home', { product: product.id })
+    assert(!landing.includes(shopAction), 'retired_shop_action_present')
+    assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })
+    assert(homepage.includes(`id="${product.id}"`), 'landing_route_link_missing_on_home', { product: product.id })
+  }
+  for (const product of manifest.customerProducts.filter(product => !publicProducts.includes(product))) {
+    assert(!homepage.includes(`href="/${product.id}/"`) && !homepage.includes(`product=${product.id}`), 'retired_product_marketed', { product: product.id })
+    const retained = pages.get(`/${product.id}/`)
+    if (retained != null) assert(retained.includes('content="noindex,follow"') && retained.includes('This product is not offered for new setup.') && !retained.includes('"@type":"Product"'), 'retired_product_boundary_missing', { product: product.id })
   }
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
-  assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
+  assert(pages.get('/')?.includes('href="/privacy/"'), 'privacy_navigation_missing')
   const contactPage = pages.get('/contact/') || ''
-  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Client-provided trial proof', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Trial summary detached.', 'Request received:', "query.get('source')==='managed-intelligence'", 'Request managed company intelligence.', "submit.textContent='Request managed pilot'"]) {
+  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Attached request details', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_behavior"', 'name="proof_sources"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Attached summary removed. Review the updated request before sending.', 'Request received:', 'source.value=location.href', '>Send message</button>']) {
     assert(contactPage.includes(token), 'contact_trial_proof_contract_missing', { token })
   }
+  for (const token of ['Request managed company intelligence.', "submit.textContent='Request managed pilot'", 'managedIntelligenceRequest']) {
+    assert(!contactPage.includes(token), 'retired_managed_pilot_pitch_present', { token })
+  }
   const privacyPage = pages.get('/privacy/') || ''
-  assert(privacyPage.includes('optional trial proof summary, outcome status, and digest') && privacyPage.includes('digest-bound aggregate outcome') && privacyPage.includes('excludes raw product records, questions, approval contents, and account details'), 'trial_proof_privacy_copy_missing')
+  assert(privacyPage.includes('optional attached request summary, outcome status, and digest') && privacyPage.includes('digest-bound aggregate outcome') && privacyPage.includes('excludes raw product records, questions, approval contents, and account details'), 'trial_proof_privacy_copy_missing')
 
   // The share-and-schema surface (og-card asset, og:image/twitter metadata,
   // JSON-LD structured data, skip-to-content link) ships with a release, exactly
@@ -182,7 +195,7 @@ async function verifyOnce() {
     // generic-card surface stays valid while the per-product release is
     // pending; the post-deploy release verification always runs with
     // EXPECTED_RELEASE_COMMIT set, which asserts the per-product surface.
-    const landingShareImages = new Map(manifest.pages.filter((entry) => entry.productId).map((entry) => [entry.route, new URL(`/og-card-${entry.productId}.png`, `${manifest.release.productionDomain}/`).href]))
+    const landingShareImages = new Map(activeLandingPages.map((entry) => [entry.route, new URL(`/og-card-${entry.productId}.png`, `${manifest.release.productionDomain}/`).href]))
     const loadedLandingRoutes = [...landingShareImages.keys()].filter((route) => pages.get(route) != null)
     const perProductCardsLive = loadedLandingRoutes.length > 0 && loadedLandingRoutes.every((route) => pages.get(route).includes(landingShareImages.get(route)))
     const perProductCardsActive = Boolean(expectedCommit) || perProductCardsLive
@@ -202,8 +215,8 @@ async function verifyOnce() {
       && homeSchema?.['@type'] === 'Organization'
       && homeSchema?.name === 'SuperMega'
       && homeSchema?.url === new URL('/', `${manifest.release.productionDomain}/`).href
-      && homeSchema?.description === manifest.company.statement, 'organization_schema_wrong_live', { homeSchema })
-    for (const page of manifest.pages.filter((entry) => entry.productId)) {
+      && homeSchema?.description === manifest.pages.find(page => page.route === '/').description, 'organization_schema_wrong_live', { homeSchema })
+    for (const page of activeLandingPages) {
       const landing = pages.get(page.route)
       if (landing == null) continue
       const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
@@ -214,12 +227,36 @@ async function verifyOnce() {
         && schema?.url === new URL(page.route, `${manifest.release.productionDomain}/`).href
         && schema?.description === (page.description || product.description), 'product_schema_wrong_live', { route: page.route, schema })
     }
-    const cardPaths = ['/og-card.png', ...(perProductCardsActive ? manifest.pages.filter((entry) => entry.productId).map((entry) => `/og-card-${entry.productId}.png`) : [])]
+    const cardPaths = ['/og-card.png', ...(perProductCardsActive ? activeLandingPages.map((entry) => `/og-card-${entry.productId}.png`) : [])]
     await Promise.all(cardPaths.map(async (path) => {
       const card = await request(path, { accept: 'image/png' })
       assert(card.status === 200, 'share_image_http_error', { path, status: card.status })
       assert((card.headers.get('content-type') || '').includes('image/png'), 'share_image_content_type_wrong', { path, contentType: card.headers.get('content-type') })
     }))
+  }
+
+  // The screenshots are part of the release, not optional decoration. Verify
+  // their actual response bytes; a 200 HTML fallback must never pass as an image.
+  const interfaceImages = {
+    shop: 'platform-stock.jpg',
+    website: 'platform-pages.jpg',
+    ecommerce: 'platform-catalog.jpg',
+  }
+  for (const product of publicProducts) {
+    const filename = interfaceImages[product.id]
+    assert(filename, 'interface_image_mapping_missing', { product: product.id })
+    const path = `/images/${filename}`
+    for (const route of ['/', `/${product.id}/`]) {
+      const html = pages.get(route)
+      if (html != null) assert(html.includes(`src="${path}"`), 'interface_image_reference_missing', { route, path })
+    }
+    const response = await request(path, { accept: 'image/jpeg' })
+    assert(response.status === 200, 'interface_image_http_error', { path, status: response.status })
+    assert((response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() === 'image/jpeg', 'interface_image_content_type_wrong', { path })
+    const bytes = Buffer.from(await response.arrayBuffer())
+    assert(bytes.length > 10000 && bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255])), 'interface_image_invalid', { path })
+    const source = await readFile(new URL(`./public-assets/${filename}`, import.meta.url))
+    assert(createHash('sha256').update(bytes).digest('hex') === createHash('sha256').update(source).digest('hex'), 'interface_image_release_mismatch', { path })
   }
 
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
@@ -253,7 +290,7 @@ async function verifyOnce() {
 
   await Promise.all([
     verifyRedirect('/products/shop/', '/#shop'),
-    verifyRedirect('/products/factory/', '/#plant'),
+    verifyRedirect('/products/factory/', '/plant/'),
     verifyRedirect('/products/ecommerce/', '/#ecommerce'),
     verifyRedirect('/ai-agent-solutions/', '/#products'),
     verifyRedirect('/offers/', '/#products'),
@@ -265,7 +302,7 @@ async function verifyOnce() {
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })
   assert(www.status === 200, 'www_http_error', { status: www.status })
   const wwwHtml = await www.text()
-  assert(wwwHtml.includes(manifest.company.headline), 'www_release_drift')
+  assert(wwwHtml.includes('Less busywork.<br>More business.'), 'www_release_drift')
 
   return {
     pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),

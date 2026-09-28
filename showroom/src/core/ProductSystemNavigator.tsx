@@ -26,8 +26,8 @@ type ProductActivationEvent = 'next_steps_opened' | 'data_setup_opened'
 const productDetails: Record<ClientSolutionId, ProductSystemDetail> = {
   commerce: { label: 'Shop', primaryPath: '/shop/', dataTitle: 'Use your items and stock', dataAction: 'Use my Shop data' },
   production: { label: 'Plant', primaryPath: '/plant/', dataTitle: 'Use your jobs and plan', dataAction: 'Use my Plant data' },
-  website: { label: 'Website', primaryPath: '/website/', dataTitle: 'Use your pages and content', dataAction: 'Use my website content' },
-  ecommerce: { label: 'Ecommerce', primaryPath: '/ecommerce/', dataTitle: 'Use your store catalog', dataAction: 'Use my store data' },
+  website: { label: productContracts.website.name, primaryPath: '/website/', dataTitle: 'Use your pages and content', dataAction: 'Use my website content' },
+  ecommerce: { label: productContracts.ecommerce.name, primaryPath: '/ecommerce/', dataTitle: 'Use your store catalog', dataAction: 'Use my store data' },
 }
 
 function readCurrentShopIndustryPackId(): ShopIndustryPackId {
@@ -41,9 +41,9 @@ function readCurrentShopIndustryPackId(): ShopIndustryPackId {
   }
 }
 
-function ProductDataImport({ product, managed, details }: { product: ClientSolutionId; managed: boolean; details: ProductSystemDetail }) {
+export function ProductDataImport({ product, managed, details = productDetails[product] }: { product: ClientSolutionId; managed: boolean; details?: ProductSystemDetail }) {
   const [setup] = useSetupWorkspace()
-  const [managedIdentity] = useManagedIdentity(managed)
+  const [managedIdentity, , identitySettled] = useManagedIdentity(managed)
   const [shopIndustryPackId] = useState<ShopIndustryPackId>(readCurrentShopIndustryPackId)
   const [plantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const contract = productContracts[product]
@@ -54,6 +54,10 @@ function ProductDataImport({ product, managed, details }: { product: ClientSolut
       : templateFor(product, '')
   const workspace = setup.product === product && setup.workspace.trim() ? setup.workspace.trim() : `My ${details.label}`
   const owner = setup.product === product && setup.owner.trim() ? setup.owner.trim() : 'Business owner'
+
+  if (managed && !managedIdentity) {
+    return <p className="form-notice" role="status">{identitySettled ? <>Login to import data. <Link to={`/login?product=${contract.slug}`}>Login</Link></> : 'Loading your account...'}</p>
+  }
 
   return <Suspense fallback={<p className="form-notice" role="status">Loading {details.label} data tools...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} owner={owner} plantIndustryPackId={product === 'production' ? plantIndustryPackId : undefined} product={product} productName={details.label} productSlug={contract.slug} shopIndustryPackId={product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={workspace} /></Suspense>
 }
@@ -73,6 +77,9 @@ export function ProductSystemNavigator({ product, managed = false }: { product: 
   const [open, setOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
   const details = productDetails[product]
+  const assistedSetupProduct = !managed && product !== 'production'
+    ? product === 'commerce' ? 'shop' : product
+    : null
   const capabilities = useMemo(() => productCapabilityCatalog(product), [product])
   const workingFlows = useMemo(() => {
     const seen = new Set<string>()
@@ -114,14 +121,14 @@ export function ProductSystemNavigator({ product, managed = false }: { product: 
       </summary>
       <div className="product-system-body">
         <header>
-          <div><span className="core-eyebrow">{details.label}</span><h2>Keep working in {details.label}</h2><p>Choose another working flow, use your data, or make this sample yours.</p></div>
-          <div className="product-system-actions"><Link className="core-button compact primary" to={clientSetupPath(product)}>Make {details.label} mine</Link></div>
+          <div><span className="core-eyebrow">{details.label}</span><h2>Keep working in {details.label}</h2><p>{assistedSetupProduct ? 'We can configure this for your business. Tell us what you need; we agree the scope and prepare it for your review. The tools below remain available for local preparation.' : 'Choose a workflow or import your data.'}</p></div>
+          {!managed ? <div className="product-system-actions">{assistedSetupProduct ? <a className="core-button compact primary" href={`https://supermega.dev/contact/?product=${assistedSetupProduct}&source=product-next-steps`} target="_blank" rel="noopener noreferrer">Request {details.label} setup<span className="sr-only"> (opens in a new tab)</span></a> : <Link className="core-button compact primary" to={clientSetupPath(product)}>Make {details.label} mine</Link>}</div> : null}
         </header>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
           {workingFlows.map((capability) => <WorkflowLink capability={capability} fallbackPath={details.primaryPath} key={capability.id} />)}
         </div>
         <section aria-label={`${details.label} data`} className="product-system-data">
-          <div><span className="core-eyebrow">Your data</span><h3>{details.dataTitle}</h3><p>Upload a CSV or try a sample. SuperMega matches columns locally and asks before changing {details.label}.</p><small>Only {details.label} is prepared here.</small></div>
+          <div><span className="core-eyebrow">Your data</span><h3>{details.dataTitle}</h3><p>Upload your CSV to review and import your data.</p></div>
           <button aria-controls={dataPanelId} aria-expanded={dataOpen} className="core-button compact" onClick={toggleDataSetup} type="button">{dataOpen ? 'Close data setup' : details.dataAction}</button>
         </section>
         {dataOpen ? <div className="product-system-import" id={dataPanelId}><ProductDataImport details={details} managed={managed} product={product} /></div> : null}

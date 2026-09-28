@@ -25,7 +25,7 @@ const bundle = await build({
   stdin: {
     contents: `
       export {
-        websiteTradeBrief, websiteTradeBriefTradeIds, websiteTradeBriefOptions,
+        websiteBusinessBriefPreview, websiteTradeBrief, websiteTradeBriefTradeIds, websiteTradeBriefOptions,
       } from '../products/website/website-trade-brief.ts'
       export {
         websiteStarterBriefIssues, websiteStarterTemplates, applyWebsiteStarterBrief,
@@ -46,7 +46,7 @@ const bundle = await build({
 })
 
 const {
-  websiteTradeBrief, websiteTradeBriefTradeIds, websiteTradeBriefOptions,
+  websiteBusinessBriefPreview, websiteTradeBrief, websiteTradeBriefTradeIds, websiteTradeBriefOptions,
   websiteStarterBriefIssues, websiteStarterTemplates, applyWebsiteStarterBrief,
   isUntouchedWebsiteStarter, createInitialWorkspace, workspaceFingerprint,
   shopBusinessTemplates,
@@ -274,3 +274,15 @@ assert.deepEqual(
 checks += 1
 
 console.log(`website trade brief contract: ${checks} checks passed`)
+
+const ownerBrief = websiteBusinessBriefPreview({ company: 'Thazin Bakery', description: 'Bread and birthday cakes.' }, 'bakery')
+assert.equal(ownerBrief.businessName, 'Thazin Bakery')
+assert.equal(ownerBrief.offer, 'Bread and birthday cakes.')
+assert.equal(ownerBrief.contactHref, '')
+assert.deepEqual(websiteStarterBriefIssues(ownerBrief), [])
+assert.ok(websiteStarterBriefIssues(websiteBusinessBriefPreview({ company: 'x'.repeat(61), description: 'x'.repeat(141) })).length >= 2)
+assert.equal(websiteBusinessBriefPreview({ company: 'Business', description: 'Services' }).templateId, 'business-presence')
+const preparedOwnerSite = applyWebsiteStarterBrief(createInitialWorkspace(), ownerBrief, '2026-09-26T00:00:00.000Z')
+assert.ok(JSON.stringify(preparedOwnerSite).includes('Thazin Bakery'))
+assert.ok(JSON.stringify(preparedOwnerSite).includes('Bread and birthday cakes.'))
+assert.notEqual(workspaceFingerprint(preparedOwnerSite), workspaceFingerprint(createInitialWorkspace()))

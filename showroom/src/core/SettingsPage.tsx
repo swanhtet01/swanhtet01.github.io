@@ -326,9 +326,12 @@ export function SettingsPage() {
   const [restorePoint, setRestorePoint] = useState<LocalWorkspaceBackup | null>(loadLocalWorkspaceRestorePoint)
   const [restorePointLabel, setRestorePointLabel] = useState(() => loadLocalWorkspaceRestorePoint() ? 'Saved on this device' : '')
   const [restoreBusy, setRestoreBusy] = useState(false)
+  const [restoreArmed, setRestoreArmed] = useState(false)
+  const restoreLoadSequence = useRef(0)
+  const localWorkspaceOperation = useRef<'restore' | 'reset' | null>(null)
   const [restoreNotice, setRestoreNotice] = useState('')
   const [settingsStep, setSettingsStep] = useState<'workflow' | 'success'>('workflow')
-  const [managedIdentity, setManagedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const [managedIdentity, setManagedIdentity, managedIdentitySettled] = useManagedIdentity(runtime.status === 'enterprise')
   const [managedEmail, setManagedEmail] = useState('')
   const [managedPassword, setManagedPassword] = useState('')
   const [managedWorkspace, setManagedWorkspace] = useState('')
@@ -358,8 +361,10 @@ export function SettingsPage() {
   const [preparedArtifact, setPreparedArtifact] = useState<ClientDemoPreparationArtifact | null>(null)
   const [preparingClientFiles, setPreparingClientFiles] = useState(false)
   const [preparedConfirmation, setPreparedConfirmation] = useState('')
+  const [preparedInstalled, setPreparedInstalled] = useState<Record<string, string>>({})
   const [preparedBusyProduct, setPreparedBusyProduct] = useState<SetupProductId | null>(null)
   const [preparedInstallStep, setPreparedInstallStep] = useState('')
+  const preparedInstallRunning = useRef(false)
   const [preparedNotice, setPreparedNotice] = useState('')
   const [preparedBlockedProduct, setPreparedBlockedProduct] = useState<SetupProductId | null>(null)
   const [ecommerceActivationPacketText, setEcommerceActivationPacketText] = useState('')
@@ -495,7 +500,7 @@ export function SettingsPage() {
   const capabilityPlanHref = capabilityPlan ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(capabilityPlan, null, 2))}` : ''
   const demoReadyCount = demoWorkspace?.products.filter((product) => ['data_ready', 'workspace_checked', 'applied'].includes(product.status)).length ?? 0
   const preparedApprovalReady = Boolean(preparedArtifact && clientDemoPreparationConfirmationMatches(preparedArtifact, preparedConfirmation))
-  const preparedAppliedProducts = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
+  const preparedAppliedProducts = new Set(Object.keys(preparedInstalled).filter((product) => preparedInstalled[product] === preparedArtifact?.bundleDigest))
   const preparedRemainingCount = preparedArtifact?.products.filter((product) => !preparedAppliedProducts.has(product.product)).length ?? 0
   const preparedBlockedEntry = preparedBlockedProduct
     ? preparedArtifact?.products.find((product) => product.product === preparedBlockedProduct) ?? null
@@ -1254,6 +1259,11 @@ export function SettingsPage() {
   }
 
   async function installDemoBlueprint(blueprint: ClientDemoBlueprint, origin: 'created' | 'loaded') {
+    setPreparedArtifact(null)
+    setPreparedConfirmation('')
+    setPreparedInstalled({})
+    setPreparedBlockedProduct(null)
+    setPreparedNotice('')
     let shopPackNotice = ''
     if (origin === 'created' && blueprint.products.some((product) => product.product === 'commerce')) {
       try {
@@ -1314,12 +1324,13 @@ export function SettingsPage() {
       }))
     }
     setNotice(origin === 'loaded'
-      ? `${blueprint.products.length}-product setup loaded. Client records, product packs, and progress were not changed; prepare the data again on this device.`
+      ? `${blueprint.products.length}-product setup loaded. Review and prepare data on this device.`
       : `${blueprint.products.length}-product demo kit ready.${shopPackNotice}${plantPackNotice}${websitePackNotice} Prepare data or open a product.`)
   }
 
   async function loadDemoKit(file: File | null) {
-    if (!file) return
+    if (!file || preparedInstallRunning.current) return
+    preparedInstallRunning.current = true
     try {
       if (file.size < 1 || file.size > CLIENT_DEMO_KIT_MAX_BYTES) throw new Error('Choose a SuperMega setup kit smaller than 128 KB.')
       const kit = restoreClientDemoKit(JSON.parse(await file.text()))
@@ -1327,11 +1338,14 @@ export function SettingsPage() {
       await installDemoBlueprint(kit.blueprint, 'loaded')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The setup kit could not be loaded.')
+    } finally {
+      preparedInstallRunning.current = false
     }
   }
 
   async function loadPreparedClientDemo(file: File | null) {
-    if (!file) return
+    if (!file || preparedInstallRunning.current) return
+    preparedInstallRunning.current = true
     setPreparedNotice('Verifying the private package...')
     try {
       if (file.size < 1 || file.size > CLIENT_DEMO_PREPARATION_MAX_BYTES) throw new Error('Choose a private SuperMega package smaller than 5 MB.')
@@ -1341,17 +1355,20 @@ export function SettingsPage() {
       setPreparedArtifact(artifact)
       setPreparedConfirmation('')
       setPreparedBlockedProduct(null)
-      setPreparedNotice(`${artifact.products.length}-product private package verified. Review it, then approve one serial installation.`)
+      setPreparedNotice(`${artifact.products.length}-product private package verified. Review and approve to install.`)
     } catch (error) {
       setPreparedArtifact(null)
       setPreparedConfirmation('')
       setPreparedBlockedProduct(null)
       setPreparedNotice(error instanceof Error ? error.message : 'The private package could not be loaded.')
+    } finally {
+      preparedInstallRunning.current = false
     }
   }
 
   async function prepareClientFiles(files: readonly File[]) {
-    if (!files.length || !demoKitReadiness?.kit) return
+    if (!files.length || !demoKitReadiness?.kit || preparedInstallRunning.current) return
+    preparedInstallRunning.current = true
     setPreparingClientFiles(true)
     setPreparedArtifact(null)
     setPreparedConfirmation('')
@@ -1377,21 +1394,23 @@ export function SettingsPage() {
     } catch (error) {
       setPreparedNotice(error instanceof Error ? error.message : 'The selected client files could not be prepared.')
     } finally {
+      preparedInstallRunning.current = false
       setPreparingClientFiles(false)
     }
   }
 
   async function installPreparedProducts() {
     const artifact = preparedArtifact
-    if (!artifact || preparedBusyProduct || managedIdentity || !preparedApprovalReady) return
-    const installedBeforeRun = new Set(demoWorkspace?.products.filter((product) => product.status === 'applied').map((product) => product.product) ?? [])
+    if (!artifact || preparedInstallRunning.current || preparedBusyProduct || managedIdentity || !preparedApprovalReady) return
+    preparedInstallRunning.current = true
+    const installedBeforeRun = preparedAppliedProducts
     let activeProduct: SetupProductId | null = null
     setPreparedBlockedProduct(null)
     try {
       const { applyPreparedLocalClientDemoProduct, preparedLocalClientDemoInstallOrder } = await import('./local-client-import')
       const installOrder = (await preparedLocalClientDemoInstallOrder(artifact)).filter((product) => !installedBeforeRun.has(product))
       if (!installOrder.length) {
-        setPreparedNotice('All products in this private package are already installed and current.')
+        setPreparedNotice('This package is installed locally.')
         return
       }
       const summaries: string[] = []
@@ -1401,6 +1420,7 @@ export function SettingsPage() {
         setPreparedInstallStep(`Installing ${index + 1} of ${installOrder.length}: ${productDisplayName(product)}`)
         setPreparedNotice(`Rechecking and installing ${productDisplayName(product)} locally...`)
         const installed = await applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)
+        setPreparedInstalled((current) => ({ ...current, [product]: artifact.bundleDigest }))
         let packNotice = ''
         if (product === 'commerce') {
           try {
@@ -1429,14 +1449,17 @@ export function SettingsPage() {
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'The product could not be installed.'
       setPreparedBlockedProduct(activeProduct)
-      setPreparedNotice(`Stopped${activeProduct ? ` at ${productDisplayName(activeProduct)}` : ''}: ${detail} Products already installed are preserved; fix the issue and run the remaining installation again.`)
+      setPreparedNotice(`Stopped${activeProduct ? ` at ${productDisplayName(activeProduct)}` : ''}: ${detail} Installed products are preserved. Fix the issue and retry.`)
     } finally {
+      preparedInstallRunning.current = false
       setPreparedBusyProduct(null)
       setPreparedInstallStep('')
     }
   }
 
   async function createDemoKit() {
+    if (preparedInstallRunning.current) return
+    preparedInstallRunning.current = true
     try {
       const blueprint = buildClientDemoBlueprint({
         workspace: setup.workspace,
@@ -1449,6 +1472,8 @@ export function SettingsPage() {
       await installDemoBlueprint(blueprint, 'created')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The client demo kit could not be prepared.')
+    } finally {
+      preparedInstallRunning.current = false
     }
   }
 
@@ -1809,6 +1834,9 @@ export function SettingsPage() {
   }
 
   function saveLocalRestorePoint() {
+    if (localWorkspaceOperation.current) return
+    restoreLoadSequence.current += 1
+    setRestoreArmed(false)
     const backup = collectLocalWorkspaceBackup(window.localStorage)
     if (!backup) {
       setRestoreNotice('This local workspace is too large to save safely. Export evidence before resetting.')
@@ -1825,34 +1853,50 @@ export function SettingsPage() {
   }
 
   async function loadEvidenceRestorePoint(file: File | null) {
-    if (!file) return
+    if (!file || localWorkspaceOperation.current) return
+    const sequence = ++restoreLoadSequence.current
+    setRestoreArmed(false)
+    setRestorePoint(null)
+    setRestorePointLabel('')
     try {
+      window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       if (file.size < 1 || file.size > LOCAL_WORKSPACE_BACKUP_MAX_BYTES) throw new Error('Choose a SuperMega evidence file smaller than 5 MB.')
-      const backup = restoreLocalWorkspaceBackupFromEvidence(JSON.parse(await file.text()))
+      const text = await file.text()
+      if (sequence !== restoreLoadSequence.current) return
+      const backup = restoreLocalWorkspaceBackupFromEvidence(JSON.parse(text))
       if (!backup) throw new Error('This evidence file cannot restore a local workspace. Export a current version 24 evidence file first.')
       window.sessionStorage.setItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY, JSON.stringify(backup))
       setRestorePoint(backup)
       setRestorePointLabel(file.name)
       setRestoreNotice(`${Object.keys(backup.records).length} local records verified. Restore only when you are ready to replace this browser workspace.`)
     } catch (error) {
+      if (sequence !== restoreLoadSequence.current) return
       setRestoreNotice(error instanceof Error ? error.message : 'The evidence backup could not be loaded.')
     }
   }
 
   async function restoreSavedLocalWorkspace() {
-    if (!restorePoint || restoreBusy) return
+    if (!restorePoint || localWorkspaceOperation.current || !restoreArmed) return
+    localWorkspaceOperation.current = 'restore'
+    restoreLoadSequence.current += 1
+    setRestoreArmed(false)
     setRestoreBusy(true)
     try {
       await applyLocalWorkspaceBackup(window.localStorage, restorePoint)
       window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       window.location.assign('/settings/#controls')
     } catch (error) {
+      localWorkspaceOperation.current = null
       setRestoreNotice(error instanceof Error ? error.message : 'The previous local workspace could not be restored safely.')
       setRestoreBusy(false)
     }
   }
 
   async function resetDemoWorkspace() {
+    if (localWorkspaceOperation.current) return
+    localWorkspaceOperation.current = 'reset'
+    restoreLoadSequence.current += 1
+    setRestoreArmed(false)
     setResetBusy(true)
     try {
       if (!loadLocalWorkspaceRestorePoint()) {
@@ -1866,6 +1910,7 @@ export function SettingsPage() {
       resettableKeys.forEach((key) => window.localStorage.removeItem(key))
       window.location.assign('/')
     } catch (error) {
+      localWorkspaceOperation.current = null
       setNotice(error instanceof Error ? error.message : 'The local trial could not be reset safely.')
       setResetBusy(false)
     }
@@ -2049,7 +2094,7 @@ export function SettingsPage() {
                   <p className="capability-control-note">Shared controls: {capabilityPlan.sharedControls.join(' · ')}. Every capability must be verified before it is presented as available.</p>
                 </div>
               </details> : null}
-                {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.outcome}</span></li>)}</ol> : <p className="form-notice">This demo has one standalone product.</p>}
+                {demoBlueprint.integrations.length ? <ol className="demo-integration-flow">{demoBlueprint.integrations.map((integration) => <li key={`${integration.from}-${integration.to}`}><strong>{productDisplayName(integration.from)} → {productDisplayName(integration.to)}</strong><span>{integration.from === 'website' && integration.to === 'ecommerce' ? 'Website presents the business; Ecommerce lets customers browse products and send requests.' : integration.outcome}</span></li>)}</ol> : <p className="form-notice">This demo has one standalone product.</p>}
               </details>
               <details className="compact-disclosure client-preparation-handoff">
                 <summary><span>Use client data</span><small>One local step</small></summary>
@@ -2070,18 +2115,18 @@ export function SettingsPage() {
                 <p>Files stay in this browser. Preparation makes no upload, model call, managed write, or activation.</p>
               </details>
               {preparedArtifact ? <section aria-label="Private client package installer" className="setup-template-summary">
-                <div><span className="core-eyebrow">Verified private package</span><strong>Install one connected local demo.</strong><small>Private client rows stay in this browser. Nothing is uploaded, shared, or installed automatically.</small></div>
-                <div className="template-contract"><span>Founder approval</span><strong>{preparedArtifact.products.length} products · {preparedArtifact.products.reduce((total, product) => total + product.rowCount, 0)} reviewed rows</strong><small>{preparedArtifact.controls.containsNormalizedClientData ? 'Includes normalized client CSV data.' : 'Uses prepared sample fixtures.'}</small></div>
+                <div><span className="core-eyebrow">Verified private package</span><strong>Review and install locally.</strong><small>Data stays in this browser. Installation needs your approval.</small></div>
+                <div className="template-contract"><span>Founder approval</span><strong>{preparedArtifact.products.length} product{preparedArtifact.products.length === 1 ? '' : 's'} · {preparedArtifact.products.reduce((total, product) => total + product.rowCount, 0)} rows to review</strong><small>{preparedArtifact.controls.containsSampleFixtures ? 'Includes sample data. Review before delivery.' : 'Client CSV data. Review before delivery.'}</small></div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <details className="compact-disclosure"><summary><span>Review exact package</span><small>{preparedArtifact.bundleDigest.slice(0, 22)}...</small></summary><ol>{preparedArtifact.review.checklist.map((item) => <li key={item}>{item}</li>)}</ol><code>{preparedArtifact.review.confirmation}</code></details>
                   <label>Paste the exact approval phrase<input autoComplete="off" disabled={Boolean(managedIdentity || preparedBusyProduct)} onChange={(event) => setPreparedConfirmation(event.target.value)} spellCheck={false} value={preparedConfirmation} /></label>
                   {managedIdentity ? <p className="form-notice">Disconnect the managed account to use this browser-local installer. Managed imports keep their separate server validation and approval flow.</p> : null}
-                  <div className="settings-step-actions"><span>{preparedRemainingCount ? `${preparedRemainingCount} product${preparedRemainingCount === 1 ? '' : 's'} remaining · Shop installs before Ecommerce.` : 'All package products are installed.'}</span><button className="core-button primary" disabled={!preparedApprovalReady || Boolean(preparedBusyProduct) || Boolean(managedIdentity) || preparedRemainingCount === 0} onClick={() => void installPreparedProducts()} type="button">{preparedBusyProduct ? preparedInstallStep : `Install remaining ${preparedRemainingCount}`}</button></div>
+                  <div className="settings-step-actions"><span>{preparedRemainingCount ? `${preparedRemainingCount} product${preparedRemainingCount === 1 ? '' : 's'} remaining` : 'All package products are installed.'}</span><button className="core-button primary" disabled={!preparedApprovalReady || Boolean(preparedBusyProduct) || Boolean(managedIdentity) || preparedRemainingCount === 0} onClick={() => void installPreparedProducts()} type="button">{preparedBusyProduct ? preparedInstallStep : `Install remaining ${preparedRemainingCount}`}</button></div>
                   <div aria-label="Install prepared products" className="demo-solution-grid">{preparedArtifact.products.map((product) => {
-                    const applied = demoWorkspace?.products.find((entry) => entry.product === product.product)?.status === 'applied'
+                    const applied = preparedAppliedProducts.has(product.product)
                     const busy = preparedBusyProduct === product.product
                     const blocked = preparedBlockedProduct === product.product
-                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? 'Installed and ready' : blocked ? 'Existing work needs a decision' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}`}</small></div>{applied || blocked ? <Link className="core-button" to={product.demoPath}>{blocked ? 'Review existing work' : bi('Open')}</Link> : null}</section>
+                    return <section className="demo-solution-card" data-selected key={product.product}><div><strong>{product.label}</strong><small>{busy ? 'Installing now...' : applied ? `Installed locally · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'sample data'}` : blocked ? 'Existing work needs a decision' : `${product.rowCount} rows · ${product.sourceMode === 'client_csv' ? 'client CSV' : 'prepared sample'}`}</small></div>{applied || blocked ? <Link className="core-button" to={product.demoPath}>{blocked ? 'Review existing work' : bi('Open')}</Link> : null}</section>
                   })}</div>
                   <p className="form-notice" aria-live="polite">{preparedNotice}</p>
                   {preparedBlockedEntry ? <div className="settings-step-actions" aria-label="Blocked installation recovery"><span>Keep the existing {preparedBlockedEntry.label} work, or use the recoverable reset controls before retrying.</span><div className="setup-action-group"><Link className="core-button" to={preparedBlockedEntry.demoPath}>Review {preparedBlockedEntry.label}</Link><a className="core-button primary" href="#controls">Open restore or reset controls</a></div></div> : null}
@@ -2094,7 +2139,7 @@ export function SettingsPage() {
               })}</div></details>
             </section> : null}
           </>
-          {demoBlueprint && demoDataSetupOpen ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Load data when ready</h3><p>The working sample is available first. Import the client's matching CSV only when you have it.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
+          {demoBlueprint && demoDataSetupOpen ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Load data when ready</h3><p>The working sample is available first. Import the client's matching CSV only when you have it.</p></div>{runtime.status === 'enterprise' && !managedIdentity ? <p className="form-notice" role="status">{managedIdentitySettled ? <Link to={`/login?product=${selectedProduct.slug}`}>Login to import data</Link> : 'Loading your account...'}</p> : <Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense>}</section> : null}
           {demoBlueprint && demoDataSetupOpen ? <div className="settings-step-actions"><span>Optional: add measurable success criteria after the demo works.</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button></div></div> : null}
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
@@ -2144,7 +2189,7 @@ export function SettingsPage() {
       <details className="settings-advanced" id="controls" open={location.hash === '#controls' || undefined}>
         <summary><span>Advanced controls</span><small>Security, evidence, reset</small></summary>
         <div className="settings-advanced-content">
-          {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete settings-restore-point"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} local records</small></div><button className="core-button" disabled={restoreBusy} onClick={restoreSavedLocalWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button></section> : null}
+          {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete settings-restore-point"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} local records</small>{restoreArmed ? <p role="alert">Replace this browser workspace with this restore point? Current local records will be replaced, not merged. Export current evidence first if you need to keep it. This does not restore cloud data.</p> : null}</div>{restoreArmed ? <><button className="core-button" onClick={() => setRestoreArmed(false)} type="button">Cancel restore</button><button className="core-button danger" disabled={restoreBusy} onClick={restoreSavedLocalWorkspace} type="button">Confirm replace local workspace</button></> : <button className="core-button" disabled={restoreBusy} onClick={() => setRestoreArmed(true)} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button>}</section> : null}
           {restoreNotice ? <p className="form-notice settings-restore-point" role="status">{restoreNotice}</p> : null}
           <section className="core-panel system-boundary-panel">
             <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>

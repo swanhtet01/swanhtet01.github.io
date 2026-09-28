@@ -465,6 +465,55 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
 
 
 class ActivationWrapperContractTests(unittest.TestCase):
+    def test_v13_profile_and_billing_values_are_bound_before_future_writes(self) -> None:
+        source = _read(ACTIVATOR)
+        from supermega_runtime.managed_activation import TRIAL_SCHEMA_VERSION, TRIAL_SCHEMA_PROFILE, TRIAL_DATABASE_CONTRACT
+        from tools.private_trial_v13_contract import PROFILE, CONTRACT
+
+        self.assertEqual((TRIAL_SCHEMA_VERSION, TRIAL_SCHEMA_PROFILE, TRIAL_DATABASE_CONTRACT), (13, PROFILE, CONTRACT))
+        self.assertIn("if ($activationSchemaVersion -ne '13')", source)
+        self.assertIn(f"target.schemaProfile -cne '{PROFILE}'", source)
+        self.assertIn(f"target.databaseContract -cne '{CONTRACT}'", source)
+        self.assertLess(source.index("target.schemaProfile -cne"), source.index("$resolved = Resolve-SecretValue"))
+        self.assertIn(f"'--schema-profile', '{PROFILE}'", source)
+        self.assertEqual(source.count("'--schema-profile'"), 1)
+        self.assertNotIn("--schema-profile', 'legacy-v11'", source)
+        billing = source.index("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_BILLING_SCHEMA_VERSION' -Value $activationSchemaVersion")
+        staged = source.index("$EnvironmentValueVerifier staged")
+        apply = source.index("$ActivationModule apply", staged)
+        enable = source.index("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_WRITES_ENABLED'")
+        self.assertLess(billing, staged)
+        self.assertLess(staged, apply)
+        self.assertLess(apply, enable)
+        # These feature windows remain separately owner-gated, not opened by this cutover.
+        self.assertNotIn("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW'", source)
+        self.assertNotIn("Add-ManagedEnvironmentValue -Key 'SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW'", source)
+
+    @unittest.skipUnless(POWERSHELL, "Windows PowerShell required for isolated guard execution")
+    def test_exact_powershell_profile_guard_rejects_old_plans_without_running_activator(self) -> None:
+        source = _read(ACTIVATOR)
+        guard = source[source.index("$activationSchemaVersion ="):source.index("if ($activationReleaseCommit -notmatch")]
+        profile = "v13-self-serve"
+        contract = "supermega_private_trial_database_v13_self_serve_v1"
+        cases = [
+            (13, profile, contract, True), (11, profile, contract, False),
+            (12, profile, contract, False), (13, "legacy-v11", contract, False),
+            (13, None, contract, False), (13, profile, None, False),
+            (13, profile.upper(), contract, False), (13, profile, "unknown", False),
+        ]
+        script = "$ErrorActionPreference = 'Stop'\n$checks = 0\n"
+        for version, selected_profile, selected_contract, accepted in cases:
+            plan = {"target": {"schemaVersion": version, "schemaProfile": selected_profile,
+                               "databaseContract": selected_contract, "releaseCommit": "a" * 40}}
+            script += "$activationPlan = '" + json.dumps(plan) + "' | ConvertFrom-Json\n"
+            script += "$accepted = $false\ntry {\n" + guard + "\n$accepted = $true\n} catch {}\n"
+            script += "if ($accepted -ne $" + str(accepted).lower() + ") { throw 'profile_guard_failed' }\n$checks++\n"
+        script += "Write-Output $checks\n"
+        result = subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", script],
+                                capture_output=True, text=True, timeout=20, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), str(len(cases)))
+
     def test_production_activation_binds_tls_checkout_and_live_release_provenance(self) -> None:
         source = _read(MANAGED_ACTIVATION)
         for expected in (

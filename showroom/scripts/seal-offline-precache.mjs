@@ -21,9 +21,10 @@
 //
 // What that yields: the app shell and its chrome (including the product switcher and workspace
 // status panel, which render on every screen), the `core-app` chunk -- /shop/ and /plant/, the till
-// and the shop floor -- and the nine lazy screens the operations route owns (Today, Sell, Orders,
+// and the shop floor -- and the lazy screens the operations route owns (Today, Sell, Orders,
 // Stock, the receipt dialog, the service schedule, the monthly statement, the channel intake, the
-// Plant order board). About 1.9 MB uncompressed, roughly 480 KB over the wire.
+// Plant order board), plus the explicitly requested synthetic bakery demo and real local Batch
+// first-use workflow opened from Today.
 //
 // What the exclusions drop, and why each one: Website and Ecommerce (publishing a site and serving
 // a storefront both require a network by definition), Settings, product onboarding, login, signup
@@ -44,7 +45,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const showroomRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const distDir = resolve(showroomRoot, 'dist')
+const distDir = resolve(process.env.SUPERMEGA_BUILD_OUTPUT || resolve(showroomRoot, 'dist'))
 const viteDir = resolve(distDir, '.vite')
 const manifestPath = resolve(viteDir, 'manifest.json')
 const swPath = resolve(distDir, 'sw.js')
@@ -54,7 +55,11 @@ const swPath = resolve(distDir, 'sw.js')
 // pins that same name as the operations route artifact. Both are resolved against the manifest and
 // a miss is fatal, so a rename cannot quietly drop a route out of the offline set.
 const OFFLINE_ENTRY_KEYS = ['index.html']
-const OFFLINE_CHUNK_NAMES = ['core-app']
+const OFFLINE_CHUNK_NAMES = [
+  'core-app',
+  'shop-bakery-demo-loader',
+  'shop-batch-profit-control-first-use',
+]
 
 // Surfaces that are NOT worth the install-time bytes: either they need a network to do anything,
 // or they are one-time setup a shop does once, on connectivity, and never again during a shift.
@@ -64,10 +69,9 @@ const OFFLINE_CHUNK_NAMES = ['core-app']
 const ONLINE_ONLY = [
   'src/core/SettingsPage.tsx',
   'src/core/ProductOnboardingPage.tsx',
-  'src/core/WorkspaceControlsPage.tsx',
+  'WorkspaceControlsPage',
   'src/core/ManagedLoginPage.tsx',
   'src/core/ManagedAccountPage.tsx',
-  'src/core/SignupPage.tsx',
   // The "data tools" panel behind the product switcher: a client's catalog/CSV import, run once
   // while setting a shop up. Flagged by the two-levels-deep check below rather than by hand.
   'src/core/ClientDataOnboarding.tsx',
@@ -76,10 +80,10 @@ const ONLINE_ONLY = [
 ]
 // Vite records dependencies reached through the workspace's node_modules junction with an
 // installation-specific relative prefix. Match the stable package suffix instead of sealing one
-// machine's path into this contract. Supabase authentication cannot operate without the network
-// and its responses must never become install-time offline assets.
+// machine's path into this contract. The browser ships only Supabase Auth; it cannot operate
+// without the network and its responses must never become install-time offline assets.
 const ONLINE_ONLY_SUFFIXES = [
-  '/@supabase/supabase-js/dist/index.mjs',
+  '/@supabase/auth-js/dist/module/index.js',
 ]
 // The other three products' own surfaces, by location rather than by name, so a product added
 // later is excluded without anyone having to remember this file.
@@ -250,8 +254,10 @@ swSource = swSource
 await writeFile(swPath, swSource, 'utf8')
 
 // The manifest was a build input, not a deliverable: it would ship a full map of the chunk graph
-// and count against the artifact byte budget for nothing.
-await rm(viteDir, { recursive: true, force: true })
+// and count against the artifact byte budget for nothing. On Windows, Vite's manifest directory
+// can stay briefly locked after the build process exits, so keep the removal deterministic but
+// tolerate transient handle release latency.
+await rm(viteDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
 
 const bytes = (await Promise.all(precache.map(async (url) => (await stat(resolve(distDir, url.slice(1)))).size)))
   .reduce((total, size) => total + size, 0)

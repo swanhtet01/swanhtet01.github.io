@@ -8,6 +8,13 @@ Gate context: portfolio.json researchGates `order-intake-agent` = evaluate,
 evaluationStatus design-complete; sharedCapabilities `ai-assistance` =
 gated-r-and-d, firstWorkflow "Order Intake".
 
+Freshness note, 2026-08-27: cloud-provider eval lanes are suspended for the
+current owner-named wave. The active eval path is local Ollama only:
+`llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback, no provider key, and
+no hosted model route. If the local model cannot meet the quality gate, the
+feature remains blocked; do not route to a paid provider without a separate
+owner-approved source-controlled cut.
+
 ## 1. What the feature does end-to-end
 
 An operator pastes or forwards one customer message (Messenger, Viber, phone
@@ -108,27 +115,20 @@ Stage B - build drafts and score (Python, offline, zero network):
   { provider_lane, model, prompt_version, budget_window, weighted_units,
   runner, git_commit }. Exit nonzero unless quality_gate_passed.
 
-Provider lanes (record model_version in evidence; a pass certifies only the
-exact model + prompt pair that ran):
-- gateway lane (default): kernel gateway, Anthropic primary. Env:
-  ANTHROPIC_API_KEY (or CLAUDE_API_KEY). Optional cross-provider fallback:
-  OPENROUTER_API_KEY (bulk fallback model openai/gpt-4o-mini; override via
-  SUPERMEGA_OR_MODEL_BULK). Budget: SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS
-  (default 500,000; compiled hard max 2,000,000). Local runs use the
-  gateway's memory-mode ledger; do not set SUPERMEGA_REQUIRE_DURABLE_SPEND=1
-  unless SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are also provided.
-- production-parity lane: the deployed trial endpoint path uses OpenAI
-  (order_intake_provider.py, default model gpt-5-mini via the Responses
-  API). Env: OPENAI_API_KEY (founder's key from the private keystore;
-  export into the session env only, never into a file or commit), optional
-  SUPERMEGA_ORDER_INTAKE_MODEL. This lane must pass before pilot exposure,
-  because it is the code path operators actually hit; the gateway lane
-  proves the harness and gives an Anthropic baseline for provider choice.
+Active provider lane for this wave (record model_version in evidence; a pass
+certifies only the exact model + prompt pair that ran):
+- local-ollama lane: loopback-only Ollama with `llama3.2:1b`.
+  Runtime: `OLLAMA_KEEP_ALIVE=0s`; bind to `127.0.0.1`; unload after the
+  bounded eval. No provider key, no paid model, no hosted model route, no
+  production endpoint, and no cloud fallback are active.
+- Historical gateway and production-parity cloud lanes are suspended. Re-enable
+  them only through a separate owner-approved source-controlled cut that names
+  the exact provider, key handling, spend boundary, and verification scope.
 
-Next-session runbook: set the lane's env vars from the keystore, then
+Next-session local runbook:
   node tools/eval_order_intake.mjs --fixtures tests/fixtures/order_intake_v1.json
   python tools/evaluate_order_intake_results.py --extractions <tmp file>
-No other credentials, no Supabase write, no deploy.
+No credentials, no Supabase write, no deploy, no provider I/O.
 
 ## 4. Gate to ship
 

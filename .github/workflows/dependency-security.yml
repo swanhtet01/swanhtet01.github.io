@@ -2,17 +2,7 @@ name: Dependency Security Audit
 
 on:
   pull_request:
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - 'showroom/package.json'
-      - 'showroom/package-lock.json'
-      - 'kernel/package.json'
-      - 'kernel/package-lock.json'
-      - 'requirements.txt'
-      - 'requirements-test.txt'
-      - 'pyproject.toml'
-      - '.github/workflows/dependency-security.yml'
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
   schedule:
     - cron: '25 3 * * 1'
@@ -27,7 +17,6 @@ concurrency:
 jobs:
   npm-audit:
     name: Audit ${{ matrix.package }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -55,7 +44,6 @@ jobs:
 
   pip-audit:
     name: Audit runtime (pip)
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -74,3 +62,16 @@ jobs:
 
       - name: Audit locked dependencies
         run: pip-audit -r requirements-test.txt
+
+  required-audits:
+    name: Dependency Security Audit
+    needs: [npm-audit, pip-audit]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      NPM_RESULT: ${{ needs.npm-audit.result }}
+      PIP_RESULT: ${{ needs.pip-audit.result }}
+    steps:
+      - name: Require every dependency audit to succeed
+        run: node -e "if (process.env.NPM_RESULT !== 'success' || process.env.PIP_RESULT !== 'success') process.exit(1)"

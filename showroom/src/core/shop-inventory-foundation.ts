@@ -1,3 +1,4 @@
+import { sha256Hex } from "./sha256.ts"
 export const SHOP_INVENTORY_STATE_SCHEMA = 'supermega.shop.inventory_foundation.v1' as const
 export const SHOP_INVENTORY_IMPORT_CONTRACT = 'supermega.shop.inventory_import.v1' as const
 export const SHOP_INVENTORY_PROJECTION_CONTRACT = 'supermega.shop.inventory_projection.v1' as const
@@ -171,10 +172,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function exact(value: unknown, field: string, fields: string[]) {
-  if (!isRecord(value)) throw new Error(`${field} must be an object.`)
+  if (!isRecord(value)) throw foundationError(`${field} must be an object.`)
   const keys = Object.keys(value)
   if (keys.length !== fields.length || keys.some((key) => !fields.includes(key))) {
-    throw new Error(`${field} fields do not match the contract.`)
+    throw foundationError(`${field} fields do not match the contract.`)
   }
   return value
 }
@@ -185,53 +186,53 @@ export const MAX_SHOP_INVENTORY_STOCK_UNITS = 1_000
 
 function array(value: unknown, field: string, minimum: number, maximum: number) {
   if (!Array.isArray(value) || value.length < minimum || value.length > maximum) {
-    throw new Error(`${field} must contain between ${minimum} and ${maximum} items.`)
+    throw foundationError(`${field} must contain between ${minimum} and ${maximum} items.`)
   }
   return value
 }
 
 function text(value: unknown, field: string, maximum = 180) {
   if (typeof value !== 'string' || !value || value !== value.trim() || value.normalize('NFC') !== value) {
-    throw new Error(`${field} must be normalized nonblank trimmed text.`)
+    throw foundationError(`${field} must be normalized nonblank trimmed text.`)
   }
   if (Array.from(value).some((character) => {
     const code = character.codePointAt(0) ?? 0
     return code <= 31 || code === 127
-  }) || value.length > maximum) throw new Error(`${field} is not canonical text.`)
+  }) || value.length > maximum) throw foundationError(`${field} is not canonical text.`)
   return value
 }
 
 function identifier(value: unknown, field: string, prefix: string) {
   const candidate = text(value, field, 80)
   if (!candidate.startsWith(`${prefix}-`) || !businessIdPattern.test(candidate)) {
-    throw new Error(`${field} must be a canonical ${prefix} identifier.`)
+    throw foundationError(`${field} must be a canonical ${prefix} identifier.`)
   }
   return candidate
 }
 
 function quantity(value: unknown, field: string, minimum = 0) {
-  if (!Number.isSafeInteger(value) || Number(value) < minimum) throw new Error(`${field} must be a supported integer quantity.`)
+  if (!Number.isSafeInteger(value) || Number(value) < minimum) throw foundationError(`${field} must be a supported integer quantity.`)
   return Number(value)
 }
 
 function digest(value: unknown, field: string) {
   const candidate = text(value, field, 71)
-  if (!digestPattern.test(candidate)) throw new Error(`${field} must be a SHA-256 digest.`)
+  if (!digestPattern.test(candidate)) throw foundationError(`${field} must be a SHA-256 digest.`)
   return candidate
 }
 
 function timestampMicros(value: unknown, field: string) {
   const candidate = text(value, field, 40)
   const match = timestampPattern.exec(candidate)
-  if (!match) throw new Error(`${field} must be an ISO timestamp with an explicit offset.`)
+  if (!match) throw foundationError(`${field} must be an ISO timestamp with an explicit offset.`)
   const parsed = Date.parse(candidate)
-  if (!Number.isFinite(parsed)) throw new Error(`${field} must be a real calendar timestamp.`)
+  if (!Number.isFinite(parsed)) throw foundationError(`${field} must be a real calendar timestamp.`)
   const fraction = /\.(\d{1,6})/.exec(candidate)?.[1] ?? ''
   return { value: candidate, micros: BigInt(parsed) * 1_000n + BigInt(fraction.padEnd(6, '0').slice(3) || '0') }
 }
 
 function unique(values: string[], field: string) {
-  if (new Set(values).size !== values.length) throw new Error(`${field} contains duplicates.`)
+  if (new Set(values).size !== values.length) throw foundationError(`${field} contains duplicates.`)
 }
 
 function compareCanonicalText(left: string, right: string) {
@@ -245,7 +246,7 @@ function compareCanonicalText(left: string, right: string) {
 
 function sorted(values: string[], field: string) {
   const ordered = [...values].sort(compareCanonicalText)
-  if (values.some((value, index) => value !== ordered[index])) throw new Error(`${field} must use canonical identifier order.`)
+  if (values.some((value, index) => value !== ordered[index])) throw foundationError(`${field} must use canonical identifier order.`)
 }
 
 function canonicalValue(value: unknown): unknown {
@@ -262,57 +263,8 @@ function canonicalCopy<T>(value: T): T {
   return JSON.parse(canonicalJson(value)) as T
 }
 
-const sha256RoundConstants = new Uint32Array([
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-])
 
-function rotateRight(value: number, bits: number) {
-  return (value >>> bits) | (value << (32 - bits))
-}
 
-function sha256Hex(source: string) {
-  const input = new TextEncoder().encode(source)
-  const paddedLength = Math.ceil((input.length + 9) / 64) * 64
-  const padded = new Uint8Array(paddedLength)
-  padded.set(input)
-  padded[input.length] = 0x80
-  const view = new DataView(padded.buffer)
-  const bitLength = BigInt(input.length) * 8n
-  view.setUint32(paddedLength - 8, Number(bitLength >> 32n), false)
-  view.setUint32(paddedLength - 4, Number(bitLength & 0xffffffffn), false)
-  const hash = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19])
-  const words = new Uint32Array(64)
-  for (let offset = 0; offset < paddedLength; offset += 64) {
-    for (let index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4, false)
-    for (let index = 16; index < 64; index += 1) {
-      const before15 = words[index - 15]
-      const before2 = words[index - 2]
-      const sigma0 = rotateRight(before15, 7) ^ rotateRight(before15, 18) ^ (before15 >>> 3)
-      const sigma1 = rotateRight(before2, 17) ^ rotateRight(before2, 19) ^ (before2 >>> 10)
-      words[index] = (words[index - 16] + sigma0 + words[index - 7] + sigma1) >>> 0
-    }
-    let [a, b, c, d, e, f, g, h] = hash
-    for (let index = 0; index < 64; index += 1) {
-      const sum1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25)
-      const choice = (e & f) ^ (~e & g)
-      const temporary1 = (h + sum1 + choice + sha256RoundConstants[index] + words[index]) >>> 0
-      const sum0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22)
-      const majority = (a & b) ^ (a & c) ^ (b & c)
-      const temporary2 = (sum0 + majority) >>> 0
-      h = g; g = f; f = e; e = (d + temporary1) >>> 0; d = c; c = b; b = a; a = (temporary1 + temporary2) >>> 0
-    }
-    hash[0] = (hash[0] + a) >>> 0; hash[1] = (hash[1] + b) >>> 0; hash[2] = (hash[2] + c) >>> 0; hash[3] = (hash[3] + d) >>> 0
-    hash[4] = (hash[4] + e) >>> 0; hash[5] = (hash[5] + f) >>> 0; hash[6] = (hash[6] + g) >>> 0; hash[7] = (hash[7] + h) >>> 0
-  }
-  return Array.from(hash, (word) => word.toString(16).padStart(8, '0')).join('')
-}
 
 function canonicalDigest(value: unknown) {
   return `sha256:${sha256Hex(canonicalJson(value))}`
@@ -352,22 +304,22 @@ export function shopInventoryCatalogDigest(catalog: unknown) {
 
 function validateImportPackage(value: unknown, catalog: string[], requireCurrentDigest: boolean): ShopInventoryImportPackage {
   const source = exact(value, 'import package', ['contract', 'importId', 'sourceDigest', 'catalogSkuDigest', 'clients', 'vendors', 'locations', 'stockUnits', 'openings', 'packageDigest'])
-  if (source.contract !== SHOP_INVENTORY_IMPORT_CONTRACT) throw new Error('import package.contract is unsupported.')
+  if (source.contract !== SHOP_INVENTORY_IMPORT_CONTRACT) throw foundationError('import package.contract is unsupported.')
   const importId = identifier(source.importId, 'import package.importId', 'IMP')
   const sourceDigest = digest(source.sourceDigest, 'import package.sourceDigest')
   const catalogSkuDigest = digest(source.catalogSkuDigest, 'import package.catalogSkuDigest')
-  if (requireCurrentDigest && catalogSkuDigest !== shopInventoryCatalogDigest(catalog)) throw new Error('The import package catalog identity is stale.')
+  if (requireCurrentDigest && catalogSkuDigest !== shopInventoryCatalogDigest(catalog)) throw foundationError('The import package catalog identity is stale.')
   const clients = masterRows(source.clients, 'import package.clients', 'CLI', 200)
   const vendors = masterRows(source.vendors, 'import package.vendors', 'VEN', 200)
   const locations = masterRows(source.locations, 'import package.locations', 'LOC', 8)
-  if (locations.length < 2) throw new Error('The v1 inventory foundation requires at least two locations.')
+  if (locations.length < 2) throw foundationError('The v1 inventory foundation requires at least two locations.')
   const stockUnits = array(source.stockUnits, 'import package.stockUnits', 1, SHOP_INVENTORY_MAX_STOCK_UNITS).map((candidate, index): ShopInventoryStockUnit => {
     const field = `import package.stockUnits[${index}]`
     const row = exact(candidate, field, ['id', 'sku', 'tracking', 'trackingCode'])
     const tracking = text(row.tracking, `${field}.tracking`, 10)
-    if (tracking !== 'lot' && tracking !== 'serial') throw new Error(`${field}.tracking is unsupported.`)
+    if (tracking !== 'lot' && tracking !== 'serial') throw foundationError(`${field}.tracking is unsupported.`)
     const sku = text(row.sku, `${field}.sku`, 80)
-    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    if (!catalog.includes(sku)) throw foundationError(`${field}.sku is not present in the trusted Shop catalog.`)
     return { id: identifier(row.id, `${field}.id`, tracking === 'lot' ? 'LOT' : 'SER'), sku, tracking, trackingCode: text(row.trackingCode, `${field}.trackingCode`, 80) }
   })
   unique(stockUnits.map((row) => row.id), 'import package.stockUnits')
@@ -384,19 +336,19 @@ function validateImportPackage(value: unknown, catalog: string[], requireCurrent
     const locationId = text(row.locationId, `${field}.locationId`, 80)
     const vendorId = text(row.vendorId, `${field}.vendorId`, 80)
     const unit = units.get(stockUnitId)
-    if (!unit || !locationIds.has(locationId) || !vendorIds.has(vendorId)) throw new Error(`${field} references an unknown master.`)
+    if (!unit || !locationIds.has(locationId) || !vendorIds.has(vendorId)) throw foundationError(`${field} references an unknown master.`)
     const openingQuantity = quantity(row.quantity, `${field}.quantity`, 1)
-    if (unit.tracking === 'serial' && (openingQuantity !== 1 || serialOpenings.has(stockUnitId))) throw new Error(`${field} serial stock must open exactly once with quantity one.`)
+    if (unit.tracking === 'serial' && (openingQuantity !== 1 || serialOpenings.has(stockUnitId))) throw foundationError(`${field} serial stock must open exactly once with quantity one.`)
     if (unit.tracking === 'serial') serialOpenings.add(stockUnitId)
     return { stockUnitId, locationId, vendorId, quantity: openingQuantity }
   })
   const openingKeys = openings.map((row) => `${row.stockUnitId}|${row.locationId}`)
   unique(openingKeys, 'import package.openings')
   sorted(openingKeys, 'import package.openings')
-  if (new Set(openings.map((row) => row.stockUnitId)).size !== stockUnits.length) throw new Error('Every stock unit must have opening evidence.')
+  if (new Set(openings.map((row) => row.stockUnitId)).size !== stockUnits.length) throw foundationError('Every stock unit must have opening evidence.')
   const canonical = { contract: SHOP_INVENTORY_IMPORT_CONTRACT, importId, sourceDigest, catalogSkuDigest, clients, vendors, locations, stockUnits, openings }
   const packageDigest = digest(source.packageDigest, 'import package.packageDigest')
-  if (packageDigest !== canonicalDigest(canonical)) throw new Error('import package.packageDigest does not match its reviewed contents.')
+  if (packageDigest !== canonicalDigest(canonical)) throw foundationError('import package.packageDigest does not match its reviewed contents.')
   return { ...canonical, packageDigest }
 }
 
@@ -425,7 +377,7 @@ function orderAllocations(value: unknown, field: string, catalog: string[]) {
     const rowField = `${field}[${index}]`
     const row = exact(candidate, rowField, ['reservationId', 'sku', 'stockUnitId', 'locationId', 'quantity'])
     const sku = text(row.sku, `${rowField}.sku`, 80)
-    if (!catalog.includes(sku)) throw new Error(`${rowField}.sku is not present in the trusted Shop catalog.`)
+    if (!catalog.includes(sku)) throw foundationError(`${rowField}.sku is not present in the trusted Shop catalog.`)
     return {
       reservationId: identifier(row.reservationId, `${rowField}.reservationId`, 'RES'),
       sku,
@@ -476,18 +428,18 @@ function productionAllocations(value: unknown, field: string) {
 }
 
 function commandPayload(value: unknown, field: string, catalog: string[]): ShopInventoryCommandPayload {
-  if (!isRecord(value) || typeof value.kind !== 'string' || !commandKinds.has(value.kind)) throw new Error(`${field}.kind is unsupported.`)
+  if (!isRecord(value) || typeof value.kind !== 'string' || !commandKinds.has(value.kind)) throw foundationError(`${field}.kind is unsupported.`)
   if (value.kind === 'import') {
     const source = exact(value, field, ['kind', 'id', 'package', 'proof'])
     const importPackage = validateImportPackage(source.package, catalog, false)
     const id = identifier(source.id, `${field}.id`, 'IMP')
-    if (id !== importPackage.importId) throw new Error(`${field}.id must equal its import package identity.`)
+    if (id !== importPackage.importId) throw foundationError(`${field}.id must equal its import package identity.`)
     return { kind: 'import', id, package: importPackage, proof: proof(source.proof, `${field}.proof`) }
   }
   if (value.kind === 'master_create') {
     const source = exact(value, field, ['kind', 'id', 'masterType', 'master', 'proof'])
     const masterType = text(source.masterType, `${field}.masterType`, 12)
-    if (masterType !== 'client' && masterType !== 'vendor') throw new Error(`${field}.masterType is unsupported.`)
+    if (masterType !== 'client' && masterType !== 'vendor') throw foundationError(`${field}.masterType is unsupported.`)
     const masterSource = exact(source.master, `${field}.master`, ['id', 'name'])
     const master = {
       id: identifier(masterSource.id, `${field}.master.id`, masterType === 'client' ? 'CLI' : 'VEN'),
@@ -508,19 +460,19 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
       'safetyStockUnits', 'serviceLevelBasisPoints', 'status',
     ])
     const sku = text(policySource.sku, `${field}.policy.sku`, 80)
-    if (!catalog.includes(sku)) throw new Error(`${field}.policy.sku is not present in the trusted Shop catalog.`)
+    if (!catalog.includes(sku)) throw foundationError(`${field}.policy.sku is not present in the trusted Shop catalog.`)
     const leadTimeDays = quantity(policySource.leadTimeDays, `${field}.policy.leadTimeDays`, 1)
     const minimumOrderUnits = quantity(policySource.minimumOrderUnits, `${field}.policy.minimumOrderUnits`, 1)
     const orderMultipleUnits = quantity(policySource.orderMultipleUnits, `${field}.policy.orderMultipleUnits`, 1)
     const safetyStockUnits = quantity(policySource.safetyStockUnits, `${field}.policy.safetyStockUnits`)
     const serviceLevelBasisPoints = quantity(policySource.serviceLevelBasisPoints, `${field}.policy.serviceLevelBasisPoints`, 5_000)
-    if (leadTimeDays > 365) throw new Error(`${field}.policy.leadTimeDays cannot exceed 365.`)
+    if (leadTimeDays > 365) throw foundationError(`${field}.policy.leadTimeDays cannot exceed 365.`)
     if (minimumOrderUnits > 1_000_000 || orderMultipleUnits > 1_000_000 || safetyStockUnits > 1_000_000) {
-      throw new Error(`${field}.policy quantities cannot exceed 1,000,000 units.`)
+      throw foundationError(`${field}.policy quantities cannot exceed 1,000,000 units.`)
     }
-    if (serviceLevelBasisPoints > 9_999) throw new Error(`${field}.policy.serviceLevelBasisPoints cannot exceed 9,999.`)
+    if (serviceLevelBasisPoints > 9_999) throw foundationError(`${field}.policy.serviceLevelBasisPoints cannot exceed 9,999.`)
     const status = text(policySource.status, `${field}.policy.status`, 8)
-    if (status !== 'active' && status !== 'inactive') throw new Error(`${field}.policy.status is unsupported.`)
+    if (status !== 'active' && status !== 'inactive') throw foundationError(`${field}.policy.status is unsupported.`)
     return {
       kind: 'supplier_policy_set',
       id: identifier(source.id, `${field}.id`, 'SPP'),
@@ -541,7 +493,7 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
     const source = exact(value, field, ['kind', 'id', 'stockUnitId', 'fromLocationId', 'toLocationId', 'quantity', 'proof'])
     const fromLocationId = identifier(source.fromLocationId, `${field}.fromLocationId`, 'LOC')
     const toLocationId = identifier(source.toLocationId, `${field}.toLocationId`, 'LOC')
-    if (fromLocationId === toLocationId) throw new Error(`${field} must move stock between different locations.`)
+    if (fromLocationId === toLocationId) throw foundationError(`${field} must move stock between different locations.`)
     return {
       kind: 'transfer',
       id: identifier(source.id, `${field}.id`, 'TRF'),
@@ -555,7 +507,7 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
   if (value.kind === 'receipt') {
     const source = exact(value, field, ['kind', 'id', 'purchaseOrderId', 'stockUnitId', 'sku', 'trackingCode', 'locationId', 'quantity', 'proof'])
     const sku = text(source.sku, `${field}.sku`, 80)
-    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    if (!catalog.includes(sku)) throw foundationError(`${field}.sku is not present in the trusted Shop catalog.`)
     return {
       kind: 'receipt',
       id: identifier(source.id, `${field}.id`, 'RCV'),
@@ -572,14 +524,14 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
     const source = exact(value, field, ['kind', 'id', 'productionReleaseId', 'productionCommandDigest', 'productionJobId', 'productionOutputBatchId', 'productionReleasedAt', 'stockUnitId', 'sku', 'trackingCode', 'locationId', 'quantity', 'proof'])
     const productionReleaseId = identifier(source.productionReleaseId, `${field}.productionReleaseId`, 'QREL')
     const id = identifier(source.id, `${field}.id`, 'PRC')
-    if (id !== inventoryProductionReceiptCommandId(productionReleaseId)) throw new Error(`${field}.id is not deterministic for its Plant release.`)
+    if (id !== inventoryProductionReceiptCommandId(productionReleaseId)) throw foundationError(`${field}.id is not deterministic for its Plant release.`)
     const productionOutputBatchId = identifier(source.productionOutputBatchId, `${field}.productionOutputBatchId`, 'BATCH')
     const stockUnitId = identifier(source.stockUnitId, `${field}.stockUnitId`, 'LOT')
-    if (stockUnitId !== inventoryProductionReceiptStockUnitId(productionReleaseId)) throw new Error(`${field}.stockUnitId is not deterministic for its Plant release.`)
+    if (stockUnitId !== inventoryProductionReceiptStockUnitId(productionReleaseId)) throw foundationError(`${field}.stockUnitId is not deterministic for its Plant release.`)
     const sku = text(source.sku, `${field}.sku`, 80)
-    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    if (!catalog.includes(sku)) throw foundationError(`${field}.sku is not present in the trusted Shop catalog.`)
     const trackingCode = text(source.trackingCode, `${field}.trackingCode`, 80)
-    if (trackingCode !== productionOutputBatchId) throw new Error(`${field}.trackingCode must equal its released Plant output batch.`)
+    if (trackingCode !== productionOutputBatchId) throw foundationError(`${field}.trackingCode must equal its released Plant output batch.`)
     return {
       kind: 'production_receipt',
       id,
@@ -616,15 +568,15 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
     ])
     const productionRequestId = text(source.productionRequestId, `${field}.productionRequestId`, 80)
     const id = identifier(source.id, `${field}.id`, 'PIS')
-    if (id !== inventoryProductionCommandId(productionRequestId)) throw new Error(`${field}.id is not deterministic for its Plant request.`)
+    if (id !== inventoryProductionCommandId(productionRequestId)) throw foundationError(`${field}.id is not deterministic for its Plant request.`)
     const sku = text(source.sku, `${field}.sku`, 80)
-    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    if (!catalog.includes(sku)) throw foundationError(`${field}.sku is not present in the trusted Shop catalog.`)
     const productionUnit = text(source.productionUnit, `${field}.productionUnit`, 12) as ShopInventoryProductionUnit
-    if (!productionUnits.has(productionUnit)) throw new Error(`${field}.productionUnit is unsupported.`)
+    if (!productionUnits.has(productionUnit)) throw foundationError(`${field}.productionUnit is unsupported.`)
     const stockQuantity = quantity(source.stockQuantity, `${field}.stockQuantity`, 1)
     const allocations = productionAllocations(source.allocations, `${field}.allocations`)
     const allocated = allocations.reduce((total, allocation) => total + allocation.quantity, 0)
-    if (!Number.isSafeInteger(allocated) || allocated !== stockQuantity) throw new Error(`${field}.allocations must equal the issued Shop quantity.`)
+    if (!Number.isSafeInteger(allocated) || allocated !== stockQuantity) throw foundationError(`${field}.allocations must equal the issued Shop quantity.`)
     return {
       kind: 'production_issue',
       id,
@@ -652,12 +604,12 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
     const productionIssueId = identifier(source.productionIssueId, `${field}.productionIssueId`, 'PIS')
     const id = identifier(source.id, `${field}.id`, 'PRT')
     if (id !== inventoryProductionReturnCommandId(productionIssueId, actionProof.actionId)) {
-      throw new Error(`${field}.id is not deterministic for its Plant return evidence.`)
+      throw foundationError(`${field}.id is not deterministic for its Plant return evidence.`)
     }
     const sku = text(source.sku, `${field}.sku`, 80)
-    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    if (!catalog.includes(sku)) throw foundationError(`${field}.sku is not present in the trusted Shop catalog.`)
     const productionUnit = text(source.productionUnit, `${field}.productionUnit`, 12) as ShopInventoryProductionUnit
-    if (!productionUnits.has(productionUnit)) throw new Error(`${field}.productionUnit is unsupported.`)
+    if (!productionUnits.has(productionUnit)) throw foundationError(`${field}.productionUnit is unsupported.`)
     return {
       kind: 'production_return',
       id,
@@ -693,11 +645,11 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
     const source = exact(value, field, ['kind', 'id', 'orderId', 'customerReference', 'allocations', 'proof'])
     const orderId = text(source.orderId, `${field}.orderId`, 160)
     const id = identifier(source.id, `${field}.id`, 'ORS')
-    if (id !== inventoryOrderCommandId('ORS', orderId)) throw new Error(`${field}.id is not deterministic for its order.`)
+    if (id !== inventoryOrderCommandId('ORS', orderId)) throw foundationError(`${field}.id is not deterministic for its order.`)
     const allocations = orderAllocations(source.allocations, `${field}.allocations`, catalog)
     allocations.forEach((allocation, index) => {
       if (allocation.reservationId !== inventoryOrderReservationId(orderId, allocation)) {
-        throw new Error(`${field}.allocations[${index}].reservationId is not deterministic.`)
+        throw foundationError(`${field}.allocations[${index}].reservationId is not deterministic.`)
       }
     })
     return {
@@ -714,7 +666,7 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
     const orderId = text(source.orderId, `${field}.orderId`, 160)
     const prefix = value.kind === 'order_release' ? 'ORL' : 'ORF'
     const id = identifier(source.id, `${field}.id`, prefix)
-    if (id !== inventoryOrderCommandId(prefix, orderId)) throw new Error(`${field}.id is not deterministic for its order.`)
+    if (id !== inventoryOrderCommandId(prefix, orderId)) throw foundationError(`${field}.id is not deterministic for its order.`)
     const reservationIds = array(source.reservationIds, `${field}.reservationIds`, 1, 200)
       .map((candidate, index) => identifier(candidate, `${field}.reservationIds[${index}]`, 'RES'))
     unique(reservationIds, `${field}.reservationIds`)
@@ -731,17 +683,17 @@ function commandPayload(value: unknown, field: string, catalog: string[]): ShopI
     const source = exact(value, field, ['kind', 'id', 'orderId', 'sku', 'quantity', 'allocations', 'proof'])
     const orderId = text(source.orderId, `${field}.orderId`, 160)
     const sku = text(source.sku, `${field}.sku`, 80)
-    if (!catalog.includes(sku)) throw new Error(`${field}.sku is not present in the trusted Shop catalog.`)
+    if (!catalog.includes(sku)) throw foundationError(`${field}.sku is not present in the trusted Shop catalog.`)
     const returnedQuantity = quantity(source.quantity, `${field}.quantity`, 1)
     const allocations = orderReturnAllocations(source.allocations, `${field}.allocations`)
     const allocated = allocations.reduce((total, allocation) => total + allocation.quantity, 0)
     if (!Number.isSafeInteger(allocated) || allocated !== returnedQuantity) {
-      throw new Error(`${field}.allocations must equal the returned Shop quantity.`)
+      throw foundationError(`${field}.allocations must equal the returned Shop quantity.`)
     }
     const actionProof = proof(source.proof, `${field}.proof`)
     const id = identifier(source.id, `${field}.id`, 'ORT')
     if (id !== inventoryOrderReturnCommandId(orderId, sku, actionProof.actionId)) {
-      throw new Error(`${field}.id is not deterministic for its order return.`)
+      throw foundationError(`${field}.id is not deterministic for its order return.`)
     }
     return { kind: 'order_return', id, orderId, sku, quantity: returnedQuantity, allocations, proof: actionProof }
   }
@@ -831,7 +783,7 @@ function planProductionAllocationRows(
     allocations.push({ stockUnitId: candidate.stockUnitId, locationId: candidate.locationId, quantity: allocated })
     remaining -= allocated
   }
-  if (remaining !== 0) throw new Error(`Location stock cannot allocate ${stockQuantity} Shop units for the Plant request.`)
+  if (remaining !== 0) throw foundationError(`Location stock cannot allocate ${stockQuantity} Shop units for the Plant request.`)
   return allocations.sort((left, right) => compareCanonicalText(
     `${left.locationId}|${left.stockUnitId}`,
     `${right.locationId}|${right.stockUnitId}`,
@@ -862,7 +814,7 @@ function planOrderReturnAllocationRows(
     })
     remaining -= allocated
   }
-  if (remaining !== 0) throw new Error(`The fulfilled order has only ${returnedQuantity - remaining} location units available to return.`)
+  if (remaining !== 0) throw foundationError(`The fulfilled order has only ${returnedQuantity - remaining} location units available to return.`)
   return allocations.sort((left, right) => compareCanonicalText(
     `${left.locationId}|${left.stockUnitId}|${left.reservationId}`,
     `${right.locationId}|${right.stockUnitId}|${right.reservationId}`,
@@ -895,19 +847,19 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
     const onHand = current.onHand + onHandDelta
     const reserved = current.reserved + reservedDelta
     if (!Number.isSafeInteger(onHand) || !Number.isSafeInteger(reserved) || onHand < 0 || reserved < 0 || reserved > onHand) {
-      throw new Error(`${field} would make on-hand or reserved stock invalid.`)
+      throw foundationError(`${field} would make on-hand or reserved stock invalid.`)
     }
-    if (stockUnits.get(stockUnitId)?.tracking === 'serial' && onHand > 1) throw new Error(`${field} would duplicate serial stock.`)
+    if (stockUnits.get(stockUnitId)?.tracking === 'serial' && onHand > 1) throw foundationError(`${field} would duplicate serial stock.`)
     current.onHand = onHand
     current.reserved = reserved
   }
 
   commands.forEach((command, index) => {
     const field = `commands[${index}].payload`
-    if (index === 0 && command.kind !== 'import') throw new Error('The first inventory command must be the reviewed opening import.')
+    if (index === 0 && command.kind !== 'import') throw foundationError('The first inventory command must be the reviewed opening import.')
     if (command.kind === 'import') {
       importCount += 1
-      if (importCount !== 1) throw new Error('Inventory foundation v1 accepts exactly one opening import.')
+      if (importCount !== 1) throw foundationError('Inventory foundation v1 accepts exactly one opening import.')
       command.package.clients.forEach((row) => clients.set(row.id, row))
       command.package.vendors.forEach((row) => vendors.set(row.id, row))
       command.package.locations.forEach((row) => locations.set(row.id, row))
@@ -925,17 +877,17 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
     if (command.kind === 'master_create') {
       const masters = command.masterType === 'client' ? clients : vendors
       const label = command.masterType === 'client' ? 'client' : 'vendor'
-      if (masters.size >= 200) throw new Error(`${field} exceeds the supported ${label} master limit.`)
-      if (masters.has(command.master.id)) throw new Error(`${field}.master.id is already recorded.`)
+      if (masters.size >= 200) throw foundationError(`${field} exceeds the supported ${label} master limit.`)
+      if (masters.has(command.master.id)) throw foundationError(`${field}.master.id is already recorded.`)
       const foldedName = command.master.name.toLocaleLowerCase('en-US')
       if ([...masters.values()].some((master) => master.name.toLocaleLowerCase('en-US') === foldedName)) {
-        throw new Error(`${field}.master.name is already recorded.`)
+        throw foundationError(`${field}.master.name is already recorded.`)
       }
       masters.set(command.master.id, command.master)
       return
     }
     if (command.kind === 'supplier_policy_set') {
-      if (!vendors.has(command.policy.vendorId)) throw new Error(`${field}.policy.vendorId is unknown.`)
+      if (!vendors.has(command.policy.vendorId)) throw foundationError(`${field}.policy.vendorId is unknown.`)
       const key = `${command.policy.sku}\u0000${command.policy.vendorId}`
       supplierPolicies.set(key, {
         ...canonicalCopy(command.policy),
@@ -945,11 +897,11 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       return
     }
     if (command.kind === 'receipt' || command.kind === 'production_receipt') {
-      if (!locations.has(command.locationId)) throw new Error(`${field}.locationId is unknown.`)
-      if (stockUnits.has(command.stockUnitId)) throw new Error(`${field}.stockUnitId is already recorded.`)
+      if (!locations.has(command.locationId)) throw foundationError(`${field}.locationId is unknown.`)
+      if (stockUnits.has(command.stockUnitId)) throw foundationError(`${field}.stockUnitId is already recorded.`)
       const traceIdentity = `${command.sku}|lot|${command.trackingCode}`
       if ([...stockUnits.values()].some((unit) => `${unit.sku}|${unit.tracking}|${unit.trackingCode}` === traceIdentity)) {
-        throw new Error(`${field}.trackingCode is already recorded for this SKU.`)
+        throw foundationError(`${field}.trackingCode is already recorded for this SKU.`)
       }
       stockUnits.set(command.stockUnitId, {
         id: command.stockUnitId,
@@ -973,11 +925,11 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       return
     }
     const stockUnitId = 'stockUnitId' in command ? command.stockUnitId : ''
-    if ((command.kind === 'transfer' || command.kind === 'count' || command.kind === 'reserve') && !stockUnits.has(stockUnitId)) throw new Error(`${field}.stockUnitId is unknown.`)
+    if ((command.kind === 'transfer' || command.kind === 'count' || command.kind === 'reserve') && !stockUnits.has(stockUnitId)) throw foundationError(`${field}.stockUnitId is unknown.`)
     if (command.kind === 'transfer') {
-      if (!locations.has(command.fromLocationId) || !locations.has(command.toLocationId)) throw new Error(`${field} references an unknown location.`)
+      if (!locations.has(command.fromLocationId) || !locations.has(command.toLocationId)) throw foundationError(`${field} references an unknown location.`)
       const source = currentBalance(command.stockUnitId, command.fromLocationId)
-      if (source.onHand - source.reserved < command.quantity) throw new Error(`${field} exceeds source available-to-promise stock.`)
+      if (source.onHand - source.reserved < command.quantity) throw foundationError(`${field} exceeds source available-to-promise stock.`)
       applyDelta(command.stockUnitId, command.fromLocationId, -command.quantity, 0, field)
       applyDelta(command.stockUnitId, command.toLocationId, command.quantity, 0, field)
       ledger.push(
@@ -987,13 +939,13 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       return
     }
     if (command.kind === 'count') {
-      if (!locations.has(command.locationId)) throw new Error(`${field}.locationId is unknown.`)
+      if (!locations.has(command.locationId)) throw foundationError(`${field}.locationId is unknown.`)
       const key = balanceKey(command.stockUnitId, command.locationId)
-      if (!balances.has(key)) throw new Error(`${field} must reference an existing stock-unit balance.`)
+      if (!balances.has(key)) throw foundationError(`${field} must reference an existing stock-unit balance.`)
       const current = currentBalance(command.stockUnitId, command.locationId)
-      if (current.onHand === 0 && current.reserved === 0) throw new Error(`${field} must reference an active stock-unit balance.`)
-      if (current.onHand !== command.expectedQuantity) throw new Error(`${field}.expectedQuantity is stale.`)
-      if (command.countedQuantity < current.reserved) throw new Error(`${field}.countedQuantity cannot be below reserved stock.`)
+      if (current.onHand === 0 && current.reserved === 0) throw foundationError(`${field} must reference an active stock-unit balance.`)
+      if (current.onHand !== command.expectedQuantity) throw foundationError(`${field}.expectedQuantity is stale.`)
+      if (command.countedQuantity < current.reserved) throw foundationError(`${field}.countedQuantity cannot be below reserved stock.`)
       const delta = command.countedQuantity - current.onHand
       applyDelta(command.stockUnitId, command.locationId, delta, 0, field)
       ledger.push(ledgerEvent({
@@ -1016,15 +968,15 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       })
       const expectedAllocations = planProductionAllocationRows(candidates, command.stockQuantity)
       if (canonicalJson(expectedAllocations) !== canonicalJson(command.allocations)) {
-        throw new Error(`${field}.allocations do not match deterministic available location stock.`)
+        throw foundationError(`${field}.allocations do not match deterministic available location stock.`)
       }
       command.allocations.forEach((allocation, allocationIndex) => {
         const allocationField = `${field}.allocations[${allocationIndex}]`
         const unit = stockUnits.get(allocation.stockUnitId)
-        if (!unit || unit.sku !== command.sku) throw new Error(`${allocationField}.stockUnitId does not match the issued SKU.`)
-        if (!locations.has(allocation.locationId)) throw new Error(`${allocationField}.locationId is unknown.`)
+        if (!unit || unit.sku !== command.sku) throw foundationError(`${allocationField}.stockUnitId does not match the issued SKU.`)
+        if (!locations.has(allocation.locationId)) throw foundationError(`${allocationField}.locationId is unknown.`)
         const current = currentBalance(allocation.stockUnitId, allocation.locationId)
-        if (current.onHand - current.reserved < allocation.quantity) throw new Error(`${allocationField} exceeds available-to-promise stock.`)
+        if (current.onHand - current.reserved < allocation.quantity) throw foundationError(`${allocationField} exceeds available-to-promise stock.`)
         applyDelta(allocation.stockUnitId, allocation.locationId, -allocation.quantity, 0, allocationField)
         ledger.push(ledgerEvent({
           id: `LED-${command.id}-PRODUCTION-${allocationIndex + 1}`,
@@ -1046,7 +998,7 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
     }
     if (command.kind === 'production_return') {
       const issue = productionIssues.get(command.productionIssueId)
-      if (!issue) throw new Error(`${field}.productionIssueId does not reference an earlier Plant issue.`)
+      if (!issue) throw foundationError(`${field}.productionIssueId does not reference an earlier Plant issue.`)
       const expectedIdentity = {
         productionRequestId: issue.productionRequestId,
         productionCommandDigest: issue.productionCommandDigest,
@@ -1068,26 +1020,26 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
         conversionNote: command.conversionNote,
       }
       if (canonicalJson(retainedIdentity) !== canonicalJson(expectedIdentity)) {
-        throw new Error(`${field} does not match its immutable Plant issue evidence.`)
+        throw foundationError(`${field} does not match its immutable Plant issue evidence.`)
       }
       const sourceAllocation = issue.allocations.find((allocation) => (
         allocation.stockUnitId === command.stockUnitId && allocation.locationId === command.locationId
       ))
-      if (!sourceAllocation) throw new Error(`${field} must return to an exact lot and location from its Plant issue.`)
+      if (!sourceAllocation) throw foundationError(`${field} must return to an exact lot and location from its Plant issue.`)
       if (BigInt(command.productionQuantityMilli) * BigInt(issue.stockQuantity) !== BigInt(command.stockQuantity) * BigInt(issue.productionQuantityMilli)) {
-        throw new Error(`${field} does not preserve the reviewed Plant-to-Shop conversion ratio.`)
+        throw foundationError(`${field} does not preserve the reviewed Plant-to-Shop conversion ratio.`)
       }
       const returned = productionReturnedByIssue.get(issue.id) ?? { productionQuantityMilli: 0, stockQuantity: 0 }
       const nextProductionQuantityMilli = BigInt(returned.productionQuantityMilli) + BigInt(command.productionQuantityMilli)
       const nextStockQuantity = BigInt(returned.stockQuantity) + BigInt(command.stockQuantity)
       if (nextProductionQuantityMilli > BigInt(issue.productionQuantityMilli) || nextStockQuantity > BigInt(issue.stockQuantity)) {
-        throw new Error(`${field} exceeds the unconsumed quantity from its Plant issue.`)
+        throw foundationError(`${field} exceeds the unconsumed quantity from its Plant issue.`)
       }
       const allocationKey = `${issue.id}\u0000${command.stockUnitId}\u0000${command.locationId}`
       const allocationReturned = productionReturnedByAllocation.get(allocationKey) ?? 0
       const nextAllocationQuantity = BigInt(allocationReturned) + BigInt(command.stockQuantity)
       if (nextAllocationQuantity > BigInt(sourceAllocation.quantity)) {
-        throw new Error(`${field} exceeds the quantity issued from its exact lot and location.`)
+        throw foundationError(`${field} exceeds the quantity issued from its exact lot and location.`)
       }
       applyDelta(command.stockUnitId, command.locationId, command.stockQuantity, 0, field)
       productionReturnedByIssue.set(issue.id, {
@@ -1113,16 +1065,16 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
     }
     if (command.kind === 'order_reserve') {
       if ([...reservations.values()].some((reservation) => reservation.orderId === command.orderId)) {
-        throw new Error(`${field}.orderId is already reserved.`)
+        throw foundationError(`${field}.orderId is already reserved.`)
       }
       command.allocations.forEach((allocation, allocationIndex) => {
         const allocationField = `${field}.allocations[${allocationIndex}]`
         const unit = stockUnits.get(allocation.stockUnitId)
-        if (!unit || unit.sku !== allocation.sku) throw new Error(`${allocationField}.stockUnitId does not match its SKU.`)
-        if (!locations.has(allocation.locationId)) throw new Error(`${allocationField}.locationId is unknown.`)
-        if (reservations.has(allocation.reservationId)) throw new Error(`${allocationField}.reservationId is already recorded.`)
+        if (!unit || unit.sku !== allocation.sku) throw foundationError(`${allocationField}.stockUnitId does not match its SKU.`)
+        if (!locations.has(allocation.locationId)) throw foundationError(`${allocationField}.locationId is unknown.`)
+        if (reservations.has(allocation.reservationId)) throw foundationError(`${allocationField}.reservationId is already recorded.`)
         const current = currentBalance(allocation.stockUnitId, allocation.locationId)
-        if (current.onHand - current.reserved < allocation.quantity) throw new Error(`${allocationField} exceeds available-to-promise stock.`)
+        if (current.onHand - current.reserved < allocation.quantity) throw foundationError(`${allocationField} exceeds available-to-promise stock.`)
         applyDelta(allocation.stockUnitId, allocation.locationId, 0, allocation.quantity, allocationField)
         reservations.set(allocation.reservationId, {
           id: allocation.reservationId,
@@ -1152,10 +1104,10 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       return
     }
     if (command.kind === 'reserve') {
-      if (!clients.has(command.clientId)) throw new Error(`${field}.clientId is unknown.`)
-      if (!locations.has(command.locationId)) throw new Error(`${field}.locationId is unknown.`)
+      if (!clients.has(command.clientId)) throw foundationError(`${field}.clientId is unknown.`)
+      if (!locations.has(command.locationId)) throw foundationError(`${field}.locationId is unknown.`)
       const current = currentBalance(command.stockUnitId, command.locationId)
-      if (current.onHand - current.reserved < command.quantity) throw new Error(`${field} exceeds available-to-promise stock.`)
+      if (current.onHand - current.reserved < command.quantity) throw foundationError(`${field} exceeds available-to-promise stock.`)
       applyDelta(command.stockUnitId, command.locationId, 0, command.quantity, field)
       reservations.set(command.id, {
         id: command.id, clientId: command.clientId, stockUnitId: command.stockUnitId, locationId: command.locationId,
@@ -1170,12 +1122,12 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
         .map((reservation) => reservation.id)
         .sort(compareCanonicalText)
       if (canonicalJson(activeIds) !== canonicalJson(command.reservationIds)) {
-        throw new Error(`${field}.reservationIds must close every active reservation for its order.`)
+        throw foundationError(`${field}.reservationIds must close every active reservation for its order.`)
       }
       command.reservationIds.forEach((reservationId, reservationIndex) => {
         const reservation = reservations.get(reservationId)
         if (!reservation || reservation.orderId !== command.orderId || reservation.status !== 'active') {
-          throw new Error(`${field}.reservationIds[${reservationIndex}] is not an active reservation for this order.`)
+          throw foundationError(`${field}.reservationIds[${reservationIndex}] is not an active reservation for this order.`)
         }
         const onHandDelta = command.kind === 'order_fulfil' ? -reservation.quantity : 0
         applyDelta(reservation.stockUnitId, reservation.locationId, onHandDelta, -reservation.quantity, field)
@@ -1211,7 +1163,7 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       })
       const expectedAllocations = planOrderReturnAllocationRows(candidates, command.quantity)
       if (canonicalJson(expectedAllocations) !== canonicalJson(command.allocations)) {
-        throw new Error(`${field}.allocations do not match the deterministic fulfilled order locations.`)
+        throw foundationError(`${field}.allocations do not match the deterministic fulfilled order locations.`)
       }
       command.allocations.forEach((allocation, allocationIndex) => {
         const allocationField = `${field}.allocations[${allocationIndex}]`
@@ -1223,11 +1175,11 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
           || reservation.stockUnitId !== allocation.stockUnitId
           || reservation.locationId !== allocation.locationId
           || unit?.sku !== command.sku) {
-          throw new Error(`${allocationField} does not match a fulfilled location reservation for this order and SKU.`)
+          throw foundationError(`${allocationField} does not match a fulfilled location reservation for this order and SKU.`)
         }
         const priorReturned = returnedByReservation.get(allocation.reservationId) ?? 0
         if (priorReturned + allocation.quantity > reservation.quantity) {
-          throw new Error(`${allocationField} exceeds the fulfilled reservation quantity.`)
+          throw foundationError(`${allocationField} exceeds the fulfilled reservation quantity.`)
         }
         applyDelta(allocation.stockUnitId, allocation.locationId, allocation.quantity, 0, allocationField)
         returnedByReservation.set(allocation.reservationId, priorReturned + allocation.quantity)
@@ -1246,10 +1198,10 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
       })
       return
     }
-    if (!('reservationId' in command)) throw new Error(`${field}.kind is unsupported.`)
+    if (!('reservationId' in command)) throw foundationError(`${field}.kind is unsupported.`)
     const reservation = reservations.get(command.reservationId)
-    if (!reservation) throw new Error(`${field}.reservationId is unknown.`)
-    if (reservation.status !== 'active') throw new Error(`${field}.reservationId is already closed.`)
+    if (!reservation) throw foundationError(`${field}.reservationId is unknown.`)
+    if (reservation.status !== 'active') throw foundationError(`${field}.reservationId is already closed.`)
     const onHandDelta = command.kind === 'fulfil' ? -reservation.quantity : 0
     applyDelta(reservation.stockUnitId, reservation.locationId, onHandDelta, -reservation.quantity, field)
     reservation.status = command.kind === 'fulfil' ? 'fulfilled' : 'released'
@@ -1257,14 +1209,14 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
     reservation.closureProof = canonicalCopy(command.proof)
     ledger.push(ledgerEvent({ id: `LED-${command.id}-${command.kind.toUpperCase()}`, kind: command.kind, command, stockUnitId: reservation.stockUnitId, locationId: reservation.locationId, onHandDelta, reservedDelta: -reservation.quantity, referenceId: reservation.id, clientId: reservation.clientId }))
   })
-  if (commands.length && importCount !== 1) throw new Error('Inventory command history lacks its opening import.')
+  if (commands.length && importCount !== 1) throw foundationError('Inventory command history lacks its opening import.')
 
   const balanceRows: ShopInventoryBalance[] = []
   for (const [key, values] of [...balances.entries()].sort(([left], [right]) => compareCanonicalText(left, right))) {
     if (values.onHand === 0 && values.reserved === 0) continue
     const [stockUnitId, locationId] = key.split('\u0000')
     const unit = stockUnits.get(stockUnitId)
-    if (!unit) throw new Error('Inventory balance references an unknown stock unit.')
+    if (!unit) throw foundationError('Inventory balance references an unknown stock unit.')
     balanceRows.push({ stockUnitId: unit.id, sku: unit.sku, tracking: unit.tracking, trackingCode: unit.trackingCode, locationId, onHand: values.onHand, reserved: values.reserved, availableToPromise: values.onHand - values.reserved })
   }
   const totalOnHand = balanceRows.reduce((total, row) => total + row.onHand, 0)
@@ -1282,11 +1234,11 @@ function replayCommands(commands: ShopInventoryCommandPayload[]) {
 export function validateShopInventoryState(value: unknown, catalog: unknown): ShopInventoryState {
   const trustedCatalog = catalogSkus(catalog)
   const source = exact(value, 'inventory state', ['schema', 'revision', 'headDigest', 'commands'])
-  if (source.schema !== SHOP_INVENTORY_STATE_SCHEMA) throw new Error('inventory state.schema is unsupported.')
+  if (source.schema !== SHOP_INVENTORY_STATE_SCHEMA) throw foundationError('inventory state.schema is unsupported.')
   const revision = quantity(source.revision, 'inventory state.revision')
   const headDigest = digest(source.headDigest, 'inventory state.headDigest')
   const rawCommands = array(source.commands, 'inventory state.commands', 0, 2_000)
-  if (revision !== rawCommands.length) throw new Error('inventory state.revision must equal its retained command count.')
+  if (revision !== rawCommands.length) throw foundationError('inventory state.revision must equal its retained command count.')
   const commands: ShopInventoryCommand[] = []
   const commandIds: string[] = []
   const actionIds: string[] = []
@@ -1296,15 +1248,15 @@ export function validateShopInventoryState(value: unknown, catalog: unknown): Sh
     const field = `inventory state.commands[${index}]`
     const envelope = exact(candidate, field, ['sequence', 'previousDigest', 'payload', 'digest'])
     const sequence = quantity(envelope.sequence, `${field}.sequence`, 1)
-    if (sequence !== index + 1) throw new Error(`${field}.sequence is not contiguous.`)
+    if (sequence !== index + 1) throw foundationError(`${field}.sequence is not contiguous.`)
     const retainedPrevious = digest(envelope.previousDigest, `${field}.previousDigest`)
-    if (retainedPrevious !== previousDigest) throw new Error(`${field}.previousDigest breaks the command chain.`)
+    if (retainedPrevious !== previousDigest) throw foundationError(`${field}.previousDigest breaks the command chain.`)
     const payload = commandPayload(envelope.payload, `${field}.payload`, trustedCatalog)
     const capturedAt = timestampMicros(payload.proof.capturedAt, `${field}.payload.proof.capturedAt`).micros
-    if (previousTimestamp !== null && capturedAt < previousTimestamp) throw new Error(`${field}.payload.proof.capturedAt moves backwards.`)
+    if (previousTimestamp !== null && capturedAt < previousTimestamp) throw foundationError(`${field}.payload.proof.capturedAt moves backwards.`)
     const body = { sequence, previousDigest: retainedPrevious, payload }
     const retainedDigest = digest(envelope.digest, `${field}.digest`)
-    if (retainedDigest !== canonicalDigest(body)) throw new Error(`${field}.digest does not match its command evidence.`)
+    if (retainedDigest !== canonicalDigest(body)) throw foundationError(`${field}.digest does not match its command evidence.`)
     commands.push({ ...body, digest: retainedDigest })
     commandIds.push(payload.id)
     actionIds.push(payload.proof.actionId)
@@ -1313,7 +1265,7 @@ export function validateShopInventoryState(value: unknown, catalog: unknown): Sh
   })
   unique(commandIds, 'inventory command IDs')
   unique(actionIds, 'inventory action IDs')
-  if (headDigest !== (commands.length ? previousDigest : EMPTY_SHOP_INVENTORY_DIGEST)) throw new Error('inventory state.headDigest does not match its command chain.')
+  if (headDigest !== (commands.length ? previousDigest : EMPTY_SHOP_INVENTORY_DIGEST)) throw foundationError('inventory state.headDigest does not match its command chain.')
   replayCommands(commands.map((command) => command.payload))
   return canonicalCopy({ schema: SHOP_INVENTORY_STATE_SCHEMA, revision, headDigest, commands })
 }
@@ -1343,10 +1295,10 @@ function appendCommand(
   const canonicalPayload = commandPayload(payload, 'command payload', trustedCatalog)
   const existing = current.commands.find((command) => command.payload.id === canonicalPayload.id)
   if (existing) {
-    if (canonicalJson(existing.payload) !== canonicalJson(canonicalPayload)) throw new Error('The inventory command ID was already used with different evidence.')
+    if (canonicalJson(existing.payload) !== canonicalJson(canonicalPayload)) throw foundationError('The inventory command ID was already used with different evidence.')
     return { state: current, replayed: true }
   }
-  if (digest(expectedHeadDigest, 'expected_head_digest') !== current.headDigest) throw new Error('The inventory snapshot changed before this command was applied.')
+  if (digest(expectedHeadDigest, 'expected_head_digest') !== current.headDigest) throw foundationError('The inventory snapshot changed before this command was applied.')
   const body = { sequence: current.revision + 1, previousDigest: current.headDigest, payload: canonicalPayload }
   const envelope = { ...body, digest: canonicalDigest(body) }
   const candidate = { schema: SHOP_INVENTORY_STATE_SCHEMA, revision: body.sequence, headDigest: envelope.digest, commands: [...current.commands, envelope] }
@@ -1502,7 +1454,7 @@ export function planShopInventoryProductionAllocation(state: unknown, input: {
 }) {
   const catalog = catalogSkus(input.catalogSkus)
   const sku = text(input.sku, 'production allocation.sku', 80)
-  if (!catalog.includes(sku)) throw new Error('The production issue SKU is not present in the trusted Shop catalog.')
+  if (!catalog.includes(sku)) throw foundationError('The production issue SKU is not present in the trusted Shop catalog.')
   const stockQuantity = quantity(input.stockQuantity, 'production allocation.stockQuantity', 1)
   const projection = projectShopInventory(state, catalog)
   return canonicalCopy(planProductionAllocationRows(
@@ -1537,9 +1489,9 @@ export function issueShopInventoryToProduction(state: unknown, input: {
     quantityMilli: quantity(input.request.quantityMilli, 'production issue.quantityMilli', 1),
     unit: text(input.request.unit, 'production issue.unit', 12) as ShopInventoryProductionUnit,
   }
-  if (!productionUnits.has(request.unit)) throw new Error('The production issue unit is unsupported.')
+  if (!productionUnits.has(request.unit)) throw foundationError('The production issue unit is unsupported.')
   const sku = text(input.sku, 'production issue.sku', 80)
-  if (!catalog.includes(sku)) throw new Error('The production issue SKU is not present in the trusted Shop catalog.')
+  if (!catalog.includes(sku)) throw foundationError('The production issue SKU is not present in the trusted Shop catalog.')
   const stockQuantity = quantity(input.stockQuantity, 'production issue.stockQuantity', 1)
   const conversionNote = text(input.conversionNote, 'production issue.conversionNote', 240)
   const commandId = inventoryProductionCommandId(request.requestId)
@@ -1579,7 +1531,7 @@ export function returnShopInventoryFromProduction(state: unknown, input: {
   const current = validateShopInventoryState(state, catalog)
   const productionIssueId = identifier(input.productionIssueId, 'production return.productionIssueId', 'PIS')
   const issue = current.commands.find((command) => command.payload.id === productionIssueId)?.payload
-  if (!issue || issue.kind !== 'production_issue') throw new Error('The production return must reference an existing Plant issue.')
+  if (!issue || issue.kind !== 'production_issue') throw foundationError('The production return must reference an existing Plant issue.')
   const actionProof = proof(input.proof, 'proof')
   return appendCommand(current, {
     kind: 'production_return',
@@ -1633,7 +1585,7 @@ function inventoryOrderLines(value: unknown, field: string, catalog: string[]) {
     const rowField = `${field}[${index}]`
     const row = exact(candidate, rowField, ['sku', 'quantity'])
     const sku = text(row.sku, `${rowField}.sku`, 80)
-    if (!catalog.includes(sku)) throw new Error(`${rowField}.sku is not present in the trusted Shop catalog.`)
+    if (!catalog.includes(sku)) throw foundationError(`${rowField}.sku is not present in the trusted Shop catalog.`)
     return { sku, quantity: quantity(row.quantity, `${rowField}.quantity`, 1) }
   })
   unique(rows.map((row) => row.sku), `${field} SKUs`)
@@ -1670,7 +1622,7 @@ export function planShopInventoryOrderAllocation(state: unknown, input: {
       provisional.push({ sku: line.sku, stockUnitId: candidate.stockUnitId, locationId: candidate.locationId, quantity: allocated })
       remaining -= allocated
     }
-    if (remaining !== 0) throw new Error(`Location stock cannot allocate ${line.quantity} units of ${line.sku}.`)
+    if (remaining !== 0) throw foundationError(`Location stock cannot allocate ${line.quantity} units of ${line.sku}.`)
   }
   provisional.sort((left, right) => compareCanonicalText(
     `${left.sku}|${left.locationId}|${left.stockUnitId}`,
@@ -1703,7 +1655,7 @@ export function reserveShopInventoryOrder(state: unknown, input: {
       || retained.orderId !== orderId
       || retained.customerReference !== customerReference
       || canonicalJson(allocationLineTotals(retained.allocations)) !== canonicalJson(lines)) {
-      throw new Error('The order inventory command was already used with different allocation evidence.')
+      throw foundationError('The order inventory command was already used with different allocation evidence.')
     }
     return appendCommand(current, { ...retained, proof: proof(input.proof, 'proof') }, catalog, input.expectedHeadDigest)
   }
@@ -1732,7 +1684,7 @@ function closeShopInventoryOrder(state: unknown, input: {
       .filter((reservation) => reservation.orderId === orderId && reservation.status === 'active')
       .map((reservation) => reservation.id)
       .sort(compareCanonicalText)
-  if (!reservationIds.length) throw new Error('The order has no active location reservation to close.')
+  if (!reservationIds.length) throw foundationError('The order has no active location reservation to close.')
   return appendCommand(current, {
     kind: input.kind, id: commandId, orderId, reservationIds, proof: proof(input.proof, 'proof'),
   }, catalog, input.expectedHeadDigest)
@@ -1756,7 +1708,7 @@ export function planShopInventoryOrderReturn(state: unknown, input: {
   const current = validateShopInventoryState(state, catalog)
   const orderId = text(input.orderId, 'order return.orderId', 160)
   const sku = text(input.sku, 'order return.sku', 80)
-  if (!catalog.includes(sku)) throw new Error('The returned SKU is not present in the trusted Shop catalog.')
+  if (!catalog.includes(sku)) throw foundationError('The returned SKU is not present in the trusted Shop catalog.')
   const returnedQuantity = quantity(input.quantity, 'order return.quantity', 1)
   const projection = projectShopInventory(current, catalog)
   const unitById = new Map(projection.stockUnits.map((unit) => [unit.id, unit]))
@@ -1796,7 +1748,7 @@ export function returnShopInventoryOrder(state: unknown, input: {
   const current = validateShopInventoryState(state, catalog)
   const orderId = text(input.orderId, 'order return.orderId', 160)
   const sku = text(input.sku, 'order return.sku', 80)
-  if (!catalog.includes(sku)) throw new Error('The returned SKU is not present in the trusted Shop catalog.')
+  if (!catalog.includes(sku)) throw foundationError('The returned SKU is not present in the trusted Shop catalog.')
   const returnedQuantity = quantity(input.quantity, 'order return.quantity', 1)
   const actionProof = proof(input.proof, 'proof')
   const commandId = inventoryOrderReturnCommandId(orderId, sku, actionProof.actionId)
@@ -1861,3 +1813,5 @@ export function fulfilShopInventoryReservation(state: unknown, input: {
 }) {
   return closeReservation(state, { ...input, kind: 'fulfil', commandId: input.fulfilmentId })
 }
+
+function foundationError(message: string) { return new Error(message) }

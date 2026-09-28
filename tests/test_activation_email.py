@@ -13,10 +13,27 @@ import io
 import json
 import os
 import unittest
+from email.message import Message
+from html.parser import HTMLParser
 from unittest.mock import patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
+from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
+from urllib.response import addinfourl
 
 import supermega_runtime.activation_email as activation_email
+
+
+class _EmailHTML(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tags = []
+        self.content = []
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
+
+    def handle_data(self, data):
+        self.content.append(data)
 
 
 class _RecordingOpener:
@@ -86,16 +103,111 @@ class ActivationEmailTests(unittest.TestCase):
         )
         payload = json.loads(request.data.decode("utf-8"))
         self.assertEqual(payload["to"], ["owner@example.invalid"])
-        self.assertIn("SM-ABCD-2345", payload["text"])
-        self.assertIn("Yangon Tyre and Service", payload["subject"])
+        self.assertNotIn("SM-ABCD-2345", json.dumps(payload))
+        self.assertEqual(payload["subject"], "Company account created - Yangon Tyre and Service | SuperMega")
         # The courtesy email never carries secrets or session material.
         self.assertNotIn("Bearer", payload["text"])
+        self.assertEqual(payload["html"], activation_email._welcome_html("Yangon Tyre and Service"))
+
+    def test_html_escapes_names_and_has_only_the_fixed_sign_in_link(self) -> None:
+        for name in ("မြန်မာ ဆိုင်", '<img src="https://example.invalid/pixel" onerror="alert(1)">', "A & B <Shop>"):
+            with self.subTest(name=name):
+                html = activation_email._welcome_html(name)
+                parsed = _EmailHTML()
+                parsed.feed(html)
+                visible = "".join(parsed.content)
+                for section in activation_email._welcome_sections(name):
+                    self.assertIn(section, visible)
+                links = [attrs.get("href") for tag, attrs in parsed.tags if tag == "a"]
+                self.assertEqual(links, ["https://app.supermega.dev/login"])
+                for tag, attrs in parsed.tags:
+                    self.assertNotIn(tag, ("img", "script", "iframe", "form", "input", "link"))
+                    self.assertFalse(any(key.startswith("on") or key == "src" for key in attrs))
+                self.assertIn('<html lang="en">', html)
+                self.assertIn('name="viewport"', html)
+                self.assertLess(len(html.encode("utf-8")), 8000)
+
+    def test_welcome_has_one_sign_in_action_and_precise_status(self) -> None:
+        text = activation_email._welcome_text("Example Shop")
+        self.assertEqual(text.count("https://"), 1)
+        self.assertIn("https://app.supermega.dev/login", text)
+        self.assertIn("same account you used during setup", text)
+        self.assertIn("companies assigned to that account", text)
+        self.assertIn("does not import your browser-local sample records", text)
+        self.assertIn("readiness are separate from account creation", text)
+        self.assertIn("reply to this email for setup help", text)
+        self.assertIn("Do not send passwords, sign-in codes or customer records", text)
+        for retired_claim in ("is active", "claim code", "Next steps:", "any time", "only shared with people you invite"):
+            self.assertNotIn(retired_claim, text)
+
+    def test_recovery_uses_configured_reply_address(self) -> None:
+        opener = _RecordingOpener()
+        env_patch, opener_patch = self._patched(opener, {
+            "RESEND_API_KEY": "re_test_key",
+            "SUPERMEGA_CONTACT_NOTIFY_EMAIL": "setup@example.invalid",
+        })
+        with env_patch, opener_patch:
+            self.assertTrue(_send(business_name="မြန်မာ ဆိုင်"))
+        payload = json.loads(opener.requests[0].data.decode("utf-8"))
+        self.assertEqual(payload["reply_to"], "setup@example.invalid")
+        self.assertIn("မြန်မာ ဆိုင်", payload["text"])
 
     def test_provider_failure_returns_false_never_raises(self) -> None:
         opener = _RecordingOpener(error=URLError("connection refused"))
         env_patch, opener_patch = self._patched(opener, {"RESEND_API_KEY": "re_test_key"})
         with env_patch, opener_patch:
             self.assertFalse(_send())
+
+    def test_transport_installs_redirect_denial_and_bounded_timeout(self) -> None:
+        opener = _RecordingOpener()
+        with patch.dict(os.environ, {"RESEND_API_KEY": "re_test_key"}, clear=True):
+            with patch.object(activation_email, "build_opener", return_value=opener) as factory:
+                with patch.object(opener, "open", wraps=opener.open) as send:
+                    self.assertTrue(_send())
+        handlers = factory.call_args.args
+        self.assertTrue(any(isinstance(handler, ProxyHandler) and handler.proxies == {} for handler in handlers))
+        self.assertTrue(any(isinstance(handler, activation_email._RefuseRedirects) for handler in handlers))
+        self.assertEqual(send.call_args.kwargs["timeout"], 9.0)
+        self.assertEqual(opener.requests[0].full_url, "https://api.resend.com/emails")
+        self.assertEqual(opener.requests[0].get_method(), "POST")
+
+    def test_redirect_handler_never_reissues_request(self) -> None:
+        handler = activation_email._RefuseRedirects()
+        request = Request("https://api.resend.com/emails", data=b"{}", method="POST")
+        for code in (301, 302, 303, 307, 308):
+            for target in ("https://other.example.invalid/emails", "https://api.resend.com/other", "http://api.resend.com/emails"):
+                with self.subTest(code=code, target=target):
+                    self.assertIsNone(handler.redirect_request(request, None, code, "redirect", {}, target))
+                    # Full urllib error chain, with synthetic HTTPS transport:
+                    # the default error handler raises after redirect denial.
+                    calls = []
+
+                    class SyntheticHTTPS(HTTPSHandler):
+                        def https_open(self, req):
+                            calls.append(req.full_url)
+                            headers = Message()
+                            headers["Location"] = target
+                            response = addinfourl(io.BytesIO(), headers, req.full_url, code)
+                            response.msg = "redirect"
+                            return response
+
+                    offline_opener = build_opener(ProxyHandler({}), activation_email._RefuseRedirects(), SyntheticHTTPS())
+                    with self.assertRaises(HTTPError) as failure:
+                        offline_opener.open(request)
+                    failure.exception.close()
+                    self.assertEqual(calls, ["https://api.resend.com/emails"])
+
+    def test_provider_rejection_and_transport_setup_failure_are_nonfatal(self) -> None:
+        for status in (301, 400, 401, 429, 500):
+            with self.subTest(status=status):
+                opener = _RecordingOpener(status=status)
+                env_patch, opener_patch = self._patched(opener, {"RESEND_API_KEY": "re_test_key"})
+                with env_patch, opener_patch:
+                    self.assertFalse(_send())
+                self.assertEqual(len(opener.requests), 1)
+        with patch.dict(os.environ, {"RESEND_API_KEY": "re_test_key"}, clear=True):
+            with patch.object(activation_email, "build_opener", side_effect=OSError("unavailable")):
+                self.assertFalse(_send())
 
 
 if __name__ == "__main__":

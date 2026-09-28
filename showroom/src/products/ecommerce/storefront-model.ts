@@ -1,7 +1,6 @@
 import {
   COMMERCE_KEY,
   COMMERCE_WORKSPACE_SCHEMA,
-  createSeedCommerce,
   validateCommerceState,
   type CommerceItem,
   type CommerceStorefrontMerchandising,
@@ -155,8 +154,8 @@ export function readStorefrontCatalog(storage = browserStorage()): StorefrontCat
   }
   if (raw === null) {
     return {
-      source: 'sample',
-      items: createSeedCommerce().items,
+      source: 'shop-local',
+      items: [],
       error: '',
     }
   }

@@ -1,3 +1,5 @@
+import { sha256Hex } from "./sha256.ts"
+export { sha256Hex } from "./sha256.ts"
 import {
   countShopInventory,
   fulfilShopInventoryOrder,
@@ -1529,6 +1531,12 @@ export type CommerceWorkspaceSnapshot = {
   error: string
 }
 
+export type CommerceWorkspaceReadSnapshot = {
+  state: CommerceState
+  source: 'current' | 'legacy' | 'absent' | 'recovery'
+  error: string
+}
+
 export type CommerceMutationResult =
   | { ok: true; state: CommerceState; replayed: boolean }
   | { ok: false; error: string }
@@ -1630,25 +1638,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function requiredText(value: unknown, field: string) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} must be a non-empty string.`)
+  if (typeof value !== 'string' || !value.trim()) rejectInvalid(`${field} must be a non-empty string.`)
   return value.trim()
 }
 
 function canonicalText(value: unknown, field: string, maximum = 180) {
   const text = requiredText(value, field)
-  if (value !== text || text.length > maximum) throw new Error(`${field} must be canonical text of at most ${maximum} characters.`)
+  if (value !== text || text.length > maximum) rejectInvalid(`${field} must be canonical text of at most ${maximum} characters.`)
   return text
 }
 
 function canonicalBlankableText(value: unknown, field: string, maximum: number) {
   if (typeof value !== 'string' || value !== value.trim() || value.length > maximum) {
-    throw new Error(`${field} must be canonical text of at most ${maximum} characters or empty.`)
+    rejectInvalid(`${field} must be canonical text of at most ${maximum} characters or empty.`)
   }
   return value
 }
 
 function canonicalBoolean(value: unknown, field: string) {
-  if (typeof value !== 'boolean') throw new Error(`${field} must be boolean.`)
+  if (typeof value !== 'boolean') rejectInvalid(`${field} must be boolean.`)
   return value
 }
 
@@ -1664,7 +1672,7 @@ function compareCanonicalText(left: string, right: string) {
 
 export function commerceStorefrontConfigurationActionId(revision: number, shopCatalogDigest: string) {
   if (!Number.isSafeInteger(revision) || revision < 1 || !sha256DigestPattern.test(shopCatalogDigest)) {
-    throw new Error('Storefront configuration action identity is invalid.')
+    rejectInvalid('Storefront configuration action identity is invalid.')
   }
   return `ACT-STOREFRONT-R${revision}-${shopCatalogDigest.slice('sha256:'.length)}`
 }
@@ -1706,11 +1714,11 @@ function validTimestamp(value: unknown) {
 }
 
 function assertSafeInteger(value: unknown, field: string, minimum = 0) {
-  if (!Number.isSafeInteger(value) || Number(value) < minimum) throw new Error(`${field} must be a safe integer of at least ${minimum}.`)
+  if (!Number.isSafeInteger(value) || Number(value) < minimum) rejectInvalid(`${field} must be a safe integer of at least ${minimum}.`)
 }
 
 function assertUnique(values: string[], field: string) {
-  if (new Set(values).size !== values.length) throw new Error(`${field} values must be unique.`)
+  if (new Set(values).size !== values.length) rejectInvalid(`${field} values must be unique.`)
 }
 
 function sameStringArray(left: string[], right: string[]) {
@@ -1725,16 +1733,16 @@ function hasExactKeys(value: Record<string, unknown>, required: string[], option
 
 function storefrontRequestLineV2(value: unknown, field: string): CommerceStorefrontRequestLineV2 {
   if (!isRecord(value) || !hasExactKeys(value, ['sku', 'name', 'variant', 'quantity', 'unitPriceMmk', 'lineTotalMmk'])) {
-    throw new Error(`${field} is invalid.`)
+    rejectInvalid(`${field} is invalid.`)
   }
   const sku = canonicalText(value.sku, `${field}.sku`, 80)
   const name = canonicalText(value.name, `${field}.name`)
   if (value.variant !== null) canonicalText(value.variant, `${field}.variant`)
   assertSafeInteger(value.quantity, `${field}.quantity`, 1)
-  if (Number(value.quantity) > 99) throw new Error(`${field}.quantity must be at most 99.`)
+  if (Number(value.quantity) > 99) rejectInvalid(`${field}.quantity must be at most 99.`)
   assertSafeInteger(value.unitPriceMmk, `${field}.unitPriceMmk`, 1)
   assertSafeInteger(value.lineTotalMmk, `${field}.lineTotalMmk`, 1)
-  if (Number(value.quantity) * Number(value.unitPriceMmk) !== value.lineTotalMmk) throw new Error(`${field}.lineTotalMmk is invalid.`)
+  if (Number(value.quantity) * Number(value.unitPriceMmk) !== value.lineTotalMmk) rejectInvalid(`${field}.lineTotalMmk is invalid.`)
   return { sku, name, variant: value.variant as string | null, quantity: Number(value.quantity), unitPriceMmk: Number(value.unitPriceMmk), lineTotalMmk: Number(value.lineTotalMmk) }
 }
 
@@ -1753,7 +1761,7 @@ function sameStorefrontRequestLinesV2(left: CommerceStorefrontRequestLineV2[], r
 function storefrontCustomerProfile(value: unknown, field: string): CommerceStorefrontCustomerProfile {
   if (!isRecord(value) || !hasExactKeys(value, [
     'schema', 'id', 'revision', 'name', 'phone', 'savedAt', 'previousDigest', 'profileDigest',
-  ]) || value.schema !== 'supermega.ecommerce.customer_profile_snapshot.v1') throw new Error(`${field} is invalid.`)
+  ]) || value.schema !== 'supermega.ecommerce.customer_profile_snapshot.v1') rejectInvalid(`${field} is invalid.`)
   const id = canonicalText(value.id, `${field}.id`, 40)
   const phone = canonicalText(value.phone, `${field}.phone`, 32)
   const digitCount = phone.replace(/\D/g, '').length
@@ -1765,7 +1773,7 @@ function storefrontCustomerProfile(value: unknown, field: string): CommerceStore
     || typeof value.profileDigest !== 'string'
     || !sha256DigestPattern.test(value.profileDigest)
     || value.previousDigest !== null && (typeof value.previousDigest !== 'string' || !sha256DigestPattern.test(value.previousDigest))) {
-    throw new Error(`${field} identity or evidence is invalid.`)
+    rejectInvalid(`${field} identity or evidence is invalid.`)
   }
   assertSafeInteger(value.revision, `${field}.revision`, 1)
   return {
@@ -1784,14 +1792,14 @@ function storefrontDeliveryAddress(value: unknown, field: string): CommerceStore
   if (!isRecord(value) || !hasExactKeys(value, [
     'schema', 'id', 'revision', 'line1', 'township', 'city', 'instructions',
     'savedAt', 'previousDigest', 'addressDigest',
-  ]) || value.schema !== 'supermega.ecommerce.delivery_address_snapshot.v1') throw new Error(`${field} is invalid.`)
+  ]) || value.schema !== 'supermega.ecommerce.delivery_address_snapshot.v1') rejectInvalid(`${field} is invalid.`)
   const id = canonicalText(value.id, `${field}.id`, 40)
   if (!storefrontAddressIdPattern.test(id)
     || !validTimestamp(value.savedAt)
     || typeof value.addressDigest !== 'string'
     || !sha256DigestPattern.test(value.addressDigest)
     || value.previousDigest !== null && (typeof value.previousDigest !== 'string' || !sha256DigestPattern.test(value.previousDigest))) {
-    throw new Error(`${field} identity or evidence is invalid.`)
+    rejectInvalid(`${field} identity or evidence is invalid.`)
   }
   assertSafeInteger(value.revision, `${field}.revision`, 1)
   if (value.instructions !== null) canonicalText(value.instructions, `${field}.instructions`, 160)
@@ -1821,9 +1829,9 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
   if (!hasExactKeys(value, requestFields)
     || value.schema !== 'supermega.ecommerce.order_request.v2'
     || value.mode !== 'browser-local-request'
-    || value.state !== 'pending_shop_review') throw new Error(`${field} is invalid.`)
+    || value.state !== 'pending_shop_review') rejectInvalid(`${field} is invalid.`)
   const scope = canonicalText(value.scope, `${field}.scope`)
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,179}$/.test(scope)) throw new Error(`${field}.scope is invalid.`)
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,179}$/.test(scope)) rejectInvalid(`${field}.scope is invalid.`)
   const requestId = canonicalText(value.id, `${field}.id`, 40)
   const idempotencyKey = canonicalText(value.idempotencyKey, `${field}.idempotencyKey`, 40)
   if (!storefrontRequestIdPattern.test(requestId)
@@ -1831,14 +1839,14 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
     || requestId.slice(4) !== idempotencyKey.slice(4)
     || !validTimestamp(value.createdAt)
     || typeof value.sourcePreviewDigest !== 'string'
-    || !sha256DigestPattern.test(value.sourcePreviewDigest)) throw new Error(`${field} identity or source is invalid.`)
-  if ((value.sourceStorefrontRevision === null) !== (value.sourceStorefrontActionId === null)) throw new Error(`${field} storefront provenance is incomplete.`)
+    || !sha256DigestPattern.test(value.sourcePreviewDigest)) rejectInvalid(`${field} identity or source is invalid.`)
+  if ((value.sourceStorefrontRevision === null) !== (value.sourceStorefrontActionId === null)) rejectInvalid(`${field} storefront provenance is incomplete.`)
   if (value.sourceStorefrontRevision !== null) {
     assertSafeInteger(value.sourceStorefrontRevision, `${field}.sourceStorefrontRevision`, 1)
     canonicalText(value.sourceStorefrontActionId, `${field}.sourceStorefrontActionId`, 160)
   }
   canonicalText(value.customerReference, `${field}.customerReference`, 80)
-  if (value.fulfilment !== 'pickup' && value.fulfilment !== 'delivery') throw new Error(`${field}.fulfilment is invalid.`)
+  if (value.fulfilment !== 'pickup' && value.fulfilment !== 'delivery') rejectInvalid(`${field}.fulfilment is invalid.`)
   const customerProfile = structured ? storefrontCustomerProfile(value.customerProfile, `${field}.customerProfile`) : null
   const deliveryAddress = structured
     ? value.deliveryAddress === null ? null : storefrontDeliveryAddress(value.deliveryAddress, `${field}.deliveryAddress`)
@@ -1847,17 +1855,17 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
     && ((value.fulfilment === 'delivery') !== Boolean(deliveryAddress)
       || Date.parse(customerProfile!.savedAt) > Date.parse(String(value.createdAt))
       || deliveryAddress && Date.parse(deliveryAddress.savedAt) > Date.parse(String(value.createdAt)))) {
-    throw new Error(`${field} customer or delivery identity is invalid.`)
+    rejectInvalid(`${field} customer or delivery identity is invalid.`)
   }
-  if (value.currency !== 'MMK' || !Array.isArray(value.lines) || value.lines.length < 1 || value.lines.length > maxOrderLines) throw new Error(`${field} currency or lines are invalid.`)
+  if (value.currency !== 'MMK' || !Array.isArray(value.lines) || value.lines.length < 1 || value.lines.length > maxOrderLines) rejectInvalid(`${field} currency or lines are invalid.`)
   const lines = value.lines.map((line, index) => storefrontRequestLineV2(line, `${field}.lines[${index}]`))
-  if (lines.some((line, index) => index > 0 && compareCanonicalText(lines[index - 1].sku, line.sku) >= 0)) throw new Error(`${field}.lines must use unique canonical SKU order.`)
+  if (lines.some((line, index) => index > 0 && compareCanonicalText(lines[index - 1].sku, line.sku) >= 0)) rejectInvalid(`${field}.lines must use unique canonical SKU order.`)
   const subtotalMmk = lines.reduce((total, line) => total + line.lineTotalMmk, 0)
   assertSafeInteger(subtotalMmk, `${field}.subtotalMmk`, 1)
   assertSafeInteger(value.totalMmk, `${field}.totalMmk`, 1)
-  if (value.totalMmk !== subtotalMmk) throw new Error(`${field}.totalMmk is invalid.`)
+  if (value.totalMmk !== subtotalMmk) rejectInvalid(`${field}.totalMmk is invalid.`)
 
-  if (!isRecord(value.quote)) throw new Error(`${field}.quote is invalid.`)
+  if (!isRecord(value.quote)) rejectInvalid(`${field}.quote is invalid.`)
   const quote = value.quote
   const baseQuoteFields = [
     'schema', 'scope', 'quoteId', 'idempotencyKey', 'quotedAt', 'expiresAt', 'sourcePreviewDigest',
@@ -1874,35 +1882,35 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
     || quote.currency !== 'MMK'
     || quote.customerReference !== value.customerReference
     || quote.fulfilment !== value.fulfilment
-    || !Array.isArray(quote.lines)) throw new Error(`${field}.quote does not match the request.`)
+    || !Array.isArray(quote.lines)) rejectInvalid(`${field}.quote does not match the request.`)
   if (structured) {
     const quoteCustomerProfile = storefrontCustomerProfile(quote.customerProfile, `${field}.quote.customerProfile`)
     const quoteDeliveryAddress = quote.deliveryAddress === null ? null : storefrontDeliveryAddress(quote.deliveryAddress, `${field}.quote.deliveryAddress`)
     if (JSON.stringify(quoteCustomerProfile) !== JSON.stringify(customerProfile)
-      || JSON.stringify(quoteDeliveryAddress) !== JSON.stringify(deliveryAddress)) throw new Error(`${field}.quote customer identity does not match the request.`)
+      || JSON.stringify(quoteDeliveryAddress) !== JSON.stringify(deliveryAddress)) rejectInvalid(`${field}.quote customer identity does not match the request.`)
   }
   const quoteId = canonicalText(quote.quoteId, `${field}.quote.quoteId`, 40)
-  if (!storefrontQuoteIdPattern.test(quoteId) || quoteId.slice(4) !== idempotencyKey.slice(4)) throw new Error(`${field}.quote identity is invalid.`)
+  if (!storefrontQuoteIdPattern.test(quoteId) || quoteId.slice(4) !== idempotencyKey.slice(4)) rejectInvalid(`${field}.quote identity is invalid.`)
   if (!validTimestamp(quote.expiresAt)
     || (timestampMicros(quote.expiresAt) as bigint) <= (timestampMicros(quote.quotedAt) as bigint)
-    || (timestampMicros(quote.expiresAt) as bigint) - (timestampMicros(quote.quotedAt) as bigint) > 1_800_000_000n) throw new Error(`${field}.quote expiry is invalid.`)
+    || (timestampMicros(quote.expiresAt) as bigint) - (timestampMicros(quote.quotedAt) as bigint) > 1_800_000_000n) rejectInvalid(`${field}.quote expiry is invalid.`)
   if (typeof quote.pimDigest !== 'string' || !sha256DigestPattern.test(quote.pimDigest)
-    || typeof quote.quoteDigest !== 'string' || !sha256DigestPattern.test(quote.quoteDigest)) throw new Error(`${field}.quote digest is invalid.`)
+    || typeof quote.quoteDigest !== 'string' || !sha256DigestPattern.test(quote.quoteDigest)) rejectInvalid(`${field}.quote digest is invalid.`)
   const quoteLines = quote.lines.map((line, index) => storefrontRequestLineV2(line, `${field}.quote.lines[${index}]`))
-  if (!sameStorefrontRequestLinesV2(lines, quoteLines) || quote.subtotalMmk !== subtotalMmk || quote.totalMmk !== subtotalMmk) throw new Error(`${field}.quote totals or lines are invalid.`)
+  if (!sameStorefrontRequestLinesV2(lines, quoteLines) || quote.subtotalMmk !== subtotalMmk || quote.totalMmk !== subtotalMmk) rejectInvalid(`${field}.quote totals or lines are invalid.`)
   if (!isRecord(quote.promotion) || !hasExactKeys(quote.promotion, ['adapter', 'status', 'code', 'amountMmk'])
     || quote.promotion.adapter !== 'shop_promotion_review' || quote.promotion.amountMmk !== 0
-    || (quote.promotion.code === null ? quote.promotion.status !== 'not_requested' : quote.promotion.status !== 'pending_shop_review')) throw new Error(`${field}.quote promotion boundary is invalid.`)
+    || (quote.promotion.code === null ? quote.promotion.status !== 'not_requested' : quote.promotion.status !== 'pending_shop_review')) rejectInvalid(`${field}.quote promotion boundary is invalid.`)
   if (quote.promotion.code !== null) canonicalText(quote.promotion.code, `${field}.quote.promotion.code`, 40)
   if (!isRecord(quote.tax) || !hasExactKeys(quote.tax, ['adapter', 'status', 'amountMmk'])
-    || quote.tax.adapter !== 'price_inclusive' || quote.tax.status !== 'included' || quote.tax.amountMmk !== 0) throw new Error(`${field}.quote tax boundary is invalid.`)
+    || quote.tax.adapter !== 'price_inclusive' || quote.tax.status !== 'included' || quote.tax.amountMmk !== 0) rejectInvalid(`${field}.quote tax boundary is invalid.`)
   if (!isRecord(quote.shipping) || !hasExactKeys(quote.shipping, ['adapter', 'status', 'amountMmk']) || quote.shipping.amountMmk !== 0
-    || (value.fulfilment === 'pickup' ? quote.shipping.adapter !== 'pickup' || quote.shipping.status !== 'included' : quote.shipping.adapter !== 'shop_delivery_review' || quote.shipping.status !== 'pending_shop_review')) throw new Error(`${field}.quote shipping boundary is invalid.`)
+    || (value.fulfilment === 'pickup' ? quote.shipping.adapter !== 'pickup' || quote.shipping.status !== 'included' : quote.shipping.adapter !== 'shop_delivery_review' || quote.shipping.status !== 'pending_shop_review')) rejectInvalid(`${field}.quote shipping boundary is invalid.`)
   if (!isRecord(quote.payment) || !hasExactKeys(quote.payment, ['adapter', 'status', 'amountMmk'])
     || !['pay_on_pickup', 'cash_on_delivery', 'kbzpay_manual'].includes(String(quote.payment.adapter))
     || (quote.payment.adapter !== 'kbzpay_manual'
       && (value.fulfilment === 'pickup' ? quote.payment.adapter !== 'pay_on_pickup' : quote.payment.adapter !== 'cash_on_delivery'))
-    || quote.payment.status !== 'not_authorized' || quote.payment.amountMmk !== 0) throw new Error(`${field}.quote payment boundary is invalid.`)
+    || quote.payment.status !== 'not_authorized' || quote.payment.amountMmk !== 0) rejectInvalid(`${field}.quote payment boundary is invalid.`)
   return value as CommerceStorefrontRequestV2
 }
 
@@ -1962,74 +1970,8 @@ function validProof(proof: CommerceActionProof) {
     )
 }
 
-const sha256RoundConstants = new Uint32Array([
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-])
 
-function rotateRight(value: number, bits: number) {
-  return (value >>> bits) | (value << (32 - bits))
-}
 
-export function sha256Hex(source: string) {
-  const input = new TextEncoder().encode(source)
-  const paddedLength = Math.ceil((input.length + 9) / 64) * 64
-  const padded = new Uint8Array(paddedLength)
-  padded.set(input)
-  padded[input.length] = 0x80
-  const view = new DataView(padded.buffer)
-  const bitLength = BigInt(input.length) * 8n
-  view.setUint32(paddedLength - 8, Number(bitLength >> 32n), false)
-  view.setUint32(paddedLength - 4, Number(bitLength & 0xffffffffn), false)
-
-  const hash = new Uint32Array([
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
-  ])
-  const words = new Uint32Array(64)
-  for (let offset = 0; offset < paddedLength; offset += 64) {
-    for (let index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4, false)
-    for (let index = 16; index < 64; index += 1) {
-      const before15 = words[index - 15]
-      const before2 = words[index - 2]
-      const sigma0 = rotateRight(before15, 7) ^ rotateRight(before15, 18) ^ (before15 >>> 3)
-      const sigma1 = rotateRight(before2, 17) ^ rotateRight(before2, 19) ^ (before2 >>> 10)
-      words[index] = (words[index - 16] + sigma0 + words[index - 7] + sigma1) >>> 0
-    }
-    let [a, b, c, d, e, f, g, h] = hash
-    for (let index = 0; index < 64; index += 1) {
-      const sum1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25)
-      const choice = (e & f) ^ (~e & g)
-      const temporary1 = (h + sum1 + choice + sha256RoundConstants[index] + words[index]) >>> 0
-      const sum0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22)
-      const majority = (a & b) ^ (a & c) ^ (b & c)
-      const temporary2 = (sum0 + majority) >>> 0
-      h = g
-      g = f
-      f = e
-      e = (d + temporary1) >>> 0
-      d = c
-      c = b
-      b = a
-      a = (temporary1 + temporary2) >>> 0
-    }
-    hash[0] = (hash[0] + a) >>> 0
-    hash[1] = (hash[1] + b) >>> 0
-    hash[2] = (hash[2] + c) >>> 0
-    hash[3] = (hash[3] + d) >>> 0
-    hash[4] = (hash[4] + e) >>> 0
-    hash[5] = (hash[5] + f) >>> 0
-    hash[6] = (hash[6] + g) >>> 0
-    hash[7] = (hash[7] + h) >>> 0
-  }
-  return Array.from(hash, (word) => word.toString(16).padStart(8, '0')).join('')
-}
 
 function proofDigestProjection(proof: CommerceActionProof) {
   return [proof.actionId, proof.capturedAt, proof.actor, proof.reason, proof.evidenceReference]
@@ -2166,7 +2108,7 @@ function shopInventoryProductionActionMatches(
 export function commerceOrderLocationAllocationPreview(state: CommerceState, order: CommerceOrder) {
   if (!state.inventoryFoundation) return []
   if (!shopInventoryMatchesItems(state.inventoryFoundation, state.items)) {
-    throw new Error('Location stock has drifted from aggregate Shop stock.')
+    rejectInvalid('Location stock has drifted from aggregate Shop stock.')
   }
   return planShopInventoryOrderAllocation(state.inventoryFoundation, {
     orderId: order.id,
@@ -2408,23 +2350,23 @@ export function upgradeCommerceSeedPolicies(stateValue: CommerceState) {
 }
 
 export function validateCommerceState(value: unknown): CommerceState {
-  if (!isRecord(value) || value.schema !== COMMERCE_WORKSPACE_SCHEMA) throw new Error('Commerce workspace schema is not v2.')
-  if (!Array.isArray(value.items) || !Array.isArray(value.orders) || !Array.isArray(value.movements) || !Array.isArray(value.closes)) throw new Error('Commerce workspace collections are incomplete.')
-  if (value.catalogBaselines !== undefined && !Array.isArray(value.catalogBaselines)) throw new Error('Commerce catalog baselines must be an array when present.')
-  if (value.catalogChanges !== undefined && !Array.isArray(value.catalogChanges)) throw new Error('Commerce catalog changes must be an array when present.')
-  if (value.taxConfigurations !== undefined && !Array.isArray(value.taxConfigurations)) throw new Error('Commerce tax configurations must be an array when present.')
-  if (value.accountMappingConfigurations !== undefined && !Array.isArray(value.accountMappingConfigurations)) throw new Error('Commerce account mapping configurations must be an array when present.')
-  if (value.customerCreditPolicies !== undefined && !Array.isArray(value.customerCreditPolicies)) throw new Error('Commerce customer credit policies must be an array when present.')
-  if (value.promotionPolicies !== undefined && !Array.isArray(value.promotionPolicies)) throw new Error('Commerce promotion policies must be an array when present.')
-  if (value.shippingPolicies !== undefined && !Array.isArray(value.shippingPolicies)) throw new Error('Commerce shipping policies must be an array when present.')
-  if (value.paymentPolicies !== undefined && !Array.isArray(value.paymentPolicies)) throw new Error('Commerce payment policies must be an array when present.')
-  if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) throw new Error('Commerce Website intakes must be an array when present.')
-  if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) throw new Error('Commerce storefront requests must be an array when present.')
-  if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) throw new Error('Commerce storefront configuration must be an object when present.')
-  if (value.purchaseBudgetEnvelopes !== undefined && !Array.isArray(value.purchaseBudgetEnvelopes)) throw new Error('Commerce purchase budget envelopes must be an array when present.')
-  if (value.supplierSourcingDecisions !== undefined && !Array.isArray(value.supplierSourcingDecisions)) throw new Error('Commerce supplier sourcing decisions must be an array when present.')
-  if (value.purchaseRequisitions !== undefined && !Array.isArray(value.purchaseRequisitions)) throw new Error('Commerce purchase requisitions must be an array when present.')
-  if (value.purchaseOrders !== undefined && !Array.isArray(value.purchaseOrders)) throw new Error('Commerce purchase orders must be an array when present.')
+  if (!isRecord(value) || value.schema !== COMMERCE_WORKSPACE_SCHEMA) rejectInvalid('Commerce workspace schema is not v2.')
+  if (!Array.isArray(value.items) || !Array.isArray(value.orders) || !Array.isArray(value.movements) || !Array.isArray(value.closes)) rejectInvalid('Commerce workspace collections are incomplete.')
+  if (value.catalogBaselines !== undefined && !Array.isArray(value.catalogBaselines)) rejectInvalid('Commerce catalog baselines must be an array when present.')
+  if (value.catalogChanges !== undefined && !Array.isArray(value.catalogChanges)) rejectInvalid('Commerce catalog changes must be an array when present.')
+  if (value.taxConfigurations !== undefined && !Array.isArray(value.taxConfigurations)) rejectInvalid('Commerce tax configurations must be an array when present.')
+  if (value.accountMappingConfigurations !== undefined && !Array.isArray(value.accountMappingConfigurations)) rejectInvalid('Commerce account mapping configurations must be an array when present.')
+  if (value.customerCreditPolicies !== undefined && !Array.isArray(value.customerCreditPolicies)) rejectInvalid('Commerce customer credit policies must be an array when present.')
+  if (value.promotionPolicies !== undefined && !Array.isArray(value.promotionPolicies)) rejectInvalid('Commerce promotion policies must be an array when present.')
+  if (value.shippingPolicies !== undefined && !Array.isArray(value.shippingPolicies)) rejectInvalid('Commerce shipping policies must be an array when present.')
+  if (value.paymentPolicies !== undefined && !Array.isArray(value.paymentPolicies)) rejectInvalid('Commerce payment policies must be an array when present.')
+  if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) rejectInvalid('Commerce Website intakes must be an array when present.')
+  if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) rejectInvalid('Commerce storefront requests must be an array when present.')
+  if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) rejectInvalid('Commerce storefront configuration must be an object when present.')
+  if (value.purchaseBudgetEnvelopes !== undefined && !Array.isArray(value.purchaseBudgetEnvelopes)) rejectInvalid('Commerce purchase budget envelopes must be an array when present.')
+  if (value.supplierSourcingDecisions !== undefined && !Array.isArray(value.supplierSourcingDecisions)) rejectInvalid('Commerce supplier sourcing decisions must be an array when present.')
+  if (value.purchaseRequisitions !== undefined && !Array.isArray(value.purchaseRequisitions)) rejectInvalid('Commerce purchase requisitions must be an array when present.')
+  if (value.purchaseOrders !== undefined && !Array.isArray(value.purchaseOrders)) rejectInvalid('Commerce purchase orders must be an array when present.')
   if (value.inventoryFoundation !== undefined) {
     const inventory = value.inventoryFoundation
     if (!isRecord(inventory)
@@ -2437,7 +2379,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       || inventory.commands.length > 2_000
       || typeof inventory.headDigest !== 'string'
       || !sha256DigestPattern.test(inventory.headDigest)) {
-      throw new Error('Commerce location inventory envelope is invalid.')
+      rejectInvalid('Commerce location inventory envelope is invalid.')
     }
   }
 
@@ -2460,19 +2402,19 @@ export function validateCommerceState(value: unknown): CommerceState {
   const supplierSourcingDecisions = (value.supplierSourcingDecisions ?? []) as unknown[]
   const purchaseRequisitions = (value.purchaseRequisitions ?? []) as unknown[]
   const purchaseOrders = (value.purchaseOrders ?? []) as unknown[]
-  if (catalogBaselines.length > maxCatalogBaselines) throw new Error(`Commerce catalog baselines cannot exceed ${maxCatalogBaselines}.`)
-  if (catalogChanges.length > maxCatalogChanges) throw new Error(`Commerce catalog changes cannot exceed ${maxCatalogChanges}.`)
-  if (taxConfigurations.length > maxTaxConfigurations) throw new Error(`Commerce tax configurations cannot exceed ${maxTaxConfigurations}.`)
-  if (accountMappingConfigurations.length > maxAccountMappingConfigurations) throw new Error(`Commerce account mapping configurations cannot exceed ${maxAccountMappingConfigurations}.`)
-  if (customerCreditPolicies.length > maxCustomerCreditPolicies) throw new Error(`Commerce customer credit policies cannot exceed ${maxCustomerCreditPolicies}.`)
-  if (promotionPolicies.length > maxPromotionPolicies) throw new Error(`Commerce promotion policies cannot exceed ${maxPromotionPolicies}.`)
-  if (shippingPolicies.length > maxShippingPolicies) throw new Error(`Commerce shipping policies cannot exceed ${maxShippingPolicies}.`)
-  if (paymentPolicies.length > maxPaymentPolicies) throw new Error(`Commerce payment policies cannot exceed ${maxPaymentPolicies}.`)
-  if (purchaseBudgetEnvelopes.length > maxPurchaseBudgetEnvelopes) throw new Error(`Commerce purchase budget envelopes cannot exceed ${maxPurchaseBudgetEnvelopes}.`)
-  if (supplierSourcingDecisions.length > maxSupplierSourcingDecisions) throw new Error(`Commerce supplier sourcing decisions cannot exceed ${maxSupplierSourcingDecisions}.`)
-  if (storefrontRequests.length > maxStorefrontRequests) throw new Error(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
-  if (purchaseRequisitions.length > maxPurchaseRequisitions) throw new Error(`Commerce purchase requisitions cannot exceed ${maxPurchaseRequisitions}.`)
-  if (purchaseOrders.length > maxPurchaseOrders) throw new Error(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
+  if (catalogBaselines.length > maxCatalogBaselines) rejectInvalid(`Commerce catalog baselines cannot exceed ${maxCatalogBaselines}.`)
+  if (catalogChanges.length > maxCatalogChanges) rejectInvalid(`Commerce catalog changes cannot exceed ${maxCatalogChanges}.`)
+  if (taxConfigurations.length > maxTaxConfigurations) rejectInvalid(`Commerce tax configurations cannot exceed ${maxTaxConfigurations}.`)
+  if (accountMappingConfigurations.length > maxAccountMappingConfigurations) rejectInvalid(`Commerce account mapping configurations cannot exceed ${maxAccountMappingConfigurations}.`)
+  if (customerCreditPolicies.length > maxCustomerCreditPolicies) rejectInvalid(`Commerce customer credit policies cannot exceed ${maxCustomerCreditPolicies}.`)
+  if (promotionPolicies.length > maxPromotionPolicies) rejectInvalid(`Commerce promotion policies cannot exceed ${maxPromotionPolicies}.`)
+  if (shippingPolicies.length > maxShippingPolicies) rejectInvalid(`Commerce shipping policies cannot exceed ${maxShippingPolicies}.`)
+  if (paymentPolicies.length > maxPaymentPolicies) rejectInvalid(`Commerce payment policies cannot exceed ${maxPaymentPolicies}.`)
+  if (purchaseBudgetEnvelopes.length > maxPurchaseBudgetEnvelopes) rejectInvalid(`Commerce purchase budget envelopes cannot exceed ${maxPurchaseBudgetEnvelopes}.`)
+  if (supplierSourcingDecisions.length > maxSupplierSourcingDecisions) rejectInvalid(`Commerce supplier sourcing decisions cannot exceed ${maxSupplierSourcingDecisions}.`)
+  if (storefrontRequests.length > maxStorefrontRequests) rejectInvalid(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
+  if (purchaseRequisitions.length > maxPurchaseRequisitions) rejectInvalid(`Commerce purchase requisitions cannot exceed ${maxPurchaseRequisitions}.`)
+  if (purchaseOrders.length > maxPurchaseOrders) rejectInvalid(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
   const itemSkus: string[] = []
   const itemBySku = new Map<string, Record<string, unknown>>()
   const orderIds: string[] = []
@@ -2526,7 +2468,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   let storefrontConfigurationActionId = ''
 
   for (const [index, candidate] of items.entries()) {
-    if (!isRecord(candidate)) throw new Error(`items[${index}] is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`items[${index}] is invalid.`)
     const sku = canonicalText(candidate.sku, `items[${index}].sku`, 80)
     itemSkus.push(sku)
     itemBySku.set(sku, candidate)
@@ -2546,15 +2488,15 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['sku', 'price', 'reorderAt', 'proof', 'anchorDigest'],
-    )) throw new Error(`catalogBaselines[${index}] is invalid.`)
+    )) rejectInvalid(`catalogBaselines[${index}] is invalid.`)
     const sku = canonicalText(candidate.sku, `catalogBaselines[${index}].sku`, 80)
-    if (!itemBySku.has(sku)) throw new Error(`catalogBaselines[${index}].sku is unknown.`)
+    if (!itemBySku.has(sku)) rejectInvalid(`catalogBaselines[${index}].sku is unknown.`)
     assertSafeInteger(candidate.price, `catalogBaselines[${index}].price`, 1)
     assertSafeInteger(candidate.reorderAt, `catalogBaselines[${index}].reorderAt`)
     if (!isRecord(candidate.proof)
       || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.proof as CommerceActionProof)) {
-      throw new Error(`catalogBaselines[${index}].proof is invalid.`)
+      rejectInvalid(`catalogBaselines[${index}].proof is invalid.`)
     }
     const proof = candidate.proof as unknown as CommerceActionProof
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
@@ -2568,11 +2510,11 @@ export function validateCommerceState(value: unknown): CommerceState {
         reorderAt: Number(candidate.reorderAt),
         proof,
       })) {
-      throw new Error(`catalogBaselines[${index}].anchorDigest is invalid.`)
+      rejectInvalid(`catalogBaselines[${index}].anchorDigest is invalid.`)
     }
     const priorProof = catalogBaselineProofByAction.get(proof.actionId)
     if (priorProof && !sameActionProof(priorProof, proof)) {
-      throw new Error(`catalogBaselines[${index}].proof conflicts with its shared catalog command.`)
+      rejectInvalid(`catalogBaselines[${index}].proof conflicts with its shared catalog command.`)
     }
     const baseline = candidate as unknown as CommerceCatalogBaseline
     catalogBaselineSkus.push(sku)
@@ -2587,22 +2529,22 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['sku', 'previousPrice', 'nextPrice', 'previousReorderAt', 'nextReorderAt', 'proof'],
-    )) throw new Error(`catalogChanges[${index}] is invalid.`)
+    )) rejectInvalid(`catalogChanges[${index}] is invalid.`)
     const sku = canonicalText(candidate.sku, `catalogChanges[${index}].sku`, 80)
     const item = itemBySku.get(sku)
-    if (!item) throw new Error(`catalogChanges[${index}].sku is unknown.`)
+    if (!item) rejectInvalid(`catalogChanges[${index}].sku is unknown.`)
     assertSafeInteger(candidate.previousPrice, `catalogChanges[${index}].previousPrice`, 1)
     assertSafeInteger(candidate.nextPrice, `catalogChanges[${index}].nextPrice`, 1)
     assertSafeInteger(candidate.previousReorderAt, `catalogChanges[${index}].previousReorderAt`)
     assertSafeInteger(candidate.nextReorderAt, `catalogChanges[${index}].nextReorderAt`)
     if (candidate.previousPrice === candidate.nextPrice
       && candidate.previousReorderAt === candidate.nextReorderAt) {
-      throw new Error(`catalogChanges[${index}] cannot record an unchanged item.`)
+      rejectInvalid(`catalogChanges[${index}] cannot record an unchanged item.`)
     }
     if (!isRecord(candidate.proof)
       || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.proof as CommerceActionProof)) {
-      throw new Error(`catalogChanges[${index}].proof is invalid.`)
+      rejectInvalid(`catalogChanges[${index}].proof is invalid.`)
     }
     const proof = candidate.proof as unknown as CommerceActionProof
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
@@ -2612,30 +2554,30 @@ export function validateCommerceState(value: unknown): CommerceState {
     const newer = newerCatalogChangeBySku.get(sku)
     if (!newer) {
       if (item.price !== change.nextPrice || item.reorderAt !== change.nextReorderAt) {
-        throw new Error(`catalogChanges[${index}] does not match the current catalog item.`)
+        rejectInvalid(`catalogChanges[${index}] does not match the current catalog item.`)
       }
     } else if (newer.previousPrice !== change.nextPrice
       || newer.previousReorderAt !== change.nextReorderAt
       || (timestampMicros(newer.proof.capturedAt) as bigint) < (timestampMicros(change.proof.capturedAt) as bigint)) {
-      throw new Error(`catalogChanges[${index}] breaks the newest-first item history.`)
+      rejectInvalid(`catalogChanges[${index}] breaks the newest-first item history.`)
     }
     newerCatalogChangeBySku.set(sku, change)
     catalogChangeActionIds.push(proof.actionId)
   }
   for (const [sku, oldestChange] of newerCatalogChangeBySku) {
     const baseline = catalogBaselineBySku.get(sku)
-    if (!baseline) throw new Error(`Catalog change history for ${sku} has no anchored baseline.`)
+    if (!baseline) rejectInvalid(`Catalog change history for ${sku} has no anchored baseline.`)
     if (baseline.price !== oldestChange.previousPrice
       || baseline.reorderAt !== oldestChange.previousReorderAt
       || (timestampMicros(baseline.proof.capturedAt) as bigint) > (timestampMicros(oldestChange.proof.capturedAt) as bigint)) {
-      throw new Error(`Catalog change history for ${sku} does not start from its anchored baseline.`)
+      rejectInvalid(`Catalog change history for ${sku} does not start from its anchored baseline.`)
     }
   }
   for (const [sku, baseline] of catalogBaselineBySku) {
     if (newerCatalogChangeBySku.has(sku)) continue
     const item = itemBySku.get(sku) as Record<string, unknown>
     if (item.price !== baseline.price || item.reorderAt !== baseline.reorderAt) {
-      throw new Error(`Catalog baseline for ${sku} does not match the unchanged catalog item.`)
+      rejectInvalid(`Catalog baseline for ${sku} does not match the unchanged catalog item.`)
     }
   }
 
@@ -2649,29 +2591,29 @@ export function validateCommerceState(value: unknown): CommerceState {
       candidate,
       ['revision', 'code', 'label', 'rateBasisPoints', 'mode', 'jurisdictionCode', 'effectiveFrom', 'proof'],
     )
-    if (!legacyShape && !scheduledShape) throw new Error(`taxConfigurations[${index}] is invalid.`)
+    if (!legacyShape && !scheduledShape) rejectInvalid(`taxConfigurations[${index}] is invalid.`)
     assertSafeInteger(candidate.revision, `taxConfigurations[${index}].revision`, 1)
     if (candidate.revision !== taxConfigurations.length - index) {
-      throw new Error(`taxConfigurations[${index}].revision breaks the newest-first sequence.`)
+      rejectInvalid(`taxConfigurations[${index}].revision breaks the newest-first sequence.`)
     }
     const code = canonicalText(candidate.code, `taxConfigurations[${index}].code`, 12)
-    if (!taxCodePattern.test(code)) throw new Error(`taxConfigurations[${index}].code is invalid.`)
+    if (!taxCodePattern.test(code)) rejectInvalid(`taxConfigurations[${index}].code is invalid.`)
     canonicalText(candidate.label, `taxConfigurations[${index}].label`, 80)
     assertSafeInteger(candidate.rateBasisPoints, `taxConfigurations[${index}].rateBasisPoints`)
-    if (Number(candidate.rateBasisPoints) > 10_000) throw new Error(`taxConfigurations[${index}].rateBasisPoints must be at most 10000.`)
-    if (candidate.mode !== 'exclusive' && candidate.mode !== 'inclusive') throw new Error(`taxConfigurations[${index}].mode is invalid.`)
+    if (Number(candidate.rateBasisPoints) > 10_000) rejectInvalid(`taxConfigurations[${index}].rateBasisPoints must be at most 10000.`)
+    if (candidate.mode !== 'exclusive' && candidate.mode !== 'inclusive') rejectInvalid(`taxConfigurations[${index}].mode is invalid.`)
     if (!isRecord(candidate.proof)
       || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.proof as CommerceActionProof)) {
-      throw new Error(`taxConfigurations[${index}].proof is invalid.`)
+      rejectInvalid(`taxConfigurations[${index}].proof is invalid.`)
     }
     const configuration = candidate as unknown as CommerceTaxConfiguration
     if (scheduledShape) {
       const jurisdictionCode = canonicalText(configuration.jurisdictionCode, `taxConfigurations[${index}].jurisdictionCode`, 16)
-      if (!taxJurisdictionCodePattern.test(jurisdictionCode)) throw new Error(`taxConfigurations[${index}].jurisdictionCode is invalid.`)
+      if (!taxJurisdictionCodePattern.test(jurisdictionCode)) rejectInvalid(`taxConfigurations[${index}].jurisdictionCode is invalid.`)
       if (!validTimestamp(configuration.effectiveFrom)
         || (timestampMicros(configuration.effectiveFrom) as bigint) < (timestampMicros(configuration.proof.capturedAt) as bigint)) {
-        throw new Error(`taxConfigurations[${index}].effectiveFrom must be at or after its review proof.`)
+        rejectInvalid(`taxConfigurations[${index}].effectiveFrom must be at or after its review proof.`)
       }
     }
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
@@ -2679,12 +2621,12 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     if (newerTaxConfiguration
       && (timestampMicros(newerTaxConfiguration.proof.capturedAt) as bigint) < (timestampMicros(configuration.proof.capturedAt) as bigint)) {
-      throw new Error(`taxConfigurations[${index}] breaks the newest-first chronology.`)
+      rejectInvalid(`taxConfigurations[${index}] breaks the newest-first chronology.`)
     }
     if (newerTaxConfiguration
       && (timestampMicros(newerTaxConfiguration.effectiveFrom ?? newerTaxConfiguration.proof.capturedAt) as bigint)
         < (timestampMicros(configuration.effectiveFrom ?? configuration.proof.capturedAt) as bigint)) {
-      throw new Error(`taxConfigurations[${index}] breaks the newest-first effective schedule.`)
+      rejectInvalid(`taxConfigurations[${index}] breaks the newest-first effective schedule.`)
     }
     newerTaxConfiguration = configuration
     taxConfigurationActionIds.push(configuration.proof.actionId)
@@ -2693,17 +2635,17 @@ export function validateCommerceState(value: unknown): CommerceState {
   let newerAccountMappingConfiguration: CommerceAccountMappingConfiguration | null = null
   for (const [index, candidate] of accountMappingConfigurations.entries()) {
     if (!isRecord(candidate) || !hasExactKeys(candidate, ['revision', 'mappings', 'proof'])) {
-      throw new Error(`accountMappingConfigurations[${index}] is invalid.`)
+      rejectInvalid(`accountMappingConfigurations[${index}] is invalid.`)
     }
     assertSafeInteger(candidate.revision, `accountMappingConfigurations[${index}].revision`, 1)
     if (candidate.revision !== accountMappingConfigurations.length - index) {
-      throw new Error(`accountMappingConfigurations[${index}].revision breaks the newest-first sequence.`)
+      rejectInvalid(`accountMappingConfigurations[${index}].revision breaks the newest-first sequence.`)
     }
     if (!Array.isArray(candidate.mappings)
       || (candidate.mappings.length !== legacyCommerceAccountRoles.length
         && candidate.mappings.length !== commerceAccountRoles.length
         && candidate.mappings.length !== ledgerAccountRoles.length)) {
-      throw new Error(`accountMappingConfigurations[${index}].mappings must cover every account role exactly once.`)
+      rejectInvalid(`accountMappingConfigurations[${index}].mappings must cover every account role exactly once.`)
     }
     const expectedAccountRoles: readonly LedgerAccountRole[] = candidate.mappings.length === legacyCommerceAccountRoles.length
       ? legacyCommerceAccountRoles
@@ -2714,15 +2656,15 @@ export function validateCommerceState(value: unknown): CommerceState {
       const field = `accountMappingConfigurations[${index}].mappings[${mappingIndex}]`
       if (!isRecord(mapping) || !hasExactKeys(mapping, ['accountRole', 'externalAccountCode'])
         || mapping.accountRole !== expectedAccountRoles[mappingIndex]) {
-        throw new Error(`${field} must use the canonical account role order.`)
+        rejectInvalid(`${field} must use the canonical account role order.`)
       }
       const code = canonicalText(mapping.externalAccountCode, `${field}.externalAccountCode`, 40)
-      if (!externalAccountCodePattern.test(code)) throw new Error(`${field}.externalAccountCode is invalid.`)
+      if (!externalAccountCodePattern.test(code)) rejectInvalid(`${field}.externalAccountCode is invalid.`)
     }
     if (!isRecord(candidate.proof)
       || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.proof as CommerceActionProof)) {
-      throw new Error(`accountMappingConfigurations[${index}].proof is invalid.`)
+      rejectInvalid(`accountMappingConfigurations[${index}].proof is invalid.`)
     }
     const configuration = candidate as unknown as CommerceAccountMappingConfiguration
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
@@ -2730,7 +2672,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
     if (newerAccountMappingConfiguration
       && (timestampMicros(newerAccountMappingConfiguration.proof.capturedAt) as bigint) < (timestampMicros(configuration.proof.capturedAt) as bigint)) {
-      throw new Error(`accountMappingConfigurations[${index}] breaks the newest-first chronology.`)
+      rejectInvalid(`accountMappingConfigurations[${index}] breaks the newest-first chronology.`)
     }
     newerAccountMappingConfiguration = configuration
     accountMappingConfigurationActionIds.push(configuration.proof.actionId)
@@ -2740,21 +2682,21 @@ export function validateCommerceState(value: unknown): CommerceState {
   for (const [index, candidate] of customerCreditPolicies.entries()) {
     const field = `customerCreditPolicies[${index}]`
     if (!isRecord(candidate) || !hasExactKeys(candidate, ['revision', 'customer', 'creditLimitMmk', 'maxPaymentTermsDays', 'status', 'proof'])) {
-      throw new Error(`${field} is invalid.`)
+      rejectInvalid(`${field} is invalid.`)
     }
     assertSafeInteger(candidate.revision, `${field}.revision`, 1)
-    if (candidate.revision !== customerCreditPolicies.length - index) throw new Error(`${field}.revision breaks the newest-first sequence.`)
+    if (candidate.revision !== customerCreditPolicies.length - index) rejectInvalid(`${field}.revision breaks the newest-first sequence.`)
     canonicalText(candidate.customer, `${field}.customer`, 120)
     assertSafeInteger(candidate.creditLimitMmk, `${field}.creditLimitMmk`)
-    if (!customerCreditTerms.has(Number(candidate.maxPaymentTermsDays))) throw new Error(`${field}.maxPaymentTermsDays is invalid.`)
-    if (candidate.status !== 'active' && candidate.status !== 'hold') throw new Error(`${field}.status is invalid.`)
+    if (!customerCreditTerms.has(Number(candidate.maxPaymentTermsDays))) rejectInvalid(`${field}.maxPaymentTermsDays is invalid.`)
+    if (candidate.status !== 'active' && candidate.status !== 'hold') rejectInvalid(`${field}.status is invalid.`)
     if (!isRecord(candidate.proof)
       || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
-      || !validProof(candidate.proof as CommerceActionProof)) throw new Error(`${field}.proof is invalid.`)
+      || !validProof(candidate.proof as CommerceActionProof)) rejectInvalid(`${field}.proof is invalid.`)
     const policy = candidate as unknown as CommerceCustomerCreditPolicy
     if (newerCustomerCreditPolicy
       && (timestampMicros(newerCustomerCreditPolicy.proof.capturedAt) as bigint) < (timestampMicros(policy.proof.capturedAt) as bigint)) {
-      throw new Error(`${field} breaks the newest-first chronology.`)
+      rejectInvalid(`${field} breaks the newest-first chronology.`)
     }
     newerCustomerCreditPolicy = policy
     customerCreditPolicyActionIds.push(policy.proof.actionId)
@@ -2766,31 +2708,31 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(candidate, [
       'revision', 'code', 'discountBasisPoints', 'minimumSubtotalMmk', 'maximumDiscountMmk',
       'status', 'effectiveFrom', 'effectiveUntil', 'proof',
-    ])) throw new Error(`${field} is invalid.`)
+    ])) rejectInvalid(`${field} is invalid.`)
     assertSafeInteger(candidate.revision, `${field}.revision`, 1)
-    if (candidate.revision !== promotionPolicies.length - index) throw new Error(`${field}.revision breaks the newest-first sequence.`)
+    if (candidate.revision !== promotionPolicies.length - index) rejectInvalid(`${field}.revision breaks the newest-first sequence.`)
     const code = canonicalText(candidate.code, `${field}.code`, 40)
-    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(code)) throw new Error(`${field}.code is invalid.`)
+    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(code)) rejectInvalid(`${field}.code is invalid.`)
     assertSafeInteger(candidate.discountBasisPoints, `${field}.discountBasisPoints`, 1)
-    if (Number(candidate.discountBasisPoints) > 10_000) throw new Error(`${field}.discountBasisPoints is invalid.`)
+    if (Number(candidate.discountBasisPoints) > 10_000) rejectInvalid(`${field}.discountBasisPoints is invalid.`)
     assertSafeInteger(candidate.minimumSubtotalMmk, `${field}.minimumSubtotalMmk`)
     assertSafeInteger(candidate.maximumDiscountMmk, `${field}.maximumDiscountMmk`, 1)
-    if (candidate.status !== 'active' && candidate.status !== 'inactive') throw new Error(`${field}.status is invalid.`)
+    if (candidate.status !== 'active' && candidate.status !== 'inactive') rejectInvalid(`${field}.status is invalid.`)
     if (!validTimestamp(candidate.effectiveFrom)
       || candidate.effectiveUntil !== null && (!validTimestamp(candidate.effectiveUntil)
         || (timestampMicros(candidate.effectiveUntil) as bigint) <= (timestampMicros(candidate.effectiveFrom) as bigint))) {
-      throw new Error(`${field} effective window is invalid.`)
+      rejectInvalid(`${field} effective window is invalid.`)
     }
     if (!isRecord(candidate.proof)
       || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.proof as CommerceActionProof)
       || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) {
-      throw new Error(`${field}.proof is invalid.`)
+      rejectInvalid(`${field}.proof is invalid.`)
     }
     const policy = candidate as unknown as CommercePromotionPolicy
     if (newerPromotionPolicy
       && (timestampMicros(newerPromotionPolicy.proof.capturedAt) as bigint) < (timestampMicros(policy.proof.capturedAt) as bigint)) {
-      throw new Error(`${field} breaks the newest-first chronology.`)
+      rejectInvalid(`${field} breaks the newest-first chronology.`)
     }
     newerPromotionPolicy = policy
     promotionPolicyActionIds.push(policy.proof.actionId)
@@ -2802,28 +2744,28 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(candidate, [
       'revision', 'zoneCode', 'townships', 'feeMmk', 'promiseMinutes',
       'status', 'effectiveFrom', 'effectiveUntil', 'proof',
-    ])) throw new Error(`${field} is invalid.`)
+    ])) rejectInvalid(`${field} is invalid.`)
     assertSafeInteger(candidate.revision, `${field}.revision`, 1)
-    if (candidate.revision !== shippingPolicies.length - index) throw new Error(`${field}.revision breaks the newest-first sequence.`)
+    if (candidate.revision !== shippingPolicies.length - index) rejectInvalid(`${field}.revision breaks the newest-first sequence.`)
     const zoneCode = canonicalText(candidate.zoneCode, `${field}.zoneCode`, 40)
-    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(zoneCode)) throw new Error(`${field}.zoneCode is invalid.`)
-    if (!Array.isArray(candidate.townships) || candidate.townships.length < 1 || candidate.townships.length > 50) throw new Error(`${field}.townships is invalid.`)
+    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(zoneCode)) rejectInvalid(`${field}.zoneCode is invalid.`)
+    if (!Array.isArray(candidate.townships) || candidate.townships.length < 1 || candidate.townships.length > 50) rejectInvalid(`${field}.townships is invalid.`)
     const townships = candidate.townships.map((township, townshipIndex) => canonicalText(township, `${field}.townships[${townshipIndex}]`, 80))
-    if (townships.some((township, townshipIndex) => townshipIndex > 0 && townships[townshipIndex - 1].localeCompare(township, 'en', { sensitivity: 'base' }) >= 0)) throw new Error(`${field}.townships must use unique canonical order.`)
+    if (townships.some((township, townshipIndex) => townshipIndex > 0 && townships[townshipIndex - 1].localeCompare(township, 'en', { sensitivity: 'base' }) >= 0)) rejectInvalid(`${field}.townships must use unique canonical order.`)
     assertSafeInteger(candidate.feeMmk, `${field}.feeMmk`)
     assertSafeInteger(candidate.promiseMinutes, `${field}.promiseMinutes`, 15)
-    if (Number(candidate.promiseMinutes) > 10_080) throw new Error(`${field}.promiseMinutes is invalid.`)
-    if (candidate.status !== 'active' && candidate.status !== 'inactive') throw new Error(`${field}.status is invalid.`)
+    if (Number(candidate.promiseMinutes) > 10_080) rejectInvalid(`${field}.promiseMinutes is invalid.`)
+    if (candidate.status !== 'active' && candidate.status !== 'inactive') rejectInvalid(`${field}.status is invalid.`)
     if (!validTimestamp(candidate.effectiveFrom)
       || candidate.effectiveUntil !== null && (!validTimestamp(candidate.effectiveUntil)
-        || (timestampMicros(candidate.effectiveUntil) as bigint) <= (timestampMicros(candidate.effectiveFrom) as bigint))) throw new Error(`${field} effective window is invalid.`)
+        || (timestampMicros(candidate.effectiveUntil) as bigint) <= (timestampMicros(candidate.effectiveFrom) as bigint))) rejectInvalid(`${field} effective window is invalid.`)
     if (!isRecord(candidate.proof)
       || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.proof as CommerceActionProof)
-      || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) throw new Error(`${field}.proof is invalid.`)
+      || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) rejectInvalid(`${field}.proof is invalid.`)
     const policy = candidate as unknown as CommerceShippingPolicy
     if (newerShippingPolicy
-      && (timestampMicros(newerShippingPolicy.proof.capturedAt) as bigint) < (timestampMicros(policy.proof.capturedAt) as bigint)) throw new Error(`${field} breaks the newest-first chronology.`)
+      && (timestampMicros(newerShippingPolicy.proof.capturedAt) as bigint) < (timestampMicros(policy.proof.capturedAt) as bigint)) rejectInvalid(`${field} breaks the newest-first chronology.`)
     newerShippingPolicy = policy
     shippingPolicyActionIds.push(policy.proof.actionId)
   }
@@ -2834,27 +2776,27 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(candidate, [
       'revision', 'adapter', 'allowedFulfilments', 'maximumOrderMmk', 'instructions',
       'status', 'effectiveFrom', 'effectiveUntil', 'proof',
-    ])) throw new Error(`${field} is invalid.`)
+    ])) rejectInvalid(`${field} is invalid.`)
     assertSafeInteger(candidate.revision, `${field}.revision`, 1)
-    if (candidate.revision !== paymentPolicies.length - index) throw new Error(`${field}.revision breaks the newest-first sequence.`)
-    if (!['pay_on_pickup', 'cash_on_delivery', 'kbzpay_manual'].includes(String(candidate.adapter))) throw new Error(`${field}.adapter is invalid.`)
+    if (candidate.revision !== paymentPolicies.length - index) rejectInvalid(`${field}.revision breaks the newest-first sequence.`)
+    if (!['pay_on_pickup', 'cash_on_delivery', 'kbzpay_manual'].includes(String(candidate.adapter))) rejectInvalid(`${field}.adapter is invalid.`)
     const allowedFulfilments = candidate.allowedFulfilments
     if (!Array.isArray(allowedFulfilments) || allowedFulfilments.length < 1 || allowedFulfilments.length > 2
       || allowedFulfilments.some((value) => !['delivery', 'pickup'].includes(String(value)))
-      || allowedFulfilments.some((value, fulfilmentIndex) => fulfilmentIndex > 0 && allowedFulfilments[fulfilmentIndex - 1] >= value)) throw new Error(`${field}.allowedFulfilments is invalid.`)
+      || allowedFulfilments.some((value, fulfilmentIndex) => fulfilmentIndex > 0 && allowedFulfilments[fulfilmentIndex - 1] >= value)) rejectInvalid(`${field}.allowedFulfilments is invalid.`)
     if (candidate.maximumOrderMmk !== null) assertSafeInteger(candidate.maximumOrderMmk, `${field}.maximumOrderMmk`, 1)
     canonicalText(candidate.instructions, `${field}.instructions`, 240)
-    if (candidate.status !== 'active' && candidate.status !== 'inactive') throw new Error(`${field}.status is invalid.`)
+    if (candidate.status !== 'active' && candidate.status !== 'inactive') rejectInvalid(`${field}.status is invalid.`)
     if (!validTimestamp(candidate.effectiveFrom)
       || candidate.effectiveUntil !== null && (!validTimestamp(candidate.effectiveUntil)
-        || (timestampMicros(candidate.effectiveUntil) as bigint) <= (timestampMicros(candidate.effectiveFrom) as bigint))) throw new Error(`${field} effective window is invalid.`)
+        || (timestampMicros(candidate.effectiveUntil) as bigint) <= (timestampMicros(candidate.effectiveFrom) as bigint))) rejectInvalid(`${field} effective window is invalid.`)
     if (!isRecord(candidate.proof)
       || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.proof as CommerceActionProof)
-      || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) throw new Error(`${field}.proof is invalid.`)
+      || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) rejectInvalid(`${field}.proof is invalid.`)
     const policy = candidate as unknown as CommercePaymentPolicy
     if (newerPaymentPolicy
-      && (timestampMicros(newerPaymentPolicy.proof.capturedAt) as bigint) < (timestampMicros(policy.proof.capturedAt) as bigint)) throw new Error(`${field} breaks the newest-first chronology.`)
+      && (timestampMicros(newerPaymentPolicy.proof.capturedAt) as bigint) < (timestampMicros(policy.proof.capturedAt) as bigint)) rejectInvalid(`${field} breaks the newest-first chronology.`)
     newerPaymentPolicy = policy
     paymentPolicyActionIds.push(policy.proof.actionId)
   }
@@ -2865,25 +2807,25 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(candidate, [
       'id', 'createdAt', 'budgetCode', 'label', 'periodStart', 'periodEnd',
       'ceilingMmk', 'perRequisitionLimitMmk', 'approval',
-    ])) throw new Error(`${field} is invalid.`)
+    ])) rejectInvalid(`${field} is invalid.`)
     const id = canonicalText(candidate.id, `${field}.id`, 80)
-    if (!purchaseBudgetEnvelopeIdPattern.test(id)) throw new Error(`${field}.id is invalid.`)
+    if (!purchaseBudgetEnvelopeIdPattern.test(id)) rejectInvalid(`${field}.id is invalid.`)
     const budgetCode = canonicalText(candidate.budgetCode, `${field}.budgetCode`, 40)
-    if (!purchaseBudgetCodePattern.test(budgetCode) || budgetCode !== budgetCode.toUpperCase()) throw new Error(`${field}.budgetCode is invalid.`)
+    if (!purchaseBudgetCodePattern.test(budgetCode) || budgetCode !== budgetCode.toUpperCase()) rejectInvalid(`${field}.budgetCode is invalid.`)
     canonicalText(candidate.label, `${field}.label`, 120)
     if (!validTimestamp(candidate.createdAt) || !validTimestamp(candidate.periodStart) || !validTimestamp(candidate.periodEnd)
       || (timestampMicros(candidate.periodStart) as bigint) > (timestampMicros(candidate.createdAt) as bigint)
-      || (timestampMicros(candidate.createdAt) as bigint) >= (timestampMicros(candidate.periodEnd) as bigint)) throw new Error(`${field} period is invalid.`)
+      || (timestampMicros(candidate.createdAt) as bigint) >= (timestampMicros(candidate.periodEnd) as bigint)) rejectInvalid(`${field} period is invalid.`)
     assertSafeInteger(candidate.ceilingMmk, `${field}.ceilingMmk`, 1)
     assertSafeInteger(candidate.perRequisitionLimitMmk, `${field}.perRequisitionLimitMmk`, 1)
-    if (Number(candidate.perRequisitionLimitMmk) > Number(candidate.ceilingMmk)) throw new Error(`${field} per-requisition limit exceeds its ceiling.`)
+    if (Number(candidate.perRequisitionLimitMmk) > Number(candidate.ceilingMmk)) rejectInvalid(`${field} per-requisition limit exceeds its ceiling.`)
     if (!isRecord(candidate.approval)
       || !hasExactKeys(candidate.approval, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.approval as CommerceActionProof)
-      || candidate.approval.capturedAt !== candidate.createdAt) throw new Error(`${field}.approval is invalid.`)
+      || candidate.approval.capturedAt !== candidate.createdAt) rejectInvalid(`${field}.approval is invalid.`)
     const envelope = candidate as unknown as CommercePurchaseBudgetEnvelope
     if (newerPurchaseBudgetEnvelope
-      && (timestampMicros(newerPurchaseBudgetEnvelope.createdAt) as bigint) < (timestampMicros(envelope.createdAt) as bigint)) throw new Error(`${field} breaks newest-first chronology.`)
+      && (timestampMicros(newerPurchaseBudgetEnvelope.createdAt) as bigint) < (timestampMicros(envelope.createdAt) as bigint)) rejectInvalid(`${field} breaks newest-first chronology.`)
     newerPurchaseBudgetEnvelope = envelope
     purchaseBudgetEnvelopeIds.push(id)
     purchaseBudgetEnvelopeActionIds.push(envelope.approval.actionId)
@@ -2896,7 +2838,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       const right = purchaseBudgetEnvelopes[rightIndex] as CommercePurchaseBudgetEnvelope
       if (left.budgetCode === right.budgetCode
         && (timestampMicros(left.periodStart) as bigint) < (timestampMicros(right.periodEnd) as bigint)
-        && (timestampMicros(right.periodStart) as bigint) < (timestampMicros(left.periodEnd) as bigint)) throw new Error(`Purchase budget ${left.budgetCode} has overlapping envelopes.`)
+        && (timestampMicros(right.periodStart) as bigint) < (timestampMicros(left.periodEnd) as bigint)) rejectInvalid(`Purchase budget ${left.budgetCode} has overlapping envelopes.`)
     }
   }
 
@@ -2907,35 +2849,35 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(candidate, [
       'id', 'createdAt', 'sku', 'quantity', 'quotes', 'selectedQuoteReference',
       'unitCostToleranceBasisPoints', 'deliveryToleranceDays', 'approval',
-    ]) || !Array.isArray(candidate.quotes) || candidate.quotes.length < 1 || candidate.quotes.length > 5) throw new Error(`${field} is invalid.`)
+    ]) || !Array.isArray(candidate.quotes) || candidate.quotes.length < 1 || candidate.quotes.length > 5) rejectInvalid(`${field} is invalid.`)
     const id = canonicalText(candidate.id, `${field}.id`, 80)
-    if (!supplierSourcingDecisionIdPattern.test(id)) throw new Error(`${field}.id is invalid.`)
+    if (!supplierSourcingDecisionIdPattern.test(id)) rejectInvalid(`${field}.id is invalid.`)
     const sku = canonicalText(candidate.sku, `${field}.sku`, 80)
-    if (!itemBySku.has(sku)) throw new Error(`${field}.sku is unknown.`)
+    if (!itemBySku.has(sku)) rejectInvalid(`${field}.sku is unknown.`)
     assertSafeInteger(candidate.quantity, `${field}.quantity`, 1)
     assertSafeInteger(candidate.unitCostToleranceBasisPoints, `${field}.unitCostToleranceBasisPoints`, 0)
     assertSafeInteger(candidate.deliveryToleranceDays, `${field}.deliveryToleranceDays`, 0)
-    if (Number(candidate.unitCostToleranceBasisPoints) > 2_000 || Number(candidate.deliveryToleranceDays) > 30) throw new Error(`${field} tolerance is invalid.`)
+    if (Number(candidate.unitCostToleranceBasisPoints) > 2_000 || Number(candidate.deliveryToleranceDays) > 30) rejectInvalid(`${field} tolerance is invalid.`)
     const createdAt = canonicalText(candidate.createdAt, `${field}.createdAt`, 35)
     if (!validTimestamp(createdAt) || !isRecord(candidate.approval)
       || !hasExactKeys(candidate.approval, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.approval as CommerceActionProof)
-      || candidate.approval.capturedAt !== createdAt) throw new Error(`${field}.approval is invalid.`)
+      || candidate.approval.capturedAt !== createdAt) rejectInvalid(`${field}.approval is invalid.`)
     const quoteReferences: string[] = []
     const suppliers: string[] = []
     for (const [quoteIndex, quoteCandidate] of candidate.quotes.entries()) {
       const quoteField = `${field}.quotes[${quoteIndex}]`
       if (!isRecord(quoteCandidate) || !hasExactKeys(quoteCandidate, [
         'supplier', 'quoteReference', 'vendorApprovalReference', 'unitCostMmk', 'deliveryAt', 'validUntil',
-      ])) throw new Error(`${quoteField} is invalid.`)
+      ])) rejectInvalid(`${quoteField} is invalid.`)
       const supplier = canonicalText(quoteCandidate.supplier, `${quoteField}.supplier`, 120)
       const quoteReference = canonicalText(quoteCandidate.quoteReference, `${quoteField}.quoteReference`, 80)
       canonicalText(quoteCandidate.vendorApprovalReference, `${quoteField}.vendorApprovalReference`, 120)
       assertSafeInteger(quoteCandidate.unitCostMmk, `${quoteField}.unitCostMmk`, 1)
-      if (BigInt(Number(quoteCandidate.unitCostMmk)) * BigInt(10_000 + Number(candidate.unitCostToleranceBasisPoints)) / 10_000n > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error(`${quoteField}.unitCostMmk exceeds the supported tolerance range.`)
+      if (BigInt(Number(quoteCandidate.unitCostMmk)) * BigInt(10_000 + Number(candidate.unitCostToleranceBasisPoints)) / 10_000n > BigInt(Number.MAX_SAFE_INTEGER)) rejectInvalid(`${quoteField}.unitCostMmk exceeds the supported tolerance range.`)
       if (!validTimestamp(quoteCandidate.deliveryAt) || !validTimestamp(quoteCandidate.validUntil)
         || (timestampMicros(quoteCandidate.deliveryAt) as bigint) <= (timestampMicros(createdAt) as bigint)
-        || (timestampMicros(quoteCandidate.validUntil) as bigint) < (timestampMicros(createdAt) as bigint)) throw new Error(`${quoteField} dates are invalid.`)
+        || (timestampMicros(quoteCandidate.validUntil) as bigint) < (timestampMicros(createdAt) as bigint)) rejectInvalid(`${quoteField} dates are invalid.`)
       quoteReferences.push(quoteReference)
       suppliers.push(supplier)
       supplierQuoteSources.push(`${supplier}\0${quoteReference}`)
@@ -2943,9 +2885,9 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertUnique(quoteReferences, `${field} quote reference`)
     assertUnique(suppliers, `${field} supplier`)
     const selectedQuoteReference = canonicalText(candidate.selectedQuoteReference, `${field}.selectedQuoteReference`, 80)
-    if (!quoteReferences.includes(selectedQuoteReference)) throw new Error(`${field}.selectedQuoteReference is unknown.`)
+    if (!quoteReferences.includes(selectedQuoteReference)) rejectInvalid(`${field}.selectedQuoteReference is unknown.`)
     const decision = candidate as unknown as CommerceSupplierSourcingDecision
-    if (newerSourcingDecision && (timestampMicros(newerSourcingDecision.createdAt) as bigint) < (timestampMicros(createdAt) as bigint)) throw new Error(`${field} breaks newest-first chronology.`)
+    if (newerSourcingDecision && (timestampMicros(newerSourcingDecision.createdAt) as bigint) < (timestampMicros(createdAt) as bigint)) rejectInvalid(`${field} breaks newest-first chronology.`)
     newerSourcingDecision = decision
     supplierSourcingDecisionIds.push(id)
     supplierSourcingDecisionActionIds.push(decision.approval.actionId)
@@ -2958,33 +2900,33 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(candidate, [
       'id', 'createdAt', 'expectedAt', 'supplier', 'sku', 'quantityRequested',
       'unitCostMmk', 'totalMmk', 'sourceDecisionDigest', 'sourceReplenishmentDigest', 'approval',
-    ], ['budgetEnvelopeId', 'sourceSourcingDecisionId'])) throw new Error(`purchaseRequisitions[${index}] is invalid.`)
+    ], ['budgetEnvelopeId', 'sourceSourcingDecisionId'])) rejectInvalid(`purchaseRequisitions[${index}] is invalid.`)
     const field = `purchaseRequisitions[${index}]`
     const id = canonicalText(candidate.id, `${field}.id`, 80)
-    if (!purchaseRequisitionIdPattern.test(id)) throw new Error(`${field}.id is invalid.`)
+    if (!purchaseRequisitionIdPattern.test(id)) rejectInvalid(`${field}.id is invalid.`)
     if (!validTimestamp(candidate.createdAt) || !validTimestamp(candidate.expectedAt)
-      || (timestampMicros(candidate.expectedAt) as bigint) <= (timestampMicros(candidate.createdAt) as bigint)) throw new Error(`${field} dates are invalid.`)
+      || (timestampMicros(candidate.expectedAt) as bigint) <= (timestampMicros(candidate.createdAt) as bigint)) rejectInvalid(`${field} dates are invalid.`)
     canonicalText(candidate.supplier, `${field}.supplier`, 120)
     const sku = canonicalText(candidate.sku, `${field}.sku`, 80)
-    if (!itemSkus.includes(sku)) throw new Error(`${field}.sku is unknown.`)
+    if (!itemSkus.includes(sku)) rejectInvalid(`${field}.sku is unknown.`)
     assertSafeInteger(candidate.quantityRequested, `${field}.quantityRequested`, 1)
     assertSafeInteger(candidate.unitCostMmk, `${field}.unitCostMmk`, 1)
     assertSafeInteger(candidate.totalMmk, `${field}.totalMmk`, 1)
     if (!Number.isSafeInteger(Number(candidate.quantityRequested) * Number(candidate.unitCostMmk))
-      || candidate.totalMmk !== Number(candidate.quantityRequested) * Number(candidate.unitCostMmk)) throw new Error(`${field}.totalMmk must equal quantity times unit cost.`)
+      || candidate.totalMmk !== Number(candidate.quantityRequested) * Number(candidate.unitCostMmk)) rejectInvalid(`${field}.totalMmk must equal quantity times unit cost.`)
     if (typeof candidate.sourceDecisionDigest !== 'string' || !sha256DigestPattern.test(candidate.sourceDecisionDigest)
-      || typeof candidate.sourceReplenishmentDigest !== 'string' || !sha256DigestPattern.test(candidate.sourceReplenishmentDigest)) throw new Error(`${field} source evidence is invalid.`)
+      || typeof candidate.sourceReplenishmentDigest !== 'string' || !sha256DigestPattern.test(candidate.sourceReplenishmentDigest)) rejectInvalid(`${field} source evidence is invalid.`)
     if (!isRecord(candidate.approval)
       || !hasExactKeys(candidate.approval, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.approval as CommerceActionProof)
-      || candidate.approval.capturedAt !== candidate.createdAt) throw new Error(`${field}.approval is invalid.`)
+      || candidate.approval.capturedAt !== candidate.createdAt) rejectInvalid(`${field}.approval is invalid.`)
     if (candidate.budgetEnvelopeId !== undefined) {
       const budgetEnvelopeId = canonicalText(candidate.budgetEnvelopeId, `${field}.budgetEnvelopeId`, 80)
       const envelope = purchaseBudgetEnvelopeById.get(budgetEnvelopeId)
       if (!envelope
         || (timestampMicros(candidate.createdAt) as bigint) < (timestampMicros(envelope.periodStart) as bigint)
         || (timestampMicros(candidate.createdAt) as bigint) >= (timestampMicros(envelope.periodEnd) as bigint)
-        || Number(candidate.totalMmk) > envelope.perRequisitionLimitMmk) throw new Error(`${field} exceeds or falls outside its purchase budget authority.`)
+        || Number(candidate.totalMmk) > envelope.perRequisitionLimitMmk) rejectInvalid(`${field} exceeds or falls outside its purchase budget authority.`)
     }
     if (candidate.sourceSourcingDecisionId !== undefined) {
       const sourceId = canonicalText(candidate.sourceSourcingDecisionId, `${field}.sourceSourcingDecisionId`, 80)
@@ -2999,7 +2941,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (!decision || !selected || decision.sku !== sku || decision.quantity !== Number(candidate.quantityRequested)
         || selected.supplier !== candidate.supplier || Number(candidate.unitCostMmk) > maximumUnitCost
         || (timestampMicros(candidate.expectedAt) as bigint) > latestDelivery
-        || (timestampMicros(candidate.createdAt) as bigint) > (timestampMicros(selected.validUntil) as bigint)) throw new Error(`${field} does not match its approved sourcing decision.`)
+        || (timestampMicros(candidate.createdAt) as bigint) > (timestampMicros(selected.validUntil) as bigint)) rejectInvalid(`${field} does not match its approved sourcing decision.`)
     }
     purchaseRequisitionIds.push(id)
     purchaseRequisitionActionIds.push(candidate.approval.actionId as string)
@@ -3017,18 +2959,18 @@ export function validateCommerceState(value: unknown): CommerceState {
       candidate,
       ['id', 'createdAt', 'supplier', 'sku', 'quantityOrdered', 'creation'],
       ['requisitionId', 'expectedAt', 'unitCostMmk', 'cancellation', 'supplierInvoice', 'supplierReturns'],
-    )) throw new Error(`purchaseOrders[${index}] is invalid.`)
+    )) rejectInvalid(`purchaseOrders[${index}] is invalid.`)
     const id = canonicalText(candidate.id, `purchaseOrders[${index}].id`, 80)
-    if (!purchaseOrderIdPattern.test(id)) throw new Error(`purchaseOrders[${index}].id is invalid.`)
-    if (!validTimestamp(candidate.createdAt)) throw new Error(`purchaseOrders[${index}].createdAt is invalid.`)
+    if (!purchaseOrderIdPattern.test(id)) rejectInvalid(`purchaseOrders[${index}].id is invalid.`)
+    if (!validTimestamp(candidate.createdAt)) rejectInvalid(`purchaseOrders[${index}].createdAt is invalid.`)
     if (candidate.expectedAt !== undefined
       && (!validTimestamp(candidate.expectedAt)
         || (timestampMicros(candidate.expectedAt) as bigint) <= (timestampMicros(candidate.createdAt) as bigint))) {
-      throw new Error(`purchaseOrders[${index}].expectedAt is invalid.`)
+      rejectInvalid(`purchaseOrders[${index}].expectedAt is invalid.`)
     }
     canonicalText(candidate.supplier, `purchaseOrders[${index}].supplier`, 120)
     const sku = canonicalText(candidate.sku, `purchaseOrders[${index}].sku`, 80)
-    if (!itemSkus.includes(sku)) throw new Error(`purchaseOrders[${index}].sku is unknown.`)
+    if (!itemSkus.includes(sku)) rejectInvalid(`purchaseOrders[${index}].sku is unknown.`)
     assertSafeInteger(candidate.quantityOrdered, `purchaseOrders[${index}].quantityOrdered`, 1)
     if (candidate.unitCostMmk !== undefined) assertSafeInteger(candidate.unitCostMmk, `purchaseOrders[${index}].unitCostMmk`, 1)
     let linkedRequisition: CommercePurchaseRequisition | null = null
@@ -3040,7 +2982,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || requisition.supplier !== candidate.supplier
         || requisition.expectedAt !== candidate.expectedAt
         || requisition.quantityRequested !== candidate.quantityOrdered
-        || requisition.unitCostMmk !== candidate.unitCostMmk) throw new Error(`purchaseOrders[${index}] does not match its approved requisition.`)
+        || requisition.unitCostMmk !== candidate.unitCostMmk) rejectInvalid(`purchaseOrders[${index}] does not match its approved requisition.`)
       linkedRequisition = requisition
       convertedRequisitionIds.push(requisitionId)
     }
@@ -3048,12 +2990,12 @@ export function validateCommerceState(value: unknown): CommerceState {
       || !hasExactKeys(candidate.creation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.creation as CommerceActionProof)
       || candidate.creation.capturedAt !== candidate.createdAt) {
-      throw new Error(`purchaseOrders[${index}].creation is invalid.`)
+      rejectInvalid(`purchaseOrders[${index}].creation is invalid.`)
     }
     if (linkedRequisition
       && ((timestampMicros(candidate.creation.capturedAt as string) as bigint) < (timestampMicros(linkedRequisition.createdAt) as bigint)
         || sameAccountableActor(candidate.creation.actor as string, linkedRequisition.approval.actor))) {
-      throw new Error(`purchaseOrders[${index}] requires a later confirmation by a different operator.`)
+      rejectInvalid(`purchaseOrders[${index}] requires a later confirmation by a different operator.`)
     }
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
       canonicalText(candidate.creation[field], `purchaseOrders[${index}].creation.${field}`, field === 'actionId' ? 160 : 180)
@@ -3064,7 +3006,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || !hasExactKeys(candidate.cancellation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
         || !validProof(candidate.cancellation as CommerceActionProof)
         || (timestampMicros(candidate.cancellation.capturedAt) as bigint) < (timestampMicros(candidate.createdAt) as bigint)) {
-        throw new Error(`purchaseOrders[${index}].cancellation is invalid.`)
+        rejectInvalid(`purchaseOrders[${index}].cancellation is invalid.`)
       }
       for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
         canonicalText(candidate.cancellation[field], `purchaseOrders[${index}].cancellation.${field}`, field === 'actionId' ? 160 : 180)
@@ -3079,28 +3021,28 @@ export function validateCommerceState(value: unknown): CommerceState {
         || !hasExactKeys(invoice, [
           'id', 'supplierReference', 'issuedAt', 'dueAt', 'quantityInvoiced',
           'unitCostMmk', 'totalMmk', 'recording',
-        ], ['payableReview'])) throw new Error(`${field} is invalid.`)
+        ], ['payableReview'])) rejectInvalid(`${field} is invalid.`)
       const invoiceId = canonicalText(invoice.id, `${field}.id`, 80)
-      if (!supplierInvoiceIdPattern.test(invoiceId)) throw new Error(`${field}.id is invalid.`)
+      if (!supplierInvoiceIdPattern.test(invoiceId)) rejectInvalid(`${field}.id is invalid.`)
       const supplierReference = canonicalText(invoice.supplierReference, `${field}.supplierReference`, 80)
       if (!validTimestamp(invoice.issuedAt)
         || !validTimestamp(invoice.dueAt)
         || (timestampMicros(invoice.issuedAt) as bigint) < (timestampMicros(candidate.createdAt) as bigint)
         || (timestampMicros(invoice.dueAt) as bigint) < (timestampMicros(invoice.issuedAt) as bigint)) {
-        throw new Error(`${field} invoice dates are invalid.`)
+        rejectInvalid(`${field} invoice dates are invalid.`)
       }
       assertSafeInteger(invoice.quantityInvoiced, `${field}.quantityInvoiced`, 1)
       assertSafeInteger(invoice.unitCostMmk, `${field}.unitCostMmk`, 1)
       assertSafeInteger(invoice.totalMmk, `${field}.totalMmk`, 1)
       if (!Number.isSafeInteger(Number(invoice.quantityInvoiced) * Number(invoice.unitCostMmk))
         || invoice.totalMmk !== Number(invoice.quantityInvoiced) * Number(invoice.unitCostMmk)) {
-        throw new Error(`${field}.totalMmk must equal quantity times unit cost.`)
+        rejectInvalid(`${field}.totalMmk must equal quantity times unit cost.`)
       }
       if (!isRecord(invoice.recording)
         || !hasExactKeys(invoice.recording, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
         || !validProof(invoice.recording as CommerceActionProof)
         || (timestampMicros(invoice.recording.capturedAt) as bigint) < (timestampMicros(invoice.issuedAt) as bigint)) {
-        throw new Error(`${field}.recording is invalid.`)
+        rejectInvalid(`${field}.recording is invalid.`)
       }
       for (const proofField of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
         canonicalText(invoice.recording[proofField], `${field}.recording.${proofField}`, proofField === 'actionId' ? 160 : 180)
@@ -3111,7 +3053,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           || !hasExactKeys(invoice.payableReview, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
           || !validProof(invoice.payableReview as CommerceActionProof)
           || (timestampMicros(invoice.payableReview.capturedAt) as bigint) < (timestampMicros(invoice.recording.capturedAt) as bigint)) {
-          throw new Error(`${field}.payableReview is invalid.`)
+          rejectInvalid(`${field}.payableReview is invalid.`)
         }
         purchaseOrderActionIds.push(invoice.payableReview.actionId as string)
       }
@@ -3121,7 +3063,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.supplierReturns !== undefined) {
       if (candidate.unitCostMmk === undefined || !Array.isArray(candidate.supplierReturns)
         || candidate.supplierReturns.length < 1 || candidate.supplierReturns.length > maxSupplierReturnsPerPurchaseOrder) {
-        throw new Error(`purchaseOrders[${index}].supplierReturns is invalid.`)
+        rejectInvalid(`purchaseOrders[${index}].supplierReturns is invalid.`)
       }
       let newerReturnAt: bigint | null = null
       for (const [returnIndex, returnCandidate] of candidate.supplierReturns.entries()) {
@@ -3131,16 +3073,16 @@ export function validateCommerceState(value: unknown): CommerceState {
           'internalReturnReference', 'physicalReturnStatus', 'supplierContacted', 'accountingPosted',
           'authorization', 'creditNotes',
         ]) || !Array.isArray(returnCandidate.creditNotes)
-          || returnCandidate.creditNotes.length > maxSupplierCreditsPerReturn) throw new Error(`${field} is invalid.`)
+          || returnCandidate.creditNotes.length > maxSupplierCreditsPerReturn) rejectInvalid(`${field} is invalid.`)
         const returnId = canonicalText(returnCandidate.id, `${field}.id`, 80)
-        if (!supplierReturnIdPattern.test(returnId)) throw new Error(`${field}.id is invalid.`)
+        if (!supplierReturnIdPattern.test(returnId)) rejectInvalid(`${field}.id is invalid.`)
         const createdAt = timestampMicros(returnCandidate.createdAt)
         if (createdAt === null || createdAt < (timestampMicros(candidate.createdAt) as bigint)
-          || (newerReturnAt !== null && createdAt > newerReturnAt)) throw new Error(`${field}.createdAt is outside the purchase chronology.`)
+          || (newerReturnAt !== null && createdAt > newerReturnAt)) rejectInvalid(`${field}.createdAt is outside the purchase chronology.`)
         newerReturnAt = createdAt
         const receiptMovementId = canonicalText(returnCandidate.receiptMovementId, `${field}.receiptMovementId`, 2_000)
         assertSafeInteger(returnCandidate.quantityRejected, `${field}.quantityRejected`, 1)
-        if (!purchaseOrderDiscrepancyCodes.has(returnCandidate.reasonCode as CommercePurchaseOrderDiscrepancyCode)) throw new Error(`${field}.reasonCode is invalid.`)
+        if (!purchaseOrderDiscrepancyCodes.has(returnCandidate.reasonCode as CommercePurchaseOrderDiscrepancyCode)) rejectInvalid(`${field}.reasonCode is invalid.`)
         assertSafeInteger(returnCandidate.claimAmountMmk, `${field}.claimAmountMmk`, 1)
         const internalReference = canonicalText(returnCandidate.internalReturnReference, `${field}.internalReturnReference`, 80)
         if (returnCandidate.physicalReturnStatus !== 'not_dispatched'
@@ -3148,7 +3090,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           || !isRecord(returnCandidate.authorization)
           || !hasExactKeys(returnCandidate.authorization, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
           || !validProof(returnCandidate.authorization as CommerceActionProof)
-          || returnCandidate.authorization.capturedAt !== returnCandidate.createdAt) throw new Error(`${field} overclaims return execution or has invalid authorization.`)
+          || returnCandidate.authorization.capturedAt !== returnCandidate.createdAt) rejectInvalid(`${field} overclaims return execution or has invalid authorization.`)
         purchaseOrderActionIds.push(returnCandidate.authorization.actionId as string)
         let creditedMmk = 0
         let newerCreditAt: bigint | null = null
@@ -3156,9 +3098,9 @@ export function validateCommerceState(value: unknown): CommerceState {
           const creditField = `${field}.creditNotes[${creditIndex}]`
           if (!isRecord(creditCandidate) || !hasExactKeys(creditCandidate, [
             'id', 'supplierReference', 'issuedAt', 'amountMmk', 'accountingPosted', 'recording',
-          ])) throw new Error(`${creditField} is invalid.`)
+          ])) rejectInvalid(`${creditField} is invalid.`)
           const creditId = canonicalText(creditCandidate.id, `${creditField}.id`, 80)
-          if (!supplierCreditIdPattern.test(creditId)) throw new Error(`${creditField}.id is invalid.`)
+          if (!supplierCreditIdPattern.test(creditId)) rejectInvalid(`${creditField}.id is invalid.`)
           const supplierReference = canonicalText(creditCandidate.supplierReference, `${creditField}.supplierReference`, 80)
           const issuedAt = timestampMicros(creditCandidate.issuedAt)
           assertSafeInteger(creditCandidate.amountMmk, `${creditField}.amountMmk`, 1)
@@ -3167,10 +3109,10 @@ export function validateCommerceState(value: unknown): CommerceState {
             || !hasExactKeys(creditCandidate.recording, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
             || !validProof(creditCandidate.recording as CommerceActionProof)
             || (timestampMicros(creditCandidate.recording.capturedAt) as bigint) < issuedAt
-            || (newerCreditAt !== null && (timestampMicros(creditCandidate.recording.capturedAt) as bigint) > newerCreditAt)) throw new Error(`${creditField} is outside the claim chronology or overclaims posting.`)
+            || (newerCreditAt !== null && (timestampMicros(creditCandidate.recording.capturedAt) as bigint) > newerCreditAt)) rejectInvalid(`${creditField} is outside the claim chronology or overclaims posting.`)
           newerCreditAt = timestampMicros(creditCandidate.recording.capturedAt) as bigint
           creditedMmk += Number(creditCandidate.amountMmk)
-          if (!Number.isSafeInteger(creditedMmk) || creditedMmk > Number(returnCandidate.claimAmountMmk)) throw new Error(`${field} supplier credits exceed the authorized claim.`)
+          if (!Number.isSafeInteger(creditedMmk) || creditedMmk > Number(returnCandidate.claimAmountMmk)) rejectInvalid(`${field} supplier credits exceed the authorized claim.`)
           purchaseOrderActionIds.push(creditCandidate.recording.actionId as string)
           supplierCreditIds.push(creditId)
           supplierCreditReferences.push(`${String(candidate.supplier)}\u0000${supplierReference}`)
@@ -3192,12 +3134,12 @@ export function validateCommerceState(value: unknown): CommerceState {
     const linkedOrder = purchaseOrders.find((candidate) => isRecord(candidate) && candidate.requisitionId === requisition.id) as unknown as CommercePurchaseOrder | undefined
     if (linkedOrder?.cancellation) continue
     const committed = (committedByBudgetEnvelope.get(requisition.budgetEnvelopeId) ?? 0) + requisition.totalMmk
-    if (!Number.isSafeInteger(committed)) throw new Error(`Purchase budget ${requisition.budgetEnvelopeId} commitment exceeds the safe integer range.`)
+    if (!Number.isSafeInteger(committed)) rejectInvalid(`Purchase budget ${requisition.budgetEnvelopeId} commitment exceeds the safe integer range.`)
     committedByBudgetEnvelope.set(requisition.budgetEnvelopeId, committed)
   }
   for (const [budgetEnvelopeId, committedMmk] of committedByBudgetEnvelope) {
     const envelope = purchaseBudgetEnvelopeById.get(budgetEnvelopeId)
-    if (!envelope || committedMmk > envelope.ceilingMmk) throw new Error(`Purchase budget ${budgetEnvelopeId} is overcommitted.`)
+    if (!envelope || committedMmk > envelope.ceilingMmk) rejectInvalid(`Purchase budget ${budgetEnvelopeId} is overcommitted.`)
   }
   assertUnique(supplierInvoiceIds, 'Supplier invoice ID')
   assertUnique(supplierInvoiceReferences, 'Supplier invoice reference')
@@ -3213,19 +3155,19 @@ export function validateCommerceState(value: unknown): CommerceState {
       ['schema', 'revision', 'shopCatalogSnapshotRevision', 'shopCatalogDigest', 'storeName', 'summary', 'selectedSkus', 'saved'],
       ['activation', 'merchandising'],
     ) || storefrontConfiguration.schema !== COMMERCE_STOREFRONT_SCHEMA) {
-      throw new Error('storefrontConfiguration is invalid.')
+      rejectInvalid('storefrontConfiguration is invalid.')
     }
     assertSafeInteger(storefrontConfiguration.revision, 'storefrontConfiguration.revision', 1)
     assertSafeInteger(storefrontConfiguration.shopCatalogSnapshotRevision, 'storefrontConfiguration.shopCatalogSnapshotRevision', 1)
     if (typeof storefrontConfiguration.shopCatalogDigest !== 'string' || !sha256DigestPattern.test(storefrontConfiguration.shopCatalogDigest)) {
-      throw new Error('storefrontConfiguration.shopCatalogDigest is invalid.')
+      rejectInvalid('storefrontConfiguration.shopCatalogDigest is invalid.')
     }
     canonicalText(storefrontConfiguration.storeName, 'storefrontConfiguration.storeName', 60)
     canonicalText(storefrontConfiguration.summary, 'storefrontConfiguration.summary', 180)
     if (!Array.isArray(storefrontConfiguration.selectedSkus)
       || storefrontConfiguration.selectedSkus.length < 1
       || storefrontConfiguration.selectedSkus.length > 8) {
-      throw new Error('storefrontConfiguration.selectedSkus must contain 1 to 8 Shop SKUs.')
+      rejectInvalid('storefrontConfiguration.selectedSkus must contain 1 to 8 Shop SKUs.')
     }
     const selectedSkus = storefrontConfiguration.selectedSkus.map((sku, index) => (
       canonicalText(sku, `storefrontConfiguration.selectedSkus[${index}]`, 80)
@@ -3233,21 +3175,21 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertUnique(selectedSkus, 'Storefront selected SKU')
     if (selectedSkus.some((sku) => !itemSkus.includes(sku))
       || !sameStringArray(selectedSkus, [...selectedSkus].sort(compareCanonicalText))) {
-      throw new Error('storefrontConfiguration.selectedSkus must be sorted current Shop SKUs.')
+      rejectInvalid('storefrontConfiguration.selectedSkus must be sorted current Shop SKUs.')
     }
     if (storefrontConfiguration.merchandising !== undefined) {
       if (!Array.isArray(storefrontConfiguration.merchandising)
         || storefrontConfiguration.merchandising.length !== selectedSkus.length) {
-        throw new Error('storefrontConfiguration.merchandising must cover every selected Shop SKU exactly once.')
+        rejectInvalid('storefrontConfiguration.merchandising must cover every selected Shop SKU exactly once.')
       }
       const merchandisingSkus = storefrontConfiguration.merchandising.map((candidate, index) => {
         if (!isRecord(candidate)
           || !hasExactKeys(candidate, ['sku', 'featured', 'collection', 'displayName', 'note'])) {
-          throw new Error(`storefrontConfiguration.merchandising[${index}] is invalid.`)
+          rejectInvalid(`storefrontConfiguration.merchandising[${index}] is invalid.`)
         }
         const sku = canonicalText(candidate.sku, `storefrontConfiguration.merchandising[${index}].sku`, 80)
         if (typeof candidate.featured !== 'boolean') {
-          throw new Error(`storefrontConfiguration.merchandising[${index}].featured must be boolean.`)
+          rejectInvalid(`storefrontConfiguration.merchandising[${index}].featured must be boolean.`)
         }
         canonicalText(candidate.collection, `storefrontConfiguration.merchandising[${index}].collection`, 120)
         canonicalBlankableText(candidate.displayName, `storefrontConfiguration.merchandising[${index}].displayName`, 180)
@@ -3255,7 +3197,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         return sku
       })
       if (!sameStringArray(merchandisingSkus, selectedSkus)) {
-        throw new Error('storefrontConfiguration.merchandising must follow the canonical selected SKU order.')
+        rejectInvalid('storefrontConfiguration.merchandising must follow the canonical selected SKU order.')
       }
     }
     if (storefrontConfiguration.activation !== undefined) {
@@ -3270,14 +3212,14 @@ export function validateCommerceState(value: unknown): CommerceState {
         || !Array.isArray(activation.skus)
         || !activation.skus.every((sku) => typeof sku === 'string')
         || !sameStringArray(activation.skus as string[], selectedSkus)) {
-        throw new Error('storefrontConfiguration.activation is invalid.')
+        rejectInvalid('storefrontConfiguration.activation is invalid.')
       }
     }
     if (!isRecord(storefrontConfiguration.saved)
       || !hasExactKeys(storefrontConfiguration.saved, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(storefrontConfiguration.saved as CommerceActionProof)
       || storefrontConfiguration.saved.evidenceReference !== `ECOMMERCE-STOREFRONT:${storefrontConfiguration.shopCatalogDigest}:R${storefrontConfiguration.revision}`) {
-      throw new Error('storefrontConfiguration.saved is invalid.')
+      rejectInvalid('storefrontConfiguration.saved is invalid.')
     }
     const saved = storefrontConfiguration.saved as CommerceActionProof
     storefrontConfigurationActionId = canonicalText(saved.actionId, 'storefrontConfiguration.saved.actionId', 160)
@@ -3285,33 +3227,33 @@ export function validateCommerceState(value: unknown): CommerceState {
       storefrontConfiguration.revision as number,
       storefrontConfiguration.shopCatalogDigest,
     )) {
-      throw new Error('storefrontConfiguration.saved.actionId is invalid.')
+      rejectInvalid('storefrontConfiguration.saved.actionId is invalid.')
     }
-    if (!validTimestamp(saved.capturedAt)) throw new Error('storefrontConfiguration.saved.capturedAt is invalid.')
+    if (!validTimestamp(saved.capturedAt)) rejectInvalid('storefrontConfiguration.saved.capturedAt is invalid.')
     for (const field of ['actor', 'reason', 'evidenceReference'] as const) {
       canonicalText(saved[field], `storefrontConfiguration.saved.${field}`)
     }
   }
 
   for (const [index, candidate] of orders.entries()) {
-    if (!isRecord(candidate)) throw new Error(`orders[${index}] is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`orders[${index}] is invalid.`)
     orderIds.push(requiredText(candidate.id, `orders[${index}].id`))
-    if (!validTimestamp(candidate.createdAt)) throw new Error(`orders[${index}].createdAt is invalid.`)
+    if (!validTimestamp(candidate.createdAt)) rejectInvalid(`orders[${index}].createdAt is invalid.`)
     for (const field of ['customer', 'channel', 'item', 'payment'] as const) requiredText(candidate[field], `orders[${index}].${field}`)
     if (candidate.owner !== undefined) canonicalText(candidate.owner, `orders[${index}].owner`, 120)
-    if (candidate.itemSku !== undefined && !itemSkus.includes(requiredText(candidate.itemSku, `orders[${index}].itemSku`))) throw new Error(`orders[${index}].itemSku is unknown.`)
+    if (candidate.itemSku !== undefined && !itemSkus.includes(requiredText(candidate.itemSku, `orders[${index}].itemSku`))) rejectInvalid(`orders[${index}].itemSku is unknown.`)
     assertSafeInteger(candidate.quantity, `orders[${index}].quantity`, 1)
     assertSafeInteger(candidate.total, `orders[${index}].total`)
     let capturedLineSubtotal: number | null = null
     if (candidate.lines !== undefined) {
-      if (!Array.isArray(candidate.lines) || candidate.lines.length < 1 || candidate.lines.length > maxOrderLines) throw new Error(`orders[${index}].lines must contain 1 to ${maxOrderLines} entries.`)
+      if (!Array.isArray(candidate.lines) || candidate.lines.length < 1 || candidate.lines.length > maxOrderLines) rejectInvalid(`orders[${index}].lines must contain 1 to ${maxOrderLines} entries.`)
       const lineSkus: string[] = []
       let capturedQuantity = 0
       let capturedTotal = 0
       for (const [lineIndex, lineCandidate] of candidate.lines.entries()) {
-        if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant'])) throw new Error(`orders[${index}].lines[${lineIndex}] is invalid.`)
+        if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant'])) rejectInvalid(`orders[${index}].lines[${lineIndex}] is invalid.`)
         const lineSku = canonicalText(lineCandidate.sku, `orders[${index}].lines[${lineIndex}].sku`, 80)
-        if (!itemSkus.includes(lineSku)) throw new Error(`orders[${index}].lines[${lineIndex}].sku is unknown.`)
+        if (!itemSkus.includes(lineSku)) rejectInvalid(`orders[${index}].lines[${lineIndex}].sku is unknown.`)
         canonicalText(lineCandidate.name, `orders[${index}].lines[${lineIndex}].name`)
         if (lineCandidate.variant !== undefined) canonicalText(lineCandidate.variant, `orders[${index}].lines[${lineIndex}].variant`)
         assertSafeInteger(lineCandidate.quantity, `orders[${index}].lines[${lineIndex}].quantity`, 1)
@@ -3319,7 +3261,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         const nextQuantity = capturedQuantity + Number(lineCandidate.quantity)
         const lineTotal = Number(lineCandidate.quantity) * Number(lineCandidate.unitPriceMmk)
         const nextTotal = capturedTotal + lineTotal
-        if (!Number.isSafeInteger(nextQuantity) || !Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextTotal)) throw new Error(`orders[${index}].lines exceed the safe integer limit.`)
+        if (!Number.isSafeInteger(nextQuantity) || !Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextTotal)) rejectInvalid(`orders[${index}].lines exceed the safe integer limit.`)
         capturedQuantity = nextQuantity
         capturedTotal = nextTotal
         lineSkus.push(lineSku)
@@ -3330,7 +3272,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       const expectedItemSku = capturedLines.length === 1 ? capturedLines[0].sku : undefined
       if (candidate.item !== commerceOrderItemSummary(capturedLines)
         || candidate.itemSku !== expectedItemSku
-        || candidate.quantity !== capturedQuantity) throw new Error(`orders[${index}] does not match its immutable line snapshots.`)
+        || candidate.quantity !== capturedQuantity) rejectInvalid(`orders[${index}] does not match its immutable line snapshots.`)
     }
     let pricedSubtotal = capturedLineSubtotal
     if (candidate.promotionDecision !== undefined) {
@@ -3339,7 +3281,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         'schema', 'status', 'code', 'policyRevision', 'policyActionId', 'discountBasisPoints',
         'grossSubtotalMmk', 'discountMmk', 'netSubtotalMmk', 'reviewedAt', 'reason',
       ]) || capturedLineSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) {
-        throw new Error(`${field} is invalid.`)
+        rejectInvalid(`${field} is invalid.`)
       }
       const decision = candidate.promotionDecision as unknown as CommercePromotionDecision
       const expected = commercePromotionDecision(
@@ -3351,7 +3293,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (!expected
         || JSON.stringify(expected) !== JSON.stringify(decision)
         || (timestampMicros(decision.reviewedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)) {
-        throw new Error(`${field} does not match the Shop price policy.`)
+        rejectInvalid(`${field} does not match the Shop price policy.`)
       }
       pricedSubtotal = decision.netSubtotalMmk
     }
@@ -3360,7 +3302,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (!isRecord(candidate.shippingDecision) || !hasExactKeys(candidate.shippingDecision, [
         'schema', 'status', 'reason', 'township', 'zoneCode', 'policyRevision', 'policyActionId',
         'feeMmk', 'promiseMinutes', 'reviewedAt',
-      ]) || pricedSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) throw new Error(`${field} is invalid.`)
+      ]) || pricedSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) rejectInvalid(`${field} is invalid.`)
       const decision = candidate.shippingDecision as unknown as CommerceShippingDecision
       const expected = commerceShippingDecision(
         shippingPolicies as CommerceShippingPolicy[],
@@ -3373,10 +3315,10 @@ export function validateCommerceState(value: unknown): CommerceState {
         || (timestampMicros(decision.reviewedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)
         || (decision.promiseMinutes !== null && candidate.promisedAt !== undefined
           && (timestampMicros(candidate.promisedAt) as bigint) < (timestampMicros(decision.reviewedAt) as bigint) + BigInt(decision.promiseMinutes) * 60_000_000n)) {
-        throw new Error(`${field} does not match the Shop delivery policy.`)
+        rejectInvalid(`${field} does not match the Shop delivery policy.`)
       }
       const deliveredTotal = pricedSubtotal + decision.feeMmk
-      if (!Number.isSafeInteger(deliveredTotal)) throw new Error(`${field} exceeds the safe MMK boundary.`)
+      if (!Number.isSafeInteger(deliveredTotal)) rejectInvalid(`${field} exceeds the safe MMK boundary.`)
       pricedSubtotal = deliveredTotal
     }
     let payableTotal = pricedSubtotal
@@ -3386,12 +3328,12 @@ export function validateCommerceState(value: unknown): CommerceState {
         'schema', 'status', 'catalogRevision', 'taxConfigurationRevision', 'taxCode', 'taxJurisdictionCode',
         'taxEffectiveFrom', 'taxRateBasisPoints', 'taxMode', 'listedSubtotalMmk', 'subtotalMmk', 'taxMmk',
         'totalMmk', 'policyActionId', 'reviewedAt',
-      ]) || pricedSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) throw new Error(`${field} is invalid.`)
+      ]) || pricedSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) rejectInvalid(`${field} is invalid.`)
       const decision = candidate.taxDecision as unknown as CommerceTaxDecision
       const expected = commerceTaxDecision(value as CommerceState, pricedSubtotal, decision.reviewedAt)
       if (!expected || JSON.stringify(expected) !== JSON.stringify(decision)
         || (timestampMicros(decision.reviewedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)) {
-        throw new Error(`${field} does not match the Shop tax schedule.`)
+        rejectInvalid(`${field} does not match the Shop tax schedule.`)
       }
       payableTotal = decision.totalMmk
     }
@@ -3400,10 +3342,10 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (!isRecord(candidate.paymentDecision) || !hasExactKeys(candidate.paymentDecision, [
         'schema', 'status', 'reason', 'adapter', 'policyRevision', 'policyActionId',
         'maximumOrderMmk', 'instructions', 'reviewedAt', 'authorized',
-      ]) || pricedSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) throw new Error(`${field} is invalid.`)
+      ]) || pricedSubtotal === null || !String(candidate.sourceRecordId ?? '').startsWith('ECR-')) rejectInvalid(`${field} is invalid.`)
       const decision = candidate.paymentDecision as unknown as CommercePaymentDecision
       const reviewedCalculation = commerceOrderCalculation(value as CommerceState, pricedSubtotal, decision.reviewedAt)
-      if (!reviewedCalculation) throw new Error(`${field} total is invalid.`)
+      if (!reviewedCalculation) rejectInvalid(`${field} total is invalid.`)
       const expected = commercePaymentDecision(
         paymentPolicies as CommercePaymentPolicy[],
         decision.adapter,
@@ -3414,10 +3356,10 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (!expected || JSON.stringify(expected) !== JSON.stringify(decision)
         || decision.status !== 'approved' || decision.authorized !== false
         || candidate.payment !== commercePaymentAdapterLabel(decision.adapter)
-        || (timestampMicros(decision.reviewedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)) throw new Error(`${field} does not match the Shop payment policy.`)
+        || (timestampMicros(decision.reviewedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)) rejectInvalid(`${field} does not match the Shop payment policy.`)
     }
     if (candidate.calculation !== undefined) {
-      if (!isRecord(candidate.calculation)) throw new Error(`orders[${index}].calculation is invalid.`)
+      if (!isRecord(candidate.calculation)) rejectInvalid(`orders[${index}].calculation is invalid.`)
       const calculation = candidate.calculation
       const v1 = calculation.schema === COMMERCE_ORDER_CALCULATION_SCHEMA
       const v2 = calculation.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA
@@ -3438,20 +3380,20 @@ export function validateCommerceState(value: unknown): CommerceState {
         ? hasExactKeys(calculation, ['schema', 'currency', 'catalogRevision', 'subtotalMmk', 'taxMode', 'taxMmk', 'totalMmk'])
         : v2 && (hasExactKeys(calculation, v2BaseFields)
           || hasExactKeys(calculation, [...v2BaseFields, 'taxJurisdictionCode', 'taxEffectiveFrom']))
-      if (!validShape) throw new Error(`orders[${index}].calculation is invalid.`)
+      if (!validShape) rejectInvalid(`orders[${index}].calculation is invalid.`)
       assertSafeInteger(calculation.catalogRevision, `orders[${index}].calculation.catalogRevision`)
       assertSafeInteger(calculation.subtotalMmk, `orders[${index}].calculation.subtotalMmk`, v1 ? 1 : 0)
       assertSafeInteger(calculation.taxMmk, `orders[${index}].calculation.taxMmk`)
       assertSafeInteger(calculation.totalMmk, `orders[${index}].calculation.totalMmk`, 1)
       if (calculation.currency !== 'MMK'
         || Number(calculation.catalogRevision) > catalogChanges.length
-        || candidate.total !== calculation.totalMmk) throw new Error(`orders[${index}].calculation totals are invalid.`)
+        || candidate.total !== calculation.totalMmk) rejectInvalid(`orders[${index}].calculation totals are invalid.`)
       if (v1) {
         if (calculation.taxMode !== 'not_configured'
           || calculation.taxMmk !== 0
           || calculation.totalMmk !== calculation.subtotalMmk
           || (pricedSubtotal !== null && calculation.subtotalMmk !== pricedSubtotal)) {
-          throw new Error(`orders[${index}].calculation must preserve its deterministic untaxed MMK subtotal.`)
+          rejectInvalid(`orders[${index}].calculation must preserve its deterministic untaxed MMK subtotal.`)
         }
       } else {
         assertSafeInteger(calculation.taxConfigurationRevision, `orders[${index}].calculation.taxConfigurationRevision`, 1)
@@ -3474,20 +3416,20 @@ export function validateCommerceState(value: unknown): CommerceState {
           || calculation.subtotalMmk !== expected.subtotalMmk
           || calculation.taxMmk !== expected.taxMmk
           || calculation.totalMmk !== expected.totalMmk) {
-          throw new Error(`orders[${index}].calculation does not match its immutable tax configuration.`)
+          rejectInvalid(`orders[${index}].calculation does not match its immutable tax configuration.`)
         }
       }
     } else if (pricedSubtotal !== null && candidate.total !== pricedSubtotal) {
-      throw new Error(`orders[${index}] legacy total does not match its immutable line snapshots.`)
+      rejectInvalid(`orders[${index}] legacy total does not match its immutable line snapshots.`)
     }
-    if (!orderStatuses.includes(candidate.status as CommerceOrderStatus)) throw new Error(`orders[${index}].status is invalid.`)
-    if (!paymentStatuses.includes(candidate.paymentStatus as CommercePaymentStatus)) throw new Error(`orders[${index}].paymentStatus is invalid.`)
-    if (!refundStatuses.includes(candidate.refundStatus as CommerceRefundStatus)) throw new Error(`orders[${index}].refundStatus is invalid.`)
+    if (!orderStatuses.includes(candidate.status as CommerceOrderStatus)) rejectInvalid(`orders[${index}].status is invalid.`)
+    if (!paymentStatuses.includes(candidate.paymentStatus as CommercePaymentStatus)) rejectInvalid(`orders[${index}].paymentStatus is invalid.`)
+    if (!refundStatuses.includes(candidate.refundStatus as CommerceRefundStatus)) rejectInvalid(`orders[${index}].refundStatus is invalid.`)
     if (candidate.advancementActionIds !== undefined) {
       if (!Array.isArray(candidate.advancementActionIds)
         || candidate.advancementActionIds.length > 2
         || candidate.advancementActionIds.length > ({ confirmed: 0, preparing: 1, ready: 2, completed: 2, cancelled: 2 }[candidate.status as CommerceOrderStatus])) {
-        throw new Error(`orders[${index}].advancementActionIds is invalid.`)
+        rejectInvalid(`orders[${index}].advancementActionIds is invalid.`)
       }
       const orderAdvancementActionIds = candidate.advancementActionIds.map((actionId, actionIndex) => (
         canonicalText(actionId, `orders[${index}].advancementActionIds[${actionIndex}]`, 160)
@@ -3507,37 +3449,37 @@ export function validateCommerceState(value: unknown): CommerceState {
       const promisedAt = timestampMicros(candidate.promisedAt)
       const createdAt = timestampMicros(candidate.createdAt)
       if (promisedAt === null || createdAt === null || promisedAt <= createdAt) {
-        throw new Error(`orders[${index}].promisedAt must be after its creation time.`)
+        rejectInvalid(`orders[${index}].promisedAt must be after its creation time.`)
       }
     }
     if (candidate.paymentStatus === 'reconciled') {
-      if (!validTimestamp(candidate.paymentReconciledAt)) throw new Error(`orders[${index}].paymentReconciledAt is invalid.`)
+      if (!validTimestamp(candidate.paymentReconciledAt)) rejectInvalid(`orders[${index}].paymentReconciledAt is invalid.`)
       reconciliationActionIds.push(requiredText(candidate.paymentReconciliationActionId, `orders[${index}].paymentReconciliationActionId`))
       requiredText(candidate.paymentReconciledBy, `orders[${index}].paymentReconciledBy`)
       requiredText(candidate.paymentReconciliationReason, `orders[${index}].paymentReconciliationReason`)
       requiredText(candidate.paymentEvidenceReference, `orders[${index}].paymentEvidenceReference`)
     } else if (candidate.paymentReconciledAt !== undefined || candidate.paymentReconciliationActionId !== undefined || candidate.paymentReconciledBy !== undefined || candidate.paymentReconciliationReason !== undefined || candidate.paymentEvidenceReference !== undefined) {
-      throw new Error(`orders[${index}] has reconciliation evidence while payment is pending.`)
+      rejectInvalid(`orders[${index}] has reconciliation evidence while payment is pending.`)
     }
     const presentRefundSettlementFields = refundSettlementFields.filter((field) => candidate[field] !== undefined)
     if (candidate.refundStatus === 'settled') {
-      if (presentRefundSettlementFields.length !== refundSettlementFields.length) throw new Error(`orders[${index}] requires complete refund settlement evidence.`)
-      if (!validTimestamp(candidate.refundSettledAt) || String(candidate.refundSettledAt).length > 40) throw new Error(`orders[${index}].refundSettledAt is invalid.`)
+      if (presentRefundSettlementFields.length !== refundSettlementFields.length) rejectInvalid(`orders[${index}] requires complete refund settlement evidence.`)
+      if (!validTimestamp(candidate.refundSettledAt) || String(candidate.refundSettledAt).length > 40) rejectInvalid(`orders[${index}].refundSettledAt is invalid.`)
       refundSettlementActionIds.push(canonicalText(candidate.refundSettlementActionId, `orders[${index}].refundSettlementActionId`, 160))
       canonicalText(candidate.refundSettledBy, `orders[${index}].refundSettledBy`)
       canonicalText(candidate.refundSettlementReason, `orders[${index}].refundSettlementReason`)
       canonicalText(candidate.refundEvidenceReference, `orders[${index}].refundEvidenceReference`)
     } else if (presentRefundSettlementFields.length) {
-      throw new Error(`orders[${index}] has settlement evidence while refund is ${candidate.refundStatus}.`)
+      rejectInvalid(`orders[${index}] has settlement evidence while refund is ${candidate.refundStatus}.`)
     }
-    if ((candidate.refundStatus === 'due' || candidate.refundStatus === 'settled') && (candidate.status !== 'cancelled' || candidate.paymentStatus !== 'reconciled')) throw new Error(`orders[${index}] has an invalid refund exception.`)
-    if (candidate.status === 'cancelled' && candidate.paymentStatus === 'reconciled' && candidate.refundStatus !== 'due' && candidate.refundStatus !== 'settled') throw new Error(`orders[${index}] must preserve a due or settled refund.`)
+    if ((candidate.refundStatus === 'due' || candidate.refundStatus === 'settled') && (candidate.status !== 'cancelled' || candidate.paymentStatus !== 'reconciled')) rejectInvalid(`orders[${index}] has an invalid refund exception.`)
+    if (candidate.status === 'cancelled' && candidate.paymentStatus === 'reconciled' && candidate.refundStatus !== 'due' && candidate.refundStatus !== 'settled') rejectInvalid(`orders[${index}] must preserve a due or settled refund.`)
     if (candidate.completion !== undefined) {
       if (candidate.status !== 'completed'
         || !isRecord(candidate.completion)
         || !hasExactKeys(candidate.completion, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
         || !validProof(candidate.completion as CommerceActionProof)) {
-        throw new Error(`orders[${index}].completion is invalid.`)
+        rejectInvalid(`orders[${index}].completion is invalid.`)
       }
       const completion = candidate.completion as CommerceActionProof
       for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
@@ -3546,11 +3488,11 @@ export function validateCommerceState(value: unknown): CommerceState {
       if ((timestampMicros(completion.capturedAt) as bigint) < (timestampMicros(candidate.createdAt) as bigint)
         || (candidate.paymentReconciledAt !== undefined
           && (timestampMicros(completion.capturedAt) as bigint) < (timestampMicros(candidate.paymentReconciledAt) as bigint))) {
-        throw new Error(`orders[${index}].completion is outside the order chronology.`)
+        rejectInvalid(`orders[${index}].completion is outside the order chronology.`)
       }
       completionActionIds.push(completion.actionId)
     } else if (candidate.returns !== undefined || candidate.corrections !== undefined) {
-      throw new Error(`orders[${index}] cannot retain returns or corrections without completion proof.`)
+      rejectInvalid(`orders[${index}] cannot retain returns or corrections without completion proof.`)
     }
     if (candidate.corrections !== undefined) {
       if (!Array.isArray(candidate.corrections)
@@ -3559,7 +3501,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || candidate.status !== 'completed'
         || candidate.paymentStatus !== 'reconciled'
         || !candidate.calculation) {
-        throw new Error(`orders[${index}].corrections requires 1 to ${maxCorrectionsPerOrder} records on a calculated, reconciled, completed order.`)
+        rejectInvalid(`orders[${index}].corrections requires 1 to ${maxCorrectionsPerOrder} records on a calculated, reconciled, completed order.`)
       }
       const order = candidate as unknown as CommerceOrder
       const sourceCalculationDigest = commerceOrderCalculationDigest(order)
@@ -3571,22 +3513,22 @@ export function validateCommerceState(value: unknown): CommerceState {
           'documentId', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'reasonCode',
           'sourceCalculationDigest', 'calculation', 'balanceAfterMmk', 'financialStatus', 'postingAuthority',
           'externalPostingPerformed',
-        ])) throw new Error(`${field} is invalid.`)
+        ])) rejectInvalid(`${field} is invalid.`)
         const record = correctionCandidate as unknown as CommerceOrderCorrection
         const actionId = canonicalText(record.actionId, `${field}.actionId`, 160)
-        if (record.documentId !== `COR2:${encodeURIComponent(actionId)}`) throw new Error(`${field}.documentId is invalid.`)
+        if (record.documentId !== `COR2:${encodeURIComponent(actionId)}`) rejectInvalid(`${field}.documentId is invalid.`)
         const createdAt = timestampMicros(record.createdAt)
-        if (createdAt === null || createdAt < previousCreatedAt) throw new Error(`${field}.createdAt is outside the order chronology.`)
+        if (createdAt === null || createdAt < previousCreatedAt) rejectInvalid(`${field}.createdAt is outside the order chronology.`)
         previousCreatedAt = createdAt
         for (const textField of ['actor', 'reason', 'evidenceReference'] as const) canonicalText(record[textField], `${field}.${textField}`)
-        if (!correctionKinds.includes(record.kind) || !correctionReasonCodes.includes(record.reasonCode)) throw new Error(`${field} classification is invalid.`)
-        if (record.sourceCalculationDigest !== sourceCalculationDigest) throw new Error(`${field}.sourceCalculationDigest does not bind the original order calculation.`)
-        if (!isRecord(record.calculation)) throw new Error(`${field}.calculation is invalid.`)
+        if (!correctionKinds.includes(record.kind) || !correctionReasonCodes.includes(record.reasonCode)) rejectInvalid(`${field} classification is invalid.`)
+        if (record.sourceCalculationDigest !== sourceCalculationDigest) rejectInvalid(`${field}.sourceCalculationDigest does not bind the original order calculation.`)
+        if (!isRecord(record.calculation)) rejectInvalid(`${field}.calculation is invalid.`)
         const calculation = commerceCorrectionCalculation(order, record.calculation.listedAmountMmk)
-        if (!calculation || JSON.stringify(calculation) !== JSON.stringify(record.calculation)) throw new Error(`${field}.calculation is not deterministic from the original tax snapshot.`)
+        if (!calculation || JSON.stringify(calculation) !== JSON.stringify(record.calculation)) rejectInvalid(`${field}.calculation is not deterministic from the original tax snapshot.`)
         expectedBalance += record.kind === 'debit' ? calculation.totalMmk : -calculation.totalMmk
-        if (!Number.isSafeInteger(expectedBalance) || expectedBalance < 0 || record.balanceAfterMmk !== expectedBalance) throw new Error(`${field}.balanceAfterMmk is invalid.`)
-        if (record.financialStatus !== 'review_required' || record.postingAuthority !== 'none' || record.externalPostingPerformed !== false) throw new Error(`${field} overclaims posting authority.`)
+        if (!Number.isSafeInteger(expectedBalance) || expectedBalance < 0 || record.balanceAfterMmk !== expectedBalance) rejectInvalid(`${field}.balanceAfterMmk is invalid.`)
+        if (record.financialStatus !== 'review_required' || record.postingAuthority !== 'none' || record.externalPostingPerformed !== false) rejectInvalid(`${field} overclaims posting authority.`)
         correctionActionIds.push(actionId)
       }
     }
@@ -3595,12 +3537,12 @@ export function validateCommerceState(value: unknown): CommerceState {
       const paymentDueAt = timestampMicros(candidate.paymentDueAt)
       const createdAt = timestampMicros(candidate.createdAt)
       if (paymentDueAt === null || createdAt === null || paymentDueAt < createdAt) {
-        throw new Error(`orders[${index}].paymentDueAt cannot be before its creation time.`)
+        rejectInvalid(`orders[${index}].paymentDueAt cannot be before its creation time.`)
       }
       const paymentTermMicros = paymentDueAt - createdAt
       const dayMicros = 86_400_000_000n
       const supportedTerm = ([0, 7, 30] as const).find((days) => paymentTermMicros === BigInt(days) * dayMicros)
-      if (supportedTerm === undefined) throw new Error(`orders[${index}].paymentDueAt must use a supported customer credit term.`)
+      if (supportedTerm === undefined) rejectInvalid(`orders[${index}].paymentDueAt must use a supported customer credit term.`)
       paymentTermsDays = supportedTerm
     }
     if (candidate.creditDecision !== undefined) {
@@ -3608,7 +3550,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (!isRecord(candidate.creditDecision) || !hasExactKeys(candidate.creditDecision, [
         'policyRevision', 'policyActionId', 'creditLimitMmk', 'exposureBeforeMmk', 'orderAmountMmk',
         'exposureAfterMmk', 'maxPaymentTermsDays', 'paymentTermsDays', 'status',
-      ])) throw new Error(`${field} is invalid.`)
+      ])) rejectInvalid(`${field} is invalid.`)
       const decision = candidate.creditDecision
       assertSafeInteger(decision.policyRevision, `${field}.policyRevision`, 1)
       canonicalText(decision.policyActionId, `${field}.policyActionId`, 160)
@@ -3621,7 +3563,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || paymentTermsDays !== decision.paymentTermsDays
         || decision.orderAmountMmk !== candidate.total
         || decision.exposureAfterMmk !== Number(decision.exposureBeforeMmk) + Number(decision.orderAmountMmk)) {
-        throw new Error(`${field} arithmetic or payment terms are invalid.`)
+        rejectInvalid(`${field} arithmetic or payment terms are invalid.`)
       }
       const policy = (customerCreditPolicies as CommerceCustomerCreditPolicy[]).find((entry) => (
         entry.revision === decision.policyRevision && entry.proof.actionId === decision.policyActionId
@@ -3634,14 +3576,14 @@ export function validateCommerceState(value: unknown): CommerceState {
         || decision.paymentTermsDays > policy.maxPaymentTermsDays
         || decision.exposureAfterMmk > policy.creditLimitMmk
         || (timestampMicros(policy.proof.capturedAt) as bigint) > (timestampMicros(candidate.createdAt) as bigint)) {
-        throw new Error(`${field} does not match an effective approved customer policy.`)
+        rejectInvalid(`${field} does not match an effective approved customer policy.`)
       }
     }
     if (candidate.collectionActions !== undefined) {
       if (!Array.isArray(candidate.collectionActions)
         || candidate.collectionActions.length < 1
         || candidate.collectionActions.length > maxCollectionActionsPerOrder) {
-        throw new Error(`orders[${index}].collectionActions requires 1 to ${maxCollectionActionsPerOrder} records.`)
+        rejectInvalid(`orders[${index}].collectionActions requires 1 to ${maxCollectionActionsPerOrder} records.`)
       }
       let newerActionAt: bigint | null = null
       for (const [actionIndex, actionCandidate] of candidate.collectionActions.entries()) {
@@ -3651,14 +3593,14 @@ export function validateCommerceState(value: unknown): CommerceState {
           || !isRecord(actionCandidate.proof)
           || !hasExactKeys(actionCandidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
           || !validProof(actionCandidate.proof as CommerceActionProof)) {
-          throw new Error(`orders[${index}].collectionActions[${actionIndex}] is invalid.`)
+          rejectInvalid(`orders[${index}].collectionActions[${actionIndex}] is invalid.`)
         }
         const proof = actionCandidate.proof as CommerceActionProof
         const capturedAt = timestampMicros(proof.capturedAt)
         if (capturedAt === null
           || capturedAt < (timestampMicros(candidate.createdAt) as bigint)
           || (newerActionAt !== null && capturedAt > newerActionAt)) {
-          throw new Error(`orders[${index}].collectionActions[${actionIndex}] is outside the order chronology.`)
+          rejectInvalid(`orders[${index}].collectionActions[${actionIndex}] is outside the order chronology.`)
         }
         newerActionAt = capturedAt
         for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
@@ -3672,7 +3614,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || candidate.returns.length < 1
         || candidate.returns.length > maxReturnsPerOrder
         || candidate.status !== 'completed') {
-        throw new Error(`orders[${index}].returns requires 1 to ${maxReturnsPerOrder} records on a completed order.`)
+        rejectInvalid(`orders[${index}].returns requires 1 to ${maxReturnsPerOrder} records on a completed order.`)
       }
       const soldBySku = new Map(reservationLinesForOrder(candidate as unknown as CommerceOrder).map((line) => [line.sku, line.quantity]))
       const returnedBySku = new Map<string, number>()
@@ -3681,7 +3623,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         if (!isRecord(returnCandidate) || !hasExactKeys(
           returnCandidate,
           ['actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'sku', 'quantity', 'disposition'],
-        )) throw new Error(`orders[${index}].returns[${returnIndex}] is invalid.`)
+        )) rejectInvalid(`orders[${index}].returns[${returnIndex}] is invalid.`)
         const returnRecord = returnCandidate as unknown as CommerceOrderReturn
         const actionId = canonicalText(returnRecord.actionId, `orders[${index}].returns[${returnIndex}].actionId`, 160)
         const createdAt = timestampMicros(returnRecord.createdAt)
@@ -3690,7 +3632,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           || (candidate.paymentReconciledAt !== undefined
             && createdAt < (timestampMicros(candidate.paymentReconciledAt) as bigint))
           || (newerReturnAt !== null && createdAt > newerReturnAt)) {
-          throw new Error(`orders[${index}].returns[${returnIndex}].createdAt is outside the order chronology.`)
+          rejectInvalid(`orders[${index}].returns[${returnIndex}].createdAt is outside the order chronology.`)
         }
         newerReturnAt = createdAt
         for (const field of ['actor', 'reason', 'evidenceReference'] as const) {
@@ -3700,11 +3642,11 @@ export function validateCommerceState(value: unknown): CommerceState {
         const soldQuantity = soldBySku.get(returnSku)
         assertSafeInteger(returnRecord.quantity, `orders[${index}].returns[${returnIndex}].quantity`, 1)
         if (!returnDispositions.includes(returnRecord.disposition)) {
-          throw new Error(`orders[${index}].returns[${returnIndex}].disposition is invalid.`)
+          rejectInvalid(`orders[${index}].returns[${returnIndex}].disposition is invalid.`)
         }
         const returnedQuantity = (returnedBySku.get(returnSku) ?? 0) + returnRecord.quantity
         if (!soldQuantity || !Number.isSafeInteger(returnedQuantity) || returnedQuantity > soldQuantity) {
-          throw new Error(`orders[${index}].returns exceed the sold quantity for ${returnSku}.`)
+          rejectInvalid(`orders[${index}].returns exceed the sold quantity for ${returnSku}.`)
         }
         returnedBySku.set(returnSku, returnedQuantity)
         returnActionIds.push(actionId)
@@ -3717,7 +3659,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || candidate.supportCases.length > maxSupportCasesPerOrder
         || candidate.status !== 'completed'
         || !candidate.completion) {
-        throw new Error(`orders[${index}].supportCases requires 1 to ${maxSupportCasesPerOrder} records on a completed order.`)
+        rejectInvalid(`orders[${index}].supportCases requires 1 to ${maxSupportCasesPerOrder} records on a completed order.`)
       }
       let newerOpeningAt: bigint | null = null
       for (const [caseIndex, caseCandidate] of candidate.supportCases.entries()) {
@@ -3726,7 +3668,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           caseCandidate,
           ['caseId', 'sourceIntentId', 'sourceRequestId', 'customerRequestedAt', 'category', 'customerDescription', 'status', 'opening', 'externalMessageSent', 'refundStarted'],
           ['resolution', 'serviceEvents', 'priority', 'owner', 'dueAt', 'reopen', 'followUpServiceEvents', 'followUpResolution'],
-        )) throw new Error(`${field} is invalid.`)
+        )) rejectInvalid(`${field} is invalid.`)
         const caseId = canonicalText(caseCandidate.caseId, `${field}.caseId`, 41)
         const sourceIntentId = canonicalText(caseCandidate.sourceIntentId, `${field}.sourceIntentId`, 40)
         const sourceRequestId = canonicalText(caseCandidate.sourceRequestId, `${field}.sourceRequestId`, 40)
@@ -3745,7 +3687,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           || !hasExactKeys(caseCandidate.opening, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
           || !validProof(caseCandidate.opening as CommerceActionProof)
           || caseCandidate.opening.evidenceReference !== expectedEvidence) {
-          throw new Error(`${field} boundary is invalid.`)
+          rejectInvalid(`${field} boundary is invalid.`)
         }
         canonicalText(caseCandidate.customerDescription, `${field}.customerDescription`, 300)
         const requestedAt = timestampMicros(caseCandidate.customerRequestedAt) as bigint
@@ -3755,26 +3697,26 @@ export function validateCommerceState(value: unknown): CommerceState {
         const hasOwner = caseCandidate.owner !== undefined
         const hasDueAt = caseCandidate.dueAt !== undefined
         if ((hasPriority || hasOwner || hasDueAt) && !(hasPriority && hasOwner && hasDueAt)) {
-          throw new Error(`${field} service triage must include priority, owner, and due time together.`)
+          rejectInvalid(`${field} service triage must include priority, owner, and due time together.`)
         }
         if (hasPriority && hasOwner && hasDueAt) {
           if (!supportPriorities.includes(caseCandidate.priority as CommerceSupportPriority)
             || !validTimestamp(caseCandidate.dueAt)
             || (timestampMicros(caseCandidate.dueAt) as bigint) <= openingAt) {
-            throw new Error(`${field} service triage is invalid.`)
+            rejectInvalid(`${field} service triage is invalid.`)
           }
           canonicalText(caseCandidate.owner, `${field}.owner`, 120)
         }
         if (openingAt < requestedAt
           || openingAt < (timestampMicros((candidate.completion as CommerceActionProof).capturedAt) as bigint)
           || (newerOpeningAt !== null && openingAt > newerOpeningAt)) {
-          throw new Error(`${field} is outside the order chronology.`)
+          rejectInvalid(`${field} is outside the order chronology.`)
         }
         newerOpeningAt = openingAt
         const initialService = hasPriority && hasOwner && hasDueAt
           ? { priority: caseCandidate.priority as CommerceSupportPriority, owner: caseCandidate.owner as string, dueAt: caseCandidate.dueAt as string }
           : null
-        if (caseCandidate.serviceEvents !== undefined && !initialService) throw new Error(`${field}.serviceEvents requires attributable opening triage.`)
+        if (caseCandidate.serviceEvents !== undefined && !initialService) rejectInvalid(`${field}.serviceEvents requires attributable opening triage.`)
         const originalTimeline = initialService
           ? validateSupportServiceTimeline(caseCandidate.serviceEvents, `${field}.serviceEvents`, caseId, initialService, openingAt, supportActionIds)
           : null
@@ -3796,14 +3738,14 @@ export function validateCommerceState(value: unknown): CommerceState {
             || !hasExactKeys(caseCandidate.reopen.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
             || !validProof(caseCandidate.reopen.proof as CommerceActionProof)
             || caseCandidate.reopen.proof.evidenceReference !== `SUPPORT-REOPEN:${caseId}:${originalResolution.proof.actionId}`) {
-            throw new Error(`${field}.reopen is invalid.`)
+            rejectInvalid(`${field}.reopen is invalid.`)
           }
           canonicalText(caseCandidate.reopen.owner, `${field}.reopen.owner`, 120)
           canonicalText(caseCandidate.reopen.note, `${field}.reopen.note`, 300)
           const reopenProof = caseCandidate.reopen.proof as CommerceActionProof
           const reopenAt = timestampMicros(reopenProof.capturedAt) as bigint
           if (reopenAt <= (timestampMicros(originalResolution.proof.capturedAt) as bigint)
-            || (timestampMicros(caseCandidate.reopen.dueAt) as bigint) <= reopenAt) throw new Error(`${field}.reopen chronology is invalid.`)
+            || (timestampMicros(caseCandidate.reopen.dueAt) as bigint) <= reopenAt) rejectInvalid(`${field}.reopen chronology is invalid.`)
           supportActionIds.push(reopenProof.actionId)
           const followUpTimeline = validateSupportServiceTimeline(
             caseCandidate.followUpServiceEvents,
@@ -3822,13 +3764,13 @@ export function validateCommerceState(value: unknown): CommerceState {
             : validateSupportResolution(caseCandidate.followUpResolution, `${field}.followUpResolution`, followUpTimeline.latestAt, supportActionIds)
           if ((caseCandidate.status === 'open' && followUpResolution)
             || (caseCandidate.status === 'resolved' && !followUpResolution)
-            || (caseCandidate.status !== 'open' && caseCandidate.status !== 'resolved')) throw new Error(`${field} follow-up status is invalid.`)
+            || (caseCandidate.status !== 'open' && caseCandidate.status !== 'resolved')) rejectInvalid(`${field} follow-up status is invalid.`)
         } else if (caseCandidate.followUpServiceEvents !== undefined || caseCandidate.followUpResolution !== undefined) {
-          throw new Error(`${field} follow-up evidence requires a retained reopen.`)
+          rejectInvalid(`${field} follow-up evidence requires a retained reopen.`)
         } else if ((caseCandidate.status === 'open' && originalResolution)
           || (caseCandidate.status === 'resolved' && !originalResolution)
           || (caseCandidate.status !== 'open' && caseCandidate.status !== 'resolved')) {
-          throw new Error(`${field} status is invalid.`)
+          rejectInvalid(`${field} status is invalid.`)
         }
         supportSourceIntentIds.push(sourceIntentId)
         supportActionIds.push(opening.actionId)
@@ -3864,13 +3806,13 @@ export function validateCommerceState(value: unknown): CommerceState {
       candidate,
       ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'sku', 'quantityDelta'],
       ['orderId', 'purchaseOrderId', 'expectedQuantity', 'countedQuantity', ...purchaseReceiptDiscrepancyFields, ...productionIssueFields, ...productionReturnExclusiveFields, ...productionReceiptExclusiveFields],
-    )) throw new Error(`movements[${index}] is invalid.`)
+    )) rejectInvalid(`movements[${index}] is invalid.`)
     movementIds.push(requiredText(candidate.id, `movements[${index}].id`))
     movementActionIds.push(requiredText(candidate.actionId, `movements[${index}].actionId`))
-    if (!validTimestamp(candidate.createdAt)) throw new Error(`movements[${index}].createdAt is invalid.`)
+    if (!validTimestamp(candidate.createdAt)) rejectInvalid(`movements[${index}].createdAt is invalid.`)
     for (const field of ['actor', 'reason', 'evidenceReference', 'sku'] as const) requiredText(candidate[field], `movements[${index}].${field}`)
-    if (!itemSkus.includes(candidate.sku as string)) throw new Error(`movements[${index}].sku is unknown.`)
-    if (!movementKinds.includes(candidate.kind as CommerceStockMovementKind)) throw new Error(`movements[${index}].kind is invalid.`)
+    if (!itemSkus.includes(candidate.sku as string)) rejectInvalid(`movements[${index}].sku is unknown.`)
+    if (!movementKinds.includes(candidate.kind as CommerceStockMovementKind)) rejectInvalid(`movements[${index}].kind is invalid.`)
     const retainedProductionFields = productionIssueFields.filter((field) => candidate[field] !== undefined)
     const retainedProductionReturnFields = productionReturnExclusiveFields.filter((field) => candidate[field] !== undefined)
     const retainedProductionReceiptFields = productionReceiptFields.filter((field) => candidate[field] !== undefined)
@@ -3882,15 +3824,15 @@ export function validateCommerceState(value: unknown): CommerceState {
         || candidate.orderId !== undefined
         || candidate.purchaseOrderId !== undefined
         || candidate.expectedQuantity !== undefined
-        || candidate.countedQuantity !== undefined) throw new Error(`movements[${index}] production issue fields are incomplete.`)
+        || candidate.countedQuantity !== undefined) rejectInvalid(`movements[${index}] production issue fields are incomplete.`)
       const requestId = canonicalText(candidate.productionRequestId, `movements[${index}].productionRequestId`, 80)
       productionRequestIds.push(requestId)
-      if (typeof candidate.productionCommandDigest !== 'string' || !sha256DigestPattern.test(candidate.productionCommandDigest)) throw new Error(`movements[${index}].productionCommandDigest is invalid.`)
+      if (typeof candidate.productionCommandDigest !== 'string' || !sha256DigestPattern.test(candidate.productionCommandDigest)) rejectInvalid(`movements[${index}].productionCommandDigest is invalid.`)
       canonicalText(candidate.productionJobId, `movements[${index}].productionJobId`, 80)
       canonicalText(candidate.productionMaterialId, `movements[${index}].productionMaterialId`, 80)
       canonicalText(candidate.productionInputLotId, `movements[${index}].productionInputLotId`, 80)
       assertSafeInteger(candidate.productionQuantityMilli, `movements[${index}].productionQuantityMilli`, 1)
-      if (!productionMaterialUnits.has(candidate.productionUnit as CommerceProductionMaterialUnit)) throw new Error(`movements[${index}].productionUnit is invalid.`)
+      if (!productionMaterialUnits.has(candidate.productionUnit as CommerceProductionMaterialUnit)) rejectInvalid(`movements[${index}].productionUnit is invalid.`)
       canonicalText(candidate.conversionNote, `movements[${index}].conversionNote`, 240)
     } else if (candidate.kind === 'production_return') {
       if (retainedProductionFields.length !== productionIssueFields.length
@@ -3899,14 +3841,14 @@ export function validateCommerceState(value: unknown): CommerceState {
         || candidate.orderId !== undefined
         || candidate.purchaseOrderId !== undefined
         || candidate.expectedQuantity !== undefined
-        || candidate.countedQuantity !== undefined) throw new Error(`movements[${index}] production return fields are incomplete.`)
+        || candidate.countedQuantity !== undefined) rejectInvalid(`movements[${index}] production return fields are incomplete.`)
       canonicalText(candidate.productionRequestId, `movements[${index}].productionRequestId`, 80)
-      if (typeof candidate.productionCommandDigest !== 'string' || !sha256DigestPattern.test(candidate.productionCommandDigest)) throw new Error(`movements[${index}].productionCommandDigest is invalid.`)
+      if (typeof candidate.productionCommandDigest !== 'string' || !sha256DigestPattern.test(candidate.productionCommandDigest)) rejectInvalid(`movements[${index}].productionCommandDigest is invalid.`)
       canonicalText(candidate.productionJobId, `movements[${index}].productionJobId`, 80)
       canonicalText(candidate.productionMaterialId, `movements[${index}].productionMaterialId`, 80)
       canonicalText(candidate.productionInputLotId, `movements[${index}].productionInputLotId`, 80)
       assertSafeInteger(candidate.productionQuantityMilli, `movements[${index}].productionQuantityMilli`, 1)
-      if (!productionMaterialUnits.has(candidate.productionUnit as CommerceProductionMaterialUnit)) throw new Error(`movements[${index}].productionUnit is invalid.`)
+      if (!productionMaterialUnits.has(candidate.productionUnit as CommerceProductionMaterialUnit)) rejectInvalid(`movements[${index}].productionUnit is invalid.`)
       canonicalText(candidate.conversionNote, `movements[${index}].conversionNote`, 240)
       canonicalText(candidate.productionIssueActionId, `movements[${index}].productionIssueActionId`, 160)
       assertSafeInteger(candidate.productionReturnedQuantityMilli, `movements[${index}].productionReturnedQuantityMilli`, 1)
@@ -3919,23 +3861,23 @@ export function validateCommerceState(value: unknown): CommerceState {
         || candidate.orderId !== undefined
         || candidate.purchaseOrderId !== undefined
         || candidate.expectedQuantity !== undefined
-        || candidate.countedQuantity !== undefined) throw new Error(`movements[${index}] production receipt fields are incomplete.`)
+        || candidate.countedQuantity !== undefined) rejectInvalid(`movements[${index}] production receipt fields are incomplete.`)
       productionReleaseIds.push(canonicalText(candidate.productionReleaseId, `movements[${index}].productionReleaseId`, 80))
-      if (typeof candidate.productionCommandDigest !== 'string' || !sha256DigestPattern.test(candidate.productionCommandDigest)) throw new Error(`movements[${index}].productionCommandDigest is invalid.`)
+      if (typeof candidate.productionCommandDigest !== 'string' || !sha256DigestPattern.test(candidate.productionCommandDigest)) rejectInvalid(`movements[${index}].productionCommandDigest is invalid.`)
       canonicalText(candidate.productionJobId, `movements[${index}].productionJobId`, 80)
       canonicalText(candidate.productionOutputBatchId, `movements[${index}].productionOutputBatchId`, 80)
       const productionSourceProduct = canonicalText(candidate.productionSourceProduct, `movements[${index}].productionSourceProduct`, 180)
       const sourceProductKey = productionSourceProduct.toLocaleLowerCase()
       const mappedSku = productionSkuBySourceProduct.get(sourceProductKey)
-      if (mappedSku && mappedSku !== candidate.sku) throw new Error(`movements[${index}] conflicts with the retained Plant product mapping.`)
+      if (mappedSku && mappedSku !== candidate.sku) rejectInvalid(`movements[${index}] conflicts with the retained Plant product mapping.`)
       productionSkuBySourceProduct.set(sourceProductKey, candidate.sku as string)
-      if (!validTimestamp(candidate.productionReleasedAt)) throw new Error(`movements[${index}].productionReleasedAt is invalid.`)
-      if ((timestampMicros(candidate.createdAt) as bigint) < (timestampMicros(candidate.productionReleasedAt) as bigint)) throw new Error(`movements[${index}] predates its Plant release.`)
+      if (!validTimestamp(candidate.productionReleasedAt)) rejectInvalid(`movements[${index}].productionReleasedAt is invalid.`)
+      if ((timestampMicros(candidate.createdAt) as bigint) < (timestampMicros(candidate.productionReleasedAt) as bigint)) rejectInvalid(`movements[${index}] predates its Plant release.`)
     } else if (retainedProductionFields.length || retainedProductionReturnFields.length || retainedProductionReceiptFields.length) {
-      throw new Error(`movements[${index}] production fields are unsupported for ${String(candidate.kind)}.`)
+      rejectInvalid(`movements[${index}] production fields are unsupported for ${String(candidate.kind)}.`)
     }
     if (candidate.kind !== 'receipt' && retainedDiscrepancyFields.length) {
-      throw new Error(`movements[${index}] purchase discrepancy fields are unsupported for ${String(candidate.kind)}.`)
+      rejectInvalid(`movements[${index}] purchase discrepancy fields are unsupported for ${String(candidate.kind)}.`)
     }
     const actionMovements = movementsByAction.get(candidate.actionId as string) ?? []
     actionMovements.push(candidate as unknown as CommerceStockMovement)
@@ -3943,37 +3885,37 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.kind === 'count') {
       if (!Number.isSafeInteger(candidate.quantityDelta)
         || candidate.orderId !== undefined
-        || candidate.purchaseOrderId !== undefined) throw new Error(`movements[${index}] count fields are invalid.`)
+        || candidate.purchaseOrderId !== undefined) rejectInvalid(`movements[${index}] count fields are invalid.`)
       assertSafeInteger(candidate.expectedQuantity, `movements[${index}].expectedQuantity`)
       assertSafeInteger(candidate.countedQuantity, `movements[${index}].countedQuantity`)
-      if (candidate.quantityDelta !== Number(candidate.countedQuantity) - Number(candidate.expectedQuantity)) throw new Error(`movements[${index}] count variance is invalid.`)
+      if (candidate.quantityDelta !== Number(candidate.countedQuantity) - Number(candidate.expectedQuantity)) rejectInvalid(`movements[${index}] count variance is invalid.`)
       continue
     }
-    if (candidate.expectedQuantity !== undefined || candidate.countedQuantity !== undefined) throw new Error(`movements[${index}] count fields are unsupported for ${String(candidate.kind)}.`)
+    if (candidate.expectedQuantity !== undefined || candidate.countedQuantity !== undefined) rejectInvalid(`movements[${index}] count fields are unsupported for ${String(candidate.kind)}.`)
     if (candidate.kind === 'opening') {
       assertSafeInteger(candidate.quantityDelta, `movements[${index}].quantityDelta`)
-      if (candidate.orderId !== undefined || candidate.purchaseOrderId !== undefined) throw new Error(`movements[${index}] opening balance cannot reference an order.`)
+      if (candidate.orderId !== undefined || candidate.purchaseOrderId !== undefined) rejectInvalid(`movements[${index}] opening balance cannot reference an order.`)
       continue
     }
-    if (!Number.isSafeInteger(candidate.quantityDelta) || candidate.quantityDelta === 0) throw new Error(`movements[${index}].quantityDelta is invalid.`)
-    if ((candidate.kind === 'reserve' || candidate.kind === 'production_issue') && Number(candidate.quantityDelta) >= 0) throw new Error(`movements[${index}] ${String(candidate.kind)} must be negative.`)
-    if (candidate.kind !== 'reserve' && candidate.kind !== 'production_issue' && Number(candidate.quantityDelta) <= 0) throw new Error(`movements[${index}] release, receipt, or return must be positive.`)
+    if (!Number.isSafeInteger(candidate.quantityDelta) || candidate.quantityDelta === 0) rejectInvalid(`movements[${index}].quantityDelta is invalid.`)
+    if ((candidate.kind === 'reserve' || candidate.kind === 'production_issue') && Number(candidate.quantityDelta) >= 0) rejectInvalid(`movements[${index}] ${String(candidate.kind)} must be negative.`)
+    if (candidate.kind !== 'reserve' && candidate.kind !== 'production_issue' && Number(candidate.quantityDelta) <= 0) rejectInvalid(`movements[${index}] release, receipt, or return must be positive.`)
     if (candidate.kind === 'production_issue') continue
     if (candidate.kind === 'production_return') continue
     if (candidate.kind === 'production_receipt') continue
     if (candidate.kind === 'receipt') {
-      if (candidate.orderId !== undefined) throw new Error(`movements[${index}] receipt cannot reference an order.`)
+      if (candidate.orderId !== undefined) rejectInvalid(`movements[${index}] receipt cannot reference an order.`)
       if (retainedDiscrepancyFields.length !== 0 && retainedDiscrepancyFields.length !== purchaseReceiptDiscrepancyFields.length) {
-        throw new Error(`movements[${index}] purchase discrepancy fields are incomplete.`)
+        rejectInvalid(`movements[${index}] purchase discrepancy fields are incomplete.`)
       }
       if (retainedDiscrepancyFields.length) assertSafeInteger(candidate.rejectedQuantity, `movements[${index}].rejectedQuantity`, 1)
       const rejectedQuantity = retainedDiscrepancyFields.length ? Number(candidate.rejectedQuantity) : 0
       if (rejectedQuantity && (!purchaseOrderDiscrepancyCodes.has(candidate.discrepancyCode as CommercePurchaseOrderDiscrepancyCode)
         || candidate.discrepancyDisposition !== 'return_to_vendor')) {
-        throw new Error(`movements[${index}] purchase discrepancy is invalid.`)
+        rejectInvalid(`movements[${index}] purchase discrepancy is invalid.`)
       }
       if (rejectedQuantity && candidate.purchaseOrderId === undefined) {
-        throw new Error(`movements[${index}] purchase discrepancy requires a purchase order.`)
+        rejectInvalid(`movements[${index}] purchase discrepancy requires a purchase order.`)
       }
       if (candidate.purchaseOrderId !== undefined) {
         const purchaseOrderId = canonicalText(candidate.purchaseOrderId, `movements[${index}].purchaseOrderId`, 80)
@@ -3983,13 +3925,13 @@ export function validateCommerceState(value: unknown): CommerceState {
           || purchaseOrder.sku !== candidate.sku
           || createdAt < (timestampMicros(purchaseOrder.createdAt) as bigint)
           || (purchaseOrder.cancellation && createdAt > (timestampMicros(purchaseOrder.cancellation.capturedAt) as bigint))) {
-          throw new Error(`movements[${index}] does not match its purchase order.`)
+          rejectInvalid(`movements[${index}] does not match its purchase order.`)
         }
         const received = (receiptQuantityByPurchaseOrder.get(purchaseOrderId) ?? 0) + Number(candidate.quantityDelta)
         const rejected = (rejectedQuantityByPurchaseOrder.get(purchaseOrderId) ?? 0) + rejectedQuantity
         const delivered = received + rejected
         if (!Number.isSafeInteger(received) || !Number.isSafeInteger(rejected) || !Number.isSafeInteger(delivered) || delivered > purchaseOrder.quantityOrdered) {
-          throw new Error(`movements[${index}] exceeds its purchase order quantity.`)
+          rejectInvalid(`movements[${index}] exceeds its purchase order quantity.`)
         }
         receiptQuantityByPurchaseOrder.set(purchaseOrderId, received)
         rejectedQuantityByPurchaseOrder.set(purchaseOrderId, rejected)
@@ -3998,7 +3940,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       }
       continue
     }
-    if (candidate.purchaseOrderId !== undefined) throw new Error(`movements[${index}] sales movement cannot reference a purchase order.`)
+    if (candidate.purchaseOrderId !== undefined) rejectInvalid(`movements[${index}] sales movement cannot reference a purchase order.`)
     const orderId = requiredText(candidate.orderId, `movements[${index}].orderId`)
     if (candidate.kind === 'return') {
       const matchingReturns = orderReturns.filter(({ orderId: returnOrderId, record }) => (
@@ -4007,14 +3949,14 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (matchingReturns.length !== 1
         || matchingReturns[0].record.disposition !== 'restock'
         || !movementMatchesReturn(candidate as unknown as CommerceStockMovement, matchingReturns[0].record, orderId)) {
-        throw new Error(`movements[${index}] does not match one sellable order return.`)
+        rejectInvalid(`movements[${index}] does not match one sellable order return.`)
       }
       continue
     }
     const order = orders.find((entry) => isRecord(entry) && entry.id === orderId) as Record<string, unknown> | undefined
     const orderLines = order ? reservationLinesForOrder(order as unknown as CommerceOrder) : []
     const matchingLines = orderLines.filter((line) => line.sku === candidate.sku)
-    if (!order || matchingLines.length !== 1 || Math.abs(Number(candidate.quantityDelta)) !== matchingLines[0].quantity) throw new Error(`movements[${index}] does not match its order reservation.`)
+    if (!order || matchingLines.length !== 1 || Math.abs(Number(candidate.quantityDelta)) !== matchingLines[0].quantity) rejectInvalid(`movements[${index}] does not match its order reservation.`)
     const counter = candidate.kind === 'reserve' ? reserveByOrder : releaseByOrder
     counter.set(orderId, (counter.get(orderId) ?? 0) + 1)
     const actions = candidate.kind === 'reserve' ? reserveActionsByOrder : releaseActionsByOrder
@@ -4024,7 +3966,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.kind === 'reserve' && !reserveMovementByOrder.has(orderId)) {
       reserveMovementByOrder.set(orderId, candidate as unknown as CommerceStockMovement)
     }
-    if (candidate.kind === 'release' && order.status !== 'cancelled') throw new Error(`movements[${index}] release requires a cancelled order.`)
+    if (candidate.kind === 'release' && order.status !== 'cancelled') rejectInvalid(`movements[${index}] release requires a cancelled order.`)
   }
   assertUnique(movementIds, 'Stock movement ID')
   assertUnique(productionRequestIds, 'Production material request ID')
@@ -4037,7 +3979,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   for (const movement of validatedMovements.filter((candidate) => candidate.kind === 'production_return')) {
     const sourceIssueActionId = movement.productionIssueActionId as string
     const issue = productionIssuesByAction.get(sourceIssueActionId)
-    if (!issue) throw new Error(`Production return ${movement.actionId} does not reference one retained Plant issue.`)
+    if (!issue) rejectInvalid(`Production return ${movement.actionId} does not reference one retained Plant issue.`)
     if (movement.sku !== issue.sku
       || movement.productionRequestId !== issue.productionRequestId
       || movement.productionCommandDigest !== issue.productionCommandDigest
@@ -4047,21 +3989,21 @@ export function validateCommerceState(value: unknown): CommerceState {
       || movement.productionQuantityMilli !== issue.productionQuantityMilli
       || movement.productionUnit !== issue.productionUnit
       || movement.conversionNote !== issue.conversionNote) {
-      throw new Error(`Production return ${movement.actionId} does not match its immutable Plant issue.`)
+      rejectInvalid(`Production return ${movement.actionId} does not match its immutable Plant issue.`)
     }
     if ((timestampMicros(movement.createdAt) as bigint) < (timestampMicros(issue.createdAt) as bigint)) {
-      throw new Error(`Production return ${movement.actionId} predates its Plant issue.`)
+      rejectInvalid(`Production return ${movement.actionId} predates its Plant issue.`)
     }
     const returnedProductionQuantityMilli = BigInt(movement.productionReturnedQuantityMilli as number)
     const returnedStockQuantity = BigInt(movement.quantityDelta)
     if (returnedProductionQuantityMilli * BigInt(-issue.quantityDelta) !== returnedStockQuantity * BigInt(issue.productionQuantityMilli as number)) {
-      throw new Error(`Production return ${movement.actionId} does not preserve its reviewed conversion ratio.`)
+      rejectInvalid(`Production return ${movement.actionId} does not preserve its reviewed conversion ratio.`)
     }
     const returned = productionReturnedByIssue.get(sourceIssueActionId) ?? { productionQuantityMilli: 0n, stockQuantity: 0n }
     const nextProductionQuantityMilli = returned.productionQuantityMilli + returnedProductionQuantityMilli
     const nextStockQuantity = returned.stockQuantity + returnedStockQuantity
     if (nextProductionQuantityMilli > BigInt(issue.productionQuantityMilli as number) || nextStockQuantity > BigInt(-issue.quantityDelta)) {
-      throw new Error(`Production return ${movement.actionId} exceeds its Plant issue.`)
+      rejectInvalid(`Production return ${movement.actionId} exceeds its Plant issue.`)
     }
     productionReturnedByIssue.set(sourceIssueActionId, { productionQuantityMilli: nextProductionQuantityMilli, stockQuantity: nextStockQuantity })
   }
@@ -4091,7 +4033,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       || (record.disposition === 'restock'
         ? actionMovements.length !== 1 || !movementMatchesReturn(actionMovements[0], record, orderId)
         : actionMovements.length !== 0)) {
-      throw new Error(`Order return ${record.actionId} is not bound to one completed, reserved sale.`)
+      rejectInvalid(`Order return ${record.actionId} is not bound to one completed, reserved sale.`)
     }
   }
   for (const [actionId, actionMovements] of movementsByAction) {
@@ -4105,7 +4047,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || movement.createdAt !== first.createdAt
         || movement.actor !== first.actor
         || movement.reason !== first.reason
-        || movement.evidenceReference !== first.evidenceReference)) throw new Error(`Stock movement action ${actionId} is not one exact order reservation group.`)
+        || movement.evidenceReference !== first.evidenceReference)) rejectInvalid(`Stock movement action ${actionId} is not one exact order reservation group.`)
   }
   for (const [sku, item] of itemBySku) {
     const skuMovements = movements.filter(
@@ -4115,10 +4057,10 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (oldestCountIndex < 0) continue
     let balance = Number(item.onHand)
     for (const movement of skuMovements.slice(0, oldestCountIndex + 1)) {
-      if (movement.kind === 'count' && movement.countedQuantity !== balance) throw new Error(`Stock count ${String(movement.actionId)} does not match the later movement history for ${sku}.`)
+      if (movement.kind === 'count' && movement.countedQuantity !== balance) rejectInvalid(`Stock count ${String(movement.actionId)} does not match the later movement history for ${sku}.`)
       const priorBalance = balance - Number(movement.quantityDelta)
-      if (!Number.isSafeInteger(priorBalance) || priorBalance < 0) throw new Error(`Stock movement history for ${sku} has an invalid prior balance.`)
-      if (movement.kind === 'count' && movement.expectedQuantity !== priorBalance) throw new Error(`Stock count ${String(movement.actionId)} does not match its expected balance for ${sku}.`)
+      if (!Number.isSafeInteger(priorBalance) || priorBalance < 0) rejectInvalid(`Stock movement history for ${sku} has an invalid prior balance.`)
+      if (movement.kind === 'count' && movement.expectedQuantity !== priorBalance) rejectInvalid(`Stock count ${String(movement.actionId)} does not match its expected balance for ${sku}.`)
       balance = priorBalance
     }
   }
@@ -4128,7 +4070,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!order
       || count !== reservationLinesForOrder(order as unknown as CommerceOrder).length
       || reserveActionsByOrder.get(orderId)?.size !== 1
-      || (order.owner !== undefined && reservation?.actor !== order.owner)) throw new Error(`${orderId} does not have one owner-bound reservation action covering every order line.`)
+      || (order.owner !== undefined && reservation?.actor !== order.owner)) rejectInvalid(`${orderId} does not have one owner-bound reservation action covering every order line.`)
   }
   for (const [orderId, count] of releaseByOrder) {
     const order = orderById.get(orderId)
@@ -4136,7 +4078,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!expected
       || count !== expected
       || reserveByOrder.get(orderId) !== expected
-      || releaseActionsByOrder.get(orderId)?.size !== 1) throw new Error(`${orderId} has an unproven stock release.`)
+      || releaseActionsByOrder.get(orderId)?.size !== 1) rejectInvalid(`${orderId} has an unproven stock release.`)
   }
   for (const purchaseOrder of purchaseOrderById.values()) {
     const received = receiptQuantityByPurchaseOrder.get(purchaseOrder.id) ?? 0
@@ -4151,14 +4093,14 @@ export function validateCommerceState(value: unknown): CommerceState {
         || !Number.isSafeInteger(claim.quantityRejected * purchaseOrder.unitCostMmk)
         || claim.claimAmountMmk !== claim.quantityRejected * purchaseOrder.unitCostMmk
         || (timestampMicros(claim.createdAt) as bigint) < (timestampMicros(receipt.createdAt) as bigint)) {
-        throw new Error(`${claim.id} does not bind one exact rejected supplier receipt.`)
+        rejectInvalid(`${claim.id} does not bind one exact rejected supplier receipt.`)
       }
     }
     if (purchaseOrder.cancellation) {
       if (purchaseOrder.supplierInvoice
         || delivered >= purchaseOrder.quantityOrdered
         || (timestampMicros(purchaseOrder.cancellation.capturedAt) as bigint) < (latestReceiptAtByPurchaseOrder.get(purchaseOrder.id) ?? 0n)) {
-        throw new Error(`${purchaseOrder.id} has an invalid cancellation boundary.`)
+        rejectInvalid(`${purchaseOrder.id} has an invalid cancellation boundary.`)
       }
     } else if (delivered < purchaseOrder.quantityOrdered) {
       activePurchaseOrderSkus.push(purchaseOrder.sku)
@@ -4168,7 +4110,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       const latestReceiptAt = latestReceiptAtByPurchaseOrder.get(purchaseOrder.id) ?? 0n
       if (match.status !== 'matched'
         || (timestampMicros(purchaseOrder.supplierInvoice.payableReview.capturedAt) as bigint) < latestReceiptAt) {
-        throw new Error(`${purchaseOrder.id} has an invalid payable-ready review.`)
+        rejectInvalid(`${purchaseOrder.id} has an invalid payable-ready review.`)
       }
     }
   }
@@ -4180,34 +4122,34 @@ export function validateCommerceState(value: unknown): CommerceState {
       candidate,
       ['id', 'createdAt', 'total', 'orders'],
       [...closeSnapshotFields, 'settlement'],
-    )) throw new Error(`closes[${index}] is invalid.`)
+    )) rejectInvalid(`closes[${index}] is invalid.`)
     closeIds.push(requiredText(candidate.id, `closes[${index}].id`))
-    if (!validTimestamp(candidate.createdAt)) throw new Error(`closes[${index}].createdAt is invalid.`)
+    if (!validTimestamp(candidate.createdAt)) rejectInvalid(`closes[${index}].createdAt is invalid.`)
     assertSafeInteger(candidate.total, `closes[${index}].total`)
     assertSafeInteger(candidate.orders, `closes[${index}].orders`)
     const presentSnapshotFields = closeSnapshotFields.filter((field) => candidate[field] !== undefined)
     if (presentSnapshotFields.length && presentSnapshotFields.length !== closeSnapshotFields.length) {
-      throw new Error(`closes[${index}] has incomplete exception and operator evidence.`)
+      rejectInvalid(`closes[${index}] has incomplete exception and operator evidence.`)
     }
     if (presentSnapshotFields.length) {
       if (!Array.isArray(candidate.orderIds) || !Array.isArray(candidate.paymentExceptionOrderIds) || !Array.isArray(candidate.stockExceptionSkus)) {
-        throw new Error(`closes[${index}] exception references must be arrays.`)
+        rejectInvalid(`closes[${index}] exception references must be arrays.`)
       }
       const businessDate = canonicalText(candidate.businessDate, `closes[${index}].businessDate`, 10)
       const orderIdsForClose = candidate.orderIds.map((value, referenceIndex) => canonicalText(value, `closes[${index}].orderIds[${referenceIndex}]`, 160))
       const paymentExceptionOrderIds = candidate.paymentExceptionOrderIds.map((value, referenceIndex) => canonicalText(value, `closes[${index}].paymentExceptionOrderIds[${referenceIndex}]`, 160))
       const stockExceptionSkus = candidate.stockExceptionSkus.map((value, referenceIndex) => canonicalText(value, `closes[${index}].stockExceptionSkus[${referenceIndex}]`, 80))
-      if (!businessDatePattern.test(businessDate) || businessDate !== myanmarBusinessDate(String(candidate.createdAt))) throw new Error(`closes[${index}].businessDate must match its Myanmar close date.`)
+      if (!businessDatePattern.test(businessDate) || businessDate !== myanmarBusinessDate(String(candidate.createdAt))) rejectInvalid(`closes[${index}].businessDate must match its Myanmar close date.`)
       assertUnique(orderIdsForClose, `closes[${index}] order ID`)
       assertUnique(paymentExceptionOrderIds, `closes[${index}] payment exception order ID`)
       assertUnique(stockExceptionSkus, `closes[${index}] stock exception SKU`)
-      if (orderIdsForClose.some((orderId) => !orderIds.includes(orderId))) throw new Error(`closes[${index}] references an unknown closed order.`)
-      if (paymentExceptionOrderIds.some((orderId) => !orderIds.includes(orderId))) throw new Error(`closes[${index}] references an unknown payment exception order.`)
-      if (stockExceptionSkus.some((sku) => !itemSkus.includes(sku))) throw new Error(`closes[${index}] references an unknown stock exception SKU.`)
+      if (orderIdsForClose.some((orderId) => !orderIds.includes(orderId))) rejectInvalid(`closes[${index}] references an unknown closed order.`)
+      if (paymentExceptionOrderIds.some((orderId) => !orderIds.includes(orderId))) rejectInvalid(`closes[${index}] references an unknown payment exception order.`)
+      if (stockExceptionSkus.some((sku) => !itemSkus.includes(sku))) rejectInvalid(`closes[${index}] references an unknown stock exception SKU.`)
       if (!sameStringArray(orderIdsForClose, [...orderIdsForClose].sort())
         || !sameStringArray(paymentExceptionOrderIds, [...paymentExceptionOrderIds].sort())
         || !sameStringArray(stockExceptionSkus, [...stockExceptionSkus].sort())) {
-        throw new Error(`closes[${index}] exception references must be sorted.`)
+        rejectInvalid(`closes[${index}] exception references must be sorted.`)
       }
       const memberOrders = orderIdsForClose.map((orderId) => orderById.get(orderId) as unknown as CommerceOrder)
       const memberAdjustedTotals = memberOrders.map(commerceOrderAdjustedTotal)
@@ -4215,11 +4157,11 @@ export function validateCommerceState(value: unknown): CommerceState {
         || memberAdjustedTotals.some((total) => total === null)
         || candidate.orders !== orderIdsForClose.length
         || candidate.total !== memberAdjustedTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0)) {
-        throw new Error(`closes[${index}] totals must match its completed, reconciled order membership.`)
+        rejectInvalid(`closes[${index}] totals must match its completed, reconciled order membership.`)
       }
-      if (!closeIdPattern.test(String(candidate.id))) throw new Error(`closes[${index}].id must be a full close UUID.`)
+      if (!closeIdPattern.test(String(candidate.id))) rejectInvalid(`closes[${index}].id must be a full close UUID.`)
       const actionId = canonicalText(candidate.actionId, `closes[${index}].actionId`, 160)
-      if (!closeActionIdPattern.test(actionId)) throw new Error(`closes[${index}].actionId must be a full action UUID.`)
+      if (!closeActionIdPattern.test(actionId)) rejectInvalid(`closes[${index}].actionId must be a full action UUID.`)
       closeActionIds.push(actionId)
       closeBusinessDates.push(businessDate)
       closedOrderIds.push(...orderIdsForClose)
@@ -4231,36 +4173,36 @@ export function validateCommerceState(value: unknown): CommerceState {
         if (!isRecord(settlement) || !hasExactKeys(settlement, ['schema', 'status', 'totalExpectedMmk', 'totalCountedMmk', 'totalVarianceMmk', 'lines'])
           || settlement.schema !== COMMERCE_CLOSE_SETTLEMENT_SCHEMA
           || !['matched', 'variance_review'].includes(String(settlement.status))
-          || !Array.isArray(settlement.lines)) throw new Error(`closes[${index}].settlement is invalid.`)
+          || !Array.isArray(settlement.lines)) rejectInvalid(`closes[${index}].settlement is invalid.`)
         const expectedByPayment = new Map<string, number>()
         for (const order of memberOrders) {
           const adjustedTotal = commerceOrderAdjustedTotal(order)
-          if (adjustedTotal === null) throw new Error(`closes[${index}].settlement order total is invalid.`)
+          if (adjustedTotal === null) rejectInvalid(`closes[${index}].settlement order total is invalid.`)
           expectedByPayment.set(order.payment, (expectedByPayment.get(order.payment) ?? 0) + adjustedTotal)
         }
         const expectedMethods = [...expectedByPayment.keys()].sort()
         const settlementLines = settlement.lines.map((lineCandidate, lineIndex): CommerceCloseSettlementLine => {
           const field = `closes[${index}].settlement.lines[${lineIndex}]`
-          if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['paymentMethod', 'expectedMmk', 'countedMmk', 'varianceMmk', 'status', 'varianceOwner', 'varianceReason'])) throw new Error(`${field} is invalid.`)
+          if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['paymentMethod', 'expectedMmk', 'countedMmk', 'varianceMmk', 'status', 'varianceOwner', 'varianceReason'])) rejectInvalid(`${field} is invalid.`)
           const paymentMethod = canonicalText(lineCandidate.paymentMethod, `${field}.paymentMethod`, 80)
           if (!Number.isSafeInteger(lineCandidate.expectedMmk) || Number(lineCandidate.expectedMmk) < 0
             || !Number.isSafeInteger(lineCandidate.countedMmk) || Number(lineCandidate.countedMmk) < 0
-            || !Number.isSafeInteger(lineCandidate.varianceMmk)) throw new Error(`${field} amounts are invalid.`)
+            || !Number.isSafeInteger(lineCandidate.varianceMmk)) rejectInvalid(`${field} amounts are invalid.`)
           const expectedMmk = Number(lineCandidate.expectedMmk)
           const countedMmk = Number(lineCandidate.countedMmk)
           const varianceMmk = Number(lineCandidate.varianceMmk)
-          if (expectedByPayment.get(paymentMethod) !== expectedMmk || countedMmk - expectedMmk !== varianceMmk) throw new Error(`${field} does not match the closed orders.`)
+          if (expectedByPayment.get(paymentMethod) !== expectedMmk || countedMmk - expectedMmk !== varianceMmk) rejectInvalid(`${field} does not match the closed orders.`)
           if (varianceMmk === 0) {
-            if (lineCandidate.status !== 'matched' || lineCandidate.varianceOwner !== null || lineCandidate.varianceReason !== null) throw new Error(`${field} matched evidence is invalid.`)
+            if (lineCandidate.status !== 'matched' || lineCandidate.varianceOwner !== null || lineCandidate.varianceReason !== null) rejectInvalid(`${field} matched evidence is invalid.`)
           } else {
-            if (lineCandidate.status !== 'variance_review') throw new Error(`${field} variance status is invalid.`)
+            if (lineCandidate.status !== 'variance_review') rejectInvalid(`${field} variance status is invalid.`)
             canonicalText(lineCandidate.varianceOwner, `${field}.varianceOwner`, 80)
             canonicalText(lineCandidate.varianceReason, `${field}.varianceReason`, 240)
           }
           return lineCandidate as unknown as CommerceCloseSettlementLine
         })
         const methods = settlementLines.map((line) => line.paymentMethod)
-        if (!sameStringArray(methods, expectedMethods)) throw new Error(`closes[${index}].settlement payment methods are invalid.`)
+        if (!sameStringArray(methods, expectedMethods)) rejectInvalid(`closes[${index}].settlement payment methods are invalid.`)
         const totalExpectedMmk = settlementLines.reduce((total, line) => total + line.expectedMmk, 0)
         const totalCountedMmk = settlementLines.reduce((total, line) => total + line.countedMmk, 0)
         const totalVarianceMmk = settlementLines.reduce((total, line) => total + line.varianceMmk, 0)
@@ -4270,7 +4212,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           || settlement.totalVarianceMmk !== totalVarianceMmk
           || totalExpectedMmk !== candidate.total
           || settlement.status !== (settlementLines.some((line) => line.status === 'variance_review') ? 'variance_review' : 'matched')) {
-          throw new Error(`closes[${index}].settlement totals are invalid.`)
+          rejectInvalid(`closes[${index}].settlement totals are invalid.`)
         }
       }
     }
@@ -4286,38 +4228,38 @@ export function validateCommerceState(value: unknown): CommerceState {
       candidate,
       ['id', 'createdAt', 'status', 'source', 'sku', 'quantity', 'itemName', 'unitPrice', 'total', 'creation'],
       ['itemVariant', 'snapshotDigest', 'conversion'],
-    )) throw new Error(`websiteIntakes[${index}] is invalid.`)
+    )) rejectInvalid(`websiteIntakes[${index}] is invalid.`)
     const intakeId = canonicalText(candidate.id, `websiteIntakes[${index}].id`, 85)
-    if (!websiteIntakeIdPattern.test(intakeId)) throw new Error(`websiteIntakes[${index}].id is invalid.`)
-    if (!validTimestamp(candidate.createdAt)) throw new Error(`websiteIntakes[${index}].createdAt is invalid.`)
-    if (!websiteIntakeStatuses.includes(candidate.status as CommerceWebsiteIntakeStatus)) throw new Error(`websiteIntakes[${index}].status is invalid.`)
+    if (!websiteIntakeIdPattern.test(intakeId)) rejectInvalid(`websiteIntakes[${index}].id is invalid.`)
+    if (!validTimestamp(candidate.createdAt)) rejectInvalid(`websiteIntakes[${index}].createdAt is invalid.`)
+    if (!websiteIntakeStatuses.includes(candidate.status as CommerceWebsiteIntakeStatus)) rejectInvalid(`websiteIntakes[${index}].status is invalid.`)
     if (!isRecord(candidate.source) || !hasExactKeys(candidate.source, ['fingerprint', 'approvalId', 'snapshotId', 'pageId', 'siteName', 'pagePath'])) {
-      throw new Error(`websiteIntakes[${index}].source is invalid.`)
+      rejectInvalid(`websiteIntakes[${index}].source is invalid.`)
     }
     const fingerprint = canonicalText(candidate.source.fingerprint, `websiteIntakes[${index}].source.fingerprint`, 12)
-    if (!websiteFingerprintPattern.test(fingerprint)) throw new Error(`websiteIntakes[${index}].source.fingerprint is invalid.`)
+    if (!websiteFingerprintPattern.test(fingerprint)) rejectInvalid(`websiteIntakes[${index}].source.fingerprint is invalid.`)
     const approvalId = canonicalText(candidate.source.approvalId, `websiteIntakes[${index}].source.approvalId`, 160)
     const snapshotId = canonicalText(candidate.source.snapshotId, `websiteIntakes[${index}].source.snapshotId`, 160)
     const pageId = canonicalText(candidate.source.pageId, `websiteIntakes[${index}].source.pageId`, 160)
     canonicalText(candidate.source.siteName, `websiteIntakes[${index}].source.siteName`, 160)
     const pagePath = canonicalText(candidate.source.pagePath, `websiteIntakes[${index}].source.pagePath`, 160)
-    if (!pagePath.startsWith('/')) throw new Error(`websiteIntakes[${index}].source.pagePath must be absolute.`)
+    if (!pagePath.startsWith('/')) rejectInvalid(`websiteIntakes[${index}].source.pagePath must be absolute.`)
     const sku = canonicalText(candidate.sku, `websiteIntakes[${index}].sku`, 80)
     assertSafeInteger(candidate.quantity, `websiteIntakes[${index}].quantity`, 1)
     const item = itemBySku.get(sku)
-    if (!item) throw new Error(`websiteIntakes[${index}].sku is unknown.`)
+    if (!item) rejectInvalid(`websiteIntakes[${index}].sku is unknown.`)
     const itemName = canonicalText(candidate.itemName, `websiteIntakes[${index}].itemName`)
     const itemVariant = candidate.itemVariant === undefined ? undefined : canonicalText(candidate.itemVariant, `websiteIntakes[${index}].itemVariant`)
     assertSafeInteger(candidate.unitPrice, `websiteIntakes[${index}].unitPrice`, 1)
     assertSafeInteger(candidate.total, `websiteIntakes[${index}].total`, 1)
     if (itemName !== item.name || itemVariant !== optionalText(item.variant) || candidate.total !== Number(candidate.quantity) * Number(candidate.unitPrice)) {
-      throw new Error(`websiteIntakes[${index}] does not match its retained Commerce snapshot.`)
+      rejectInvalid(`websiteIntakes[${index}] does not match its retained Commerce snapshot.`)
     }
     if (!isRecord(candidate.creation) || !hasExactKeys(candidate.creation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])) {
-      throw new Error(`websiteIntakes[${index}].creation is invalid.`)
+      rejectInvalid(`websiteIntakes[${index}].creation is invalid.`)
     }
     const creation = candidate.creation as CommerceActionProof
-    if (!validProof(creation) || creation.capturedAt !== candidate.createdAt) throw new Error(`websiteIntakes[${index}].creation is invalid.`)
+    if (!validProof(creation) || creation.capturedAt !== candidate.createdAt) rejectInvalid(`websiteIntakes[${index}].creation is invalid.`)
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) canonicalText(creation[field], `websiteIntakes[${index}].creation.${field}`, field === 'actionId' ? 160 : 180)
     if (candidate.snapshotDigest !== undefined) {
       const snapshot: Omit<CommerceWebsiteIntake, 'snapshotDigest' | 'conversion' | 'status'> = {
@@ -4335,20 +4277,20 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (typeof candidate.snapshotDigest !== 'string'
         || !sha256DigestPattern.test(candidate.snapshotDigest)
         || candidate.snapshotDigest !== commerceWebsiteIntakeSnapshotDigest(snapshot)) {
-        throw new Error(`websiteIntakes[${index}].snapshotDigest is invalid.`)
+        rejectInvalid(`websiteIntakes[${index}].snapshotDigest is invalid.`)
       }
     }
     websiteIntakeCreationActionIds.push(creation.actionId)
 
     const matchingSourceOrders = orders.filter((order) => isRecord(order) && order.sourceRecordId === intakeId) as Record<string, unknown>[]
     if (candidate.status === 'pending_confirmation') {
-      if (candidate.conversion !== undefined || matchingSourceOrders.length) throw new Error(`websiteIntakes[${index}] pending intake has conversion history.`)
+      if (candidate.conversion !== undefined || matchingSourceOrders.length) rejectInvalid(`websiteIntakes[${index}] pending intake has conversion history.`)
     } else {
       if (!isRecord(candidate.conversion) || !hasExactKeys(candidate.conversion, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference', 'orderId'])) {
-        throw new Error(`websiteIntakes[${index}].conversion is invalid.`)
+        rejectInvalid(`websiteIntakes[${index}].conversion is invalid.`)
       }
       const conversion = candidate.conversion as CommerceActionProof & { orderId: string }
-      if (!validProof(conversion)) throw new Error(`websiteIntakes[${index}].conversion is invalid.`)
+      if (!validProof(conversion)) rejectInvalid(`websiteIntakes[${index}].conversion is invalid.`)
       for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) canonicalText(conversion[field], `websiteIntakes[${index}].conversion.${field}`, field === 'actionId' ? 160 : 180)
       const orderId = canonicalText(conversion.orderId, `websiteIntakes[${index}].conversion.orderId`, 160)
       const order = orderById.get(orderId)
@@ -4366,7 +4308,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || order.quantity !== candidate.quantity
         || order.total !== candidate.total
         || order.evidenceReference !== conversion.evidenceReference) {
-        throw new Error(`websiteIntakes[${index}] does not match its converted Website order.`)
+        rejectInvalid(`websiteIntakes[${index}] does not match its converted Website order.`)
       }
       websiteIntakeConversionActionIds.push(conversion.actionId)
     }
@@ -4380,7 +4322,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const storefrontIdempotencyKeys: string[] = []
   const storefrontActionIds: string[] = []
   for (const [index, candidate] of storefrontRequests.entries()) {
-    if (!isRecord(candidate)) throw new Error(`storefrontRequests[${index}] is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`storefrontRequests[${index}] is invalid.`)
     if (candidate.schema === 'supermega.ecommerce.order_request.v2') {
       const request = storefrontRequestV2(candidate, `storefrontRequests[${index}]`)
       storefrontRequestIds.push(request.id)
@@ -4391,7 +4333,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     const legacyFields = ['schema', 'mode', 'state', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk']
     const currentFields = [...legacyFields, 'sourceStorefrontRevision', 'sourceStorefrontActionId']
     if (!hasExactKeys(candidate, legacyFields) && !hasExactKeys(candidate, currentFields)) {
-      throw new Error(`storefrontRequests[${index}] is invalid.`)
+      rejectInvalid(`storefrontRequests[${index}] is invalid.`)
     }
     const hasStorefrontProvenance = 'sourceStorefrontRevision' in candidate
       && 'sourceStorefrontActionId' in candidate
@@ -4417,7 +4359,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       || candidate.currency !== 'MMK'
       || !isRecord(candidate.line)
       || !hasExactKeys(candidate.line, ['sku', 'name', 'variant', 'quantity', 'unitPriceMmk'])) {
-      throw new Error(`storefrontRequests[${index}] is invalid.`)
+      rejectInvalid(`storefrontRequests[${index}] is invalid.`)
     }
     canonicalText(candidate.customerReference, `storefrontRequests[${index}].customerReference`, 80)
     if (hasStorefrontProvenance && candidate.sourceStorefrontActionId !== null) {
@@ -4431,11 +4373,11 @@ export function validateCommerceState(value: unknown): CommerceState {
     canonicalText(candidate.line.name, `storefrontRequests[${index}].line.name`)
     if (candidate.line.variant !== null) canonicalText(candidate.line.variant, `storefrontRequests[${index}].line.variant`)
     assertSafeInteger(candidate.line.quantity, `storefrontRequests[${index}].line.quantity`, 1)
-    if (Number(candidate.line.quantity) > 99) throw new Error(`storefrontRequests[${index}].line.quantity must be at most 99.`)
+    if (Number(candidate.line.quantity) > 99) rejectInvalid(`storefrontRequests[${index}].line.quantity must be at most 99.`)
     assertSafeInteger(candidate.line.unitPriceMmk, `storefrontRequests[${index}].line.unitPriceMmk`, 1)
     assertSafeInteger(candidate.totalMmk, `storefrontRequests[${index}].totalMmk`, 1)
     if (candidate.totalMmk !== Number(candidate.line.quantity) * Number(candidate.line.unitPriceMmk)) {
-      throw new Error(`storefrontRequests[${index}].totalMmk is invalid.`)
+      rejectInvalid(`storefrontRequests[${index}].totalMmk is invalid.`)
     }
     storefrontRequestIds.push(requestId)
     storefrontIdempotencyKeys.push(idempotencyKey)
@@ -4452,7 +4394,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     const matchingMovements = movements.filter((candidate) => isRecord(candidate)
       && candidate.actionId === actionId) as unknown as CommerceStockMovement[]
     if (matchingChanges.length && matchingMovements.length) {
-      throw new Error(`Catalog baseline action ${actionId} cannot anchor two event types.`)
+      rejectInvalid(`Catalog baseline action ${actionId} cannot anchor two event types.`)
     }
     if (matchingChanges.length) {
       const [baseline] = baselines
@@ -4462,7 +4404,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || change !== newerCatalogChangeBySku.get(baseline.sku)
         || change.sku !== baseline.sku
         || !sameActionProof(change.proof, baseline.proof)) {
-        throw new Error(`Catalog baseline action ${actionId} does not match its first catalog change.`)
+        rejectInvalid(`Catalog baseline action ${actionId} does not match its first catalog change.`)
       }
     }
     if (matchingMovements.length) {
@@ -4473,7 +4415,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         || movement.kind !== 'opening'
         || movement.sku !== baseline.sku
         || !sameProof(movement, baseline.proof)) {
-        throw new Error(`Catalog baseline action ${actionId} does not match its opening balance.`)
+        rejectInvalid(`Catalog baseline action ${actionId} does not match its opening balance.`)
       }
     }
   }
@@ -4509,7 +4451,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (!shopInventoryMatchesItems(
         value.inventoryFoundation as ShopInventoryState,
         value.items as CommerceItem[],
-      )) throw new Error('available-to-promise stock does not match the Shop catalog')
+      )) rejectInvalid('available-to-promise stock does not match the Shop catalog')
       // Sorted, because projectShopInventory requires canonical SKU order and itemSkus is
       // built in CATALOG order. Every other caller sorts; this one did not, so validating any
       // workspace that had an inventory foundation threw for any catalog whose SKUs were not
@@ -4522,7 +4464,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           const policy = vendor && inventory.supplierPolicies.find((candidate) => (
             candidate.vendorId === vendor.id && candidate.sku === decision.sku && candidate.status === 'active'
           ))
-          if (!policy || policy.commandId !== quote.vendorApprovalReference) throw new Error(`supplier quote ${quote.quoteReference} is not bound to an active approved-vendor policy`)
+          if (!policy || policy.commandId !== quote.vendorApprovalReference) rejectInvalid(`supplier quote ${quote.quoteReference} is not bound to an active approved-vendor policy`)
         }
       }
     } catch (error) {
@@ -4545,9 +4487,9 @@ function legacyTimestamp(value: unknown) {
 }
 
 function migrateLegacyCommerce(value: unknown): CommerceState {
-  if (!isRecord(value) || !Array.isArray(value.items)) throw new Error('Legacy Commerce workspace has no item collection.')
+  if (!isRecord(value) || !Array.isArray(value.items)) rejectInvalid('Legacy Commerce workspace has no item collection.')
   const items = value.items.map((candidate, index): CommerceItem => {
-    if (!isRecord(candidate)) throw new Error(`Legacy item ${index + 1} is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`Legacy item ${index + 1} is invalid.`)
     const item: CommerceItem = {
       sku: requiredText(candidate.sku, `legacy.items[${index}].sku`),
       name: requiredText(candidate.name, `legacy.items[${index}].name`),
@@ -4562,7 +4504,7 @@ function migrateLegacyCommerce(value: unknown): CommerceState {
   const rawOrders = Array.isArray(value.orders) ? value.orders : Array.isArray(value.sales) ? value.sales : []
   const fromSales = !Array.isArray(value.orders) && Array.isArray(value.sales)
   const orders = rawOrders.map((candidate, index): CommerceOrder => {
-    if (!isRecord(candidate)) throw new Error(`Legacy order ${index + 1} is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`Legacy order ${index + 1} is invalid.`)
     const itemName = optionalText(candidate.item) ?? 'Legacy item'
     const matchingItems = items.filter((item) => item.name === itemName)
     const storedSku = optionalText(candidate.itemSku)
@@ -4591,7 +4533,7 @@ function migrateLegacyCommerce(value: unknown): CommerceState {
   })
   const rawCloses = Array.isArray(value.closes) ? value.closes : []
   const closes = rawCloses.map((candidate, index) => {
-    if (!isRecord(candidate)) throw new Error(`Legacy close ${index + 1} is invalid.`)
+    if (!isRecord(candidate)) rejectInvalid(`Legacy close ${index + 1} is invalid.`)
     return {
       id: optionalText(candidate.id) ?? `CLOSE-LEGACY-${index + 1}`,
       createdAt: legacyTimestamp(candidate.createdAt),
@@ -4615,11 +4557,38 @@ function persistInitialState(storage: CommerceStorage, state: CommerceState, sou
   try {
     const serialized = JSON.stringify(state)
     storage.setItem(COMMERCE_KEY, serialized)
-    if (storage.getItem(COMMERCE_KEY) !== serialized) throw new Error('write_not_confirmed')
+    if (storage.getItem(COMMERCE_KEY) !== serialized) rejectInvalid('write_not_confirmed')
     return { state, source, error: '' }
   } catch {
     return { state, source, error: 'Commerce storage is unavailable. This workspace is read-only until browser storage is restored.' }
   }
+}
+
+export function readCommerceWorkspace(storage = browserStorage()): CommerceWorkspaceReadSnapshot {
+  if (!storage) return { state: createEmptyCommerce(), source: 'recovery', error: 'Commerce storage is unavailable. No local data was changed.' }
+  let currentRaw: string | null
+  try { currentRaw = storage.getItem(COMMERCE_KEY) } catch { return { state: createEmptyCommerce(), source: 'recovery', error: 'Commerce storage could not be read. No local data was changed.' } }
+  if (currentRaw !== null) {
+    try {
+      return { state: validateCommerceState(JSON.parse(currentRaw)), source: 'current', error: '' }
+    } catch {
+      return { state: createEmptyCommerce(), source: 'recovery', error: 'Commerce v2 data is malformed. The read failed closed without replacing data.' }
+    }
+  }
+
+  let invalidLegacyFound = false
+  for (const legacyKey of LEGACY_COMMERCE_KEYS) {
+    let legacyRaw: string | null
+    try { legacyRaw = storage.getItem(legacyKey) } catch { invalidLegacyFound = true; continue }
+    if (legacyRaw === null) continue
+    try {
+      return { state: migrateLegacyCommerce(JSON.parse(legacyRaw)), source: 'legacy', error: '' }
+    } catch {
+      invalidLegacyFound = true
+    }
+  }
+  if (invalidLegacyFound) return { state: createEmptyCommerce(), source: 'recovery', error: 'Legacy Commerce data is malformed. The read failed closed without creating v2 data.' }
+  return { state: createEmptyCommerce(), source: 'absent', error: '' }
 }
 
 export function loadCommerceWorkspace(storage = browserStorage()): CommerceWorkspaceSnapshot {
@@ -4650,7 +4619,8 @@ export function loadCommerceWorkspace(storage = browserStorage()): CommerceWorks
     }
   }
   if (invalidLegacyFound) return { state: createEmptyCommerce(), source: 'recovery', error: 'Legacy Commerce data is malformed. Migration failed closed and did not create v2 data.' }
-  return persistInitialState(storage, createSeedCommerce(Date.now()), 'seed')
+  // First use starts with the owner's catalog, not fabricated products or sales.
+  return persistInitialState(storage, createEmptyCommerce(), 'current')
 }
 
 export function commerceWorkspaceCanWrite(
@@ -4845,7 +4815,7 @@ function validateSupportServiceTimeline(
   let firstResponseReady = false
   if (value === undefined) return { effectiveService, latestAt, acknowledged, firstResponseReady }
   if (!Array.isArray(value) || value.length < 1 || value.length > maxSupportServiceEventsPerCase) {
-    throw new Error(`${field} requires 1 to ${maxSupportServiceEventsPerCase} records.`)
+    rejectInvalid(`${field} requires 1 to ${maxSupportServiceEventsPerCase} records.`)
   }
   for (const [reverseIndex, serviceCandidate] of [...value].reverse().entries()) {
     const serviceIndex = value.length - reverseIndex - 1
@@ -4859,7 +4829,7 @@ function validateSupportServiceTimeline(
       || !hasExactKeys(serviceCandidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(serviceCandidate.proof as CommerceActionProof)
       || serviceCandidate.proof.evidenceReference !== `SUPPORT-SERVICE:${caseId}`) {
-      throw new Error(`${serviceField} is invalid.`)
+      rejectInvalid(`${serviceField} is invalid.`)
     }
     const serviceProof = serviceCandidate.proof as CommerceActionProof
     const serviceAt = timestampMicros(serviceProof.capturedAt) as bigint
@@ -4869,18 +4839,18 @@ function validateSupportServiceTimeline(
     const nextPriority = supportPriorities.indexOf(serviceCandidate.priority as CommerceSupportPriority)
     canonicalText(serviceCandidate.owner, `${serviceField}.owner`, 120)
     canonicalText(serviceCandidate.note, `${serviceField}.note`, 300)
-    if (serviceAt < latestAt) throw new Error(`${serviceField} chronology is invalid.`)
+    if (serviceAt < latestAt) rejectInvalid(`${serviceField} chronology is invalid.`)
     if (serviceCandidate.kind === 'reassigned') {
       if (serviceCandidate.owner === effectiveService.owner
         || serviceCandidate.priority !== effectiveService.priority
-        || serviceCandidate.dueAt !== effectiveService.dueAt) throw new Error(`${serviceField} must change only the accountable owner.`)
+        || serviceCandidate.dueAt !== effectiveService.dueAt) rejectInvalid(`${serviceField} must change only the accountable owner.`)
     } else if (serviceCandidate.kind === 'escalated') {
       if (serviceCandidate.owner !== effectiveService.owner
         || nextPriority > previousPriority
         || dueAt > previousDueAt
         || (nextPriority === previousPriority && dueAt === previousDueAt)
         || (serviceCandidate.dueAt !== effectiveService.dueAt && dueAt <= serviceAt)) {
-        throw new Error(`${serviceField} must increase priority or bring a future due time forward without changing owner.`)
+        rejectInvalid(`${serviceField} must increase priority or bring a future due time forward without changing owner.`)
       }
     } else if (serviceCandidate.kind === 'acknowledged') {
       if (acknowledged
@@ -4888,7 +4858,7 @@ function validateSupportServiceTimeline(
         || serviceCandidate.owner !== effectiveService.owner
         || serviceCandidate.priority !== effectiveService.priority
         || serviceCandidate.dueAt !== effectiveService.dueAt) {
-        throw new Error(`${serviceField} must acknowledge the current service state exactly once.`)
+        rejectInvalid(`${serviceField} must acknowledge the current service state exactly once.`)
       }
       acknowledged = true
     } else {
@@ -4897,7 +4867,7 @@ function validateSupportServiceTimeline(
         || serviceCandidate.owner !== effectiveService.owner
         || serviceCandidate.priority !== effectiveService.priority
         || serviceCandidate.dueAt !== effectiveService.dueAt) {
-        throw new Error(`${serviceField} must record one first response after acknowledgement without changing service state.`)
+        rejectInvalid(`${serviceField} must record one first response after acknowledgement without changing service state.`)
       }
       firstResponseReady = true
     }
@@ -4924,12 +4894,12 @@ function validateSupportResolution(
     || !isRecord(value.proof)
     || !hasExactKeys(value.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
     || !validProof(value.proof as CommerceActionProof)) {
-    throw new Error(`${field} is invalid.`)
+    rejectInvalid(`${field} is invalid.`)
   }
   canonicalText(value.note, `${field}.note`, 300)
   const resolution = value as CommerceOrderSupportResolution
   if ((timestampMicros(resolution.proof.capturedAt) as bigint) < minimumAt) {
-    throw new Error(`${field} predates its latest service event.`)
+    rejectInvalid(`${field} predates its latest service event.`)
   }
   supportActionIds.push(resolution.proof.actionId)
   return resolution
@@ -5207,7 +5177,7 @@ export function commerceCustomerCreditExposure(state: CommerceState, customer: s
   for (const order of state.orders) {
     if (order.customer !== customer || order.status === 'cancelled' || order.paymentStatus !== 'pending') continue
     const next = exposure + order.total
-    if (!Number.isSafeInteger(next)) throw new Error('Customer credit exposure exceeds the supported MMK range.')
+    if (!Number.isSafeInteger(next)) rejectInvalid('Customer credit exposure exceeds the supported MMK range.')
     exposure = next
   }
   return exposure
@@ -5720,7 +5690,7 @@ export function commerceStorefrontOrderTimeline(
   const current = validateCommerceState(state)
   const seenIds = new Set<string>()
   for (const request of requests) {
-    if (seenIds.has(request.id)) throw new Error(`Duplicate Ecommerce request ${request.id} cannot be projected.`)
+    if (seenIds.has(request.id)) rejectInvalid(`Duplicate Ecommerce request ${request.id} cannot be projected.`)
     seenIds.add(request.id)
   }
   const validatedRequests = commerceStorefrontRequests(validateCommerceState({
@@ -5729,7 +5699,7 @@ export function commerceStorefrontOrderTimeline(
   }))
   return validatedRequests.map((request): CommerceStorefrontOrderTimelineEntry => {
     const matchingOrders = current.orders.filter((order) => order.sourceRecordId === request.id)
-    if (matchingOrders.length > 1) throw new Error(`Ecommerce request ${request.id} has multiple Shop orders.`)
+    if (matchingOrders.length > 1) rejectInvalid(`Ecommerce request ${request.id} has multiple Shop orders.`)
     const order = matchingOrders[0] ? structuredClone(matchingOrders[0]) : null
     const nextAction: CommerceStorefrontOrderNextAction = !order
       ? 'review_in_shop'
@@ -5803,7 +5773,7 @@ export function commercePurchaseBudgetCommitment(state: CommerceState, envelope:
     const purchaseOrder = linkedOrders.get(requisition.id)
     if (purchaseOrder?.cancellation) continue
     committedMmk += requisition.totalMmk
-    if (!Number.isSafeInteger(committedMmk)) throw new Error('Purchase budget commitment exceeds the safe integer range.')
+    if (!Number.isSafeInteger(committedMmk)) rejectInvalid('Purchase budget commitment exceeds the safe integer range.')
     if (purchaseOrder) activePurchaseOrders += 1
     else openRequisitions += 1
   }
@@ -5851,10 +5821,10 @@ export function commercePurchaseOrderArrivalUrgency(
 
 export function commerceSupplierInvoiceMatch(state: CommerceState, purchaseOrder: CommercePurchaseOrder): CommerceSupplierInvoiceMatch {
   const invoice = purchaseOrder.supplierInvoice
-  if (!invoice || purchaseOrder.unitCostMmk === undefined) throw new Error('Supplier invoice matching requires retained PO commercial terms and an invoice.')
+  if (!invoice || purchaseOrder.unitCostMmk === undefined) rejectInvalid('Supplier invoice matching requires retained PO commercial terms and an invoice.')
   const progress = commercePurchaseOrderProgress(state, purchaseOrder)
   const orderedTotalMmk = purchaseOrder.quantityOrdered * purchaseOrder.unitCostMmk
-  if (!Number.isSafeInteger(orderedTotalMmk)) throw new Error('Purchase order total exceeds the supported safe integer range.')
+  if (!Number.isSafeInteger(orderedTotalMmk)) rejectInvalid('Purchase order total exceeds the supported safe integer range.')
   const supplierClaimMmk = commerceSupplierReturnClaims(purchaseOrder).reduce((total, claim) => total + claim.claimAmountMmk, 0)
   const supplierCreditMmk = commerceSupplierReturnClaims(purchaseOrder).reduce((total, claim) => total
     + claim.creditNotes.reduce((claimTotal, credit) => claimTotal + credit.amountMmk, 0), 0)
@@ -5863,7 +5833,7 @@ export function commerceSupplierInvoiceMatch(state: CommerceState, purchaseOrder
   const netInvoiceTotalMmk = invoice.totalMmk - supplierCreditMmk
   const acceptedTotalMmk = progress.received * purchaseOrder.unitCostMmk
   if (![supplierClaimMmk, supplierCreditMmk, expectedSupplierReturnMmk, supplierReturnBalanceMmk, netInvoiceTotalMmk, acceptedTotalMmk].every(Number.isSafeInteger)) {
-    throw new Error('Supplier invoice and return totals exceed the supported safe integer range.')
+    rejectInvalid('Supplier invoice and return totals exceed the supported safe integer range.')
   }
   const status: CommerceSupplierInvoiceMatchStatus = progress.delivered < invoice.quantityInvoiced
     ? 'awaiting_receipt'
@@ -5899,7 +5869,7 @@ export function commerceSupplierPerformance(state: CommerceState, now: number): 
   const groups = new Map<string, CommerceSupplierPerformance>()
   const addSafeUnits = (currentTotal: number, increment: number) => {
     const nextTotal = currentTotal + increment
-    if (!Number.isSafeInteger(nextTotal)) throw new Error('Supplier performance totals exceed the supported safe integer range.')
+    if (!Number.isSafeInteger(nextTotal)) rejectInvalid('Supplier performance totals exceed the supported safe integer range.')
     return nextTotal
   }
   for (const purchaseOrder of commercePurchaseOrders(current)) {
@@ -6011,7 +5981,7 @@ export function commerceCatalogDigestSource(state: CommerceState) {
 
 export async function commerceCatalogDigest(state: CommerceState) {
   const subtle = globalThis.crypto?.subtle
-  if (!subtle) throw new Error('SHA-256 is unavailable.')
+  if (!subtle) rejectInvalid('SHA-256 is unavailable.')
   const digest = await subtle.digest(
     'SHA-256',
     new TextEncoder().encode(commerceCatalogDigestSource(state)),
@@ -6022,9 +5992,9 @@ export async function commerceCatalogDigest(state: CommerceState) {
 export async function commerceStorefrontPreviewDigest(state: CommerceState) {
   const current = validateCommerceState(state)
   const configuration = commerceStorefrontConfiguration(current)
-  if (!configuration) throw new Error('A saved storefront configuration is required.')
+  if (!configuration) rejectInvalid('A saved storefront configuration is required.')
   if (configuration.shopCatalogDigest !== await commerceCatalogDigest(current)) {
-    throw new Error('The saved storefront configuration does not match the current Shop catalog.')
+    rejectInvalid('The saved storefront configuration does not match the current Shop catalog.')
   }
   const itemBySku = new Map(current.items.map((item) => [item.sku, item]))
   const merchandisingBySku = new Map(configuration.merchandising?.map((entry) => [entry.sku, entry]) ?? [])
@@ -6037,7 +6007,7 @@ export async function commerceStorefrontPreviewDigest(state: CommerceState) {
     currency: 'MMK',
     items: configuration.selectedSkus.map((sku) => {
       const item = itemBySku.get(sku)
-      if (!item) throw new Error(`Saved storefront SKU ${sku} is unavailable.`)
+      if (!item) rejectInvalid(`Saved storefront SKU ${sku} is unavailable.`)
       const merchandising = merchandisingBySku.get(sku)
       return {
         sku: item.sku,
@@ -6057,7 +6027,7 @@ export async function commerceStorefrontPreviewDigest(state: CommerceState) {
     }),
   })
   const subtle = globalThis.crypto?.subtle
-  if (!subtle) throw new Error('SHA-256 is unavailable.')
+  if (!subtle) rejectInvalid('SHA-256 is unavailable.')
   const digest = await subtle.digest('SHA-256', new TextEncoder().encode(source))
   return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }
@@ -6797,6 +6767,12 @@ export function commerceWorkingSampleSkus(stateValue: CommerceState) {
   return [...skus].sort((left, right) => left.localeCompare(right, 'en'))
 }
 
+export const commerceCatalogImportFields = ['name', 'variant', 'onHand', 'reorderAt', 'price'] as const
+
+export function commerceCatalogImportDifferences(existing: CommerceItem, incoming: CommerceItem): (typeof commerceCatalogImportFields)[number][] {
+  return commerceCatalogImportFields.filter((field) => existing[field] !== incoming[field])
+}
+
 export function importCommerceCatalog(stateValue: CommerceState, input: {
   items: CommerceItem[]
   sourceDigest: string
@@ -6816,11 +6792,7 @@ export function importCommerceCatalog(stateValue: CommerceState, input: {
   for (const [index, item] of input.items.entries()) {
     const existing = state.items.find((candidate) => candidate.sku === item.sku)
     if (existing) {
-      if (existing.name !== item.name
-        || existing.variant !== item.variant
-        || existing.onHand !== item.onHand
-        || existing.reorderAt !== item.reorderAt
-        || existing.price !== item.price) return null
+      if (commerceCatalogImportDifferences(existing, item).length) return null
       alreadyPresent += 1
       continue
     }
@@ -8977,7 +8949,7 @@ export function commerceSupportWorkloadExport(
   const current = validateCommerceState(state)
   const asOfMs = Date.parse(asOf)
   if (!Number.isFinite(asOfMs) || new Date(asOfMs).toISOString() !== asOf) {
-    throw new Error('Support workload as-of time must be one exact UTC timestamp.')
+    rejectInvalid('Support workload as-of time must be one exact UTC timestamp.')
   }
   const urgencyRank: Record<CommerceSupportUrgency, number> = {
     overdue: 0,
@@ -9003,7 +8975,7 @@ export function commerceSupportWorkloadExport(
       ...(supportCase.followUpResolution ? [supportCase.followUpResolution.proof.capturedAt] : []),
     ]
     if (retainedEventTimes.some((timestamp) => Date.parse(timestamp) > asOfMs)) {
-      throw new Error(`Support workload as-of time precedes retained evidence for ${supportCase.caseId}.`)
+      rejectInvalid(`Support workload as-of time precedes retained evidence for ${supportCase.caseId}.`)
     }
     const caseEndMs = resolvedAt ? Date.parse(resolvedAt) : asOfMs
     const cycleEndMs = resolvedAt ? Date.parse(resolvedAt) : asOfMs
@@ -9649,13 +9621,13 @@ function buildCommerceCloseSettlement(
   try {
     const lines = input.map((candidate): CommerceCloseSettlementLine => {
       const paymentMethod = canonicalText(candidate?.paymentMethod, 'settlement.paymentMethod', 80)
-      if (!Number.isSafeInteger(candidate?.countedMmk) || candidate.countedMmk < 0) throw new Error('settlement.countedMmk is invalid')
+      if (!Number.isSafeInteger(candidate?.countedMmk) || candidate.countedMmk < 0) rejectInvalid('settlement.countedMmk is invalid')
       const expectedMmk = expectedByPayment.get(paymentMethod)
-      if (expectedMmk === undefined) throw new Error('settlement.paymentMethod is unknown')
+      if (expectedMmk === undefined) rejectInvalid('settlement.paymentMethod is unknown')
       const varianceMmk = candidate.countedMmk - expectedMmk
-      if (!Number.isSafeInteger(varianceMmk)) throw new Error('settlement.varianceMmk is invalid')
+      if (!Number.isSafeInteger(varianceMmk)) rejectInvalid('settlement.varianceMmk is invalid')
       if (varianceMmk === 0) {
-        if (candidate.varianceOwner.trim() || candidate.varianceReason.trim()) throw new Error('matched settlement cannot retain variance evidence')
+        if (candidate.varianceOwner.trim() || candidate.varianceReason.trim()) rejectInvalid('matched settlement cannot retain variance evidence')
         return { paymentMethod, expectedMmk, countedMmk: candidate.countedMmk, varianceMmk, status: 'matched', varianceOwner: null, varianceReason: null }
       }
       return {
@@ -9828,7 +9800,7 @@ function commerceDailyCloseExportFrom(current: CommerceState, closeId: string): 
       externalPostingPerformed: correction.externalPostingPerformed,
     }))
     const adjustedTotal = commerceOrderAdjustedTotal(order)
-    if (adjustedTotal === null) throw new Error(`Order ${order.id} has an invalid adjusted total.`)
+    if (adjustedTotal === null) rejectInvalid(`Order ${order.id} has an invalid adjusted total.`)
     return {
       orderId: order.id,
       orderCreatedAt: order.createdAt,
@@ -9887,7 +9859,7 @@ export function commerceSupportWorkloadCsv(artifact: CommerceSupportWorkloadExpo
   const { digest, ...unsigned } = artifact
   if (artifact.schema !== COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA
     || digest !== commerceSupportWorkloadDigest(unsigned)) {
-    throw new Error('Support workload export integrity check failed.')
+    rejectInvalid('Support workload export integrity check failed.')
   }
   const header = [
     'schema',
@@ -10238,7 +10210,7 @@ export function commerceWorkspaceArchiveCsv(artifact: CommerceWorkspaceArchive) 
   const { digest, ...unsigned } = artifact
   if (artifact.schema !== COMMERCE_WORKSPACE_ARCHIVE_SCHEMA
     || digest !== `sha256:${sha256Hex(JSON.stringify(commerceWorkspaceArchiveProjection(unsigned)))}`) {
-    throw new Error('Workspace archive integrity check failed.')
+    rejectInvalid('Workspace archive integrity check failed.')
   }
   const header = [
     'archive_schema',
@@ -10777,7 +10749,7 @@ export function commerceSupplierPayablesHandoff(state: CommerceState): CommerceS
   const netPayableTotalMmk = rows.reduce((total, row) => total + row.netPayableMmk, 0)
   if (![grossInvoiceTotalMmk, supplierCreditTotalMmk, netPayableTotalMmk].every(Number.isSafeInteger)
     || grossInvoiceTotalMmk - supplierCreditTotalMmk !== netPayableTotalMmk) {
-    throw new Error('Supplier payables handoff totals exceed the supported safe integer range or do not balance.')
+    rejectInvalid('Supplier payables handoff totals exceed the supported safe integer range or do not balance.')
   }
   const artifact: Omit<CommerceSupplierPayablesHandoff, 'digest'> = {
     schema: COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA,
@@ -10802,7 +10774,7 @@ export function commerceSupplierPayablesHandoffCsv(artifact: CommerceSupplierPay
   const { digest, ...unsigned } = artifact
   if (artifact.schema !== COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA
     || digest !== commerceSupplierPayablesHandoffDigest(unsigned)) {
-    throw new Error('Supplier payables handoff integrity check failed.')
+    rejectInvalid('Supplier payables handoff integrity check failed.')
   }
   const header = [
     'schema', 'status', 'payment_authority', 'payment_initiated', 'accounting_posted', 'currency',
@@ -10870,7 +10842,7 @@ export function commerceSupplierPayablesAging(state: CommerceState, now: number)
   ])) as Record<CommerceSupplierPayableAgingBucket, number>
   const totalNetPayableMmk = rows.reduce((total, row) => total + row.netPayableMmk, 0)
   if (![...Object.values(totalsMmk), totalNetPayableMmk].every(Number.isSafeInteger)) {
-    throw new Error('Supplier payables aging totals exceed the supported safe integer range.')
+    rejectInvalid('Supplier payables aging totals exceed the supported safe integer range.')
   }
   return {
     asOf: new Date(safeNow).toISOString(),
@@ -10945,7 +10917,7 @@ export function commerceCustomerReceivablesHandoff(state: CommerceState, now: nu
     }
   })
   if (![aging.totalOutstandingMmk, aging.overdueMmk].every(Number.isSafeInteger)) {
-    throw new Error('Customer receivables handoff totals exceed the supported safe integer range.')
+    rejectInvalid('Customer receivables handoff totals exceed the supported safe integer range.')
   }
   const artifact: Omit<CommerceCustomerReceivablesHandoff, 'digest'> = {
     schema: COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA,
@@ -10969,7 +10941,7 @@ export function commerceCustomerReceivablesHandoffCsv(artifact: CommerceCustomer
   const { digest, ...unsigned } = artifact
   if (artifact.schema !== COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA
     || digest !== commerceCustomerReceivablesHandoffDigest(unsigned)) {
-    throw new Error('Customer receivables handoff integrity check failed.')
+    rejectInvalid('Customer receivables handoff integrity check failed.')
   }
   const header = [
     'schema', 'status', 'collection_authority', 'payment_received', 'accounting_posted', 'currency',
@@ -11068,4 +11040,9 @@ export function advanceCommerceOrder(
     } : candidate),
     ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })
+}
+
+// Keep rejection messages and synchronous failure behavior identical across checks.
+function rejectInvalid(message: string): never {
+  throw new Error(message)
 }

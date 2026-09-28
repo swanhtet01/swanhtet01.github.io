@@ -1,5 +1,8 @@
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
+import { readSessionCart, readSessionCartSnapshot, saveSessionCart } from './cart-session'
+import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
@@ -269,7 +272,23 @@ function initialEcommerceState() {
   }
 }
 
+function canDeliverCatalogReviews(bootstrap: Parameters<typeof managedBootstrapHasCapability>[0], identity: ManagedIdentity) {
+  return (['commerce.write', 'company.write', 'approvals.decide'] as const).every(capability => managedBootstrapHasCapability(bootstrap, identity, capability))
+}
+
+function StatusRows({ rows }: { rows: readonly (readonly string[])[] }) {
+  return <>{rows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</>
+}
+
+const CatalogReviewPreparation = lazy(() => import('./CatalogReviewPreparation').then(module => ({ default: module.CatalogReviewPreparation })))
+
 export function EcommerceProduct() {
+  const [workspaceOpened, setWorkspaceOpened] = useState(false)
+  const [orderOpsNow, setOrderOpsNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setOrderOpsNow(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
   const navigate = useNavigate()
   const location = useLocation()
   const [initialState] = useState(initialEcommerceState)
@@ -278,6 +297,7 @@ export function EcommerceProduct() {
   const [catalogHydrating, setCatalogHydrating] = useState(true)
   const [managedIdentity, setManagedIdentity] = useState<ManagedIdentity | null>(null)
   const [managedCanWrite, setManagedCanWrite] = useState(false)
+  const [managedCanDeliverReviews, setManagedCanDeliverReviews] = useState(false)
   const [managedInbox, setManagedInbox] = useState<ManagedInboxContext | null>(null)
   const [savedDraft, setSavedDraft] = useState<SavedStorefrontState | null>(null)
   const [draftReadStatus, setDraftReadStatus] = useState<StorefrontDraftReadResult['status']>('empty')
@@ -298,7 +318,11 @@ export function EcommerceProduct() {
     error: '',
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
+  const restoredCartScope = useRef('')
+  const [cartSessionUnavailable, setCartSessionUnavailable] = useState(false)
   const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
+  const [trackingRequest, setTrackingRequest] = useState(0)
+  const [customerRequestDeliveryConfirmed, setCustomerRequestDeliveryConfirmed] = useState<DeliveryConfirmation | null>(null)
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
   const [orderImportReview, setOrderImportReview] = useState<EcommerceOrderImportReview | null>(null)
@@ -335,7 +359,15 @@ export function EcommerceProduct() {
         setManagedIdentity(identity)
         const bootstrap = await loadManagedBootstrap(identity)
         if (!current) return
+        const confirmedIdentity = await currentManagedIdentity()
+        if (!current) return
+        if (!confirmedIdentity
+          || confirmedIdentity.workspaceId !== identity.workspaceId
+          || confirmedIdentity.userId !== identity.userId) {
+          throw new Error('The company account changed while loading. Reload to open the current company.')
+        }
         setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write'))
+        setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
         const view = resolveManagedStorefront(
           identity,
           requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
@@ -372,6 +404,7 @@ export function EcommerceProduct() {
         if (!current) return
         setManagedInbox(null)
         setManagedCanWrite(false)
+        setManagedCanDeliverReviews(false)
         setCatalog({
           source: 'unavailable',
           items: [],
@@ -443,6 +476,28 @@ export function EcommerceProduct() {
   const previewJson = previewResult.preview ? JSON.stringify(previewResult.preview) : ''
   const digest = digestState.previewJson === previewJson ? digestState.value : ''
   const digestError = digestState.previewJson === previewJson ? digestState.error : ''
+  const cartScope = !catalogHydrating && digest && catalog.source !== 'unavailable'
+    ? JSON.stringify([managedIdentity ? [managedIdentity.workspaceId, managedIdentity.userId] : 'local', digest]) : ''
+  const recoverSessionCart = useCallback(() => {
+    try { return readSessionCartSnapshot(window.sessionStorage, cartScope, catalog.items) } catch { return null }
+  }, [cartScope, catalog.items])
+  useEffect(() => {
+    if (!cartScope) return
+    let current = true
+    queueMicrotask(() => {
+      if (!current) return
+      if (restoredCartScope.current !== cartScope) {
+        restoredCartScope.current = cartScope
+        try { setBuyingCart(readSessionCart(window.sessionStorage, cartScope, catalog.items)) }
+        catch { setBuyingCart([]); setCartSessionUnavailable(true) }
+        return
+      }
+      try { setCartSessionUnavailable(!saveSessionCart(window.sessionStorage, cartScope, buyingCart)) }
+      catch { setCartSessionUnavailable(true) }
+    })
+    return () => { current = false }
+  }, [cartScope, buyingCart, catalog.items])
+
   const managedCatalogSource = managedInbox
     ? commerceCatalogDigestSource(managedInbox.state)
     : ''
@@ -558,7 +613,7 @@ export function EcommerceProduct() {
   }
 
   function downloadOrderImportTemplate() {
-    const csv = buildSampleOrderImportCsv()
+    const csv = ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message'].map(csvCell).join(',')
     const url = URL.createObjectURL(new Blob([`${csv}\r\n`], { type: 'text/csv' }))
     const link = document.createElement('a')
     link.href = url
@@ -575,35 +630,6 @@ export function EcommerceProduct() {
       detail: 'Download Ecommerce order import template',
     })
     const notice = 'Order import template downloaded. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
-    setOrderImportNotice(notice)
-    setDraftNotice(notice)
-  }
-
-  function buildSampleOrderImportCsv() {
-    const suggestedSku = selectedSkus.find((sku) => catalog.items.some((item) => item.sku === sku && item.onHand > 0))
-      ?? catalog.items.find((item) => item.onHand > 0)?.sku
-      ?? 'SKU-001'
-    const rows = [
-      ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message'],
-      ['Daw Mya / 09 xxx xxx xxx / Bahan', 'Viber', suggestedSku, 1, 'delivery', 'manual_review', 'Paste original customer message here'],
-      ['Walk-in customer', 'Shop form', suggestedSku, 1, 'pickup', 'cash_on_pickup', 'Owner-entered sample row'],
-    ]
-    return rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
-  }
-
-  function loadSampleOrderImportBatch() {
-    const csv = buildSampleOrderImportCsv()
-    const review = buildOrderImportReview(csv)
-    setOrderImportText(csv)
-    setOrderImportReview(review)
-    setOrderImportSourceName('sample-order-batch.csv')
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_chosen',
-      product: 'ecommerce',
-      route: location.pathname + location.search,
-      detail: 'Load sample Ecommerce order batch',
-    })
-    const notice = 'Sample Ecommerce order batch loaded and reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
     setOrderImportNotice(notice)
     setDraftNotice(notice)
   }
@@ -782,6 +808,7 @@ export function EcommerceProduct() {
     const bootstrap = await loadManagedBootstrap(identity)
     const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
     setManagedCanWrite(writeAllowed)
+    setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
     const view = resolveManagedStorefront(
       identity,
@@ -938,7 +965,7 @@ export function EcommerceProduct() {
       : 'Current Shop defaults were restored. The storefront is still not saved.')
   }
 
-  function addToCart(sku: string) {
+  const addToCart = useCallback((sku: string) => {
     if (catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)) return
     if (!buyingCart.some((line) => line.sku === sku)) emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'cart.built', ts: Date.now() })
     setBuyingCart((current) => current.some((line) => line.sku === sku)
@@ -950,7 +977,7 @@ export function EcommerceProduct() {
       workspace?.scrollIntoView({ block: 'start' })
       workspace?.focus({ preventScroll: true })
     })
-  }
+  }, [catalogHydrating, previewResult.preview, digest, managedIdentity, savedDraftIsCurrent, buyingCart])
 
   function prepareQuoteRecovery() {
     if (pendingManagedRequests[0]) {
@@ -978,6 +1005,7 @@ export function EcommerceProduct() {
 
   function focusCurrentRequestReceipt() {
     const receipt = document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="true"]')
+      ?? document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="false"]')
     if (!receipt) {
       prepareQuoteRecovery()
       return
@@ -1075,9 +1103,17 @@ export function EcommerceProduct() {
     if (!currentIdentity
       || currentIdentity.workspaceId !== identity.workspaceId
       || currentIdentity.userId !== identity.userId) throw new Error('The company account changed. Reload before sending this request to Shop.')
+    const assertCurrentRequestIdentity = async () => {
+      const current = await currentManagedIdentity()
+      if (!current || current.workspaceId !== identity.workspaceId || current.userId !== identity.userId) {
+        throw new Error('The company account changed while preparing this request. Reopen checkout.')
+      }
+    }
     const bootstrap = await loadManagedBootstrap(identity)
+    await assertCurrentRequestIdentity()
     const writeAllowed = managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
     setManagedCanWrite(writeAllowed)
+    setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
     const view = resolveManagedStorefront(identity, requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'))
     if (!view?.saved) throw new Error('Save the managed storefront before sending a customer request to Shop.')
@@ -1095,6 +1131,7 @@ export function EcommerceProduct() {
       evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}`,
     }
     const next = await recordCommerceStorefrontRequest(view.inbox.state, request, proof)
+    await assertCurrentRequestIdentity()
     if (!next) throw new Error('The Ecommerce request no longer matches the current managed Shop catalog or storefront.')
     if (next === view.inbox.state && exactRequestIsRetained(next)) return
     const commandId = globalThis.crypto.randomUUID()
@@ -1201,7 +1238,6 @@ export function EcommerceProduct() {
     ? managedReturnedUnits
     : localEcommerceOrders.reduce((total, order) => total + (order.returns ?? []).reduce((returned, record) => returned + record.quantity, 0), 0)
   const importNeeded = catalog.source === 'unavailable' || catalog.items.length === 0
-  const orderOpsNow = Date.now()
   const orderOpsAgingCount = pendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
   const orderOpsExpiringCount = pendingManagedRequests.filter((request) => {
     const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
@@ -1274,7 +1310,7 @@ export function EcommerceProduct() {
         ['Next fix', orderImportReview.status === 'ready' ? 'Download packet' : 'Repair SKU, quantity, fulfilment, payment, customer, source proof'],
       ] as const
     : [
-        ['Step 1', 'Load sample or upload CSV'],
+        ['Step 1', 'Upload your order CSV'],
         ['Step 2', 'Checks fields locally'],
         ['Step 3', 'Download reviewed packet'],
       ] as const
@@ -1485,6 +1521,20 @@ export function EcommerceProduct() {
     ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD' : 'Not charged'],
     ['Boundary', 'No booking'],
   ] as const
+  const requestWaitingInLocalMode = customerRequestState === 'waiting_shop_review' && !managedIdentity
+  const requestDeliveryVerified = Boolean(managedIdentity && deliveryConfirmedForScope(customerRequestDeliveryConfirmed, buyingScope))
+  const requestWaitingQueueLabel = requestWaitingInLocalMode ? 'Saved locally' : requestDeliveryVerified ? 'Request sent' : 'Delivery unverified'
+  const ecommerceWaitingHeadline = requestWaitingInLocalMode ? 'Sample request saved locally' : requestDeliveryVerified ? 'Request sent to Shop' : 'Request saved — verify Shop delivery'
+  const ecommerceWaitingSummary = requestWaitingInLocalMode
+    ? 'The sample customer request is saved on this device for Shop review. No Shop inbox write, charge, stock, delivery, or customer message happened.'
+    : requestDeliveryVerified ? 'No charge or stock change happens until Shop confirms the order.' : 'This device retained the request, but delivery to Company Shop is not verified in this session. Check the request before retrying. No charge or stock change is confirmed.'
+  const ecommerceWaitingMetric = requestWaitingInLocalMode ? 'Local receipt' : requestDeliveryVerified ? 'Review waiting' : 'Delivery unverified'
+  const waitingShopReviewReason = requestWaitingInLocalMode
+    ? 'The customer request is retained only in browser-local recovery until the operator opens the Shop review draft.'
+    : requestDeliveryVerified ? 'The customer request is retained in the Company Shop inbox for operator review.' : 'A local recovery record does not prove Company Shop received the request.'
+  const waitingShopReviewGate = requestWaitingInLocalMode
+    ? 'Open the local Shop review draft before claiming Shop has received the request.'
+    : requestDeliveryVerified ? 'The Shop operator confirms stock, promise, payment, and delivery.' : 'Verify or retry the same request before claiming Company Shop delivery.'
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
     : !selectedSkus.length
@@ -1576,7 +1626,7 @@ export function EcommerceProduct() {
     ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
     ['Merchandise', selectedSkus.length ? `${selectedSkus.length} selected` : 'Pick products'],
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
-    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? 'Request sent' : 'No queue'],
+    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? requestWaitingQueueLabel : 'No queue'],
   ] as const
   const aiAgentJob = pendingManagedRequests.length
     ? 'Review Ecommerce requests in Shop'
@@ -1592,11 +1642,11 @@ export function EcommerceProduct() {
           ? 'Review cart quote'
           : managedIdentity
             ? 'Open store for ordering'
-            : 'Start sample order'
+            : 'Try sample request'
   const aiAgentReason = pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
     : customerRequestState === 'waiting_shop_review'
-      ? 'The customer request is retained separately from the Shop operator review.'
+      ? waitingShopReviewReason
     : ecommerceActiveOrderCount
       ? `${ecommerceActiveOrderCount} Ecommerce order${ecommerceActiveOrderCount === 1 ? '' : 's'} now use the Shop-owned fulfilment record.`
     : importNeeded
@@ -1611,7 +1661,7 @@ export function EcommerceProduct() {
   const aiOwnerGate = pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
     : customerRequestState === 'waiting_shop_review'
-      ? 'The Shop operator confirms stock, promise, payment, and delivery.'
+      ? waitingShopReviewGate
     : ecommerceActiveOrderCount
       ? 'Shop remains authoritative for fulfilment, payment, cancellation, and returns.'
     : importNeeded
@@ -1659,28 +1709,34 @@ export function EcommerceProduct() {
           ? `${ecommercePaymentAttentionCount} payment${ecommercePaymentAttentionCount === 1 ? '' : 's'} need confirmation`
           : pendingManagedRequests.length
             ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
-            : customerRequestState === 'waiting_shop_review'
-              ? 'Request sent to Shop'
-            : ecommerceActiveOrderCount
+            : customerRequestState === 'confirmed'
+              ? 'Your order is confirmed'
+            : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
+              ? ecommerceWaitingHeadline
+            : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
               ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
               : ecommerceTodayCartUnits
                 ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'} ready for checkout`
                 : managedIdentity
                   ? 'Your store is ready for the next order'
-                  : 'Try one customer order'
+                  : 'Try one sample request'
   const ecommerceTodaySummary = importNeeded
     ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
     : storefrontSetupRequired
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
-        : customerRequestState === 'waiting_shop_review'
-          ? 'No charge or stock change happens until Shop confirms the order.'
-        : ecommerceActiveOrderCount
+        : customerRequestState === 'confirmed'
+          ? 'Track this order, or use Reorder to review another purchase.'
+        : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
+          ? ecommerceWaitingSummary
+        : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
           ? 'Shop owns fulfilment for this order. The storefront stays ready for the next customer.'
           : managedIdentity
             ? 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
-            : 'Add one sample item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.'
+            : ecommerceTodayCartUnits
+              ? 'Review your sample request. No live order will be placed.'
+              : 'Add an item to try checkout. No live order will be placed.'
   const ecommerceTodayAction = importNeeded
     ? 'Connect products'
     : storefrontSetupRequired
@@ -1691,22 +1747,24 @@ export function EcommerceProduct() {
           ? 'Fix order import'
           : pendingManagedRequests.length
             ? 'Review orders in Shop'
-            : customerRequestState === 'waiting_shop_review'
+            : customerRequestState === 'confirmed'
+              ? 'View order'
+            : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
               ? 'View request receipt'
-            : ecommerceActiveOrderCount
+            : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
               ? 'Open Shop'
             : ecommerceTodayCartUnits
               ? 'Review checkout'
               : managedIdentity
                 ? 'Prepare next order'
-                : 'Start sample order'
+                : 'Try sample request'
   const ecommerceTodayMetrics = [
     ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Sample ready'],
-    ['2. Cart', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
+    ['2. Cart', ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['3. Shop', pendingManagedRequests.length
       ? `${pendingManagedRequests.length} to review`
       : customerRequestState === 'waiting_shop_review'
-        ? 'Review waiting'
+        ? ecommerceWaitingMetric
       : ecommerceActiveOrderCount
         ? `${ecommerceActiveOrderCount} in progress`
         : ecommerceCompletedOrderCount
@@ -1722,7 +1780,7 @@ export function EcommerceProduct() {
       detail: `Order autopilot: ${orderAutopilotStage}`,
     })
     if (importNeeded) {
-      navigate('/settings/?product=ecommerce')
+      navigate(managedIdentity ? '/settings/?product=ecommerce' : '/shop/?tab=inventory')
       return
     }
     if (storefrontSetupRequired) {
@@ -1737,11 +1795,15 @@ export function EcommerceProduct() {
       navigate('/shop/?tab=orders&source=ecommerce')
       return
     }
-    if (customerRequestState === 'waiting_shop_review') {
+    if (customerRequestState === 'confirmed') {
+      setTrackingRequest((request) => request + 1)
+      return
+    }
+    if (customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits) {
       focusCurrentRequestReceipt()
       return
     }
-    if (ecommerceActiveOrderCount) {
+    if (ecommerceActiveOrderCount && !ecommerceTodayCartUnits) {
       navigate('/shop/?tab=orders')
       return
     }
@@ -1763,26 +1825,71 @@ export function EcommerceProduct() {
     })
   }, [aiAgentJob, location.pathname, location.search])
 
+  const showAssistedCatalogSetup = !catalogHydrating && !managedIdentity
+    && catalog.source !== 'unavailable' && !draftIssue && !draftBusy
+  const assistedCatalogEntry = showAssistedCatalogSetup
+    && new URLSearchParams(location.search).get('workspace') !== '1'
+
+  if ((showAssistedCatalogSetup && new URLSearchParams(location.search).get('setup') === '1') || (assistedCatalogEntry && !workspaceOpened && new URLSearchParams(location.search).get('workspace') !== '1')) {
+    return <BusinessBrief product="ecommerce" onOpenWorkspace={() => {
+      setWorkspaceOpened(true)
+      const search = new URLSearchParams(location.search)
+      search.delete('setup')
+      search.set('workspace', '1')
+      navigate({ pathname: location.pathname, search: search.toString() }, { replace: true })
+    }} />
+  }
+
+  if (!catalogHydrating && !managedIdentity && catalog.source === 'shop-local'
+    && catalog.items.length === 0 && !draftIssue && !draftBusy) {
+    return (
+      <div className="workspace-screen ecommerce-product">
+        <header className="ecommerce-heading">
+          <div><span className="core-eyebrow">Commerce</span><h1>Add your products</h1>
+            <p>Your online store uses the same products and prices as Shop.</p></div>
+        </header>
+        <section className="core-panel" aria-label="Store catalog setup">
+          <p>Add products individually or upload your catalog to get started.</p>
+          <Link className="core-button primary" to="/shop/?tab=inventory">Add products</Link>
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div className="workspace-screen ecommerce-product">
+      {managedIdentity && managedCanDeliverReviews ? <details className="compact-disclosure">
+        <summary>Customer catalog review</summary>
+        <Suspense fallback={<p role="status">Opening review tools…</p>}>
+          <CatalogReviewPreparation key={JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId])}
+            workspaceId={managedIdentity.workspaceId} actorId={managedIdentity.userId} />
+        </Suspense>
+      </details> : null}
+      {cartSessionUnavailable ? <p role="status">This browser cannot keep your cart after a refresh.</p> : null}
       <header className="ecommerce-heading">
         <div>
           <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Sample store'}</span>
-          <h1>Ecommerce</h1>
-          <p>Sell online with products, cart, orders, delivery, and returns.</p>
+          <h1>Commerce</h1>
+          <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Browse a sample catalog. Requests stay on this device and are not live orders.'}</p>
         </div>
+        {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Request catalog setup</a> : null}
       </header>
 
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-density={ecommerceTodayGuided ? 'guided' : 'compact'} data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
-          <span className="core-eyebrow">Start here</span>
-          <h2 id="ecommerce-today-title">{ecommerceTodayHeadline}</h2>
-          <p>{ecommerceTodaySummary}</p>
-          <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
+          {!assistedCatalogEntry ? <span className="core-eyebrow">Start here</span> : null}
+          <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Explore the catalog' : ecommerceTodayHeadline}</h2>
+          {!assistedCatalogEntry ? <p>{ecommerceTodaySummary}</p> : null}
+          {assistedCatalogEntry ? <>
+            <AssistedDeliveryScope product="ecommerce" />
+            <div className="form-actions ecommerce-service-actions">
+              <button className="core-button secondary" onClick={runOrderAutopilot} type="button">Try sample request</button>
+            </div>
+          </> : <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>}
         </div>
         {ecommerceTodayGuided ? (
           <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
-            {ecommerceTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            <StatusRows rows={ecommerceTodayMetrics} />
           </div>
         ) : null}
         <div className="ecommerce-today-source" role="status">
@@ -1792,7 +1899,8 @@ export function EcommerceProduct() {
       </section>
 
       <details className="ecommerce-business-controls">
-        <summary><span><strong>Extra order tools</strong><small>Use only when importing orders, checking delivery, or preparing launch</small></span><b>Extra</b></summary>
+        <summary><span><strong>Extra order tools</strong></span></summary>
+        <p>Prepare and review here. Confirm orders in Shop; send customer messages separately.</p>
         <div className="ecommerce-business-controls-content">
       <section aria-label="Order workspace" className="ecommerce-ai-desk">
         <div>
@@ -1809,10 +1917,10 @@ export function EcommerceProduct() {
                   : 'Use the sample cart to review the customer path. Nothing reaches Shop until confirmation.'}</p>
         </div>
         <div className="ecommerce-ai-desk-queue">
-          {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={aiDeskRows} />
         </div>
         <div className="ecommerce-ai-agent-queue" aria-label="Ecommerce next step" role="group">
-          {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={aiAgentQueueRows} />
         </div>
         <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Open next step</button>
       </section>
@@ -1821,20 +1929,19 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Import customer orders</span>
           <h2>{orderImportStage}</h2>
-          <p>Check CSV, Viber, LINE, WeChat, email, and form orders against the saved Shop catalog so Shop gets one clean order list. Nothing is sent, charged, delivered, refunded, or saved to Shop until a manager reviews it.</p>
+          <p>Check imported orders against your catalog. A manager reviews them before saving to Shop.</p>
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
-            <button className="text-link" onClick={loadSampleOrderImportBatch} type="button">Load sample order batch</button>
           </div>
           <details className="ecommerce-order-import-workspace" open={orderImportText || orderImportReview ? true : undefined}>
             <summary><span>Review an order batch</span><small>Upload CSV or paste channel orders only when needed.</small></summary>
             <div aria-label="Order batch review workspace" className="ecommerce-order-import-workspace-body">
               <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">
-                {orderIntakeGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+                <StatusRows rows={orderIntakeGuideRows} />
               </div>
               <div aria-label="Order repair checklist" className="ecommerce-order-repair-checklist">
-                {orderRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+                <StatusRows rows={orderRepairRows} />
               </div>
               <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
               <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
@@ -1850,7 +1957,7 @@ export function EcommerceProduct() {
           </details>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {orderImportRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={orderImportRows} />
         </div>
       </section>
 
@@ -1861,14 +1968,14 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Request inbox</span>
           <h2>{requestInboxStage}</h2>
-          <p>Filter customer requests by stock risk, quote expiry, QR payment review, and delivery mode so the manager opens the right Shop order first. Nothing is sent, charged, delivered, refunded, or saved to Shop from this screen.</p>
+          <p>Find requests needing attention, then open them in Shop.</p>
           <div className="ecommerce-request-filter" role="group" aria-label="Request inbox filter">
             {requestInboxFilterButtons.map(([value, label]) => <button aria-pressed={requestInboxFilter === value} key={value} onClick={() => setRequestInboxFilter(value)} type="button">{label}</button>)}
           </div>
           <button className="text-link" disabled={!requestInboxNextRequest} onClick={openFilteredRequestInShop} type="button">Open filtered request</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {requestInboxRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={requestInboxRows} />
         </div>
         <p className="ecommerce-request-inbox-summary" role="status">{requestInboxNextSummary}</p>
       </section>
@@ -1877,11 +1984,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Order lifecycle</span>
           <h2>{orderOpsPriority}</h2>
-          <p>One Shop-owned record now follows each Ecommerce request through review, fulfilment, payment, cancellation, refund, and return. This view reads the lifecycle; Shop confirms every change.</p>
+          <p>Track each order through payment, delivery and returns. Confirm changes in Shop.</p>
           <button className="text-link" disabled={!managedOrderTimeline.some((entry) => entry.order)} onClick={() => navigate('/shop/?tab=orders')} type="button">Open Shop order queue</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {orderOpsRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={orderOpsRows} />
         </div>
       </section>
 
@@ -1889,10 +1996,10 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Ordering readiness</span>
           <h2>{orderingReadinessStage}</h2>
-          <p>Check products, prices, quote readiness, Shop review queue, and safety mode before a customer request moves forward. The manager reviews important changes before they are saved.</p>
+          <p>Check products, prices and requests before accepting orders.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {orderingReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={orderingReadinessRows} />
         </div>
       </section>
 
@@ -1900,11 +2007,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Store launch checklist</span>
           <h2>{managedStoreActivationStage}</h2>
-          <p>Package products, prices, checkout controls, manual payment review, delivery templates, and Shop review queue for go-live review. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or go-live action runs from this file.</p>
+          <p>Download a checklist for launch review. Downloading does not publish your store.</p>
           <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download go-live file</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
-          {managedStoreActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={managedStoreActivationRows} />
         </div>
       </section>
 
@@ -1912,10 +2019,10 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Fulfilment review</span>
           <h2>{fulfillmentHandoffStage}</h2>
-          <p>Review the exact customer order across source evidence, stock availability, payment review, pickup or delivery, reply draft, and Shop queue ownership. Nothing is sent, charged, booked, refunded, moved, or saved until a manager reviews it.</p>
+          <p>Check stock, payment and delivery for the selected order.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-fulfillment-handoff-rows">
-          {fulfillmentHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={fulfillmentHandoffRows} />
         </div>
       </section>
 
@@ -1923,10 +2030,10 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Order lifecycle</span>
           <h2>One path from cart to return</h2>
-          <p>Follow capture, pricing, available-to-promise, fulfilment, and returns from the same Shop-controlled source. No charge, message, refund, or stock write starts here.</p>
+          <p>Review the order from cart to return. Confirm changes in Shop.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {lifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={lifecycleRows} />
         </div>
       </section>
 
@@ -1934,10 +2041,10 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Payment and delivery controls</span>
           <h2>{paymentDeliveryStage}</h2>
-          <p>Review pickup, local delivery, manual QR payment, quote expiry, and Shop confirmation from the same checkout request. No card charge, wallet debit, driver booking, customer message, or settlement write runs here.</p>
+          <p>Check payment, pickup or delivery before Shop confirmation.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {paymentDeliveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={paymentDeliveryRows} />
         </div>
       </section>
 
@@ -1945,11 +2052,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Delivery fee review</span>
           <h2>{deliveryFeeStage}</h2>
-          <p>Prepare a local delivery zone, fee, rider assignment, and payment review from the customer request. No rider booking, fee charge, customer message, payment capture, stock move, refund, or Shop write runs here.</p>
+          <p>Draft the delivery area, fee and rider details for review.</p>
           <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryFeeReview} type="button">Prepare delivery review</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {deliveryFeeRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={deliveryFeeRows} />
         </div>
         {deliveryReviewDraft ? <p className="ecommerce-delivery-review-draft" role="status">{deliveryReviewDraft}</p> : null}
       </section>
@@ -1958,11 +2065,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Delivery-area templates</span>
           <h2>{deliveryAreaTemplateStage}</h2>
-          <p>Build reusable area, fee, rider, payment, and cut-off templates from repeated delivery requests. No saved template, customer message, rider booking, fee charge, settlement write, stock move, or Shop write runs here.</p>
+          <p>Draft reusable delivery areas and fees. Review before saving.</p>
           <button className="text-link" disabled={catalogHydrating || (!deliveryReviewRequest && !buyingReady)} onClick={prepareDeliveryAreaTemplate} type="button">Prepare area template</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {deliveryAreaTemplateRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={deliveryAreaTemplateRows} />
         </div>
         {deliveryAreaTemplateDraft ? <p className="ecommerce-delivery-template-draft" role="status">{deliveryAreaTemplateDraft}</p> : null}
       </section>
@@ -1971,11 +2078,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Quote recovery</span>
           <h2>{quoteRecoveryStage}</h2>
-          <p>Prepare stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source. No customer message, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <p>Review expired quotes and older requests before following up.</p>
           <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareQuoteRecovery} type="button">Prepare quote recovery</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {quoteRecoveryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={quoteRecoveryRows} />
         </div>
       </section>
 
@@ -1983,11 +2090,11 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Customer follow-up</span>
           <h2>{customerFollowUpStage}</h2>
-          <p>Prepare the next reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status. No SMS, email, Viber, WhatsApp, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <p>Draft an update from the current order status. Nothing is sent.</p>
           <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareCustomerFollowUpDraft} type="button">Prepare follow-up draft</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {customerFollowUpRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={customerFollowUpRows} />
         </div>
         {customerFollowUpDraft ? <p className="ecommerce-follow-up-draft" role="status">{customerFollowUpDraft}</p> : null}
       </section>
@@ -1996,41 +2103,31 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Channel reply templates</span>
           <h2>{channelReplyStage}</h2>
-          <p>Prepare reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence. No message send, clipboard copy, discount, payment, delivery booking, refund, stock move, or Shop write runs here.</p>
+          <p>Draft a reply for the selected channel. Review it before sending.</p>
           <div className="ecommerce-request-filter" role="group" aria-label="Reply channel template">
             {replyChannelButtons.map(([value, label]) => <button aria-pressed={replyChannelTemplate === value} key={value} onClick={() => setReplyChannelTemplate(value)} type="button">{label}</button>)}
           </div>
           <button className="text-link" disabled={catalogHydrating || (!customerFollowUpRequest && !buyingReady)} onClick={prepareChannelReplyTemplate} type="button">Prepare reply template</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
-          {channelReplyRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          <StatusRows rows={channelReplyRows} />
         </div>
         {channelReplyDraft ? <p className="ecommerce-channel-reply-draft" role="status">{channelReplyDraft}</p> : null}
       </section>
         </div>
       </details>
 
-      <details className="ecommerce-verification" open={digestError ? true : undefined}>
-        <summary>
-          <span><strong>Preview verification</strong><small>Local currentness check</small></span>
-          <b>{digestError ? 'Attention' : digest ? 'Ready' : 'Checking'}</b>
-        </summary>
-        <div className="ecommerce-digest" aria-live="polite">
-          <span>Preview fingerprint</span>
-          <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
-          <small>{digestError || 'The same store fields and Shop snapshot produce the same local check.'}</small>
-        </div>
-      </details>
+      {digestError ? <p className="ecommerce-verification" role="alert">We could not verify your store changes. Keep this page open and try saving again shortly.</p> : null}
         </div>
       </details>
 
-      <label className="ecommerce-workspace-switch">
+      {!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">
         <span>View</span>
         <select aria-controls={workspaceView === 'preview' ? 'ecommerce-preview-panel' : 'ecommerce-setup-panel'} aria-label="Storefront view" onChange={(event) => showWorkspace(event.target.value as 'setup' | 'preview')} value={workspaceView}>
           <option value="preview">Store</option>
           <option value="setup">Edit store</option>
         </select>
-      </label>
+      </label> : null}
 
       <div className="ecommerce-workspace" data-view={workspaceView}>
         <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
@@ -2167,7 +2264,9 @@ export function EcommerceProduct() {
 
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
-            <div><span className="core-eyebrow">Store demo</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Shop the sample</h2></div>
+            <div><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>{managedIdentity ? 'Your store' : 'Shop the sample'}</h2></div>
+            <details className="compact-disclosure">
+              <summary>Preview options</summary>
             <label className="ecommerce-preview-size">
               <span>Preview</span>
               <select aria-label="Preview size" onChange={(event) => setDevice(event.target.value as PreviewDevice)} value={device}>
@@ -2175,6 +2274,7 @@ export function EcommerceProduct() {
                 <option value="desktop">Desktop</option>
               </select>
             </label>
+            </details>
           </div>
 
           {!buyingReady && !catalogHydrating ? (
@@ -2250,11 +2350,13 @@ export function EcommerceProduct() {
 
           {buyingReady && previewResult.preview && digest && activeCommerceState ? (
             <EcommerceBuyingWorkspace
+              key={cartScope}
               cart={buyingCart}
               commerceState={activeCommerceState}
               currentCatalog={catalog.items}
               disabled={catalogHydrating}
               onCartChange={setBuyingCart}
+              recoverSessionCart={recoverSessionCart}
               onContinueInShop={(requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`)}
               onDraft={openShopDraft}
               onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`) : undefined}
@@ -2266,6 +2368,8 @@ export function EcommerceProduct() {
               onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
               onRecordManagedRequest={managedIdentity && managedCanWrite ? recordManagedBuyingRequest : undefined}
               onRequestStateChange={setCustomerRequestState}
+              trackingRequest={trackingRequest}
+              onDeliveryConfirmationChange={setCustomerRequestDeliveryConfirmed}
               preview={previewResult.preview}
               scope={buyingScope}
               sourcePreviewDigest={digest}

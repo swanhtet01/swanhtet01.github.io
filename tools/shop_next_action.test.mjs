@@ -76,7 +76,7 @@ test('lowStockCount > 0 → Reorder low stock', () => {
   assert.equal(result.job, 'Reorder low stock')
   assert.equal(result.path, '/shop/?tab=inventory')
   assert.equal(result.track, 'Inventory')
-  assert.ok(result.reason.startsWith('4 SKUs'), `reason: ${result.reason}`)
+  assert.ok(result.reason.startsWith('4 items'), `reason: ${result.reason}`)
 })
 
 test('inventoryReady=false → Set up stock locations', () => {

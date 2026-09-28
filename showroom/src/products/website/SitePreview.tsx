@@ -15,15 +15,8 @@ export function SitePreview({ device, page, pages, siteName, onSelectPage }: Sit
   const safeStandaloneCta = ctaHref.startsWith('https://') || ctaHref.startsWith('#') ? ctaHref : ''
 
   return (
-    <section className="website-preview-panel" aria-labelledby="site-preview-title">
-      <header className="website-preview-toolbar">
-        <div className="website-window-dots" aria-hidden="true"><i /><i /><i /></div>
-        <div>
-          <strong id="site-preview-title">Draft preview</strong>
-          <code>local.preview{page.slug || '/'}</code>
-        </div>
-        <span>{device}</span>
-      </header>
+    <section className="website-preview-panel" aria-label={siteName + ' page preview'}>
+
 
       <div className="website-preview-stage">
         <div className={'website-preview-frame is-' + device}>

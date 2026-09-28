@@ -1,8 +1,9 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
-import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { recordBehaviorSignal } from './behavior-trail'
+import { shopPlanGuideForTemplate } from './capability-tiers'
+import { emitOutcomeTelemetry } from '../analytics/outcome-telemetry'
 import { PageHeading, type RuntimeHealth } from './CoreShell'
 import {
   buildPlantGuidedShiftCloseOutcomeMetric,
@@ -11,12 +12,20 @@ import {
 } from './pilot-outcome'
 import { currentProductionShiftClose } from './production-workspace'
 import {
+  activeSetupProductContracts,
+  plantPackSaveAllowed,
   productContracts,
   managedTrialRequestUrl,
   readProductSetup,
   rememberProductSetup,
+  resolveSetupTemplateDoor,
+  resolveSetupVariantDoor,
   seedSetupForProduct,
+  setupDoorQueryAfterChoice,
+  setupVariantMatchesSource,
   templateFor,
+  type SetupDoorDimension,
+  type SetupProvisionDisposition,
   type SetupProductId,
   type SetupState,
 } from './product-setup'
@@ -36,11 +45,10 @@ import {
   managedOnboardingAccountCheckPending,
   managedShopOnboardingNotice,
   provisionLocalPlantWorkingSample,
-  provisionLocalShopBusinessTemplateSample,
-  provisionLocalShopIndustryPack,
-  provisionLocalShopWorkingSample,
+  readLocalShopBusinessTemplateId,
   readLocalShopIndustryPackId,
 } from './product-onboarding-runtime'
+import { plantBusinessTemplateForShopTemplateId } from '../products/plant/business-templates'
 import {
   shopBusinessTemplate,
   shopBusinessChoiceFromIndustryPack,
@@ -75,10 +83,10 @@ type ProductOnboardingPageProps = {
 
 const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: string; actionLabel: string; firstTaskPath: string }> = {
   commerce: {
-    outcome: 'Complete a sample sale',
-    detail: 'A realistic catalog and stock are ready. Tap an item, choose payment, then create the order.',
-    actionLabel: 'Create Shop and start selling',
-    firstTaskPath: '/shop/?tab=counter',
+    outcome: 'Add your first product',
+    detail: 'Enter your products, prices and opening stock, or import your catalog.',
+    actionLabel: 'Continue to catalog',
+    firstTaskPath: '/shop/?tab=inventory',
   },
   production: {
     outcome: 'Run a sample production job',
@@ -87,20 +95,57 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
     firstTaskPath: '/plant/?tab=production',
   },
   website: {
-    outcome: 'Preview a business website',
-    detail: 'A responsive homepage is ready. Check desktop and mobile, then edit the page.',
-    actionLabel: 'Create Website and preview it',
-    firstTaskPath: '/website/',
+    outcome: 'Prepare your business website',
+    detail: 'Add your business details, services and contact information to prepare your pages.',
+    actionLabel: 'Continue to website setup',
+    firstTaskPath: '/website/?workspace=1',
   },
   ecommerce: {
-    outcome: 'Open a working online store',
-    detail: 'A storefront and checkout sample are ready. Review the store, then send an order into Shop.',
-    actionLabel: 'Create Ecommerce and open the store',
-    firstTaskPath: '/ecommerce/',
+    outcome: 'Set up your online store',
+    detail: 'Connect your product catalog, set delivery details, and save your storefront.',
+    actionLabel: 'Continue to store setup',
+    firstTaskPath: '/ecommerce/?workspace=1',
   },
 }
 
+const onboardingFirstRunSteps: Record<SetupProductId, readonly { title: string; detail: string }[]> = {
+  commerce: [
+    { title: 'Pick your business type', detail: 'Choose the type of business you operate.' },
+    { title: 'Add your products or services', detail: 'Enter actual prices and opening stock, or import your catalog.' },
+    { title: 'Take one sale', detail: 'Use Cash, KBZPay, WavePay, AYA Pay, or MMQR at the counter.' },
+    { title: 'Reconcile payment and close day', detail: 'Orders, payment status, stock movement, and daily close stay tied together.' },
+  ],
+  production: [
+    { title: 'Pick your plant type', detail: 'Choose the closest production starter before creating anything.' },
+    { title: 'Load jobs, materials, quality, and equipment', detail: 'SuperMega prepares one realistic production day.' },
+    { title: 'Record one production event', detail: 'Capture output, scrap, issue notes, and owner evidence.' },
+    { title: 'Review risk and next action', detail: 'Use the issue, maintenance, and close views to decide what needs attention.' },
+  ],
+  website: [
+    { title: 'Name the business website', detail: 'Start with one clear homepage instead of a blank builder.' },
+    { title: 'Preview desktop and mobile', detail: 'Check what a customer sees before editing copy.' },
+    { title: 'Adjust sections and lead capture', detail: 'Keep only the useful pages, offers, proof, and contact path.' },
+    { title: 'Approve before publishing', detail: 'Publishing stays gated until the owner reviews evidence.' },
+  ],
+  ecommerce: [
+    { title: 'Name the storefront', detail: 'Start from a small product list that can be governed by Shop.' },
+    { title: 'Review products and fulfilment', detail: 'Check SKUs, pickup/delivery promise, and payment instructions.' },
+    { title: 'Receive customer orders', detail: 'Review incoming requests before confirming fulfillment.' },
+    { title: 'Send approved orders into Shop', detail: 'Inventory, payment, and support decisions stay connected.' },
+  ],
+}
+
 export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
+  if (!activeSetupProductContracts.some(contract => contract.id === product)) {
+    return <div className="workspace-screen">
+      <PageHeading eyebrow="Retained product" title="Plant is not available for new setup." copy="Existing records are unchanged. Open the retained workspace to continue existing work, or choose a current product." />
+      <div className="managed-login-actions"><Link className="core-button" to="/plant/">Open retained Plant workspace</Link><Link className="core-button primary" to="/?choose=1">Choose Shop, Ecommerce or Website</Link></div>
+    </div>
+  }
+  return <ActiveProductOnboardingPage key={product} product={product} />
+}
+
+function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const runtime = useOutletContext<RuntimeHealth>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -111,13 +156,20 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
   const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
-  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => {
+  const requestedPlantIndustryPackId = useMemo<PlantIndustryPackId | null>(() => {
     const requested = new URLSearchParams(location.search).get('pack')?.trim().toLowerCase()
-    return plantIndustryPacks.find((pack) => pack.id === requested)?.id
-      ?? readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage)
-  })
+    return plantIndustryPacks.find((pack) => pack.id === requested)?.id ?? null
+  }, [location.search])
+  const [savedPlantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+  const [hasSavedPlantSetup] = useState(() => typeof window !== 'undefined' && Boolean(readProductSetup(window.localStorage, 'production')))
+  const plantPackDoorSelection = resolveSetupVariantDoor(savedPlantIndustryPackId, requestedPlantIndustryPackId, hasSavedPlantSetup)
+  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => plantPackDoorSelection.activeId)
+  const [plantPackChangeSelected, setPlantPackChangeSelected] = useState(false)
   const [plantTypeOpen, setPlantTypeOpen] = useState(() => product === 'production')
   const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
+  const pendingRequestedPlantIndustryPack = product === 'production' && plantPackDoorSelection.choiceRequired && plantPackDoorSelection.requestedId
+    ? plantIndustryPack(plantPackDoorSelection.requestedId)
+    : null
   // One grouped picker, ported from the signup page so both doors ask the product's first
   // question the same way. A choice is either 'trade:<template>' or 'pack:<industry pack>';
   // the empty string keeps the standard sample on whatever pack this device already carries.
@@ -154,10 +206,14 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [businessTypeOpen, setBusinessTypeOpen] = useState(() => product === 'commerce')
 
   const onboardingProduct = productContracts[product]
-  const requestedWorkflowTemplate = product === 'commerce'
-    ? templateFor(product, '')
-    : templateFor(product, new URLSearchParams(location.search).get('template') ?? '')
+  const requestedTemplateId = product === 'commerce' ? null : new URLSearchParams(location.search).get('template')
+  const templateDoorSelection = resolveSetupTemplateDoor(product, setup, requestedTemplateId)
+  const requestedWorkflowTemplate = templateDoorSelection.requestedTemplate ?? templateFor(product, '')
+  const pendingRequestedWorkflowTemplate = product !== 'commerce' && templateDoorSelection.choiceRequired
+    ? templateDoorSelection.requestedTemplate
+    : null
   const selectedBusinessTemplate = product === 'commerce' && businessTemplateId ? shopBusinessTemplate(businessTemplateId) : null
+  const shopPlanGuide = selectedBusinessTemplate ? shopPlanGuideForTemplate(selectedBusinessTemplate.id) : null
   // Shop and Plant setup for a signed-in company account. Plant packs and generic Shop packs are
   // still device-only. A named Shop trade now has a separate reviewed server activation path;
   // onboarding routes there but does not claim the catalog exists before the owner approves it.
@@ -181,11 +237,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           ? { ...onboardingJourneys[product], ...MANAGED_ECOMMERCE_ONBOARDING_JOURNEY }
       : onboardingJourneys[product]
   const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
-  const onboardingTemplate = setup.product === product
-    ? templateFor(product, setup.templateId)
-    : product === 'commerce'
-      ? templateFor(product, selectedShopIndustryPack.workflowTemplateId)
-      : requestedWorkflowTemplate
+  const onboardingTemplate = product === 'commerce'
+    ? setup.product === product
+      ? templateFor(product, setup.templateId)
+      : templateFor(product, selectedShopIndustryPack.workflowTemplateId)
+    : templateDoorSelection.activeTemplate
   // The trade, or the plant type, she actually picked -- named the way each picker names it, so
   // the notice can carry her choice forward instead of dropping it.
   const managedShopBusinessTypeName = selectedBusinessTemplate?.name.en ?? selectedShopIndustryPack.name
@@ -203,7 +259,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         ? MANAGED_WEBSITE_ONBOARDING_INTRO
         : managedEcommerce
           ? MANAGED_ECOMMERCE_ONBOARDING_INTRO
-          : 'We will add realistic sample records now; replace them with your data whenever you are ready.'
+          : product === 'commerce' ? 'Name your business, then add your products and prices. Records are saved on this device.' : 'Prepare your business content to continue.'
   const managedHint = managedCommerce
     ? managedShopHint
     : managedProduction
@@ -213,9 +269,19 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         : managedEcommerce
           ? MANAGED_ECOMMERCE_ONBOARDING_HINT
           : null
+  const businessNamePlaceholder = product === 'commerce'
+    ? 'Example: Yangon Wellness Spa'
+    : product === 'production'
+      ? 'Example: Bago Food Production'
+      : product === 'website'
+        ? 'Example: Mandalay Clinic'
+        : 'Example: Yangon Home Store'
   const workspaceOwner = setup.owner.trim() || 'Business owner'
-  const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
-  const workspaceStarted = workflowReady && Boolean(setup.startedAt)
+  const workflowReady = setup.product === product
+    && Boolean(setup.workspace.trim())
+    && !pendingRequestedWorkflowTemplate
+    && !pendingRequestedPlantIndustryPack
+  const workspaceStarted = workflowReady && Boolean(setup.startedAt) && !(product === 'production' && plantPackChangeSelected)
   // A schedule that predates the current integrity contract is protected, so provisioning must
   // fail closed. The error used to be rendered as one sentence with no action, leaving a new owner
   // unable to finish setup and unable to discover the backup-and-reset controls that can recover
@@ -288,8 +354,64 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     })
   }
 
+  function clearSetupDoorDimension(resolvedDimension: SetupDoorDimension) {
+    const query = setupDoorQueryAfterChoice(
+      onboardingProduct.slug,
+      templateDoorSelection.requestedTemplate?.id,
+      requestedPlantIndustryPackId,
+      resolvedDimension,
+    )
+    navigate(`/settings/?${query}`, { replace: true })
+  }
+
+  function continueSavedTemplate() {
+    if (!pendingRequestedWorkflowTemplate) return
+    clearSetupDoorDimension('template')
+    setNotice(`Continuing the saved ${onboardingTemplate.name} setup. The requested ${pendingRequestedWorkflowTemplate.name} starting point was not applied.`)
+  }
+
+  function useRequestedTemplate() {
+    if (!pendingRequestedWorkflowTemplate) return
+    const requested = pendingRequestedWorkflowTemplate
+    setSetup((current) => current.product !== product ? current : {
+      ...current,
+      templateId: requested.id,
+      entryPoint: requested.entryPoints[0] ?? '',
+      startedAt: undefined,
+      savedAt: undefined,
+    })
+    clearSetupDoorDimension('template')
+    setNotice(`${requested.name} is selected for reviewed setup. Existing ${onboardingProduct.name} records were not overwritten; setup will run only after you submit this form.`)
+  }
+
+  function continueSavedPlantPack() {
+    if (!pendingRequestedPlantIndustryPack) return
+    setPlantIndustryPackId(savedPlantIndustryPackId)
+    setPlantPackChangeSelected(false)
+    clearSetupDoorDimension('variant')
+    setNotice(`Continuing the saved ${plantIndustryPack(savedPlantIndustryPackId).name} Plant type. The requested ${pendingRequestedPlantIndustryPack.name} pack was not applied.`)
+  }
+
+  function useRequestedPlantPack() {
+    if (!pendingRequestedPlantIndustryPack) return
+    const requested = pendingRequestedPlantIndustryPack
+    setPlantIndustryPackId(requested.id)
+    setPlantPackChangeSelected(true)
+    clearSetupDoorDimension('variant')
+    setNotice(`${requested.name} is selected for reviewed setup. Existing Plant records and the saved plant type were not changed; provisioning runs only after you submit this form.`)
+  }
+
+  function changePlantIndustryPack(id: PlantIndustryPackId) {
+    setPlantIndustryPackId(id)
+    setPlantPackChangeSelected(hasSavedPlantSetup && id !== savedPlantIndustryPackId)
+  }
+
   async function startGuidedWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack) {
+      setNotice('Choose the saved setup or the requested starting point before continuing.')
+      return
+    }
     if (accountCheckPending) {
       setNotice('Checking whether this workspace uses a company account.')
       return
@@ -309,57 +431,33 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       // Every provisioner below REPORTS what it did, and every report was thrown away. A no-op
       // then reached the owner stamped as a completed setup: the appointment book left on the old
       // industry, the catalog never installed, the workspace never written -- interface advanced.
-      let carriedOver = false
-      // `&& !managedIdentity` mirrors the ecommerce branch below, and the asymmetry between them
-      // WAS the bug: these provisioners write to window.localStorage, a store a managed Shop never
-      // reads, so for a signed-in owner they reported a trade template as installed while the
-      // company workspace stayed at version 0 and rendered 'managed-unprovisioned'. Measured in
-      // hq/research/MANAGED-TEMPLATE-PROVISIONING.md -- disposition 'installed', zero fetch calls.
-      // A named trade is routed to the reviewed server-backed catalog step below; a generic pack
-      // still goes to Shop's one-real-item boundary. Neither browser-local provisioner runs.
-      if (product === 'commerce' && !managedIdentity) {
-        // Returns the pack ACTUALLY in force. An existing appointment keeps its own pack, so the
-        // pack asked for is not always the pack installed, and the sample must follow the real one.
-        const schedule = provisionLocalShopIndustryPack(selectedShopIndustryPack.id)
-        const disposition = selectedBusinessTemplate
-          ? await provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)
-          : await provisionLocalShopWorkingSample(schedule.industryPackId, onboardingTemplate.id)
-        carriedOver = disposition === 'preserved'
-      }
-      // Deliberately NOT guarded, and the one place Plant is treated differently from Shop: this
-      // records which plant type she picked, and readPlantIndustryPackId reads it back to prefill
-      // the picker on her next visit. That is a device preference, not workspace data, so it is
-      // the right answer for a company account too -- and it is what makes "saved as your plant
-      // type" in managedPlantOnboardingNotice literally true rather than a second small lie.
-      if (product === 'production') {
-        savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
-      }
+      let plantProvisionDisposition: SetupProvisionDisposition | null = null
+      // Shop setup saves business preferences only. Catalog entry happens in Stock;
+      // never fabricate products, stock, appointments or sales from a business type.
       // The twin of the commerce guard above, and the same defect: mutateProductionWorkingSample
       // is window.localStorage, which a managed Plant never reads. Re-measured the same way before
       // this guard was added -- disposition 'installed', zero fetch calls, across all five plant
       // packs -- while the company workspace stayed at version 0 and ProductionPage rendered
       // 'managed-unprovisioned'. See managedPlantOnboardingNotice in product-onboarding-runtime.ts.
       if (product === 'production' && !managedIdentity) {
-        await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)
+        const linkedPlantTemplate = plantBusinessTemplateForShopTemplateId(readLocalShopBusinessTemplateId(window.localStorage))
+        if (!setupVariantMatchesSource(plantIndustryPackId, linkedPlantTemplate?.industryPackId)) {
+          const linkedPackName = plantIndustryPack(linkedPlantTemplate?.industryPackId ?? savedPlantIndustryPackId).name
+          setNotice(`The existing Shop sample links this device to ${linkedPackName} Plant. The requested ${selectedPlantIndustryPack.name} type was not provisioned or saved.`)
+          return
+        }
+        plantProvisionDisposition = await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)
+        if (!plantPackSaveAllowed(false, plantProvisionDisposition)) {
+          setNotice(`Existing Plant records were kept. The requested ${selectedPlantIndustryPack.name} type was not saved or applied because this workspace could not be replaced safely.`)
+          return
+        }
       }
-      if (product === 'website' && !managedIdentity) {
-        // Returns { ok, error } instead of throwing. Ignoring it sent the owner into a Website that
-        // was never prepared, and told them it was ready.
-        const activated = await activateLocalWebsiteWorkingSample({
-          templateId: onboardingTemplate.id as 'business-presence' | 'lead-generation' | 'catalog-showcase',
-          businessName: setup.workspace,
-          capturedAt: new Date().toISOString(),
-        })
-        if (!activated.ok) throw new Error(activated.error)
-      }
-      if (product === 'ecommerce' && !managedIdentity) {
-        const { activateLocalEcommerceWorkingSample } = await import('./local-client-import')
-        const activated = await activateLocalEcommerceWorkingSample({
-          templateId: onboardingTemplate.id as 'social-storefront' | 'pickup-preorder' | 'wholesale-request',
-          businessName: setup.workspace,
-          capturedAt: new Date().toISOString(),
-        })
-        if (!activated.ok) throw new Error(activated.error)
+      // Local preference follows only an installed/current sample. Managed Plant deliberately
+      // has no browser sample write; its explicit form submit saves the device-only choice before
+      // routing to the separate company-plan review, where nothing is written without confirmation.
+      if (product === 'production' && plantPackSaveAllowed(Boolean(managedIdentity), plantProvisionDisposition)) {
+        savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
+        setPlantPackChangeSelected(false)
       }
       const startedAt = new Date().toISOString()
       setSetup((current) => ({ ...current, product, owner: workspaceOwner, startedAt, savedAt: undefined }))
@@ -369,12 +467,17 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           ? buildShopGuidedSaleOutcomeMetric(actions, startedAt)
           : buildPlantGuidedShiftCloseOutcomeMetric(currentPlantShiftClose ? [currentPlantShiftClose] : [], startedAt)
         if (metric) {
-          startPilotOutcome(window.localStorage, {
-          product,
-          workspace: setup.workspace,
-          owner: workspaceOwner,
-          templateId: onboardingTemplate.id,
+          const checkpoint = startPilotOutcome(window.localStorage, {
+            product,
+            workspace: setup.workspace,
+            owner: workspaceOwner,
+            templateId: onboardingTemplate.id,
           }, metric, new Date(startedAt))
+          emitOutcomeTelemetry({
+            pilotProduct: product,
+            stage: 'workflow_started',
+            evidenceDigest: checkpoint.checkpointDigest,
+          })
         }
       }
       recordBehaviorSignal(window.localStorage, {
@@ -383,18 +486,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         route: onboardingJourney.firstTaskPath,
         detail: onboardingJourney.outcome,
       })
-      // 'preserved' means the catalog was NOT installed, because this device already carries real
-      // Shop data worth keeping. Say so plainly instead of dropping the owner into a workspace
-      // stocked by a previous business and calling it their new setup.
-      if (carriedOver) {
-        setNotice('Your existing Shop data was kept and nothing was overwritten. Open Shop to carry on, or reset this device first to load the starter catalog for this trade.')
-        return
-      }
-      // Same shape as the 'preserved' case above, and for the same reason: nothing was installed,
-      // so say so here rather than letting a navigation stand in for a claim. The workspace is now
-      // started, which relabels the button to "Open my Shop" / "Open my Plant", so each notice's
-      // "Open Shop" / "Open Plant" is the button she is already looking at -- routed onward, not
-      // stuck.
       if (managedCommerce) {
         if (selectedBusinessTemplate) {
           navigate(shopBusinessTemplateManagedCatalogPath(selectedBusinessTemplate.id))
@@ -460,14 +551,50 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
           <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>{accountCheckPending ? 'Checking whether this is a company workspace before preparing anything.' : managedIntro}</p></div>
           <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
-          <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
+          <ol aria-label={`${onboardingProduct.name} first-run path`} className="product-onboarding-path">
+            {onboardingFirstRunSteps[product].map((step, index) => (
+              <li key={step.title}>
+                <span aria-hidden="true">{index + 1}</span>
+                <p><strong>{step.title}</strong>{step.detail}</p>
+              </li>
+            ))}
+          </ol>
+          {pendingRequestedWorkflowTemplate ? (
+            <section aria-label="Template starting-point choice" className="product-onboarding-proof">
+              <div>
+                <span className="core-eyebrow">Saved setup protected</span>
+                <h3>Choose which starting point to continue</h3>
+                <p>This device has {onboardingTemplate.name} saved. The public door requested {pendingRequestedWorkflowTemplate.name}. Nothing has changed yet.</p>
+              </div>
+              <div className="actions">
+                <button className="core-button" onClick={continueSavedTemplate} type="button">Continue saved {onboardingTemplate.name}</button>
+                <button className="core-button primary" onClick={useRequestedTemplate} type="button">Use {pendingRequestedWorkflowTemplate.name} for reviewed setup</button>
+              </div>
+              <p>Both choices preserve existing product records. Loading different sample data still requires the reviewed setup action below and may fail closed when existing records cannot be replaced safely.</p>
+            </section>
+          ) : null}
+          {pendingRequestedPlantIndustryPack ? (
+            <section aria-label="Plant type choice" className="product-onboarding-proof">
+              <div>
+                <span className="core-eyebrow">Saved Plant type protected</span>
+                <h3>Choose which Plant type to continue</h3>
+                <p>This device has {plantIndustryPack(savedPlantIndustryPackId).name} saved. The public door requested {pendingRequestedPlantIndustryPack.name}. Nothing has changed yet.</p>
+              </div>
+              <div className="actions">
+                <button className="core-button" onClick={continueSavedPlantPack} type="button">Continue saved {plantIndustryPack(savedPlantIndustryPackId).name}</button>
+                <button className="core-button primary" onClick={useRequestedPlantPack} type="button">Use {pendingRequestedPlantIndustryPack.name} for reviewed setup</button>
+              </div>
+              <p>No Plant record or saved plant type changes until the requested pack is explicitly selected and the setup form is submitted.</p>
+            </section>
+          ) : null}
+          <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={businessNamePlaceholder} required value={setup.workspace} /></label>
           {product === 'commerce' ? (
             <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setBusinessTypeOpen(event.currentTarget.open)} open={businessTypeOpen}>
               {/* Named after the pack actually selected. This said "Standard retail sample" for
                   every pack, so a spa or school owner -- the ones with no trade template to pick,
                   who are the whole reason this fallback exists -- was told their starter data was
-                  retail. Lowercasing keeps the retail wording identical to before. */}
-              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : `Standard ${selectedShopIndustryPack.name.toLowerCase()} sample`}</small></summary>
+                  retail. */}
+              <summary><span>Business type</span><small>{selectedBusinessTemplate ? selectedBusinessTemplate.name.en : selectedShopIndustryPack.name}</small></summary>
               {/* The signup page's grouped picker, ported so both doors speak one vocabulary.
                   Trades cover shops that sell goods; a spa, gym or school has no trade template,
                   so the service packs are listed directly -- without them, that owner's only
@@ -475,7 +602,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                   client never opens, and they onboarded onto a retail catalog. */}
               <label className="demo-pack-select">What kind of business?
                 <select onChange={(event) => changeBusinessChoice(event.target.value)} value={businessChoiceId}>
-                  <option value="">Standard sample (current industry pack)</option>
+                  <option value="">Choose a business type</option>
                   <optgroup label="Shops and trades">
                     {shopBusinessTemplates.map((template) => <option key={template.id} value={`trade:${template.id}`}>{template.name.en} · {template.name.my}</option>)}
                   </optgroup>
@@ -484,9 +611,19 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                   </optgroup>
                 </select>
                 <small>{selectedBusinessTemplate
-                  ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.`
+                  ? managedCommerce
+                    ? `${selectedBusinessTemplate.description} Review ${selectedBusinessTemplate.catalog.length} suggested items before adding company records.`
+                    : `${selectedBusinessTemplate.description} Add your own products, prices and opening stock.`
                   : `${selectedShopIndustryPack.firstWorkflow} ${selectedShopIndustryPack.description}`}</small>
               </label>
+              {shopPlanGuide ? <section aria-label={`${selectedBusinessTemplate?.name.en} plan guide`} className="shop-plan-guide">
+                <header><span className="core-eyebrow">Plan guide</span><strong>{shopPlanGuide.coreFocus}</strong><small>{shopPlanGuide.boundary}</small></header>
+                <div>
+                  <article><b>Core · included</b><p>Run the complete day on one device.</p><ul>{shopPlanGuide.core.map((item) => <li key={item.id}>{item.label}</li>)}</ul></article>
+                  <article><b>Premium · less admin</b><p>Discuss help with routine work.</p><ul>{shopPlanGuide.premium.map((item) => <li key={item.id}>{item.label} — {item.availabilityLabel}</li>)}</ul></article>
+                  <article><b>Managed · team scale</b><p>Discuss shared records and team access.</p><ul>{shopPlanGuide.managed.map((item) => <li key={item.id}>{item.label} — {item.availabilityLabel}</li>)}</ul></article>
+                </div>
+              </section> : null}
             </details>
           ) : null}
           {/* Plant shipped five industry packs and reached one. plantIndustryPackId was read from
@@ -498,7 +635,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
             <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setPlantTypeOpen(event.currentTarget.open)} open={plantTypeOpen}>
               <summary><span>Plant type</span><small>{selectedPlantIndustryPack.name} starter data</small></summary>
               <label className="demo-pack-select">Type of production
-                <select onChange={(event) => setPlantIndustryPackId(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>
+                <select disabled={Boolean(pendingRequestedPlantIndustryPack)} onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>
                   {plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
                 </select>
                 <small>{selectedPlantIndustryPack.firstWorkflow}. {selectedPlantIndustryPack.description}</small>
@@ -510,7 +647,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 so a screen reader landing on the disabled control hears "Enter a business name
                 to continue" instead of an unexplained dead end. */}
             <button aria-describedby="product-onboarding-submit-hint" className="core-button primary" disabled={!workflowReady || workspaceBusy || accountCheckPending} type="submit">{accountCheckPending ? 'Checking company account...' : workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
-            <small id="product-onboarding-submit-hint">{accountCheckPending ? 'Setup stays paused until account access is known.' : managedHint && workflowReady ? managedHint : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
+            <small id="product-onboarding-submit-hint">{pendingRequestedWorkflowTemplate || pendingRequestedPlantIndustryPack ? 'Choose the saved setup or requested starting point first.' : accountCheckPending ? 'Setup stays paused until account access is known.' : managedHint && workflowReady ? managedHint : workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Saves your setup, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>

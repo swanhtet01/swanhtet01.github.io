@@ -12,7 +12,7 @@ const PRODUCT_CONNECTIONS: readonly ManagedProductConnection[] = [
     id: 'online-orders',
     products: ['commerce', 'ecommerce'],
     label: 'Online orders to Shop',
-    detail: 'Ecommerce uses the company catalog, stock, customer, and order flow in Shop.',
+    detail: 'Ecommerce uses your Shop catalog and sends customer requests to Shop for review.',
   },
   {
     id: 'demand-to-production',
@@ -30,7 +30,7 @@ const PRODUCT_CONNECTIONS: readonly ManagedProductConnection[] = [
     id: 'website-storefront',
     products: ['website', 'ecommerce'],
     label: 'Website to Ecommerce',
-    detail: 'Approved Website content and catalog presentation stay aligned with the online storefront.',
+    detail: 'Website presents your business. Ecommerce lets customers browse products and send order requests.',
   },
 ]
 

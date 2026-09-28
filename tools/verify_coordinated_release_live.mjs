@@ -9,6 +9,14 @@ function assert(condition, code, detail = {}) {
   if (!condition) throw new Error(`${code}:${JSON.stringify(detail)}`)
 }
 
+function releaseBaseUrl(value) {
+  let url
+  try { url = new URL(value) } catch { throw new Error('invalid_release_origin') }
+  assert(url.protocol === 'https:' && !url.username && !url.password
+    && url.pathname === '/' && !url.search && !url.hash, 'invalid_release_origin')
+  return url.origin
+}
+
 function releaseIdentity(release) {
   return Object.fromEntries(identityFields.map((field) => [field, String(release?.[field] || '').trim()]))
 }
@@ -95,8 +103,8 @@ if (process.argv.includes('--self-test')) {
   process.exit(failed.length === 0 ? 0 : 1)
 }
 
-const appBaseUrl = String(process.env.APP_BASE_URL || 'https://app.supermega.dev').replace(/\/$/, '')
-const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || manifest.release.productionDomain).replace(/\/$/, '')
+const appBaseUrl = releaseBaseUrl(process.env.APP_BASE_URL || 'https://app.supermega.dev')
+const publicBaseUrl = releaseBaseUrl(process.env.PUBLIC_BASE_URL || manifest.release.productionDomain)
 const expectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
 const pairOnly = process.env.VERIFY_RELEASE_PAIR_ONLY === '1'
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
@@ -108,6 +116,7 @@ const retryDelayMs = Number(process.env.RELEASE_BARRIER_RETRY_MS || 3000)
 const timeoutMs = Number(process.env.RELEASE_BARRIER_TIMEOUT_MS || 15000)
 const cliEnv = vercelToken ? { ...process.env, VERCEL_TOKEN: vercelToken } : process.env
 
+assert(Number.isInteger(timeoutMs) && timeoutMs >= 1000 && timeoutMs <= 60000, 'invalid_release_timeout')
 assert(appBaseUrl.startsWith('https://'), 'app_release_url_required')
 assert(publicBaseUrl.startsWith('https://'), 'public_release_url_required')
 if (protectedPreview) assert(vercelToken, 'protected_preview_token_required')
@@ -134,6 +143,8 @@ function readProtectedRelease(baseUrl, projectId) {
       encoding: 'utf8',
       env: { ...cliEnv, VERCEL_PROJECT_ID: projectId },
       maxBuffer: 2 * 1024 * 1024,
+      timeout: timeoutMs,
+      killSignal: 'SIGKILL',
       stdio: ['ignore', 'pipe', 'pipe'],
     }))
   } catch (error) {
@@ -144,7 +155,7 @@ function readProtectedRelease(baseUrl, projectId) {
 async function readPublicRelease(baseUrl) {
   const response = await fetch(new URL('/__release.json', `${baseUrl}/`), {
     cache: 'no-store',
-    redirect: 'follow',
+    redirect: 'error',
     headers: {
       accept: 'application/json',
       'cache-control': 'no-cache',

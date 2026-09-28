@@ -727,6 +727,24 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     if (!managedIdentity) {
       if (eventType === 'commerce.workspace.initialized') throw new Error('Browser demo Shop is already initialized.')
       const current = snapshotRef.current
+      // A retry may reconcile only the exact reviewed command retained after an
+      // unconfirmed local write. Ordinary writes still use the readiness gates below.
+      if (current.mode === 'local' && current.writeReady && syncStatusRef.current.status === 'pending') {
+        const retried = transition(current.state)
+        if (!retried) throw new Error('The reviewed Shop change no longer matches. Reload to review the current records.')
+        const candidateRaw = JSON.stringify(validateCommerceState(retried))
+        const recovered = await recoverLocalCommerceSyncOutbox(undefined, undefined, { commandId, eventType, evidence, candidateRaw })
+        const latest = loadCommerceWorkspace()
+        if (recovered.status !== 'ready' || latest.error || JSON.stringify(latest.state) !== candidateRaw) {
+          updateSyncStatus(recovered)
+          throw new Error('Shop recovery could not confirm this change. Reload to review the current records.')
+        }
+        const accepted = { state: latest.state, mode: 'local' as const, workspaceId: '', version: null, error: '', writeReady: commerceWorkspaceCanWrite() }
+        snapshotRef.current = accepted
+        setLocalSnapshot(accepted)
+        updateSyncStatus(recovered)
+        return
+      }
       if (current.mode !== 'local' || current.error || !current.writeReady) throw new Error(current.error || 'Browser demo Shop is not ready for writes.')
       if (syncStatusRef.current.status !== 'ready') throw new Error(syncStatusRef.current.message || 'Shop recovery is not ready for another change.')
       const next = transition(current.state)

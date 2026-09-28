@@ -1,3 +1,4 @@
+import { validateServicePackages, type ServicePackageDefinition, type ServicePackageEntitlement } from './shop-service-packages.ts'
 export const SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v4' as const
 export const SHOP_SERVICE_SCHEDULE_STORAGE_KEY = 'supermega.shop.service-schedule.v1'
 const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v1' as const
@@ -82,7 +83,8 @@ export type ShopServiceBooking = {
   contact: string
   appointmentUpdates: ShopServiceAppointmentUpdates
   serviceId: string
-  resourceId: string
+  resourceId?: string
+  resourceIds?: string[]
   startsAt: string
   endsAt: string
   status: ShopServiceBookingStatus
@@ -93,7 +95,7 @@ export type ShopServiceBooking = {
 
 export type ShopServiceScheduleEvent = {
   revision: number
-  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'package_redeemed' | 'client_retention_set' | 'client_exported' | 'client_anonymized'
+  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'booking_resources_assigned' | 'package_definition_saved' | 'package_allocated' | 'package_redeemed' | 'client_retention_set' | 'client_exported' | 'client_anonymized'
   subjectId: string
   actor: string
   reason: string
@@ -109,6 +111,8 @@ export type ShopServiceSchedule = {
   privacyPolicy: ShopServicePrivacyPolicy
   clients: ShopServiceClient[]
   bookings: ShopServiceBooking[]
+  packageDefinitions?: ServicePackageDefinition[]
+  packageLedger?: ServicePackageEntitlement[]
   events: ShopServiceScheduleEvent[]
 }
 
@@ -279,7 +283,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
 
 export function shopIndustryPack(id: ShopIndustryPackId) {
   const pack = shopIndustryPacks.find((candidate) => candidate.id === id)
-  if (!pack) throw new Error('Choose a supported Shop industry pack.')
+  if (!pack) domainError('Choose a supported Shop industry pack.')
   return pack
 }
 
@@ -313,25 +317,25 @@ export function shopScheduleVocabulary(id: string): ShopScheduleVocabulary {
 
 function boundedText(value: string, label: string, maximum = 160) {
   const normalized = value.trim()
-  if (!normalized) throw new Error(`${label} is required.`)
-  if (normalized.length > maximum) throw new Error(`${label} must be ${maximum} characters or fewer.`)
+  if (!normalized) domainError(`${label} is required.`)
+  if (normalized.length > maximum) domainError(`${label} must be ${maximum} characters or fewer.`)
   if (Array.from(normalized).some((character) => {
     const code = character.codePointAt(0) as number
     return code <= 31 || code === 127
-  })) throw new Error(`${label} contains unsupported control characters.`)
+  })) domainError(`${label} contains unsupported control characters.`)
   return normalized
 }
 
 function positiveWholeNumber(value: number, label: string, maximum: number) {
   if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
-    throw new Error(`${label} must be a whole number from 1 to ${maximum.toLocaleString()}.`)
+    domainError(`${label} must be a whole number from 1 to ${maximum.toLocaleString()}.`)
   }
   return value
 }
 
 function validIso(value: string, label: string) {
   const timestamp = Date.parse(value)
-  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value) throw new Error(`${label} must be an exact ISO timestamp.`)
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value) domainError(`${label} must be an exact ISO timestamp.`)
   return timestamp
 }
 
@@ -362,38 +366,50 @@ export function createShopServiceSchedule(industryPackId: ShopIndustryPackId = '
   }
 }
 
+export function shopBookingResourceIds(booking: { resourceId?: string; resourceIds?: string[] }): string[] {
+  if (booking.resourceIds !== undefined) {
+    if (booking.resourceId !== undefined || !Array.isArray(booking.resourceIds)
+      || booking.resourceIds.length < 1 || booking.resourceIds.length > 10
+      || booking.resourceIds.some((id) => typeof id !== 'string' || !id.trim())
+      || new Set(booking.resourceIds).size !== booking.resourceIds.length) domainError('Choose distinct booking resources.')
+    return booking.resourceIds
+  }
+  if (typeof booking.resourceId !== 'string' || !booking.resourceId.trim()) domainError('Choose a booking resource.')
+  return [booking.resourceId]
+}
+
 export function validateShopServiceSchedule(state: ShopServiceSchedule) {
-  if (!state || state.schema !== SHOP_SERVICE_SCHEDULE_SCHEMA) throw new Error('Unsupported Shop service schedule.')
+  if (!state || state.schema !== SHOP_SERVICE_SCHEDULE_SCHEMA) domainError('Unsupported Shop service schedule.')
   shopIndustryPack(state.industryPackId)
-  if (!Number.isSafeInteger(state.revision) || state.revision < 0) throw new Error('Invalid Shop service schedule revision.')
-  if (!Array.isArray(state.services) || !Array.isArray(state.resources) || !state.privacyPolicy || typeof state.privacyPolicy !== 'object' || Array.isArray(state.privacyPolicy) || !Array.isArray(state.clients) || !Array.isArray(state.bookings) || !Array.isArray(state.events)) throw new Error('Incomplete Shop service schedule.')
+  if (!Number.isSafeInteger(state.revision) || state.revision < 0) domainError('Invalid Shop service schedule revision.')
+  if (!Array.isArray(state.services) || !Array.isArray(state.resources) || !state.privacyPolicy || typeof state.privacyPolicy !== 'object' || Array.isArray(state.privacyPolicy) || !Array.isArray(state.clients) || !Array.isArray(state.bookings) || !Array.isArray(state.events)) domainError('Incomplete Shop service schedule.')
   const serviceIds = new Set<string>()
   for (const service of state.services) {
     const id = boundedText(service.id, 'Service ID', 80)
-    if (serviceIds.has(id)) throw new Error(`Duplicate service ${id}.`)
+    if (serviceIds.has(id)) domainError(`Duplicate service ${id}.`)
     serviceIds.add(id)
     boundedText(service.name, 'Service name')
     if (service.nameMy !== undefined) boundedText(service.nameMy, 'Service Myanmar name')
     positiveWholeNumber(service.durationMinutes, 'Service duration', 24 * 60)
     positiveWholeNumber(service.priceMmk, 'Service price', Number.MAX_SAFE_INTEGER)
-    if (typeof service.active !== 'boolean') throw new Error(`Service ${id} has an invalid active state.`)
+    if (typeof service.active !== 'boolean') domainError(`Service ${id} has an invalid active state.`)
   }
   const resourceIds = new Set<string>()
   for (const resource of state.resources) {
     const id = boundedText(resource.id, 'Resource ID', 80)
-    if (resourceIds.has(id)) throw new Error(`Duplicate resource ${id}.`)
+    if (resourceIds.has(id)) domainError(`Duplicate resource ${id}.`)
     resourceIds.add(id)
     boundedText(resource.name, 'Resource name')
     if (resource.nameMy !== undefined) boundedText(resource.nameMy, 'Resource Myanmar name')
-    if (!['staff', 'room', 'equipment'].includes(resource.kind)) throw new Error(`Resource ${id} has an invalid kind.`)
-    if (typeof resource.active !== 'boolean') throw new Error(`Resource ${id} has an invalid active state.`)
+    if (!['staff', 'room', 'equipment'].includes(resource.kind)) domainError(`Resource ${id} has an invalid kind.`)
+    if (typeof resource.active !== 'boolean') domainError(`Resource ${id} has an invalid active state.`)
   }
   if (state.privacyPolicy.clientRetentionDays === null) {
-    if (state.privacyPolicy.updatedAt !== undefined || state.privacyPolicy.updatedBy !== undefined) throw new Error('An unset client retention policy cannot claim approval evidence.')
+    if (state.privacyPolicy.updatedAt !== undefined || state.privacyPolicy.updatedBy !== undefined) domainError('An unset client retention policy cannot claim approval evidence.')
   } else {
     positiveWholeNumber(state.privacyPolicy.clientRetentionDays, 'Client retention days', 3650)
-    if (state.privacyPolicy.clientRetentionDays < 30) throw new Error('Client retention must be at least 30 days.')
-    if (!state.privacyPolicy.updatedAt || !state.privacyPolicy.updatedBy) throw new Error('Client retention approval evidence is incomplete.')
+    if (state.privacyPolicy.clientRetentionDays < 30) domainError('Client retention must be at least 30 days.')
+    if (!state.privacyPolicy.updatedAt || !state.privacyPolicy.updatedBy) domainError('Client retention approval evidence is incomplete.')
     validIso(state.privacyPolicy.updatedAt, 'Client retention update time')
     boundedText(state.privacyPolicy.updatedBy, 'Client retention approver', 120)
   }
@@ -402,25 +418,25 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   for (const client of state.clients) {
     const id = boundedText(client.id, 'Client ID', 80)
     const contact = boundedText(client.contact, 'Client contact').toLocaleLowerCase()
-    if (clientIds.has(id) || !/^client-(?:legacy-)?\d{4,10}$/.test(id)) throw new Error(`Duplicate or invalid client ${id}.`)
-    if (clientContacts.has(contact)) throw new Error('Each Spa contact must belong to one client record.')
+    if (clientIds.has(id) || !/^client-(?:legacy-)?\d{4,10}$/.test(id)) domainError(`Duplicate or invalid client ${id}.`)
+    if (clientContacts.has(contact)) domainError('Each Spa contact must belong to one client record.')
     clientIds.add(id)
     clientContacts.add(contact)
     boundedText(client.name, 'Client name')
-    if (!['allowed', 'declined', 'not_recorded'].includes(client.appointmentUpdates)) throw new Error(`Client ${id} appointment-update choice is invalid.`)
+    if (!['allowed', 'declined', 'not_recorded'].includes(client.appointmentUpdates)) domainError(`Client ${id} appointment-update choice is invalid.`)
     validIso(client.createdAt, 'Client creation time')
     validIso(client.updatedAt, 'Client update time')
     if (client.appointmentUpdates === 'allowed') {
-      if (!client.consentRecordedAt) throw new Error(`Client ${id} consent evidence is missing.`)
+      if (!client.consentRecordedAt) domainError(`Client ${id} consent evidence is missing.`)
       validIso(client.consentRecordedAt, 'Client consent time')
     } else if (client.consentRecordedAt !== undefined) {
-      throw new Error(`Client ${id} consent evidence is invalid.`)
+      domainError(`Client ${id} consent evidence is invalid.`)
     }
     const hasAnonymizedAt = client.anonymizedAt !== undefined
     const hasAnonymizedBy = client.anonymizedBy !== undefined
-    if (hasAnonymizedAt !== hasAnonymizedBy) throw new Error(`Client ${id} anonymization evidence is incomplete.`)
+    if (hasAnonymizedAt !== hasAnonymizedBy) domainError(`Client ${id} anonymization evidence is incomplete.`)
     if (hasAnonymizedAt) {
-      if (client.name !== `Former client ${id}` || client.contact !== `anonymized:${id}` || client.appointmentUpdates !== 'not_recorded' || client.updatedAt !== client.anonymizedAt) throw new Error(`Client ${id} anonymization is invalid.`)
+      if (client.name !== `Former client ${id}` || client.contact !== `anonymized:${id}` || client.appointmentUpdates !== 'not_recorded' || client.updatedAt !== client.anonymizedAt) domainError(`Client ${id} anonymization is invalid.`)
       validIso(client.anonymizedAt as string, 'Client anonymization time')
       boundedText(client.anonymizedBy as string, 'Client anonymization actor', 120)
     }
@@ -429,21 +445,28 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   const bookingIds = new Set<string>()
   for (const booking of state.bookings) {
     const id = boundedText(booking.id, 'Booking ID', 80)
-    if (bookingIds.has(id)) throw new Error(`Duplicate booking ${id}.`)
+    if (bookingIds.has(id)) domainError(`Duplicate booking ${id}.`)
     bookingIds.add(id)
     const client = clientById.get(booking.clientId)
-    if (!client) throw new Error(`Booking ${id} references an unknown client.`)
+    if (!client) domainError(`Booking ${id} references an unknown client.`)
     boundedText(booking.customerName, 'Customer name')
     boundedText(booking.contact, 'Customer contact')
-    if (!['allowed', 'declined', 'not_recorded'].includes(booking.appointmentUpdates)) throw new Error(`Booking ${id} appointment-update choice is invalid.`)
-    if (booking.customerName !== client.name || booking.contact !== client.contact || booking.appointmentUpdates !== client.appointmentUpdates) throw new Error(`Booking ${id} client details are stale.`)
-    if (!serviceIds.has(booking.serviceId)) throw new Error(`Booking ${id} references an unknown service.`)
-    if (!resourceIds.has(booking.resourceId)) throw new Error(`Booking ${id} references an unknown resource.`)
+    if (!['allowed', 'declined', 'not_recorded'].includes(booking.appointmentUpdates)) domainError(`Booking ${id} appointment-update choice is invalid.`)
+    if (booking.customerName !== client.name || booking.contact !== client.contact || booking.appointmentUpdates !== client.appointmentUpdates) domainError(`Booking ${id} client details are stale.`)
+    if (!serviceIds.has(booking.serviceId)) domainError(`Booking ${id} references an unknown service.`)
+    const assignedIds = shopBookingResourceIds(booking)
+    if (assignedIds.some((resourceId) => !resourceIds.has(resourceId)
+      || !state.resources.find((resource) => resource.id === resourceId)?.active)) domainError(`Booking ${id} references an unknown or inactive resource.`)
+    if (booking.resourceIds && state.industryPackId === 'spa') {
+      const kinds = assignedIds.map((resourceId) => state.resources.find((resource) => resource.id === resourceId)?.kind)
+      if (kinds.length < 2 || kinds[0] !== 'staff' || kinds[1] !== 'room'
+        || kinds.slice(2).some((kind) => kind !== 'equipment')) domainError('Choose staff and a room, then optional equipment.')
+    }
     const startsAt = validIso(booking.startsAt, 'Booking start')
     const endsAt = validIso(booking.endsAt, 'Booking end')
-    if (endsAt <= startsAt) throw new Error(`Booking ${id} must end after it starts.`)
-    if (!['held', 'confirmed', 'checked_in', 'completed', 'cancelled'].includes(booking.status)) throw new Error(`Booking ${id} has an invalid status.`)
-    if (booking.note.length > 300) throw new Error(`Booking ${id} note is too long.`)
+    if (endsAt <= startsAt) domainError(`Booking ${id} must end after it starts.`)
+    if (!['held', 'confirmed', 'checked_in', 'completed', 'cancelled'].includes(booking.status)) domainError(`Booking ${id} has an invalid status.`)
+    if (booking.note.length > 300) domainError(`Booking ${id} note is too long.`)
     validIso(booking.createdAt, 'Booking creation time')
     validIso(booking.updatedAt, 'Booking update time')
   }
@@ -452,24 +475,27 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
     for (let right = left + 1; right < blocking.length; right += 1) {
       const first = blocking[left]
       const second = blocking[right]
-      if (first.resourceId === second.resourceId
+      if (shopBookingResourceIds(first).some((id) => shopBookingResourceIds(second).includes(id))
         && Date.parse(first.startsAt) < Date.parse(second.endsAt)
-        && Date.parse(second.startsAt) < Date.parse(first.endsAt)) throw new Error(`Bookings ${first.id} and ${second.id} overlap.`)
+        && Date.parse(second.startsAt) < Date.parse(first.endsAt)) domainError(`Bookings ${first.id} and ${second.id} overlap.`)
     }
   }
-  if (state.events.length !== state.revision) throw new Error('Shop service schedule evidence is incomplete.')
+  if (state.events.length !== state.revision) domainError('Shop service schedule evidence is incomplete.')
   state.events.forEach((event, index) => {
-    if (event.revision !== index + 1) throw new Error('Shop service schedule evidence revisions are not continuous.')
-    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'package_redeemed', 'client_retention_set', 'client_exported', 'client_anonymized'].includes(event.type)) throw new Error('Shop service schedule evidence type is unsupported.')
+    if (event.revision !== index + 1) domainError('Shop service schedule evidence revisions are not continuous.')
+    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'booking_resources_assigned', 'package_definition_saved', 'package_allocated', 'package_redeemed', 'client_retention_set', 'client_exported', 'client_anonymized'].includes(event.type)) domainError('Shop service schedule evidence type is unsupported.')
     boundedText(event.subjectId, 'Evidence subject', 80)
-    if (event.type === 'package_redeemed' && !state.bookings.some((booking) => booking.id === event.subjectId && booking.status === 'completed')) throw new Error('Package redemption must reference a completed booking.')
+    if (event.type === 'package_definition_saved' && !state.packageDefinitions?.some(d => d.id === event.subjectId)) domainError('Unknown package definition.')
+    if (event.type === 'package_allocated' && !state.packageLedger?.some(e => e.id === event.subjectId)) domainError('Unknown package entitlement.')
+    if (event.type === 'package_redeemed' && !state.packageLedger?.some(entry => entry.id === event.subjectId) && !(!state.packageDefinitions?.length && !state.packageLedger?.length && state.bookings.some((booking) => booking.id === event.subjectId && booking.status === 'completed'))) domainError('Package redemption must reference its entitlement or a legacy completed booking.')
     boundedText(event.actor, 'Evidence actor', 120)
     boundedText(event.reason, 'Evidence reason', 240)
     validIso(event.happenedAt, 'Evidence time')
-    if (event.type === 'client_anonymized' && !clientIds.has(event.subjectId)) throw new Error('Client anonymization evidence references an unknown client.')
-    if (event.type === 'client_exported' && !/^sha256:[a-f0-9]{64}$/.test(event.subjectId)) throw new Error('Client export evidence digest is invalid.')
-    if (event.type === 'client_retention_set' && !/^retention-(?:[3-9]\d|[1-9]\d{2,3})-days$/.test(event.subjectId)) throw new Error('Client retention evidence is invalid.')
+    if (event.type === 'client_anonymized' && !clientIds.has(event.subjectId)) domainError('Client anonymization evidence references an unknown client.')
+    if (event.type === 'client_exported' && !/^sha256:[a-f0-9]{64}$/.test(event.subjectId)) domainError('Client export evidence digest is invalid.')
+    if (event.type === 'client_retention_set' && !/^retention-(?:[3-9]\d|[1-9]\d{2,3})-days$/.test(event.subjectId)) domainError('Client retention evidence is invalid.')
   })
+  validateServicePackages(state)
   return state
 }
 
@@ -497,7 +523,7 @@ export function registerShopService(state: ShopServiceSchedule, input: Omit<Shop
 export function registerShopServiceResource(state: ShopServiceSchedule, input: Pick<ShopServiceResource, 'name' | 'kind' | 'nameMy'>, proof: ShopServiceScheduleProof) {
   validateShopServiceSchedule(state)
   const evidence = proofRecord(proof)
-  if (!['staff', 'room', 'equipment'].includes(input.kind)) throw new Error('Choose staff, room, or equipment.')
+  if (!['staff', 'room', 'equipment'].includes(input.kind)) domainError('Choose staff, room, or equipment.')
   const revision = state.revision + 1
   const resource: ShopServiceResource = {
     id: identifier('resource', revision),
@@ -515,31 +541,33 @@ export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
   contact: string
   appointmentUpdates: Exclude<ShopServiceAppointmentUpdates, 'not_recorded'>
   serviceId: string
-  resourceId: string
+  resourceId?: string
+  resourceIds?: string[]
   startsAt: string
   note?: string
 }, proof: ShopServiceScheduleProof) {
   validateShopServiceSchedule(state)
   const evidence = proofRecord(proof)
   const service = state.services.find((candidate) => candidate.id === input.serviceId && candidate.active)
-  if (!service) throw new Error('Choose an active service.')
-  const resource = state.resources.find((candidate) => candidate.id === input.resourceId && candidate.active)
-  if (!resource) throw new Error('Choose active staff, room, or equipment.')
+  if (!service) domainError('Choose an active service.')
+  const assignedIds = shopBookingResourceIds(input.resourceIds ? { resourceIds: input.resourceIds } : input)
+  const resources = assignedIds.map((id) => state.resources.find((candidate) => candidate.id === id && candidate.active))
+  if (resources.some((resource) => !resource)) domainError('Choose active staff, room, or equipment.')
   const startsAt = validIso(input.startsAt, 'Booking start')
   const endsAt = startsAt + service.durationMinutes * 60_000
-  const conflict = state.bookings.find((booking) => booking.resourceId === resource.id
+  const conflict = state.bookings.find((booking) => shopBookingResourceIds(booking).some((id) => assignedIds.includes(id))
     && booking.status !== 'cancelled'
     && startsAt < Date.parse(booking.endsAt)
     && Date.parse(booking.startsAt) < endsAt)
-  if (conflict) throw new Error(`${resource.name} is already booked during that time.`)
+  if (conflict) domainError('A selected resource is already booked during that time.')
   const revision = state.revision + 1
-  if (!['allowed', 'declined'].includes(input.appointmentUpdates)) throw new Error('Choose whether the customer allows appointment updates.')
+  if (!['allowed', 'declined'].includes(input.appointmentUpdates)) domainError('Choose whether the customer allows appointment updates.')
   const customerName = boundedText(input.customerName, 'Customer name')
   const contact = boundedText(input.contact, 'Customer contact')
   const normalizedContact = contact.toLocaleLowerCase()
   const existingClient = state.clients.find((client) => client.contact.toLocaleLowerCase() === normalizedContact)
   if (existingClient && existingClient.name.toLocaleLowerCase() !== customerName.toLocaleLowerCase()) {
-    throw new Error(`This contact already belongs to ${existingClient.name}. Review the client before booking.`)
+    domainError(`This contact already belongs to ${existingClient.name}. Review the client before booking.`)
   }
   const client: ShopServiceClient = existingClient
     ? {
@@ -566,7 +594,7 @@ export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
     contact: client.contact,
     appointmentUpdates: client.appointmentUpdates,
     serviceId: service.id,
-    resourceId: resource.id,
+    ...(input.resourceIds ? { resourceIds: [...assignedIds] } : { resourceId: assignedIds[0] }),
     startsAt: new Date(startsAt).toISOString(),
     endsAt: new Date(endsAt).toISOString(),
     status: 'held',
@@ -584,12 +612,24 @@ export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
   return validateShopServiceSchedule(next)
 }
 
+export function assignLegacyBookingResources(state: ShopServiceSchedule, bookingId: string, resourceIds: string[], proof: ShopServiceScheduleProof) {
+  validateShopServiceSchedule(state)
+  const evidence = proofRecord(proof)
+  const booking = state.bookings.find(b => b.id === bookingId)
+  if (!booking?.resourceId || booking.resourceIds) domainError('Choose an older appointment.')
+  if (Date.parse(evidence.happenedAt) < Date.parse(booking.updatedAt)) domainError('Assignment cannot predate the appointment update.')
+  const replacement = { ...booking, resourceIds: [...resourceIds], updatedAt: evidence.happenedAt }
+  delete replacement.resourceId
+  return validateShopServiceSchedule(appendEvent({ ...state, bookings: state.bookings.map(b => b.id === bookingId ? replacement : b) },
+    { type: 'booking_resources_assigned', subjectId: bookingId, ...evidence }))
+}
+
 export function advanceShopServiceBooking(state: ShopServiceSchedule, bookingId: string, proof: ShopServiceScheduleProof) {
   validateShopServiceSchedule(state)
   const evidence = proofRecord(proof)
   const booking = state.bookings.find((candidate) => candidate.id === bookingId)
-  if (!booking) throw new Error('Booking not found.')
-  if (booking.status === 'completed' || booking.status === 'cancelled') throw new Error('This booking has no next operating step.')
+  if (!booking) domainError('Booking not found.')
+  if (booking.status === 'completed' || booking.status === 'cancelled') domainError('This booking has no next operating step.')
   const status = bookingTransitions[booking.status]
   const next = appendEvent({
     ...state,
@@ -602,8 +642,8 @@ export function cancelShopServiceBooking(state: ShopServiceSchedule, bookingId: 
   validateShopServiceSchedule(state)
   const evidence = proofRecord(proof)
   const booking = state.bookings.find((candidate) => candidate.id === bookingId)
-  if (!booking) throw new Error('Booking not found.')
-  if (booking.status === 'completed' || booking.status === 'cancelled') throw new Error('This booking cannot be cancelled.')
+  if (!booking) domainError('Booking not found.')
+  if (booking.status === 'completed' || booking.status === 'cancelled') domainError('This booking cannot be cancelled.')
   const next = appendEvent({
     ...state,
     bookings: state.bookings.map((candidate) => candidate.id === bookingId ? { ...candidate, status: 'cancelled' as const, updatedAt: evidence.happenedAt } : candidate),
@@ -636,8 +676,8 @@ export function setShopServiceClientRetention(state: ShopServiceSchedule, client
   validateShopServiceSchedule(state)
   const evidence = proofRecord(proof)
   positiveWholeNumber(clientRetentionDays, 'Client retention days', 3650)
-  if (clientRetentionDays < 30) throw new Error('Client retention must be at least 30 days.')
-  if (state.privacyPolicy.clientRetentionDays === clientRetentionDays) throw new Error('Choose a different client retention period.')
+  if (clientRetentionDays < 30) domainError('Client retention must be at least 30 days.')
+  if (state.privacyPolicy.clientRetentionDays === clientRetentionDays) domainError('Choose a different client retention period.')
   return validateShopServiceSchedule(appendEvent({
     ...state,
     privacyPolicy: { clientRetentionDays, updatedAt: evidence.happenedAt, updatedBy: evidence.actor },
@@ -673,7 +713,7 @@ export function shopServiceClientCsv(state: ShopServiceSchedule) {
 export function recordShopServiceClientExport(state: ShopServiceSchedule, digest: string, proof: ShopServiceScheduleProof) {
   validateShopServiceSchedule(state)
   const evidence = proofRecord(proof)
-  if (!/^sha256:[a-f0-9]{64}$/.test(digest)) throw new Error('Client export digest is invalid.')
+  if (!/^sha256:[a-f0-9]{64}$/.test(digest)) domainError('Client export digest is invalid.')
   const count = shopServiceClientExportRows(state).length
   return validateShopServiceSchedule(appendEvent(state, {
     type: 'client_exported',
@@ -717,7 +757,7 @@ export function anonymizeShopServiceClient(state: ShopServiceSchedule, clientId:
   validateShopServiceSchedule(state)
   const evidence = proofRecord(proof)
   const readiness = shopServiceClientAnonymizationReadiness(state, clientId, settledSourceRecordIds, new Date(evidence.happenedAt))
-  if (!readiness.allowed) throw new Error(readiness.reason)
+  if (!readiness.allowed) domainError(readiness.reason)
   const anonymousName = `Former client ${clientId}`
   const anonymousContact = `anonymized:${clientId}`
   const clients = state.clients.map((client) => client.id === clientId ? {
@@ -775,14 +815,14 @@ export function readShopServiceSchedule(value: string | null) {
     if (v2.schema === LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V3) return validateShopServiceSchedule({ ...v2, schema: SHOP_SERVICE_SCHEDULE_SCHEMA, privacyPolicy: { clientRetentionDays: null } } as unknown as ShopServiceSchedule)
     return validateShopServiceSchedule(v2 as unknown as ShopServiceSchedule)
   } catch {
-    throw new Error('Saved appointments are unreadable. Export or clear the local evidence before continuing.')
+    domainError('Saved appointments are unreadable. Export or clear the local evidence before continuing.')
   }
 }
 
 export function provisionEmptyShopServiceSchedule(state: ShopServiceSchedule, industryPackId: ShopIndustryPackId) {
   validateShopServiceSchedule(state)
   if (state.bookings.length || state.events.length || state.revision !== 0) {
-    throw new Error('Existing appointment evidence was preserved. Reset that local demo before replacing its industry pack.')
+    domainError('Existing appointment evidence was preserved. Reset that local demo before replacing its industry pack.')
   }
   return createShopServiceSchedule(industryPackId)
 }
@@ -1029,7 +1069,7 @@ export function isGuidedSampleShopSchedule(state: ShopServiceSchedule) {
 
 export function createShopServiceScheduleDemo(industryPackId: ShopIndustryPackId, planningDay: string): ShopServiceSchedule {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(planningDay) || !Number.isFinite(Date.parse(`${planningDay}T00:00:00.000Z`))) {
-    throw new Error('Planning day must be an exact YYYY-MM-DD date.')
+    domainError('Planning day must be an exact YYYY-MM-DD date.')
   }
   const pack = shopIndustryPack(industryPackId)
   const dayStart = Date.parse(`${planningDay}T00:00:00.000Z`)
@@ -1059,3 +1099,5 @@ export function createShopServiceScheduleDemo(industryPackId: ShopIndustryPackId
   }
   return validateShopServiceSchedule(state)
 }
+
+function domainError(message: string): never { throw new Error(message) }

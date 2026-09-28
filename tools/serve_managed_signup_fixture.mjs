@@ -1,0 +1,135 @@
+// Local human QA only; never a release, provider, identity or email-delivery proof.
+import { createServer } from 'node:http'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import assert from 'node:assert/strict'
+
+function fixtureHref(raw, origin) {
+  try {
+    const url = new URL(raw, origin)
+    return url.origin === origin && !url.username && !url.password ? raw : '/fixture/external-link'
+  } catch { return '/fixture/external-link' }
+}
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const rawArgs = process.argv.slice(2)
+const buildOnly = rawArgs.includes('--build-only')
+const managedEntry = rawArgs.includes('--managed-entry')
+const reviewProduct = rawArgs.includes('--website-review') ? 'website' : rawArgs.includes('--ecommerce-review') ? 'ecommerce' : null
+if (rawArgs.includes('--website-review') && rawArgs.includes('--ecommerce-review')) throw Error('one_review_product_required')
+const args = rawArgs.filter(arg => !['--build-only', '--managed-entry', '--website-review', '--ecommerce-review'].includes(arg))
+if (args.length === 1 && args[0] === '--self-test') {
+  const origin = 'http://127.0.0.1:4194'
+  for (const value of ['https://supermega.dev/terms/v1/', 'https://supermega.dev/contact/?product=shop', '//example.invalid', 'javascript:void(0)', 'data:text/plain,test', 'http://localhost:4194/', 'http://127.0.0.1:4195/']) assert.equal(fixtureHref(value, origin), '/fixture/external-link')
+  for (const value of ['/', '/account/recovery?product=shop', '#main', origin + '/fixture/external-link']) assert.equal(fixtureHref(value, origin), value)
+  console.log(JSON.stringify({ ok: true, checks: 11, contract: 'supermega.signup-fixture-navigation.v1' }))
+  process.exit(0)
+}
+if (args.length !== 2 || args[0] !== '--expected-head' || !/^[0-9a-f]{40}$/.test(args[1])) throw Error('exact_expected_head_required')
+const git = (...argv) => execFileSync('git', argv, { cwd: root, encoding: 'utf8', windowsHide: true }).trim()
+const head = git('rev-parse', 'HEAD')
+if (head !== args[1] || git('status', '--porcelain')) throw Error('clean_exact_source_required')
+const require = createRequire(resolve(root, 'showroom/package.json'))
+const { build } = await import(pathToFileURL(require.resolve('esbuild')).href)
+const policy = { status: 'ready', authentication: {
+  self_serve_signup_open: true, supabase_user_tokens_ready: true,
+  anonymous_users_allowed: false, client_asserted_roles_allowed: false,
+  self_serve_signup_terms_version: 'v1', self_serve_signup_terms_url: 'https://supermega.dev/terms/v1/',
+} }
+const result = await build({
+  absWorkingDir: root, bundle: true, write: false, format: 'esm', platform: 'browser', jsx: 'automatic',
+  outdir: 'fixture-memory', minify: false, logLevel: 'error',
+  define: { 'import.meta.env': JSON.stringify({
+    VITE_SUPABASE_URL: 'https://auth.example.invalid',
+    VITE_SUPABASE_PUBLISHABLE_KEY: ['sb', 'publishable', 'synthetic-unit-test-only'].join('_'),
+  }), 'process.env.NODE_ENV': '"development"' },
+  stdin: { resolveDir: resolve(root, 'showroom/src/core'), loader: 'tsx', contents: `
+    import React, { useLayoutEffect } from 'react'; import { createRoot } from 'react-dom/client';
+    import { MemoryRouter, Routes, Route, Outlet, useLocation } from 'react-router';
+    import { ManagedLoginPage } from './ManagedLoginPage.tsx';
+    import { ManagedAccountPage } from './ManagedAccountPage.tsx';
+    import { readManagedSignupPolicy } from './managed-signup-policy.ts';
+    import './core-app.css';
+    const health = ${JSON.stringify(policy)};
+    ${fixtureHref.toString()}
+    // Rewrite destinations, not just clicks: keyboard, middle-click and new-tab
+    // actions must all stay local. Product source/terms URLs are not changed.
+    const isolateLinks = () => {
+      for (const link of document.querySelectorAll('a[href]')) {
+        const original = link.getAttribute('href');
+        const safeHref = fixtureHref(original, window.location.origin);
+        const safe = ${buildOnly} && safeHref === '/fixture/external-link' ? './external-link.html' : safeHref;
+        if (safe !== original) { link.setAttribute('href', safe); link.removeAttribute('target'); }
+      }
+    };
+    new MutationObserver(isolateLinks).observe(document.documentElement, {subtree:true,childList:true,attributes:true,attributeFilter:['href']});
+    const counter = document.getElementById('fixture-counts');
+    const counts = { authRequests: 0, healthReads: 0, blockedRequests: 0, errors: 0 };
+    const show = () => { counter.textContent = Object.entries(counts).map(([key,value]) => key + ': ' + value).join(' · ') }; show();
+    window.addEventListener('fixture-auth-request', () => { counts.authRequests++; show() });
+    window.addEventListener('fixture-recovery-request', event => { document.getElementById('fixture-recovery').textContent = 'Synthetic redirect: ' + event.detail; });
+    window.addEventListener('error', () => { counts.errors++; show() });
+    window.addEventListener('unhandledrejection', () => { counts.errors++; show() });
+    window.fetch = async (url, init = {}) => {
+      if (url === '/api/health' && (init.method ?? 'GET') === 'GET') {
+        counts.healthReads++; show(); return new Response(JSON.stringify(health), { headers: { 'content-type': 'application/json' } });
+      }
+      counts.blockedRequests++; show(); throw Error('fixture_network_denied');
+    };
+    function Frame() { const route = useLocation(); useLayoutEffect(() => { window.history.replaceState(null, '', window.location.pathname + route.search); }, [route.search]); return <main className="core-main"><div className="core-route-content"><Outlet context={{status:${JSON.stringify(managedEntry ? 'enterprise' : 'demo')}, authReady:${managedEntry}, signupPolicy:readManagedSignupPolicy(health)}} /></div></main> }
+    createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={[${JSON.stringify(reviewProduct ? '/login?product=' + reviewProduct + '&review=11111111-1111-4111-8111-111111111111' : '/login?product=shop')}]}>
+      <Routes><Route element={<Frame/>}><Route path='/login' element={<ManagedLoginPage/>}/>
+      <Route path='/account/recovery' element={<ManagedAccountPage/>}/></Route></Routes>
+    </MemoryRouter>);
+  ` },
+  plugins: [{ name: 'local-only-auth-fixture', setup(builder) {
+    builder.onResolve({ filter: /^@supabase\/auth-js$/ }, () => ({ path: 'provider', namespace: 'qa-auth' }))
+    builder.onLoad({ filter: /.*/, namespace: 'qa-auth' }, () => ({ contents: `
+      export class AuthClient {
+        async getSession() { return { data: { session: null }, error: null } }
+        async signUp(input) {
+          if (input.email !== 'owner@example.invalid') throw Error('synthetic_email_only');
+          window.dispatchEvent(new Event('fixture-auth-request'));
+          return { data: { user: null, session: null }, error: null };
+        }
+        async resend(input) { return this.signUp(input) }
+        async resetPasswordForEmail(email, options) {
+          if (email !== 'owner@example.invalid') throw Error('synthetic_email_only');
+          const url = new URL(options.redirectTo);
+          if (url.origin !== window.location.origin || url.pathname !== '/account/setup' || url.searchParams.get('mode') !== 'recovery') throw Error('invalid_synthetic_redirect');
+          window.dispatchEvent(new Event('fixture-auth-request'));
+          window.dispatchEvent(new CustomEvent('fixture-recovery-request', {detail:options.redirectTo}));
+          return { data: {}, error: null };
+        }
+      }` }))
+  } }],
+})
+const assets = new Map(result.outputFiles.map((file) => ['/' + file.path.split(/[\\/]/).at(-1), file.contents]))
+const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SuperMega synthetic signup QA</title><link rel="stylesheet" href="/stdin.css"><body><aside>LOCAL SYNTHETIC QA — no real account or email. Source ${head.slice(0, 8)}.</aside><output id="fixture-counts"></output><p id="fixture-recovery"></p><div id="root"></div><script type="module" src="/stdin.js"></script></body></html>`
+if (buildOnly) {
+  const out = resolve(root, 'showroom/dist/__qa-managed-account')
+  mkdirSync(out, { recursive: true })
+  for (const [name, bytes] of assets) writeFileSync(resolve(out, name.slice(1)), bytes)
+  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'">`
+  writeFileSync(resolve(out, 'index.html'), html.replace('<title>', csp + '<title>').replace('href="/stdin.css"', 'href="./stdin.css"').replace('src="/stdin.js"', 'src="./stdin.js"'))
+  writeFileSync(resolve(out, 'external-link.html'), '<!doctype html><meta charset="utf-8"><h1>External link kept local</h1><p>Synthetic QA only. No account, email or setup request.</p>')
+  console.log(JSON.stringify({ mode: 'synthetic_build_only', head, path: out, serverStarted: false }))
+  process.exit(0)
+}
+const server = createServer((request, response) => {
+  if (request.headers.host !== '127.0.0.1:4194' || request.method !== 'GET') { response.writeHead(403); response.end(); return }
+  response.setHeader('cache-control', 'no-store')
+  response.setHeader('content-security-policy', "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; font-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'")
+  response.setHeader('referrer-policy', 'no-referrer')
+  response.setHeader('x-content-type-options', 'nosniff')
+  const path = request.url
+  const asset = assets.get(path)
+  if (path === '/') { response.setHeader('content-type', 'text/html; charset=utf-8'); response.end(html) }
+  else if (path === '/fixture/external-link') { response.setHeader('content-type', 'text/html; charset=utf-8'); response.end('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic link boundary</title><h1>External link kept local</h1><p>No external site was opened. This fixture does not publish or approve account terms, or send a setup request.</p></html>') }
+  else if (asset) { response.setHeader('content-type', path.endsWith('.css') ? 'text/css' : 'text/javascript'); response.end(asset) }
+  else { response.writeHead(404); response.end() }
+})
+server.listen(4194, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'synthetic_only', head, url: 'http://127.0.0.1:4194/', externalRequestsAllowed: false })))

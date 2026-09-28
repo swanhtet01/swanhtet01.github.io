@@ -3,6 +3,7 @@
 // directly under node for its runtime checks, where an extensionless specifier does not resolve.
 // Vite tolerates either, so the omission only shows in CI -- see the identical note atop
 // local-merchandising-import.ts.
+import { parseCounterTickets } from './shop-parked-tickets.ts'
 import {
   clientDemoPresets,
   clientImportTemplate,
@@ -278,27 +279,27 @@ export const MANAGED_PLANT_ONBOARDING_JOURNEY = {
 }
 
 export const MANAGED_WEBSITE_ONBOARDING_HINT =
-  'Opens the company Website starter for review. No browser sample is copied into the company account.'
+  'Opens the company Sites starter for review. No browser sample is copied into the company account.'
 
 export const MANAGED_WEBSITE_ONBOARDING_INTRO =
-  'Your company Website is server-backed. Name this workspace, then replace the starter text with approved business content.'
+  'Your company Sites is server-backed. Name this workspace, then replace the starter text with approved business content.'
 
 export const MANAGED_WEBSITE_ONBOARDING_JOURNEY = {
   outcome: 'Draft your real homepage',
-  detail: 'Website opens on the company starter. Replace its example text, preview mobile and desktop, then save the reviewed content.',
-  actionLabel: 'Open Website and edit the homepage',
+  detail: 'Sites opens on the company starter. Replace its example text, preview mobile and desktop, then save the reviewed content.',
+  actionLabel: 'Open Sites and edit the homepage',
 }
 
 export const MANAGED_ECOMMERCE_ONBOARDING_HINT =
-  'Opens Ecommerce to review the company storefront. No sample orders are created.'
+  'Opens Commerce to review the company storefront. No sample orders are created.'
 
 export const MANAGED_ECOMMERCE_ONBOARDING_INTRO =
   'Your company account holds real order records only. Name this workspace, then review the storefront before taking orders.'
 
 export const MANAGED_ECOMMERCE_ONBOARDING_JOURNEY = {
   outcome: 'Review your online store',
-  detail: 'Ecommerce opens on company storefront setup. Review catalog source, fulfilment, payment, and Shop handoff before taking orders.',
-  actionLabel: 'Open Ecommerce and review the store',
+  detail: 'Commerce opens on company storefront setup. Review catalog source, fulfilment, payment, and Shop handoff before taking orders.',
+  actionLabel: 'Open Commerce and review the store',
 }
 
 export function managedOnboardingAccountCheckPending(
@@ -404,7 +405,13 @@ export async function provisionLocalShopWorkingSample(industryPackId: ShopIndust
   return disposition
 }
 
-export async function provisionLocalShopBusinessTemplateSample(businessTemplateId: ShopBusinessTemplateId) {
+export async function provisionLocalShopBusinessTemplateSample(
+  businessTemplateId: ShopBusinessTemplateId,
+): Promise<'installed' | 'current' | 'preserved'> {
+  // A trade link is allowed to replace an untouched guided sample, never a sale the operator
+  // is already ringing up. The cart is stored separately from the Commerce workspace, so the
+  // catalog guard cannot see it; check it before staging any replacement and fail closed.
+  if (localShopCounterDraftHasLines()) return 'preserved'
   const template = shopBusinessTemplate(businessTemplateId)
   const preview = await createClientImportPreview(
     shopBusinessTemplateCatalogCsv(template.id),
@@ -464,6 +471,27 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
 }
 
 const SHOP_COUNTER_DRAFT_STORAGE_KEY = 'supermega.shop.counter_draft.v1'
+
+function localShopCounterDraftHasLines() {
+  const raw = window.localStorage.getItem(SHOP_COUNTER_DRAFT_STORAGE_KEY)
+  if (!raw) return false
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return true
+    if ('schema' in parsed) {
+      const tickets = parseCounterTickets(raw)
+      return tickets.parked.length > 0 || Object.keys(tickets.cart).length > 0
+    }
+    const cart = (parsed as { cart?: unknown }).cart
+    if (!cart || typeof cart !== 'object' || Array.isArray(cart)) return true
+    return Object.entries(cart).some(([sku, quantity]) => Boolean(sku)
+      && Number.isSafeInteger(quantity)
+      && (quantity as number) > 0)
+  } catch {
+    // Unknown draft data may still be the only copy of a sale. Keep it for explicit recovery.
+    return true
+  }
+}
 
 function clearInstalledSampleCounterDraft(disposition: 'installed' | 'current' | 'preserved') {
   // A newly installed catalog is a new till context. Keeping the previous draft can mix an

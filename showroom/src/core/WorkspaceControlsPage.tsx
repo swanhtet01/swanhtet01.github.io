@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext, useSearchParams } from 'react-router'
 
-import { getSessionEvents } from '../analytics/metrics-collector'
+import { getRecordedEvents, LOCAL_METRICS_MAX_EVENTS, projectLocalActivityLifecycle } from '../analytics/metrics-collector'
 
 import {
   LOCAL_WORKSPACE_BACKUP_MAX_BYTES,
@@ -45,12 +45,12 @@ import { projectPlantEquipmentMaintenanceSummary } from './plant-equipment-maint
 import { projectWebsiteLeadSummary } from './website-lead-summary'
 import { readWebsiteLeadLedger } from '../products/website/website-leads'
 import { projectCustomerJourneySummary } from './customer-journey-summary'
-import { projectCeoOperatingBrief } from './ceo-operating-brief'
-import type { EcommercePipelineSummary } from './ecommerce-pipeline-summary'
 import { projectEcommerceStaleRequestQueue } from './ecommerce-request-age-summary'
 import type { EcommerceOrderRequestV2 } from '../products/ecommerce/ecommerce-buying-lifecycle.ts'
 
 const ECOMMERCE_BUYING_LOCAL_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'
+const CeoOperatingBriefView = lazy(() => import('./WorkspaceEvidenceViews').then((module) => ({ default: module.CeoOperatingBriefView })))
+const REPORT_FALLBACK = <div className="workspace-screen settings-screen"><p className="form-notice">Loading local report…</p></div>
 
 // Same raw-localStorage read EcommercePipelineView below uses: readEcommerceBuyingState's
 // validation is async, and every other view on this page reads its workspace state
@@ -67,47 +67,6 @@ function readEcommercePendingRequests(): EcommerceOrderRequestV2[] {
   } catch {
     return []
   }
-}
-
-function CeoOperatingBriefView() {
-  const commerce = useMemo(() => loadCommerceWorkspace().state, [])
-  const production = useMemo(() => loadProductionWorkspace().state, [])
-  const ledger = useMemo(() => (typeof window !== 'undefined' ? readWebsiteLeadLedger(window.localStorage) : { schema: 'supermega.website.lead-ledger.v1' as const, revision: 0, leads: [] }), [])
-  const shopRevenue = useMemo(() => projectShopRevenueSummary(commerce), [commerce])
-  const plantOee = useMemo(() => projectPlantOeeSummary(production, new Date().toISOString()), [production])
-  const websiteLeads = useMemo(() => projectWebsiteLeadSummary(ledger), [ledger])
-  const crmJourney = useMemo(() => projectCustomerJourneySummary(commerce), [commerce])
-  const ecommerce = useMemo((): EcommercePipelineSummary => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return { totalRequests: p?.requests?.length ?? 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: p?.returnIntents?.length ?? 0, pendingCancellationIntents: p?.cancellationIntents?.length ?? 0 } } catch { return { totalRequests: 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: 0, pendingCancellationIntents: 0 } } }, [])
-  const brief = useMemo(() => projectCeoOperatingBrief(shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney, new Date().toISOString()), [shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney])
-  return (
-    <div className="workspace-screen settings-screen">
-      <PageHeading copy="Cross-product operating summary. Read-only." eyebrow="CEO brief" title="Operating brief" />
-      <div className="settings-control-stack">
-        {brief.alerts.length > 0 && <section className="core-panel">
-          <div><span className="core-eyebrow">Alerts</span></div>
-          <div className="readiness-list">{brief.alerts.map((a, i) => <span key={i}><small>{a.product}</small><strong>{a.message}</strong></span>)}</div>
-        </section>}
-        <section className="core-panel"><div><span className="core-eyebrow">Shop</span></div>
-          <div className="readiness-list">
-            <span><small>Revenue</small><strong>{brief.shopRevenue.totalRevenue.toLocaleString()}</strong></span>
-            <span><small>Orders</small><strong>{brief.shopRevenue.orderCount}</strong></span>
-            <span><small>Avg order</small><strong>{brief.shopRevenue.averageOrderValue.toLocaleString()}</strong></span>
-          </div></section>
-        <section className="core-panel"><div><span className="core-eyebrow">Plant</span></div>
-          <div className="readiness-list">
-            <span><small>Jobs</small><strong>{brief.plantOee.totalJobs}</strong></span>
-            <span><small>Quality</small><strong>{brief.plantOee.totalJobs > 0 ? `${brief.plantOee.qualityRate}%` : '—'}</strong></span>
-            <span><small>Overdue</small><strong>{brief.plantOee.overdueJobs}</strong></span>
-          </div></section>
-        <section className="core-panel"><div><span className="core-eyebrow">CRM</span></div>
-          <div className="readiness-list">
-            <span><small>Customers</small><strong>{brief.crmJourney.uniqueCustomers}</strong></span>
-            <span><small>Repeat</small><strong>{brief.crmJourney.repeatCustomers}</strong></span>
-            <span><small>Website leads</small><strong>{brief.websiteLeads.totalLeads}</strong></span>
-          </div></section>
-      </div>
-    </div>
-  )
 }
 
 function EcommercePipelineView() {
@@ -430,16 +389,31 @@ function ShopRevenueView() {
 }
 
 function LocalMetricsView() {
-  const events = getSessionEvents()
+  const summary = projectLocalActivityLifecycle(getRecordedEvents())
+  const productLabels = { shop: 'Shop', plant: 'Plant', website: 'Website', ecommerce: 'Ecommerce' } as const
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading copy="Session activity. Nothing leaves this device." eyebrow="Analytics" title="Session metrics" />
+      <PageHeading copy="Bounded activity saved on this device across sessions." eyebrow="Analytics" title="Device activity" />
       <div className="settings-control-stack">
-        {events.length === 0
-          ? <p className="form-notice">No events yet. Open a product to begin.</p>
-          : <table><thead><tr><th>Product</th><th>Action</th></tr></thead><tbody>
-              {events.map((e, i) => <tr key={i}><td>{e.product}</td><td>{e.action}</td></tr>)}
-            </tbody></table>}
+        <section className="core-panel system-boundary-panel">
+          <div><span className="core-eyebrow">Evidence boundary</span><h2>Local activity — not observed production telemetry</h2><p>These privacy-minimal counters may span earlier sessions on this device. They contain product, capability, action, and timestamp only.</p></div>
+          <div className="readiness-list">
+            <span><small>Product events</small><strong>{summary.productEventCount}</strong></span>
+            <span><small>HQ and navigation events</small><strong>{summary.hqEventCount}</strong></span>
+            <span><small>Stored events</small><strong>{summary.eventCount} / {LOCAL_METRICS_MAX_EVENTS}</strong></span>
+            <span><small>External telemetry</small><strong>Not observed</strong></span>
+            <span><small>Commercial proof</small><strong>Not proven</strong></span>
+          </div>
+          <p className="authority-note">Activity counts do not prove a customer, pilot, production operation, commercial result, or provider ingestion. The oldest events may be dropped when the device record reaches its {LOCAL_METRICS_MAX_EVENTS}-event limit.</p>
+        </section>
+        {summary.products.map((product) => <section className="core-panel" key={product.product}>
+          <div><span className="core-eyebrow">{productLabels[product.product]}</span></div>
+          <div className="readiness-list">
+            <span><small>Local events</small><strong>{product.eventCount}</strong></span>
+            <span><small>Latest local activity</small><strong>{product.latestAt ? new Date(product.latestAt).toLocaleString() : 'No local activity'}</strong></span>
+          </div>
+        </section>)}
+        {summary.atCapacity ? <p className="form-notice">The local activity record is at its bounded capacity. New events keep replacing the oldest events on this device.</p> : null}
       </div>
     </div>
   )
@@ -556,9 +530,12 @@ export function WorkspaceControlsPage() {
   const [searchParams] = useSearchParams()
   const [currentBackup, setCurrentBackup] = useState<LocalWorkspaceBackup | null>(collectCurrentBackup)
   const [restorePoint, setRestorePoint] = useState<LocalWorkspaceBackup | null>(loadRestorePoint)
+  const [reviewedRestorePoint, setReviewedRestorePoint] = useState<LocalWorkspaceBackup | null>(null)
   const [restorePointLabel, setRestorePointLabel] = useState(restorePoint ? 'Saved on this device' : '')
   const [notice, setNotice] = useState('')
   const [restoreBusy, setRestoreBusy] = useState(false)
+  const localWorkspaceOperation = useRef<'restore' | 'reset' | null>(null)
+  const restoreLoadSequence = useRef(0)
   const [resetArmed, setResetArmed] = useState(false)
 
   const [resetBusy, setResetBusy] = useState(false)
@@ -575,9 +552,8 @@ export function WorkspaceControlsPage() {
   const recordCount = currentBackup ? Object.keys(currentBackup.records).length : backupRefusal?.records ?? 0
   const statusRows: Array<readonly [string, string]> = [
     ['Mode', runtime.status === 'enterprise' ? 'Company data' : runtime.status === 'checking' ? 'Checking' : 'Demo on this device'],
-    ['Writes', runtime.writesReady ? 'Ready' : 'Locked'],
+    ['Company changes', runtime.writesReady ? 'Available' : 'Unavailable'],
     ['Local records', currentBackup ? String(recordCount) : `${recordCount} · no backup file possible`],
-    ['Next action', runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Open a product and continue working.'],
   ]
   if (searchParams.get('view') === 'local-metrics') return <LocalMetricsView />
   if (searchParams.get('view') === 'cross-product') return <CrossProductView />
@@ -588,9 +564,12 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'customer-journey') return <CustomerJourneyView />
   if (searchParams.get('view') === 'ecommerce-pipeline') return <EcommercePipelineView />
   if (searchParams.get('view') === 'ecommerce-stale-requests') return <EcommerceStaleRequestsView />
-  if (searchParams.get('view') === 'ceo-brief') return <CeoOperatingBriefView />
+  if (searchParams.get('view') === 'ceo-brief') return <Suspense fallback={REPORT_FALLBACK}><CeoOperatingBriefView backupReady={Boolean(currentBackup)} runtime={runtime} /></Suspense>
 
   function saveRestorePoint() {
+    if (localWorkspaceOperation.current) return
+    restoreLoadSequence.current += 1
+    setReviewedRestorePoint(null)
     const backup = collectCurrentBackup()
     if (!backup) {
       setNotice('This workspace is too large to save safely. Download smaller product exports before resetting this device.')
@@ -608,10 +587,17 @@ export function WorkspaceControlsPage() {
   }
 
   async function loadBackupFile(file: File | null) {
-    if (!file) return
+    if (!file || localWorkspaceOperation.current) return
+    const sequence = ++restoreLoadSequence.current
+    setReviewedRestorePoint(null)
+    setRestorePoint(null)
+    setRestorePointLabel('')
     try {
+      window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       if (file.size < 1 || file.size > LOCAL_WORKSPACE_BACKUP_MAX_BYTES) throw new Error('Choose a SuperMega backup smaller than 5 MB.')
-      const parsed: unknown = JSON.parse(await file.text())
+      const text = await file.text()
+      if (sequence !== restoreLoadSequence.current) return
+      const parsed: unknown = JSON.parse(text)
       const backup = restoreLocalWorkspaceBackup(parsed) ?? restoreLocalWorkspaceBackupFromEvidence(parsed)
       if (!backup) throw new Error('This is not a valid SuperMega workspace backup or version 24 evidence file.')
       window.sessionStorage.setItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY, JSON.stringify(backup))
@@ -619,18 +605,23 @@ export function WorkspaceControlsPage() {
       setRestorePointLabel(file.name)
       setNotice(`${Object.keys(backup.records).length} records verified. Restore only when you are ready to replace this browser workspace.`)
     } catch (error) {
+      if (sequence !== restoreLoadSequence.current) return
       setNotice(error instanceof Error ? error.message : 'The workspace backup could not be loaded.')
     }
   }
 
   async function restoreWorkspace() {
-    if (!restorePoint || restoreBusy) return
+    if (!restorePoint || reviewedRestorePoint !== restorePoint || localWorkspaceOperation.current) return
+    localWorkspaceOperation.current = 'restore'
+    restoreLoadSequence.current += 1
     setRestoreBusy(true)
+    setReviewedRestorePoint(null)
     try {
       await applyLocalWorkspaceBackup(window.localStorage, restorePoint)
       window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
       window.location.assign('/')
     } catch (error) {
+      localWorkspaceOperation.current = null
       setNotice(error instanceof Error ? error.message : 'The previous workspace could not be restored safely.')
       setRestoreBusy(false)
     }
@@ -706,7 +697,10 @@ export function WorkspaceControlsPage() {
   }
 
   async function resetWorkspace() {
-    if (resetBusy) return
+    if (localWorkspaceOperation.current) return
+    localWorkspaceOperation.current = 'reset'
+    restoreLoadSequence.current += 1
+    setReviewedRestorePoint(null)
     setResetBusy(true)
     try {
       if (!loadRestorePoint()) {
@@ -728,6 +722,7 @@ export function WorkspaceControlsPage() {
       listLocalWorkspaceStorageKeys(window.localStorage).forEach((key) => window.localStorage.removeItem(key))
       window.location.assign('/')
     } catch (error) {
+      localWorkspaceOperation.current = null
       setNotice(error instanceof Error ? error.message : 'The workspace could not be reset safely.')
       setResetBusy(false)
     }
@@ -737,21 +732,25 @@ export function WorkspaceControlsPage() {
     <div className="workspace-screen settings-screen">
       <PageHeading
         actions={<Link className="core-button" to="/">Back to products</Link>}
-        copy="Check company readiness and protect the work saved in this browser. Product setup and internal client tools stay separate."
+        copy="Manage your connection and back up your work."
         eyebrow="Workspace controls"
         title="Status and recovery"
       />
       <div className="settings-control-stack">
         <section className="core-panel system-boundary-panel">
-          <div className="panel-head"><div><span className="core-eyebrow">Company boundary</span><h2>{runtime.writesReady ? 'Company writes are ready' : 'Real changes stay locked'}</h2><p>Local work remains usable while hosted identity, persistence, and security evidence are checked.</p></div><RuntimeBadge status={runtime.status} /></div>
+          <div className="panel-head"><div><span className="core-eyebrow">Company boundary</span><h2>{runtime.status === 'checking' ? 'Checking your connection' : runtime.writesReady ? 'Company workspace connected' : 'Company workspace unavailable'}</h2><p>Work saved on this device stays here. Company changes need a connected, authorised account.</p></div><RuntimeBadge status={runtime.status} /></div>
           <div aria-label="Workspace readiness" className="readiness-list">{statusRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-          {runtime.requirements.length ? <ul className="requirement-list">{runtime.requirements.slice(0, 4).map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
-          <div className="trial-actions"><Link className="core-button" to="/login">Company login</Link><Link className="core-button primary" to="/">Open a product</Link></div>
+          {runtime.requirements.length || runtime.activationManifest?.next_action ? <details className="compact-disclosure">
+            <summary>Connection details for support</summary>
+            {runtime.activationManifest?.next_action ? <p>{runtime.activationManifest.next_action}</p> : null}
+            {runtime.requirements.length ? <ul className="requirement-list">{runtime.requirements.map((requirement) => <li key={requirement}>{requirement}</li>)}</ul> : null}
+          </details> : null}
+          <div className="trial-actions"><Link className="core-button" to="/login">Login</Link><Link className="core-button primary" to="/">Open a product</Link></div>
           <p className="authority-note">SuperMega can prepare local work. Customer messages, payments, publishing, imports, and managed writes still require verified company controls and human approval.</p>
         </section>
 
-        <section className="core-panel">
-          <div><span className="core-eyebrow">Reports</span><h2>See how the business is doing.</h2><p>Read-only summaries pulled from what is already saved in Shop, Plant, Website, and Ecommerce. Nothing changes by looking.</p></div>
+        <details className="core-panel compact-disclosure"><summary>Business reports</summary>
+          <div><span className="core-eyebrow">Reports</span><h2>See how the business is doing.</h2><p>Sales, stock and activity from your saved records.</p></div>
           <div className="trial-actions">
             <Link className="core-button primary" to="/settings/?view=ceo-brief#controls">Operating brief</Link>
             <Link className="core-button" to="/settings/?view=shop-revenue#controls">Shop revenue</Link>
@@ -760,20 +759,20 @@ export function WorkspaceControlsPage() {
             <Link className="core-button" to="/settings/?view=ecommerce-pipeline#controls">Ecommerce pipeline</Link>
             <Link className="core-button" to="/settings/?view=customer-journey#controls">Customer journey</Link>
             <Link className="core-button" to="/settings/?view=cross-product#controls">Order and production status</Link>
-            <Link className="core-button" to="/settings/?view=local-metrics#controls">Session metrics</Link>
+            <Link className="core-button" to="/settings/?view=local-metrics#controls">Device activity</Link>
           </div>
-        </section>
+        </details>
 
-        <section className="core-panel">
+        <details className="core-panel compact-disclosure"><summary>Payment QR</summary>
           {/* S2 merchant payment QR (display-only — boundary documented in payment-qr-store.ts).
               The image is stored in this device's IndexedDB only: it is never uploaded, and it
               is not part of workspace backups by construction (the backup snapshots registered
               localStorage keys; this store is invisible to it, like product photos). */}
-          <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (Wave MMQR, MyanMyanPay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
+          <div><span className="core-eyebrow">Payment QR</span><h2>Show your payment QR at the counter.</h2><p>Upload the merchant QR your payment provider issued (MMQR, AYA Pay, WavePay, or a KBZPay merchant code). When a sale is paid by that method, the Shop counter and the order receipt can show it full screen with the amount due, so the customer scans and pays in their own app. Display only — no payment API is connected, and confirming money arrived stays your manual review in Orders. The image stays on this device: it is never uploaded and is not included in workspace backups.</p></div>
           <PaymentQrSettingsControls scope={paymentQrScope} />
-        </section>
+        </details>
 
-        <section className="core-panel">
+        <details className="core-panel compact-disclosure"><summary>Customer points</summary>
           {/* S3 customer points (module boundary, the per-device managed gap, the
               guided-sample exclusion, and the PR2 redemption design are documented in
               shop-loyalty.ts). Balances are recomputed from recorded orders on every
@@ -781,7 +780,7 @@ export function WorkspaceControlsPage() {
               each redemption appends a spend row beside it. */}
           <div><span className="core-eyebrow">Customer points</span><h2>Reward repeat customers at the counter.</h2><p>Points are counted on this device from the day you turn them on. Balances come from your recorded sales — refunds subtract automatically. A sale earns points once it is paid and handed over, credited to the exact customer name on the order; Guest sales earn nothing. Points are redeemed as a discount recorded on the order — 1 point = 1 MMK, spent from a completed sale in Orders. Another register or browser keeps its own setting.</p></div>
           <LoyaltySettingsControls actor={managedIdentity?.email ?? 'Local Shop operator'} scope={shopLoyaltyScopeForWorkspace(managedIdentity?.workspaceId)} />
-        </section>
+        </details>
 
         {/* Native anchor scrolling fires before this lazy route has rendered the target. The ref
             repeats it at mount so recovery opens here instead of 2,000px above this panel. */}
@@ -820,20 +819,30 @@ export function WorkspaceControlsPage() {
             An owner told to "export a backup" by the storage warning needs to know which file
             does which, or she will keep the wrong one. */}
         <section className="core-panel">
-          <div><span className="core-eyebrow">Sales archive</span><h2>Keep a readable copy of your sales.</h2><p>This file lists every trading day you have closed on this device, one row for each sale, as a spreadsheet you or your accountant can open anywhere. It is a record to keep and read — Shop cannot load it back in. To be able to put this device back the way it was, use Download workspace backup above; that is the file Shop can read.</p></div>
+          <div><span className="core-eyebrow">Sales archive</span><h2>Keep a readable copy of your sales.</h2><p>Spreadsheet of this device's closed days, one row per sale. Keep it for your records or accountant; Shop cannot restore it. For recovery, use Download workspace backup above.</p></div>
           <div className="trial-actions">
             <button className="core-button" disabled={archiveBusy} onClick={() => downloadSalesArchive()} type="button">{archiveBusy ? 'Preparing...' : 'Download sales archive'}</button>
           </div>
           {archiveNotice ? <p aria-live="polite" className="form-notice" role="status">{archiveNotice}</p> : null}
         </section>
 
-        {restorePoint ? <section aria-label="Local workspace restore point" className="setup-complete settings-restore-point"><div><strong>Restore point ready.</strong><small>{restorePointLabel} · {Object.keys(restorePoint.records).length} records</small></div><button className="core-button primary" disabled={restoreBusy} onClick={restoreWorkspace} type="button">{restoreBusy ? 'Restoring...' : 'Restore previous workspace'}</button></section> : null}
+        {restorePoint ? <section aria-label="Local workspace restore point" className="core-panel">
+          <h2>Restore point ready.</h2>
+          <p>{restorePointLabel} · {Object.keys(restorePoint.records).length} records · saved {restorePoint.createdAt}</p>
+          {reviewedRestorePoint === restorePoint ? <>
+            <p role="alert">This replaces the registered local workspace records in this browser with this snapshot. Work saved after the snapshot may be lost. Download a current workspace backup first if you need to keep it. Managed server records are not restored by this action.</p>
+            <div className="trial-actions">
+              <button className="core-button" disabled={restoreBusy} onClick={() => setReviewedRestorePoint(null)} type="button">Cancel restore</button>
+              <button className="core-button danger" disabled={restoreBusy} onClick={() => void restoreWorkspace()} type="button">Confirm restore of this snapshot</button>
+            </div>
+          </> : <button className="core-button" disabled={restoreBusy} onClick={() => setReviewedRestorePoint(restorePoint)} type="button">{restoreBusy ? 'Restoring...' : 'Review restore'}</button>}
+        </section> : null}
         {notice ? <p aria-live="polite" className="form-notice" role="status">{notice}</p> : null}
 
-        <details className="compact-disclosure">
+        {import.meta.env.DEV ? <details className="compact-disclosure">
           <summary><span>Reset this device</span><small>Destructive</small></summary>
           <div className="setup-template-summary"><div><span>What will be cleared</span><strong>Local Shop, Plant, Website, Ecommerce, setup, drafts, approvals, and AI-memory records</strong></div><p>A restore point is created first. Managed company records and external systems are not changed.</p><div className="trial-actions">{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm local reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Prepare local reset</button>}</div></div>
-        </details>
+        </details> : null}
       </div>
     </div>
   )

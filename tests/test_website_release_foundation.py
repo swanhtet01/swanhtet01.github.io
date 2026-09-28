@@ -8,17 +8,21 @@ from supermega_runtime.website_release_foundation import (
     EMPTY_WEBSITE_RELEASE_DIGEST,
     WEBSITE_BRAND_TOKEN_CONTRACT,
     WEBSITE_DEPLOY_PLAN_CONTRACT,
+    WEBSITE_DOMAIN_HANDOFF_CONTRACT,
     WEBSITE_RELEASE_PACKAGE_CONTRACT,
     WebsiteReleaseValidationError,
     apply_website_template_upgrade,
     approve_website_release_package,
+    build_website_domain_handoff,
     build_website_release_package,
     create_empty_website_release_state,
+    normalize_website_domain_hostname,
     prepare_website_deploy_plan,
     prepare_website_release_package,
     project_website_release,
     upgrade_website_release_package,
     validate_website_release_state,
+    validate_website_domain_handoff,
     website_release_evidence_digest,
     website_release_template,
 )
@@ -265,6 +269,128 @@ class WebsiteReleaseFoundationTests(unittest.TestCase):
         )
         self.assertNotIn("domain", json.dumps(plan).lower())
         self.assertNotIn("token", json.dumps(plan).lower())
+
+    def test_customer_domain_handoff_is_canonical_and_fails_closed(self) -> None:
+        state = approved_state()
+        candidate = project_website_release(state)["package"]
+        result = prepare_website_deploy_plan(
+            state,
+            plan_id="deploy-plan-domain-001",
+            package_digest=candidate["packageDigest"],
+            approval_id="release-approval-001",
+            target={
+                "provider": "vercel",
+                "projectRef": "owner-bound-project",
+                "environment": "production",
+                "protection": "required",
+            },
+            previous_deployment=None,
+            proof=proof(4, "Release manager", "prepared no-write domain handoff"),
+            expected_head_digest=state["headDigest"],
+        )
+        plan = project_website_release(result["state"])["deployPlan"]
+        self.assertNotIn("domain", plan["target"])
+        self.assertEqual(len(plan["steps"]), 4)
+        handoff = build_website_domain_handoff(
+            hostname="WWW.Mingalar-Spa.COM",
+            release={
+                "scope": SCOPE,
+                "headDigest": result["state"]["headDigest"],
+                "packageDigest": candidate["packageDigest"],
+                "artifactDigest": candidate["source"]["artifactDigest"],
+                "approvalId": "release-approval-001",
+                "deployPlanDigest": website_release_evidence_digest(plan),
+            },
+        )
+        self.assertEqual(handoff["contract"], WEBSITE_DOMAIN_HANDOFF_CONTRACT)
+        self.assertEqual(handoff["hostname"], "www.mingalar-spa.com")
+        self.assertEqual(handoff["status"], "not_executed")
+        self.assertEqual(handoff["currentGate"], "domain_ownership_unverified")
+        self.assertEqual(len(handoff["stages"]), 7)
+        self.assertEqual(
+            [stage["action"] for stage in handoff["stages"]],
+            [
+                "verify_domain_ownership",
+                "add_domain_to_provider_project",
+                "capture_provider_dns_challenge",
+                "apply_exact_dns_mapping",
+                "verify_provider_domain_ready",
+                "verify_https_and_live_routes",
+                "activate_canonical_domain",
+            ],
+        )
+        self.assertEqual(
+            handoff["rollback"]["requiredEvidence"],
+            [
+                "provider_domain_removal_receipt",
+                "dns_restore_receipt",
+                "https_previous_route_receipt",
+            ],
+        )
+        self.assertEqual(
+            handoff["rollback"]["blockers"],
+            [
+                "known_good_previous_domain_state_missing",
+                "owner_rollback_approval_missing",
+            ],
+        )
+        self.assertTrue(handoff["rollback"]["ownerApprovalRequired"])
+        self.assertFalse(any(handoff["controls"].values()))
+        self.assertEqual(validate_website_domain_handoff(handoff), handoff)
+        self.assertEqual(
+            normalize_website_domain_hostname("xn--fa-hia.de"), "xn--fa-hia.de"
+        )
+        parity_handoff = build_website_domain_handoff(
+            hostname="WWW.Mingalar-Spa.COM",
+            release={
+                "scope": "website:domain-parity",
+                "headDigest": "sha256:" + "1" * 64,
+                "packageDigest": "sha256:" + "2" * 64,
+                "artifactDigest": "sha256:" + "3" * 64,
+                "approvalId": "website-domain-parity-approval",
+                "deployPlanDigest": "sha256:" + "4" * 64,
+            },
+        )
+        self.assertEqual(
+            parity_handoff["packetDigest"],
+            "sha256:beca88a43f6442214cb14b0e1caa2d90b86ba1521ec7245a59c9438ae295a444",
+        )
+
+        invalid_domains = (
+            "မင်္ဂလာ.com",
+            "faß.de",
+            "https://example.com",
+            "example.com/path",
+            "example.com:443",
+            "user@example.com",
+            "localhost",
+            "shop.local",
+            "shop.example",
+            "example.com",
+            "www.example.com",
+            "example.net",
+            "client.example.org",
+            "127.0.0.1",
+            "singlelabel",
+            "-bad.example.com",
+        )
+        for invalid in invalid_domains:
+            with self.subTest(invalid=invalid), self.assertRaises(
+                WebsiteReleaseValidationError
+            ):
+                normalize_website_domain_hostname(invalid)
+
+        tampered = deepcopy(handoff)
+        tampered["controls"]["providerWritesPerformed"] = True
+        with self.assertRaises(WebsiteReleaseValidationError):
+            validate_website_domain_handoff(tampered)
+
+        drifted = deepcopy(handoff)
+        drifted["stages"][2]["action"] = "skip_provider_dns_challenge"
+        drifted.pop("packetDigest")
+        drifted["packetDigest"] = website_release_evidence_digest(drifted)
+        with self.assertRaises(WebsiteReleaseValidationError):
+            validate_website_domain_handoff(drifted)
 
     def test_plan_without_previous_deployment_exposes_blocked_rollback(self) -> None:
         state = approved_state()

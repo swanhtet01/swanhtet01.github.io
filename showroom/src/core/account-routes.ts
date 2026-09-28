@@ -18,12 +18,14 @@ export function managedAccountRequestUrl(value: string | null) {
     product: accountProductSlug(value) ?? 'guide',
     template: 'managed-account',
     utm_source: 'app',
-    utm_medium: 'guided_trial',
+    utm_medium: 'business_setup',
   })
   return `https://supermega.dev/contact/?${query.toString()}`
 }
 
-export function managedAccountPath(path: '/login' | '/account/recovery', value: string | null) {
+export function managedAccountPath(path: '/login' | '/account/recovery', value: string | null, search = '') {
+  const reviewPath = managedLoginReviewPath(search)
+  if (reviewPath) return `${path}?product=${reviewPath.split('/')[1]}&review=${reviewPath.split('/').at(-1)}`
   const product = accountProductSlug(value)
   return product ? `${path}?product=${encodeURIComponent(product)}` : path
 }
@@ -33,9 +35,35 @@ export function managedPortalEntryPath(value: string | null) {
   return product ? `/${product}/` : '/?choose=1'
 }
 
+function canonicalReviewId(value: string | null) {
+  // No free-form return URL. Exact length also rejects a trailing newline,
+  // which JavaScript's end-of-string regex anchor alone would accept.
+  return value?.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value) ? value : null
+}
+
+export function managedLoginReviewPath(search: string) {
+  const query = new URLSearchParams(search)
+  const products = query.getAll('product')
+  if (products.length > 1 || (products.length === 1 && !['website', 'ecommerce'].includes(products[0]))) return null
+  const product = products[0] ?? 'website'
+  const values = query.getAll('review')
+  const review = values.length === 1 ? canonicalReviewId(values[0]) : null
+  return review ? `/${product}/review/${review}` : null
+}
+
+export function customerWebsiteReviewLoginPath(reviewId: string) {
+  const review = canonicalReviewId(reviewId)
+  return review ? `/login?product=website&review=${review}` : '/login?product=website'
+}
+
 export function alternateManagedWorkspaceId(
   workspaces: readonly { workspaceId: string }[],
   currentWorkspaceId: string,
 ) {
   return workspaces.find((workspace) => workspace.workspaceId !== currentWorkspaceId)?.workspaceId ?? ''
+}
+
+export function customerEcommerceReviewLoginPath(reviewId: string) {
+  const review = canonicalReviewId(reviewId)
+  return review ? `/login?product=ecommerce&review=${review}` : '/login?product=ecommerce'
 }

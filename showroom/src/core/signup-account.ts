@@ -1,13 +1,10 @@
 /**
  * Create-account groundwork: validation, panel states and copy for self-serve identity creation.
  *
- * PR-1 of hq/strategy/SELF-SERVE-IDENTITY-DESIGN.md (section 6). This module is DEAD CODE by
- * design until PR-2: nothing in showroom imports it, no route renders it, and it performs no
- * network call of any kind. The Supabase `signUp` call, the create-account panel in
- * ManagedLoginPage, and the `/api/health` `self_serve_signup_open` signal are all PR-2. Even after
- * PR-2 ships, the surface stays dark until the founder sets `SUPERMEGA_SELF_SERVE_SIGNUP_WINDOW`
- * to exactly `open` at the runtime AND turns the provider-side signup toggle on -- the fail-closed
- * pattern of SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW (design section 7).
+ * Pure validation from hq/strategy/SELF-SERVE-IDENTITY-DESIGN.md (section 6), now consumed
+ * by the default-closed managed-trial signup helper. This module still makes no network calls.
+ * The public form, runtime opening, durable abuse controls, terms artifact and provider
+ * configuration remain separate work. Identity creation never activates a workspace or payment.
  *
  * This module is deliberately pure -- no window, no clock, no randomness, no fetch, no Supabase
  * import. Every guard in tools/ tests plain modules because nothing in this repo can render React,

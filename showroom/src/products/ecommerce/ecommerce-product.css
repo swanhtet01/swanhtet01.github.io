@@ -9,7 +9,7 @@
 }
 
 .ecommerce-heading h1 {
-  margin: 5px 0 4px;
+  margin: .3125rem 0 .25rem;
   font-size: clamp(2rem, 3.3vw, 2.875rem);
   line-height: .98;
   letter-spacing: -.045em;
@@ -18,7 +18,7 @@
 .ecommerce-heading p {
   max-width: 760px;
   margin: 0;
-  /* Design phase 2 item 12: --core-muted is #56665d in light, byte-identical here; this
+  /* Design phase 2 item 12: --core-muted is #526078 in light, byte-identical here; this
      sits on the ordinary page shell (already theme-aware), unlike the cockpit/buying-
      workspace cards elsewhere in this file, so it is safe to flip with the theme. */
   color: var(--core-muted);
@@ -32,12 +32,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
-  border: 1px solid rgba(11, 116, 94, .22);
+  gap: .75rem;
+  margin-top: .625rem;
+  border: 1px solid rgba(36,84,230, .22);
   border-radius: 10px;
-  padding: 9px 10px;
-  background: rgba(11, 116, 94, .05);
+  padding: .5625rem .625rem;
+  background: rgba(36,84,230, .05);
 }
 
 .ecommerce-workspace-switch {
@@ -48,7 +48,7 @@
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
-  border: 1px solid rgba(31, 68, 51, .12);
+  border: 1px solid rgba(37,48,74, .12);
   border-radius: 12px;
   padding: 5px 6px 5px 12px;
   background: rgba(238, 244, 239, .96);
@@ -60,7 +60,7 @@
 
 .ecommerce-workspace-switch > span,
 .ecommerce-preview-size > span {
-  /* --core-muted is #56665d in light, so this is byte-identical there and only changes
+  /* --core-muted is #526078 in light, so this is byte-identical there and only changes
      dark mode, where the literal measured 3.07:1 on the themed panel behind it. */
   color: var(--core-muted);
   font-size: 0.6875rem;
@@ -71,10 +71,10 @@
 .ecommerce-preview-size select {
   min-height: 46px;
   min-width: 0;
-  border: 1px solid rgba(31, 68, 51, .14);
+  border: 1px solid rgba(37,48,74, .14);
   border-radius: 9px;
   padding: 0 34px 0 12px;
-  /* Design phase 2 item 12: #fff/#17231d are byte-identical to --core-panel/--core-ink in
+  /* Design phase 2 item 12: #fff/#171b26 are byte-identical to --core-panel/--core-ink in
      light. The .ecommerce-workspace-switch shell already flips dark (:56 above), so these
      selects were the one part of it that did not -- tokenizing gives them the matching
      .theme-dark remap the switch itself already has. */
@@ -108,7 +108,7 @@
   grid-template-columns: minmax(260px, .8fr) minmax(0, 1.35fr);
   gap: 14px;
   margin: 0 0 12px;
-  border: 1px solid rgba(31, 68, 51, .14);
+  border: 1px solid rgba(37,48,74, .14);
   border-radius: 14px;
   padding: 16px;
   background: linear-gradient(135deg, #fff 0%, #f3f8f4 100%);
@@ -139,6 +139,12 @@
 .ecommerce-today[data-density="compact"] .ecommerce-today-priority > p { grid-area: summary; margin-bottom: 0; }
 .ecommerce-today[data-density="compact"] .ecommerce-today-priority > .core-button { grid-area: action; min-width: 132px; }
 
+.ecommerce-today-priority > .ecommerce-service-actions {
+  grid-area: action;
+  align-items: stretch;
+  flex-direction: column;
+}
+
 .ecommerce-today-priority {
   min-width: 0;
   display: grid;
@@ -156,7 +162,7 @@
      stays white in dark mode. A token that flips with the theme therefore puts near-white
      text on a white card: measured 1.07:1, against 16.22:1 for this literal. Until the card
      itself becomes theme-aware, the text on it must be theme-blind too. */
-  color: #17231d;
+  color: #171b26;
   font-size: clamp(1.375rem, 2.4vw, 2.125rem);
   line-height: 1.04;
   letter-spacing: -.035em;
@@ -175,7 +181,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   overflow: hidden;
-  border: 1px solid rgba(31, 68, 51, .12);
+  border: 1px solid rgba(37,48,74, .12);
   border-radius: 11px;
   background: rgba(255, 255, 255, .78);
 }
@@ -186,7 +192,7 @@
   display: grid;
   align-content: center;
   gap: 4px;
-  border-right: 1px solid rgba(31, 68, 51, .09);
+  border-right: 1px solid rgba(37,48,74, .09);
   padding: 10px 12px;
 }
 
@@ -207,7 +213,7 @@
 
 .ecommerce-today-metrics strong {
   overflow: hidden;
-  color: #17231d;
+  color: #171b26;
   font-size: 0.8125rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -218,7 +224,7 @@
   display: flex;
   align-items: center;
   gap: 8px 16px;
-  border-top: 1px solid rgba(31, 68, 51, .1);
+  border-top: 1px solid rgba(37,48,74, .1);
   padding-top: 10px;
 }
 
@@ -268,9 +274,9 @@
   display: grid;
   grid-template-columns: minmax(0, .9fr) minmax(300px, .75fr) minmax(280px, .8fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: .75rem;
   margin: 0 0 12px;
-  border: 1px solid rgba(31, 68, 51, .14);
+  border: 1px solid rgba(37,48,74, .14);
   border-radius: 10px;
   padding: 12px;
   background: #fff;
@@ -284,7 +290,7 @@
 
 .ecommerce-ai-desk h2 {
   margin: 0;
-  color: #17231d;
+  color: #171b26;
   font-size: 1.0625rem;
   line-height: 1.2;
 }
@@ -302,7 +308,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
-  border: 1px solid rgba(31, 68, 51, .12);
+  border: 1px solid rgba(37,48,74, .12);
   border-radius: 8px;
 }
 
@@ -312,9 +318,9 @@
   display: grid;
   align-content: center;
   gap: 2px;
-  border-right: 1px solid rgba(31, 68, 51, .1);
+  border-right: 1px solid rgba(37,48,74, .1);
   padding: 6px 8px;
-  background: rgba(11, 116, 94, .04);
+  background: rgba(36,84,230, .04);
 }
 
 .ecommerce-ai-desk-queue span:last-child {
@@ -334,7 +340,7 @@
 
 .ecommerce-ai-desk-queue strong {
   overflow: hidden;
-  color: #17231d;
+  color: #171b26;
   font-size: 0.625rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -362,7 +368,7 @@
 
 .ecommerce-ai-agent-queue strong {
   min-width: 0;
-  color: #17231d;
+  color: #171b26;
   font-size: 0.6875rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -373,7 +379,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(280px, .95fr);
   gap: 14px;
   align-items: center;
-  border: 1px solid rgba(11, 116, 94, .18);
+  border: 1px solid rgba(36,84,230, .18);
   border-radius: 12px;
   padding: 14px;
   background: #f5faf6;
@@ -395,7 +401,7 @@
 }
 
 .ecommerce-order-import-workspace {
-  margin-top: 10px;
+  margin-top: .625rem;
   border-top: 1px solid rgba(70, 85, 165, .16);
 }
 
@@ -404,7 +410,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 24px;
   align-items: center;
-  gap: 12px;
+  gap: .75rem;
   padding: 11px 2px;
   color: #293044;
   cursor: pointer;
@@ -432,7 +438,7 @@
 .ecommerce-order-import-workspace > summary::after,
 .ecommerce-enterprise-controls > summary::after {
   content: '+';
-  color: #0b745e;
+  color: #2454e6;
   font-size: 1.125rem;
   font-weight: var(--font-weight-bold);
 }
@@ -448,8 +454,8 @@
 
 .ecommerce-enterprise-controls {
   margin: 0;
-  border-top: 1px solid rgba(31, 68, 51, .14);
-  border-bottom: 1px solid rgba(31, 68, 51, .14);
+  border-top: 1px solid rgba(37,48,74, .14);
+  border-bottom: 1px solid rgba(37,48,74, .14);
 }
 
 .ecommerce-enterprise-controls-body {
@@ -474,7 +480,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  margin-top: 10px;
+  margin-top: .625rem;
 }
 
 .ecommerce-order-intake-guide span {
@@ -497,7 +503,7 @@
 
 .ecommerce-order-intake-guide strong {
   overflow-wrap: anywhere;
-  color: #17231d;
+  color: #171b26;
   font-size: 0.6875rem;
   line-height: 1.3;
 }
@@ -543,7 +549,7 @@
 .ecommerce-order-import-field {
   display: grid;
   gap: 5px;
-  margin-top: 10px;
+  margin-top: .625rem;
   color: #4655a5;
   font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
@@ -555,7 +561,7 @@
   border-radius: 8px;
   padding: 8px;
   background: #fff;
-  color: #17231d;
+  color: #171b26;
   font-size: 0.75rem;
 }
 
@@ -609,7 +615,7 @@
 }
 
 .ecommerce-order-import-review.ready {
-  border-color: rgba(11, 116, 94, .2);
+  border-color: rgba(36,84,230, .2);
 }
 
 .ecommerce-order-import-review.blocked {
@@ -647,7 +653,7 @@
 }
 
 .ecommerce-request-filter button[aria-pressed="true"] {
-  background: #0b745e;
+  background: #2454e6;
   color: #fff;
 }
 
@@ -713,7 +719,7 @@
 
 .ecommerce-ops-cockpit h2 {
   margin: 2px 0 4px;
-  color: #17231d;
+  color: #171b26;
   font-size: 1.125rem;
   line-height: 1.2;
 }
@@ -753,7 +759,7 @@
 
 .ecommerce-ops-cockpit-rows strong {
   min-width: 0;
-  color: #17231d;
+  color: #171b26;
   font-size: 0.6875rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -862,7 +868,7 @@
   margin: 6px 0 0;
   border: 1px solid rgba(177, 113, 0, .26);
   border-radius: 9px;
-  padding: 9px 10px;
+  padding: .5625rem .625rem;
   background: rgba(177, 113, 0, .06);
   color: #695018;
   font-size: 0.75rem;
@@ -870,68 +876,17 @@
   overflow-wrap: anywhere;
 }
 
-.ecommerce-product-autopilot {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.2fr) auto;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(11, 116, 94, .22);
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(11, 116, 94, .05);
-}
-
-.ecommerce-product-autopilot > div:first-child {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.ecommerce-product-autopilot strong {
-  font-size: 0.8125rem;
-}
-
-.ecommerce-product-autopilot small {
-  color: #66746b;
-  font-size: 0.6875rem;
-  line-height: 1.35;
-}
-
-.ecommerce-product-autopilot-rows {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.ecommerce-product-autopilot-rows span {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-  border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 8px;
-  padding: 7px;
-  background: rgba(255, 255, 255, .72);
-}
-
-.ecommerce-product-autopilot-rows b {
-  overflow: hidden;
-  color: #17261f;
-  font-size: 0.75rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .ecommerce-merchandising-status {
   min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: .75rem;
   margin: 8px 0;
-  border: 1px solid rgba(11, 116, 94, .22);
+  border: 1px solid rgba(36,84,230, .22);
   border-radius: 10px;
   padding: 8px 10px;
-  background: rgba(11, 116, 94, .05);
+  background: rgba(36,84,230, .05);
 }
 
 .ecommerce-merchandising-status > span {
@@ -954,8 +909,8 @@
   flex: 0 0 auto;
   border-radius: 999px;
   padding: 4px 7px;
-  background: rgba(11, 116, 94, .1);
-  color: #075c4b;
+  background: rgba(36,84,230, .1);
+  color: #173bb0;
   font-size: 0.5625rem;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -965,11 +920,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: .75rem;
   margin-bottom: 10px;
   border: 1px solid rgba(177, 113, 0, .26);
   border-radius: 10px;
-  padding: 9px 10px;
+  padding: .5625rem .625rem;
   background: rgba(177, 113, 0, .05);
 }
 
@@ -999,17 +954,17 @@
 }
 
 .storefront-grid article.has-request-action[data-requested="true"] {
-  border-color: rgba(11, 116, 94, .48);
-  box-shadow: 0 0 0 2px rgba(11, 116, 94, .08);
+  border-color: rgba(36,84,230, .48);
+  box-shadow: 0 0 0 2px rgba(36,84,230, .08);
 }
 
 .storefront-grid article[data-featured="true"] {
-  border-color: rgba(11, 116, 94, .35);
-  background: linear-gradient(145deg, rgba(11, 116, 94, .07), #fff 62%);
+  border-color: rgba(36,84,230, .35);
+  background: linear-gradient(145deg, rgba(36,84,230, .07), #fff 62%);
 }
 
 .storefront-grid article.has-request-action > small {
-  color: #56665d;
+  color: #526078;
 }
 
 .storefront-grid article > .storefront-product-art {
@@ -1037,10 +992,10 @@
   grid-column: 2 / -1;
   grid-row: 4;
   margin-top: 6px;
-  border: 1px solid #0b745e;
+  border: 1px solid #2454e6;
   border-radius: 8px;
   padding: 0 12px;
-  background: #0b745e;
+  background: #2454e6;
   color: #fff;
   font: inherit;
   font-size: 0.625rem;
@@ -1049,8 +1004,8 @@
 }
 
 .storefront-request-button:hover:not(:disabled) {
-  border-color: #075c4b;
-  background: #075c4b;
+  border-color: #173bb0;
+  background: #173bb0;
 }
 
 .storefront-request-button:disabled {
@@ -1064,12 +1019,8 @@
   scroll-margin-top: 16px;
 }
 
-.ecommerce-request-body form > .core-button {
-  min-height: 48px;
-}
-
 .ecommerce-request-receipt > .status-pill.bounded {
-  color: #075c4b;
+  color: #173bb0;
 }
 
 .ecommerce-buying-workspace {
@@ -1089,13 +1040,13 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   padding: 11px;
-  color: #17231d;
+  color: #171b26;
 }
 
 .ecommerce-cart {
   max-height: 286px;
   overflow: auto;
-  border: 1px solid rgba(31, 68, 51, .12);
+  border: 1px solid rgba(37,48,74, .12);
   border-radius: 10px;
   background: #fff;
 }
@@ -1107,7 +1058,7 @@
   gap: 7px;
   min-height: 62px;
   padding: 8px 9px;
-  border-bottom: 1px solid rgba(31, 68, 51, .1);
+  border-bottom: 1px solid rgba(37,48,74, .1);
 }
 
 .ecommerce-cart-line > span {
@@ -1134,11 +1085,11 @@
 .ecommerce-cart-line input {
   width: 100%;
   min-height: 44px;
-  border: 1px solid rgba(31, 68, 51, .2);
+  border: 1px solid rgba(37,48,74, .2);
   border-radius: 8px;
   padding: 0 6px;
   background: #fff;
-  color: #17231d;
+  color: #171b26;
   font: inherit;
   font-size: 0.6875rem;
 }
@@ -1168,7 +1119,7 @@
   gap: 10px;
   min-height: 46px;
   padding: 8px 10px;
-  background: rgba(11, 116, 94, .05);
+  background: rgba(36,84,230, .05);
   font-size: 0.6875rem;
 }
 
@@ -1177,7 +1128,7 @@
   align-content: center;
   gap: 5px;
   min-height: 140px;
-  border: 1px dashed rgba(31, 68, 51, .2);
+  border: 1px dashed rgba(37,48,74, .2);
   border-radius: 10px;
   padding: 14px;
   background: rgba(255, 255, 255, .55);
@@ -1205,7 +1156,7 @@
   min-width: 0;
   display: grid;
   gap: 5px;
-  color: #56665d;
+  color: #526078;
   font-size: 0.5625rem;
   font-weight: var(--font-weight-bold);
 }
@@ -1220,11 +1171,11 @@
 .ecommerce-buying-body > form select {
   width: 100%;
   min-height: 44px;
-  border: 1px solid rgba(31, 68, 51, .2);
+  border: 1px solid rgba(37,48,74, .2);
   border-radius: 8px;
   padding: 0 9px;
   background: #fff;
-  color: #17231d;
+  color: #171b26;
   font: inherit;
   font-size: 0.6875rem;
 }
@@ -1288,7 +1239,7 @@
   min-width: 0;
   display: grid;
   gap: 2px;
-  border: 1px solid rgba(31, 68, 51, .1);
+  border: 1px solid rgba(37,48,74, .1);
   border-radius: 8px;
   padding: 7px 8px;
   background: rgba(255, 255, 255, .68);
@@ -1300,7 +1251,6 @@
   line-height: 1.35;
 }
 
-.ecommerce-quote-confirm,
 .ecommerce-quote-receipt > .core-button,
 .ecommerce-quote-receipt > small {
   grid-column: 1 / -1;
@@ -1331,6 +1281,36 @@
   line-height: 1.4;
 }
 
+.ecommerce-stale-quote details > small { display: block; margin-top: .5rem; font-size: .875rem; line-height: 1.5; }
+.ecommerce-stale-quote summary { min-height: 44px; align-content: center; cursor: pointer; }
+.ecommerce-stale-quote summary:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* A retained receipt is evidence the customer needs to read, not fine print. */
+.ecommerce-quote-receipt[data-current="false"] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: .5rem;
+  padding: 1rem;
+}
+
+.ecommerce-quote-receipt[data-current="false"] > * {
+  grid-column: 1;
+  grid-row: auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: .875rem;
+  line-height: 1.5;
+}
+
+.ecommerce-quote-receipt[data-current="false"] > strong {
+  font-size: 1rem;
+}
+
+.ecommerce-quote-receipt[data-current="false"] > b {
+  font-size: 1.125rem;
+}
+
 .ecommerce-buying-notice {
   grid-column: 1 / -1;
   margin: 0;
@@ -1340,7 +1320,7 @@
   grid-column: 1 / -1;
   display: grid;
   gap: 9px;
-  border: 1px solid rgba(31, 68, 51, .12);
+  border: 1px solid rgba(37,48,74, .12);
   border-radius: 12px;
   padding: 11px;
   background: rgba(255, 255, 255, .7);
@@ -1358,7 +1338,7 @@
 .ecommerce-order-tracking-head {
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: .75rem;
 }
 
 .ecommerce-order-tracking-head > span,
@@ -1369,7 +1349,7 @@
 
 .ecommerce-order-tracking-head strong,
 .ecommerce-order-history article strong {
-  color: #17231d;
+  color: #171b26;
   font-size: 0.75rem;
 }
 
@@ -1382,7 +1362,7 @@
 }
 
 .ecommerce-order-tracking-head b {
-  color: #0b745e;
+  color: #2454e6;
   font-size: 0.625rem;
   text-transform: uppercase;
 }
@@ -1398,8 +1378,8 @@
 .ecommerce-order-history article {
   align-items: center;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-  gap: 12px;
-  border-top: 1px solid rgba(31, 68, 51, .1);
+  gap: .75rem;
+  border-top: 1px solid rgba(37,48,74, .1);
   padding-top: 8px;
 }
 
@@ -1414,7 +1394,7 @@
 }
 
 .ecommerce-order-history article > span > b {
-  color: #17231d;
+  color: #171b26;
   font-size: 0.6875rem;
 }
 
@@ -1431,7 +1411,7 @@
 
 .ecommerce-after-purchase {
   margin-top: 8px;
-  border-top: 1px solid rgba(31, 68, 51, .12);
+  border-top: 1px solid rgba(37,48,74, .12);
 }
 
 .ecommerce-after-purchase > summary {
@@ -1439,7 +1419,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: .75rem;
   padding: 4px 2px;
   cursor: pointer;
   list-style: none;
@@ -1459,8 +1439,8 @@
 }
 
 /* This block sits on the themed panel, so its light-theme literals carried straight into
-   dark mode and failed AA there: #66746b measured 3.80:1 and #0b745e 3.26:1 against
-   --core-panel. --core-green is exactly #0b745e in light, so that one is byte-identical
+   dark mode and failed AA there: #66746b measured 3.80:1 and #2454e6 3.26:1 against
+   --core-panel. --core-green is exactly #2454e6 in light, so that one is byte-identical
    there. #66746b is not a token; --core-quiet (#5f6f67 light) is the nearest and is a
    shade darker, which only moves light mode further above the floor. */
 .ecommerce-after-purchase > summary small,
@@ -1480,7 +1460,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: .75rem;
   padding: 0 2px 10px;
 }
 
@@ -1509,8 +1489,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  border: 1px solid rgba(31, 68, 51, .12);
+  gap: .75rem;
+  border: 1px solid rgba(37,48,74, .12);
   border-radius: 12px;
   padding: 9px;
   background: rgba(255, 255, 255, .68);
@@ -1525,7 +1505,7 @@
 
 .ecommerce-return-status strong,
 .ecommerce-return-form strong {
-  color: #17231d;
+  color: #171b26;
   font-size: 0.6875rem;
 }
 
@@ -1540,7 +1520,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(110px, .7fr) minmax(0, 1fr);
   gap: 9px;
-  border: 1px solid rgba(11, 116, 94, .22);
+  border: 1px solid rgba(36,84,230, .22);
   border-radius: 12px;
   padding: 11px;
   background: rgba(225, 245, 238, .56);
@@ -1565,11 +1545,11 @@
 .ecommerce-return-form textarea {
   width: 100%;
   min-height: 44px;
-  border: 1px solid rgba(31, 68, 51, .18);
+  border: 1px solid rgba(37,48,74, .18);
   border-radius: 9px;
-  padding: 9px 10px;
+  padding: .5625rem .625rem;
   background: #fff;
-  color: #17231d;
+  color: #171b26;
   font: inherit;
   font-size: 0.75rem;
 }
@@ -1675,7 +1655,7 @@
   }
 
   .ecommerce-ai-agent-queue {
-    border-top: 1px solid rgba(31, 68, 51, .1);
+    border-top: 1px solid rgba(37,48,74, .1);
     padding-top: 8px;
   }
 
@@ -1684,7 +1664,7 @@
   }
 
   .ecommerce-ai-desk-queue span:nth-child(-n+2) {
-    border-bottom: 1px solid rgba(31, 68, 51, .1);
+    border-bottom: 1px solid rgba(37,48,74, .1);
   }
 
   .ecommerce-save-actions {
@@ -1693,18 +1673,6 @@
   }
 
   .ecommerce-save-actions .core-button {
-    width: 100%;
-  }
-
-  .ecommerce-product-autopilot {
-    grid-template-columns: 1fr;
-  }
-
-  .ecommerce-product-autopilot-rows {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .ecommerce-product-autopilot .core-button {
     width: 100%;
   }
 
@@ -1720,14 +1688,6 @@
   .ecommerce-request-lab > summary {
     align-items: flex-start;
     padding-block: 10px;
-  }
-
-  .ecommerce-request-body {
-    padding: 10px;
-  }
-
-  .ecommerce-request-body form > .core-button {
-    width: 100%;
   }
 
   .ecommerce-buying-body {
@@ -1831,7 +1791,7 @@
    Only reachable with the enterprise controls expanded, which is why earlier sweeps of this
    route reported it clean.
    The fix matches the rest of this file: on a theme-blind card, the text must be theme-blind
-   too. #0b745e is exactly what --core-green resolves to in LIGHT, so these read identically
+   too. #2454e6 is exactly what --core-green resolves to in LIGHT, so these read identically
    in both themes rather than introducing a new colour. Verified: 5.9:1 on the cockpit tint,
    5.73:1 on white.
    Attempting the opposite -- darkening the cards -- was measured and reverted: it took the
@@ -1840,7 +1800,7 @@
 .theme-dark .ecommerce-ops-cockpit .text-link,
 .theme-dark .ecommerce-ai-desk .core-eyebrow,
 .theme-dark .ecommerce-ai-desk .text-link {
-  color: #0b745e;
+  color: #2454e6;
 }
 
 /* The mirror image of the block above, and the reason a blanket rule would be wrong here.
@@ -1947,6 +1907,22 @@
    ========================================================================== */
 .storefront-grid article > .storefront-product-photo { object-fit: cover; }
 
+/* A retained Desktop preview selection must not squeeze two cards onto a phone. */
+@media (max-width: 47.5rem) {
+  .ecommerce-preview-frame .storefront-preview .storefront-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) {
+    grid-template-columns: 4rem minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto;
+  }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > small { grid-column: 2; grid-row: 1; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > strong { grid-column: 2; grid-row: 2; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > span { grid-column: 2; grid-row: 3; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > b { grid-column: 2; grid-row: 4; }
+  .storefront-grid article:not(:has(> .storefront-product-photo)) > .storefront-request-button { grid-column: 1 / -1; grid-row: 5; }
+}
+
 /* ============================================================================
    Photo-first storefront cards (2026-08-19). A card whose item carries a
    device-local photo flips to the merchandising layout customers know from
@@ -2016,4 +1992,49 @@
    pixel-identically. */
 .storefront-grid:has(article > .storefront-product-photo) article {
   align-content: start;
+}
+
+
+/* Private review delivery stays secondary to the storefront workspace. */
+.ecommerce-product > .compact-disclosure {
+  border: 1px solid var(--core-line);
+  border-radius: var(--radius-md);
+  padding-inline: 16px;
+  margin-bottom: 16px;
+}
+.ecommerce-product > .compact-disclosure > summary,
+.catalog-review-tools summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+  font-size: .875rem;
+}
+.catalog-review-tools { display: grid; gap: .75rem; min-width: 0; padding-block: 4px 16px; }
+.catalog-review-tools > p { margin: 0; color: var(--core-muted); font-size: .875rem; line-height: 1.5; }
+.catalog-review-tools > .core-button { justify-self: start; max-width: 100%; }
+.catalog-review-tools label { display: grid; gap: 6px; font-size: .875rem; }
+.catalog-review-tools select {
+  min-height: 44px; min-width: 0; width: 100%; max-width: 28rem;
+  border: 1px solid var(--core-line-strong); border-radius: var(--radius-md);
+  padding: 8px 12px; background: var(--core-panel); color: var(--core-ink); font: inherit;
+}
+.catalog-review-recovery { border-top: 1px solid var(--core-line); }
+.catalog-review-recovery > div { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+
+.ecommerce-order-history .ecommerce-order-reference { min-width: 0; }
+.ecommerce-order-history .ecommerce-order-reference > summary {
+  min-height: 2.75rem;
+  display: list-item;
+  align-content: center;
+  cursor: pointer;
+  font-size: .8125rem;
+}
+.ecommerce-order-history .ecommerce-order-reference > summary:focus-visible {
+  outline: 2px solid var(--core-green);
+  outline-offset: 2px;
+}
+.ecommerce-order-history .ecommerce-order-reference > small {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-block: .25rem;
 }

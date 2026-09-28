@@ -76,6 +76,10 @@ function check(condition, label) {
 // because the cost of a wrong entry here is silent: the key stops being backed up and stops
 // being cleared, with nothing failing.
 const DELIBERATE_EXCLUSIONS = new Map([
+  ['supermega.business-brief.', 'One-hour sessionStorage intake draft, not saved business workspace content. Caller storage medium is checked below; it must not enter portable backups.'],
+  ['supermega.ecommerce.cart-session.v1', 'Scope-checked, expiring sessionStorage cart recovery; not localStorage workspace content. Caller storage medium is checked below.'],
+  ['supermega.catalog-response:', 'Actor/workspace/review-bound sessionStorage retry payload, cleared after confirmation or expiry; copying it through a workspace backup could replay a private response.'],
+  ['supermega.website-feedback:', 'Actor/workspace/review-bound sessionStorage feedback retry, not portable business content. It has its own confirmation and expiry lifecycle.'],
   ['supermega.managed.workspace.v1', 'Holds the managed workspace IDENTITY, not workspace content, and has its own lifecycle (forgetWorkspace on sign-out). Registering it would make a local demo reset silently sign the operator out of their enterprise workspace.'],
   // Everything below this line was invisible until discovery stopped depending on constant
   // names. None of them is workspace content; each says why.
@@ -97,6 +101,28 @@ function sourceFiles(dir, out = []) {
 
 const STORAGE_METHODS = new Set(['getItem', 'setItem', 'removeItem'])
 const MAX_DEPTH = 10
+
+// Generic Storage ports hide the medium from key discovery. Pin every app caller
+// so an exclusion cannot silently survive a switch to persistent localStorage.
+const sessionHelpers = new Set([
+  'readBusinessBrief', 'saveBusinessBrief', 'readSessionCartSnapshot', 'readSessionCart', 'saveSessionCart',
+  'retainCatalogDecision', 'recoverCatalogDecision', 'clearCatalogDecision', 'discardExpiredCatalogDecision',
+  'recoverWebsiteFeedback', 'retainWebsiteFeedback', 'clearWebsiteFeedback',
+])
+let sessionCallerCount = 0
+for (const path of sourceFiles('showroom/src').filter(path => path.endsWith('.tsx'))) {
+  const tree = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && sessionHelpers.has(node.expression.text)) {
+      sessionCallerCount++
+      const medium = node.arguments[0]?.getText(tree)
+      check(medium === 'window.sessionStorage', `${node.expression.text} in ${path} must remain session-only, got ${medium}`)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(tree)
+}
+check(sessionCallerCount >= 12, 'session-only storage exclusions retain their app call-site coverage')
 
 /**
  * Structural discovery. Walks real syntax trees, seeds on the ARGUMENT of every storage call,
@@ -341,6 +367,7 @@ for (const key of [
   'supermega.production.workspace.v2',
   'supermega.setup.v3',
   'supermega.shop.counter_draft.v1',
+  'supermega.shop.batch-profit-control.local-workspace.v1',
   'supermega.last_operator.v1',
   'supermega.trial_signup.v1',
   'supermega.behavior-trail.v1',
@@ -362,6 +389,7 @@ check(isLocalWorkspaceKey('supermega.commerce.workspace.v2'), 'the Shop workspac
 check(isLocalWorkspaceKey('supermega.production.workspace.v2'), 'the Plant workspace is registered')
 check(isLocalWorkspaceKey('supermega.website.workspace.v2'), 'the Website workspace is registered')
 check(isLocalWorkspaceKey('supermega.shop.counter_draft.v1'), 'the in-progress counter sale is registered')
+check(isLocalWorkspaceKey('supermega.shop.batch-profit-control.local-workspace.v1'), 'local Batch Profit Control reviews are registered')
 check(isLocalWorkspaceKey('supermega.last_operator.v1'), 'the remembered operator name is registered')
 check(isLocalWorkspaceKey('supermega.shop.order_draft.v1.any-scope'), 'scoped order drafts are registered by prefix')
 
@@ -372,9 +400,13 @@ check(!isLocalWorkspaceKey(''), 'an empty key is not claimed')
 // --- listing only reports what is present ------------------------------------
 const fakeStorage = (keys) => ({ length: keys.length, key: (index) => keys[index] ?? null })
 const listed = listLocalWorkspaceStorageKeys(fakeStorage([
-  'supermega.commerce.workspace.v2', 'unrelated.app.data', 'supermega.last_operator.v1',
+  'supermega.commerce.workspace.v2',
+  'supermega.shop.batch-profit-control.local-workspace.v1',
+  'unrelated.app.data',
+  'supermega.last_operator.v1',
 ]))
-check(listed.length === 2, `listing returns only workspace keys, got ${listed.length}`)
+check(listed.length === 3, `listing returns only workspace keys, got ${listed.length}`)
+check(listed.includes('supermega.shop.batch-profit-control.local-workspace.v1'), 'listing includes local Batch Profit Control reviews')
 check(!listed.includes('unrelated.app.data'), 'and never a key belonging to another app on the same origin')
 
 console.log(`workspace storage registry contract: ${checks} checks passed (${discovered.size} keys scanned, ${DELIBERATE_EXCLUSIONS.size} documented exclusions)`)

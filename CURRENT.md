@@ -48,6 +48,7 @@ Home, Products, and internal Work should reveal one clear task at a time. Deskto
 - `supermega.dev` is one compact company page.
 - The only support pages are `/contact/` and `/privacy/`.
 - The page explains Shop, Plant, Website, Ecommerce, and bounded AI assistance without a catalogue, pricing theatre, or fake launch claims.
+- The home page and each product landing page must show the product's first operating loop before advanced module lists, so a new owner can see the first useful job without learning the whole system.
 - The brand is SuperMega with the jade `>_` terminal mark on a warm light interface, dark ink, and restrained status colors.
 - Historical products, demos, client deployments, YTF material, and case-specific routes are not current SuperMega public context.
 

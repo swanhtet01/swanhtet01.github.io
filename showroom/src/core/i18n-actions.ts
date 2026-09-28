@@ -172,7 +172,7 @@ const ACTION_TRANSLATIONS: Record<string, ActionTranslation> = {
   'Payment pending': { my: 'ငွေပေးချေရန် ကျန်', status: 'pending_native_review' },
   'Points redeemed': { my: 'အသုံးပြုပြီး အမှတ်', status: 'pending_native_review' },
   'Points balance': { my: 'အမှတ် လက်ကျန်', status: 'pending_native_review' },
-  'Print receipt': { my: 'ဘောင်ချာ ပရင့်ထုတ်မည်', status: 'pending_native_review' }, // two loanwords in one label; reviewer may prefer ငွေဖြတ်ပိုင်း for the slip
+  'Print order record': { my: 'အော်ဒါ မှတ်တမ်း ပရင့်ထုတ်မည်', status: 'pending_native_review' }, // draft only; English remains visible until native review
   'Copy text': { my: 'စာသား ကူးယူမည်', status: 'pending_native_review' },
   // REFUSED, deliberately -- no entry, so bi() renders English and the surface stays
   // honest rather than confidently wrong:

@@ -28,17 +28,17 @@ export function verifyCurrentReleaseAssets({
   activationRunbookChunk,
 }) {
   const groups = [
-    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Each product opens as its own working sample. Setup is optional when you are ready to use your business data.', 'supermega.last-product.v1', 'Sell and manage stock', 'Run production', 'Publish your business', 'Take online orders', 'Counter sales, inventory, orders, and daily close.', 'Jobs, materials, output, quality, and traceability.', 'Pages, services, inquiries, and launch preview.', 'Storefront, checkout, delivery, and Shop handoff.', 'Your product workspaces stay separate. Opening a sample does not change another product.', 'Open', manifest.brand.colors.accent, manifest.brand.colors.ink]],
-    ['guided_outcomes', productOnboardingChunk, ['Complete a sample sale', 'Create Shop and start selling', 'Run a sample production job', 'Create Plant and open the job', 'Preview a business website', 'Create Website and preview it', 'Open a working online store', 'Create Ecommerce and open the store']],
-    ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'We will add realistic sample records now; replace them with your data whenever you are ready.', 'First useful result:', 'Creates local sample records, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
-    ['shop_plant', operationsChunk, ['Create order', 'Finish payment and handoff in Orders.', 'Stock reserved. Finish fulfilment and reconcile payment before completion.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
-    ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose another working flow, use your data, or make this sample yours.', 'Make ', ' mine', 'Your data', 'Upload a CSV or try a sample.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'Only ', 'next_steps_opened', 'data_setup_opened']],
+    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Website', 'Ecommerce', 'Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.', 'Saved on this device.', 'Welcome back', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['guided_outcomes', productOnboardingChunk, ['Add your first product', 'Continue to catalog', 'Run a sample production job', 'Create Plant and open the job', 'Prepare your business website', 'Continue to website setup', 'Set up your online store', 'Continue to store setup']],
+    ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'Prepare your business content to continue.', 'First useful result:', 'Saves your setup, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
+    ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'One review records payment, handoff, stock, and the order record.', 'Keep as open order', 'Create order', 'Creates an open order; payment and handoff stay for Orders.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'It does not charge a wallet or card', 'No payment is captured']],
+    ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose a workflow or import your data.', 'Make ', ' mine', 'Your data', 'Upload your CSV to review and import your data.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
     ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
-    ['website', websiteChunk, ['Make this website yours', 'Download site', 'Website starter brief generated', 'Not online yet', 'Edit sample', 'Edit page', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
-    ['ecommerce', ecommerceProductCorpus, ['Extra order tools', 'Preview verification', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Payment and customer messages stay locked.', 'Shop review', 'supermega.ecommerce.order_import_review_packet.v1']],
-    ['data_onboarding', clientDataOnboardingChunk, ['Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'No customer message, payment, website publish, or automation runs from this check.']],
-    ['company_login', managedLoginChunk, ['Open your company.', 'Try free demo', 'Request company account']],
+    ['website', websiteChunk, ['Your website', 'Download site', 'Website starter brief generated', 'Not online yet', 'Edit page', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
+    ['ecommerce', ecommerceProductCorpus, ['Extra order tools', 'We could not verify your store changes.', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Payment and customer messages stay locked.', 'Shop review', 'supermega.ecommerce.order_import_review_packet.v1']],
+    ['data_onboarding', clientDataOnboardingChunk, ['Choose your CSV, check the matched columns, and review any corrections.', 'No customer message, payment, website publish, or automation runs from this check.']],
+    ['company_login', managedLoginChunk, ['Sign in to your workspace.', 'Login is currently unavailable.', 'Saved work on this device', 'Contact support', 'Contact support for account access. Your saved work is still available on this device.']],
     ['account_recovery', managedAccountChunk, ['Recover your account.', 'Secure your account.', 'Save password and continue']],
     ['company_backup', companyBackupCorpus, ['supermega.company_backup.v1', 'Customer-owned and encrypted', 'Download encrypted backup', 'Auth sessions, company account IDs, and credentials are excluded.']],
     ['activation', activationRunbookChunk, ['Evidence to go live', 'proof gates ready']],
@@ -50,11 +50,11 @@ export function verifyCurrentReleaseAssets({
       if (!corpus.includes(required)) throw new Error(`missing_current_release_asset:${group}:${required}`)
     }
   }
-  for (const forbidden of ['Complete sale', 'Stock updated. Receipt saved.']) {
+  for (const forbidden of ['Load sample catalog item', 'SM-FRESH-006', 'Confirming creates a sample order and reserves sample stock in this browser.', 'Stock updated. Receipt saved.']) {
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
-  for (const forbidden of ['Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
+  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
     checks += 1
     if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
   }
@@ -144,7 +144,7 @@ if (artifactSelfTest) {
   const websiteDependencyCorpus = (await Promise.all(
     extractRelativeJavascriptDependencies(websiteChunk).map((name) => readFile(join(assetsDir, name), 'utf8')),
   )).join('\n')
-  const result = verifyCurrentReleaseAssets({
+  const artifactInput = {
     manifest: artifactManifest,
     assetCorpus,
     operationsChunk,
@@ -158,8 +158,37 @@ if (artifactSelfTest) {
     managedAccountChunk,
     companyBackupCorpus: `${settingsChunk}\n${companyBackupChunk}`,
     activationRunbookChunk,
-  })
-  console.log(JSON.stringify({ ok: true, ...result, evidenceVersion }, null, 2))
+  }
+  const result = verifyCurrentReleaseAssets(artifactInput)
+  const launcherMutations = [
+    ...['Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.'].map((text) => ({
+      corpus: assetCorpus.replaceAll(text, ''), expected: `missing_current_release_asset:launcher:${text}`,
+    })),
+    ...['Run a sample production job', 'Jobs, materials, quality.'].map((text) => ({
+      corpus: `${assetCorpus}\n${text}`, expected: `retired_launcher_release_asset:${text}`,
+    })),
+  ]
+  for (const { corpus, expected } of launcherMutations) {
+    let rejected = false
+    try { verifyCurrentReleaseAssets({ ...artifactInput, assetCorpus: corpus }) } catch (error) {
+      if (error.message !== expected) throw error
+      rejected = true
+    }
+    if (!rejected) throw new Error(`launcher_mutation_not_rejected:${expected}`)
+  }
+  const loginRequirements = ['Sign in to your workspace.', 'Login is currently unavailable.', 'Saved work on this device', 'Contact support']
+  for (const text of loginRequirements) {
+    const expected = `missing_current_release_asset:company_login:${text}`
+    let rejected = false
+    try {
+      verifyCurrentReleaseAssets({ ...artifactInput, managedLoginChunk: managedLoginChunk.replaceAll(text, '') })
+    } catch (error) {
+      if (error.message !== expected) throw error
+      rejected = true
+    }
+    if (!rejected) throw new Error(`login_mutation_not_rejected:${text}`)
+  }
+  console.log(JSON.stringify({ ok: true, ...result, launcherMutationChecks: launcherMutations.length, loginMutationChecks: loginRequirements.length, evidenceVersion }, null, 2))
   process.exit(0)
 }
 
@@ -242,12 +271,12 @@ async function get(path, attempts = 7) {
         const body = execFileSync(executable, executableArgs, {
           encoding: 'utf8',
           env: cliEnv,
-          maxBuffer: 8 * 1024 * 1024,
+          maxBuffer: 8 * 1024 * 1024, timeout: 15000, killSignal: 'SIGKILL',
           stdio: ['ignore', 'pipe', 'pipe'],
         })
         return { response: null, body }
       }
-      const response = await fetch(`${baseUrl}${path}`, { headers: { accept: path.endsWith('.json') ? 'application/json' : 'text/html' }, redirect: 'follow', signal: AbortSignal.timeout(15000) })
+      const response = await fetch(`${baseUrl}${path}`, { headers: { accept: path.endsWith('.json') ? 'application/json' : 'text/html' }, redirect: 'error', signal: AbortSignal.timeout(15000) })
       if (!response.ok) throw new Error(`${path}:${response.status}`)
       return { response, body: await response.text() }
     } catch (error) {
@@ -542,19 +571,25 @@ if (!operationsChunk.includes('Other products')
   || !assetCorpus.includes('.stock-catalog-content')
   || !assetCorpus.includes('.stock-record-content')
   || !assetCorpus.includes('.data-row.stock-empty-row')) throw new Error('missing_live_shop_stock_worklist_contract')
-for (const required of ['Browser-local sample only.', 'sample order and sample stock change in this browser', 'No payment is captured', 'no customer is contacted', 'no server or managed workspace is written', 'no real stock is moved']) {
+for (const required of [
+  'Browser-local sample only.',
+  'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
+  'It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.',
+  'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
+  'No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.',
+]) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_shop_counter_local_boundary:${required}`)
 }
 const shopLiveCopyUpdates = new Map([
   ['Owner gate', 'Review'],
   ['Write gate', 'Write status'],
   ['Owner approves writes', 'Review before writes'],
-  ['Sample Shop catalog item loaded for owner review.', 'Sample Shop catalog item loaded for review.'],
+  ['Sample Shop catalog item loaded for review.'],
   ['AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed.', 'AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and manager review before any accounting export is reviewed.'],
   ['budget and owner approval required', 'budget and review required'],
   ['The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.', 'A manager confirms every sale, payment, stock, supplier, refund, and accounting review.'],
 ])
-for (const required of ['Recommended next step', 'Recommended Shop next step', 'Agent job', 'Owner gate', 'Restore Shop write readiness', 'Review online order requests', 'Finish fulfilment queue', 'Receive purchase orders', 'Reorder low stock', 'Set up stock locations', 'Shop setup guide', 'Import products once. Then run the daily queue.', 'The assistant prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets.', 'The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.', 'Products', 'Import catalog', 'Location + ATP', 'Simple count first', 'Owner approves writes', 'Load sample catalog item', 'SM-FRESH-006', 'Fresh market delivery pack', 'Load sample Shop catalog item', 'Sample Shop catalog item loaded for owner review.', 'no Shop write, stock move, supplier message, sale, payment, or accounting post ran.', 'Order control', 'Review Ecommerce inbox', 'Reconcile payment exceptions', 'Online inbox', 'Write gate', 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.', 'Shop order lifecycle', 'Order lifecycle', 'Capture to return', 'AI guides capture, reserve, fulfil, collect, replenish, and returns.', 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.', 'Shop accounting readiness', 'Accounting readiness', 'AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed.', 'No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.', 'Restore accounting readiness', 'Approve pending Shop action', 'Review refund exposure', 'Receive supplier evidence', 'Reconcile stock evidence', 'Accounting package ready', 'Export gate', 'Shop accounting export packet', 'Accounting export packet', 'AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review.', 'No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.', 'Ready for accountant review', 'Close before export', 'No export package yet', 'CSV ready', 'Review import', 'Not posted', 'Not configured', 'External proof only', 'Need close evidence', 'Shop procurement readiness', 'Procurement readiness', 'AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness.', 'No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.', 'Supplier control', 'AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue.', 'No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.', 'Start supplier request', 'Preferred supplier', 'Supplier request drafted for', 'no RFQ, message, payment, payable, costing, or stock write is created.', 'Supplier request is clear. No uncovered reorder item needs a draft.', 'Restore purchasing readiness', 'Approve pending supplier action', 'Resolve late supplier order', 'Prepare receiving evidence', 'Close partial receipt', 'Choose supplier and arrival', 'Monitor supplier promise', 'Supplier controls ready', 'Suppliers', 'Open units', 'Gate', 'Need', 'On order', 'Remaining', 'Arrival', 'Receipt', 'Order uncovered stock', 'Receive or cancel late PO', 'Check arriving PO', 'Track open supply', 'Supply ready', 'Capture', 'Reserve', 'Fulfil', 'Collect', 'Replenish', 'Return']) {
+for (const required of ['Recommended next step', 'Recommended Shop next step', 'Agent job', 'Owner gate', 'Restore Shop write readiness', 'Review online order requests', 'Finish fulfilment queue', 'Receive purchase orders', 'Reorder low stock', 'Set up stock locations', 'Shop setup guide', 'Import products once. Then run the daily queue.', 'The assistant prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets.', 'The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.', 'Products', 'Import catalog', 'Location + ATP', 'Simple count first', 'Owner approves writes', 'Order control', 'Review Ecommerce inbox', 'Reconcile payment exceptions', 'Online inbox', 'Write gate', 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.', 'Shop order lifecycle', 'Order lifecycle', 'Capture to return', 'AI guides capture, reserve, fulfil, collect, replenish, and returns.', 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.', 'Shop accounting readiness', 'Accounting readiness', 'AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed.', 'No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.', 'Restore accounting readiness', 'Approve pending Shop action', 'Review refund exposure', 'Receive supplier evidence', 'Reconcile stock evidence', 'Accounting package ready', 'Export gate', 'Shop accounting export packet', 'Accounting export packet', 'AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review.', 'No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.', 'Ready for accountant review', 'Close before export', 'No export package yet', 'CSV ready', 'Review import', 'Not posted', 'Not configured', 'External proof only', 'Need close evidence', 'Shop procurement readiness', 'Procurement readiness', 'AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness.', 'No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.', 'Supplier control', 'AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue.', 'No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.', 'Start supplier request', 'Preferred supplier', 'Supplier request drafted for', 'no RFQ, message, payment, payable, costing, or stock write is created.', 'Supplier request is clear. No uncovered reorder item needs a draft.', 'Restore purchasing readiness', 'Approve pending supplier action', 'Resolve late supplier order', 'Prepare receiving evidence', 'Close partial receipt', 'Choose supplier and arrival', 'Monitor supplier promise', 'Supplier controls ready', 'Suppliers', 'Open units', 'Gate', 'Need', 'On order', 'Remaining', 'Arrival', 'Receipt', 'Order uncovered stock', 'Receive or cancel late PO', 'Check arriving PO', 'Track open supply', 'Supply ready', 'Capture', 'Reserve', 'Fulfil', 'Collect', 'Replenish', 'Return']) {
   const currentRequired = shopLiveCopyUpdates.get(required) ?? required
   if (!operationsChunk.includes(currentRequired)) throw new Error(`missing_live_shop_context:${required}`)
 }
@@ -606,13 +641,14 @@ for (const required of ['Premium pilot', 'Your business context, remembered.', '
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_premium_pilot_context:${required}`)
 }
 const managedLoginLiveCopyUpdates = new Map([
-  ['Request managed activation', 'Request company account'],
+  ['Open free workspace', 'Try a sample — no account'],
+  ['Request managed activation', 'Ask SuperMega to set me up'],
 ])
-for (const required of ['Open your company.', 'Sign in once. SuperMega finds the companies assigned to you.', 'Use your work account.', 'No workspace code or technical setup is required.', 'Only active companies assigned to this account are shown.', 'Find my company', 'Open company', 'Open free workspace', 'Request managed activation']) {
+for (const required of ['Open your company.', 'Sign in once. SuperMega finds the companies assigned to you.', 'Company sign-in', 'Choose your company.', 'Only active companies assigned to this account are shown.', 'Find my company', 'Open company', 'Open free workspace', 'Request managed activation']) {
   const currentRequired = managedLoginLiveCopyUpdates.get(required) ?? required
   if (!managedLoginChunk.includes(currentRequired)) throw new Error(`missing_live_managed_login_context:${required}`)
 }
-for (const required of ['Recover your account.', 'Send a secure link.', 'For privacy, the result is the same whether or not the address has an account.', 'If this email belongs to a managed account, a recovery link is on its way.', 'Secure your account.', 'Secure link confirmed', 'Set your password.', 'Save password and continue', 'Request a new link', 'Only active companies assigned to this named account are shown.']) {
+for (const required of ['Recover your account.', 'Account recovery', 'For privacy, the result is the same whether or not the address has an account.', 'Recovery requested. If this address is eligible, check your inbox and spam folder for the latest link. This screen cannot confirm email delivery.', 'Secure your account.', 'Secure link confirmed', 'Set your password.', 'Save password and continue', 'Request a new link', 'Only active companies assigned to this named account are shown.']) {
   if (!managedAccountChunk.includes(required)) throw new Error(`missing_live_managed_account_context:${required}`)
 }
 for (const required of ['supermega.company_backup.v1', 'supermega.local_company_snapshot.v1', 'AES-GCM', 'PBKDF2', 'Company backup', 'Move or recover this company.', 'Customer-owned and encrypted', 'Download encrypted backup', 'Inspect backup', 'Confirm restore', 'Auth sessions, company account IDs, and credentials are excluded.', 'Nothing is uploaded, sent, or written to a company account.', 'Backup integrity passed.', 'previous company state was restored']) {
@@ -645,7 +681,7 @@ const clientImportLiveCopyUpdates = new Map([
   ['authority + revision preflight retained', 'company check retained'],
   ['No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.', 'No customer message, payment, website publish, or automation runs from this check.'],
 ])
-for (const required of ['Import autopilot', 'Import coach', 'Next action', 'Write boundary', 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'Managed check before write', 'Local/export only', 'Activation handoff', 'Download activation package', 'Run managed check', 'Free mode can export the package for support review without sending data from the browser.', 'Server validation passed with zero records written', 'Provisioning plan', 'managed provisioning plan', 'Final preflight', 'Runs before apply', 'Verifying the named human, product capability, package digest, and current workspace revision...', 'Running final preflight...', 'authority + revision preflight retained', 'No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.']) {
+for (const required of ['Import autopilot', 'Import coach', 'Next action', 'Write boundary', 'Choose your CSV, check the matched columns, and review any corrections.', 'Managed check before write', 'Local/export only', 'Activation handoff', 'Download activation package', 'Run managed check', 'Free mode can export the package for support review without sending data from the browser.', 'Server validation passed with zero records written', 'Provisioning plan', 'managed provisioning plan', 'Final preflight', 'Runs before apply', 'Verifying the named human, product capability, package digest, and current workspace revision...', 'Running final preflight...', 'authority + revision preflight retained', 'No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.']) {
   const currentRequired = clientImportLiveCopyUpdates.get(required) ?? required
   if (!clientDataOnboardingChunk.includes(currentRequired)) throw new Error(`missing_live_import_coach_context:${required}`)
 }
@@ -728,7 +764,7 @@ for (const required of ['Run next step', 'Review an order batch', 'Upload CSV or
   const currentRequired = ecommerceLiveCopyUpdates.get(required) ?? required
   if (!ecommerceProductCorpus.includes(currentRequired)) throw new Error(`missing_live_ecommerce_simple_operator_context:${required}`)
 }
-for (const required of ['Try one customer order', 'Start sample order', 'Sample ready']) {
+for (const required of ['Try one sample request', 'Try sample request', 'Sample ready']) {
   if (!ecommerceProductCorpus.includes(required)) throw new Error(`missing_live_ecommerce_demo_first_context:${required}`)
 }
 for (const required of ['Order desk', 'Recommended Ecommerce next step', 'Agent job', 'Owner gate', 'Review Ecommerce requests in Shop', 'Prepare catalog import', 'Finish storefront setup', 'Review cart quote', 'Open storefront for ordering', 'Ecommerce request inbox', 'Request inbox', 'AI filters customer requests by stock risk, quote expiry, manual QR review, and delivery mode so the owner opens the right Shop review first.', 'No customer message, payment, delivery booking, stock move, refund, or Shop write runs here.', 'Request inbox filter', 'Open filtered request', 'Switch filter to find requests', 'Inbox ready for requests', 'Request inbox locked', 'Order ops cockpit', 'AI ranks order exceptions from the live queue, quote expiry, stock risk, and payment state. Shop still confirms every write.', 'Order import helper', 'The assistant prepares CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners review one clean Shop queue.', 'No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.', 'Open import setup', 'Download order template', 'Load sample order batch', 'Load sample Ecommerce order batch', 'Sample Ecommerce order batch loaded and reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.', 'Order repair checklist', 'Ready rows', 'Blocked rows', 'Next fix', 'Order intake guide', 'CSV, Viber, LINE, WeChat, email, form', 'Customer, SKU, quantity, fulfilment, payment, source proof', 'Ready rows, blocked rows, stock risk, missing fields', 'One reviewed packet for Shop queue approval', 'Download Ecommerce order import template', 'Order import template downloaded. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.', 'Order batch CSV', 'Review order batch', 'Download review packet', 'Ready for owner review', 'Repair before handoff', 'Order import batch reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.', 'Order import batch rejected locally. No Shop or customer action ran.', 'supermega.ecommerce.order_import_review_packet.v1', 'supermega-ecommerce-order-review-', 'Download Ecommerce order import review packet', 'Order import review packet downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or managed activation ran.', 'order_import', 'managed_activation', 'supermega-ecommerce-order-import-', 'customer_reference', 'source_message', 'Upload catalog first', 'Review imported orders', 'Ready for order upload', 'Save storefront first', 'CSV or messages', 'Download CSV', 'No auto submit', 'Ordering readiness', 'AI checks catalog, storefront fingerprint, quote readiness, Shop review queue, and safety mode before a customer request can move forward.', 'No customer message, payment, delivery, stock, refund, or Shop write runs from this panel.', 'Product recommendation', 'The assistant prepares the simplest sellable set from in-stock Shop items. You only save after review.', 'Use recommended products', 'Local selection', 'Product recommendation selected', 'no catalog, order, payment, delivery, stock, or Shop write ran.', 'Import Shop catalog', 'Choose sellable products', 'Repair storefront preview', 'Save ordering setup', 'Clear Shop review queue', 'Ready for reviewed orders', 'Ecommerce managed store activation packet', 'Managed store activation packet', 'AI packages catalog, storefront fingerprint, checkout quote controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for store activation.', 'No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this packet.', 'supermega.ecommerce.managed_store_activation_packet.v1', 'browser_local_trial', 'pendingShopReviews', 'supportHandoff', 'Enable managed writes only after Postgres, RLS, auth, audit, and scheduler proof passes.', 'forbiddenActions', 'product_publish', 'customer_message_send', 'payment_capture', 'wallet_debit', 'delivery_booking', 'stock_move', 'refund_write', 'shop_write', 'managed_activation', 'supermega-ecommerce-activation-', 'Download Ecommerce managed store activation packet', 'Ecommerce activation packet downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.', 'Import catalog for activation', 'Save storefront for activation', 'Repair checkout activation', 'Clear Shop activation queue', 'Review payment activation', 'Review delivery activation', 'Managed store activation ready', 'Download activation packet', 'Saved fingerprint', 'Quote controlled', 'Review only', 'Template ready', 'Shop gate', 'owner review', 'Free local only', 'Managed controls', 'Catalog', 'Storefront', 'Checkout', 'Queue', 'Safety', 'Order lifecycle', 'One path from cart to return', 'AI guides capture, pricing, available-to-promise, fulfilment, and returns from the same Shop-controlled source.', 'No charge, message, refund, or stock write starts here.', 'Payment and delivery controls', 'AI prepares pickup, local delivery, manual QR review, quote expiry, and Shop confirmation from the same checkout request.', 'No card charge, wallet debit, driver booking, customer message, or settlement write runs here.', 'Import catalog before checkout', 'Save storefront before checkout', 'Review payment and delivery', 'Quote payment and delivery', 'Checkout controls ready', 'Delivery fee review controls', 'Delivery fee review', 'AI prepares a local delivery zone, fee, rider handoff, and payment review packet from the customer request.', 'No rider booking, fee charge, customer message, payment capture, stock move, refund, or Shop write runs here.', 'Import catalog before delivery setup', 'Save storefront before delivery setup', 'Review delivery zone and fee', 'Delivery template ready', 'Prepare delivery review', 'No booking', 'Delivery-area template controls', 'Delivery-area templates', 'AI turns repeated delivery requests into reusable area, fee, rider, payment, and cut-off templates.', 'No saved template, customer message, rider booking, fee charge, settlement write, stock move, or Shop write runs here.', 'Import catalog before delivery templates', 'Save storefront before delivery templates', 'Prepare delivery-area template', 'Template ready when requests arrive', 'Delivery templates locked', 'Prepare area template', 'After approval', 'Managed gate', 'Quote recovery controls', 'Quote recovery', 'AI prepares stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source.', 'No customer message, discount, payment, delivery, refund, stock, or Shop write runs here.', 'Import catalog before recovery', 'Save storefront before recovery', 'Prepare quote refresh', 'Recover aged request', 'Open Shop recovery', 'Review recovery quote', 'Prepare recovery cart', 'Prepare quote recovery', 'Customer follow-up controls', 'Customer follow-up', 'AI prepares the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status.', 'No SMS, email, Viber, WhatsApp, discount, payment, delivery, refund, stock, or Shop write runs here.', 'Import catalog before follow-up', 'Save storefront before follow-up', 'Draft availability update', 'Draft quote refresh', 'Draft payment clarification', 'Draft delivery confirmation', 'Draft Shop review update', 'Follow-up ready when orders arrive', 'Prepare follow-up draft', 'Channel reply template controls', 'Channel reply templates', 'AI prepares owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence.', 'No message send, clipboard copy, discount, payment, delivery booking, refund, stock move, or Shop write runs here.', 'Reply channel template', 'Import catalog before reply templates', 'Save storefront before reply templates', 'Prepare reviewed channel reply', 'Reply templates ready', 'Reply templates locked', 'Prepare reply template', 'No send', 'Owner draft only', 'Draft only', 'Expiring', 'Aged', 'Draft', 'Boundary', 'Shop review', 'Delivery', 'Pickup', 'Expiry', 'Control', 'No customer send', 'Capture', 'Price', 'ATP', 'Fulfil', 'Return', 'Priority', 'SLA', 'Stock risk', 'Handoff', 'Shop owns writes', 'Order autopilot', 'Repair checkout recovery', 'Confirm reviewed quote', 'Shop handoff', 'Needs owner check', 'Payment', 'Not charged', 'Browser-local quote only. No stock, delivery, message, payment, or Shop record changes here.']) {
@@ -769,7 +805,7 @@ for (const required of ['Website agent queue', 'Recommended Website agent job', 
   const currentRequired = websiteLiveCopyUpdates.get(required) ?? required
   if (!websiteChunk.includes(currentRequired)) throw new Error(`missing_live_website_context:${required}`)
 }
-for (const required of ['Make this website yours', 'Example ready', 'Back to demo', 'Mingalar Fresh Mart', 'families and office buyers in Yangon', 'Daily groceries, pantry packs, and local delivery with clear pickup windows.', 'Public proof: same-day neighborhood delivery, visible prices, and a reviewed phone or chat contact route.', 'Website starter brief generated']) {
+for (const required of ['Your website', 'Example ready', 'Back to demo', 'Mingalar Fresh Mart', 'families and office buyers in Yangon', 'Daily groceries, pantry packs, and local delivery with clear pickup windows.', 'Public proof: same-day neighborhood delivery, visible prices, and a reviewed phone or chat contact route.', 'Website starter brief generated']) {
   if (!websiteChunk.includes(required)) throw new Error(`missing_live_website_starter_context:${required}`)
 }
 for (const required of ['Managed activation evidence plan', 'Evidence to go live', 'proof gates ready']) {
@@ -792,7 +828,7 @@ if (protectedPreview) {
     deploymentOutput = execFileSync(executable, executableArgs, {
       encoding: 'utf8',
       env: cliEnv,
-      maxBuffer: 8 * 1024 * 1024,
+      maxBuffer: 8 * 1024 * 1024, timeout: 15000, killSignal: 'SIGKILL',
       stdio: ['ignore', 'pipe', 'pipe'],
     })
   } catch (error) {

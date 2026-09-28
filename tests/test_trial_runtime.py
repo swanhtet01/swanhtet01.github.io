@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from copy import deepcopy
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -84,6 +85,28 @@ class TrialRuntimeTests(unittest.TestCase):
         }
         self._provision(self.store)
         self.client = self._client(self.store)
+
+    def test_provider_failure_is_private_and_never_reaches_workspace_store(self):
+        from supermega_runtime.runtime import resolve_trial_principal
+        from supermega_runtime.supabase_auth import SupabaseAuthUnavailable
+        app = FastAPI()
+        app.include_router(create_trial_router(store=self.store, resolve_principal=resolve_trial_principal))
+        with patch.dict('os.environ', {}, clear=True), \
+             patch('supermega_runtime.runtime.verify_supabase_user_identity',
+                   side_effect=SupabaseAuthUnavailable('PRIVATE_PROVIDER_SENTINEL')), \
+             patch.object(self.store, 'readiness', side_effect=AssertionError('store must not be reached')) as readiness, \
+             TestClient(app) as client:
+            for path in ('/api/trial/v1/website-reviews', '/api/trial/v1/ecommerce-reviews'):
+                with self.subTest(path=path):
+                    response = client.get(path, headers={'authorization': 'Bearer synthetic-token',
+                        'x-supermega-workspace-id': 'workspace-a', 'x-supermega-actor-id': 'forged-actor'})
+                    self.assertEqual(response.status_code, 503)
+                    self.assertEqual(response.json(), {'detail': {'code': 'trial_auth_unavailable'}})
+                    self.assertEqual(response.headers['cache-control'], 'private, no-store')
+                    self.assertNotIn('PRIVATE_PROVIDER_SENTINEL', response.text)
+                    self.assertNotIn('forged-actor', response.text)
+            readiness.assert_not_called()
+        self.assertEqual(self.reducer.calls, 0)
 
     def tearDown(self) -> None:
         self.client.close()
@@ -1066,6 +1089,42 @@ class TrialRuntimeTests(unittest.TestCase):
             )
             self.assertEqual(agent.status_code, 422)
             self.assertEqual(agent.json()["detail"]["code"], "commerce_actor_evidence_required")
+
+            # Verify authoritative readback after replay and rejected variants:
+            # a matching response alone cannot prove stock was reserved only once.
+            recovered = client.get(
+                "/api/trial/v1/bootstrap",
+                headers=self._headers(),
+            )
+            self.assertEqual(recovered.status_code, 200, recovered.text)
+            commerce = recovered.json()["states"]["commerce"]
+            self.assertEqual(commerce["version"], result["version"])
+            self.assertEqual(len(commerce["state"]["orders"]), 1)
+            self.assertEqual(commerce["state"]["orders"][0]["id"], "ORD-MANAGED-001")
+            self.assertEqual(commerce["state"]["items"][0]["onHand"], 8)
+
+            newer = deepcopy(body)
+            newer["command_id"] = str(uuid4())
+            newer["expected_version"] = result["version"]
+            newer["payload"]["intent"]["orderId"] = "ORD-MANAGED-002"
+            newer["payload"]["evidence"]["actionId"] = "ACT-SHOP-ORDER-002"
+            newer["payload"]["evidence"]["evidenceReference"] = "COUNTER-ORD-MANAGED-002"
+            advanced = client.post("/api/trial/v1/commands", headers=self._headers(), json=newer)
+            self.assertEqual(advanced.status_code, 200, advanced.text)
+            late_replay = client.post("/api/trial/v1/commands", headers=self._headers(), json=body)
+            self.assertEqual(late_replay.status_code, 200, late_replay.text)
+            old_receipt = late_replay.json()["result"]
+            self.assertTrue(old_receipt["idempotent_replay"])
+            self.assertEqual(old_receipt["version"], result["version"])
+            self.assertEqual(old_receipt["state"], result["state"])
+            latest = client.get("/api/trial/v1/bootstrap", headers=self._headers())
+            self.assertEqual(latest.status_code, 200, latest.text)
+            latest_commerce = latest.json()["states"]["commerce"]
+            self.assertEqual(latest_commerce["version"], result["version"] + 1)
+            self.assertEqual({row["id"] for row in latest_commerce["state"]["orders"]},
+                             {"ORD-MANAGED-001", "ORD-MANAGED-002"})
+            self.assertEqual(len(latest_commerce["state"]["orders"]), 2)
+            self.assertEqual(latest_commerce["state"]["items"][0]["onHand"], 6)
 
             other = client.get(
                 "/api/trial/v1/bootstrap",

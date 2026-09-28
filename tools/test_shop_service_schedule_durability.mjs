@@ -183,13 +183,32 @@ const booked = (base, startsAt = '2026-09-01T03:00:00.000Z', customerName = 'Daw
   check(readShopServiceSchedule(storage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)).bookings.length === 2, 'and both real bookings are now in the book')
 }
 
+// Rapid submissions share one lock queue before any result reaches the UI.
+{
+  const storage = memoryStorage()
+  const locks = recordingLocks()
+  const base = createShopServiceSchedule('spa')
+  const proposals = ['First', 'Second', 'Third'].map((name, index) =>
+    booked(base, `2026-09-01T0${3 + index}:00:00.000Z`, name))
+  const pending = proposals.map(next =>
+    mutateShopServiceSchedule(planShopServiceScheduleWrite(base.revision, next), storage, locks))
+  const outcomes = await Promise.all(pending)
+  check(outcomes[0].ok && outcomes.slice(1).every(result => !result.ok), 'queued stale submissions are refused after the first accepted write')
+  const stored = readShopServiceSchedule(storage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY))
+  check(stored.bookings.length === 1 && stored.bookings[0].customerName === 'First', 'rapid submissions preserve the first confirmed customer')
+  const retry = booked(stored, '2026-09-01T07:00:00.000Z', 'Second')
+  const retried = await mutateShopServiceSchedule(planShopServiceScheduleWrite(stored.revision, retry), storage, locks)
+  check(retried.ok && retried.schedule.bookings.length === 2, 'a reviewed retry after readback preserves both bookings')
+}
+
 // ---- 6b. the guard must survive MORE THAN ONE collision -------------------------------
-// The dangerous case is the refused tab's SECOND attempt. The component advances its
-// on-screen book optimistically, so after a refusal its in-memory revision equals the
+// The dangerous case is the refused tab's SECOND attempt. Historically the component
+// advanced its book optimistically, so after a refusal its in-memory revision equalled the
 // revision storage independently reached. If that stale book is used as the next
 // baseline, the numbers match by coincidence, the guard says yes, and the other tab's
 // booking is overwritten -- the exact loss this whole change exists to prevent.
-// commit() therefore re-reads storage on refusal; this asserts the consequence.
+// commit() now waits for acknowledgement and re-reads storage on refusal. Keep this
+// regression example to document why a phantom baseline must never be reused.
 {
   const storage = memoryStorage()
   const base = createShopServiceSchedule('spa')
@@ -256,3 +275,75 @@ const booked = (base, startsAt = '2026-09-01T03:00:00.000Z', customerName = 'Daw
 }
 
 console.log(`shop appointment book durability: ${checks} checks passed`)
+
+// Exercise the component's actual identity-loading effect with a foreign local book.
+// Managed loading must neither read that book nor overwrite it with company records.
+const { readFileSync: readScheduleSource } = await import('node:fs')
+const scheduleUi = readScheduleSource('showroom/src/core/ShopServiceSchedule.tsx', 'utf8')
+assert.ok(!scheduleUi.includes('useState(initialSchedule)'))
+assert.ok(!scheduleUi.includes('persistLocal('))
+assert.ok(!scheduleUi.includes('localStorage.setItem'))
+const effectStart = scheduleUi.indexOf('    let active = true')
+const effectEnd = scheduleUi.indexOf('  }, [])', effectStart)
+assert.ok(effectStart > 0 && effectEnd > effectStart)
+const effectBody = scheduleUi.slice(effectStart, effectEnd)
+for (const mode of ['local', 'managed', 'missing', 'failed', 'cancelled', 'signed-out', 'other-company', 'other-user', 'unexpected-company']) {
+  let localReads = 0
+  const shown = []
+  const identity = { workspaceId: 'company-A', userId: 'operator' }
+  const local = { services: [], resources: [], privacyPolicy: {}, owner: 'local' }
+  const company = { ...local, owner: 'company-A' }
+  const deps = {
+    currentManagedIdentity: async () => ['local', 'signed-out'].includes(mode) ? null : identity,
+    allowLocal: ['local', 'unexpected-company'].includes(mode),
+    expectedIdentity: ['local', 'unexpected-company'].includes(mode) ? null : mode === 'other-company' ? { ...identity, workspaceId: 'company-B' } : mode === 'other-user' ? { ...identity, userId: 'other' } : identity,
+    initialSchedule: () => { localReads++; return { schedule: local, error: '' } },
+    setSchedule: value => shown.push(value),
+    setScheduleState: value => shown.push(value),
+    setBookingDraft: () => {}, setRetentionDraft: () => {}, setNotice: () => {},
+    managedIdentityRef: { current: null }, managedVersionRef: { current: null },
+    setManagedConnected: () => {}, setManagedPrivacyOwner: () => {}, setManagedLoading: () => {},
+    isCurrentScheduleIdentity: async () => true,
+    loadManagedServiceSchedule: async () => {
+      if (mode === 'failed') throw Error('unavailable')
+      return { schedule: mode === 'missing' ? null : company, version: 1 }
+    },
+  }
+  const cleanup = Function(...Object.keys(deps), effectBody)(...Object.values(deps))
+  if (mode === 'cancelled') cleanup()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(localReads, mode === 'local' ? 1 : 0, `${mode}: local cache access`)
+  assert.equal(shown.includes(local), mode === 'local', `${mode}: foreign schedule displayed`)
+  assert.equal(shown.includes(company), mode === 'managed', `${mode}: company result`)
+  cleanup()
+}
+console.log('PASS schedule identity loading: local, managed, missing, failed, cancelled; no managed local-cache writes')
+
+const parentUi = readScheduleSource('showroom/src/core/CoreApp.tsx', 'utf8').replace(/\r\n/g, '\n')
+assert.ok(!parentUi.includes('useState<ShopServiceScheduleState | null>(readLocalShopServiceSchedule)'))
+assert.ok(!parentUi.includes('readLocalShopIndustryPack'))
+assert.ok(parentUi.includes('key={scheduleScopeKey}'))
+assert.ok(parentUi.includes('{confirmedLocalShop || managedIdentity ? <Suspense fallback={null}><ShopServiceSchedule'))
+assert.ok(parentUi.includes('onScheduleChange={(schedule) => setScheduleSnapshot({ key: scheduleScopeKey, schedule })}'))
+const selection = parentUi.match(/const shopSchedule = (.+)/)[1]
+const selectSchedule = Function('scheduleSnapshot', 'scheduleScopeKey', `return ${selection}`)
+const oldBook = { owner: 'old company' }
+assert.equal(selectSchedule({ key: 'A', schedule: oldBook }, 'A'), oldBook)
+for (const nextScope of ['B', 'checking', 'local']) {
+  assert.equal(selectSchedule({ key: 'A', schedule: oldBook }, nextScope), null)
+}
+const localEffect = parentUi.match(/useEffect\(\(\) => \{\n(    if \(!confirmedLocalShop \|\| managedIdentity\) return[\s\S]*?)  \}, \[confirmedLocalShop, managedIdentity, scheduleScopeKey\]\)/)[1]
+for (const [confirmed, identity, expected] of [[false, null, 0], [true, { workspaceId: 'A' }, 0], [true, null, 1]]) {
+  let reads = 0
+  const cleanup = Function('confirmedLocalShop', 'managedIdentity', 'scheduleScopeKey', 'setScheduleSnapshot', 'readLocalShopServiceSchedule', localEffect)(confirmed, identity, 'test', () => {}, () => { reads++; return null })
+  await Promise.resolve()
+  assert.equal(reads, expected)
+  cleanup?.()
+}
+console.log('PASS parent schedule boundary: deferred local reads, scoped snapshots, keyed child, null propagation')
+
+let cancelledReads = 0
+const cancelParentRead = Function('confirmedLocalShop', 'managedIdentity', 'scheduleScopeKey', 'setScheduleSnapshot', 'readLocalShopServiceSchedule', localEffect)(true, null, 'local', () => { throw Error('cancelled state update') }, () => { cancelledReads++; return null })
+cancelParentRead()
+await Promise.resolve()
+assert.equal(cancelledReads, 0, 'unmounted or switched local scope must not read or publish')
