@@ -750,7 +750,7 @@ export function WorkspaceControlsPage() {
         </section>
 
         <details className="core-panel compact-disclosure"><summary>Business reports</summary>
-          <div><span className="core-eyebrow">Reports</span><h2>See how the business is doing.</h2><p>Read-only summaries of saved Shop, Plant, Website and Ecommerce records.</p></div>
+          <div><span className="core-eyebrow">Reports</span><h2>See how the business is doing.</h2><p>Sales, stock and activity from your saved records.</p></div>
           <div className="trial-actions">
             <Link className="core-button primary" to="/settings/?view=ceo-brief#controls">Operating brief</Link>
             <Link className="core-button" to="/settings/?view=shop-revenue#controls">Shop revenue</Link>

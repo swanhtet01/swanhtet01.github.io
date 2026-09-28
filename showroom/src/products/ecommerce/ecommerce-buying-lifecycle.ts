@@ -2342,7 +2342,7 @@ export async function buildEcommerceCancellationDecision(input: {
   proof: CommerceActionProof
 }): Promise<EcommerceCancellationDecision> {
   const intent = validateEcommerceCancellationIntent(input.intent)
-  if (canonicalToken(input.scope, 'scope') !== intent.scope) rejectInvalid('Cancellation decision belongs to a different Ecommerce workspace.')
+  if (canonicalToken(input.scope, 'scope') !== intent.scope) rejectInvalid('Cancellation decision belongs to a different Commerce workspace.')
   if (!ecommerceCancellationMatchesCurrentShop(input.commerceState, intent)) {
     rejectInvalid('Cancellation decision requires the exact active Shop order reviewed by the customer request.')
   }

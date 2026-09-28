@@ -199,7 +199,7 @@ export function projectShopProfitControl(input: ShopProfitControlInput): ShopPro
     id: 'incoming_request',
     severity: 'watch',
     title: 'Convert waiting demand',
-    impact: 'Unreviewed Website and Ecommerce requests are demand that has not become accountable Shop orders.',
+    impact: 'Review requests from Sites and Commerce before confirming them as Shop orders.',
     ownerRole: 'Order reviewer',
     dueLabel: 'Within the operating shift',
     actionLabel: 'Open intake',
