@@ -1108,12 +1108,15 @@ test('installed SDK nonpersistent signup cleanup cannot touch workspace storage'
 })
 
 
-test('account setup has one business destination and no demo fallback', () => {
+test('unavailable account offers support and login without a setup or demo detour', () => {
   const page = readFileSync(new URL('../showroom/src/core/ManagedAccountPage.tsx', import.meta.url), 'utf8')
   const unavailable = page.slice(page.indexOf('function ManagedUnavailable'), page.indexOf('export function ManagedAccountPage'))
   assert.doesNotMatch(unavailable, /demo|trial/i)
   assert.equal((unavailable.match(/href=\{managedAccountRequestUrl\(productIntent\)\}/g) || []).length, 1)
-  assert.match(unavailable, /Set up your business/)
+  assert.match(unavailable, /Contact support/)
+  assert.match(unavailable, /Back to Login/)
+  assert.doesNotMatch(unavailable, /Set up your business|Send your business details/)
+  assert.ok(unavailable.includes("managedAccountPath('/login', productIntent, search)"))
   for (const product of ['shop', 'website', 'ecommerce']) {
     const destination = new URL(managedAccountRequestUrl(product))
     assert.equal(destination.origin, 'https://supermega.dev')

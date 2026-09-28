@@ -18,8 +18,8 @@ import {
 function ManagedUnavailable({ productIntent, search }: { productIntent: string | null; search: string }) {
   if (managedLoginReviewPath(search)) return <section className="managed-login-panel" aria-label="Review account unavailable"><h2>Review recovery is unavailable here.</h2><p>Keep your original review link. Ask SuperMega in your existing setup conversation to restore access.</p><Link className="core-button" to={managedAccountPath('/login', productIntent, search)}>Back to sign in</Link></section>
   return <section className="managed-login-panel" aria-label="Company account unavailable">
-    <div><span className="core-eyebrow">Business setup</span><h2>Account access is unavailable here.</h2><p>Send your business details to get your workspace set up.</p></div>
-    <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Set up your business</a></div>
+    <div><span className="core-eyebrow">Account</span><h2>Account access is unavailable here.</h2><p>Contact support to restore access to your account.</p></div>
+    <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a><Link className="account-inline-link" to={managedAccountPath('/login', productIntent, search)}>Back to Login</Link></div>
   </section>
 }
 

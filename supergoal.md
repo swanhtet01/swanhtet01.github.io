@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.13
+Version: 1.2.14
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -65,9 +65,9 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Pushed `5b8f1902` on `codex/site-app-cleanup-20260924` | Recheck exact head and CI before release |
+| Source | Pushed `6c502056` on `codex/site-app-cleanup-20260924` | Recheck exact head and CI before release |
 | Integration | PR #596 is open, non-draft and mergeable; 573 changed files at af3e7ab7. Review API shows a COMMENTED review, no approval. Analytics findings match existing fix be64785c, verified locally by 71 telemetry checks plus initial-bootstrap assertions | Broad accumulated scope still needs genuine review; code verification is not independent approval |
-| CI | Full CI `36430761564` on `6017a08a` passed, including desktop/390px journeys and bounded browser commands | Newer `5b8f1902` needs its own CI; hosted/customer acceptance remains outstanding |
+| CI | Full CI `36430761564` on `6017a08a` passed, including desktop/390px journeys and bounded browser commands | Newer `6c502056` needs its own CI; hosted/customer acceptance remains outstanding |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
@@ -260,6 +260,12 @@ Baseline interaction/page latency, errors, checkout completion, failed commands 
 Use structured logs, correlation IDs and appropriate traces/error reporting. OpenTelemetry or maintained equivalents are options; a package installation does not prove end-to-end monitoring. Scrub tokens, private review identifiers, customer contact data, payment details and raw payloads. Test redaction through failures as well as successful requests.
 
 Incident loop: detect → classify → contain within authority → preserve evidence → repair → verify → communicate where authorized → prevent recurrence. Automated analysis must not invent incidents or execute destructive remediation. Notify meaningful changes rather than repeated unchanged status.
+
+### Founder product access and cloud capacity
+
+Provide one private founder login with assigned Shop, Website and Ecommerce workspaces. Reconcile existing identity and memberships before provisioning; do not create duplicate accounts or expose shared passwords. Custom products appear only after deployment and access are verified. Owner confirmed swanhtet@supermega.dev for the founder account and company email. Production Auth lookup on 28 September found no user with that email; official account provisioning is still required. Keep personal email separate. devteam@supermega.dev is unverified. Complete hosted sign-in, product entry, save/reload and recovery before handing over an account as ready. Use owner-supplied content or honestly labelled illustrative content, never invented customer activity.
+
+The owner accepts paid cloud capacity when local RAM limits useful work. Prefer existing Vercel, Supabase, Google Workspace and coding subscriptions; verify actual plans and remaining capacity before claiming they are paid for. Connected access alone does not establish billing entitlement. New spend requires a specific service, workload, monthly ceiling and owner confirmation. Automated local routing stays local-only until an exact cloud job is authorized; no silent paid fallback. Move a measured workload to cloud before adding another framework or fleet. Track cost per accepted result and a stop limit. Owner reports an existing Resend account; contact notification and acknowledgement code already uses Resend, but sender-domain verification, SMTP configuration, plan and delivery still require provider evidence. Private custom-product and R&D access must remain separate from publicly available products.
 
 ## 14. AI-operated company
 
