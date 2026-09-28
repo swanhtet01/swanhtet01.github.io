@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import unittest
 from uuid import uuid4
+from unittest.mock import patch
 from tools.acceptance_auth_fixture import PROJECT, temporary_users, require_authority
 
 
@@ -20,6 +21,10 @@ class FakeApi:
 
 
 class AcceptanceAuthTests(unittest.TestCase):
+    def setUp(self):
+        clock=patch("tools.acceptance_auth_fixture.datetime").start()
+        clock.now.return_value=datetime(2026,9,28,23,0,tzinfo=timezone.utc)
+        self.addCleanup(patch.stopall)
     def test_cleanup_after_caller_failure(self):
         api=FakeApi()
         with self.assertRaisesRegex(RuntimeError,'caller failed'):
