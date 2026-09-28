@@ -370,8 +370,10 @@ Status: deterministic baseline PASS on ten synthetic cases in
 `tools/catalog_mapping_corpus.json`, exercised by `tools/test_catalog_mapping_baseline.mjs`.
 The existing importer is MMK-only; currency detection/conversion is not proven.
 Explicit currency columns now reject non-MMK or blank declarations. This does
-not implement conversion or all possible currency-labelled headers. Next: define
-the mapping-suggestion contract and extend currency-header coverage before model comparison. AI usefulness and operator time savings remain NOT RUN. R&D produces
+not implement conversion or all possible currency-labelled headers. The mapping-suggestion contract now binds proposals to the source digest, preserves
+deterministic mappings, rejects ambiguous choices and returns review-only previews.
+Recognized foreign-currency price headers are rejected. Next: compare real model
+output against this contract on a capacity-qualified runtime. AI usefulness and operator time savings remain NOT RUN. R&D produces
 an adopt/reject result and a product change, not another strategy document.
 
 ## 17. Milestones and completion evidence
