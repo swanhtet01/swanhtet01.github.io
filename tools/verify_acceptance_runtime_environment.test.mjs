@@ -28,3 +28,18 @@ test('rejects privileged, cross-project, insecure and ambiguous database URLs wi
   assert.ok(!JSON.stringify(result).includes('PRIVATE_TEST_SECRET'))
  }
 })
+
+
+test('rejects inherited server Auth overrides that would bypass the acceptance browser configuration', () => {
+ for (const name of ['SUPERMEGA_SUPABASE_URL', 'SUPABASE_URL']) {
+  assert.equal(inspect({ ...valid, [name]: 'https://zvtzwcimpvvtkowflhda.supabase.co' }, commit).ok, false)
+  assert.equal(inspect({ ...valid, [name]: valid.VITE_SUPABASE_URL + '/' }, commit).ok, true)
+ }
+ for (const name of ['SUPERMEGA_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_PUBLISHABLE_KEY',
+   'SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY']) {
+  const result = inspect({ ...valid, [name]: 'PRIVATE_OTHER_PROJECT_KEY' }, commit)
+  assert.equal(result.ok, false)
+  assert.ok(!JSON.stringify(result).includes('PRIVATE_OTHER_PROJECT_KEY'))
+  assert.equal(inspect({ ...valid, [name]: valid.VITE_SUPABASE_PUBLISHABLE_KEY }, commit).ok, true)
+ }
+})

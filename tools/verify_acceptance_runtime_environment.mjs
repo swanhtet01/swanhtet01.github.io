@@ -11,6 +11,14 @@ export function inspectAcceptanceEnvironment(env, expectedCommit) {
   check(env.SUPERMEGA_SUPABASE_PROJECT_REF === acceptanceProject, 'project_mismatch')
   check(env.VITE_SUPABASE_URL === `https://${acceptanceProject}.supabase.co`, 'auth_project_mismatch')
   check(/^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(env.VITE_SUPABASE_PUBLISHABLE_KEY || ''), 'publishable_key_required')
+  // Server Auth resolves these aliases before the browser fallback. Reject inherited
+  // project credentials even when the VITE configuration looks correct.
+  const authUrl = `https://${acceptanceProject}.supabase.co`
+  check(['SUPERMEGA_SUPABASE_URL', 'SUPABASE_URL'].every(name =>
+    !env[name] || String(env[name]).trim().replace(/\/$/, '') === authUrl), 'server_auth_project_mismatch')
+  check(['SUPERMEGA_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_PUBLISHABLE_KEY',
+    'SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY'].every(name =>
+    !env[name] || String(env[name]).trim() === env.VITE_SUPABASE_PUBLISHABLE_KEY), 'server_auth_key_mismatch')
   check(env.SUPERMEGA_TRIAL_SCHEMA_VERSION === '13' && env.SUPERMEGA_BILLING_SCHEMA_VERSION === '13', 'schema_version_mismatch')
   check(['', 'false'].includes(env.SUPERMEGA_TRIAL_WRITES_ENABLED || ''), 'staging_writes_must_be_disabled')
   check(!env.SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW, 'self_serve_must_be_closed')
