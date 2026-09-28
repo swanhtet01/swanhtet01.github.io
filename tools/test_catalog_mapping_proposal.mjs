@@ -43,3 +43,28 @@ test('evaluation refuses incomplete or duplicated case coverage and preserves ev
   const rejected = await evaluateCatalogMappings(corpus, [{ id: 'mapping', proposal: null }])
   assert.equal(rejected.technicalPass, false)
 })
+
+
+test('cafe spreadsheet headings map automatically without changing values', async () => {
+  const source = 'Item code,Menu item,Stock on hand,Reorder level,Selling price MMK\nCAFE-1,Espresso,12,3,3500'
+  const result = await createShopCatalogImportPreview(source, [])
+  assert.equal(result.totals.ready, 1)
+  assert.deepEqual(result.rows[0].item, { sku: 'CAFE-1', name: 'Espresso', onHand: 12, reorderAt: 3, price: 3500 })
+  assert.equal(result.mapping.name, 'Menu item')
+  assert.equal(result.mapping.price, 'Selling price MMK')
+})
+
+test('competing cafe price columns still need an explicit choice', async () => {
+  const source = 'Item code,Item,Stock on hand,Reorder level,Selling price MMK,Unit price MMK\nCAFE-1,Espresso,12,3,3500,3000'
+  const result = await createShopCatalogImportPreview(source, [])
+  assert.equal(result.mapping.price, '')
+  assert.equal(result.suggestions.find(row => row.field === 'price').basis, 'ambiguous')
+  assert.equal(result.totals.ready, 0)
+})
+
+test('recognized cafe headings do not bypass declared foreign currency', async () => {
+  const source = 'Item code,Menu item,Stock on hand,Reorder level,Selling price MMK,Currency\nCAFE-1,Espresso,12,3,3500,THB'
+  const result = await createShopCatalogImportPreview(source, [])
+  assert.equal(result.totals.ready, 0)
+  assert.ok(result.rows[0].issues.some(issue => issue.code === 'unsupported_currency'))
+})

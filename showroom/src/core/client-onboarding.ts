@@ -451,10 +451,10 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
     },
     fields: [
       { id: 'sku', label: 'SKU', required: true, kind: 'sku', aliases: ['sku', 'item_sku', 'product_sku', 'stock_code', 'item_code', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },
-      { id: 'name', label: 'Item name', required: true, kind: 'text', aliases: ['item_name', 'name', 'product_name', 'title', 'description', 'ပစ္စည်းအမည်'], maximum: 180 },
-      { id: 'onHand', label: 'Opening stock', required: true, kind: 'integer', aliases: ['opening_stock', 'on_hand', 'available_stock', 'stock', 'quantity', 'qty', 'opening_quantity', 'လက်ကျန်'], minimum: 0 },
+      { id: 'name', label: 'Item name', required: true, kind: 'text', aliases: ['item_name', 'name', 'product_name', 'item', 'menu_item', 'title', 'description', 'ပစ္စည်းအမည်'], maximum: 180 },
+      { id: 'onHand', label: 'Opening stock', required: true, kind: 'integer', aliases: ['opening_stock', 'on_hand', 'stock_on_hand', 'available_stock', 'stock', 'quantity', 'qty', 'opening_quantity', 'လက်ကျန်'], minimum: 0 },
       { id: 'reorderAt', label: 'Reorder at', required: true, kind: 'integer', aliases: ['reorder_at', 'reorder_level', 'reorder_point', 'low_stock_at', 'minimum_stock', 'min_stock'], minimum: 0 },
-      { id: 'price', label: 'Price (MMK)', required: true, kind: 'integer', aliases: ['price_mmk', 'price', 'unit_price', 'selling_price', 'mmk_price', 'စျေးနှုန်း'], minimum: 1 },
+      { id: 'price', label: 'Price (MMK)', required: true, kind: 'integer', aliases: ['price_mmk', 'price', 'unit_price', 'selling_price', 'unit_price_mmk', 'selling_price_mmk', 'mmk_price', 'စျေးနှုန်း'], minimum: 1 },
     ],
   },
   production: {
