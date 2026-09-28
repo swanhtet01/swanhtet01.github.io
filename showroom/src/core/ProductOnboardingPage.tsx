@@ -611,7 +611,9 @@ function ActiveProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                   </optgroup>
                 </select>
                 <small>{selectedBusinessTemplate
-                  ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.`
+                  ? managedCommerce
+                    ? `${selectedBusinessTemplate.description} Review ${selectedBusinessTemplate.catalog.length} suggested items before adding company records.`
+                    : `${selectedBusinessTemplate.description} Add your own products, prices and opening stock.`
                   : `${selectedShopIndustryPack.firstWorkflow} ${selectedShopIndustryPack.description}`}</small>
               </label>
               {shopPlanGuide ? <section aria-label={`${selectedBusinessTemplate?.name.en} plan guide`} className="shop-plan-guide">
