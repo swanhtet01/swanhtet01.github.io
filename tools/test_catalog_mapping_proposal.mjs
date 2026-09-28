@@ -28,3 +28,18 @@ test('mapped foreign currency still fails deterministic validation', async () =>
   const p = await proposalFor(source); p.mapping.price = 'price_usd'
   assert.equal((await reviewCatalogMappingProposal(source, [], p)).reason, 'import_validation_failed')
 })
+
+test('evaluation refuses incomplete or duplicated case coverage and preserves evidence limits', async () => {
+  const { evaluateCatalogMappings } = await import('./evaluate_catalog_mapping.mjs')
+  const corpus = { cases: [{ id: 'mapping', csv, ready: 1, values: { price: '1200', onHand: '5' } }] }
+  await assert.rejects(evaluateCatalogMappings(corpus, []), /exact_case_coverage/)
+  const row = { id: 'mapping', proposal: await proposalFor() }
+  await assert.rejects(evaluateCatalogMappings(corpus, [row, row]), /exact_case_coverage/)
+  const result = await evaluateCatalogMappings(corpus, [row])
+  assert.equal(result.technicalPass, true)
+  assert.equal(result.adoptionApproved, false)
+  assert.equal(result.operatorTimeSavings, null)
+  assert.equal(result.importExecuted, false)
+  const rejected = await evaluateCatalogMappings(corpus, [{ id: 'mapping', proposal: null }])
+  assert.equal(rejected.technicalPass, false)
+})
