@@ -62,7 +62,11 @@ def main(argv=None):
         url = core._read_secret(args.admin_database_url_file, "SUPERMEGA_ACCEPTANCE_ADMIN_URL", "admin_url")
         core.validate_admin_target(url, args.expected_project_ref)
         with core._connect(url) as connection:
+            # Enforce inspection safety at the database, including through a
+            # pooler that may ignore connection startup options.
+            connection.execute("BEGIN READ ONLY")
             before = core.inspect_runtime_role(connection)
+            connection.rollback()
             if args.apply:
                 # Recheck immediately before mutation; a slow connect must not
                 # extend the recorded authorization window.

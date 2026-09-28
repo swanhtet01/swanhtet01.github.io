@@ -89,12 +89,22 @@ class AcceptanceRoleTests(unittest.TestCase):
                 secret = stack.enter_context(patch.object(module.core, "_read_secret", return_value="PRIVATE_SENTINEL"))
                 stack.enter_context(patch.object(module.core, "validate_admin_target"))
                 stack.enter_context(patch.object(module.core, "_connect", return_value=connection))
-                stack.enter_context(patch.object(module.core, "inspect_runtime_role", return_value={"runtime_exists": applying, "ready": applying}))
+                inspect = stack.enter_context(patch.object(module.core, "inspect_runtime_role", return_value={"runtime_exists": applying, "ready": applying}))
                 apply = stack.enter_context(patch.object(module.core, "apply_runtime_role"))
+                sequence = MagicMock()
+                sequence.attach_mock(connection.execute, "begin")
+                sequence.attach_mock(inspect, "inspect")
+                sequence.attach_mock(connection.rollback, "rollback")
+                sequence.attach_mock(apply, "apply")
                 args = ["--expected-project-ref", module.ACCEPTANCE_REF]
                 if applying:
                     args += ["--apply", "--approval-file", "approval.json"]
                 self.assertEqual(module.main(args), 0)
+                connection.execute.assert_called_once_with("BEGIN READ ONLY")
+                connection.rollback.assert_called_once_with()
+                self.assertEqual([item[0] for item in sequence.mock_calls],
+                                 ["begin", "inspect", "rollback"] +
+                                 (["apply", "inspect"] if applying else []))
                 self.assertEqual(apply.call_count, int(applying))
                 self.assertEqual(approval.call_count, 2 if applying else 0)
                 self.assertEqual(secret.call_count, 2 if applying else 1)
