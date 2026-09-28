@@ -478,3 +478,15 @@ test('synthetic business briefs survive service corrections without repeat entry
     assert.equal(payload.template, '')
   }
 })
+
+test('legacy intelligence links retain normal contact presentation and source attribution', async () => {
+  const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
+  const baseline = harness([])
+  const legacy = harness([{ body: receipt }], '?source=managed-intelligence')
+  assert.deepEqual([...legacy.headings], [...baseline.headings])
+  assert.equal(legacy.fields.get('button[type="submit"]')?.textContent, baseline.fields.get('button[type="submit"]')?.textContent)
+  assert.doesNotMatch(script, /Request managed pilot|Request managed company intelligence/)
+  await legacy.submit()
+  assert.equal(JSON.parse(legacy.calls[0].body).source_url, 'https://supermega.dev/contact/?source=managed-intelligence')
+  assert.match(legacy.fields.get('[data-form-status]').textContent, /Request received/)
+})

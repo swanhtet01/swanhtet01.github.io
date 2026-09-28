@@ -563,7 +563,7 @@ const contactScript = `<script>(function(){
     var valid=values.proof_contract==='supermega.managed_trial_proof.v2'&&values.proof_version==='2'&&/^sha256:[0-9a-f]{64}$/.test(values.proof_digest)&&/^(shop|plant|website|ecommerce)$/.test(values.proof_product)&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(values.proof_template)&&boundedInteger(values.proof_readiness,100)&&boundedInteger(values.proof_sources,1000000)&&boundedInteger(values.proof_behavior,1000000)&&boundedInteger(values.proof_decisions,1000000)&&/^(not_started|collecting|target_met|improved|unchanged|regressed)$/.test(values.proof_outcome)&&outcomeDigestValid&&/^(true|false)$/.test(values.proof_outcome_accepted)&&(!outcomeAccepted||/^(target_met|improved)$/.test(values.proof_outcome))&&values.proof_raw_records==='false'&&values.proof_product===(query.get('product')||'')&&values.proof_template===(query.get('template')||'')&&contextValid;
     return {attempted:true,proof:valid?values:null};
   }
-  var requestedProduct=query.get('product'),managedIntelligenceRequest=query.get('source')==='managed-intelligence';if(product&&${JSON.stringify(['guide', ...publicProducts.map(item => item.id)])}.includes(requestedProduct||''))product.value=requestedProduct;
+  var requestedProduct=query.get('product');if(product&&${JSON.stringify(['guide', ...publicProducts.map(item => item.id)])}.includes(requestedProduct||''))product.value=requestedProduct;
   var requestedTemplate=query.get('template')||'';
   if(template&&product&&requestedProduct!=='guide'&&product.value===requestedProduct&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(requestedTemplate))template.value=requestedTemplate;
   if(handoff.get('company')&&company)company.value=handoff.get('company').slice(0,180);
@@ -605,13 +605,6 @@ const contactScript = `<script>(function(){
   updateBriefHint();
   if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateBriefHint();updateServiceSummary();if(briefChoice)briefChoice.open=true});
   if(template)template.addEventListener('input',detachProofIfChanged);
-  if(managedIntelligenceRequest&&!handoff.toString()){
-    if(heading)heading.textContent='Request managed company intelligence.';
-    if(lede)lede.textContent='Describe the first ${escapeHtml(publicProductNames)} workflow that should use approved company context.';
-    if(copyHeading)copyHeading.textContent='Start with one proven workflow.';
-    if(copy)copy.textContent='We will confirm the records, responsible owner, acceptance test, tenant boundary, recovery plan, and actions that must stay review-gated.';
-    submit.textContent='Request managed pilot';
-  }
   if(handoff.toString()){
     var productName=product&&product.selectedOptions.length?product.selectedOptions[0].textContent:'managed AI';
     if(heading)heading.textContent='Finish your '+productName+' request.';
