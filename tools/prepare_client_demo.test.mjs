@@ -178,8 +178,8 @@ test('client preparation compiles one validated four-product founder-review arti
       recordAuthorities: [
         { product: 'commerce', label: 'Shop', locationIds: ['LOC-MAIN'], owns: ['catalog', 'inventory', 'orders', 'payments', 'customer_accounts'], consumesFrom: ['production'], writePolicy: 'human_review_required' },
         { product: 'production', label: 'Plant', locationIds: ['LOC-MAIN'], owns: ['materials', 'work_orders', 'quality', 'maintenance', 'released_stock'], consumesFrom: ['commerce'], writePolicy: 'human_review_required' },
-        { product: 'website', label: 'Website', locationIds: ['LOC-MAIN'], owns: ['pages', 'content', 'releases', 'lead_intake'], consumesFrom: [], writePolicy: 'human_review_required' },
-        { product: 'ecommerce', label: 'Ecommerce', locationIds: ['LOC-MAIN'], owns: ['storefront', 'collections', 'carts', 'quotes', 'order_requests'], consumesFrom: ['commerce', 'website'], writePolicy: 'human_review_required' },
+        { product: 'website', label: 'Sites', locationIds: ['LOC-MAIN'], owns: ['pages', 'content', 'releases', 'lead_intake'], consumesFrom: [], writePolicy: 'human_review_required' },
+        { product: 'ecommerce', label: 'Commerce', locationIds: ['LOC-MAIN'], owns: ['storefront', 'collections', 'carts', 'quotes', 'order_requests'], consumesFrom: ['commerce', 'website'], writePolicy: 'human_review_required' },
       ],
       controls: { canonicalLocationRequired: true, crossProductReferencesRequired: true, unmanagedWritesAllowed: false },
     })
