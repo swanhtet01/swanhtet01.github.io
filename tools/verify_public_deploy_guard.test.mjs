@@ -70,6 +70,7 @@ for (const [path, token, failure] of [
   ['tools/verify_public_release_live.mjs', 'homepage_shop_action_missing', 'live_navigation_contract_missing'],
   ['tools/verify_public_release_live.mjs', 'guided_product_route_missing', 'live_navigation_contract_missing'],
   ['tools/verify_public_release_live.mjs', 'retired_product_marketed', 'live_navigation_contract_missing'],
+  ...['retired_shop_action_present', 'interface_image_reference_missing', 'interface_image_http_error', 'interface_image_content_type_wrong', 'interface_image_invalid', 'interface_image_release_mismatch'].map(token => ['tools/verify_public_release_live.mjs', token, 'live_navigation_contract_missing']),
 ]) {
   test(`removing ${token} remains blocked`, () => {
     const result = evaluate(value => value, { [path]: value => {
