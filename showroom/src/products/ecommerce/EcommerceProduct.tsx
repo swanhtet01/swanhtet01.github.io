@@ -2117,17 +2117,7 @@ export function EcommerceProduct() {
         </div>
       </details>
 
-      <details className="ecommerce-verification" open={digestError ? true : undefined}>
-        <summary>
-          <span><strong>Preview verification</strong><small>Local currentness check</small></span>
-          <b>{digestError ? 'Attention' : digest ? 'Ready' : 'Checking'}</b>
-        </summary>
-        <div className="ecommerce-digest" aria-live="polite">
-          <span>Preview fingerprint</span>
-          <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
-          <small>{digestError || 'The same store fields and Shop snapshot produce the same local check.'}</small>
-        </div>
-      </details>
+      {digestError ? <p className="ecommerce-verification" role="alert">We could not verify your store changes. Keep this page open and try saving again shortly.</p> : null}
         </div>
       </details>
 
