@@ -1,7 +1,7 @@
 # Generates the per-product 1200x630 social share cards committed at
 # tools/public-assets/og-card-<productId>.png, one for each customer product in
 # site-manifest.json. The layout reproduces the committed generic og-card.png
-# (jade-v2 brand) measured pixel-by-pixel:
+# (cobalt-v1 brand) measured pixel-by-pixel:
 #   - #f6f4ee background with the 3px #e5e4de/#d3d3ce ink border
 #   - green ">_" mark (Consolas Bold 46px) + "SUPERMEGA" (Segoe UI Bold 36px)
 #   - 119x9 accent rule at (72, 246)
@@ -9,7 +9,7 @@
 #   - one-line product description (Segoe UI 31px, muted) under the name
 #   - footer "supermega.dev" (Consolas 30px, green) + the brand tagline (muted)
 # Regenerate after changing a product name or headline in site-manifest.json,
-# then rerun npm run public:prebuilt. The generic og-card.png is not touched.
+# then rerun npm run public:prebuilt. The generic og-card.png is regenerated too.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
@@ -28,10 +28,10 @@ function ColorFromHex([string]$hex) {
 $background = ColorFromHex $manifest.brand.colors.background   # #f6f4ee
 $ink = ColorFromHex $manifest.brand.colors.ink                 # #17231d
 $accent = ColorFromHex $manifest.brand.colors.accent           # #0b745e
-$muted = ColorFromHex '#56665d'                                # --muted in the shared page style
-$borderOuter = ColorFromHex '#e5e4de'                          # measured from the committed og-card.png
-$borderCore = ColorFromHex '#d3d3ce'
-$tagline = 'Accountable company software.'
+$muted = ColorFromHex '#526078'                                # --muted in the shared page style
+$borderOuter = ColorFromHex '#e1e6f0'                          # measured from the committed og-card.png
+$borderCore = ColorFromHex '#cbd3e3'
+$tagline = 'Shop / Website / Ecommerce'
 
 function New-OgCard {
   param([string]$Name, [string]$Headline, [string]$OutPath)
@@ -93,3 +93,5 @@ function New-OgCard {
 foreach ($product in $manifest.customerProducts) {
   New-OgCard -Name $product.name -Headline $product.headline -OutPath (Join-Path $assetDir ('og-card-' + $product.id + '.png'))
 }
+
+New-OgCard -Name 'Less busywork.' -Headline 'More business.' -OutPath (Join-Path $assetDir 'og-card.png')

@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.14
+Version: 1.2.15
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -54,7 +54,7 @@ Prioritize the weakest required part of the customer lifecycle. Do not spend suc
 
 ### Current execution order — 28 September
 
-1. Finish the public-site and customer-entry cleanup: one Login, real interface screenshots, consistent white/jade styling, concise contact receipts, and no promotional demo/trial/preview detours. Preserve truthful synthetic-data provenance and legitimate editing/review tools.
+1. Finish the public-site and customer-entry cleanup: one Login, real interface screenshots, consistent white/graphite/cobalt styling, concise contact receipts, and no promotional demo/trial/preview detours. Preserve truthful synthetic-data provenance and legitimate editing/review tools.
 2. Complete full CI on a stable candidate; fix failures rather than repeatedly interrupting runs with small copy pushes. Local checks are not hosted acceptance.
 3. Release through the existing founder gate when Vercel access and independent PR approval are available; verify real-domain login, assigned product access, persistence and recovery afterward. Do not report a push as a deployment.
 4. Continue Shop, Website and Ecommerce task completion and visual refinement, then customer delivery, sales/marketing preparation and internal agent operations. Keep these workstreams in scope; CI monitoring alone is not product progress.
@@ -97,7 +97,7 @@ Current products are Shop/POS, Website and Ecommerce. The public `supermega.dev`
 
 Plant is excluded from new customer acquisition and setup. Preserve retained records and recovery paths. SOL is a separate build: its public experience may inform requested research, but its code, infrastructure and customer data are outside this implementation scope.
 
-The public website keeps the existing white/jade identity and has no theme toggle. Individual products also use the fixed light theme; no appearance controls. Cards, banners, proposals and social assets should match the brand. Use plain, confident language, short labels such as Login, clear hierarchy and fewer visible decisions. Remove generic AI hype, repeated approval prose and unsupported enterprise claims.
+The owner replaced the green identity on 28 September: cobalt #2454e6, graphite #171b26 and cool white #f7f8fc now define the public website and has no theme toggle. Individual products also use the fixed light theme; no appearance controls. Cards, banners, proposals and social assets must match this palette. Existing screenshots need fresh captures of the actual recolored product before the public release; do not recolor screenshot pixels or imply that archived jade assets are current. Updated card, social banner and email signature are in outputs/supermega-business-card/cobalt. Use plain, confident language, short labels such as Login, clear hierarchy and fewer visible decisions. Remove generic AI hype, repeated approval prose and unsupported enterprise claims.
 
 No trial/demo/sample detours as the primary customer experience. Private synthetic fixtures and isolated staging remain necessary engineering tools. Content review before publication is legitimate; do not confuse it with a fake product demonstration. Never remove provenance labels from existing synthetic records merely to satisfy copy cleanup.
 
@@ -107,7 +107,7 @@ Serve a broad small-business audience with appropriate Myanmar language/payment/
 
 Owner direction, 28 September 2026: use visual exploration, interface images and deliberate design before substantial UI implementation. Make every product coherent, premium, simple to understand and effective in daily work. This applies to the public site, connected workspace, Shop, Website, Ecommerce and internal operating tools. It is a maintained practice, not a one-off cosmetic redesign.
 
-The three owner-supplied SOL concepts (dashboard, boutique counter and appointment calendar) establish a craft reference: focused navigation, strong hierarchy, useful imagery, calm spacing and task-oriented panels. Transfer those qualities into SuperMega's white/jade identity. Do not copy SOL branding, customer identities, decorative slogans or permanent panels that do not help the task. SOL implementation remains separate.
+The three owner-supplied SOL concepts (dashboard, boutique counter and appointment calendar) establish a craft reference: focused navigation, strong hierarchy, useful imagery, calm spacing and task-oriented panels. Transfer those qualities into SuperMega's white/graphite/cobalt identity. Do not copy SOL branding, customer identities, decorative slogans or permanent panels that do not help the task. SOL implementation remains separate.
 
 #### Required cycle for substantial UI work
 
@@ -144,7 +144,7 @@ Artifacts are retained under `C:/Users/thesw/.codex/generated_images/01a0d249-2b
 
 These absolute paths are local working references. Preserve the selected source alongside the implementation handoff before moving machines. Generated details such as optional tax rows, decorative branding and catalog imagery require product validation; they are not requirements merely because they appear in an image.
 
-Latest owner direction: improve the whole product with Apple-like restraint and polish, not cosmetic choices. Remove the skin dropdown and dark-mode controls. Use one consistent light white/jade interface across the apps and public website. This supersedes the earlier selectable-skins proposal. Keep reusable design tokens internally; do not expose appearance controls without a new user request. Ignore previously saved appearance preferences when rendering the app. Preserve business records.
+Latest owner direction: improve the whole product with Apple-like restraint and polish, not cosmetic choices. Remove the skin dropdown and dark-mode controls. Use one consistent light white/graphite/cobalt interface across the apps and public website. This supersedes the earlier selectable-skins proposal. Keep reusable design tokens internally; do not expose appearance controls without a new user request. Ignore previously saved appearance preferences when rendering the app. Preserve business records.
 
 Design priorities: stronger typography and hierarchy, deliberate spacing, fewer borders and redundant labels, natural interaction feedback, and one clear next action. Retain essential status, accessibility and recovery information. Use the supplied SOL references as a quality benchmark; no wholesale brand cloning or new settings panels.
 
@@ -341,7 +341,7 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Lasting decisions
 
-- Fixed white/jade visual system; no customer theme picker or promotional trial/demo detours.
+- Fixed white/graphite/cobalt visual system; no customer theme picker or promotional trial/demo detours.
 - No automatic synthetic customer records. Private fixtures remain explicitly labelled and isolated.
 - Preserve saved work, tenant boundaries, money/stock correctness and recovery throughout interface cleanup.
 - Full exact-candidate CI, rendered journeys and separate hosted/customer acceptance are required.
