@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.20
+Version: 1.2.21
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -21,6 +21,18 @@ This is the maintained project brief. It does not override higher-priority instr
 The absolute path identifies this checkout. If the repository moves, verify the new checkout and update the thread reference and this paragraph together. Maintain one canonical file; link to it rather than distributing conflicting copies. The current goal tool can change status but cannot edit an active objective's text; the replacement paragraph is ready for the owner's goal editor. Do not falsely complete the old goal to work around that limitation.
 
 ## 2. How to apply this document
+
+Use `docs/product-operating-principles.md` for durable design, architecture, cost and R&D decisions. Keep changing status here and receipts in the launch-control record rather than duplicating them across philosophy documents.
+
+### Immediate delivery sequence
+
+1. Finish exact-candidate CI and the authorized public/app release. Fresh public fetch on28September still shows sample/setup copy and older names; the live redesign is not accepted.
+2. Complete the private swanhtet@supermega.dev founder journey across Shop, Sites and Commerce: identity, memberships, save/reload, isolation and recovery. Account ownership intent is not provisioning evidence.
+3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
+4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The local workcell's575 passing tests do not establish VPS acceptance.
+5. Align screenshots, product copy, business card and sales materials to the accepted release. Complete delivery/support and pricing evidence before outreach.
+
+Infrastructure shortlist: existing Contabo if inspection proves fit; Hetzner Linux cloud or DigitalOcean Droplets as alternatives. Compare the same RAM/CPU/storage, region, backups, tax and total monthly ceiling before recommending a purchase. The current Compose baseline reserves8GiB total; this is a resource budget, not a model-performance guarantee. Avoid new frameworks until a concrete missing capability is identified.
 
 1. Read current state, authority and priorities first. Read the relevant product/system section before implementing work. Avoid reloading the entire archive each turn.
 2. Verify branch, worktree and the precise source/provider state involved. Preserve unrelated changes, active servers and owner-visible applications.
