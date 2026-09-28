@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.5
+Version: 1.2.6
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -323,6 +323,8 @@ Use patch versions for status/factual updates, minor versions for accepted refin
 Label future ambitions as future and proposals as proposals. Never present them as deployments or paid offerings. Do not add secrets, raw personal data, unsupported claims, endless backlogs or repeated approval questions. End each slice with the next action and concrete blocker, if any. Apply the active goal's repeated-blocker audit honestly rather than manufacturing unrelated activity.
 
 ### Decision log
+
+- 2026-09-28 v1.2.6: Removed the fresh Ecommerce catalog fallback to generated sample inventory. Missing local catalog now returns an empty catalog without writes; saved catalogs are preserved and malformed storage still fails closed. Local build/artifact verification PASS, including empty/saved/malformed catalog runtime assertions. Remaining storefront sample wording and guided actions require a separate state-aware cleanup; this change does not relabel existing synthetic records or prove hosted acceptance. Earlier CI `36367654342` reached desktop/390px journeys; hold pushes until terminal.
 
 - 2026-09-28 v1.2.5: Removed Ecommerce synthetic order-batch loading and changed the downloadable CSV to headers only. Real upload/paste, review validation and existing records remain intact. Local app build and artifact verification PASS. This is one sample-generation path removed, not completion of all sample-led entry cleanup. Saved locally while App CI `36367654342` on `6d850a54` continues; push after that run terminates so its evidence is preserved. Next product slice: inspect unmanaged storefront entry and replace sample-first behavior with real setup without relabeling synthetic records.
 

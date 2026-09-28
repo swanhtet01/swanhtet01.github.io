@@ -15962,11 +15962,11 @@ async function verifyStorefrontRuntime() {
       setItem: () => { writes += 1 },
     })
     assert(currentSnapshot.source === 'shop-local' && currentSnapshot.items.length === catalog.length && writes === 0, 'storefront_shop_catalog_read_wrote_or_changed_state')
-    const sampleSnapshot = storefront.readStorefrontCatalog({
+    const emptySnapshot = storefront.readStorefrontCatalog({
       getItem: () => null,
       setItem: () => { writes += 1 },
     })
-    assert(sampleSnapshot.source === 'sample' && sampleSnapshot.items.length > 0 && writes === 0, 'storefront_sample_catalog_wrote_state')
+    assert(emptySnapshot.source === 'shop-local' && emptySnapshot.items.length === 0 && writes === 0, 'storefront_empty_catalog_generated_sample_or_wrote_state')
     const malformedSnapshot = storefront.readStorefrontCatalog({
       getItem: () => '{broken',
       setItem: () => { writes += 1 },
