@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.1
+Version: 1.2.2
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -324,6 +324,8 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Decision log
 
+- 2026-09-28 v1.2.2: Readiness diagnostics now classify genuine Psycopg client-side timeouts and operational failures without SQLSTATE, using fixed labels and no exception text. SQLSTATE-specific authentication/capacity classification remains authoritative. Local diagnostics and PostgreSQL rehearsal-contract tests: 28 PASS; no live connection repair claimed.
+
 - 2026-09-28 v1.2.1: Fixed the legacy Shop entry to resolve directly to `/shop/?tab=counter`, eliminating the intermediate route change observed in CI 36359621542. The rendered verifier now requires the exact canonical URL; capture stability remains enforced. Local regression suite 13/13, app build and artifact verification PASS. Updated-head CI/browser and hosted acceptance remain unproven.
 
 - 2026-09-28 v1.2.0: Balanced delivery contract explicitly preserves engineering, data/security, money, reliability, operations, commercial and AI/R&D scope alongside design. Removed stale source/CI claims. Owner rejected appearance controls; c2580db1 removes them and uses fixed light/jade. Local build/artifact checks passed; current remote CI is incomplete.
@@ -334,6 +336,6 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Push the canonical Shop redirect fix and inspect its exact-head CI browser result. Then diagnose the production connection failure using sanitized stage/category evidence; do not retry acceptance credentials against production. Keep technical acceptance ahead of further visual expansion: managed login, persistence, tenant isolation, recovery and complete customer delivery remain required.
+Shop redirect revision `b223febd` is pushed. App CI run `36360658028` / job `108737067281` is confirmed active; API contracts and RLS guards passed, browser journeys are pending. Inspect that exact run to completion before pushing the saved diagnostic follow-up, avoiding cancellation churn. Then diagnose the production connection failure using sanitized stage/category evidence; do not retry acceptance credentials against production. Keep technical acceptance ahead of further visual expansion: managed login, persistence, tenant isolation, recovery and complete customer delivery remain required.
 
 Environment boundary: production variables identify schema 11 and Supabase project `zvtzwcimpvvtkowflhda` (supermegabase, ACTIVE_HEALTHY in the latest read-only provider check). Earlier password work targeted separate acceptance project `twflgmlwfkykgzsxnegc`. Production health reports `connect/unexpected_error`; healthy project metadata does not establish runtime connectivity. Database URL and keys remain unexposed. Vercel's database Config warning requires separate authorized remediation. No production writes or credential changes occurred in this slice.

@@ -32,15 +32,29 @@ _READINESS_STAGES = frozenset({
 _READINESS_FAILURES = frozenset({
     "missing_configuration", "driver_unavailable", "contract_not_ready",
     "unexpected_error", "authentication_rejected", "connection_failure",
-    "permission_denied", "connection_capacity",
+    "permission_denied", "connection_capacity", "connection_timeout",
+    "database_operation_failure",
 })
 
 
 
 def _readiness_exception_category(exc: Exception) -> str:
-    """Map only SQLSTATE to a fixed label; never inspect exception messages."""
+    """Map SQLSTATE or trusted driver types; never inspect exception messages."""
     try:
         state = getattr(exc, "sqlstate", None)
+        if state is None:
+            # Client-side libpq failures need not carry a server SQLSTATE.
+            # Keep the import lazy for offline/no-driver validation. Do not read
+            # messages, diagnostic objects, connection attributes or class names.
+            try:
+                from psycopg import OperationalError
+                from psycopg.errors import ConnectionTimeout
+            except ImportError:
+                return "unexpected_error"
+            if isinstance(exc, ConnectionTimeout):
+                return "connection_timeout"
+            if isinstance(exc, OperationalError):
+                return "database_operation_failure"
         if not isinstance(state, str) or not re.fullmatch(r"[0-9A-Z]{5}", state):
             return "unexpected_error"
         if state.startswith("28"):

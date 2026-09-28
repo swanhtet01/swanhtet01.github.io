@@ -64,6 +64,48 @@ class ReadinessDiagnosticsTests(unittest.TestCase):
                 self.assertIsNone(record.exc_info)
                 self.assertNotIn(SECRET, str(record.__dict__))
 
+    def test_driver_errors_without_sqlstate_are_classified_without_reading_messages(self):
+        from psycopg import OperationalError
+        from psycopg.errors import ConnectionTimeout, InvalidPassword, TooManyConnections
+
+        class UnprintableConnectionError(OperationalError):
+            def __str__(self):
+                raise AssertionError("exception text must never be read")
+
+        cases = ((OperationalError(SECRET), "database_operation_failure"),
+                 (ConnectionTimeout(SECRET), "connection_timeout"),
+                 (UnprintableConnectionError(SECRET), "database_operation_failure"),
+                 (InvalidPassword(SECRET), "authentication_rejected"),
+                 (TooManyConnections(SECRET), "connection_capacity"))
+        for error, expected in cases:
+            with self.subTest(category=expected):
+                store, _ = self.make_store()
+                store._connect.side_effect = error
+                with self.assertLogs(LOGGER) as captured:
+                    self.assert_reset(store.readiness(None))
+                record = captured.records[0]
+                self.assertEqual(record.getMessage(),
+                    f"trial_readiness_failure stage=connect category={expected}")
+                self.assertIsNone(record.exc_info)
+                self.assertNotIn(SECRET, str(record.__dict__))
+
+        # An arbitrary exception with a matching name is not a driver error.
+        impostor = type('OperationalError', (Exception,), {})(SECRET)
+        store, _ = self.make_store()
+        store._connect.side_effect = impostor
+        with self.assertLogs(LOGGER) as captured:
+            self.assert_reset(store.readiness(None))
+        self.assertIn("category=unexpected_error", captured.output[0])
+
+    def test_missing_optional_driver_does_not_break_failure_reporting(self):
+        store, _ = self.make_store()
+        store._connect.side_effect = RuntimeError(SECRET)
+        with patch.dict("sys.modules", {"psycopg": None}):
+            with self.assertLogs(LOGGER) as captured:
+                self.assert_reset(store.readiness(None))
+        self.assertIn("category=unexpected_error", captured.output[0])
+        self.assertNotIn(SECRET, str(captured.records[0].__dict__))
+
     def test_broken_sqlstate_accessor_does_not_escape(self):
         class BrokenError(Exception):
             @property
