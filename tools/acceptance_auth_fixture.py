@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 import secrets
+import urllib.error
 import urllib.request
 from uuid import UUID, uuid4
 
@@ -17,10 +18,16 @@ def require_authority(project, approved, now=None):
         raise ValueError('acceptance_authority_invalid')
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError('acceptance_redirect_refused')
+
+
 class AuthApi:
     def __init__(self, admin_key, public_key):
         self.admin_key = admin_key
         self.public_key = public_key
+        self.opener = urllib.request.build_opener(NoRedirect())
 
     def request(self, method, path, payload=None, admin=False, token=None):
         key = self.admin_key if admin else self.public_key
@@ -30,9 +37,25 @@ class AuthApi:
         body = json.dumps(payload).encode() if payload is not None else None
         request = urllib.request.Request(ORIGIN + '/auth/v1' + path, data=body, headers=headers, method=method)
         # Never log request, response, credentials, passwords or raw exceptions.
-        with urllib.request.urlopen(request, timeout=20) as response:
-            raw = response.read(100000)
-            return json.loads(raw) if raw else {}
+        try:
+            with self.opener.open(request, timeout=20) as response:
+                raw = response.read(100001)
+                if len(raw) > 100000:
+                    raise ValueError('acceptance_response_too_large')
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as error:
+            error.close()
+            raise RuntimeError('acceptance_auth_http_error') from None
+        except (OSError, ValueError):
+            raise RuntimeError('acceptance_auth_transport_error') from None
+
+
+def list_users_page(api, page):
+    result = api.request('GET', f'/admin/users?page={page}&per_page=100', admin=True)
+    batch = result.get('users') if isinstance(result, dict) else None
+    if not isinstance(batch, list) or any(not isinstance(user, dict) for user in batch):
+        raise RuntimeError('acceptance_auth_list_invalid')
+    return batch
 
 
 @contextmanager
@@ -64,7 +87,7 @@ def temporary_users(api, *, project, approved, run_id=None):
         try:
             known = {user['id'] for user in users}
             for page in range(1, 101):
-                batch = api.request('GET', f'/admin/users?page={page}&per_page=100', admin=True).get('users', [])
+                batch = list_users_page(api, page)
                 for user in batch:
                     if (user.get('email') in emails
                             and user.get('app_metadata', {}).get('supermega_acceptance_run') == run_id
@@ -87,5 +110,17 @@ def temporary_users(api, *, project, approved, run_id=None):
                 api.request('DELETE', '/admin/users/' + user['id'], admin=True)
             except Exception:
                 failed = True
+        # A successful DELETE response alone is not cleanup evidence.
+        try:
+            for page in range(1, 101):
+                batch = list_users_page(api, page)
+                if any(user.get('email') in emails for user in batch):
+                    failed = True
+                if len(batch) < 100:
+                    break
+            else:
+                failed = True
+        except Exception:
+            failed = True
         if failed:
             raise RuntimeError('acceptance_auth_cleanup_incomplete') from None
