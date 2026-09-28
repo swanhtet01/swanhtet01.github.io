@@ -18,3 +18,15 @@ for (const scenario of corpus.cases) {
     }
   })
 }
+
+for (const header of ['price_usd', 'Unit price (THB)', 'EUR price', 'Price $']) {
+  test(`manual price mapping cannot discard currency: ${header}`, async () => {
+    const result = await createClientImportPreview(`sku,name,stock,reorder_at,${header}\nSYN-FX,Synthetic item,5,1,1200`, 'commerce', {
+      sku: 'sku', name: 'name', onHand: 'stock', reorderAt: 'reorder_at', price: header,
+    })
+    assert.equal(result.readyForStaging, false)
+    assert.equal(result.rows[0].status, 'invalid')
+    assert.ok(result.rows[0].issues.some(issue => issue.code === 'unsupported_currency'))
+    assert.equal(result.rows[0].values.price, '1200')
+  })
+}
