@@ -26,8 +26,8 @@ type ProductActivationEvent = 'next_steps_opened' | 'data_setup_opened'
 const productDetails: Record<ClientSolutionId, ProductSystemDetail> = {
   commerce: { label: 'Shop', primaryPath: '/shop/', dataTitle: 'Use your items and stock', dataAction: 'Use my Shop data' },
   production: { label: 'Plant', primaryPath: '/plant/', dataTitle: 'Use your jobs and plan', dataAction: 'Use my Plant data' },
-  website: { label: 'Website', primaryPath: '/website/', dataTitle: 'Use your pages and content', dataAction: 'Use my website content' },
-  ecommerce: { label: 'Ecommerce', primaryPath: '/ecommerce/', dataTitle: 'Use your store catalog', dataAction: 'Use my store data' },
+  website: { label: productContracts.website.name, primaryPath: '/website/', dataTitle: 'Use your pages and content', dataAction: 'Use my website content' },
+  ecommerce: { label: productContracts.ecommerce.name, primaryPath: '/ecommerce/', dataTitle: 'Use your store catalog', dataAction: 'Use my store data' },
 }
 
 function readCurrentShopIndustryPackId(): ShopIndustryPackId {

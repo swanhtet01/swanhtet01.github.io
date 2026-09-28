@@ -533,7 +533,7 @@ const stories = {
  ecommerce: {title:'From your catalog to their next order.', body:'Put products and prices in front of customers. Your team confirms each order and payment. Arrange delivery with your customer. Manage stock in Shop.', image:'platform-catalog.jpg', alt:'Catalog with product cards, prices and cart controls', features:['Product catalog','Cart and requests','Order follow-through']},
 }
 function productStory(id, standalone = false) {
- const item=stories[id], label=id==='ecommerce'?'Ecommerce':id[0].toUpperCase()+id.slice(1)
+ const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><span class="eyebrow">${label}</span><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<figure class="platform-image"><img src="/images/${item.image}" alt="${item.alt}" width="${id === 'ecommerce' ? 940 : 960}" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="lazy" /><figcaption>${label} interface &middot; illustrative records</figcaption></figure><ul class="feature-line">${item.features.map(f=>`<li>${f}</li>`).join('')}</ul></section>`
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
@@ -584,7 +584,7 @@ const contactScript = `<script>(function(){
   function updateBriefHint(){
     if(!goal)return;
     var hints={
-      website:'What does your business offer, who should the Website reach, and what should visitors do? Existing text or photos are optional. Do not paste passwords or customer records.',
+      website:'What does your business offer, who should the site reach, and what should visitors do? Existing text or photos are optional. Do not paste passwords or customer records.',
       ecommerce:'What do you sell, roughly how many products, and how should you receive customer requests? Mention delivery or collection needs. Do not paste payment slips or customer records.',
       shop:'What type of shop do you run, which devices do staff use, and what is the main daily task to improve? Do not paste customer records or payment details.',
       guide:'Tell us your business type and the main result you need. We can help choose the right service. Do not paste passwords, payment details or customer records.'
@@ -592,7 +592,7 @@ const contactScript = `<script>(function(){
     goal.placeholder=hints[product&&product.value]||hints.guide;
   }
   var serviceChoice=form.querySelector('[data-contact-service]'),serviceSummary=form.querySelector('[data-contact-service-summary]');
-  function updateServiceSummary(){var serviceName=product&&({website:'Website',ecommerce:'Ecommerce',shop:'Shop'})[product.value];if(serviceSummary)serviceSummary.textContent=serviceName||'Choose a service';if(heading&&handoff.toString())heading.textContent='Finish your '+(serviceName||'contact')+' request.';}
+  function updateServiceSummary(){var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];if(serviceSummary)serviceSummary.textContent=serviceName||'Choose a service';if(heading&&handoff.toString())heading.textContent='Finish your '+(serviceName||'contact')+' request.';}
   updateServiceSummary();
   if(serviceChoice&&['website','ecommerce'].includes(requestedProduct)&&query.get('source')===requestedProduct+'-brief'&&company&&company.value.trim()&&goal&&goal.value.trim())serviceChoice.open=false;
   var briefChoice=form.querySelector('[data-contact-brief]'),briefSummary=form.querySelector('[data-contact-brief-summary]');
@@ -662,7 +662,7 @@ const notFoundHtml = documentHtml({
   title: 'Page not found | SuperMega',
   description: 'The requested SuperMega route does not exist.',
   robots: 'noindex,nofollow',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Find Shop, Website and Ecommerce on the home page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Page not found</span><h1>We couldn’t find that page.</h1><p class="lede">Find Shop, Sites and Commerce on the home page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
 })
 
 const healthFunction = `'use strict'
@@ -1123,8 +1123,8 @@ async function sendWebhook(record) {
 function acknowledgementPlan(workflow) {
   const plans = {
     commerce: 'For Shop, we prepare a your catalog, stock and sales workflow.',
-    website: 'For Website, we prepare the your pages, content and responsive layout for your review.',
-    ecommerce: 'For Ecommerce, we prepare a your catalog, storefront and order workflow for your review.',
+    website: 'For Sites, we prepare your pages, content and responsive layout for your review.',
+    ecommerce: 'For Commerce, we prepare your catalog, storefront and order workflow for your review.',
     production: 'For Plant, we prepare the operating workflow and role boundaries for your review.',
     guide: 'For a guided recommendation, we review the brief and recommend the suitable product.',
   }

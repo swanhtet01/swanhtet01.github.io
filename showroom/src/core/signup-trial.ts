@@ -87,7 +87,7 @@ const TRIAL_PRODUCTS: readonly TrialSignupProduct[] = ['commerce', 'production',
 export type TrialSignupProductChoice = {
   id: TrialSignupProduct
   slug: 'shop' | 'plant' | 'website' | 'ecommerce'
-  label: 'Shop' | 'Plant' | 'Website' | 'Ecommerce'
+  label: 'Shop' | 'Plant' | 'Sites' | 'Commerce'
   outcome: string
   setupPath: string
   workspacePath: string
@@ -96,8 +96,8 @@ export type TrialSignupProductChoice = {
 export const TRIAL_SIGNUP_PRODUCT_CHOICES: readonly TrialSignupProductChoice[] = [
   { id: 'commerce', slug: 'shop', label: 'Shop', outcome: 'Sample sales, appointments, and closes on this device.', setupPath: '/settings/?product=shop', workspacePath: '/shop/' },
   { id: 'production', slug: 'plant', label: 'Plant', outcome: 'Sample production and quality checks on this device.', setupPath: '/settings/?product=plant', workspacePath: '/plant/' },
-  { id: 'website', slug: 'website', label: 'Website', outcome: 'Preview a local draft. Publishing needs separate review.', setupPath: '/settings/?product=website', workspacePath: '/website/' },
-  { id: 'ecommerce', slug: 'ecommerce', label: 'Ecommerce', outcome: 'Try a local catalog and request draft. Nothing is sent or paid.', setupPath: '/settings/?product=ecommerce', workspacePath: '/ecommerce/' },
+  { id: 'website', slug: 'website', label: 'Sites', outcome: 'Preview a local draft. Publishing needs separate review.', setupPath: '/settings/?product=website', workspacePath: '/website/' },
+  { id: 'ecommerce', slug: 'ecommerce', label: 'Commerce', outcome: 'Try a local catalog and request draft. Nothing is sent or paid.', setupPath: '/settings/?product=ecommerce', workspacePath: '/ecommerce/' },
 ] as const
 
 export function trialSignupProductChoice(value: unknown): TrialSignupProductChoice {

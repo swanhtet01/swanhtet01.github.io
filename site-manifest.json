@@ -722,7 +722,7 @@
       "id": "website",
       "runtimeId": "website",
       "kind": "maker-product",
-      "name": "Website",
+      "name": "Sites",
       "publicAnchor": "/#website",
       "appRoute": "https://app.supermega.dev/website/",
       "status": "available-in-app",
@@ -839,7 +839,7 @@
       "id": "ecommerce",
       "runtimeId": "ecommerce",
       "kind": "maker-product",
-      "name": "Ecommerce",
+      "name": "Commerce",
       "publicAnchor": "/#ecommerce",
       "appRoute": "https://app.supermega.dev/ecommerce/",
       "status": "release-candidate-local",
@@ -996,7 +996,7 @@
       "route": "/",
       "file": "index.html",
       "title": "SuperMega | Business tools for Myanmar",
-      "description": "Sales and stock, business websites, and customer requests. Shop, Website and Ecommerce for businesses in Myanmar."
+      "description": "Sales and stock, business websites, and customer requests. Shop, Sites and Commerce for your business."
     },
     {
       "route": "/shop/",
@@ -1016,8 +1016,8 @@
     {
       "route": "/website/",
       "file": "website/index.html",
-      "title": "Website | Your business online | SuperMega",
-      "description": "Manage business pages, content and inquiries in one place with SuperMega Website.",
+      "title": "Sites | Your business online | SuperMega",
+      "description": "Manage business pages, content and inquiries in one place with SuperMega Sites.",
       "productId": "website",
       "liveGate": "post-release",
       "description": "A clear website for your services, photos and contact details. Review a prepared preview before agreeing to launch."
@@ -1025,8 +1025,8 @@
     {
       "route": "/ecommerce/",
       "file": "ecommerce/index.html",
-      "title": "Ecommerce | Your product catalog | SuperMega",
-      "description": "Present products and prices, collect customer order requests and manage follow-through with SuperMega Ecommerce.",
+      "title": "Commerce | Your product catalog | SuperMega",
+      "description": "Present products and prices, collect customer order requests and manage follow-through with SuperMega Commerce.",
       "productId": "ecommerce",
       "liveGate": "post-release",
       "description": "Help customers browse your products and prepare a request. Your team confirms availability, orders and payment."

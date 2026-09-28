@@ -607,8 +607,8 @@ const clientDemoProductOrder: readonly ClientSolutionId[] = ['commerce', 'produc
 const clientDemoProductDetails: Record<ClientSolutionId, { label: string; demoPath: string; setupPath: string }> = {
   commerce: { label: 'Shop', demoPath: '/shop/?tab=counter', setupPath: '/settings/?product=shop' },
   production: { label: 'Plant', demoPath: '/plant/?tab=production', setupPath: '/settings/?product=plant' },
-  website: { label: 'Website', demoPath: '/website/', setupPath: '/settings/?product=website' },
-  ecommerce: { label: 'Ecommerce', demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
+  website: { label: 'Sites', demoPath: '/website/', setupPath: '/settings/?product=website' },
+  ecommerce: { label: 'Commerce', demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
 }
 
 const clientDemoPreparationReviewChecklist = [
