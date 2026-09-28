@@ -1,10 +1,10 @@
-# Website — operator walkthrough
+# Sites — operator walkthrough
 
 ## 1. Client and the 30-second pitch
 
 Current public page:
 
-- `Website | Your business online | SuperMega`
+- `Sites | Your business online | SuperMega`
 - `A clear website for your services, photos and contact details. Review a prepared preview before agreeing to launch.`
 
 The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.

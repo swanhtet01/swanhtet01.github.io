@@ -1,10 +1,10 @@
-# Ecommerce — operator walkthrough
+# Commerce — operator walkthrough
 
 ## 1. Client and the 30-second pitch
 
 Current public page:
 
-- `Ecommerce | Your product catalog | SuperMega`
+- `Commerce | Your product catalog | SuperMega`
 - `Help customers browse your products and prepare a request. Your team confirms availability, orders and payment.`
 
 The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
