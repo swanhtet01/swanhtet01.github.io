@@ -1062,7 +1062,7 @@ const tests = [
     height: 900,
     expectedPath: (path) => path.startsWith('/website/'),
     expectedPathLabel: '/website/',
-    expectedText: ['Sites'],
+    expectedText: ['Your website', 'Add business details', 'Main customers', 'What do you sell or provide?', 'Prepare private draft'],
     seed: {},
   },
   {
