@@ -168,3 +168,35 @@ test('concurrent deliveries settle the project only once', async () => {
   assert.ok(results.every(result => result.ok && result.paid))
   assert.equal(results.filter(result => !result.alreadyPaid).length, 1)
 })
+
+test('verifyWebhook never authenticates normalized bytes in place of the received body', () => {
+  const t = Math.floor(Date.now() / 1000)
+  const raw = Buffer.concat([Buffer.from('{"id":"evt_bytes","type":"'), Buffer.from([0x80]), Buffer.from('"}')])
+  const normalizedSignature = crypto.createHmac('sha256', process.env.STRIPE_WEBHOOK_SECRET)
+    .update(`${t}.${raw.toString('utf8')}`).digest('hex')
+  assert.deepEqual(verifyWebhook(raw, `t=${t},v1=${normalizedSignature}`), { ok: false, reason: 'signature_mismatch' })
+  const exactSignature = crypto.createHmac('sha256', process.env.STRIPE_WEBHOOK_SECRET)
+    .update(`${t}.`).update(raw).digest('hex')
+  assert.deepEqual(verifyWebhook(raw, `t=${t},v1=${exactSignature}`), { ok: false, reason: 'bad_json' })
+})
+
+test('verifyWebhook accepts exact UTF-8 bytes for multilingual event data', () => {
+  const { raw, sig } = signed({ id: 'evt_unicode_bytes', type: 'unhandled', label: 'မြန်မာ café' })
+  assert.equal(verifyWebhook(Buffer.from(raw, 'utf8'), sig).ok, true)
+})
+
+test('HTTP webhook preserves incoming bytes through signature verification', async () => {
+  const { Readable } = await import('node:stream')
+  const { default: handler } = await import('../api/stripe-webhook.mjs')
+  const t = Math.floor(Date.now() / 1000)
+  const raw = Buffer.concat([Buffer.from('{"id":"evt_http_bytes","type":"'), Buffer.from([0x80]), Buffer.from('"}')])
+  const digest = crypto.createHmac('sha256', process.env.STRIPE_WEBHOOK_SECRET)
+    .update(`${t}.${raw.toString('utf8')}`).digest('hex')
+  const req = Readable.from([raw.subarray(0, 10), raw.subarray(10)])
+  req.method = 'POST'
+  req.headers = { 'stripe-signature': `t=${t},v1=${digest}` }
+  const res = { status(code) { this.code = code; return this }, json(body) { this.body = body } }
+  await handler(req, res)
+  assert.equal(res.code, 400)
+  assert.deepEqual(res.body, { ok: false, reason: 'signature_mismatch' })
+})

@@ -199,7 +199,8 @@ export function verifyWebhook(rawBody, sig, { toleranceSec = 300 } = {}) {
   if (!sig) return { ok: false, reason: 'no_signature' }
   if (typeof sig !== 'string') return { ok: false, reason: 'malformed_signature' }
   if (!Number.isFinite(toleranceSec) || toleranceSec < 0) return { ok: false, reason: 'invalid_tolerance' }
-  const raw = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody || '')
+  if (!Buffer.isBuffer(rawBody) && typeof rawBody !== 'string') return { ok: false, reason: 'invalid_body' }
+  const raw = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody, 'utf8')
 
   const parts = sig.split(',').map(part => part.trim().split('='))
   const timestamps = parts.filter(([key]) => key === 't')
@@ -210,7 +211,7 @@ export function verifyWebhook(rawBody, sig, { toleranceSec = 300 } = {}) {
   const t = timestamps[0][1]
   const timestamp = Number(t)
   if (!Number.isSafeInteger(timestamp) || timestamp <= 0) return { ok: false, reason: 'malformed_signature' }
-  const expected = crypto.createHmac('sha256', whsec).update(`${t}.${raw}`).digest('hex')
+  const expected = crypto.createHmac('sha256', whsec).update(`${t}.`).update(raw).digest('hex')
   // Secret rotation can supply several v1 values; any matching HMAC is valid.
   if (!signatures.some(signature => timingSafeEqualHex(expected, signature))) return { ok: false, reason: 'signature_mismatch' }
 
@@ -218,7 +219,7 @@ export function verifyWebhook(rawBody, sig, { toleranceSec = 300 } = {}) {
   if (ageSec > toleranceSec) return { ok: false, reason: 'timestamp_out_of_tolerance' }
 
   let event
-  try { event = JSON.parse(raw) } catch { return { ok: false, reason: 'bad_json' } }
+  try { event = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw)) } catch { return { ok: false, reason: 'bad_json' } }
   if (!event || typeof event !== 'object' || Array.isArray(event) || typeof event.id !== 'string' || !event.id || typeof event.type !== 'string' || !event.type) {
     return { ok: false, reason: 'invalid_event' }
   }
