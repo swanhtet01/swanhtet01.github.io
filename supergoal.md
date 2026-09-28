@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.23
+Version: 1.2.24
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-29
@@ -25,6 +25,8 @@ The absolute path identifies this checkout. If the repository moves, verify the 
 Use `docs/product-operating-principles.md` for durable design, architecture, cost and R&D decisions. Keep changing status here and receipts in the launch-control record rather than duplicating them across philosophy documents.
 
 ### Immediate delivery sequence
+
+Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require company login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. R&D may use a separate private environment; repurposing app.supermega.dev is a proposal, not an implemented or accepted migration. Retain the white/cobalt design and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
 1. Finish the current candidate's CI, complete independent review and authorized paired release, then hosted acceptance. See section 3 for exact evidence; the live redesign is not yet accepted.
 2. Complete the private swanhtet@supermega.dev founder journey across Shop, Sites and Commerce: identity, memberships, save/reload, isolation and recovery. Account ownership intent is not provisioning evidence.
