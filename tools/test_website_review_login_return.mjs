@@ -102,10 +102,13 @@ test('unavailable recovery preserves private review context without sample or ac
       assert.equal(links.length, 1)
       assert.equal(links[0].to, `/login?product=website&review=${id}`)
     } else {
-      assert.equal(links.length, 1)
+      assert.equal(links.length, 2)
       assert.equal(links[0].href, routes.managedAccountRequestUrl('shop'))
-      assert.equal(links[0].children, 'Set up your business')
+      assert.equal(links[0].children, 'Contact support')
       assert.equal(links[0].to, undefined)
+      assert.equal(links[1].to, '/login?product=shop')
+      assert.equal(links[1].children, 'Back to Login')
+      assert.equal(links.some(link => /sample|demo|Set up your business/i.test(String(link.children))), false)
     }
   }
 })
