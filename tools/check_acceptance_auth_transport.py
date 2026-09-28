@@ -17,6 +17,7 @@ def check(opener=urllib.request.urlopen):
                 failure = 'unexpected_redirect'
     except urllib.error.HTTPError as exc:
         status = exc.code
+        exc.close()
     except (urllib.error.URLError, OSError, TimeoutError):
         failure = 'transport_unavailable'
     ok = failure is None and status in (200, 401)
