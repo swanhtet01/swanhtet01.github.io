@@ -1,3 +1,4 @@
+import * as productionEntry from '../showroom/src/core/production-entry.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -45,7 +46,7 @@ test('rendered review login offers no sample, trial activation or self-registrat
     module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const elements = tree => Array.isArray(tree) ? tree.flatMap(elements) : tree && typeof tree === 'object' ? [tree, ...elements(tree.props?.children)] : []
   const text = tree => Array.isArray(tree) ? tree.map(text).join('') : tree && typeof tree === 'object' ? text(tree.props?.children) : typeof tree === 'string' ? tree : ''
-  for (const ready of [true, false]) for (const reviewing of [true, false]) {
+  for (const hostname of ['localhost', 'app.supermega.dev']) for (const ready of [true, false]) for (const reviewing of [true, false]) {
     const exports = {}
     const jsx = (type, props) => ({ type, props })
     const dependencies = {
@@ -55,10 +56,10 @@ test('rendered review login offers no sample, trial activation or self-registrat
         useLocation: () => ({ search: reviewing ? `?product=website&review=${id}` : '?product=shop' }),
         useOutletContext: () => ({ status: ready ? 'enterprise' : 'checking', signupPolicy: { termsVersion: 'test' } }) },
       './CoreShell': { PageHeading: 'heading' }, './i18n-actions': { bi: value => value },
-      './account-routes': routes, './managed-trial': { managedTrialAuthConfigured: () => true },
+      './production-entry': productionEntry, './account-routes': routes, './managed-trial': { managedTrialAuthConfigured: () => true },
       './signup-trial': { readTrialSignup: () => null, trialSignupProductChoice: () => ({ slug: 'shop' }) },
     }
-    runInNewContext(compiled, { exports, URLSearchParams, require: name => { assert.ok(name in dependencies, name); return dependencies[name] }, window: { localStorage: {} } })
+    runInNewContext(compiled, { exports, URLSearchParams, require: name => { assert.ok(name in dependencies, name); return dependencies[name] }, window: { localStorage: {}, location: { hostname } } })
     const tree = exports.ManagedLoginPage(), nodes = elements(tree), content = text(tree)
     if (reviewing) {
       assert.equal(nodes.find(node => node.type === 'heading').props.title, 'Open your prepared review.')
@@ -69,7 +70,11 @@ test('rendered review login offers no sample, trial activation or self-registrat
     } else {
       assert.match(content, ready ? /Create an account/ : /Contact support/)
       if (!ready) {
-        assert.match(content, /Saved work on this device/)
+        if (hostname === 'localhost') assert.match(content, /Saved work on this device/)
+        else {
+          assert.doesNotMatch(content, /Saved work on this device/)
+          assert.equal(nodes.some(node => node.type === 'a' && /choose=1/.test(node.props.to ?? '')), false)
+        }
         assert.doesNotMatch(content, /Try a sample/)
       }
     }
