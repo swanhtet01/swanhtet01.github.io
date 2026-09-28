@@ -45,6 +45,7 @@ TABLES = (
 )
 CHECKS = (
     "v11_baseline_validator_passed", "full_private_chain_applied",
+    "unwrapped_migration_failure_rolled_back",
     "four_product_workspaces_created", "product_entitlements_exact",
     "exact_create_replay", "claim_conflict_without_takeover", "durable_budget_enforced",
     "actor_directory_isolated", "cross_actor_read_denied", "revoked_session_denied",
@@ -361,6 +362,46 @@ def verify_customer_reviews(runtime_url, retained):
                 and restored['deploymentAuthorized'] is False, 'restored_ecommerce_decisions_mismatch')
 
 
+def migration_catalog(admin_url):
+    """Metadata fingerprint: definitions, grants, policies and triggers; no customer rows."""
+    with pg._connect(admin_url) as conn:
+        conn.execute("set transaction read only")
+        rows = conn.execute("""
+            select 'routine', p.oid::text, pg_get_functiondef(p.oid), p.proacl::text
+            from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+            where n.nspname='app_private'
+            union all
+            select 'relation', c.oid::text,
+                concat_ws(':', c.relname, c.relkind, c.relrowsecurity, c.relforcerowsecurity), c.relacl::text
+            from pg_class c join pg_namespace n on n.oid=c.relnamespace
+            where n.nspname='app_private'
+            union all
+            select 'trigger', t.oid::text, pg_get_triggerdef(t.oid), t.tgenabled::text
+            from pg_trigger t join pg_class c on c.oid=t.tgrelid
+            join pg_namespace n on n.oid=c.relnamespace where n.nspname='app_private'
+            union all
+            select 'policy', p.oid::text, row_to_json(p)::text, null
+            from pg_policy p join pg_class c on c.oid=p.polrelid
+            join pg_namespace n on n.oid=c.relnamespace where n.nspname='app_private'
+            order by 1,2
+        """).fetchall()
+    return digest(rows)
+
+
+def verify_unwrapped_failure_rollback(admin_url, migration_sql):
+    from psycopg.errors import DivisionByZero
+    before = migration_catalog(admin_url)
+    try:
+        with pg._connect(admin_url, autocommit=True) as conn:
+            # Match the real executor: one batch, no artificial surrounding transaction.
+            conn.execute(migration_sql + "\nSELECT 1 / 0;\n")
+    except DivisionByZero:
+        pass
+    else:
+        raise pg.RehearsalFailure("migration_fault_not_observed")
+    require(migration_catalog(admin_url) == before, "failed_migration_left_catalog_changes")
+
+
 def run(expected_head):
     source = source_identity(expected_head)
     require("supermega_runtime.trial_store" not in sys.modules
@@ -387,9 +428,18 @@ def run(expected_head):
             pg._provision_runtime(admin, runtime_secret)
             pg._bootstrap_local_storage_catalog_fixture(admin)
             pg._run_validator(runtime, admin, environment)  # Real strict v11 baseline.
+            rollback_probes = 0
             for name in EXTRAS:
+                migration_sql = (ROOT / "supabase/migrations" / name).read_text(encoding="utf-8")
+                if name in (
+                    "20260924190304_ecommerce_review_entitlement_proof.sql",
+                    "20260924194557_ecommerce_customer_review_storage.sql",
+                ):
+                    verify_unwrapped_failure_rollback(admin, migration_sql)
+                    rollback_probes += 1
                 with pg._connect(admin, autocommit=True) as conn:
-                    conn.execute((ROOT / "supabase/migrations" / name).read_text(encoding="utf-8"))
+                    conn.execute(migration_sql)
+            require(rollback_probes == 2, "migration_rollback_probe_coverage_incomplete")
             from tools.validate_supermega_database_url import audit_database
             legacy = audit_database(runtime, storage_audit_database_url=admin)
             require(legacy["ready"] is False and "schema_version_current" in legacy["failed_checks"],
