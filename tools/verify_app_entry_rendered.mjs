@@ -1040,7 +1040,7 @@ const tests = [
     mobile: true,
     expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
     expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
-    expectedText: ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'LOCAL WORKSPACE'],
+    expectedText: ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'Login'],
     exerciseShopCounter: true,
     noHorizontalOverflow: true,
     screenshotName: 'shop-counter-mini-mart-mobile-390x844',
