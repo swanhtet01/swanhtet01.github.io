@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
+import { runInNewContext } from 'node:vm'
 import { counterCaptureReady, receiptBoundaryVisible } from './verify_app_entry_rendered.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
 
@@ -512,4 +513,17 @@ test('rejects report-body tampering and wrong expected scope', async (context) =
     expectedScope: 'shop-counter',
     rootDir: fixture.rootDir,
   }), /report_contract_invalid/)
+})
+
+
+test('legacy Shop links resolve directly to the canonical counter URL', async () => {
+  const source = await readFile(new URL('../showroom/src/App.tsx', import.meta.url), 'utf8')
+  const fn = source.match(/function productDemoPath\(value: string \| null\) \{[\s\S]*?\n\}/)[0]
+    .replace('value: string | null', 'value')
+  const resolve = runInNewContext(`${fn}; productDemoPath`, { visionPreviewEnabled: false })
+  for (const input of ['shop', 'retail', 'SHOP']) assert.equal(resolve(input), '/shop/?tab=counter')
+  for (const input of ['plant', 'factory']) assert.equal(resolve(input), '/?choose=1')
+  for (const input of [null, 'unknown']) assert.equal(resolve(input), null)
+  const shopCase = renderedVerifierSource.split("name: 'demo shop opens explicit shop route'")[1].split('seed:')[0]
+  assert.ok(shopCase.includes("expectedPath: '/shop/?tab=counter'"))
 })

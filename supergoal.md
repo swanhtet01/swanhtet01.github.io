@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.0
+Version: 1.2.1
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -324,6 +324,8 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Decision log
 
+- 2026-09-28 v1.2.1: Fixed the legacy Shop entry to resolve directly to `/shop/?tab=counter`, eliminating the intermediate route change observed in CI 36359621542. The rendered verifier now requires the exact canonical URL; capture stability remains enforced. Local regression suite 13/13, app build and artifact verification PASS. Updated-head CI/browser and hosted acceptance remain unproven.
+
 - 2026-09-28 v1.2.0: Balanced delivery contract explicitly preserves engineering, data/security, money, reliability, operations, commercial and AI/R&D scope alongside design. Removed stale source/CI claims. Owner rejected appearance controls; c2580db1 removes them and uses fixed light/jade. Local build/artifact checks passed; current remote CI is incomplete.
 
 - 2026-09-28 v1.0.1: Fresh desktop/mobile catalog clicks passed; earlier click failure not reproduced. CI failure traced to removed automatic sample creation, with private checkout fixture supplied explicitly. Hosted/fresh-data acceptance remains incomplete.
@@ -332,4 +334,6 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Reconcile production and acceptance environments before connection remediation. Read-only Vercel dashboard inspection confirms six production variables exist; only non-secret schema/project values were inspected: SUPERMEGA_TRIAL_SCHEMA_VERSION=11 and SUPERMEGA_SUPABASE_PROJECT_REF=zvtzwcimpvvtkowflhda. Database URL and keys were never revealed. Supabase connector lists zvtzwcimpvvtkowflhda (supermegabase, Postgres 17) ACTIVE_HEALTHY. Earlier owner password work targeted separate acceptance project twflgmlwfkykgzsxnegc; do not reuse it as production evidence or credentials. Production /api/health still fails at connect/unexpected_error; healthy project metadata does not prove runtime connection access. Vercel marks the database URL Config entry Needs Attention; any conversion/rotation is a separate authorized change. Inspect existing sanitized production connection diagnostics and exact-head CI run 36359621542 next. No production writes or credential changes occurred.
+Push the canonical Shop redirect fix and inspect its exact-head CI browser result. Then diagnose the production connection failure using sanitized stage/category evidence; do not retry acceptance credentials against production. Keep technical acceptance ahead of further visual expansion: managed login, persistence, tenant isolation, recovery and complete customer delivery remain required.
+
+Environment boundary: production variables identify schema 11 and Supabase project `zvtzwcimpvvtkowflhda` (supermegabase, ACTIVE_HEALTHY in the latest read-only provider check). Earlier password work targeted separate acceptance project `twflgmlwfkykgzsxnegc`. Production health reports `connect/unexpected_error`; healthy project metadata does not establish runtime connectivity. Database URL and keys remain unexposed. Vercel's database Config warning requires separate authorized remediation. No production writes or credential changes occurred in this slice.
