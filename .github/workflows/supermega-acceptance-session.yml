@@ -1,0 +1,39 @@
+name: SuperMega Approved Acceptance Session
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/acceptance-auth-transport-20260929]
+    paths: ['.github/workflows/supermega-acceptance-session.yml']
+permissions:
+  contents: read
+concurrency:
+  group: supermega-approved-acceptance-session
+  cancel-in-progress: false
+jobs:
+  register:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Manual acceptance session registered; no credentials or writes.'
+  acceptance:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/acceptance-auth-transport-20260929'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned runtime
+        run: python3 -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Verify runner contracts
+        run: python3 -W error::ResourceWarning -m unittest tests.test_acceptance_auth_fixture tests.test_acceptance_workspace_journey tests.test_acceptance_auth_transport
+      - name: Execute approved session and cleanup
+        env:
+          SUPERMEGA_ACCEPTANCE_APPROVED: 20260929T1103Z
+          SUPERMEGA_SUPABASE_PROJECT_REF: twflgmlwfkykgzsxnegc
+          SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
+          ACCEPTANCE_ADMIN_URL: ${{ secrets.SM_ACCEPTANCE_ADMIN_URL }}
+          ACCEPTANCE_RUNTIME_URL: ${{ secrets.SM_ACCEPTANCE_RUNTIME_URL }}
+          ACCEPTANCE_ADMIN_KEY: ${{ secrets.SM_ACCEPTANCE_ADMIN_KEY }}
+          ACCEPTANCE_PUBLIC_KEY: ${{ secrets.SM_ACCEPTANCE_PUBLIC_KEY }}
+        run: python3 tools/run_acceptance_session.py
