@@ -37,10 +37,11 @@ class FullChainProofContractTests(unittest.TestCase):
         ))
 
     def test_matrix_has_exact_unique_behavior_checks(self):
-        self.assertEqual(len(proof.CHECKS), 17)
-        self.assertEqual(len(set(proof.CHECKS)), 17)
+        self.assertEqual(len(proof.CHECKS), 18)
+        self.assertEqual(len(set(proof.CHECKS)), 18)
         for name in ("payment_confirmation_not_entitlement", "restored_budget_enforced",
-                     "four_product_workspaces_created", "revoked_session_denied"):
+                     "four_product_workspaces_created", "revoked_session_denied",
+                     "unwrapped_migration_failure_rolled_back"):
             self.assertIn(name, proof.CHECKS)
 
     def test_invalid_head_fails_before_cluster(self):
