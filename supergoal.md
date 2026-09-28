@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.25
+Version: 1.2.26
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-29
@@ -26,9 +26,9 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 ### Immediate delivery sequence
 
-Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require company login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. R&D may use a separate private environment; repurposing app.supermega.dev is a proposal, not an implemented or accepted migration. Retain the white/cobalt design and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
+Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner now designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. This destination is approved product direction, but account provisioning, access and hosted acceptance remain unverified. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain the white/cobalt design and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
-1. Finish the current candidate's CI, complete independent review and authorized paired release, then hosted acceptance. See section 3 for exact evidence; the live redesign is not yet accepted.
+1. Preserve the passing ea70da00 candidate, complete independent review and authorized paired release, then hosted acceptance. See section 3 for exact evidence; the live redesign is not yet accepted.
 2. Complete the private swanhtet@supermega.dev founder journey across Shop, Sites and Commerce: identity, memberships, save/reload, isolation and recovery. Account ownership intent is not provisioning evidence.
 3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
 4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The transfer package has 577 passing tests and three policy-blocked skips; VPS acceptance remains unproven.
@@ -82,9 +82,9 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Pushed candidate 5cf09fc4 includes public-host login gating, production reset-control removal, shorter English marketing, catalog-copy corrections and removal of the redundant build. Login rendering fixtures cover production and localhost | This document is newer than the candidate; production is unchanged |
+| Source | Pushed ea70da00 includes production login gating, production reset-control removal, English white/cobalt public marketing and corrected responsive journey assertions | This brief is newer. Production remains on bbab9a63; passing source changes are not live |
 | Integration | PR #596 BLOCKED / REVIEW_REQUIRED, no approving review. Earlier analytics findings are fixed by be64785c and verified | Eligible independent approval remains required |
-| CI | Last full green: bbd744bc, run 36476548309. Current candidate 5cf09fc4 has 109 focused login/account/recovery checks passing; run 36483270214 is active after passing API, signup-budget, release/RLS guard and lint steps | Follow this run to terminal; canonical build and rendered journeys are not yet confirmed for this candidate |
+| CI | App run 36484748852 SUCCESS at ea70da007a0238bc4303294afb08b4d1e3a59937: canonical API/build/verification, release/RLS guards and desktop/390px journeys passed | CI does not establish hosted acceptance. Existing accessibility lint warnings remain; do not rerun an unchanged passing candidate |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |

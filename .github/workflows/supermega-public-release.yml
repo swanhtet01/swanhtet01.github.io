@@ -145,7 +145,11 @@ jobs:
                 OPERATING_MODE=managed_trial
                 RUNTIME_MODE=managed_trial
               else
-                VALUE_AUDIT="$(npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- node tools/verify_managed_runtime_environment_values.mjs staged)"
+                if ! VALUE_AUDIT="$(npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- node tools/verify_managed_runtime_environment_values.mjs staged)"; then
+                  printf '%s\n' "$VALUE_AUDIT"
+                  echo "::error::Production runtime configuration failed the staged value check; see redacted audit above."
+                  exit 1
+                fi
                 OPERATING_MODE=isolated_demo
                 RUNTIME_MODE=staged
               fi
