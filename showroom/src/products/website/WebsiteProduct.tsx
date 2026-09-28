@@ -522,12 +522,12 @@ export function WebsiteProduct() {
       return null
     }
     if (!editSessionScope) {
-      setNotice('Website workspace is still loading. Try the edit again.')
+      setNotice('Sites workspace is still loading. Try the edit again.')
       return null
     }
     const retained = editSessionRef.current
     if (retained && retained.scope !== editSessionScope) {
-      setNotice('Website workspace identity changed. Review the loaded workspace before editing.')
+      setNotice('Sites workspace identity changed. Review the loaded workspace before editing.')
       return null
     }
     const base = retained?.session ?? createWebsiteEditSession(workspace)
@@ -918,7 +918,7 @@ export function WebsiteProduct() {
                 : 'ready'
   const compactWebsiteStatus = showAssistedWebsitePreview || (view === 'content' && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft)
   const websiteAgentJob = storageIssue || canRepairLocalStorage
-    ? 'Recover Website workspace'
+    ? 'Recover Sites workspace'
     : pendingRestoredDraft
       ? 'Choose which Website to customize'
     : starterSetupActive

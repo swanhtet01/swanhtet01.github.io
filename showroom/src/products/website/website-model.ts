@@ -1151,7 +1151,7 @@ export async function repairInvalidWebsiteWorkspace(
 ): Promise<WebsiteLocalRepairResult> {
   if (!storage) return repairFailure('storage_unavailable', 'Browser storage is unavailable, so the saved Website value was not changed.')
   if (!locks?.request) return repairFailure('lock_unavailable', 'Safe browser locking is unavailable, so the saved Website value was not changed.')
-  if (!isWebsiteWorkspace(replacement)) return repairFailure('replacement_confirmation_failed', 'The current Website workspace is not valid enough to repair local storage.')
+  if (!isWebsiteWorkspace(replacement)) return repairFailure('replacement_confirmation_failed', 'The current Sites workspace is not valid enough to repair local storage.')
   const sourceMatches = (candidate.source === 'v2' && candidate.sourceKey === WEBSITE_STORAGE_KEY)
     || (candidate.source === 'v1' && candidate.sourceKey === LEGACY_WEBSITE_STORAGE_KEY)
   if (!sourceMatches) return repairFailure('stale_candidate', 'The Website repair candidate does not match its storage source.')
@@ -1176,7 +1176,7 @@ export async function repairInvalidWebsiteWorkspace(
         : parseLegacyWorkspace(currentRaw) === null
       if (!isStillInvalid) return repairFailure('not_invalid', 'Saved Website data is now valid. Nothing was replaced.')
       if (candidate.source === 'v1' && storage.getItem(WEBSITE_STORAGE_KEY) !== null) {
-        return repairFailure('stale_candidate', 'A newer Website workspace now exists. The old value was not repaired or replaced.')
+        return repairFailure('stale_candidate', 'A newer Sites workspace now exists. The old value was not repaired or replaced.')
       }
 
       const archivedAt = new Date().toISOString()
@@ -1227,18 +1227,18 @@ export async function repairInvalidWebsiteWorkspace(
         return repairFailure('stale_candidate', 'Saved Website data changed while the recovery archive was being prepared. The archive was retained, but nothing was replaced.', repairState)
       }
       if (candidate.source === 'v1' && storage.getItem(WEBSITE_STORAGE_KEY) !== null) {
-        return repairFailure('stale_candidate', 'A newer Website workspace appeared while the old value was being archived. The archive was retained, but the newer workspace was not replaced.', repairState)
+        return repairFailure('stale_candidate', 'A newer Sites workspace appeared while the old value was being archived. The archive was retained, but the newer workspace was not replaced.', repairState)
       }
       const replacementRaw = serialize(replacement)
       try {
         storage.setItem(WEBSITE_STORAGE_KEY, replacementRaw)
       } catch (error) {
-        return repairFailure('replacement_write_failed', `The valid Website workspace could not be saved: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
+        return repairFailure('replacement_write_failed', `The valid Sites workspace could not be saved: ${error instanceof Error ? error.message : 'unknown storage error'}`, repairState)
       }
       const confirmedRaw = storage.getItem(WEBSITE_STORAGE_KEY)
       const confirmed = confirmedRaw === replacementRaw ? parseStoredWorkspace(confirmedRaw) : null
       if (!confirmed || serialize(confirmed) !== replacementRaw) {
-        return repairFailure('replacement_confirmation_failed', 'The repaired Website workspace could not be confirmed. The archive was retained and durable editing remains paused.', repairState)
+        return repairFailure('replacement_confirmation_failed', 'The repaired Sites workspace could not be confirmed. The archive was retained and durable editing remains paused.', repairState)
       }
       repairState.replacementConfirmed = true
 

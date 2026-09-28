@@ -323,7 +323,7 @@ export function useWebsiteWorkspace(): {
                   actionId: initializationId,
                   capturedAt,
                   actor: bootstrap.identity.actor_id,
-                  reason: 'Initialize managed Website workspace',
+                  reason: 'Initialize managed Sites workspace',
                   evidenceReference: 'website:revision:0',
                 },
                 state: seed,
@@ -423,7 +423,7 @@ export function useWebsiteWorkspace(): {
         storageModeRef.current = 'browser-local'
         setStorageMode('browser-local')
         updateRepairCandidate(null)
-        setStorageIssue('Website workspace refreshed from another tab.')
+        setStorageIssue('Sites workspace refreshed from another tab.')
       } catch {
         setStorageIssue('Another tab supplied malformed Website data. The current valid screen was preserved.')
         updateRepairCandidate({
@@ -445,7 +445,7 @@ export function useWebsiteWorkspace(): {
     new Promise<WebsiteMutationResult>((resolve) => {
       queueRef.current = queueRef.current.then(async () => {
         if (!hydratedRef.current) {
-          resolve({ ok: false, error: 'Website workspace is still loading. Try the change again.' })
+          resolve({ ok: false, error: 'Sites workspace is still loading. Try the change again.' })
           return
         }
         const current = workspaceRef.current
@@ -567,7 +567,7 @@ export function useWebsiteWorkspace(): {
           replacementConfirmed: false,
         })
         if (!hydratedRef.current) {
-          resolve(fail('stale_candidate', 'Website workspace is still loading. Nothing was replaced.'))
+          resolve(fail('stale_candidate', 'Sites workspace is still loading. Nothing was replaced.'))
           return
         }
         if (storageModeRef.current === 'managed') {
