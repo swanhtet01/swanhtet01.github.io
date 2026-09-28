@@ -67,7 +67,7 @@ test('rendered review login offers no sample, trial activation or self-registrat
       assert.match(content, ready ? /existing setup conversation/ : /Review sign-in is unavailable/)
       if (ready) assert.equal(nodes.find(node => text(node) === 'Forgot password?').props.to, `/account/recovery?product=website&review=${id}`)
     } else {
-      assert.match(content, ready ? /Create an account/ : /Request setup/)
+      assert.match(content, ready ? /Create an account/ : /Contact support/)
       if (!ready) {
         assert.match(content, /Saved work on this device/)
         assert.doesNotMatch(content, /Try a sample/)

@@ -549,7 +549,7 @@ export function CoreLayout() {
                       : requestedProduct && !managedProductAllowed
                         ? managedRouteDecision.kind === 'redirect'
                           ? <Navigate replace to={managedRouteDecision.path} />
-                      : <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Request setup</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
+                      : <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Contact support</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
                         : <Outlet context={runtime} />}
               </RouteErrorBoundary>
             </ManagedPortalAccessContext.Provider>
@@ -574,9 +574,9 @@ const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
 }
 
 const customerProducts = [
-  ['Shop', 'Sales, stock and your daily totals.', 'Open Shop', '/shop/'],
-  ['Website', 'Your services, photos and contact details.', 'Open Website', '/website/'],
-  ['Ecommerce', 'A product catalog and customer requests.', 'Open Ecommerce', '/ecommerce/'],
+  ['Shop', 'Sales, stock and your daily totals.', 'Shop', '/shop/'],
+  ['Website', 'Your services, photos and contact details.', 'Website', '/website/'],
+  ['Ecommerce', 'A product catalog and customer requests.', 'Ecommerce', '/ecommerce/'],
 ] as const
 
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
@@ -663,8 +663,8 @@ export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
       {managedPortal
-        ? emptyCompany ? null : <PageHeading copy="Only assigned products are shown." eyebrow="Company portal" title="Company products" />
-        : <PageHeading copy={loginAvailable ? "Sign in to access your business." : "Open saved work on this device, or request setup."} eyebrow="SuperMega" title="Your workspace" actions={loginAvailable ? <Link className="core-button primary" to={managedLoginPath(null)}>Login</Link> : <a className="core-button primary" href="https://supermega.dev/contact/?product=guide&source=workspace-home">Request setup</a>} />}
+        ? emptyCompany ? null : <PageHeading copy="" eyebrow="SuperMega" title="Workspace" />
+        : <PageHeading copy={loginAvailable ? "Sign in to your business." : "Your business, in one place."} eyebrow="SuperMega" title="Welcome back" actions={<Link className="core-button primary" to={managedLoginPath(null)}>Login</Link>} />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
           <span>Active company</span>
@@ -677,9 +677,9 @@ export function ProductHomePage() {
         </div>
       </section> : null}
       {emptyCompany
-        ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Request setup</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
+        ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Contact support</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
         : null}
-      {!emptyCompany && (managedPortal || anyStarted) ? <nav aria-label="Choose product" className="product-track-grid">
+      {!emptyCompany && (managedPortal || anyStarted) ? <nav aria-label="Your workspace" className="product-track-grid">
         {customerProducts.filter(([name]) => managedPortal
           ? managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name])
           : Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]?.startedAt) || (name === 'Website' && Boolean(savedWebsiteName)))
@@ -693,9 +693,9 @@ export function ProductHomePage() {
           if (!managedPortal && !activeSetupIds.includes(setupKey) && !setup) return null
           const workspaceName = name === 'Website' && savedWebsiteName ? savedWebsiteName : setup?.startedAt ? setup.workspace : null
           const workspacePath = !managedPortal && (name === 'Website' || name === 'Ecommerce') ? `${path}?workspace=1` : path
-          return <Link aria-label={`Open ${name}`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={workspacePath}>
+          return <Link aria-label={name} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={workspacePath}>
               <span className="product-track-copy">
-                <small>{managedPortal ? 'Company product' : 'Saved on this device'}</small>
+                {!managedPortal ? <small>On this device</small> : null}
                 <h2>{name}</h2>
                 <p>{workspaceName || outcome}</p>
               </span>
@@ -704,7 +704,7 @@ export function ProductHomePage() {
         })}
       </nav> : null}
       {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
-      {!emptyCompany && (managedPortal || anyStarted) ? <p className="product-home-note">{managedPortal ? 'Your company controls access to each product.' : 'Saved work is stored on this device.'}</p> : null}
+      {!emptyCompany && (managedPortal || anyStarted) ? <p className="product-home-note">{managedPortal ? '' : 'Saved on this device.'}</p> : null}
     </div>
   )
 }

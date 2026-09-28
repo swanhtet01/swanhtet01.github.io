@@ -316,7 +316,7 @@ export function ManagedLoginPage() {
         <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
         <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Activating...' : 'Activate my company'}</button>
-        <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Ask a person to finish setup instead</a>
+        <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Contact support</a>
         <button className="account-inline-link account-link-button" disabled={busy} onClick={() => { if (accountRequestPending.current) return; setActivating(false); setNotice(''); setNoticeTone('quiet'); setClaimCodeFieldError(false) }} type="button">{bi('Back to sign in')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : managedReady ? <form aria-label="Login" aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
@@ -329,14 +329,14 @@ export function ManagedLoginPage() {
           <label>Email<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
           <label>Password<input aria-describedby={noticeTone === 'error' ? 'managed-login-notice' : undefined} aria-invalid={noticeTone === 'error'} autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
           <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent, location.search)}>Forgot password?</Link>
-          {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. Use your existing account.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Request setup</a>}
+          {reviewReturnPath ? <p>Need access? Ask SuperMega in your existing setup conversation. Use your existing account.</p> : signupPolicy ? <button className="account-inline-link account-link-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Contact support</a>}
         </>}
-        <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Find my company')}</button>
+        <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : reviewReturnPath ? 'Continue to review' : directory ? bi('Open company') : bi('Login')}</button>
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Login unavailable">
-        {reviewReturnPath ? <div><h2>Review sign-in is unavailable here.</h2><p>Keep your original review link and ask SuperMega in your existing setup conversation to restore access. A sample or a new company cannot open this review.</p></div> : <>
-          <div><h2>Login is not available here yet.</h2><p>Request setup for your business, or open work already saved on this device.</p></div>
-          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Request setup</a><Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link>{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
+        {reviewReturnPath ? <div><h2>Review sign-in is unavailable here.</h2><p>Keep your original review link and ask SuperMega in your existing setup conversation to restore access. Use the account associated with this review.</p></div> : <>
+          <div><h2>Login is currently unavailable.</h2><p>Contact support for account access. Your saved work is still available on this device.</p></div>
+          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a><Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link>{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
         </>}
       </section>}
     </div>

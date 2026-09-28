@@ -286,7 +286,7 @@ export function renderedStateScript(retirement = false) {
       ${retirement ? `retained: Object.fromEntries(${JSON.stringify(RETIRED_STORAGE_KEYS)}.map(key => [key, localStorage.getItem(key)])),
       retiredToolVisible: [...document.querySelectorAll('h1,h2,h3,[role="heading"]')].some(el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && /^(Plant|Production|Record first shift output)$/i.test(el.textContent.trim())),
       retiredActionVisible: [...document.querySelectorAll('a,button')].some(el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && (/\\b(plant|production|first shift)\\b/i.test(el.textContent) || /(?:\\/plant(?:\\/|\\?|$)|\\/operations\\/production|[?&](?:product|demo)=(?:plant|production|factory)(?:&|$))/i.test(el.getAttribute('href') || ''))),` : ''}
-      launcherLinks: [...document.querySelectorAll('nav[aria-label="Choose product"] a')]
+      launcherLinks: [...document.querySelectorAll('nav[aria-label="Your workspace"] a')]
         .filter(link => link.getClientRects().length && getComputedStyle(link).visibility !== 'hidden')
         .map(link => ({ name: link.querySelector('h2')?.textContent.trim() || '', href: link.getAttribute('href') })),
     }))()`
