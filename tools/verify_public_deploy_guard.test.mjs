@@ -43,6 +43,7 @@ test('current exact public verification chain passes the actual guard', () => {
 
 for (const command of [
   'node --test --test-concurrency=1 tools/verify_public_release_live.test.mjs',
+  'node --test --test-concurrency=1 tools/public_preview_profile.test.mjs',
   'node --test tools/test_public_contact_receipt.mjs',
   'node tools/verify_public_vercel_artifact_budget.mjs',
   'npm run hq:verify',

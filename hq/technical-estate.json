@@ -7,7 +7,7 @@
     "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:b2e72bf74a88889f7cc863e667e79129ee6e997034f721b476e1f49e70f57ae7",
+  "sourceDigest": "sha256:563723a0c89e42bb32175ccafba07afdfdd0c0b557566c1abee3b56e86da5857",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -27,7 +27,7 @@
           "www.supermega.dev"
         ],
         "buildScript": "node tools/create_public_vercel_output.mjs",
-        "verifyScript": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node --test tools/product_visibility.test.mjs && node --test --test-concurrency=1 tools/verify_public_release_live.test.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify",
+        "verifyScript": "node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node --test tools/product_visibility.test.mjs && node --test --test-concurrency=1 tools/verify_public_release_live.test.mjs && node --test --test-concurrency=1 tools/public_preview_profile.test.mjs && node tools/test_public_contact_function.mjs && node --test tools/test_public_contact_receipt.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify",
         "output": ".vercel/output",
         "productionPromotion": "owner-approved coordinated workflow only"
       },
@@ -242,7 +242,7 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:de2f9fe093af89aaad4b7909a5bd6bcf7897e2f0d836ddab6da997218c19996a"
+      "digest": "sha256:63203c414d02f3f1d16e143f68765c5189319d5f5f451180d882e7ca866ef029"
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
