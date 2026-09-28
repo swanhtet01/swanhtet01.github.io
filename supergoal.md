@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.9
+Version: 1.2.10
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -351,20 +351,22 @@ Label future ambitions as future and proposals as proposals. Never present them 
 | Evidence | Verified scope | Remaining action |
 |---|---|---|
 | `3805b4b2`, App CI `36365671862` | Full build, desktop/390px journeys and real disposable PostgreSQL signup-budget tests PASS | Does not establish production acceptance |
-| Pushed `7a6fff17`, App CI `36366410004`, job `108753607728` | Active at full build verification; includes credential-free transport tool | Read terminal result, fix any failure, then push saved reconciliation notes |
+| Pushed `1728cf9f`, App CI `36416667112` | Current redesigned public site and CI fixes; run active at last check | Read terminal result; do not cancel useful CI or infer success from an active job |
 | Local database proof | 18 signup-budget tests, 74 rehearsal checks, 37 HQ checks PASS | Preserve source binding when runtime/migration files change |
-| Production | Still older deployed revision; configured pooler host mismatches recorded dashboard endpoint | Prepare approved host-only correction and coordinated release |
-| Acceptance branch | Newer schema exists; decision guard body/trigger/RLS match source | Named runtime-login behavioral, isolation and persistence acceptance |
+| Production configuration | Host-only correction applied and read back on 28 September; explicit read-only connection passed | Hosted runtime acceptance and protected coordinated release remain outstanding |
+| Acceptance branch | Newer schema and decision guard catalog verified; expiring runtime login provisioned and read-only connection verified on 28 September | Immutable deployment, hosted sign-in, isolation and persistence acceptance |
 
 #### Established production diagnosis
 
-The 27 September launch-control record documents the Supabase dashboard endpoint `aws-1-us-east-1.pooler.supabase.com:6543` and successful read-only connectivity with the existing production credentials after changing only the host in memory. The 28 September private comparison confirms Vercel's configured host still differs; runtime identity, port and database match. `supermega_trial_login` is the login role; `supermega_trial_backend` is its intended group. Their different names are not evidence of a fault.
+The launch-control record documents the owner-authorized production host-only correction on 28 September to `aws-1-us-east-1.pooler.supabase.com:6543`. Vercel decrypted readback matched the prepared candidate; username, password, database, port, TLS and disabled-write flags were preserved. An explicit BEGIN READ ONLY/ROLLBACK connection verified runtime identity and read-only status. No deployment or production migration accompanied the correction. This is recorded configuration/connectivity evidence, not current hosted sign-in or persistence acceptance.
 
-The next managed change is host-only, preserving username, password, database, port, TLS and disabled-write flags. Preparation helper `tools/prepare_pooler_host_correction.py` now creates the candidate in memory, rejects target/current-host drift, preserves all non-host URL bytes and never calls a provider; four focused tests pass. This helper is not an apply command or authorization. Revalidate the dashboard endpoint before preparing that change. Exact host-correction authority remains pending in the control record; earlier candidate-bound approvals do not establish it. Do not repeat unchanged approval questions, reset passwords or recreate roles. Historical local connectivity is not Vercel hosted acceptance.
+The host correction is complete; do not ask for the same permission, reset credentials or repeat the old hostname diagnosis. `tools/prepare_pooler_host_correction.py` remains a preparation helper, not blanket mutation authority. `supermega_trial_login` is the runtime login and `supermega_trial_backend` its group; different names are expected.
 
 Production's last observed core schema is 11; the maintained release needs 13 plus extensions. All nine pending migration files still match reviewed SHA256 values, and fresh production history remains 15 entries. Reuse the existing ordered review; do not replay the legacy baseline or alter production-only quarantine/payroll changes. Acceptance already contains the newer schema: source/catalog drift checks precede any separately authorized migration or role provisioning.
 
-Acceptance `guard_ecommerce_decision()` is one SECURITY INVOKER trigger function with an exact body digest match after CRLF-to-LF normalization only. The BEFORE INSERT/UPDATE/DELETE row trigger is enabled and table RLS is forced. This is catalog equivalence, not behavioral acceptance. Missing acceptance runtime-login evidence remains a separate gate.
+Acceptance `guard_ecommerce_decision()` is one SECURITY INVOKER trigger function with an exact body digest match after CRLF-to-LF normalization only. The BEFORE INSERT/UPDATE/DELETE row trigger is enabled and table RLS is forced. This is catalog equivalence, not behavioral acceptance. The same-day control record subsequently confirms creation of the acceptance-only `supermega_trial_login`, backend-only membership, and independent transaction-pooler READ ONLY identity/privilege checks. Its recorded expiry is **2026-09-29T11:03:02.537791Z**. Reuse the existing owner-only private runtime credential within that expiry; do not rotate or recreate the role. Authenticated cached Supabase CLI branch configuration recovered supported admin access; the earlier missing-CLI/credential assumption is superseded. No credential value belongs in this file.
+
+Next acceptance action: after the candidate CI result, prepare one immutable preview with acceptance Auth/database bindings, schema 13 and all business writes/self-serve activation disabled. Verify exact release, managed readiness and write denial before separately authorized sign-in/persistence scenarios. Production approval and independent PR review remain distinct gates.
 
 #### Evidence locations and diagnostic limits
 
@@ -372,4 +374,4 @@ Acceptance `guard_ecommerce_decision()` is one SECURITY INVOKER trigger function
 - Ordered migration review and fresh source/catalog checks: `C:/Users/thesw/OneDrive - BDA/outputs/supermega-production-migration-gap-20260927.json`.
 - Reusable transport check: `tools/probe_postgres_transport.py --database-url-env NAME`; uses an existing environment variable, sends only SSLRequest, verifies system trust, never authenticates or runs SQL. Sixteen focused diagnostics checks passed.
 
-Recent local TCP reachability and Python certificate-verification failures do not supersede the established host mismatch. Two uncorrelated Supavisor errors do not establish an additional cause. Stop redundant credential/transport probes. Keep local, CI, staging, hosted and customer evidence distinct; continue authorized source and delivery work while managed authority is pending.
+Historical transport errors do not supersede the later verified host correction and acceptance runtime connection. Keep local, CI, staging, hosted and customer evidence distinct. Do not repeat failed credentials or treat recorded connectivity as live application acceptance.
