@@ -35,7 +35,7 @@ export function verifyCurrentReleaseAssets({
     ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose a workflow or import your data.', 'Make ', ' mine', 'Your data', 'Upload your CSV to review and import your data.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
     ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
-    ['website', websiteChunk, ['Make this website yours', 'Download site', 'Website starter brief generated', 'Not online yet', 'Edit sample', 'Edit page', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
+    ['website', websiteChunk, ['Your website', 'Download site', 'Website starter brief generated', 'Not online yet', 'Edit page', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
     ['ecommerce', ecommerceProductCorpus, ['Extra order tools', 'We could not verify your store changes.', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Payment and customer messages stay locked.', 'Shop review', 'supermega.ecommerce.order_import_review_packet.v1']],
     ['data_onboarding', clientDataOnboardingChunk, ['Choose your CSV, check the matched columns, and review any corrections.', 'No customer message, payment, website publish, or automation runs from this check.']],
     ['company_login', managedLoginChunk, ['Sign in to your workspace.', 'Login is currently unavailable.', 'Saved work on this device', 'Contact support', 'Contact support for account access. Your saved work is still available on this device.']],
@@ -805,7 +805,7 @@ for (const required of ['Website agent queue', 'Recommended Website agent job', 
   const currentRequired = websiteLiveCopyUpdates.get(required) ?? required
   if (!websiteChunk.includes(currentRequired)) throw new Error(`missing_live_website_context:${required}`)
 }
-for (const required of ['Make this website yours', 'Example ready', 'Back to demo', 'Mingalar Fresh Mart', 'families and office buyers in Yangon', 'Daily groceries, pantry packs, and local delivery with clear pickup windows.', 'Public proof: same-day neighborhood delivery, visible prices, and a reviewed phone or chat contact route.', 'Website starter brief generated']) {
+for (const required of ['Your website', 'Example ready', 'Back to demo', 'Mingalar Fresh Mart', 'families and office buyers in Yangon', 'Daily groceries, pantry packs, and local delivery with clear pickup windows.', 'Public proof: same-day neighborhood delivery, visible prices, and a reviewed phone or chat contact route.', 'Website starter brief generated']) {
   if (!websiteChunk.includes(required)) throw new Error(`missing_live_website_starter_context:${required}`)
 }
 for (const required of ['Managed activation evidence plan', 'Evidence to go live', 'proof gates ready']) {

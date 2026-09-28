@@ -240,18 +240,18 @@ export function WebsiteProduct() {
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
         title: 'Website',
-        copy: 'Preview, edit, and download the website file.',
+        copy: 'Edit your pages and download your website.',
       }
     : starterSetupActive
     ? {
-        title: 'Make this website yours',
+        title: 'Your website',
         copy: 'Add your business details to prepare your pages.',
       }
     : view === 'content' && surface === 'preview'
     ? {
         title: hasUnsavedChanges ? 'Unsaved changes' : 'Website',
         copy: hasUnsavedChanges
-          ? 'This preview is not saved yet. Return to edit, then save or discard it.'
+          ? 'Your changes are not saved. Return to edit to save or discard them.'
           : selectedPage.stage === 'draft'
             ? 'This page is saved as a draft. Select Edit page to update it and mark it ready.'
             : 'Check the selected page at desktop, tablet, or mobile size.',
@@ -270,18 +270,18 @@ export function WebsiteProduct() {
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
   const saveStateLabel = starterAvailable
-    ? 'Setup needed'
+    ? 'Add business details'
     : editConflict
     ? 'Saved version changed'
     : hasUnsavedChanges
-      ? 'Unsaved preview'
+      ? 'Unsaved changes'
       : storageMode === 'managed'
         ? 'Saved to company'
         : storageMode === 'browser-local'
           ? 'Saved on this device'
           : 'Session only'
   const websiteSurfaceActionLabel = surface === 'preview'
-    ? starterAvailable ? 'Edit sample' : 'Edit page'
+    ? 'Edit page'
     : 'Preview'
   const canRequestWebsiteSetup = storageMode !== 'managed'
     && view === 'content'
