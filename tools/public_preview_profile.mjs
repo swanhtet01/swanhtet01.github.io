@@ -37,9 +37,7 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
       return String.fromCodePoint(parseInt(entity.slice(entity[2].toLowerCase() === 'x' ? 3 : 2, -1), entity[2].toLowerCase() === 'x' ? 16 : 10))
     })
   })
-  const appPaths = new Set(['/login', '/?choose=1', '/shop/?tab=today', ...active.map(p => `/settings/?product=${p.id}`),
-    ...(options.shopTemplateIds || []).map(id => `/shop/?template=${id}`),
-    ...active.filter(p => p.id !== 'shop').flatMap(p => (p.templates || []).map(t => `/settings/?product=${p.id}&template=${t.id}`))])
+  const appPaths = new Set(['/login'])
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
   for (const href of hrefs) {
     if (!href || /[\s\\]|%|&(?:#|[a-z]+;)/i.test(href) || href.startsWith('//')) throw new Error('public_preview_href_unsafe')
@@ -52,9 +50,8 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     } else if (url.origin !== publicOrigin) throw new Error('public_preview_production_escape')
     else if (!['/', '/shop/', '/website/', '/ecommerce/', '/contact/', '/privacy/'].includes(url.pathname)) throw new Error('public_preview_public_route_invalid')
   }
-  for (const product of options.requireActions === false ? [] : active) {
-    const expected = product.id === 'shop' ? '/shop/?tab=today' : `/settings/?product=${product.id}`
-    if (!hrefs.includes(`${origin}${expected}`)) throw new Error(`public_preview_action_missing:${product.id}`)
+  if (options.requireActions !== false && hrefs.filter(href => href === `${origin}/login`).length !== 1) {
+    throw new Error('public_preview_action_missing:single_login')
   }
   return { activeProducts: active.map(product => product.id), pairedOrigin: origin }
 }

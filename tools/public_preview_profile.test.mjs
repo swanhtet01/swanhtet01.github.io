@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { readFileSync } from 'node:fs'
+import { bindPreviewNavigation } from './public_preview_navigation.mjs'
 import { previewProfile, validatePreviewContact, validatePreviewLinks, validatePreviewDeployment } from './public_preview_profile.mjs'
 const commit = 'a'.repeat(40)
 const app = { origin: 'https://megaos-123456789-swanhtet01s-projects.vercel.app',
   projectId: 'prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG', deploymentId: 'dpl_12345678', commit }
 const policy = previewProfile({ profile: 'isolated-pair', expectedCommit: commit, appBinding: JSON.stringify(app) })
 const products = ['shop', 'website', 'ecommerce', 'plant'].map(id => ({ id }))
-const html = `<a href="${app.origin}/shop/?tab=today">Shop</a><a href="${app.origin}/settings/?product=website">Website</a><a href="${app.origin}/settings/?product=ecommerce">Ecommerce</a>`
+const html = `<a href="${app.origin}/login">Login</a>`
 test('requires explicit profile, exact SHA and app binding', () => {
   for (const input of [{}, { profile: 'isolated-pair', expectedCommit: commit },
     { profile: 'isolated-pair', expectedCommit: 'main' }, { profile: 'unknown', expectedCommit: commit }]) assert.throws(() => previewProfile(input))
@@ -14,7 +16,7 @@ test('requires explicit profile, exact SHA and app binding', () => {
 })
 test('paired active actions exclude Plant and production escapes', () => {
   assert.equal(validatePreviewLinks(html, policy, products).activeProducts.length, 3)
-  for (const wrong of [html.replace('?tab=today', '?tab=counter'), html.replace(app.origin, 'https://app.supermega.dev'),
+  for (const wrong of [html.replace('/login', '/shop/?tab=counter'), html.replace(app.origin, 'https://app.supermega.dev'),
     html + '<a href="/plant/">Plant</a>', html + '<a href="/settings/?product=production">Setup</a>',
     html.replace(app.origin, 'https://other.vercel.app')]) assert.throws(() => validatePreviewLinks(wrong, policy, products))
 })
@@ -53,9 +55,18 @@ test('all-page mode permits informational tombstone but not a retired tool actio
 })
 
 
-test('explicit product picker is allowed without allowing arbitrary app-root queries', () => {
-  validatePreviewLinks(html + `<a href="${app.origin}/?choose=1">Choose product</a>`, policy, products)
-  for (const suffix of ['/?choose=0', '/?choose=1&next=https://evil.example', '/?product=plant']) {
+test('public site rejects product pickers, setup routes and duplicate Login actions', () => {
+  for (const suffix of ['/?choose=1', '/shop/?tab=today', '/settings/?product=website', '/login?product=shop', '/login']) {
     assert.throws(() => validatePreviewLinks(html + `<a href="${app.origin}${suffix}">Open</a>`, policy, products))
+  }
+  assert.throws(() => validatePreviewLinks('<h1>Products</h1>', policy, products), /action_missing/)
+})
+
+test('current generated pages bind to one isolated Login without production escapes', () => {
+  for (const path of ['index.html', 'shop/index.html', 'website/index.html', 'ecommerce/index.html', 'contact/index.html', 'privacy/index.html']) {
+    const source = readFileSync(new URL(`../.vercel/output/static/${path}`, import.meta.url), 'utf8')
+    const bound = bindPreviewNavigation(source, app)
+    assert.equal(validatePreviewLinks(bound, policy, products, { publicOrigin: 'https://public-preview.example' }).pairedOrigin, app.origin)
+    assert.ok(!bound.includes('href="https://app.supermega.dev/'))
   }
 })

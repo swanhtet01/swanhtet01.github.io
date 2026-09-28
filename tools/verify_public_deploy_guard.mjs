@@ -60,7 +60,7 @@ for (const token of ['validatePreviewLinks(homepage, policy, manifest.customerPr
 }
 for (const token of ['public_preview_action_missing', 'public_preview_app_route_invalid',
   'public_preview_production_escape', 'public_preview_retired_entry',
-  "product.id === 'shop' ? '/shop/?tab=today' : `/settings/?product=${product.id}`"]) {
+  "const appPaths = new Set(['/login'])"]) {
   requireToken(previewProfile, token, 'preview_navigation_policy_missing')
 }
 for (const token of ['guided_product_route_missing', 'guided_product_label_wrong',
