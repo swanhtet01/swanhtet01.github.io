@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.4
+Version: 1.2.5
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -323,6 +323,8 @@ Use patch versions for status/factual updates, minor versions for accepted refin
 Label future ambitions as future and proposals as proposals. Never present them as deployments or paid offerings. Do not add secrets, raw personal data, unsupported claims, endless backlogs or repeated approval questions. End each slice with the next action and concrete blocker, if any. Apply the active goal's repeated-blocker audit honestly rather than manufacturing unrelated activity.
 
 ### Decision log
+
+- 2026-09-28 v1.2.5: Removed Ecommerce synthetic order-batch loading and changed the downloadable CSV to headers only. Real upload/paste, review validation and existing records remain intact. Local app build and artifact verification PASS. This is one sample-generation path removed, not completion of all sample-led entry cleanup. Saved locally while App CI `36367654342` on `6d850a54` continues; push after that run terminates so its evidence is preserved. Next product slice: inspect unmanaged storefront entry and replace sample-first behavior with real setup without relabeling synthetic records.
 
 - 2026-09-28 v1.2.3: Added mandatory disposable PostgreSQL signup-budget execution to app CI; previously these integration tests were skipped by the default Python command. Local PostgreSQL 17 execution: 18/18 PASS, no skips; workflow contract: 155 PASS. Coverage includes durable quota, conflict handling and tenant isolation, not hosted Supabase acceptance.
 

@@ -608,7 +608,7 @@ export function EcommerceProduct() {
   }
 
   function downloadOrderImportTemplate() {
-    const csv = buildSampleOrderImportCsv()
+    const csv = ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message'].map(csvCell).join(',')
     const url = URL.createObjectURL(new Blob([`${csv}\r\n`], { type: 'text/csv' }))
     const link = document.createElement('a')
     link.href = url
@@ -625,35 +625,6 @@ export function EcommerceProduct() {
       detail: 'Download Ecommerce order import template',
     })
     const notice = 'Order import template downloaded. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
-    setOrderImportNotice(notice)
-    setDraftNotice(notice)
-  }
-
-  function buildSampleOrderImportCsv() {
-    const suggestedSku = selectedSkus.find((sku) => catalog.items.some((item) => item.sku === sku && item.onHand > 0))
-      ?? catalog.items.find((item) => item.onHand > 0)?.sku
-      ?? 'SKU-001'
-    const rows = [
-      ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message'],
-      ['Daw Mya / 09 xxx xxx xxx / Bahan', 'Viber', suggestedSku, 1, 'delivery', 'manual_review', 'Paste original customer message here'],
-      ['Walk-in customer', 'Shop form', suggestedSku, 1, 'pickup', 'cash_on_pickup', 'Owner-entered sample row'],
-    ]
-    return rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
-  }
-
-  function loadSampleOrderImportBatch() {
-    const csv = buildSampleOrderImportCsv()
-    const review = buildOrderImportReview(csv)
-    setOrderImportText(csv)
-    setOrderImportReview(review)
-    setOrderImportSourceName('sample-order-batch.csv')
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_chosen',
-      product: 'ecommerce',
-      route: location.pathname + location.search,
-      detail: 'Load sample Ecommerce order batch',
-    })
-    const notice = 'Sample Ecommerce order batch loaded and reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.'
     setOrderImportNotice(notice)
     setDraftNotice(notice)
   }
@@ -1335,7 +1306,7 @@ export function EcommerceProduct() {
         ['Next fix', orderImportReview.status === 'ready' ? 'Download packet' : 'Repair SKU, quantity, fulfilment, payment, customer, source proof'],
       ] as const
     : [
-        ['Step 1', 'Load sample or upload CSV'],
+        ['Step 1', 'Upload your order CSV'],
         ['Step 2', 'Checks fields locally'],
         ['Step 3', 'Download reviewed packet'],
       ] as const
@@ -1942,7 +1913,6 @@ export function EcommerceProduct() {
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
-            <button className="text-link" onClick={loadSampleOrderImportBatch} type="button">Load sample order batch</button>
           </div>
           <details className="ecommerce-order-import-workspace" open={orderImportText || orderImportReview ? true : undefined}>
             <summary><span>Review an order batch</span><small>Upload CSV or paste channel orders only when needed.</small></summary>
