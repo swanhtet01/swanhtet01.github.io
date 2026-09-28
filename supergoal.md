@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.18
+Version: 1.2.19
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -265,12 +265,30 @@ Incident loop: detect → classify → contain within authority → preserve evi
 
 Use this compact queue, not a separate fleet or duplicate project board. This is an assignment sequence, not a claim that multiple agents are running.
 
-| Lane | Owner | Next executable result | Completion evidence |
+| Assignment | Execution owner | Next deliverable | Acceptance |
 |---|---|---|---|
-| Release and product | Primary agent | Finish current CI; batch the saved Sites palette correction; resolve the next concrete failure | Exact candidate CI, actual UI inspection, authorized deployment and hosted journey receipts |
-| Customer support and delivery | One bounded reviewer, then primary implementation | Review the existing commercial kit; turn the highest-priority gap into a reusable intake/triage procedure | Complete issue record, ownership, escalation and recovery acceptance; no invented customer case |
-| Corporate and acquisition | Primary agent using existing corporate records | Prepare one scoped offer when a qualified request exists; reconcile existing queue access before updates | Verified source, permitted contact basis, founder-approved price and actual delivery evidence |
-| Internal machinery and R&D | Primary agent, serial local execution | Reuse the maintained workcell and qualify existing custom-product candidates | Measured useful output, cost, access boundaries and accepted tests; no model fleet or unqualified public showcase |
+| Release engineer | Primary agent | Candidate-to-production evidence packet; repair the next demonstrated hosted gap | Exact version, authorized release, login/save/reload/recovery receipt |
+| Customer delivery | Primary agent using existing intake kit | Map one consented business catalog and agreed task | No invented price/stock; missing facts explicit; customer acceptance |
+| Support analyst | Primary agent, then qualified workcell role | One request-to-resolution record in the existing system | Stable reference, owner, reproduction, verified resolution/reopen outcome |
+| Revenue operations | Primary agent using corporate records | One capability-backed scoped offer | Verified need, cost assumptions, founder-approved price; sending separately authorized |
+| Reliability operator | Deterministic checks with primary triage | An actionable signal tied to a version and affected task | Reproducible failure, severity, next action; no repeated unchanged alerts |
+| R&D engineer | Bounded review now; workcell experiment after capacity passes | Catalog-mapping experiment below | Baseline comparison, integrity checks, measured correction time, adopt/reject |
+
+**Actual staffing snapshot, 28 September:** primary operator plus one bounded
+strategy reviewer (review completed); no persistent specialist Codex workers.
+The local workcell reports15 registered roles,0 active jobs,0 running missions,
+0 resident role processes and0 loaded models. Coordinator identity matches.
+Available RAM1.38GiB is below the2.5GiB inference threshold despite the generic
+capacity endpoint reporting ready. These are measured runtime facts, not a
+claim that15 employees are working. Queue status `complete` alone does not
+establish quality acceptance. Preserve the four known quality failures.
+
+One coordinator assigns and accepts work. Roles share a serial executor until
+measured capacity and workload isolation support scaling. Delegated reviews
+are finite, explicitly scoped and integrated by the primary operator. Do not
+create idle processes or paid fallback merely to populate an organization chart.
+The existing Contabo Windows host has historical trading-workload evidence;
+verify workload isolation and capacity before deploying company agents there.
 
 The corporate task last reported a Sheets write-scope rejection; this is historical evidence, not a fresh authentication test. Do not restart its paused automation or resend unchanged requests. SOL retains separate ownership. Keep at most one bounded worker; review its result and return to zero workers before another assignment.
 
@@ -327,6 +345,31 @@ Bangkok12 October10:00–16:00 is founder-confirmed. Prepare introduction, card,
 Study incumbents for principles, workflows and documented capability. Do not copy proprietary code/private assets or create misleading brand identity. Use primary technical sources and refresh changing facts. With low traffic, observe actual task completion rather than claiming statistical A/B winners.
 
 Future options include better local models, multilingual assistance, industry packs, partner onboarding, richer inventory, verified payment integrations and reusable custom delivery. These are optional horizons, not concurrent launch promises. Promote an option only with a user problem, capacity, acceptance criteria and economic rationale.
+
+### Active R&D experiment: catalog mapping
+
+Decision owner: primary operating agent; founder retains customer/production gates.
+Question: does optional AI header mapping reduce catalog onboarding effort while
+preserving every supplied price, currency, quantity and SKU?
+
+1. Locate and reuse the maintained CSV import/validation path. Establish a
+   deterministic baseline before adding a model or another framework.
+2. Build a fixed, clearly synthetic corpus covering alternate headings, missing
+   currency, duplicate SKUs, malformed prices and ambiguous units. Record the
+   expected mappings and rejection reasons before running either approach.
+3. AI may propose mappings only. It must ask about ambiguity; it cannot invent
+   values or write customer records. Keep deterministic financial/stock validation.
+4. Compare mapping correctness, rejection behavior, operator correction time,
+   total latency, peak RAM and cost per accepted import. Record actual observations;
+   do not substitute model-estimated time savings.
+5. Stop and reject the candidate on any silent financial/stock corruption or
+   unflagged ambiguity. Adopt only with zero such failures and measured reduction
+   in correction time versus baseline. Otherwise keep deterministic import.
+
+Status: experiment assigned, execution NOT RUN. Next executable action: locate
+current import code and create the fixed fixture/expected-result corpus. Model
+comparison waits for capacity; dataset and baseline work do not. R&D produces
+an adopt/reject result and a product change, not another strategy document.
 
 ## 17. Milestones and completion evidence
 
