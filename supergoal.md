@@ -1,9 +1,9 @@
 # SuperMega Supergoal
 
-Version: 1.2.21
+Version: 1.2.22
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
-Updated: 2026-09-28  
+Updated: 2026-09-29
 Status: ACTIVE — implementation, hosted acceptance and commercial delivery remain incomplete
 
 ## 1. Controlling objective
@@ -26,10 +26,10 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 ### Immediate delivery sequence
 
-1. Finish exact-candidate CI and the authorized public/app release. Fresh public fetch on28September still shows sample/setup copy and older names; the live redesign is not accepted.
+1. Exact-candidate CI passed at 9cb4adad. Complete independent review and authorized paired release, then hosted acceptance; the live redesign is not yet accepted.
 2. Complete the private swanhtet@supermega.dev founder journey across Shop, Sites and Commerce: identity, memberships, save/reload, isolation and recovery. Account ownership intent is not provisioning evidence.
 3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
-4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The local workcell's575 passing tests do not establish VPS acceptance.
+4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The transfer package has 577 passing tests and three policy-blocked skips; VPS acceptance remains unproven.
 5. Align screenshots, product copy, business card and sales materials to the accepted release. Complete delivery/support and pricing evidence before outreach.
 
 Infrastructure shortlist: existing Contabo if inspection proves fit; Hetzner Linux cloud or DigitalOcean Droplets as alternatives. Compare the same RAM/CPU/storage, region, backups, tax and total monthly ceiling before recommending a purchase. The current Compose baseline reserves8GiB total; this is a resource budget, not a model-performance guarantee. Avoid new frameworks until a concrete missing capability is identified.
@@ -64,22 +64,28 @@ Prioritize the weakest required part of the customer lifecycle. Do not spend suc
 
 ## 3. Current baseline and evidence boundaries
 
-### Current execution order — 28 September
+### Current execution order - 29 September
 
-1. Finish the public-site and customer-entry cleanup: one Login, real interface screenshots, consistent white/graphite/cobalt styling, concise contact receipts, and no promotional demo/trial/preview detours. Preserve truthful synthetic-data provenance and legitimate editing/review tools.
-2. Complete full CI on a stable candidate; fix failures rather than repeatedly interrupting runs with small copy pushes. Local checks are not hosted acceptance.
-3. Release through the existing founder gate when Vercel access and independent PR approval are available; verify real-domain login, assigned product access, persistence and recovery afterward. Do not report a push as a deployment.
-4. Continue Shop, Sites and Commerce task completion and visual refinement, then customer delivery, sales/marketing preparation and internal agent operations. Keep these workstreams in scope; CI monitoring alone is not product progress.
+1. Complete the approved founder invitation when Auth transport works; verify invited status and founder-confirmed sign-in. Preserve the authorization below.
+2. Preserve CI-accepted candidate 9cb4adad while independent review is pending. Then perform the separately authorized paired release, hosted persistence and recovery checks.
+3. Inspect the existing VPS through authenticated access, preserve trading workloads, and install the prepared worker only after target capacity and acceptance checks.
+4. During external waits, finish a concrete customer-flow defect, delivery asset or evaluated R&D result. Do not create status documents, arbitrary hardening changes or repeated unchanged checks merely to stay active.
 
-Recent pushed changes simplify the launcher, Website editor and contact messages, remove the Ecommerce fingerprint panel and legacy managed-pilot pitch, and bound browser verification commands. Production rollout remains pending Vercel access and independent review.
+### Sustained execution
+
+A turn is not limited to three minutes. Continue through implementation, verification, saving and the next executable step while useful authorized work remains. Several bounded slices may form one sustained work block; keep heavy jobs serial. Give concise updates without ending a turn merely to report a passing check. Wait on actual running jobs with backed-off observation, using independent work where it will not disturb them. Stop for a real required input, exhausted access path, interruption or completed outcome. Claim unattended operation only when a deployed worker and monitoring are proven.
+
+### Existing founder-invitation authorization
+
+The owner approved one Supabase Auth invitation to swanhtet@supermega.dev in production supermegabase on 29 September. It remains unsent: the dashboard stalls and two read-only direct Auth preflights failed at transport. Do not request this approval again. Recheck account absence before sending; if the result is ambiguous, verify invitation state before retrying. Approval excludes memberships, email self-confirmation, customer-data changes, migrations and release-review bypass. No expiry was supplied; reassess only for material changes to the action or target.
 
 This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Pushed `5171800d`; four local commits through `1988ea79` add exact-byte webhook verification, bounded request handling, error redaction and a lint repair on `codex/site-app-cleanup-20260924` | Batch pending work after current CI; recheck exact head before release |
-| Integration | PR #596 is open, non-draft and mergeable; 573 changed files at af3e7ab7. Review API shows a COMMENTED review, no approval. Analytics findings match existing fix be64785c, verified locally by 71 telemetry checks plus initial-bootstrap assertions | Broad accumulated scope still needs genuine review; code verification is not independent approval |
-| CI | Historical full CI `36430761564` on `6017a08a` passed. Latest pushed candidate `5171800d` is being verified by run `36454087525`, observed in progress at Build and verify canonical app | Await this exact run; local payment changes need their own candidate verification. Hosted/customer acceptance remains outstanding |
+| Source | Pushed 9cb4adad07b1b64bb98f177d8ad65d6e6ca60d61, including bounded founder identity input reads | This documentation update is newer; distinguish executable-source and document evidence |
+| Integration | PR #596 BLOCKED / REVIEW_REQUIRED, no approving review. Earlier analytics findings are fixed by be64785c and verified | Eligible independent approval remains required |
+| CI | App run 36470206319 SUCCESS at 9cb4adad, including canonical build and desktop/390px journeys; Kernel, hosting and dependency checks passed | Do not rerun unchanged executable source. Hosted/customer acceptance remains open |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
@@ -87,7 +93,7 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 | Account entry | Live browser on 28 September: /login?product=shop shows Login unavailable and legacy sample entry. Live /api/health: status=ready, operating_mode=isolated_demo, enterprise_db_ready=false, security_ready=true, trial_backend.write_enabled=false | This is deployed runtime configuration/readiness, not proof the database itself is broken. UI-only release cannot establish managed login/persistence |
 | Website/Ecommerce | Setup completion now uses workspace=1, matching the product switcher. Local route tests 22/22, app build and artifact verifier PASS. Website model tests previously passed 15/15; offering component checks now pass 11/11 | Existing browser QA records preserved. Fresh valid UI submit/save/reload and hosted persistence remain unproven. Remaining sample-led paths need review |
 | Payments | 24 focused Stripe tests and full kernel verification with490 tests passed locally, including exact raw-byte signatures, interrupted/oversized requests, redacted persistence errors and successful retry. Kernel lint has0 errors and61 warnings after the outreach regex repair | No live charge or hosted settlement acceptance established; warnings remain to assess |
-| Local AI | Healthy service;15 roles / 11 profiles; idle worker; no loaded models; zero computer workflows | Available workcell, not an autonomous employee fleet |
+| Local AI | Worker a7aab36 and transfer package outputs/workcell-vps-a7aab36: 111 files, 577 tests passed and three policy-blocked skips | Not deployed; target inventory, full-state recovery and one useful accepted remote job remain |
 | Corporate | Operating materials, acquisition pack and quote check exist | Last recorded Sheets write failed scope; no fresh cloud synchronization |
 | Commercial | No accepted installation or paid conversion established in this review | Global customer/revenue totals are unknown, not assumed zero |
 | Founder event | Owner confirmed12 October 2026,10:00–16:00 through TBS context | Bangkok timezone assumed; other-session access unknown |
