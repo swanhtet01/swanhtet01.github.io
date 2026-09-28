@@ -925,9 +925,9 @@ function gitHead() {
 }
 
 const launcherText = [
-  'Your workspace',
+  'Welcome back',
   'Login',
-  'Open saved work on this device, or request setup.',
+  'Your business, in one place.',
 ]
 
 const shopSetup = {
@@ -956,7 +956,7 @@ const tests = [
     width: 1280,
     height: 900,
     expectedPath: '/',
-    expectedText: ['Your workspace', 'Login', 'Shop', 'Pilot Spa Workspace', 'Saved on this device'],
+    expectedText: ['Welcome back', 'Login', 'Shop', 'Pilot Spa Workspace', 'Saved on this device'],
     screenshotName: 'app-launcher-desktop-1280x900',
     seed: { lastProduct: 'production', productSetups: shopSetup },
   },
@@ -968,7 +968,7 @@ const tests = [
     width: 1280,
     height: 900,
     expectedPath: '/?choose=1',
-    expectedText: ['Your workspace', 'Login', 'Open saved work on this device, or request setup.'],
+    expectedText: ['Welcome back', 'Login', 'Your business, in one place.'],
     seed: { lastProduct: 'commerce' },
   },
   {
@@ -980,7 +980,7 @@ const tests = [
     height: 844,
     mobile: true,
     expectedPath: '/',
-    expectedText: ['Your workspace', 'Login', 'Open saved work on this device, or request setup.'],
+    expectedText: ['Welcome back', 'Login', 'Your business, in one place.'],
     screenshotName: 'app-launcher-mobile-390x844',
     seed: { lastProduct: 'ecommerce' },
   },
@@ -1047,7 +1047,7 @@ const tests = [
     width: 1280,
     height: 900,
     expectedPath: '/website/?workspace=1',
-    expectedText: ['Make this website yours', 'Setup needed', 'Main customers', 'What do you sell or provide?', 'Prepare private draft'],
+    expectedText: ['Your website', 'Add business details', 'Main customers', 'What do you sell or provide?', 'Prepare private draft'],
     screenshotName: 'website-business-setup-desktop-1280x900',
     seed: {},
   },
@@ -1058,7 +1058,7 @@ const tests = [
     height: 844,
     mobile: true,
     expectedPath: '/website/?workspace=1',
-    expectedText: ['Make this website yours', 'Setup needed', 'Main customers', 'What do you sell or provide?', 'Prepare private draft'],
+    expectedText: ['Your website', 'Add business details', 'Main customers', 'What do you sell or provide?', 'Prepare private draft'],
     screenshotName: 'website-business-setup-mobile-390x844',
     seed: {},
   },
