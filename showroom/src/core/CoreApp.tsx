@@ -1373,7 +1373,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
             {openOrderCount > 0 || lowStockCount > 0 || localDemoStatus ? <nav aria-label="Shop attention" className="shop-counter-summary">
               {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} open orders</Link> : null}
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
-              {localDemoStatus ? <Link className="shop-counter-local-link" data-risk={localDemoStatus === 'records-at-risk' ? 'true' : undefined} to="/settings/#controls">{localDemoStatus === 'records-at-risk' ? 'Local demo · records at risk' : 'Local demo · on this device'}</Link> : null}
+              {localDemoStatus ? <Link className="shop-counter-local-link" data-risk={localDemoStatus === 'records-at-risk' ? 'true' : undefined} to="/settings/#controls">{localDemoStatus === 'records-at-risk' ? 'Local records · backup needed' : 'Saved on this device'}</Link> : null}
             </nav> : null}
           </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
