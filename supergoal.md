@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.26
+Version: 1.2.27
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-29
@@ -28,7 +28,7 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner now designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. This destination is approved product direction, but account provisioning, access and hosted acceptance remain unverified. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain the white/cobalt design and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
-1. Preserve the passing ea70da00 candidate, complete independent review and authorized paired release, then hosted acceptance. See section 3 for exact evidence; the live redesign is not yet accepted.
+1. Complete the reviewed production schema11-to13 upgrade and extension acceptance, then rerun the authorized paired release on the current exact main commit. PR596 and PR597 are merged; release36494294930 stopped before deployment because production schema and billing versions are incompatible. Never change version flags without matching database evidence. See section3 for the remaining acceptance boundaries.
 2. Complete the private swanhtet@supermega.dev founder journey across Shop, Sites and Commerce: identity, memberships, save/reload, isolation and recovery. Account ownership intent is not provisioning evidence.
 3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
 4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The transfer package has 577 passing tests and three policy-blocked skips; VPS acceptance remains unproven.
@@ -76,15 +76,19 @@ A turn is not limited to three minutes. Continue through implementation, verific
 
 ### Existing founder-invitation authorization
 
-The owner approved one Supabase Auth invitation to swanhtet@supermega.dev in production supermegabase on 29 September. It remains unsent: the dashboard stalls and two read-only direct Auth preflights failed at transport. Do not request this approval again. Recheck account absence before sending; if the result is ambiguous, verify invitation state before retrying. Approval excludes memberships, email self-confirmation, customer-data changes, migrations and release-review bypass. No expiry was supplied; reassess only for material changes to the action or target.
+The owner-approved Supabase Auth invitation to swanhtet@supermega.dev was sent once on29September and independently verified as invited but unconfirmed. That one-send authorization is consumed. The original email used localhost; production Site URL and exact signup/recovery callbacks are now saved and reload-verified under app.supermega.dev/account/setup. The old email is not repaired by changing settings. Token-free Auth transport still failed from this machine; do not replay the private token or repeat an unchanged invitation. Confirm working transport and deployed account handling before preparing a replacement invitation. Memberships and identity self-confirmation are not authorized by the original invitation approval.
+
+### Standing routine PR authority
+
+On29September the owner explicitly approved PR597 and future routine PR review/merge without repeated permission questions. Use the previously explained temporary exception only when needed: required approvals0 and last-push approvalfalse, with every other rule preserved and immediate verified restoration in finally. Required checks must pass at the exact head and strict base; never fabricate an independent review or use an admin bypass. Reconcile current rule state before each exception. This does not authorize live database migrations, unrelated IAM changes, spending or customer contact. Existing explicit paired-release approval remains usable for the agreed deployment scope; material database/access changes require their own concrete authorization.
 
 This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Pushed ea70da00 includes production login gating, production reset-control removal, English white/cobalt public marketing and corrected responsive journey assertions | This brief is newer. Production remains on bbab9a63; passing source changes are not live |
-| Integration | PR #596 BLOCKED / REVIEW_REQUIRED, no approving review. Earlier analytics findings are fixed by be64785c and verified | Eligible independent approval remains required |
-| CI | App run 36484748852 SUCCESS at ea70da007a0238bc4303294afb08b4d1e3a59937: canonical API/build/verification, release/RLS guards and desktop/390px journeys passed | CI does not establish hosted acceptance. Existing accessibility lint warnings remain; do not rerun an unchanged passing candidate |
+| Source | Main382f97ee contains merged PR596 product cleanup and PR597 redacted release diagnostics | Last verified production remains bbab9a63; the new release stopped before deployment |
+| Integration | PR596 and PR597 merged using owner-approved two-field review exceptions; original protections restored and verified | Standing routine PR authority above supersedes the former one-release restriction |
+| CI / release | PR597 App CI36492086707 and duplicate repair36492077725 passed at9713e1499. Paired release36494294930 failed before deploy: managed_schema_version_invalid and managed_billing_schema_version_invalid | Fresh production metadata is schema11; app expects13. Hosted login/persistence remain unaccepted; do not retry unchanged release |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
@@ -171,7 +175,7 @@ Next design action: simplify the shared interface and improve the core selling/s
 
 ### Authorized ongoing work
 
-Within existing scope: inspect source and approved records, fix local code, write tests/documentation, prepare migrations and release artifacts, run bounded verification, prepare marketing/sales drafts, inspect public/provider state through authorized access and save scoped work. Existing repository push/PR preparation authority does not imply permission to merge or release production.
+Within existing scope: inspect source and approved records, fix local code, write tests/documentation, prepare migrations and release artifacts, run bounded verification, prepare marketing/sales drafts, inspect public/provider state through authorized access and save scoped work. Routine PR merges now have the standing authority in section3; production release and database/access authority remain separately scoped.
 
 ### Founder-controlled actions
 
@@ -262,7 +266,7 @@ Protect provenance, exports and backups. Define restore procedures and exercise 
 
 Relevant branches/PRs need lint, typing, meaningful unit/integration checks, dependency/security checks, build verification and risk-appropriate browser journeys. Use explicit synthetic fixtures rather than sample-producing customer defaults. Update obsolete wording assertions without removing correctness/security invariants.
 
-Bind artifacts to exact commits. Keep local, CI, immutable staging, production health and customer acceptance distinct. Critical failures stop release. Retain independent review and provider protections; do not self-approve or bypass protected-main workflows because a feature branch looks green.
+Bind artifacts to exact commits. Keep local, CI, immutable staging, production health and customer acceptance distinct. Critical failures stop release. Retain required checks and provider protections. Apply only the explicitly authorized, temporary review exception described in section3; never represent it as independent approval or broaden it to bypass CI.
 
 Use preview/blue-green or coordinated promotion where supported. Verify migrations in isolation. Prefer expand/backfill/validate/switch/contract changes, bounded locks, compatibility windows and tested restoration. Zero downtime is a change-specific target to demonstrate, not a universal guarantee.
 
