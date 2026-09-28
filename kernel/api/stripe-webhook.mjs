@@ -66,8 +66,10 @@ export default async function handler(req, res) {
   // Everything else (handled / ignored / duplicate / amount-mismatch) is a definitive ack → 200.
   if (settled.ok === false) {
     // Alert — a verified payment we failed to persist is the highest-severity money event.
-    await captureError('stripe-webhook reconcile failed', settled.detail, { event: result.event?.id || '?', type: result.event?.type || '?' }).catch(() => {})
-    res.status(500).json({ ok: false, reason: settled.detail || 'reconcile_failed' })
+    // Database exception text may contain connection details or customer data.
+    // Keep the public response and outbound alert limited to a stable code.
+    await captureError('stripe-webhook reconcile failed', 'reconcile_failed').catch(() => {})
+    res.status(500).json({ ok: false, reason: 'reconcile_failed' })
     return
   }
   res.status(200).json({ ok: true, duplicate: result.duplicate || settled.duplicate || false, handled: settled.handled, ref: settled.ref, mismatch: settled.mismatch || false })

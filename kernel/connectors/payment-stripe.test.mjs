@@ -229,3 +229,40 @@ test('HTTP webhook settles aborted requests rather than waiting forever for end'
     assert.deepEqual(res.body, { ok: false, reason: 'body_read_error' })
   }
 })
+
+test('HTTP webhook redacts persistence errors and leaves the event retryable', async () => {
+  const { Readable } = await import('node:stream')
+  const { default: handler } = await import('../api/stripe-webhook.mjs')
+  const original = store.recordPaymentEvent
+  const originalLog = console.error
+  const originalToken = process.env.TELEGRAM_BOT_TOKEN
+  delete process.env.TELEGRAM_BOT_TOKEN
+  const logs = []
+  console.error = (...args) => logs.push(args)
+  const project = await store.createProject({ offer: 'build' })
+  const { raw, sig } = signed(paidEvent('evt_private_failure', project.id, 5000))
+  const deliver = async () => {
+    const req = Readable.from([Buffer.from(raw)])
+    req.method = 'POST'
+    req.headers = { 'stripe-signature': sig }
+    const res = { status(code) { this.code = code; return this }, json(body) { this.body = body } }
+    await handler(req, res)
+    return res
+  }
+  try {
+    store.recordPaymentEvent = async () => { throw new Error('postgres://private-user:private-password@host/private-customer') }
+    const failed = await deliver()
+    assert.equal(failed.code, 500)
+    assert.deepEqual(failed.body, { ok: false, reason: 'reconcile_failed' })
+    assert.equal(JSON.stringify(logs).includes('private-password'), false)
+    assert.equal(JSON.stringify(logs).includes('private-customer'), false)
+    store.recordPaymentEvent = original
+    assert.equal((await deliver()).code, 200)
+    assert.equal((await store.getProject(project.id)).deposit_status, 'paid')
+  } finally {
+    store.recordPaymentEvent = original
+    console.error = originalLog
+    if (originalToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN
+    else process.env.TELEGRAM_BOT_TOKEN = originalToken
+  }
+})
