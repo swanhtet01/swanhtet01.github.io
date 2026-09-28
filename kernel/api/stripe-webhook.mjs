@@ -11,13 +11,33 @@ import { verifyWebhook, reconcile } from '../connectors/payment-stripe.mjs'
 import { captureError } from '../alert.mjs'
 
 export const config = { api: { bodyParser: false } }
+const MAX_BODY_BYTES = 1024 * 1024
 
 async function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = []
-    req.on('data', (c) => chunks.push(c))
-    req.on('end', () => resolve(Buffer.concat(chunks)))
-    req.on('error', reject)
+    let size = 0
+    let finished = false
+    const fail = (code) => {
+      if (finished) return
+      finished = true
+      chunks.length = 0
+      reject(Object.assign(new Error(code), { code }))
+    }
+    req.on('data', (c) => {
+      if (finished) return
+      size += c.length
+      if (size > MAX_BODY_BYTES) return fail('body_too_large')
+      chunks.push(c)
+    })
+    req.on('end', () => {
+      if (finished) return
+      finished = true
+      resolve(Buffer.concat(chunks))
+    })
+    req.on('error', () => fail('body_read_error'))
+    req.on('aborted', () => fail('body_read_error'))
+    req.on('close', () => fail('body_read_error'))
   })
 }
 
@@ -29,8 +49,9 @@ export default async function handler(req, res) {
   let rawBody
   try {
     rawBody = await readRawBody(req)
-  } catch {
-    res.status(400).json({ ok: false, reason: 'body_read_error' })
+  } catch (error) {
+    const oversized = error.code === 'body_too_large'
+    res.status(oversized ? 413 : 400).json({ ok: false, reason: oversized ? 'body_too_large' : 'body_read_error' })
     return
   }
   const sig = req.headers['stripe-signature'] || ''

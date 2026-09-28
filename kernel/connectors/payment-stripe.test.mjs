@@ -200,3 +200,32 @@ test('HTTP webhook preserves incoming bytes through signature verification', asy
   assert.equal(res.code, 400)
   assert.deepEqual(res.body, { ok: false, reason: 'signature_mismatch' })
 })
+
+test('HTTP webhook bounds streamed bodies without trusting Content-Length', async () => {
+  const { Readable } = await import('node:stream')
+  const { default: handler } = await import('../api/stripe-webhook.mjs')
+  const req = Readable.from([Buffer.alloc(1024 * 1024), Buffer.from('x')])
+  req.method = 'POST'
+  req.headers = { 'content-length': '1' }
+  const res = { status(code) { this.code = code; return this }, json(body) { this.body = body } }
+  await handler(req, res)
+  assert.equal(res.code, 413)
+  assert.deepEqual(res.body, { ok: false, reason: 'body_too_large' })
+})
+
+test('HTTP webhook settles aborted requests rather than waiting forever for end', async () => {
+  const { EventEmitter } = await import('node:events')
+  const { default: handler } = await import('../api/stripe-webhook.mjs')
+  for (const termination of ['aborted', 'close', 'error']) {
+    const req = new EventEmitter()
+    req.method = 'POST'
+    req.headers = {}
+    const res = { status(code) { this.code = code; return this }, json(body) { this.body = body } }
+    const pending = handler(req, res)
+    req.emit('data', Buffer.from('{'))
+    req.emit(termination, new Error('private transport detail'))
+    await pending
+    assert.equal(res.code, 400)
+    assert.deepEqual(res.body, { ok: false, reason: 'body_read_error' })
+  }
+})
