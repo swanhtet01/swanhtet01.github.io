@@ -3766,7 +3766,7 @@ if (addToCartStart < 0
   || !ecommerceCssSource.includes('.ecommerce-preview-gate .core-button')
   || !ecommerceCssSource.includes('.storefront-request-button')
   || !ecommerceCssSource.includes('.ecommerce-buying-workspace')
-  || !ecommerceCssSource.slice(ecommerceCssSource.indexOf('.ecommerce-buying-body {'), ecommerceCssSource.indexOf('}', ecommerceCssSource.indexOf('.ecommerce-buying-body {'))).includes('color: #17231d;')
+  || !ecommerceCssSource.slice(ecommerceCssSource.indexOf('.ecommerce-buying-body {'), ecommerceCssSource.indexOf('}', ecommerceCssSource.indexOf('.ecommerce-buying-body {'))).includes('color: #171b26;')
   || ecommerceCssSource.includes('.ecommerce-order-autopilot')
   || ecommerceCssSource.includes('.ecommerce-order-autopilot-rows')
   || !ecommerceCssSource.includes('.ecommerce-stale-quote')
@@ -19850,8 +19850,8 @@ async function verifyBusinessCommandRuntime() {
     for (const [intent, label, path] of [
       ['shop_inventory', 'Open Shop sample', '/shop/?tab=counter'],
       ['plant_control', 'Open Plant sample', '/plant/?tab=production'],
-      ['website_readiness', 'Open Website sample', '/website/'],
-      ['ecommerce_readiness', 'Open Ecommerce sample', '/ecommerce/'],
+      ['website_readiness', 'Open Sites sample', '/website/'],
+      ['ecommerce_readiness', 'Open Commerce sample', '/ecommerce/'],
     ]) {
       const answer = command.buildBusinessCommandAnswer(empty, intent)
       assert(answer.nextAction.label === label && answer.nextAction.path === path, `business_command_missing_source_sample_route_wrong:${intent}`)
@@ -20985,8 +20985,8 @@ else {
     || productOnboardingArtifact.includes('Import existing data')
     || productOnboardingArtifact.includes('Open Shop sample')
     || productOnboardingArtifact.includes('Open Plant sample')
-    || productOnboardingArtifact.includes('Open Website sample')
-    || productOnboardingArtifact.includes('Open Ecommerce sample')
+    || productOnboardingArtifact.includes('Open Sites sample')
+    || productOnboardingArtifact.includes('Open Commerce sample')
     || !productOnboardingArtifact.includes('Opening it will not run setup again.')
     || productOnboardingArtifact.includes('Responsible role')
     || productOnboardingArtifact.includes('Starting workflow')
