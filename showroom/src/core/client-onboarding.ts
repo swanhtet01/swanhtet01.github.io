@@ -1,4 +1,4 @@
-import siteManifest from '../../../site-manifest.json' with { type: 'json' }
+import { productDisplayName } from './product-setup.ts'
 import { shopIndustryPack, type ShopIndustryPackId } from './shop-service-scheduling.ts'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
 import {
@@ -605,13 +605,11 @@ export type ClientDemoPreparationSource = {
 
 const clientDemoProductOrder: readonly ClientSolutionId[] = ['commerce', 'production', 'website', 'ecommerce']
 
-const clientProductLabels = Object.fromEntries(siteManifest.customerProducts.map(product => [product.runtimeId, product.name]))
-
 const clientDemoProductDetails: Record<ClientSolutionId, { label: string; demoPath: string; setupPath: string }> = {
-  commerce: { label: clientProductLabels.commerce, demoPath: '/shop/?tab=counter', setupPath: '/settings/?product=shop' },
-  production: { label: clientProductLabels.production, demoPath: '/plant/?tab=production', setupPath: '/settings/?product=plant' },
-  website: { label: clientProductLabels.website, demoPath: '/website/', setupPath: '/settings/?product=website' },
-  ecommerce: { label: clientProductLabels.ecommerce, demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
+  commerce: { label: productDisplayName('commerce'), demoPath: '/shop/?tab=counter', setupPath: '/settings/?product=shop' },
+  production: { label: productDisplayName('production'), demoPath: '/plant/?tab=production', setupPath: '/settings/?product=plant' },
+  website: { label: productDisplayName('website'), demoPath: '/website/', setupPath: '/settings/?product=website' },
+  ecommerce: { label: productDisplayName('ecommerce'), demoPath: '/ecommerce/', setupPath: '/settings/?product=ecommerce' },
 }
 
 const clientDemoPreparationReviewChecklist = [

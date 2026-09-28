@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.16
+Version: 1.2.17
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -8,7 +8,7 @@ Status: ACTIVE — implementation, hosted acceptance and commercial delivery rem
 
 ## 1. Controlling objective
 
-Build and operate SuperMega as a dependable, commercially viable, AI-operated software company for small businesses. Deliver a coherent public website, useful Shop/POS, Website and Ecommerce products, and the internal systems needed to acquire, onboard, serve and retain customers. Implement, verify, release through the authorized path, observe and improve real systems. Plans and generated reports support execution; they do not replace customer outcomes.
+Build and operate SuperMega as a dependable, commercially viable, AI-operated software company for small businesses. Deliver a coherent public website, useful Shop/POS, Sites and Commerce products, and the internal systems needed to acquire, onboard, serve and retain customers. Implement, verify, release through the authorized path, observe and improve real systems. Plans and generated reports support execution; they do not replace customer outcomes.
 
 The founder sets direction and retains control of consequential commitments. AI and deterministic automation should perform increasingly useful portions of engineering, operations, research, marketing preparation, sales administration and support. Success means customers receive dependable value and the business delivers it repeatedly at sustainable cost. Agent counts, document counts and token consumption are not success measures.
 
@@ -16,7 +16,7 @@ This is the maintained project brief. It does not override higher-priority instr
 
 ### Replacement objective for the active Codex goal
 
-> Execute the SuperMega company and platform goal defined in `C:/Users/thesw/Projects/supermega-platform-worktrees/paired-preview-navigation-20260919/supergoal.md`. Read its current version at meaningful planning and release transitions. Build, verify and maintain Shop, Website, Ecommerce, the public site, and the internal commercial and AI operating systems through real customer outcomes. Prioritize incidents and release blockers, then complete the customer lifecycle and revenue operations. Continue useful authorized work autonomously, preserving founder approval for final production releases, live database writes, IAM/access changes, spending and customer contact. Keep evidence, next actions and this brief current. Do not mistake local tests, plans, running services or generated drafts for hosted/customer acceptance. Complete defined milestones only when their acceptance evidence exists; maintain the ongoing company mission through successive measurable milestones.
+> Execute the SuperMega company and platform goal defined in `C:/Users/thesw/Projects/supermega-platform-worktrees/paired-preview-navigation-20260919/supergoal.md`. Read its current version at meaningful planning and release transitions. Build, verify and maintain Shop, Sites, Commerce, the public site, and the internal commercial and AI operating systems through real customer outcomes. Prioritize incidents and release blockers, then complete the customer lifecycle and revenue operations. Continue useful authorized work autonomously, preserving founder approval for final production releases, live database writes, IAM/access changes, spending and customer contact. Keep evidence, next actions and this brief current. Do not mistake local tests, plans, running services or generated drafts for hosted/customer acceptance. Complete defined milestones only when their acceptance evidence exists; maintain the ongoing company mission through successive measurable milestones.
 
 The absolute path identifies this checkout. If the repository moves, verify the new checkout and update the thread reference and this paragraph together. Maintain one canonical file; link to it rather than distributing conflicting copies. The current goal tool can change status but cannot edit an active objective's text; the replacement paragraph is ready for the owner's goal editor. Do not falsely complete the old goal to work around that limitation.
 
@@ -57,7 +57,7 @@ Prioritize the weakest required part of the customer lifecycle. Do not spend suc
 1. Finish the public-site and customer-entry cleanup: one Login, real interface screenshots, consistent white/graphite/cobalt styling, concise contact receipts, and no promotional demo/trial/preview detours. Preserve truthful synthetic-data provenance and legitimate editing/review tools.
 2. Complete full CI on a stable candidate; fix failures rather than repeatedly interrupting runs with small copy pushes. Local checks are not hosted acceptance.
 3. Release through the existing founder gate when Vercel access and independent PR approval are available; verify real-domain login, assigned product access, persistence and recovery afterward. Do not report a push as a deployment.
-4. Continue Shop, Website and Ecommerce task completion and visual refinement, then customer delivery, sales/marketing preparation and internal agent operations. Keep these workstreams in scope; CI monitoring alone is not product progress.
+4. Continue Shop, Sites and Commerce task completion and visual refinement, then customer delivery, sales/marketing preparation and internal agent operations. Keep these workstreams in scope; CI monitoring alone is not product progress.
 
 Recent pushed changes simplify the launcher, Website editor and contact messages, remove the Ecommerce fingerprint panel and legacy managed-pilot pitch, and bound browser verification commands. Production rollout remains pending Vercel access and independent review.
 
@@ -105,7 +105,7 @@ Serve a broad small-business audience with appropriate Myanmar language/payment/
 
 ### Visual-first design and implementation standard
 
-Owner direction, 28 September 2026: use visual exploration, interface images and deliberate design before substantial UI implementation. Make every product coherent, premium, simple to understand and effective in daily work. This applies to the public site, connected workspace, Shop, Website, Ecommerce and internal operating tools. It is a maintained practice, not a one-off cosmetic redesign.
+Owner direction, 28 September 2026: use visual exploration, interface images and deliberate design before substantial UI implementation. Make every product coherent, premium, simple to understand and effective in daily work. This applies to the public site, connected workspace, Shop, Sites, Commerce and internal operating tools. It is a maintained practice, not a one-off cosmetic redesign.
 
 The three owner-supplied SOL concepts (dashboard, boutique counter and appointment calendar) establish a craft reference: focused navigation, strong hierarchy, useful imagery, calm spacing and task-oriented panels. Transfer those qualities into SuperMega's white/graphite/cobalt identity. Do not copy SOL branding, customer identities, decorative slogans or permanent panels that do not help the task. SOL implementation remains separate.
 
@@ -126,7 +126,7 @@ Small copy fixes, urgent defect repairs and nonvisual changes do not require thr
 
 - **Shop first:** searchable catalog, clear current sale, reliable quantity controls, accurate total and one obvious payment action. Product details, notes and advanced operations appear progressively. Preserve inventory, receipts and recovery behavior.
 - **Connected workspace next:** a clear route into the customer's products and unfinished work, consistent Login/account navigation, no Plant acquisition or trial detours.
-- **Website and Ecommerce:** collect essential business information, use coherent product/content/order management patterns, and carry the customer through actual publishing or fulfillment. Do not expose implementation choices as onboarding homework.
+- **Sites and Commerce:** collect essential business information, use coherent product/content/order management patterns, and carry the customer through actual publishing or fulfillment. Do not expose implementation choices as onboarding homework.
 - **Public site and commercial assets:** use the same brand and language, concise product explanations and a direct path to real setup. Retain white theme without a website theme toggle.
 - **Internal tools:** apply the same clarity to work queues, ownership, evidence, failures and next actions. Operational truth takes priority over decorative dashboards.
 
@@ -205,7 +205,7 @@ A business can name its workspace, enter/import its products or services, set ac
 
 Acceptance uses an agreed business dataset and real operator task: verify order, receipt, stock and payment consistency; reload and identity boundaries; failure/retry; recovery. Isolated fixtures are engineering evidence, not customer acceptance.
 
-## 8. Website requirements
+## 8. Sites requirements
 
 Collect business facts, services, photos, contact details and relevant preferences. Produce a useful site without requiring the customer to become a page-builder expert. Keep content separate from templates and application code. Allow focused corrections and an understandable publishing state.
 
@@ -213,7 +213,7 @@ Verify forms, links, responsive layout, keyboard access, metadata, contact handl
 
 Templates provide reusable structure, not invented businesses. Private review links must be scoped, authentication-aware and absent from analytics URLs. Preserve customer work across failed saves and interrupted sessions.
 
-## 9. Ecommerce requirements
+## 9. Commerce requirements
 
 Collect actual catalog, images, prices, availability, fulfillment and payment arrangements. Shoppers must understand the offer and place the supported kind of order; operators must receive and handle it reliably.
 
@@ -263,7 +263,7 @@ Incident loop: detect → classify → contain within authority → preserve evi
 
 ### Founder product access and cloud capacity
 
-Provide one private founder login with assigned Shop, Website and Ecommerce workspaces. Reconcile existing identity and memberships before provisioning; do not create duplicate accounts or expose shared passwords. Custom products appear only after deployment and access are verified. Owner confirmed swanhtet@supermega.dev for the founder account and company email. Production Auth lookup on 28 September found no user with that email; official account provisioning is still required. Keep personal email separate. devteam@supermega.dev is unverified. Complete hosted sign-in, product entry, save/reload and recovery before handing over an account as ready. Use owner-supplied content or honestly labelled illustrative content, never invented customer activity.
+Provide one private founder login with assigned Shop, Sites and Commerce workspaces. Reconcile existing identity and memberships before provisioning; do not create duplicate accounts or expose shared passwords. Custom products appear only after deployment and access are verified. Owner confirmed swanhtet@supermega.dev for the founder account and company email. Production Auth lookup on 28 September found no user with that email; official account provisioning is still required. Keep personal email separate. devteam@supermega.dev is unverified. Complete hosted sign-in, product entry, save/reload and recovery before handing over an account as ready. Use owner-supplied content or honestly labelled illustrative content, never invented customer activity.
 
 The owner accepts paid cloud capacity when local RAM limits useful work. Prefer existing Vercel, Supabase, Google Workspace and coding subscriptions; verify actual plans and remaining capacity before claiming they are paid for. Connected access alone does not establish billing entitlement. New spend requires a specific service, workload, monthly ceiling and owner confirmation. Automated local routing stays local-only until an exact cloud job is authorized; no silent paid fallback. Move a measured workload to cloud before adding another framework or fleet. Track cost per accepted result and a stop limit. Owner reports an existing Resend account; contact notification and acknowledgement code already uses Resend, but sender-domain verification, SMTP configuration, plan and delivery still require provider evidence. Private custom-product and R&D access must remain separate from publicly available products.
 
