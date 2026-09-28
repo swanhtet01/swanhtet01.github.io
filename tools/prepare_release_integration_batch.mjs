@@ -345,7 +345,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-workspace-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
-      'Your workspace', 'Saved work is stored on this device.',
+      'Your workspace', 'Saved on this device.',
       'Sign in to your workspace.', 'Saved work on this device',
       'supermega.last-product.v1', 'retired_launcher_release_asset',
       "'Choose what you want to run.'",
