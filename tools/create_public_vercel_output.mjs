@@ -1129,11 +1129,11 @@ async function sendWebhook(record) {
 
 function acknowledgementPlan(workflow) {
   const plans = {
-    commerce: 'For Shop, we prepare a reviewed import, suitable trade defaults and a ready-to-review first-sale workspace.',
-    website: 'For Website, we prepare the page plan, starter copy and responsive preview for your review.',
-    ecommerce: 'For Ecommerce, we prepare a cleaned catalog structure, customer view and request-to-Shop handoff for your review.',
-    production: 'For Plant, we prepare the operating workflow, role boundaries and sample workspace for your review.',
-    guide: 'For a guided recommendation, we review the brief and return the smallest suitable SuperMega setup path.',
+    commerce: 'For Shop, we prepare a your catalog, stock and sales workflow.',
+    website: 'For Website, we prepare the your pages, content and responsive layout for your review.',
+    ecommerce: 'For Ecommerce, we prepare a your catalog, storefront and order workflow for your review.',
+    production: 'For Plant, we prepare the operating workflow and role boundaries for your review.',
+    guide: 'For a guided recommendation, we review the brief and recommend the suitable product.',
   }
   return plans[recordWorkflow(workflow)] || plans.guide
 }
@@ -1148,7 +1148,7 @@ async function sendCustomerAcknowledgement(record) {
   if (!emailOk(record.email)) return { status: 'skipped' }
   const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
   const replyTo = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
-  const body = ['Hi ' + record.name + ',', '', 'Thanks for contacting SuperMega. We received your setup request for ' + record.company + '.', '', 'No action is needed from you now. We will review this brief and reply with one scoped next step.', '', acknowledgementPlan(record.workflow), '', 'What happens next:', '1. We confirm the scope, price and timing with you.', '2. Once agreed, SuperMega prepares the setup or preview. You review the result instead of building it yourself.', '3. Going live is a separate step after your approval and readiness checks.', '', 'If private files are needed, we will provide a safe transfer method after scope confirmation. Do not email passwords, payment slips or customer records.', '', 'This receipt does not create an account, publish a site, connect your business data or take payment.', '', 'Your reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Your trial claim code: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply only if you have a question or correction, and keep the reference above.', '', 'SuperMega - https://supermega.dev']).join('\\n')
+  const body = ['Hi ' + record.name + ',', '', 'We received your request for ' + record.company + '.', '', acknowledgementPlan(record.workflow), '', 'Next: we review your requirements and confirm scope, price and timing.', '', 'Reference: ' + record.lead_id].concat(record.raw.trial_claim_code ? ['Workspace reference: ' + record.raw.trial_claim_code] : []).concat(['', 'Reply to this email with questions or corrections. Please do not include passwords or customer records.', '', 'SuperMega - https://supermega.dev']).join('\\n')
   const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-ack/' + record.lead_id }, body: JSON.stringify({ from, to: [record.email], reply_to: replyTo, subject: 'We received your request - SuperMega', text: body }), redirect: 'error', signal: AbortSignal.timeout(9000) })
   if (!response.ok) throw new Error('ack_email_' + response.status)
   return { status: 'ready', channel: 'ack_email' }

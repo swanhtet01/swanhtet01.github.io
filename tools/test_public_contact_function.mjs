@@ -448,22 +448,17 @@ try {
   assert.equal(customerAck.body.reply_to, 'swanhtet@supermega.dev')
   assert.equal(customerAck.headers['idempotency-key'], `supermega-contact-ack/${ackAccepted.body.request_id}`)
   assert.ok(customerAck.body.text.includes(ackAccepted.body.request_id))
-  assert.ok(customerAck.body.text.includes('Your trial claim code: SM-2CDE-4FGH'))
+  assert.ok(customerAck.body.text.includes('Workspace reference: SM-2CDE-4FGH'))
   assert.ok(customerAck.body.subject.includes('We received your request'))
-  assert.match(customerAck.body.text, /No action is needed from you now/)
-  assert.match(customerAck.body.text, /reply with one scoped next step/)
-  assert.match(customerAck.body.text, /confirm the scope, price and timing/)
-  assert.match(customerAck.body.text, /You review the result instead of building it yourself/)
-  assert.match(customerAck.body.text, /Going live is a separate step after your approval and readiness checks/)
-  assert.match(customerAck.body.text, /provide a safe transfer method after scope confirmation/)
-  assert.match(customerAck.body.text, /does not create an account, publish a site, connect your business data or take payment/)
-  assert.match(customerAck.body.text, /Do not email passwords, payment slips or customer records/)
+  assert.match(customerAck.body.text, /confirm scope, price and timing/)
+  assert.match(customerAck.body.text, /Please do not include passwords or customer records/)
+  assert.doesNotMatch(customerAck.body.text.split('\n').slice(1).join('\n'), /demo|preview|trial|account created|payment received/i)
   assert.doesNotMatch(customerAck.body.text, /one business day|founder|trial keeps working/)
 
   const productAcknowledgements = {
-    shop: /reviewed import, suitable trade defaults and a ready-to-review first-sale workspace/,
-    website: /page plan, starter copy and responsive preview/,
-    ecommerce: /cleaned catalog structure, customer view and request-to-Shop handoff/,
+    shop: /your catalog, stock and sales workflow/,
+    website: /your pages, content and responsive layout/,
+    ecommerce: /your catalog, storefront and order workflow/,
   }
   for (const [index, [product, expectedPlan]] of Object.entries(productAcknowledgements).entries()) {
     const before = resendMail.length
@@ -474,8 +469,8 @@ try {
     assert.deepEqual(acknowledgement.body.to, [validSubmission.email])
     assert.ok(acknowledgement.body.text.includes(accepted.body.request_id))
     assert.match(acknowledgement.body.text, expectedPlan)
-    assert.match(acknowledgement.body.text, /SuperMega prepares the setup or preview/)
-    assert.match(acknowledgement.body.text, /Reply only if you have a question or correction/)
+    assert.match(acknowledgement.body.text, /confirm scope, price and timing/)
+    assert.match(acknowledgement.body.text, /Reply to this email with questions or corrections/)
     assert.doesNotMatch(acknowledgement.body.text, /Prepare our setup for review/)
     assert.doesNotMatch(acknowledgement.body.text, /Your trial claim code|one business day|founder|trial keeps working/)
   }
