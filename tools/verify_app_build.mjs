@@ -8563,12 +8563,12 @@ async function verifyManagedGuidedOnboardingCopyRuntime() {
     assert(/no browser sample/i.test(model.MANAGED_WEBSITE_ONBOARDING_HINT), 'managed_website_hint_hides_local_boundary')
     assert(/homepage/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.outcome), 'managed_website_journey_has_no_first_result')
     assert(/mobile and desktop/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.detail), 'managed_website_journey_hides_preview_work')
-    assert(/Website/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.actionLabel), 'managed_website_journey_hides_destination')
+    assert(/Sites/i.test(model.MANAGED_WEBSITE_ONBOARDING_JOURNEY.actionLabel), 'managed_website_journey_hides_destination')
     assert(/no sample orders/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_HINT), 'managed_ecommerce_hint_hides_order_boundary')
     assert(/online store/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.outcome), 'managed_ecommerce_journey_has_no_first_result')
     assert(/payment/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.detail)
       && /Shop handoff/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.detail), 'managed_ecommerce_journey_hides_connected_setup')
-    assert(/Ecommerce/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.actionLabel), 'managed_ecommerce_journey_hides_destination')
+    assert(/Commerce/i.test(model.MANAGED_ECOMMERCE_ONBOARDING_JOURNEY.actionLabel), 'managed_ecommerce_journey_hides_destination')
 
     // The two lanes must stay distinguishable. Copy-pasting Shop's wording into Plant is the
     // most likely way this regresses, and it would read as correct.

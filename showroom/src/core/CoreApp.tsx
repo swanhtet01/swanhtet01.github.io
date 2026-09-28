@@ -6697,7 +6697,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     { label: 'Inventory & purchasing', detail: 'Locations, lots, ATP, counts, suppliers and receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Customers & after-sales', detail: 'Credit, receivables, appointments, support and warranty trail', status: afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history' },
     { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length ? 'attention' as const : 'ready' as const },
-    { label: 'Online channels', detail: 'Website and Ecommerce requests enter one Shop authority', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
+    { label: 'Online channels', detail: 'Sites and Commerce requests arrive in Shop', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
   ]
   const shopProfitControl = projectShopProfitControl({
     canWrite: commerceCanWrite,
@@ -6905,7 +6905,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
             </div>
           }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
-          <Link className="text-link" to="/ecommerce/">Open Ecommerce</Link>
+          <Link className="text-link" to="/ecommerce/">Open Commerce</Link>
         </section>
         {confirmedLocalShop && localWebsiteIntakeRead.status === 'error' ? <div className="website-intake-record"><strong>Older Website order could not be checked.</strong><small>Reload before reviewing older Website handoffs. No order was created or changed.</small></div> : null}
         {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><Suspense fallback={<div className="website-intake-record"><strong>Opening older Website order…</strong><small>No order is created until you review and confirm it.</small></div>}><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></Suspense></details> : null}
@@ -6960,9 +6960,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           })}
           <button className="core-button compact" disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
           {!preparedEcommerceDraft ? <details className="order-options" id="commerce-order-options" ref={orderOptionsRef}>
-            <summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>
+            <summary><span>Channel and payment</span><small>{channel === 'Website' ? productDisplayName('website') : channel === 'Ecommerce' ? productDisplayName('ecommerce') : channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
-              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
+              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}><option>Messenger</option><option>Viber</option><option>Phone</option><option value="Website">Sites</option><option value="Ecommerce">Commerce</option><option>Walk-in</option></select></label>
               <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>AYA Pay</option><option>MMQR</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
           </details> : null}
