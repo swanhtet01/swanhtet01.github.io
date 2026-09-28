@@ -967,7 +967,7 @@ requireContract('competitive execution cut preserves money-path focus and claim 
 requireContract('manifest has one canonical four-product registry',
   manifest.schemaVersion === 'supermega.site-context.v2'
   && manifest.customerProducts?.map((entry) => `${entry.id}:${entry.runtimeId}:${entry.name}`).join(',')
-    === 'shop:commerce:Shop,plant:production:Plant,website:website:Website,ecommerce:ecommerce:Ecommerce')
+    === 'shop:commerce:Shop,plant:production:Plant,website:website:Sites,ecommerce:ecommerce:Commerce')
 requireContract('manifest customer routes are canonical',
   manifest.customerProducts?.map((entry) => entry.appRoute).join(',')
     === 'https://app.supermega.dev/shop/,https://app.supermega.dev/plant/,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/')
