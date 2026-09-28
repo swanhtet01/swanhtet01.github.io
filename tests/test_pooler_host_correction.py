@@ -25,6 +25,8 @@ class PoolerHostCorrectionTests(unittest.TestCase):
                         URL.replace("verify-full", "disable"),
                         URL + "&sslmode=require", URL + "&options=unsafe",
                         URL + "#PRIVATE", URL.replace(OLD_HOST, TARGET_HOST),
+                        " " + URL, URL + "\n", URL.replace("postgresql", "postgre\tsql"),
+                        URL.replace("%2Fprivate%2Froot.crt", "%20"),
                         URL.replace("PRIVATE%40secret%2Fvalue", ""), "PRIVATE"]:
             with self.subTest(), self.assertRaisesRegex(ValueError, "^pooler_host_correction_preconditions_failed$") as raised:
                 prepare(changed, expected_current_host=OLD_HOST)

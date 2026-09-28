@@ -12,7 +12,7 @@ class HostCorrection:
     corrected_url: str = field(repr=False)
     project: str = PROJECT
     target_host: str = TARGET_HOST
-    production_write_authorized: bool = False
+    production_write_authorized: bool = field(default=False, init=False)
 
 
 def prepare(database_url: str, *, expected_current_host: str) -> HostCorrection:
@@ -23,6 +23,8 @@ def prepare(database_url: str, *, expected_current_host: str) -> HostCorrection:
     Only the hostname bytes change. Credentials, query, encoding and port survive.
     """
     try:
+        if not isinstance(database_url, str) or any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in database_url):
+            raise ValueError()
         parsed = urlsplit(database_url)
         query = parse_qs(parsed.query, keep_blank_values=True)
         valid = (
@@ -35,7 +37,7 @@ def prepare(database_url: str, *, expected_current_host: str) -> HostCorrection:
             and len(query.get("sslmode", [])) == 1
             and query["sslmode"][0] in {"require", "verify-ca", "verify-full"}
             and len(query.get("sslrootcert", [])) <= 1
-            and all(query.get("sslrootcert", ["present"]))
+            and all(value.strip() for value in query.get("sslrootcert", ["present"]))
             and isinstance(expected_current_host, str)
             and re.fullmatch(r"[a-z0-9-]+\.pooler\.supabase\.com", expected_current_host)
             and parsed.hostname == expected_current_host
