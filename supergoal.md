@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.10
+Version: 1.2.11
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -51,6 +51,15 @@ Design quality is one dimension of delivery, not a replacement for technical or 
 Prioritize the weakest required part of the customer lifecycle. Do not spend successive turns on visual polish while a known data, checkout or release failure remains actionable. Conversely, passing technical tests does not excuse an unusable interface. Maintain the full scope through successive bounded slices rather than attempting every dimension concurrently.
 
 ## 3. Current baseline and evidence boundaries
+
+### Current execution order — 28 September
+
+1. Finish the public-site and customer-entry cleanup: one Login, real interface screenshots, consistent white/jade styling, concise contact receipts, and no promotional demo/trial/preview detours. Preserve truthful synthetic-data provenance and legitimate editing/review tools.
+2. Complete full CI on a stable candidate; fix failures rather than repeatedly interrupting runs with small copy pushes. Local checks are not hosted acceptance.
+3. Release through the existing founder gate when Vercel access and independent PR approval are available; verify real-domain login, assigned product access, persistence and recovery afterward. Do not report a push as a deployment.
+4. Continue Shop, Website and Ecommerce task completion and visual refinement, then customer delivery, sales/marketing preparation and internal agent operations. Keep these workstreams in scope; CI monitoring alone is not product progress.
+
+Recent source changes simplify the launcher and Website editor, remove Ecommerce's technical fingerprint panel, and preserve underlying save/access controls. These changes are not yet confirmed in production. The next public-site slice removes remaining trial language from contact handoffs and shortens confirmation messages.
 
 This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
 
