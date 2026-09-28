@@ -185,6 +185,18 @@ export function WebsiteProduct() {
   const [headingFocusRequest, setHeadingFocusRequest] = useState(0)
   const [recoveryFocusRequest, setRecoveryFocusRequest] = useState(0)
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const siteSettingsRef = useRef<HTMLDetailsElement>(null)
+  useEffect(() => {
+    const disclosure = siteSettingsRef.current
+    if (!siteSettingsOpen || !disclosure) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      setSiteSettingsOpen(false)
+      disclosure.querySelector('summary')?.focus()
+    }
+    disclosure.addEventListener('keydown', closeOnEscape)
+    return () => disclosure.removeEventListener('keydown', closeOnEscape)
+  }, [siteSettingsOpen])
   const recoveryPrimaryActionRef = useRef<HTMLButtonElement>(null)
   const editSessionRef = useRef<WebsiteEditSessionState | null>(null)
   const restoredDraftHeadingRef = useRef<HTMLHeadingElement>(null)
@@ -1310,11 +1322,7 @@ export function WebsiteProduct() {
                 {surface === 'work' ? (
                   <details
                     className="website-site-settings"
-                    onKeyDown={(event) => {
-                      if (event.key !== 'Escape') return
-                      setSiteSettingsOpen(false)
-                      event.currentTarget.querySelector('summary')?.focus()
-                    }}
+                    ref={siteSettingsRef}
                     onToggle={(event) => setSiteSettingsOpen(event.currentTarget.open)}
                     open={siteSettingsOpen}
                   >
