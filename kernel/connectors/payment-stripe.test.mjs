@@ -266,3 +266,25 @@ test('HTTP webhook redacts persistence errors and leaves the event retryable', a
     else process.env.TELEGRAM_BOT_TOKEN = originalToken
   }
 })
+
+test('reconcile cannot settle payments with absent or malformed integrity metadata', async () => {
+  const variants = [
+    object => { delete object.metadata.expected_cents },
+    object => { object.metadata.expected_cents = 'NaN' },
+    object => { object.metadata.expected_cents = '0' },
+    object => { object.metadata.expected_cents = '1.5' },
+    object => { delete object.metadata.currency },
+    object => { object.metadata.currency = '' },
+    object => { object.amount_total = '5000' },
+    object => { object.currency = null },
+  ]
+  for (const [index, mutate] of variants.entries()) {
+    const project = await store.createProject({ offer: 'build' })
+    const event = paidEvent(`evt_integrity_${index}`, project.id, 5000)
+    mutate(event.data.object)
+    const result = await reconcile(event)
+    assert.equal(result.ok, false)
+    assert.equal(result.detail, 'payment_integrity_metadata_invalid')
+    assert.equal((await store.getProject(project.id)).deposit_status, 'unpaid')
+  }
+})

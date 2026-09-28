@@ -142,6 +142,13 @@ export async function reconcile(event) {
     // Amount/currency integrity: compare the settled total against what this ref was quoted (bound into
     // metadata at checkout creation). If it doesn't match, do NOT mark paid — log and ack (no retry).
     const expectedCents = Number(obj.metadata?.expected_cents)
+    const expectedCurrency = obj.metadata?.currency
+    if (!Number.isSafeInteger(expectedCents) || expectedCents <= 0
+      || typeof expectedCurrency !== 'string' || !/^[a-zA-Z]{3}$/.test(expectedCurrency)
+      || !Number.isSafeInteger(obj.amount_total) || obj.amount_total < 0
+      || typeof obj.currency !== 'string' || !/^[a-zA-Z]{3}$/.test(obj.currency)) {
+      return { ok: false, handled: false, detail: 'payment_integrity_metadata_invalid' }
+    }
     if (Number.isFinite(expectedCents) && expectedCents > 0) {
       const gotCents = Number(obj.amount_total)
       const expCur = String(obj.metadata?.currency || '').toLowerCase()
