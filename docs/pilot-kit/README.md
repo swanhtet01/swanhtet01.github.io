@@ -4,7 +4,7 @@
 
 ## Strategy bridge: Profit Control acquisition, Spa proof
 
-POS-independent Shop Profit Control is the public and owner first-use acquisition and diagnostic wedge. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
+Historical internal positioning: POS-independent Shop Profit Control was the acquisition and diagnostic wedge; it is no longer the public website pitch. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
 
 The existing shop-spa-owner-pilot remains the first bounded named vertical proof. It uses the existing Spa package sale, treatment redemption, daily close, and recovery workflow to validate one real end-to-end operating workflow and measured correction effort. Spa is not Shop's product identity, and success in this bounded vertical does not prove all Myanmar trades.
 

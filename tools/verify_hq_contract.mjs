@@ -873,7 +873,7 @@ const shopStrategyBridgeDocuments = [pilotKitReadmeText, shopDemoPlaybookText, c
   .map((document) => document.replace(/\s+/g, ' '))
 const shopStrategyBridgeRequired = [
   'POS-independent Shop Profit Control',
-  'public and owner first-use acquisition and diagnostic wedge',
+  'it is no longer the public website pitch',
   'selects and prioritizes one accountable money leak or operating risk',
   'shop-spa-owner-pilot remains the first bounded named vertical proof',
   "Spa is not Shop's product identity",
@@ -889,7 +889,7 @@ const shopStrategyBridgeForbidden = [
   'Synthetic evidence closes the real pilot',
   'Local evidence closes the real pilot',
 ]
-requireContract('Shop Profit Control acquisition and bounded Spa proof stay distinct',
+requireContract('Historical Shop positioning and bounded Spa proof stay distinct',
   shopStrategyBridgeDocuments.every((document) => shopStrategyBridgeRequired.every((required) => document.includes(required)))
   && shopStrategyBridgeDocuments.every((document) => shopStrategyBridgeForbidden.every((forbidden) => !document.includes(forbidden))))
 requireContract('Shop finance roadmap separates reviewed handoff from tax and posting authority',

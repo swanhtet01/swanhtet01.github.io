@@ -224,7 +224,7 @@ const shopStrategyBridgeDocuments = [
 ]
 const shopStrategyBridgeRequired = [
   'POS-independent Shop Profit Control',
-  'public and owner first-use acquisition and diagnostic wedge',
+  'it is no longer the public website pitch',
   'selects and prioritizes one accountable money leak or operating risk',
   'shop-spa-owner-pilot remains the first bounded named vertical proof',
   "Spa is not Shop's product identity",
@@ -236,9 +236,7 @@ const shopStrategyBridgeRequired = [
 ]
 for (const [label, document] of shopStrategyBridgeDocuments) {
   for (const required of shopStrategyBridgeRequired) {
-    const currentRequired = label === 'shop_playbook' && required === 'public and owner first-use acquisition and diagnostic wedge'
-      ? 'it is no longer the public website pitch' : required
-    check(document.includes(currentRequired), `${label}:shop_profit_control_spa_bridge:${currentRequired}`)
+    check(document.includes(required), `${label}:shop_profit_control_spa_bridge:${required}`)
   }
   for (const forbidden of [
     "Spa is Shop's product identity",

@@ -402,8 +402,7 @@ whole performance queue.
 
 ### Risk 3 — Running the pilot kit and calling it "the pilot" would overclaim the Shop gate
 
-**Architecture bridge.** POS-independent Shop Profit Control is the public and
-owner first-use acquisition and diagnostic wedge. Its first job selects and
+**Architecture bridge.** Historical internal positioning: POS-independent Shop Profit Control was the acquisition and diagnostic wedge; it is no longer the public website pitch. Its first job selects and
 prioritizes one accountable money leak or operating risk, with the accountable
 role, due point, next action, and objective closure made explicit. It does not
 replace a POS and it does not turn a local projection into customer, pilot, or
