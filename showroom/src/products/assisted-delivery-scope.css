@@ -10,7 +10,7 @@
 .ecommerce-today[data-density] .ecommerce-today-priority:has(> .assisted-delivery-scope) > :is(.core-eyebrow, h2, p, details, section, div) { grid-area: auto; max-width: 100%; }
 
 .business-brief { width: min(100%, 620px); margin: clamp(1rem, 5vw, 5rem) auto; padding: 0 1.25rem 3rem; box-sizing: border-box; color: var(--core-ink); }
-.business-brief-kicker { font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; }
+.business-brief-kicker { font-size: .8rem; letter-spacing: .04em; text-transform: none; }
 .business-brief h1 { font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.08; letter-spacing: -.045em; margin: 1rem 0; font-weight: 600; }
 .business-brief header p { line-height: 1.6; margin-bottom: 2.5rem; }
 .business-brief form { display: grid; gap: .65rem; }
