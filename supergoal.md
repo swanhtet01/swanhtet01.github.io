@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.12
+Version: 1.2.13
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -59,15 +59,15 @@ Prioritize the weakest required part of the customer lifecycle. Do not spend suc
 3. Release through the existing founder gate when Vercel access and independent PR approval are available; verify real-domain login, assigned product access, persistence and recovery afterward. Do not report a push as a deployment.
 4. Continue Shop, Website and Ecommerce task completion and visual refinement, then customer delivery, sales/marketing preparation and internal agent operations. Keep these workstreams in scope; CI monitoring alone is not product progress.
 
-Recent source changes simplify the launcher and Website editor, remove Ecommerce's technical fingerprint panel, and preserve underlying save/access controls. These changes are not yet confirmed in production. Contact handoffs and confirmations are simplified in pushed source. Customer acknowledgement cleanup is saved locally. The next technical slice bounds browser-command waits and teardown so CI produces a terminal result; rendered and hosted acceptance remain required.
+Recent pushed changes simplify the launcher, Website editor and contact messages, remove the Ecommerce fingerprint panel and legacy managed-pilot pitch, and bound browser verification commands. Production rollout remains pending Vercel access and independent review.
 
 This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Branch `codex/site-app-cleanup-20260924`; pushed `718eaca0`; acknowledgement cleanup saved in local `1f63ee0f` | Recheck refs and include subsequent browser reliability changes before release |
+| Source | Pushed `5b8f1902` on `codex/site-app-cleanup-20260924` | Recheck exact head and CI before release |
 | Integration | PR #596 is open, non-draft and mergeable; 573 changed files at af3e7ab7. Review API shows a COMMENTED review, no approval. Analytics findings match existing fix be64785c, verified locally by 71 telemetry checks plus initial-bootstrap assertions | Broad accumulated scope still needs genuine review; code verification is not independent approval |
-| CI | `8c865629` passed full build verification; browser stage reported obsolete copy and hit the job limit. Copy expectations corrected in `718eaca0`; its full CI is active | No complete current rendered acceptance yet. Bound CDP commands and shutdown; retain all journey assertions |
+| CI | Full CI `36430761564` on `6017a08a` passed, including desktop/390px journeys and bounded browser commands | Newer `5b8f1902` needs its own CI; hosted/customer acceptance remains outstanding |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
@@ -167,6 +167,8 @@ Use the owner-provided credential files locally only when a concrete authorized 
 The connected platform is not air-gapped. The realistic requirement is local-only inference where selected, restricted network/data flow and verified secret handling. Do not promise mathematical zero-leak memory behavior in a general-purpose runtime.
 
 ### ROG Ally operating limits
+
+Readiness check on 28 September confirms Ollama/OpenCode and `llama3.2:1b` installed, with no loaded models. The deeper launcher check blocks inference: 1,885,237,248 bytes available versus 2,684,354,560 required. Keep inference off until the memory gate passes naturally; do not terminate owner applications or bypass the gate. Installation is not accepted coding quality. Use existing local-agent-company launchers and protected-test receipts for bounded tasks, not another agent framework.
 
 One active primary task, zero local Codex subagents by default, serial heavy jobs, one dev server and one local worker. Preserve active servers and owner-visible applications. Do not terminate Claude or other applications for memory without the specific owner request. Models remain scale-to-zero with short keep-alive; no hidden paid/cloud fallback.
 
@@ -331,39 +333,16 @@ Use patch versions for status/factual updates, minor versions for accepted refin
 
 Label future ambitions as future and proposals as proposals. Never present them as deployments or paid offerings. Do not add secrets, raw personal data, unsupported claims, endless backlogs or repeated approval questions. End each slice with the next action and concrete blocker, if any. Apply the active goal's repeated-blocker audit honestly rather than manufacturing unrelated activity.
 
-### Decision log
+### Lasting decisions
 
-- 2026-09-28 v1.2.9: Added isolated desktop/390px empty-Ecommerce rendered cases and matching mandatory report matrix. Existing checkout-boundary cases now explicitly install a private validated mini-mart fixture instead of relying on customer sample generation. Thirteen report-validator tests PASS; new rendered cases NOT RUN. Current 78a3727d App CI 36368847002 remains active; save this slice without cancelling it. Local preview restored at4173, session64015; preserve it and existing browser records.
+- Fixed white/jade visual system; no customer theme picker or promotional trial/demo detours.
+- No automatic synthetic customer records. Private fixtures remain explicitly labelled and isolated.
+- Preserve saved work, tenant boundaries, money/stock correctness and recovery throughout interface cleanup.
+- Full exact-candidate CI, rendered journeys and separate hosted/customer acceptance are required.
+- One primary writer; at most one explicitly requested bounded reviewer. Local models remain memory-gated and scale-to-zero.
+- Keep product delivery, commercial operations and evaluated AI machinery in scope; do not substitute document or agent counts for outcomes.
 
-- 2026-09-28 v1.2.8: App CI 36368351018 failed Ecommerce React purity lint (render-time clock and cart callback inference). Moved order aging to a 30-second state clock with interval cleanup and made addToCart an explicit callback. Focused ESLint, app build and artifact verification PASS; lint protections unchanged. Push includes the saved empty-catalog screen. Next: exact-head CI and fresh rendered setup acceptance; CUA policy-loading failure remains a tool limitation, not product evidence.
-
-- 2026-09-28 v1.2.7: Empty local Ecommerce workspaces now show one Add products action to canonical Shop inventory, instead of the full sample-led order dashboard. Loading, managed accounts, nonempty catalogs and draft errors retain their existing paths. Local build/artifact verification PASS; rendered fresh-user journey remains NOT RUN. Previous fixes pushed at ada2319c; App CI 36368351018 confirmed active. Next: verify fresh setup -> catalog entry -> return to store, then clean remaining nonempty local-store actions without misrepresenting hosted capabilities.
-
-- 2026-09-28 v1.2.6: Removed the fresh Ecommerce catalog fallback to generated sample inventory. Missing local catalog now returns an empty catalog without writes; saved catalogs are preserved and malformed storage still fails closed. Local build/artifact verification PASS, including empty/saved/malformed catalog runtime assertions. Remaining storefront sample wording and guided actions require a separate state-aware cleanup; this change does not relabel existing synthetic records or prove hosted acceptance. Earlier CI `36367654342` reached desktop/390px journeys; hold pushes until terminal.
-
-- 2026-09-28 v1.2.5: Removed Ecommerce synthetic order-batch loading and changed the downloadable CSV to headers only. Real upload/paste, review validation and existing records remain intact. Local app build and artifact verification PASS. This is one sample-generation path removed, not completion of all sample-led entry cleanup. Saved locally while App CI `36367654342` on `6d850a54` continues; push after that run terminates so its evidence is preserved. Next product slice: inspect unmanaged storefront entry and replace sample-first behavior with real setup without relabeling synthetic records.
-
-- 2026-09-28 v1.2.3: Added mandatory disposable PostgreSQL signup-budget execution to app CI; previously these integration tests were skipped by the default Python command. Local PostgreSQL 17 execution: 18/18 PASS, no skips; workflow contract: 155 PASS. Coverage includes durable quota, conflict handling and tenant isolation, not hosted Supabase acceptance.
-
-- 2026-09-28 v1.2.2: Readiness diagnostics now classify genuine Psycopg client-side timeouts and operational failures without SQLSTATE, using fixed labels and no exception text. SQLSTATE-specific authentication/capacity classification remains authoritative. Local diagnostics and PostgreSQL rehearsal-contract tests: 28 PASS; no live connection repair claimed.
-
-- 2026-09-28 v1.2.1: Fixed the legacy Shop entry to resolve directly to `/shop/?tab=counter`, eliminating the intermediate route change observed in CI 36359621542. The rendered verifier now requires the exact canonical URL; capture stability remains enforced. Local regression suite 13/13, app build and artifact verification PASS. Updated-head CI/browser and hosted acceptance remain unproven.
-
-- 2026-09-28 v1.2.0: Balanced delivery contract explicitly preserves engineering, data/security, money, reliability, operations, commercial and AI/R&D scope alongside design. Removed stale source/CI claims. Owner rejected appearance controls; c2580db1 removes them and uses fixed light/jade. Local build/artifact checks passed; current remote CI is incomplete.
-
-- 2026-09-28 v1.0.1: Fresh desktop/mobile catalog clicks passed; earlier click failure not reproduced. CI failure traced to removed automatic sample creation, with private checkout fixture supplied explicitly. Hosted/fresh-data acceptance remains incomplete.
-
-- 2026-09-28 v1.0.0: Consolidated engineering, customer products, company operations and local AI into one brief. Preserved founder gates. Clarified measured performance, local-only inference versus air-gap claims, and customer experience versus private fixtures. Recorded unresolved catalog navigation and separate hosted/customer acceptance.
-
-### Current release state and next actions
-
-| Evidence | Verified scope | Remaining action |
-|---|---|---|
-| `3805b4b2`, App CI `36365671862` | Full build, desktop/390px journeys and real disposable PostgreSQL signup-budget tests PASS | Does not establish production acceptance |
-| Pushed `1728cf9f`, App CI `36416667112` | Current redesigned public site and CI fixes; run active at last check | Read terminal result; do not cancel useful CI or infer success from an active job |
-| Local database proof | 18 signup-budget tests, 74 rehearsal checks, 37 HQ checks PASS | Preserve source binding when runtime/migration files change |
-| Production configuration | Host-only correction applied and read back on 28 September; explicit read-only connection passed | Hosted runtime acceptance and protected coordinated release remain outstanding |
-| Acceptance branch | Newer schema and decision guard catalog verified; expiring runtime login provisioned and read-only connection verified on 28 September | Immutable deployment, hosted sign-in, isolation and persistence acceptance |
+Chronological receipts belong in `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md`. Section 3 is the single current-state table. Prior database evidence includes 18 signup-budget tests, 74 rehearsal checks and 37 HQ checks; revalidate source binding when relevant code changes.
 
 #### Established production diagnosis
 
