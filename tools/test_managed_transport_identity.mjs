@@ -4,6 +4,8 @@ import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import test from 'node:test'
+// This suite is in canonical CI; include public-entry regressions alongside identity transport.
+import './test_production_entry.mjs'
 
 const { transformSync } = createRequire(resolve('showroom/package.json'))('esbuild')
 const source = readFileSync('showroom/src/core/managed-trial.ts', 'utf8')
