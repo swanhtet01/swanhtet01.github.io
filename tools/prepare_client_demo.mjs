@@ -1,3 +1,4 @@
+import siteManifest from '../site-manifest.json' with { type: 'json' }
 import { createHash, randomUUID } from 'node:crypto'
 import { constants as fsConstants, existsSync } from 'node:fs'
 import { access, chmod, link, lstat, mkdir, open, readFile, readdir, realpath, unlink } from 'node:fs/promises'
@@ -33,7 +34,7 @@ const CLIENT_CONTACT_INTAKE_MAX_BYTES = 32 * 1024
 const CLIENT_CONTACT_INTAKE_FILE = 'CONTACT-INTAKE.json'
 const PRODUCT_ORDER = Object.freeze(['commerce', 'production', 'website', 'ecommerce'])
 const PRODUCT_FILE = Object.freeze(Object.fromEntries(PRODUCT_ORDER.map((product) => [product, `${product}.csv`])))
-const PRODUCT_LABEL = Object.freeze({ commerce: 'Shop', production: 'Plant', website: 'Sites', ecommerce: 'Commerce' })
+const PRODUCT_LABEL = Object.freeze(Object.fromEntries(siteManifest.customerProducts.map(product => [product.runtimeId, product.name])))
 const CONTACT_PRODUCT = Object.freeze({ shop: 'commerce', commerce: 'commerce', plant: 'production', production: 'production', website: 'website', ecommerce: 'ecommerce', guide: 'guide' })
 const CONTACT_PRODUCT_SUGGESTION = Object.freeze({ commerce: ['shop'], production: ['plant'], website: ['website'], ecommerce: ['shop', 'ecommerce'], guide: [] })
 const CONTACT_PRESET_SUGGESTION = Object.freeze({ commerce: 'retail-network', production: 'manufacturing', website: 'service-business', ecommerce: 'retail-network', guide: 'service-business' })
