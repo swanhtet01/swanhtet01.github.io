@@ -1072,6 +1072,17 @@ const tests = [
     expectedText: ['Ecommerce'],
     seed: {},
   },
+  ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(viewport => ({
+    name: `empty Ecommerce offers real catalog setup at ${viewport.width}px`,
+    route: '/ecommerce/?workspace=1',
+    ...viewport,
+    expectedPath: '/ecommerce/?workspace=1',
+    expectedText: ['Add your products', 'Your online store uses the same products and prices as Shop.', 'Add products'],
+    isolatedBrowserContext: true,
+    noHorizontalOverflow: true,
+    screenshotName: `ecommerce-empty-catalog-${viewport.width}`,
+    seed: {},
+  })),
   {
     name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
     route: '/ecommerce/?workspace=1',
@@ -1084,7 +1095,7 @@ const tests = [
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-desktop-1280x900',
     timeoutMs: 60_000,
-    seed: {},
+    seed: miniMartCounterFixture(),
   },
   {
     name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
@@ -1099,7 +1110,7 @@ const tests = [
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-mobile-390x844',
     timeoutMs: 60_000,
-    seed: {},
+    seed: miniMartCounterFixture(),
   },
 ].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 

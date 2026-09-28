@@ -61,6 +61,14 @@ const FULL_CASE_MATRIX = Object.freeze([
   { name: 'desktop Website opens real business setup', route: '/website/?workspace=1', viewport: '1280x900', width: 1280, height: 900, path: '/website/?workspace=1', screenshot: 'website-business-setup-desktop-1280x900.png' },
   { name: 'mobile Website opens real business setup', route: '/website/?workspace=1', viewport: '390x844 mobile', width: 390, height: 844, path: '/website/?workspace=1', screenshot: 'website-business-setup-mobile-390x844.png' },
   { name: 'demo ecommerce opens explicit ecommerce route', route: '/?demo=ecommerce', viewport: '1280x900', width: 1280, height: 900, pathPrefix: '/ecommerce/', screenshot: null },
+  ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
+    name: `empty Ecommerce offers real catalog setup at ${size.width}px`,
+    route: '/ecommerce/?workspace=1',
+    viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
+    width: size.width, height: size.height,
+    path: '/ecommerce/?workspace=1',
+    screenshot: `ecommerce-empty-catalog-${size.width}.png`,
+  })),
   {
     name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
     route: '/ecommerce/?workspace=1',

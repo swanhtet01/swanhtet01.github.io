@@ -295,6 +295,13 @@ function fullCaseMatrixFixture() {
       path: '/ecommerce/',
       screenshot: null,
     },
+    ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
+      name: `empty Ecommerce offers real catalog setup at ${size.width}px`,
+      route: '/ecommerce/?workspace=1',
+      viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
+      path: '/ecommerce/?workspace=1',
+      screenshot: { file: `ecommerce-empty-catalog-${size.width}.png` },
+    })),
     {
       name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
       route: '/ecommerce/?workspace=1',
@@ -331,7 +338,7 @@ test('CLI requires an exact report, commit, and scope', () => {
 
 test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const full = fullCaseMatrixFixture()
-  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 26)
+  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 28)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(4, 6), 'shop-counter').length, 2)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(-2), 'ecommerce-claim').length, 2)
   const obsoleteEntry = structuredClone(full.slice(-2))
@@ -345,6 +352,8 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
     ...RETIRED_PRODUCT_CASES.map(spec => `${spec.id}.png`),
     'website-business-setup-desktop-1280x900.png',
     'website-business-setup-mobile-390x844.png',
+    'ecommerce-empty-catalog-1280.png',
+    'ecommerce-empty-catalog-390.png',
     'ecommerce-local-request-desktop-1280x900.png',
     'ecommerce-local-request-mobile-390x844.png',
   ])

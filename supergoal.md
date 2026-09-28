@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.8
+Version: 1.2.9
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -323,6 +323,8 @@ Use patch versions for status/factual updates, minor versions for accepted refin
 Label future ambitions as future and proposals as proposals. Never present them as deployments or paid offerings. Do not add secrets, raw personal data, unsupported claims, endless backlogs or repeated approval questions. End each slice with the next action and concrete blocker, if any. Apply the active goal's repeated-blocker audit honestly rather than manufacturing unrelated activity.
 
 ### Decision log
+
+- 2026-09-28 v1.2.9: Added isolated desktop/390px empty-Ecommerce rendered cases and matching mandatory report matrix. Existing checkout-boundary cases now explicitly install a private validated mini-mart fixture instead of relying on customer sample generation. Thirteen report-validator tests PASS; new rendered cases NOT RUN. Current 78a3727d App CI 36368847002 remains active; save this slice without cancelling it. Local preview restored at4173, session64015; preserve it and existing browser records.
 
 - 2026-09-28 v1.2.8: App CI 36368351018 failed Ecommerce React purity lint (render-time clock and cart callback inference). Moved order aging to a 30-second state clock with interval cleanup and made addToCart an explicit callback. Focused ESLint, app build and artifact verification PASS; lint protections unchanged. Push includes the saved empty-catalog screen. Next: exact-head CI and fresh rendered setup acceptance; CUA policy-loading failure remains a tool limitation, not product evidence.
 
