@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.3
+Version: 1.2.4
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -58,7 +58,7 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 |---|---|---|
 | Source | Branch `codex/site-app-cleanup-20260924`; 50f42938 passed remote CI. Later local verification/record fixes are committed | Recheck refs and exact-candidate checks before release |
 | Integration | PR #596 is open, non-draft and mergeable; 573 changed files at af3e7ab7. Review API shows a COMMENTED review, no approval. Analytics findings match existing fix be64785c, verified locally by 71 telemetry checks plus initial-bootstrap assertions | Broad accumulated scope still needs genuine review; code verification is not independent approval |
-| CI | App run 36358817666 / job 108731775778 succeeded for 50f42938, including canonical build and desktop/390px journeys. Kernel, dependency and hosting checks also passed for that revision | Subsequent local visibility-test integration and source-receipt fixes require their own exact-head CI; no hosted/customer acceptance implied |
+| CI | Full App CI on `3805b4b2` passed build verification, disposable PostgreSQL tests and desktop/390px journeys | Newer `7a6fff17` has its own active CI; no production/customer acceptance implied |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
@@ -336,22 +336,30 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 - 2026-09-28 v1.0.0: Consolidated engineering, customer products, company operations and local AI into one brief. Preserved founder gates. Clarified measured performance, local-only inference versus air-gap claims, and customer experience versus private fixtures. Recorded unresolved catalog navigation and separate hosted/customer acceptance.
 
-### Next executable action
+### Current release state and next actions
 
-Current pushed revision `3805b4b2` includes mandatory disposable PostgreSQL signup-budget tests and refreshed database rehearsal evidence. Local SQL suite: 18 PASS/no skips; rehearsal: 74 PASS; HQ checks: 37 PASS. App CI `36365671862` / job `108751481795` completed successfully on `3805b4b2`, including mandatory disposable PostgreSQL signup-budget tests, full build verification and desktop/390px journeys. The saved credential-free transport diagnostic tool is the next pushed candidate and requires its own CI. Production release and managed acceptance are still outstanding. Earlier CI `36364888000` failed stale rehearsal evidence, now regenerated through actual execution. Hosted login, persistence and customer delivery remain unproven.
+| Evidence | Verified scope | Remaining action |
+|---|---|---|
+| `3805b4b2`, App CI `36365671862` | Full build, desktop/390px journeys and real disposable PostgreSQL signup-budget tests PASS | Does not establish production acceptance |
+| Pushed `7a6fff17`, App CI `36366410004`, job `108753607728` | Active at full build verification; includes credential-free transport tool | Read terminal result, fix any failure, then push saved reconciliation notes |
+| Local database proof | 18 signup-budget tests, 74 rehearsal checks, 37 HQ checks PASS | Preserve source binding when runtime/migration files change |
+| Production | Still older deployed revision; configured pooler host mismatches recorded dashboard endpoint | Prepare approved host-only correction and coordinated release |
+| Acceptance branch | Newer schema exists; decision guard body/trigger/RLS match source | Named runtime-login behavioral, isolation and persistence acceptance |
 
-### Managed production blocker: preserve the established diagnosis
+#### Established production diagnosis
 
-Reconciled with `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md`, entries dated 27 September (provider handshake, pooler mismatch, corrected connection acceptance, production schema gap). That record documents an authenticated Supabase dashboard endpoint of `aws-1-us-east-1.pooler.supabase.com:6543`, and a successful read-only connection using the existing production runtime credentials with only the host overridden. This is historical local acceptance, not current Vercel hosted proof.
+The 27 September launch-control record documents the Supabase dashboard endpoint `aws-1-us-east-1.pooler.supabase.com:6543` and successful read-only connectivity with the existing production credentials after changing only the host in memory. The 28 September private comparison confirms Vercel's configured host still differs; runtime identity, port and database match. `supermega_trial_login` is the login role; `supermega_trial_backend` is its intended group. Their different names are not evidence of a fault.
 
-Fresh 28 September private Vercel configuration comparison confirms the configured host STILL differs from that recorded dashboard endpoint; runtime identity `supermega_trial_login.zvtzwcimpvvtkowflhda`, port 6543 and database match. The login role is distinct from the `supermega_trial_backend` group by design. Do not diagnose a missing role from their different names. No secret values were emitted, persisted or retried during this comparison.
+The next managed change is host-only, preserving username, password, database, port, TLS and disabled-write flags. Revalidate the dashboard endpoint before preparing that change. Exact host-correction authority remains pending in the control record; earlier candidate-bound approvals do not establish it. Do not repeat unchanged approval questions, reset passwords or recreate roles. Historical local connectivity is not Vercel hosted acceptance.
 
-Next managed action remains the previously proposed host-only correction for megaos production, preserving all other URI components and disabled-write flags, through the authorized managed-setting and release path. The prior control record says exact host-correction approval is pending; do not infer it from earlier candidate-bound approval or repeat an unchanged approval question. Revalidate the dashboard endpoint when preparing the actual change. Do not reset passwords or recreate roles.
+Production's last observed core schema is 11; the maintained release needs 13 plus extensions. All nine pending migration files still match reviewed SHA256 values, and fresh production history remains 15 entries. Reuse the existing ordered review; do not replay the legacy baseline or alter production-only quarantine/payroll changes. Acceptance already contains the newer schema: source/catalog drift checks precede any separately authorized migration or role provisioning.
 
-Production metadata previously confirmed core schema 11 while the maintained release profile requires core 13 plus extensions. Reuse the nine-migration source-bound review at `C:/Users/thesw/OneDrive - BDA/outputs/supermega-production-migration-gap-20260927.json`, validate freshness and existing acceptance-project evidence before any separately authorized hosted rehearsal or production migration. Do not replay the legacy baseline or change production-only quarantines.
+Acceptance `guard_ecommerce_decision()` is one SECURITY INVOKER trigger function with an exact body digest match after CRLF-to-LF normalization only. The BEFORE INSERT/UPDATE/DELETE row trigger is enabled and table RLS is forced. This is catalog equivalence, not behavioral acceptance. Missing acceptance runtime-login evidence remains a separate gate.
 
-Recent local network probes showed IPv4/TCP reachability and Python system-certificate verification failure before authentication. These secondary observations do not supersede the established endpoint mismatch and corrected-endpoint success. The reusable credential-free `tools/probe_postgres_transport.py` sends only SSLRequest, verifies system trust and never runs SQL; 16 focused diagnostics checks passed. Supabase aggregate logs in the inspected 28 September window showed two pooler errors without request correlation; no stronger cause claim follows.
+#### Evidence locations and diagnostic limits
 
-Keep exact-head CI, immutable staging, hosted login/persistence and customer acceptance distinct. Production has not been released from this branch. Continue source/release preparation while managed-setting authority is pending; stop redundant credential and transport probes.
+- Historical host correction, authority and acceptance context: `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md` (27 September entries).
+- Ordered migration review and fresh source/catalog checks: `C:/Users/thesw/OneDrive - BDA/outputs/supermega-production-migration-gap-20260927.json`.
+- Reusable transport check: `tools/probe_postgres_transport.py --database-url-env NAME`; uses an existing environment variable, sends only SSLRequest, verifies system trust, never authenticates or runs SQL. Sixteen focused diagnostics checks passed.
 
-Acceptance metadata update (28 September): all nine pending migration source hashes still match the reviewed gap record; production history remains 15 entries. Acceptance `guard_ecommerce_decision()` has one trigger-returning SECURITY INVOKER definition whose body MD5 matches source with CRLF-only normalization. Its BEFORE INSERT/UPDATE/DELETE row trigger is enabled; table RLS is enabled and forced. Evidence added to the existing migration-gap record; runtime-login behavioral acceptance remains outstanding. No hosted writes.
+Recent local TCP reachability and Python certificate-verification failures do not supersede the established host mismatch. Two uncorrelated Supavisor errors do not establish an additional cause. Stop redundant credential/transport probes. Keep local, CI, staging, hosted and customer evidence distinct; continue authorized source and delivery work while managed authority is pending.
