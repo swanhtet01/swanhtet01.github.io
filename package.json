@@ -11,7 +11,7 @@
     "app:release:write": "node tools/write_app_release_metadata.mjs",
     "preapp:build": "node --test tools/test_production_jsx_equivalence.mjs",
     "app:build": "npm run app:release:write && npm --prefix showroom run build",
-    "app:build:checked": "npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test",
+    "app:build:checked": "npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test",
     "app:lint": "npm --prefix showroom run lint",
     "app:typecheck": "npm --prefix showroom exec -- tsc --noEmit -p showroom/tsconfig.app.json && npm --prefix showroom exec -- tsc --noEmit -p showroom/tsconfig.node.json",
     "ai:content:proposal:verify": "node tools/test_ai_content_proposal.mjs",

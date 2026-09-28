@@ -363,8 +363,14 @@ requireContract('app build contract',
   config.buildCommand === 'npm run app:build'
   && generator.includes("buildCommand: 'npm run app:build'")
   && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
-  && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
+  && packageJson.scripts?.['app:build:checked'] === 'npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && ciWorkflow.includes('run: npm run app:build:checked'))
+const canonicalVerifySteps = packageJson.scripts?.['app:verify:steps']?.split(' && ') ?? []
+requireContract('checked build produces a fresh artifact exactly once before verification',
+  packageJson.scripts?.['app:verify'] === 'node tools/run_app_verify.mjs --serial'
+  && canonicalVerifySteps[0] === 'npm run app:build'
+  && canonicalVerifySteps.filter((step) => step === 'npm run app:build').length === 1
+  && canonicalVerifySteps.indexOf('node tools/verify_app_build.mjs') > 0)
 requireContract('CI verifies exact-source desktop and 390px journeys for three active products and retired Plant safety',
   ciWorkflow.includes('timeout-minutes: 15')
   && ciWorkflow.includes("SUPERMEGA_CI_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
@@ -502,7 +508,7 @@ requireContract('canonical verification includes managed Ecommerce handoff races
   packageJson.scripts['app:verify:steps'].split(' && ').includes('node --test tools/test_ecommerce_managed_request_identity.mjs'))
 requireContract('protected app candidate verification', workflow.includes("VERCEL_PROTECTED_PREVIEW: '1'") && appVerifier.includes("'curl', path, '--deployment'") && appVerifier.includes('deploymentFunctions') && appVerifier.includes("JSON.stringify(['api/app'])") && appVerifier.includes('hosted_agent_runtime_contract_wrong'))
 requireContract('current app asset contract gates local build and protected candidate',
-  packageJson.scripts['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
+  packageJson.scripts['app:build:checked'] === 'npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && workflow.includes('Verify immutable app asset contract')
   && workflow.includes('node tools/verify_app_release_live.mjs --artifact-self-test')
   && workflow.indexOf('Verify immutable app asset contract') < workflow.indexOf('Deploy isolated app production candidate')
