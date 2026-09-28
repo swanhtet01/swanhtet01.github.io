@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.17
+Version: 1.2.18
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -65,9 +65,9 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Pushed `6c502056` on `codex/site-app-cleanup-20260924` | Recheck exact head and CI before release |
+| Source | Pushed `1447b982`; local `b34f01fd` adds the Sites palette override correction on `codex/site-app-cleanup-20260924` | Batch pending work after current CI; recheck exact head before release |
 | Integration | PR #596 is open, non-draft and mergeable; 573 changed files at af3e7ab7. Review API shows a COMMENTED review, no approval. Analytics findings match existing fix be64785c, verified locally by 71 telemetry checks plus initial-bootstrap assertions | Broad accumulated scope still needs genuine review; code verification is not independent approval |
-| CI | Full CI `36430761564` on `6017a08a` passed, including desktop/390px journeys and bounded browser commands | Newer `6c502056` needs its own CI; hosted/customer acceptance remains outstanding |
+| CI | Full CI `36430761564` on `6017a08a` passed, including desktop/390px journeys and bounded browser commands | Current candidate CI `36441894279` remains pending completion; hosted/customer acceptance remains outstanding |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
@@ -260,6 +260,19 @@ Baseline interaction/page latency, errors, checkout completion, failed commands 
 Use structured logs, correlation IDs and appropriate traces/error reporting. OpenTelemetry or maintained equivalents are options; a package installation does not prove end-to-end monitoring. Scrub tokens, private review identifiers, customer contact data, payment details and raw payloads. Test redaction through failures as well as successful requests.
 
 Incident loop: detect → classify → contain within authority → preserve evidence → repair → verify → communicate where authorized → prevent recurrence. Automated analysis must not invent incidents or execute destructive remediation. Notify meaningful changes rather than repeated unchanged status.
+
+### Current coordinated work queue — 28 September
+
+Use this compact queue, not a separate fleet or duplicate project board. This is an assignment sequence, not a claim that multiple agents are running.
+
+| Lane | Owner | Next executable result | Completion evidence |
+|---|---|---|---|
+| Release and product | Primary agent | Finish current CI; batch the saved Sites palette correction; resolve the next concrete failure | Exact candidate CI, actual UI inspection, authorized deployment and hosted journey receipts |
+| Customer support and delivery | One bounded reviewer, then primary implementation | Review the existing commercial kit; turn the highest-priority gap into a reusable intake/triage procedure | Complete issue record, ownership, escalation and recovery acceptance; no invented customer case |
+| Corporate and acquisition | Primary agent using existing corporate records | Prepare one scoped offer when a qualified request exists; reconcile existing queue access before updates | Verified source, permitted contact basis, founder-approved price and actual delivery evidence |
+| Internal machinery and R&D | Primary agent, serial local execution | Reuse the maintained workcell and qualify existing custom-product candidates | Measured useful output, cost, access boundaries and accepted tests; no model fleet or unqualified public showcase |
+
+The corporate task last reported a Sheets write-scope rejection; this is historical evidence, not a fresh authentication test. Do not restart its paused automation or resend unchanged requests. SOL retains separate ownership. Keep at most one bounded worker; review its result and return to zero workers before another assignment.
 
 ### Founder product access and cloud capacity
 
