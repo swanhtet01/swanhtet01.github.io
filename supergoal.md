@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.24
+Version: 1.2.25
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-29
@@ -82,14 +82,14 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Pushed bbd744bc fixes the obsolete demo-copy assertion. Local f6763d44 corrects Shop catalog promises; 20d02bce removes the duplicate build without removing verification steps | Local commits await the active CI result before the next batched push; this document is newer |
+| Source | Pushed candidate 5cf09fc4 includes public-host login gating, production reset-control removal, shorter English marketing, catalog-copy corrections and removal of the redundant build. Login rendering fixtures cover production and localhost | This document is newer than the candidate; production is unchanged |
 | Integration | PR #596 BLOCKED / REVIEW_REQUIRED, no approving review. Earlier analytics findings are fixed by be64785c and verified | Eligible independent approval remains required |
-| CI | App run 36473828526 SUCCESS at dc7215ab, including canonical build and desktop/390px journeys. Later de5d107c failed an obsolete copy assertion; bbd744bc corrects it and run 36476548309 is active | Follow the existing run to terminal. Local release-workflow checks pass 156 checks for 20d02bce; full CI and hosted/customer acceptance remain open |
+| CI | Last full green: bbd744bc, run 36476548309. Current candidate 5cf09fc4 has 109 focused login/account/recovery checks passing; run 36483270214 is active after passing API, signup-budget, release/RLS guard and lint steps | Follow this run to terminal; canonical build and rendered journeys are not yet confirmed for this candidate |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
-| Account entry | Live browser on 28 September: /login?product=shop shows Login unavailable and legacy sample entry. Live /api/health: status=ready, operating_mode=isolated_demo, enterprise_db_ready=false, security_ready=true, trial_backend.write_enabled=false | This is deployed runtime configuration/readiness, not proof the database itself is broken. UI-only release cannot establish managed login/persistence |
+| Account entry | Candidate public app routes require ready managed access and otherwise lead to Login; account recovery stays reachable. Production has not received this change. Last hosted health remains isolated_demo with enterprise_db_ready=false and writes disabled | Source routing does not prove managed sign-in, tenant isolation or persistence; hosted acceptance is outstanding |
 | Website/Ecommerce | Setup completion now uses workspace=1, matching the product switcher. Local route tests 22/22, app build and artifact verifier PASS. Website model tests previously passed 15/15; offering component checks now pass 11/11 | Existing browser QA records preserved. Fresh valid UI submit/save/reload and hosted persistence remain unproven. Remaining sample-led paths need review |
 | Payments | 24 focused Stripe tests and full kernel verification with490 tests passed locally, including exact raw-byte signatures, interrupted/oversized requests, redacted persistence errors and successful retry. Kernel lint has0 errors and61 warnings after the outreach regex repair | No live charge or hosted settlement acceptance established; warnings remain to assess |
 | Local AI | Worker a7aab36 and transfer package outputs/workcell-vps-a7aab36: 111 files, 577 tests passed and three policy-blocked skips | Not deployed; target inventory, full-state recovery and one useful accepted remote job remain |
