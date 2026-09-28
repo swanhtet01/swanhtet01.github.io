@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.2
+Version: 1.2.3
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -324,6 +324,8 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Decision log
 
+- 2026-09-28 v1.2.3: Added mandatory disposable PostgreSQL signup-budget execution to app CI; previously these integration tests were skipped by the default Python command. Local PostgreSQL 17 execution: 18/18 PASS, no skips; workflow contract: 155 PASS. Coverage includes durable quota, conflict handling and tenant isolation, not hosted Supabase acceptance.
+
 - 2026-09-28 v1.2.2: Readiness diagnostics now classify genuine Psycopg client-side timeouts and operational failures without SQLSTATE, using fixed labels and no exception text. SQLSTATE-specific authentication/capacity classification remains authoritative. Local diagnostics and PostgreSQL rehearsal-contract tests: 28 PASS; no live connection repair claimed.
 
 - 2026-09-28 v1.2.1: Fixed the legacy Shop entry to resolve directly to `/shop/?tab=counter`, eliminating the intermediate route change observed in CI 36359621542. The rendered verifier now requires the exact canonical URL; capture stability remains enforced. Local regression suite 13/13, app build and artifact verification PASS. Updated-head CI/browser and hosted acceptance remain unproven.
@@ -336,6 +338,6 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Next executable action
 
-Shop redirect revision `b223febd` is pushed. App CI run `36360658028` / job `108737067281` completed successfully, including desktop/mobile journeys. Diagnostic follow-up `509c1b9e` passed the full local Python suite: 921 tests, 80 skipped. Push the follow-up and require its own exact-head CI before release. Skipped checks and hosted acceptance remain unproven. Then diagnose the production connection failure using sanitized stage/category evidence; do not retry acceptance credentials against production. Keep technical acceptance ahead of further visual expansion: managed login, persistence, tenant isolation, recovery and complete customer delivery remain required.
+Shop redirect `b223febd` passed App CI `36360658028`, including desktop/mobile journeys. Runtime diagnostic revision `5d5b8d5b` is pushed and its App CI `36364888000` is confirmed active. Full local Python suite: 921 tests, 80 skipped. The new disposable PostgreSQL CI step is saved locally and passed 18 tests with no skips; let the active CI run finish before pushing it. Require exact-head CI before release. Remaining skipped checks and hosted acceptance are unproven. Then diagnose the production connection failure using sanitized stage/category evidence; do not retry acceptance credentials against production. Keep technical acceptance ahead of further visual expansion: managed login, persistence, tenant isolation, recovery and complete customer delivery remain required.
 
 Environment boundary: production variables identify schema 11 and Supabase project `zvtzwcimpvvtkowflhda` (supermegabase, ACTIVE_HEALTHY in the latest read-only provider check). Earlier password work targeted separate acceptance project `twflgmlwfkykgzsxnegc`. Production health reports `connect/unexpected_error`; healthy project metadata does not establish runtime connectivity. Database URL and keys remain unexposed. Vercel's database Config warning requires separate authorized remediation. No production writes or credential changes occurred in this slice.

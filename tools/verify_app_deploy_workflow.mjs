@@ -69,6 +69,11 @@ requireContract('branch coverage rejects main-only or path-filtered pushes',
 requireContract('push and PR CI share a fork-isolated source-branch concurrency group',
   ciWorkflow.includes('group: showroom-ci-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}')
   && ciWorkflow.includes('  cancel-in-progress: true\n'))
+const budgetSqlStep = ciWorkflow.split('      - name: Verify durable signup budgets on disposable PostgreSQL\n')[1]?.split('      - name:')[0] || ''
+requireContract('app CI executes real disposable PostgreSQL signup budget tests',
+  budgetSqlStep.includes("SUPERMEGA_TEST_DISPOSABLE_PG17: '1'")
+  && budgetSqlStep.includes('run: python -m unittest tests.test_self_serve_durable_budget -v')
+  && !/^        (?:if|continue-on-error):/m.test(budgetSqlStep))
 requireContract('required check display names bind stable job IDs',
   ciWorkflow.includes('  validate:\n    name: SuperMega App CI\n')
   && kernelWorkflow.includes('  verify:\n    name: Kernel Console - Verify & Owner-Gated Release\n'))
