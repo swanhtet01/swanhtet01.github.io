@@ -1176,6 +1176,16 @@ export async function createClientImportPreview(
   const fileIssues = mappingIssues(object, headers, mapping)
   const minimumProductionDueDate = product === 'production' ? clientImportPlanningDate(planningDate) : undefined
   const rows = parsed.rows.slice(1).map((row) => rowFromMapping(row, object, headers, mapping, fileIssues, minimumProductionDueDate))
+  // Shop stores MMK amounts. Never discard an explicit source currency.
+  if (product === 'commerce') {
+    const currencyHeaders = headers.filter((header) => ['currency', 'currency_code', 'price_currency'].includes(normalizeHeader(header)))
+    for (const row of rows) {
+      if (currencyHeaders.some((header) => row.source[header]?.trim().toUpperCase() !== 'MMK')) {
+        row.status = 'invalid'
+        row.issues.push({ code: 'unsupported_currency', field: 'price', message: 'Shop imports prices in MMK. Confirm the source currency and provide MMK prices; no automatic conversion is performed.' })
+      }
+    }
+  }
   if (!rows.length) fileIssues.push({ code: 'data_rows_required', field: 'file', message: 'Add at least one data row below the header.' })
   if (rows.length > object.maximumRows) fileIssues.push({ code: 'object_row_limit', field: 'file', message: `${object.label} accepts at most ${object.maximumRows} rows in one accountable import.` })
   classifyDuplicates(rows)
