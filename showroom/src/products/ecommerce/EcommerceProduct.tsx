@@ -1836,6 +1836,22 @@ export function EcommerceProduct() {
     }} />
   }
 
+  if (!catalogHydrating && !managedIdentity && catalog.source === 'shop-local'
+    && catalog.items.length === 0 && !draftIssue && !draftBusy) {
+    return (
+      <div className="workspace-screen ecommerce-product">
+        <header className="ecommerce-heading">
+          <div><span className="core-eyebrow">Ecommerce</span><h1>Add your products</h1>
+            <p>Your online store uses the same products and prices as Shop.</p></div>
+        </header>
+        <section className="core-panel" aria-label="Store catalog setup">
+          <p>Add products individually or upload your catalog to get started.</p>
+          <Link className="core-button primary" to="/shop/?tab=inventory">Add products</Link>
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div className="workspace-screen ecommerce-product">
       {managedIdentity && managedCanDeliverReviews ? <details className="compact-disclosure">
