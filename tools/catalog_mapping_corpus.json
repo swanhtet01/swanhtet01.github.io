@@ -1,0 +1,14 @@
+{
+  "schema": "supermega.catalog-mapping-corpus.v1",
+  "provenance": "synthetic",
+  "currencyScope": "Existing Shop importer is MMK-only; this corpus does not prove currency detection or conversion.",
+  "cases": [
+    {"id":"canonical","csv":"sku,name,onHand,reorderAt,price\nSYN-1,Synthetic item,5,1,1200","ready":1,"values":{"sku":"SYN-1","onHand":"5","price":"1200"}},
+    {"id":"stock-alias","csv":"sku,name,stock,reorder_at,unit_price\nSYN-2,Synthetic item,7,2,3400","ready":1,"values":{"sku":"SYN-2","onHand":"7","price":"3400"}},
+    {"id":"ambiguous-stock","csv":"sku,name,stock,quantity,reorder_at,price\nSYN-3,Synthetic item,5,50,1,1200","ready":0,"ambiguous":"onHand"},
+    {"id":"fractional-price","csv":"sku,name,stock,reorder_at,price\nSYN-4,Synthetic item,5,1,12.50","ready":0},
+    {"id":"missing-price","csv":"sku,name,stock,reorder_at,price\nSYN-5,Synthetic item,5,1,","ready":0},
+    {"id":"ambiguous-units","csv":"sku,name,stock,reorder_at,price\nSYN-6,Synthetic item,2 boxes,1,1200","ready":0},
+    {"id":"duplicate-sku","csv":"sku,name,stock,reorder_at,price\nSYN-7,Synthetic item,5,1,1200\nSYN-7,Synthetic item,6,1,1300","ready":0}
+  ]
+}

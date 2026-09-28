@@ -366,9 +366,11 @@ preserving every supplied price, currency, quantity and SKU?
    unflagged ambiguity. Adopt only with zero such failures and measured reduction
    in correction time versus baseline. Otherwise keep deterministic import.
 
-Status: experiment assigned, execution NOT RUN. Next executable action: locate
-current import code and create the fixed fixture/expected-result corpus. Model
-comparison waits for capacity; dataset and baseline work do not. R&D produces
+Status: deterministic baseline PASS on seven synthetic cases in
+`tools/catalog_mapping_corpus.json`, exercised by `tools/test_catalog_mapping_baseline.mjs`.
+The existing importer is MMK-only; currency detection/conversion is not proven.
+Next: add explicit currency-mismatch cases and define the mapping-suggestion
+contract before model comparison. AI usefulness and operator time savings remain NOT RUN. R&D produces
 an adopt/reject result and a product change, not another strategy document.
 
 ## 17. Milestones and completion evidence
