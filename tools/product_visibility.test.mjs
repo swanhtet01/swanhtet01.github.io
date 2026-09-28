@@ -112,17 +112,15 @@ test('saved Plant setup survives visibility projection byte-for-byte', () => {
 
 test('generated public home and contact offer only active products', async () => {
   const home = main(await html('index.html')), contact = main(await html('contact/index.html'))
-  assert.equal((home.match(/class="compact-solution"/g)??[]).length, 3)
+  assert.equal((home.match(/class="product-story"/g)??[]).length, 3)
   assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
   assert.deepEqual([...contact.matchAll(/<option value="([^"]+)">/g)].map(m=>m[1]), ['guide','shop','ecommerce','website'])
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
-    const links = [...page.matchAll(/href="([^"]+)"/g)].map(match => match[1])
-    assert.ok(links.some(href => {
-      const target = new URL(href, 'https://supermega.dev')
-      return target.origin === 'https://app.supermega.dev' && (target.pathname === `/${product.id}/` || (target.pathname === '/login' && target.searchParams.get('product') === product.id))
-    }), `${product.id} must link to its actual app`)
-    assert.ok(links.some(href => href.includes(`/contact/?product=${product.id}`)), 'assisted setup remains reachable')
+    const fullPage = await html(product.id+'/index.html')
+    assert.equal((fullPage.match(/href="https:\/\/app\.supermega\.dev\/login"/g) ?? []).length, 1)
+    assert.match(page, /class="platform-image"/)
+    assert.doesNotMatch(page, /Request assisted setup|Open Shop|Open Ecommerce|Open Website/)
     assert.doesNotMatch(page, /product=plant|href="\/plant\//)
   }
 })

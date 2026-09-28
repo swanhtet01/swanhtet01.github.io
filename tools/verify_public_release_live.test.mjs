@@ -29,10 +29,10 @@ globalThis.fetch=async input=>{
  const page=manifest.pages.find(p=>p.route===u.pathname);
  if(!page) throw Error('offline_fixture_unknown_route');
  let html=fs.readFileSync('.vercel/output/static/'+page.file,'utf8');
- if(mode==='missing-offer') html=html.replaceAll('Tell us about your business.','REMOVED');
- if(mode==='missing-action') html=html.replaceAll('Explore Shop','REMOVED');
+ if(mode==='missing-offer') html=html.replaceAll('class="platform-image"','REMOVED');
+ if(mode==='missing-action') html=html.replaceAll('id="shop"','REMOVED');
  if(mode==='missing-guided') html=html.replaceAll('>Login</a>','>REMOVED</a>');
- if(mode==='missing-assisted') html=html.replaceAll('Request assisted setup','REMOVED');
+ if(mode==='missing-assisted') html=html.replaceAll('>Contact</a>','>REMOVED</a>');
  if(mode==='plant-marketing'&&u.pathname==='/') html+='<a href="/plant/">Plant</a>';
  if(mode==='plant-indexed'&&u.pathname==='/plant/') html=html.replace('noindex,follow','index,follow');
  return new Response(html,{headers});

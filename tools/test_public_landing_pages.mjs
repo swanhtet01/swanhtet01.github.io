@@ -86,32 +86,13 @@ for (const page of landingPages) {
   const schema = JSON.parse(schemaBlocks[0]?.[1] || '{}')
   check(schema['@context'] === 'https://schema.org' && schema['@type'] === 'Product' && schema.name === product.name && schema.url === canonical && schema.description === description, `landing_structured_data:${page.route}`)
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
-  check(html.includes(`<h1>${product.headline}</h1>`), `landing_headline:${page.route}`)
-  check(!html.includes('id="first-loop"') && !html.includes('id="free-sample"'), `landing_no_sample_detour:${page.route}`)
-  check(html.includes('id="modules"'), `landing_workflows_visible:${page.route}`)
-  const guidedSampleHref = `https://app.supermega.dev/login?product=${encodeURIComponent(product.id)}`
-  const guidedSampleLabel = 'Login'
-  const loginIntent = new URL(guidedSampleHref).searchParams.get('product')
-  check(managedPortalEntryPath(loginIntent) === `/${product.id}/`, `landing_login_returns_to_product:${page.route}`)
-  check(new URL(managedAccountRequestUrl(loginIntent)).searchParams.get('product') === product.id, `landing_unavailable_setup_retains_product:${page.route}`)
-
-  const assistedSetupHref = `/contact/?product=${product.id}`
-  check(html.includes(`href="${guidedSampleHref}">${guidedSampleLabel}</a>`), `landing_guided_sample_cta:${page.route}`)
-  check(product.secondaryCta?.label === 'Request assisted setup' && product.secondaryCta.url === assistedSetupHref, `landing_assisted_setup_manifest:${page.route}`)
-  check(html.includes(`href="${assistedSetupHref}">Request assisted setup</a>`), `landing_assisted_setup_cta:${page.route}`)
-  if (['website', 'ecommerce'].includes(product.id)) {
-    check(html.includes(`<a class="button primary" href="${assistedSetupHref}">Request assisted setup</a>`), `landing_service_primary:${page.route}`)
-    check(!html.includes(`<a class="button primary" href="${guidedSampleHref}">`), `landing_sample_not_primary:${page.route}`)
-    check(html.includes('id="prepared-delivery"'), `landing_prepared_deliverables:${page.route}`)
-    check(!html.includes('class="delivery-summary"'), `landing_no_redundant_delivery_summary:${page.route}`)
-    check(html.includes(product.id === 'website' ? 'Domain, publishing and maintenance are quoted separately.' : 'Your team confirms each order and payment. Arrange delivery with your customer.'), `landing_product_delivery_boundary:${page.route}`)
-  }
-  const websiteOfferingBoundary = 'Includes up to four featured offerings.'
-  check(html.includes(websiteOfferingBoundary) === (product.id === 'website'), `landing_website_offering_scope:${page.route}`)
+  check((html.match(/<h1>/g) || []).length === 1, `landing_single_headline:${page.route}`)
+  check(html.includes('class="platform-image"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
+  check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
+  check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
   }
-  check(html.includes(assistedSetupHref), `landing_setup_available:${page.route}`)
   check(!html.includes(`href="${product.appRoute}"`), `landing_no_direct_app_route:${page.route}`)
   check(html.includes('href="/contact/">Contact</a>') && html.includes('href="/privacy/">Privacy</a>'), `landing_footer_parity:${page.route}`)
   check(html.includes('aria-label="SuperMega home"'), `landing_home_navigation:${page.route}`)
@@ -203,43 +184,22 @@ for (const staleToken of [
 ]) {
   check(!home.includes(staleToken), `home_stale_metadata_absent:${staleToken}`)
 }
-const shopProfitControlHref = 'https://app.supermega.dev/shop/?tab=today'
-const shopProfitControlLabel = 'Open Shop Profit Control'
-const shopProfitControlAnchor = `href="${shopProfitControlHref}">${shopProfitControlLabel}</a>`
-check(manifest.company.positioning === 'POS-independent Shop Profit Control for Myanmar operators.', 'home_shop_profit_control_positioning_exact')
-check(manifest.company.headline === 'Shop Profit Control: see today’s operating money risk and close one accountable action.', 'home_shop_profit_control_headline_exact')
-for (const token of ['read-only first job', 'current local Shop record', 'operating money leak or risk', 'accountable owner', 'objective closure', 'next action', 'does not replace a POS']) {
-  check(manifest.company.supporting.includes(token), `home_shop_profit_control_truth:${token}`)
-}
-check(home.includes('class="button primary" href="#products"'), 'home_primary_product_choice')
-check(home.includes('href="https://app.supermega.dev/login"'), 'home_explicit_app_launcher')
-check(!shopProfitControlHref.includes('/contact/'), 'home_shop_profit_control_not_contact')
-for (const page of landingPages) {
-  const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
-  if (!activeIds.includes(product.id)) {
-    check(!home.includes(`href="${page.route}"`) && !home.includes(`?product=${product.id}`), `home_retired_acquisition_absent:${product.id}`)
-    continue
-  }
-  check(home.includes(`href="${page.route}">Explore ${product.name}</a>`), `home_links_landing:${page.route}`)
-  check(readStatic(page.file).includes(`href="https://app.supermega.dev/login"`), `product_page_keeps_guided_cta:${product.id}`)
-}
-
 const shopLanding = readStatic('shop/index.html')
-const shopGenericSetupHref = 'https://app.supermega.dev/login'
-const shopGenericSetupLabel = 'Login'
-const shopGenericSetupAnchor = `href="${shopGenericSetupHref}">${shopGenericSetupLabel}</a>`
-check(countOccurrences(home, shopGenericSetupAnchor) >= 1, 'home_no_duplicate_setup_door')
-check(countOccurrences(shopLanding, shopGenericSetupAnchor) >= 1, 'shop_landing_generic_cta_truthful_once')
-check(!`${home}\n${shopLanding}`.includes(`href="${shopGenericSetupHref}">Start free sample</a>`), 'shop_generic_cta_does_not_promise_new_sample')
-check(!shopGenericSetupHref.includes('template='), 'shop_generic_cta_does_not_silently_choose_trade')
-const shopProduct = manifest.customerProducts.find((product) => product.id === 'shop')
-check(shopProduct?.primaryCta?.label === shopProfitControlLabel && shopProduct.primaryCta.url === shopProfitControlHref, 'shop_profit_control_manifest_action_exact')
-check(countOccurrences(shopLanding, shopProfitControlAnchor) === 2, 'shop_profit_control_leads_hero_and_close')
-for (const token of ['POS-independent Shop Profit Control', 'read-only first job', 'current local Shop record', 'operating money leak or risk', 'accountable owner', 'objective closure', 'next action']) {
-  check(shopLanding.includes(token), `shop_profit_control_visible_truth:${token}`)
+const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
+for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, readStatic(`${id}/index.html`)])]) {
+  const body = html.slice(html.indexOf('<body')).replace(/<script[\s\S]*?<\/script>/g, '')
+  check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
+  check(!/<button\b/.test(body), `no_extra_buttons:${route}`)
+  for (const forbidden of ['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
+    check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
+  }
+  check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(body), `no_app_detours:${route}`)
 }
-for (const forbidden of ['margin at risk', 'margin-at-risk', 'cost coverage', '49,000 MMK', '59,000 MMK', '20 consecutive accepted']) {
-  check(!`${home}\n${shopLanding}`.toLowerCase().includes(forbidden.toLowerCase()), `shop_profit_control_unproven_claim_absent:${forbidden}`)
+for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
+for (const filename of ['platform-stock.jpg', 'platform-pages.jpg', 'platform-catalog.jpg']) {
+  const image = readFileSync(resolve(staticDir, 'images', filename))
+  check(image.subarray(0, 3).equals(Buffer.from([255,216,255])), `screenshot_jpeg:${filename}`)
+  check(image.length > 10000, `screenshot_not_empty:${filename}`)
 }
 const shopTemplates = validateShopBusinessTemplates()
 const shopTemplateIds = shopTemplates.map((template) => template.id)
@@ -258,7 +218,7 @@ for (const product of manifest.customerProducts) {
   check(!allLandingHtml.includes(`Set up ${product.name} data`), `assisted_setup_old_label_absent:${product.id}`)
 }
 for (const id of activeIds) {
-  check(countOccurrences(readStatic(`${id}/index.html`), `href="/contact/?product=${id}">Request assisted setup</a>`) === (id === 'shop' ? 1 : 2), `assisted_setup_product_specific_count:${id}`)
+  check(countOccurrences(readStatic(`${id}/index.html`), `href="/contact/?product=${id}">Request assisted setup</a>`) === 0, `assisted_setup_product_specific_count:${id}`)
 }
 
 const ecommerceLanding = readStatic('ecommerce/index.html')
@@ -354,8 +314,8 @@ check(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/.test(sitemap), 'sitemap_lastmod_fo
 check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.xml'), 'robots_references_sitemap')
 
 
-check((home.match(/class="compact-solution"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
-check(home.includes('lang="my"') && home.includes('Myanmar Text'), 'home_myanmar_language_and_font_fallback')
+check((home.match(/class="product-story"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
+check(home.includes('Myanmar Text'), 'home_myanmar_language_and_font_fallback')
 for (const id of activeIds) {
   const html = readStatic(`${id}/index.html`)
   check(!html.includes('<details class="frame product-details">'), `workflows_not_hidden:${id}`)

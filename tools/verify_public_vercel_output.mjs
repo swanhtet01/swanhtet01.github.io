@@ -90,6 +90,9 @@ const expectedStaticFiles = new Set([
   '__release.json',
   'favicon.svg',
   'vercel-insights.js',
+  'images/platform-stock.jpg',
+  'images/platform-pages.jpg',
+  'images/platform-catalog.jpg',
   'og-card.png',
   ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -278,31 +281,9 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
-if (shop?.primaryCta?.label !== 'Open Shop Profit Control'
-  || shop?.primaryCta?.url !== 'https://app.supermega.dev/shop/?tab=today') fail('shop_profit_control_action_drift')
-const shopProfitControlAnchor = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
-for (const token of [
-  'Your business.<br>A clearer day.',
-  'For businesses in Myanmar',
-  'lang="my"',
-  'Myanmar Text',
-  'min-height: 44px',
-  'class="button primary" href="#products"',
-  'href="https://app.supermega.dev/login"',
-  'id="products"',
-  'Three solutions. One business.',
-  'id="model" aria-label="Business setup"',
-  'href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a>',
-]) {
+for (const token of ['Less busywork.<br>More business.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
-for (const product of publicProducts) {
-  if (countOccurrences(home, `id="${product.id}"`) !== 1) fail('homepage_product_card_count_wrong', { product: product.id })
-  const landing = pages.get(`/${product.id}/`)?.html || ''
-  if (!landing.includes(`href="https://app.supermega.dev/login"`)) fail('guided_product_action_missing', { product: product.id })
-}
-if ((home.match(/>Request assisted setup<\/a>/g) || []).length !== 1) fail('assisted_setup_cta_count_wrong')
-if (home.includes('Start guided trial') || home.includes('aria-label="Templates"')) fail('retired_public_setup_copy_returned')
 for (const retiredToken of [
   'Four focused products',
   'Pick one product and try the working sample.',
@@ -315,7 +296,7 @@ for (const retiredToken of [
 }
 for (const product of publicProducts) {
   if (home.includes(`href="${product.appRoute}"`)) fail('direct_product_route_remains_primary', { product: product.id })
-  if (!home.includes(`href="/${product.id}/">Explore ${product.name}</a>`)) fail('landing_route_link_missing', { product: product.id })
+  if (countOccurrences(home, `id="${product.id}"`) !== 1) fail('product_story_missing', { product: product.id })
 }
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
@@ -324,66 +305,19 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// Four shared-shell links, two hero actions, one card per product and one setup action.
-const expectedHomeLinkCount = 4 + 2 + publicProducts.length + 1
-if ((home.match(/<a\b/g) || []).length !== expectedHomeLinkCount) fail('homepage_link_surface_drift', { expected: expectedHomeLinkCount })
-
-for (const product of publicProducts) {
-  const landingRoute = `/${product.id}/`
-  const landing = pages.get(landingRoute)?.html || ''
-  const guidedSampleRoute = `https://app.supermega.dev/login?product=${encodeURIComponent(product.id)}`
-  const guidedSampleLabel = 'Login'
-  const guidedSampleAnchor = `href="${guidedSampleRoute}">${guidedSampleLabel}</a>`
-  const assistedSetupRoute = `/contact/?product=${encodeURIComponent(product.id)}`
-  if (product.secondaryCta?.label !== 'Request assisted setup' || product.secondaryCta?.url !== assistedSetupRoute) fail('assisted_setup_manifest_drift', { product: product.id })
-  const assistedSetupAnchor = `href="${assistedSetupRoute}">Request assisted setup</a>`
-  const allModules = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
-  const launchModules = allModules.slice(0, manifest.templatePackPolicy.maxEnabledModulesAtLaunch)
-  for (const token of [
-    product.eyebrow,
-    `<h1>${product.headline}</h1>`,
-    guidedSampleAnchor,
-    assistedSetupAnchor,
-    'Start here',
-    `${launchModules.length} core ${product.name} workflows.`,
-    'Advanced tools stay inside the workspace and appear when they are relevant.',
-    'Ready to make it yours?',
-  ]) {
-    if (!landing.includes(token)) fail('landing_page_contract_missing', { route: landingRoute, token })
+// Navigation is shared across all marketing pages: skip, home, Login, Contact, Privacy.
+for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
+  const body = html.slice(html.indexOf('<body'))
+  if ((body.match(/<a\b/g) || []).length !== 5) fail('marketing_link_surface_drift', { route })
+  if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
+  if (!body.includes('class="platform-image"') || !body.includes('class="feature-line"')) fail('product_visual_missing', { route })
+  for (const token of ['Request assisted setup', 'Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
+    if (body.includes(token)) fail('retired_acquisition_surface', { route, token })
   }
-  const expectedGuidedSampleCount = 1
-  if (countOccurrences(landing, guidedSampleAnchor) < expectedGuidedSampleCount) fail('landing_guided_sample_action_count_wrong', { route: landingRoute })
-  if (countOccurrences(landing, assistedSetupAnchor) !== (product.id === 'shop' ? 1 : 2)) fail('landing_assisted_setup_action_count_wrong', { route: landingRoute })
-  if (landing.includes(`>Set up ${product.name} data</a>`)) fail('superseded_setup_cta_present', { route: landingRoute })
-  if (product.id === 'shop') {
-    if (countOccurrences(landing, shopProfitControlAnchor) !== 2) fail('shop_profit_control_action_count_wrong')
-    for (const token of ['POS-independent Shop Profit Control', 'read-only first job', 'current local Shop record', 'operating money leak or risk', 'accountable owner', 'objective closure', 'next action']) {
-      if (!landing.includes(token)) fail('shop_profit_control_truth_missing', { token })
-    }
-    for (const token of ['margin at risk', 'margin-at-risk', 'cost coverage', '49,000 MMK', '59,000 MMK']) {
-      if (`${home}\n${landing}`.toLowerCase().includes(token.toLowerCase())) fail('unproven_shop_claim_present', { token })
-    }
-  }
-  if (product.id === 'ecommerce') {
-    for (const token of ['Your team confirms each order and payment.', 'Arrange delivery with your customer.']) {
-      if (!landing.toLowerCase().includes(token.toLowerCase())) fail('ecommerce_delivery_boundary_missing', { token })
-    }
-    for (const token of ['Storefront from real stock', 'Create a Shop-connected ordering page.', 'Send the reviewed request into Shop.']) {
-      if (`${JSON.stringify(manifest)}\n${landing}`.includes(token)) fail('superseded_ecommerce_claim_present', { token })
-    }
-  }
-  if (landing.includes(`href="${product.appRoute}"`)) fail('landing_direct_product_route_present', { route: landingRoute })
-  for (const capability of launchModules) {
-    if (!landing.includes(capability)) fail('landing_module_missing', { route: landingRoute, capability })
-  }
-  for (const capability of allModules.slice(manifest.templatePackPolicy.maxEnabledModulesAtLaunch)) {
-    if (landing.includes(capability)) fail('advanced_module_exposed_before_relevance', { route: landingRoute, capability })
-  }
-  if ((landing.match(/<div class="solution-modules"[\s\S]*?<\/div>/)?.[0].match(/<span><i>/g) || []).length !== launchModules.length) fail('launch_module_count_wrong', { route: landingRoute })
 }
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Tell us what your business needs.', 'What to include', 'scope, price and timing', 'Include your products or services, location and contact details.', '<input type="hidden" name="template" maxlength="120"', '>Request setup</button>', '>Shop<', '>Website<', '>Ecommerce<', 'We use your email to reply about this request.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', `${JSON.stringify(['guide', ...publicProducts.map(product => product.id)])}.includes(requestedProduct||'')`, "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Add your contact details, review your brief, and send.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Your brief is ready. Nothing has been sent.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'We could not confirm receipt. Your details are still here.', 'receipt_unconfirmed', 'Promise.race', 'controller.abort()', 'clearTimeout(deadline)']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Tell us what your business needs.', 'What to include', 'scope, price and timing', 'Include your products or services, location and contact details.', '<input type="hidden" name="template" maxlength="120"', '>Send message</button>', '>Shop<', '>Website<', '>Ecommerce<', 'We use your email to reply about this request.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Attached request details', 'Request summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', `${JSON.stringify(['guide', ...publicProducts.map(product => product.id)])}.includes(requestedProduct||'')`, "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Add your contact details, review your brief, and send.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Request summary attached for review. Nothing has been sent.', 'Attached summary removed. Review the updated request before sending.', 'Your brief is ready. Nothing has been sent.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'We could not confirm receipt. Your details are still here.', 'receipt_unconfirmed', 'Promise.race', 'controller.abort()', 'clearTimeout(deadline)']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 for (const token of ['Template, if known', '>Send workflow</button>', "body.request_id||'confirmed'"]) {
@@ -399,7 +333,7 @@ if (contact.includes('value="agents"') || contact.includes('>AI Agent Solutions<
 if (/<[^>]+\sstyle=/.test(contact)) fail('contact_inline_style_returned')
 
 const privacy = pages.get('/privacy/')?.html || ''
-for (const token of ['Contact requests', 'Product data', 'AI processing', 'Deletion', 'optional trial proof summary, outcome status, and digest', 'digest-bound aggregate outcome', 'excludes raw product records, questions, approval contents, and account details']) {
+for (const token of ['Contact requests', 'Product data', 'AI processing', 'Deletion', 'optional attached request summary, outcome status, and digest', 'digest-bound aggregate outcome', 'excludes raw product records, questions, approval contents, and account details']) {
   if (!privacy.includes(token)) fail('privacy_contract_missing', { token })
 }
 

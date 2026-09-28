@@ -15,7 +15,7 @@ test('service brief asks for a business result without requiring template knowle
   assert.match(html, /We use your email to reply about this request\./)
   assert.match(html, /<input type="hidden" name="template" maxlength="120"/)
   assert.doesNotMatch(html, /Template, if known|>Send workflow<|>Send the workflow</)
-  assert.match(html, />Request setup<\/button>/)
+  assert.match(html, />Send message<\/button>/)
   assert.match(html, /name="goal" required maxlength="4000"/)
 })
 

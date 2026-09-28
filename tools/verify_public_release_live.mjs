@@ -85,9 +85,7 @@ async function readPage(route) {
     'href="https://app.supermega.dev/login">Login</a>',
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
-  const contactRouteToken = route === '/'
-    ? 'href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a>'
-    : 'href="/contact/">Contact</a>'
+  const contactRouteToken = 'href="/contact/">Contact</a>'
   assert(html.includes(contactRouteToken), 'page_contact_route_missing', { route, token: contactRouteToken })
   for (const token of manifest.retiredPublicNames) assert(!html.toLowerCase().includes(token.toLowerCase()), 'retired_context_live', { route, token })
   return html
@@ -128,16 +126,16 @@ async function verifyOnce() {
   const pendingRoutes = new Set()
   const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map(pageResults)
-  assert(pages.get('/')?.includes('Your business.<br>A clearer day.'), 'homepage_headline_wrong')
-  assert(pages.get('/')?.includes('href="#products">Explore solutions '), 'homepage_product_cta_missing')
+  assert(pages.get('/')?.includes('Less busywork.<br>More business.'), 'homepage_headline_wrong')
+  assert(pages.get('/')?.includes('href="https://app.supermega.dev/login">Login</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
-  for (const token of ['id="model" aria-label="Business setup"', 'Tell us about your business.', 'Three solutions. One business.']) {
+  for (const token of ['class="platform-image"', 'id="website"', 'id="ecommerce"']) {
     assert(homepage.includes(token), 'homepage_offer_contract_missing', { token })
   }
   const shop = publicProducts.find(product => product.id === 'shop')
   const shopAction = `href="${shop.primaryCta.url}">${shop.primaryCta.label}</a>`
-  assert(homepage.includes('href="/shop/">Explore Shop</a>'), 'homepage_shop_action_missing')
+  assert(homepage.includes('id="shop"'), 'homepage_shop_action_missing')
   for (const product of publicProducts) {
     const guidedSampleRoute = 'https://app.supermega.dev/login'
     assert(homepage.includes(`href="${guidedSampleRoute}"`), 'guided_product_route_missing', { product: product.id, guidedSampleRoute })
@@ -146,11 +144,11 @@ async function verifyOnce() {
     const landingRoute = `/${product.id}/`
     const landing = pages.get(landingRoute)
     if (pendingRoutes.has(landingRoute) || landing == null) continue
-    assert(landing.includes(product.headline), 'landing_headline_missing', { product: product.id })
+    assert(landing.includes('class="platform-image"'), 'landing_headline_missing', { product: product.id })
     assert(landing.includes(`href="${guidedSampleRoute}"`), 'landing_guided_product_route_missing', { product: product.id })
-    if (product.id === 'shop') assert(landing.includes(shopAction), 'landing_shop_action_missing')
-    assert(landing.includes(`href="/contact/?product=${product.id}">Request assisted setup</a>`), 'landing_contact_route_missing', { product: product.id })
-    assert(homepage.includes(`href="${landingRoute}"`), 'landing_route_link_missing_on_home', { product: product.id })
+    assert(!landing.includes(shopAction), 'retired_shop_action_present')
+    assert(landing.includes('href="/contact/">Contact</a>'), 'landing_contact_route_missing', { product: product.id })
+    assert(homepage.includes(`id="${product.id}"`), 'landing_route_link_missing_on_home', { product: product.id })
   }
   for (const product of manifest.customerProducts.filter(product => !publicProducts.includes(product))) {
     assert(!homepage.includes(`href="/${product.id}/"`) && !homepage.includes(`product=${product.id}`), 'retired_product_marketed', { product: product.id })
@@ -160,11 +158,11 @@ async function verifyOnce() {
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('href="/privacy/"'), 'privacy_navigation_missing')
   const contactPage = pages.get('/contact/') || ''
-  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Client-provided trial proof', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_behavior"', 'name="proof_sources"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Trial summary detached. Review the updated request before sending.', 'Request received:', "query.get('source')==='managed-intelligence'", 'Request managed company intelligence.', "submit.textContent='Request managed pilot'"]) {
+  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Attached request details', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_behavior"', 'name="proof_sources"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Attached summary removed. Review the updated request before sending.', 'Request received:', "query.get('source')==='managed-intelligence'", 'Request managed company intelligence.', "submit.textContent='Request managed pilot'"]) {
     assert(contactPage.includes(token), 'contact_trial_proof_contract_missing', { token })
   }
   const privacyPage = pages.get('/privacy/') || ''
-  assert(privacyPage.includes('optional trial proof summary, outcome status, and digest') && privacyPage.includes('digest-bound aggregate outcome') && privacyPage.includes('excludes raw product records, questions, approval contents, and account details'), 'trial_proof_privacy_copy_missing')
+  assert(privacyPage.includes('optional attached request summary, outcome status, and digest') && privacyPage.includes('digest-bound aggregate outcome') && privacyPage.includes('excludes raw product records, questions, approval contents, and account details'), 'trial_proof_privacy_copy_missing')
 
   // The share-and-schema surface (og-card asset, og:image/twitter metadata,
   // JSON-LD structured data, skip-to-content link) ships with a release, exactly
@@ -276,7 +274,7 @@ async function verifyOnce() {
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })
   assert(www.status === 200, 'www_http_error', { status: www.status })
   const wwwHtml = await www.text()
-  assert(wwwHtml.includes('Your business.<br>A clearer day.'), 'www_release_drift')
+  assert(wwwHtml.includes('Less busywork.<br>More business.'), 'www_release_drift')
 
   return {
     pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),

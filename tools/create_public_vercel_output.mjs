@@ -8,8 +8,6 @@ import { bindPreviewNavigation, parsePreviewAppBinding } from './public_preview_
 
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
-import { validatePlantBusinessTemplates } from '../showroom/src/products/plant/business-templates.ts'
-import { validateShopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
 
 const run = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -412,6 +410,21 @@ const sharedStyle = `
   @media (max-width: 420px) { .compact-solution { padding: 18px; } .first-loop-list li { grid-template-columns: 28px minmax(0,1fr); padding: 10px 11px; font-size: 13px; } }
   @media (max-width: 520px) { .compact-solutions { grid-template-columns: 1fr; gap: 14px; } .compact-solution { min-height: 0; padding: 22px; } .compact-solution h3 { margin-top: 16px; font-size: 28px; } .compact-solution > p { font-size: 16px; line-height: 1.65; } .compact-solution .myanmar-label { line-height: 1.9; } .compact-solution .card-index { font-size: 11px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { margin-top: 16px; font-size: 14px; } }
   @media (max-width: 760px) { .offer-model-grid { grid-template-columns: 1fr; } .offer-model-lane { padding: 24px 0; } .offer-model-lane + .offer-model-lane { border-top: 1px solid var(--line-strong); border-left: 0; padding-left: 0; } .offer-model-action { align-items: stretch; flex-direction: column; } .offer-model-action .button { width: 100%; } }
+  .editorial-hero {padding:100px 0 64px;max-width:940px}
+  .editorial-hero h1 {font-size:clamp(48px,7.5vw,100px);line-height:1.02;letter-spacing:-.065em;margin:20px 0 28px;font-weight:650}
+  .editorial-hero .lede {max-width:610px;font-size:21px;line-height:1.6;color:var(--muted)}
+  .platform-image {margin:0;padding:24px;background:#edf4f0;border:1px solid #dce8e1;border-radius:24px;overflow:hidden}
+  .platform-image img {width:100%;height:auto;display:block;border-radius:12px;box-shadow:0 16px 48px #173d2510}
+  .platform-image figcaption {padding:16px 0 0;color:#596960;font-size:12px}
+  .product-story {padding:80px 0;border-top:1px solid var(--line)}
+  .story-heading {display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:end;margin-bottom:32px}
+  .story-heading h2 {font-size:clamp(32px,4vw,52px);letter-spacing:-.045em;line-height:1.12;margin:12px 0 0}
+  .story-heading p {font-size:18px;line-height:1.65;color:var(--muted);margin:0;max-width:500px}
+  .feature-line {display:flex;flex-wrap:wrap;gap:12px 30px;list-style:none;padding:24px 0 0;margin:0;font-size:14px;color:#345447}
+  .platform-note {padding:36px 0 80px;max-width:700px;font-size:24px;line-height:1.5;letter-spacing:-.025em}
+  .site-header {background:#fff}
+  @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.feature-line{gap:12px 20px}}
+
 `
 
 function brandHtml() {
@@ -423,7 +436,7 @@ function headerHtml() {
 }
 
 function footerHtml(route) {
-  const contactLink = route === '/' ? '' : '<a href="/contact/">Contact</a>'
+  const contactLink = '<a href="/contact/">Contact</a>'
   return `<footer class="site-footer"><div class="frame footer-inner"><span>© ${new Date().getUTCFullYear()} SuperMega</span><span class="footer-links">${contactLink}<a href="/privacy/">Privacy</a></span></div></footer>`
 }
 
@@ -509,190 +522,30 @@ function documentHtml({ route, title, description, content, schema = null, robot
 </html>`
 }
 
-function productLoginAction(product) {
-  return { href: `https://app.supermega.dev/login?product=${encodeURIComponent(product.id)}`, label: 'Login' }
-}
-
-function assistedSetupAction(product) {
-  const expectedHref = `/contact/?product=${encodeURIComponent(product.id)}`
-  assert(product.secondaryCta?.label === 'Request assisted setup', `assisted_setup_label_invalid:${product.id}`)
-  assert(product.secondaryCta.url === expectedHref, `assisted_setup_route_invalid:${product.id}`)
-  return { href: product.secondaryCta.url, label: product.secondaryCta.label }
-}
-
-function shopProfitControlAction() {
-  const shop = publicProducts.find((product) => product.id === 'shop')
-  assert(shop?.primaryCta?.label === 'Open Shop Profit Control', 'shop_profit_control_label_invalid')
-  assert(shop.primaryCta.url === 'https://app.supermega.dev/shop/?tab=today', 'shop_profit_control_route_invalid')
-  return { href: shop.primaryCta.url, label: shop.primaryCta.label }
-}
-
-const SHOP_PROFIT_CONTROL_ACTION = shopProfitControlAction()
-
-const productSummary = {
-  shop: ['Run your shop', 'Record sales, check stock and see what needs attention.', 'အရောင်းနှင့် ကုန်ပစ္စည်းစာရင်း'],
-  website: ['Present your business', 'A clear website with your services, photos and contact details.', 'လုပ်ငန်းဝက်ဘ်ဆိုက်'],
-  ecommerce: ['Take customer requests', 'Show your catalog and let customers send a request for your team to confirm.', 'အွန်လိုင်းကုန်ပစ္စည်းစာရင်း'],
-}
-
-function productCardHtml(product, index) {
-  const [job, description, myanmar] = productSummary[product.id]
-  return `<article class="compact-solution" id="${escapeHtml(product.id)}">
-    <span class="card-index">0${index + 1} / ${escapeHtml(product.name)}</span>
-    <h3>${escapeHtml(job)}</h3>
-    <p lang="my" class="myanmar-label">${escapeHtml(myanmar)}</p>
-    <p>${escapeHtml(description)}</p>
-    <a class="card-link" href="/${escapeHtml(product.id)}/">Explore ${escapeHtml(product.name)}</a>
-  </article>`
-}
-
 const homePage = manifest.pages.find((page) => page.route === '/')
 assert(homePage?.file === 'index.html', 'home_page_manifest_entry_invalid')
 assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'), 'home_page_title_invalid')
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
-const homeHtml = documentHtml({
-  route: '/',
-  title: homePage.title,
-  description: homePage.description,
-  schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: homePage.description },
-  content: `<main id="content">
-    <section class="frame hero home-hero">
-      <div class="hero-copy"><span class="eyebrow">For businesses in Myanmar</span><h1>Your business.<br>A clearer day.</h1><p class="lede">Keep sales organised. Get your business online. Make it easier for customers to order.</p><p class="hero-local" lang="my">သင့်လုပ်ငန်းကို ပိုမိုလွယ်ကူစွာ စီမံပါ။</p><div class="actions"><a class="button primary" href="#products">Explore solutions <span aria-hidden="true">↗</span></a><a class="button" href="https://app.supermega.dev/login">Login</a></div><p class="hero-caption">Shop, Website and Ecommerce. Choose what your business needs.</p></div>
-
-    </section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">What do you need?</span><h2>Three solutions. One business.</h2><p>For shops, service businesses and growing teams.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
-    <section class="frame section offer-model" id="model" aria-label="Business setup"><div class="closing-strip"><div><h2>Tell us about your business.</h2><p>Share your products, services and the work you want to simplify.</p></div><a class="button primary" href="/contact/?product=guide&amp;source=assisted-setup">Request assisted setup</a></div></section>
-
-  </main>`,
+const stories = {
+ shop: {title:'Every sale. Every item. In view.', body:'Keep the counter, orders and stock together. See what is available and what needs replenishing.', image:'platform-stock.jpg', alt:'Stock screen with product availability, prices and reorder levels', features:['Sales counter','Stock and purchasing','Order tracking']},
+ website: {title:'Your business, clearly presented.', body:'Bring your pages, business details and inquiries into one place. Edit the content that matters without rebuilding your site.', image:'platform-pages.jpg', alt:'Page editor with page paths and content checks', features:['Page editing','Search metadata','Inquiry inbox']},
+ ecommerce: {title:'From your catalog to their next order.', body:'Put products and prices in front of customers. Your team confirms each order and payment. Arrange delivery with your customer. Manage stock in Shop.', image:'platform-catalog.jpg', alt:'Catalog with product cards, prices and cart controls', features:['Product catalog','Cart and requests','Order follow-through']},
+}
+function productStory(id, standalone = false) {
+ const item=stories[id], label=id==='ecommerce'?'Ecommerce':id[0].toUpperCase()+id.slice(1)
+ return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><span class="eyebrow">${label}</span><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<figure class="platform-image"><img src="/images/${item.image}" alt="${item.alt}" width="${id === 'ecommerce' ? 940 : 960}" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="lazy" /><figcaption>${label} interface &middot; illustrative records</figcaption></figure><ul class="feature-line">${item.features.map(f=>`<li>${f}</li>`).join('')}</ul></section>`
+}
+const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
+ schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Less busywork.<br>More business.</h1><p class="lede">Sales, stock, your website and online orders. Thoughtful tools for the work you do every day.</p></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">A clear place for your team to work.<br>A simpler way for customers to reach you.</p></main>`,
 })
 
-// Every validated Shop trade template is projected into the public site. Keeping
-// this projection registry-backed prevents a shipped template from disappearing
-// from the public door when the product registry changes.
-const SHOP_TRADES = validateShopBusinessTemplates().map((template) => ({
-  id: template.id,
-  name: template.name.en,
-  note: template.description,
-}))
-
-function tradeTemplatesHtml() {
-  return `<section class="frame section" id="trades"><div class="section-head"><span class="eyebrow">Start in your trade</span><h2>Try a sample for your trade.</h2><p>Explore sample products, sales and orders in your browser. No account needed.</p></div><div class="trade-grid">${SHOP_TRADES.map(({ id, name, note }) => `<a class="trade-card" href="https://app.supermega.dev/shop/?template=${escapeHtml(id)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div></section>`
-}
-
-function customerProductContract(id) {
-  const product = manifest.customerProducts.find((candidate) => candidate.id === id)
-  assert(product, `customer_product_missing:${id}`)
-  return product
-}
-
-function validatedProductTemplates(productId, expectedCount) {
-  const templates = customerProductContract(productId).templates
-  assert(Array.isArray(templates) && templates.length === expectedCount, `public_template_count_changed:${productId}`)
-  assert(templates.every((template) => /^[a-z][a-z0-9-]{1,39}$/.test(template.id)
-    && typeof template.name === 'string' && template.name.trim()
-    && typeof template.outcome === 'string' && template.outcome.trim()), `public_template_copy_invalid:${productId}`)
-  assert(new Set(templates.map((template) => template.id)).size === templates.length, `public_template_id_duplicate:${productId}`)
-  return templates
-}
-
-function guidedTemplateRoute(productId, templateId, extra = {}) {
-  const query = new URLSearchParams({ product: productId, template: templateId, ...extra })
-  return `https://app.supermega.dev/settings/?${query.toString()}`
-}
-
-const plantWorkflowTemplate = validatedProductTemplates('plant', 3).find((template) => template.id === 'production-control')
-assert(plantWorkflowTemplate, 'plant_primary_workflow_template_missing')
-const FIRST_JOB_TEMPLATE_SECTIONS = {
-  plant: {
-    title: 'Choose a shipped production sample.',
-    intro: 'Each door carries its validated Plant pack and first production workflow into guided setup.',
-    doors: validatePlantBusinessTemplates().map((template) => ({
-      id: template.id,
-      name: template.name.en,
-      note: template.description,
-      href: guidedTemplateRoute('plant', plantWorkflowTemplate.id, { pack: template.industryPackId }),
-    })),
-  },
-  website: {
-    title: 'Choose the first job for your website.',
-    intro: 'Start from one validated layout, then review the local draft before any publishing decision.',
-    doors: validatedProductTemplates('website', 3).map((template) => ({
-      id: template.id,
-      name: template.name,
-      note: template.outcome,
-      href: guidedTemplateRoute('website', template.id),
-    })),
-  },
-  ecommerce: {
-    title: 'Choose the first ordering workflow.',
-    intro: 'Start with one validated Shop-connected request flow while Shop remains the operating record.',
-    doors: validatedProductTemplates('ecommerce', 3).map((template) => ({
-      id: template.id,
-      name: template.name,
-      note: template.outcome,
-      href: guidedTemplateRoute('ecommerce', template.id),
-    })),
-  },
-}
-
-function firstJobTemplatesHtml(productId) {
-  const section = FIRST_JOB_TEMPLATE_SECTIONS[productId]
-  if (!section) return ''
-  const hrefs = section.doors.map((door) => door.href)
-  assert(new Set(hrefs).size === hrefs.length, `public_template_route_duplicate:${productId}`)
-  return `<section class="frame section" id="first-job-templates"><div class="section-head"><span class="eyebrow">${escapeHtml(section.doors.length)} validated starting points</span><h2>${escapeHtml(section.title)}</h2><p>${escapeHtml(section.intro)}</p></div><div class="trade-grid" aria-label="${escapeHtml(customerProductContract(productId).name)} first-job templates">${section.doors.map(({ id, name, note, href }) => `<a class="trade-card first-job-card" data-template="${escapeHtml(id)}" href="${escapeHtml(href)}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(note)}</span></a>`).join('')}</div><div class="control-line"><span class="eyebrow">Browser-local setup only</span><p>Opening a door does not overwrite an existing workspace, create a managed record, contact a customer, publish or send anything, accept payment, move stock, or record revenue. Any later setup change remains an explicit reviewed action.</p></div></section>`
-}
-
-function assistedDeliverablesHtml(productId) {
-  const offers = {
-    website: {
-      title: 'Your business, clearly presented.',
-      steps: [
-        ['Share the essentials', 'Send your services, photos and contact details. Includes up to four featured offerings.'],
-        ['Check your pages', 'We build the pages. You check the content.'],
-        ['Choose your launch date', 'Domain, publishing and maintenance are quoted separately.'],
-      ],
-    },
-    ecommerce: {
-      title: 'Your catalog, ready for customers to browse.',
-      steps: [
-        ['Share your product list', 'Send your products, photos and prices.'],
-        ['Check your catalog', 'Check product details and order requests.'],
-        ['Receive order requests', 'Your team confirms each order and payment. Arrange delivery with your customer.'],
-      ],
-    },
-  }
-  const offer = offers[productId]
-  if (!offer) return ''
-  return `<section class="frame section" id="prepared-delivery"><div class="section-head"><span class="eyebrow">Built for your business</span><h2>${escapeHtml(offer.title)}</h2></div><ol class="delivery-steps">${offer.steps.map(([title, body]) => `<li><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></li>`).join('')}</ol></section>`
-}
-
-function productLandingHtml(product, page) {
-  const loginAction = productLoginAction(product)
-  const assistedSetup = assistedSetupAction(product)
-  const leadingAction = product.id === 'shop' ? SHOP_PROFIT_CONTROL_ACTION : assistedSetup
-  const actionsHtml = product.id === 'shop'
-    ? `<a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a><a class="button" href="${escapeHtml(loginAction.href)}">${escapeHtml(loginAction.label)}</a><a class="button" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a>`
-    : `<a class="button primary" href="${escapeHtml(assistedSetup.href)}">${escapeHtml(assistedSetup.label)}</a><a class="button" href="${escapeHtml(loginAction.href)}">${escapeHtml(loginAction.label)}</a>`
-  const description = page.description || product.description
-  const moduleItems = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
-  const launchModuleLimit = manifest.templatePackPolicy.maxEnabledModulesAtLaunch
-  assert(Number.isSafeInteger(launchModuleLimit) && launchModuleLimit >= 1 && launchModuleLimit <= 8, 'launch_module_limit_invalid')
-  const launchModules = moduleItems.slice(0, launchModuleLimit)
-  return documentHtml({
-    route: page.route,
-    title: page.title,
-    description,
-    shareImage: `/og-card-${product.id}.png`,
-    schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
-    content: `<main id="content">
-    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions">${actionsHtml}</div></section>
-    ${assistedDeliverablesHtml(product.id)}
-    <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">Start here</span><h2>${escapeHtml(launchModules.length)} core ${escapeHtml(product.name)} workflows.</h2><p>Begin with the work used most often. Advanced tools stay inside the workspace and appear when they are relevant.</p></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} core workflows">${launchModules.map((item, index) => `<span><i>${String(index + 1).padStart(2, '0')}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
-    <section class="frame section"><div class="closing-strip"><div><h2>Ready to make it yours?</h2><p>Tell us what you need. We agree the setup and next steps with you.</p></div><a class="button primary" href="${escapeHtml(leadingAction.href)}">${escapeHtml(leadingAction.label)}</a></div></section>
-  </main>`,
-  })
+function productLandingHtml(product,page) {
+ const description=page.description||product.description
+ return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
+ schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${stories[product.id].body}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>`})
 }
 
 const contactScript = `<script>(function(){
@@ -726,7 +579,7 @@ const contactScript = `<script>(function(){
     if(!proof)return;
     if(proof.proof_product===(product&&product.value||'')&&proof.proof_template===(template&&template.value.trim().toLowerCase()||''))return;
     proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;
-    if(copyHeading)copyHeading.textContent='Your brief is ready to review.';if(copy)copy.textContent='Only the company and goal remain attached. The trial summary was removed because the product or template changed.';status.textContent='Trial summary detached. Review the updated request before sending.';
+    if(copyHeading)copyHeading.textContent='Your brief is ready to review.';if(copy)copy.textContent='Only the company and goal remain attached. The attached summary was removed because the product or template changed.';status.textContent='Attached summary removed. Review the updated request before sending.';
   }
   function updateBriefHint(){
     if(!goal)return;
@@ -739,7 +592,7 @@ const contactScript = `<script>(function(){
     goal.placeholder=hints[product&&product.value]||hints.guide;
   }
   var serviceChoice=form.querySelector('[data-contact-service]'),serviceSummary=form.querySelector('[data-contact-service-summary]');
-  function updateServiceSummary(){var serviceName=product&&({website:'Website',ecommerce:'Ecommerce',shop:'Shop'})[product.value];if(serviceSummary)serviceSummary.textContent=serviceName||'Choose a service';if(heading&&handoff.toString())heading.textContent='Finish your '+(serviceName||'setup')+' request.';}
+  function updateServiceSummary(){var serviceName=product&&({website:'Website',ecommerce:'Ecommerce',shop:'Shop'})[product.value];if(serviceSummary)serviceSummary.textContent=serviceName||'Choose a service';if(heading&&handoff.toString())heading.textContent='Finish your '+(serviceName||'contact')+' request.';}
   updateServiceSummary();
   if(serviceChoice&&['website','ecommerce'].includes(requestedProduct)&&query.get('source')===requestedProduct+'-brief'&&company&&company.value.trim()&&goal&&goal.value.trim())serviceChoice.open=false;
   var briefChoice=form.querySelector('[data-contact-brief]'),briefSummary=form.querySelector('[data-contact-brief-summary]');
@@ -765,7 +618,7 @@ const contactScript = `<script>(function(){
     if(lede)lede.textContent='Add your contact details, review your brief, and send.';
     if(copyHeading)copyHeading.textContent=proof?'Your trial proof is attached.':'Your brief is ready to review.';
     if(copy)copy.textContent=proof?'Readiness, source count, behavior count, reviewed decisions, and the digest-bound outcome summary move forward. Raw records, questions, approval contents, and account details stay out.':'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.';
-    status.textContent=proof?'Trial summary attached for review. Nothing has been sent.':proofResult.attempted?'Company and goal are ready. Trial proof was not attached because it did not match this request.':'Your brief is ready. Nothing has been sent.';
+    status.textContent=proof?'Request summary attached for review. Nothing has been sent.':proofResult.attempted?'Company and goal are ready. Trial proof was not attached because it did not match this request.':'Your brief is ready. Nothing has been sent.';
     history.replaceState(null,'',location.pathname+location.search);
   }
   var unconfirmedPayload=null,submittedFields=null;
@@ -781,8 +634,8 @@ const contactScript = `<script>(function(){
       var controller=new AbortController();
       var pending=fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:payload,signal:controller.signal}).then(async function(response){return {response:response,body:await response.json().catch(function(){return null})}});
       var result=await Promise.race([pending,new Promise(function(resolve,reject){deadline=setTimeout(function(){reject(new Error('receipt_unconfirmed'));controller.abort()},20000)})]);
-var response=result.response,body=result.body;if(!response.ok){if(response.status===400&&body&&body.status==='error'&&['invalid_request','required_fields_missing','product_not_supported','trial_proof_invalid','idempotency_key_required'].includes(body.reason)){unconfirmedPayload=null;submittedFields=null;requestKey.value='';status.textContent=body.reason==='trial_proof_invalid'?'The attached trial summary is invalid. Your brief is still here. Reopen the request from SuperMega without the invalid summary.':'This brief was rejected before delivery. Your details are still here. Check the required fields and product, then submit your corrected brief.';return;}throw new Error(body&&body.reason||'send_failed');}if(!body||body.status!=='ready'||typeof body.request_id!=='string'||!/^LEAD-[0-9A-F]{16}$/.test(body.request_id)||typeof body.proof_bound!=='boolean')throw new Error('receipt_unconfirmed');var edited=JSON.stringify(Object.fromEntries(new FormData(form).entries()))!==submittedFields;if(!edited){form.reset();proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;updateBriefHint();updateServiceSummary();if(serviceChoice)serviceChoice.open=true;if(heading)heading.textContent='Request received.';if(lede)lede.textContent='Reference: '+body.request_id+'. Keep this for follow-up.';if(copyHeading)copyHeading.textContent='What to include';if(copy)copy.textContent='Include your products or services, location and contact details.';submit.textContent='Send another request';}requestKey.value='';unconfirmedPayload=null;submittedFields=null;status.textContent='Request received: '+body.request_id+'. Keep this ID for follow-up. Next step: SuperMega reviews your brief to confirm scope, price and timing. This receipt does not confirm an email reply, create an account, take payment or make anything live.'+(edited?' Your later edits are still here and have not been sent. Submit them separately if needed.':'');
-    }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached trial summary changed or does not match this request. Open the request again from SuperMega.':'We could not confirm receipt. Your details are still here. Please try again; the same request reference will be reused.';if(unconfirmedPayload)status.textContent+=' Retry sends the original brief, not later edits. Later edits stay here until the original receipt is confirmed. Keep this page open and retry here; reloading or closing it loses this retry state.';}finally{clearTimeout(deadline);if(!unconfirmedPayload)window.removeEventListener('beforeunload',warnUnconfirmedNavigation);submit.disabled=false;}
+var response=result.response,body=result.body;if(!response.ok){if(response.status===400&&body&&body.status==='error'&&['invalid_request','required_fields_missing','product_not_supported','trial_proof_invalid','idempotency_key_required'].includes(body.reason)){unconfirmedPayload=null;submittedFields=null;requestKey.value='';status.textContent=body.reason==='trial_proof_invalid'?'The attached request summary is invalid. Your brief is still here. Reopen the request from SuperMega without the invalid summary.':'This brief was rejected before delivery. Your details are still here. Check the required fields and product, then submit your corrected brief.';return;}throw new Error(body&&body.reason||'send_failed');}if(!body||body.status!=='ready'||typeof body.request_id!=='string'||!/^LEAD-[0-9A-F]{16}$/.test(body.request_id)||typeof body.proof_bound!=='boolean')throw new Error('receipt_unconfirmed');var edited=JSON.stringify(Object.fromEntries(new FormData(form).entries()))!==submittedFields;if(!edited){form.reset();proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;updateBriefHint();updateServiceSummary();if(serviceChoice)serviceChoice.open=true;if(heading)heading.textContent='Request received.';if(lede)lede.textContent='Reference: '+body.request_id+'. Keep this for follow-up.';if(copyHeading)copyHeading.textContent='What to include';if(copy)copy.textContent='Include your products or services, location and contact details.';submit.textContent='Send another request';}requestKey.value='';unconfirmedPayload=null;submittedFields=null;status.textContent='Request received: '+body.request_id+'. Keep this ID for follow-up. Next step: SuperMega reviews your brief to confirm scope, price and timing. This receipt does not confirm an email reply, create an account, take payment or make anything live.'+(edited?' Your later edits are still here and have not been sent. Submit them separately if needed.':'');
+    }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached request summary changed or does not match this request. Open the request again from SuperMega.':'We could not confirm receipt. Your details are still here. Please try again; the same request reference will be reused.';if(unconfirmedPayload)status.textContent+=' Retry sends the original brief, not later edits. Later edits stay here until the original receipt is confirmed. Keep this page open and retry here; reloading or closing it loses this retry state.';}finally{clearTimeout(deadline);if(!unconfirmedPayload)window.removeEventListener('beforeunload',warnUnconfirmedNavigation);submit.disabled=false;}
   });
 })();</script>`
 
@@ -801,14 +654,14 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Setup by SuperMega</span><h1 data-contact-heading>Tell us what your business needs.</h1><p class="lede" data-contact-lede>Share the essentials. We handle the setup.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Your business brief</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><details class="contact-service" data-contact-service open><summary data-contact-service-summary>Choose a service</summary><label>What do you need?<select name="product"><option value="guide">Help me choose</option>${publicProducts.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')}</select></label></details><input type="hidden" name="template" maxlength="120" /><details class="contact-service" data-contact-brief open><summary data-contact-brief-summary>Business brief</summary><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label class="wide">What would you like us to prepare?<textarea name="goal" required maxlength="4000" placeholder="For example: a website for my salon, a catalog for customer requests, or Shop set up for my retail counter."></textarea></label></details></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Request setup</button><p class="form-note">We use your email to reply about this request.</p><p class="form-status" data-form-status aria-live="polite"></p></form><details class="contact-copy"><summary>Brief tips</summary><h2 data-contact-copy-heading>What to include</h2><p data-contact-copy>Include your products or services, location and contact details.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Client-provided trial proof</span><h3>Reviewed setup summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></details></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what your business needs.</h1><p class="lede" data-contact-lede>Products, partnerships or a question. We’re here.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Your business brief</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><details class="contact-service" data-contact-service open><summary data-contact-service-summary>Choose a service</summary><label>What do you need?<select name="product"><option value="guide">Help me choose</option>${publicProducts.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')}</select></label></details><input type="hidden" name="template" maxlength="120" /><details class="contact-service" data-contact-brief open><summary data-contact-brief-summary>Business brief</summary><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label class="wide">What would you like us to prepare?<textarea name="goal" required maxlength="4000" placeholder="For example: a website for my salon, a catalog for customer requests, or sales and stock for my retail counter."></textarea></label></details></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-note">We use your email to reply about this request.</p><p class="form-status" data-form-status aria-live="polite"></p></form><details class="contact-copy"><summary>Brief tips</summary><h2 data-contact-copy-heading>What to include</h2><p data-contact-copy>Include your products or services, location and contact details.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Attached request details</span><h3>Request summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></details></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
-  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the seven public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Site measurement</h3><p>On the production SuperMega public site, first-party Vercel Web Analytics records aggregate page views and Speed Insights measures Core Web Vitals. Before either tool starts, SuperMega allows only the seven public page paths and removes query strings and fragments from the URL. SuperMega supplies no custom or conversion event, contact-form value, identity, free text, customer record, payment, or commercial proof in its measurement event fields. Vercel may add a timestamp, referrer, approximate location, browser, operating system, and device information to its aggregate reporting. Source code or a reachable script does not prove that provider telemetry was observed.</p></section><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional attached request summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>An attached request summary includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
 const notFoundHtml = documentHtml({
@@ -1428,6 +1281,7 @@ await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
+for (const image of ['platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
