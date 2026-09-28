@@ -25,6 +25,13 @@ globalThis.fetch=async input=>{
  if(u.pathname.startsWith('/api/pipeline-control')) return json({status:'not_found'},404);
  const redirect=config.routes.find(r=>r.status===308 && new RegExp(r.src).test(u.pathname));
  if(redirect) return new Response(null,{status:308,headers:{location:mode==='old-redirect'&&u.pathname==='/products/factory/'?'/#plant':redirect.headers.Location}});
+ if(u.pathname.startsWith('/images/')) {
+  if(mode==='image-missing') return new Response('missing',{status:404});
+  if(mode==='image-html') return new Response('<html>fallback</html>',{headers:{'content-type':'text/html'}});
+  if(mode==='image-corrupt') return new Response('broken',{headers:{'content-type':'image/jpeg'}});
+  const path=mode==='image-stale'?'/images/platform-pages.jpg':u.pathname;
+  return new Response(fs.readFileSync('.vercel/output/static'+path),{headers:{'content-type':'image/jpeg'}});
+ }
  if(u.pathname.endsWith('.png')) return new Response(fs.readFileSync('.vercel/output/static'+u.pathname),{headers:{'content-type':'image/png'}});
  const page=manifest.pages.find(p=>p.route===u.pathname);
  if(!page) throw Error('offline_fixture_unknown_route');
@@ -68,6 +75,8 @@ for (const [mutation, failure] of [
   ['plant-marketing', 'retired_product_marketed'], ['plant-indexed', 'retired_product_boundary_missing'],
   ['wrong-commit', 'release_commit_wrong'], ['contact-down', 'contact_not_accepting'],
   ['old-redirect', 'redirect_destination_wrong'],
+  ['image-missing', 'interface_image_http_error'], ['image-html', 'interface_image_content_type_wrong'],
+  ['image-corrupt', 'interface_image_invalid'], ['image-stale', 'interface_image_release_mismatch'],
 ]) test('rejects ' + mutation, () => {
   const result = run(mutation)
   assert.equal(result.status, 1, result.output)
