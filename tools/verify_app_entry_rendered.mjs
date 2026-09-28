@@ -1164,7 +1164,13 @@ async function main() {
       : ecommerceClaimOnly
         ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
         : tests
-    for (const testCase of selectedTests) cases.push(await verifyCase(cdp, origin, testCase))
+    for (const [index, testCase] of selectedTests.entries()) {
+      const startedAt = Date.now()
+      console.error(JSON.stringify({ event: 'rendered_case_started', case: index + 1, total: selectedTests.length, name: testCase.name }))
+      const result = await verifyCase(cdp, origin, testCase)
+      cases.push(result)
+      console.error(JSON.stringify({ event: 'rendered_case_finished', case: index + 1, durationMs: Date.now() - startedAt, failures: result.failures.length }))
+    }
     const failures = cases.flatMap((entry) => entry.failures.map((failure) => `${entry.name}: ${failure}`))
     const provenanceAfter = await collectRenderedProofProvenance({ root, distDir, verifierPath })
     assertRenderedProofProvenanceStable(provenanceBefore, provenanceAfter)

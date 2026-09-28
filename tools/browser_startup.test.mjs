@@ -152,3 +152,16 @@ test('CDP send errors do not leak transport details or leave pending timers', as
   await assert.rejects(client.send('Page.enable'), error => error.message === 'Page.enable: browser command could not be sent')
   assert.equal(client.pending.size, 0)
 })
+
+test('CDP shutdown uses its shorter deadline even with a long command default', async () => {
+  const { Cdp } = await import('./verify_app_entry_rendered.mjs')
+  const ws = new EventTarget()
+  ws.send = () => {}
+  ws.close = () => {}
+  const client = new Cdp(ws, 60_000)
+  const start = Date.now()
+  await assert.rejects(client.send('Browser.close', {}, '', 10), /command timed out/)
+  assert.ok(Date.now() - start < 1_000, 'shutdown must not wait for the normal command deadline')
+  assert.equal(client.pending.size, 0)
+  await client.close()
+})
