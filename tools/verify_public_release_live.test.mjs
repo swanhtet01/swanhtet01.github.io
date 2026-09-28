@@ -36,6 +36,8 @@ globalThis.fetch=async input=>{
  const page=manifest.pages.find(p=>p.route===u.pathname);
  if(!page) throw Error('offline_fixture_unknown_route');
  let html=fs.readFileSync('.vercel/output/static/'+page.file,'utf8');
+ if(mode==='pilot-pitch'&&u.pathname==='/contact/') html+='<p>Request managed company intelligence.</p>';
+ if(mode==='missing-source'&&u.pathname==='/contact/') html=html.replaceAll('source.value=location.href','REMOVED');
  if(mode==='missing-offer') html=html.replaceAll('class="platform-image"','REMOVED');
  if(mode==='missing-action') html=html.replaceAll('id="shop"','REMOVED');
  if(mode==='missing-guided') html=html.replaceAll('>Login</a>','>REMOVED</a>');
@@ -75,6 +77,7 @@ for (const [mutation, failure] of [
   ['plant-marketing', 'retired_product_marketed'], ['plant-indexed', 'retired_product_boundary_missing'],
   ['wrong-commit', 'release_commit_wrong'], ['contact-down', 'contact_not_accepting'],
   ['old-redirect', 'redirect_destination_wrong'],
+  ['pilot-pitch', 'retired_managed_pilot_pitch_present'], ['missing-source', 'contact_trial_proof_contract_missing'],
   ['image-missing', 'interface_image_http_error'], ['image-html', 'interface_image_content_type_wrong'],
   ['image-corrupt', 'interface_image_invalid'], ['image-stale', 'interface_image_release_mismatch'],
 ]) test('rejects ' + mutation, () => {

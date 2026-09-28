@@ -159,8 +159,11 @@ async function verifyOnce() {
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('href="/privacy/"'), 'privacy_navigation_missing')
   const contactPage = pages.get('/contact/') || ''
-  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Attached request details', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_behavior"', 'name="proof_sources"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Attached summary removed. Review the updated request before sending.', 'Request received:', "query.get('source')==='managed-intelligence'", 'Request managed company intelligence.', "submit.textContent='Request managed pilot'"]) {
+  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Attached request details', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_behavior"', 'name="proof_sources"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Attached summary removed. Review the updated request before sending.', 'Request received:', 'source.value=location.href', '>Send message</button>']) {
     assert(contactPage.includes(token), 'contact_trial_proof_contract_missing', { token })
+  }
+  for (const token of ['Request managed company intelligence.', "submit.textContent='Request managed pilot'", 'managedIntelligenceRequest']) {
+    assert(!contactPage.includes(token), 'retired_managed_pilot_pitch_present', { token })
   }
   const privacyPage = pages.get('/privacy/') || ''
   assert(privacyPage.includes('optional attached request summary, outcome status, and digest') && privacyPage.includes('digest-bound aggregate outcome') && privacyPage.includes('excludes raw product records, questions, approval contents, and account details'), 'trial_proof_privacy_copy_missing')

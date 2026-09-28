@@ -58,8 +58,9 @@ check(!generator.includes('Open Shop Profit Control'), 'generator_profit_control
 check(generator.includes('href="/contact/">Contact</a>'), 'generator_contact_footer')
 derived.add('/contact/?product=guide&source=assisted-setup')
 // Historical deep links stay supported, but are not the current acquisition CTA.
-check(generator.includes("query.get('source')==='managed-intelligence'")
-  && generator.includes("submit.textContent='Request managed pilot'"), 'legacy_managed_pilot_deep_link_supported')
+check(generator.includes('source.value=location.href')
+  && generator.includes('>Send message</button>')
+  && !generator.includes("submit.textContent='Request managed pilot'"), 'legacy_contact_uses_standard_form_and_preserves_source')
 
 check(productSetup.includes("utm_medium: 'guided_trial'")
   && productSetup.includes('return `https://supermega.dev/contact/?${query.toString()}`'), 'app_contact_url_builder_pattern')
