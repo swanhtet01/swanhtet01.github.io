@@ -41,3 +41,16 @@ for (const product of ['website', 'ecommerce']) {
     assert.match(html, /Existing page or catalog/)
   })
 }
+
+for (const [product, label, heading] of [
+  ['website', 'Sites', 'Your business, online.'],
+  ['ecommerce', 'Commerce', 'Your products, ready to browse.'],
+]) {
+  test(`${product}: business brief identifies the current product`, () => {
+    const html = renderToStaticMarkup(React.createElement(module.exports.BusinessBrief, { product, onOpenWorkspace() {} }))
+    assert.ok(html.includes(`class="business-brief-kicker">${label}</span>`))
+    assert.ok(html.includes(heading))
+    assert.ok(html.includes('Business name'))
+    assert.ok(html.includes('Continue'))
+  })
+}

@@ -27,7 +27,7 @@ export function BusinessBrief({ product, onPreparePreview }: { product: Product;
   }
   return <section className="business-brief" aria-labelledby={`${id}-title`}>
     <header>
-      <span className="business-brief-kicker">{product === 'website' ? 'Website' : 'Ecommerce'}</span>
+      <span className="business-brief-kicker">{product === 'website' ? 'Sites' : 'Commerce'}</span>
       <h1 id={`${id}-title`}>{product === 'website' ? 'Your business, online.' : 'Your products, ready to browse.'}</h1>
       <p>Share your business details.</p>
     </header>
