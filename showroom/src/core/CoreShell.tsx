@@ -1,5 +1,6 @@
 import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router'
+import { productionEntryDecision } from './production-entry'
 
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
@@ -510,6 +511,10 @@ export function CoreLayout() {
 
   if (sessionChanged) return <PortalAccessPanel title="Account changed in another tab" copy="Reload to verify the current account. Saved records are unchanged; unsaved edits may need to be entered again." action={<button className="core-button primary" onClick={() => window.location.reload()} type="button">Reload workspace</button>} />
 
+  const productionEntry = productionEntryDecision(window.location.hostname, accountEntryRoute, portalAccess.status)
+  if (productionEntry === 'checking') return <PortalAccessPanel title="Opening…" copy="Checking your account." />
+  if (productionEntry === 'login') return <Navigate replace to={companyLoginPath} />
+
   return (
     <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
@@ -521,7 +526,7 @@ export function CoreLayout() {
         <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}</div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}{!accountEntryRoute ? <RuntimeBadge status={runtime.status} /> : null}</div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every

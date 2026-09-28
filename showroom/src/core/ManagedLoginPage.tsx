@@ -1,3 +1,4 @@
+import { productionEntryDecision } from './production-entry'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
@@ -31,6 +32,7 @@ function savedTrial() {
 }
 
 export function ManagedLoginPage() {
+  const publicApp = productionEntryDecision(window.location.hostname, false, 'local') === 'login'
   const runtime = useOutletContext<RuntimeHealth>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -335,8 +337,8 @@ export function ManagedLoginPage() {
         <p className="form-notice" data-tone={noticeTone} id="managed-login-notice" role="status">{notice}</p>
       </form> : <section className="managed-login-panel" aria-label="Login unavailable">
         {reviewReturnPath ? <div><h2>Review sign-in is unavailable here.</h2><p>Keep your original review link and ask SuperMega in your existing setup conversation to restore access. Use the account associated with this review.</p></div> : <>
-          <div><h2>Login is currently unavailable.</h2><p>Contact support for account access. Your saved work is still available on this device.</p></div>
-          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a><Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link>{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
+          <div><h2>Login is currently unavailable.</h2><p>{publicApp ? 'Contact support for account access.' : 'Contact support for account access. Your saved work is still available on this device.'}</p></div>
+          <div className="managed-login-actions"><a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>{!publicApp ? <Link className="account-inline-link" to="/?choose=1">Saved work on this device</Link> : null}{signupPolicy ? <button className="core-button" onClick={() => chooseAccountMode(true)} type="button">Create an account</button> : null}</div>
         </>}
       </section>}
     </div>

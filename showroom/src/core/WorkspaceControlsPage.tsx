@@ -839,10 +839,10 @@ export function WorkspaceControlsPage() {
         </section> : null}
         {notice ? <p aria-live="polite" className="form-notice" role="status">{notice}</p> : null}
 
-        <details className="compact-disclosure">
+        {import.meta.env.DEV ? <details className="compact-disclosure">
           <summary><span>Reset this device</span><small>Destructive</small></summary>
           <div className="setup-template-summary"><div><span>What will be cleared</span><strong>Local Shop, Plant, Website, Ecommerce, setup, drafts, approvals, and AI-memory records</strong></div><p>A restore point is created first. Managed company records and external systems are not changed.</p><div className="trial-actions">{resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm local reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Prepare local reset</button>}</div></div>
-        </details>
+        </details> : null}
       </div>
     </div>
   )
