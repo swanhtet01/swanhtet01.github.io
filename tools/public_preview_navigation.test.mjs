@@ -57,7 +57,7 @@ test('actual generator maps every production app anchor, preserves default contr
       assert.equal(/<a\b[^>]*href="https:\/\/app\.supermega\.dev(?:\/|")/.test(actual), false, name)
       mapped += (original.match(/<a\b[^>]*href="https:\/\/app\.supermega\.dev\//g) || []).length
     }
-    assert.ok(mapped >= 20, `expected all doors and repeated CTAs, got ${mapped}`)
+    assert.equal(mapped, manifest.pages.length, `expected one Login per public page, got ${mapped}`)
     assert.deepEqual(JSON.parse(read('__release.json')).previewNavigation, binding)
     assert.equal(read('robots.txt'), 'User-agent: *\nDisallow: /\n')
     const config = JSON.parse(readFileSync(resolve(root, '.vercel/output/config.json'), 'utf8'))

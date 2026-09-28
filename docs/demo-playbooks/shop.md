@@ -4,13 +4,14 @@
 
 Who this is for: counter-first businesses that sell and track stock — the manifest ships internal template packs for `Retail`, `Cafe`, `Restaurant`, `Spa`, `Gym`, and `School`, over the workflow templates `Social commerce`, `Retail and wholesale`, and `Restaurant ordering`.
 
-The pitch, verbatim from approved copy (eyebrow `POS-independent Shop Profit Control`):
+Current public page:
 
-- `Start with POS-independent Shop Profit Control, with Ecommerce requests and Website delivery as connected workflows.`
-- `Shop Profit Control: see today’s operating money risk.`
-- `A read-only first job over the current local Shop record surfaces the current operating money leak or risk, accountable owner, objective closure, and next action. It does not replace a POS or create a payment, stock movement, customer message, revenue record, or managed write.`
+- `Shop | Sales and stock | SuperMega`
+- `Keep sales, orders and stock together. See product availability, track orders and manage replenishment with SuperMega Shop.`
 
-POS-independent Shop Profit Control is the public and owner first-use acquisition and diagnostic wedge. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
+The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
+
+Historical internal positioning: POS-independent Shop Profit Control was the acquisition and diagnostic wedge; it is no longer the public website pitch. Its first job selects and prioritizes one accountable money leak or operating risk, with the accountable role, due point, next action, and objective closure made explicit. It does not replace a POS and it does not turn a local projection into customer, pilot, or commercial proof.
 
 The existing shop-spa-owner-pilot remains the first bounded named vertical proof. It uses the existing Spa package sale, treatment redemption, daily close, and recovery workflow to validate one real end-to-end operating workflow and measured correction effort. Spa is not Shop's product identity, and success in this bounded vertical does not prove all Myanmar trades.
 
@@ -56,7 +57,7 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 ## 5. The close
 
-- Primary close: `Request assisted setup` opens `/contact/?product=shop`, pre-selecting Shop in `What do you need?`. The form asks `What would you like us to prepare?` and submits with `Request setup` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
+- Historical support route: `Request assisted setup` used `/contact/?product=shop`, pre-selecting Shop in `What do you need?`. The form asks `What would you like us to prepare?` and submits with `Send message` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
 - Internal rehearsal setup only (`https://app.supermega.dev/settings/?product=shop`). Do not require this before a customer can ask SuperMega to prepare Shop; never overwrite saved work for a demo.
 - From inside the app: the setup page's "Ask SuperMega to set up Shop" link carries the workflow template, for example `https://supermega.dev/contact/?product=shop&template=social-commerce&utm_source=app&utm_medium=guided_trial`.
 - Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Multi-product setup and managed activation require separate scope and acceptance; submitting a brief does not activate a workspace.

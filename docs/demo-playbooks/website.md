@@ -2,13 +2,12 @@
 
 ## 1. Client and the 30-second pitch
 
-Current public copy:
+Current public page:
 
-Current eyebrow `Your business online`.
-
-- `Start with POS-independent Shop Profit Control, with Ecommerce requests and Website delivery as connected workflows.`
-- `Make your business easy to find.`
+- `Website | Your business online | SuperMega`
 - `A clear website for your services, photos and contact details. Review a prepared preview before agreeing to launch.`
+
+The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
 
 Use this as a service walkthrough. The product route is not proof of a provisioned business, published deliverable or completed customer acceptance.
 
@@ -31,4 +30,4 @@ Pricing and service scope require an agreed quote; these instructions promise no
 
 ## 5. The close
 
-The `Request assisted setup` action points to `/contact/?product=website`. Confirm the intended business facts and contact details before an authorized submission. Retain the returned request reference, then track preparation, customer review and delivery as separate outcomes. Avoid asking customers to operate the internal builder or legacy sample setup.
+The historical `Request assisted setup` route remains `/contact/?product=website`. Confirm the intended business facts and contact details before an authorized submission. Retain the returned request reference, then track preparation, customer review and delivery as separate outcomes. Avoid asking customers to operate the internal builder or legacy sample setup.

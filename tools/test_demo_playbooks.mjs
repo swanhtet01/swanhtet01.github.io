@@ -49,16 +49,13 @@ const packageManifest = JSON.parse(read('package.json'))
 const derived = new Set()
 
 check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_production_domain')
-check(generator.includes('function assistedSetupAction(product) {'), 'generator_assisted_setup_action')
-check(generator.includes('const expectedHref = `/contact/?product=${encodeURIComponent(product.id)}`'), 'generator_assisted_setup_expected_href')
-check(generator.includes("assert(product.secondaryCta?.label === 'Request assisted setup'"), 'generator_assisted_setup_label_guard')
-check(generator.includes('assert(product.secondaryCta.url === expectedHref'), 'generator_assisted_setup_route_guard')
-check(generator.includes('return { href: product.secondaryCta.url, label: product.secondaryCta.label }'), 'generator_assisted_setup_manifest_projection')
-check(generator.includes('const assistedSetup = assistedSetupAction(product)'), 'generator_assisted_setup_call')
-check(generator.includes('https://app.supermega.dev/login?product=${encodeURIComponent(product.id)}'), 'generator_product_login_link_pattern')
-// eslint-disable-next-line no-template-curly-in-string
-check(!generator.includes('Set up ${product.name} data'), 'generator_retired_setup_label_absent')
-check(generator.includes('/contact/?product=guide&amp;source=assisted-setup'), 'generator_assisted_guide_link')
+// The public surface presents products through screenshots and one Login.
+// Historical contact links below remain valid app/support routes, not public CTAs.
+check(generator.includes('href="https://app.supermega.dev/login">Login</a>'), 'generator_single_login_route')
+check(generator.includes('class="platform-image"'), 'generator_product_screenshots')
+check(!generator.includes('function assistedSetupAction('), 'generator_setup_funnel_removed')
+check(!generator.includes('Open Shop Profit Control'), 'generator_profit_control_action_removed')
+check(generator.includes('href="/contact/">Contact</a>'), 'generator_contact_footer')
 derived.add('/contact/?product=guide&source=assisted-setup')
 // Historical deep links stay supported, but are not the current acquisition CTA.
 check(generator.includes("query.get('source')==='managed-intelligence'")
@@ -122,9 +119,12 @@ for (const file of files) {
   const page = manifest.pages.find((candidate) => candidate.productId === productId)
   check(Boolean(product && page), `${file}:manifest_product_page_missing`)
   const renderedDescription = page.description || product.description
-  check(text.includes(`eyebrow \`${product.eyebrow}\``), `${file}:eyebrow_drift`)
-  check(text.includes(`- \`${manifest.company.statement}\``), `${file}:company_statement_drift`)
-  check(text.includes(`- \`${product.headline}\``), `${file}:headline_drift`)
+  if (productId === 'plant') {
+    check(text.includes(`eyebrow \`${product.eyebrow}\``), `${file}:eyebrow_drift`)
+  } else {
+    check(text.includes(`\`${page.title}\``), `${file}:public_title_drift`)
+    check(text.includes('one Login'), `${file}:single_login_navigation_missing`)
+  }
   check(text.includes(`- \`${renderedDescription}\``), `${file}:description_drift`)
   check(text.includes(`\`${product.secondaryCta.label}\``), `${file}:assisted_setup_label_missing`)
   check(text.includes(`\`${product.secondaryCta.url}\``), `${file}:assisted_setup_route_missing`)
@@ -236,7 +236,9 @@ const shopStrategyBridgeRequired = [
 ]
 for (const [label, document] of shopStrategyBridgeDocuments) {
   for (const required of shopStrategyBridgeRequired) {
-    check(document.includes(required), `${label}:shop_profit_control_spa_bridge:${required}`)
+    const currentRequired = label === 'shop_playbook' && required === 'public and owner first-use acquisition and diagnostic wedge'
+      ? 'it is no longer the public website pitch' : required
+    check(document.includes(currentRequired), `${label}:shop_profit_control_spa_bridge:${currentRequired}`)
   }
   for (const forbidden of [
     "Spa is Shop's product identity",
