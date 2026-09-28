@@ -164,7 +164,7 @@ for (const token of ['No action is needed now.', 'SuperMega will review your bri
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')
 const homePage = manifest.pages.find((page) => page.route === '/')
-const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Shop, Website and Ecommerce for businesses in Myanmar.'
+const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Shop, Sites and Commerce for your business.'
 check(homePage?.file === 'index.html', 'home_manifest_entry_exact')
 check(homePage?.title === 'SuperMega | Business tools for Myanmar', 'home_manifest_business_title_exact')
 check(homePage?.description === expectedHomeDescription, 'home_manifest_description_derived_from_supported_copy')

@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.15
+Version: 1.2.16
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -93,7 +93,7 @@ Do not copy credentials, customer records, raw logs or the whole conversation in
 
 ## 4. Scope and settled product direction
 
-Current products are Shop/POS, Website and Ecommerce. The public `supermega.dev` site explains these clearly. `app.supermega.dev` is the connected customer workspace. Additional subdomains require a clear audience and purpose; do not multiply portals to imitate organizational scale.
+Customer-facing product names are Shop, Sites and Commerce. Sites replaces Website and Commerce replaces Ecommerce in presentation; retain website/ecommerce route IDs, API values and storage keys for compatibility. Shop covers the counter and stock; Sites covers business pages; Commerce covers online catalogs and orders. The public `supermega.dev` site explains these clearly. `app.supermega.dev` is the connected customer workspace. Additional subdomains require a clear audience and purpose; do not multiply portals to imitate organizational scale.
 
 Plant is excluded from new customer acquisition and setup. Preserve retained records and recovery paths. SOL is a separate build: its public experience may inform requested research, but its code, infrastructure and customer data are outside this implementation scope.
 

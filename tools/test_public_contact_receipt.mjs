@@ -82,7 +82,7 @@ test('complete assisted briefs collapse the editable service choice only', () =>
   for (const product of ['website', 'ecommerce']) {
     const state = harness([], `?product=${product}&source=${product}-brief`, '#company=Example&goal=Prepare%20our%20site')
     assert.equal(state.fields.get('[data-contact-service]').open, false)
-    assert.equal(state.fields.get('[data-contact-service-summary]').textContent.toLowerCase(), product)
+    assert.equal(state.fields.get('[data-contact-service-summary]').textContent, { website: 'Sites', ecommerce: 'Commerce' }[product])
     state.changeProduct('shop')
     assert.equal(state.fields.get('[data-contact-service-summary]').textContent, 'Shop')
     assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Finish your Shop request.')

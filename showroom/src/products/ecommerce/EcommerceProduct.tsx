@@ -1845,7 +1845,7 @@ export function EcommerceProduct() {
     return (
       <div className="workspace-screen ecommerce-product">
         <header className="ecommerce-heading">
-          <div><span className="core-eyebrow">Ecommerce</span><h1>Add your products</h1>
+          <div><span className="core-eyebrow">Commerce</span><h1>Add your products</h1>
             <p>Your online store uses the same products and prices as Shop.</p></div>
         </header>
         <section className="core-panel" aria-label="Store catalog setup">
@@ -1869,7 +1869,7 @@ export function EcommerceProduct() {
       <header className="ecommerce-heading">
         <div>
           <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Sample store'}</span>
-          <h1>Ecommerce</h1>
+          <h1>Commerce</h1>
           <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Browse a sample catalog. Requests stay on this device and are not live orders.'}</p>
         </div>
         {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Request catalog setup</a> : null}
