@@ -71,7 +71,7 @@ test('launcher consumes active policy without discarding retained or assigned ac
   assert.match(source, /setSetupLoadFailed\(true\)/)
   assert.match(source, /\[managedPortal, setupLoadAttempt\]/)
   assert.match(source, /setSetupLoadAttempt\(attempt => attempt \+ 1\)/)
-  assert.match(source, /Products could not load/)
+  assert.match(source, /Workspace unavailable/)
 })
 
 test('one source policy declares exactly three active acquisition doors', () => {

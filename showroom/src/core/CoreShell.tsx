@@ -655,8 +655,8 @@ export function ProductHomePage() {
   const anyStarted = Boolean(savedWebsiteName) || (productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false)
   if (!managedPortal && !productSetups) {
     return setupLoadFailed
-      ? <PortalAccessPanel action={<button className="button" onClick={() => { setSetupLoadFailed(false); setSetupLoadAttempt(attempt => attempt + 1) }} type="button">Retry loading products</button>} copy="We could not read product setup information. Saved records have not been changed. Check that browser storage is available, then retry." title="Products could not load" />
-      : <PortalAccessPanel copy="Reading product setup information. Saved records are unchanged." title="Loading products" />
+      ? <PortalAccessPanel action={<button className="button" onClick={() => { setSetupLoadFailed(false); setSetupLoadAttempt(attempt => attempt + 1) }} type="button">Try again</button>} copy="We could not open your saved workspace. Check that browser storage is available and try again." title="Workspace unavailable" />
+      : <PortalAccessPanel copy="Opening your saved work." title="Loading workspace" />
   }
   return (
     <div className="workspace-screen product-home-screen">
@@ -702,7 +702,7 @@ export function ProductHomePage() {
         })}
       </nav> : null}
       {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
-      {!emptyCompany && (managedPortal || anyStarted) ? <p className="product-home-note">{managedPortal ? '' : 'Saved on this device.'}</p> : null}
+      {!managedPortal && anyStarted ? <p className="product-home-note">Saved on this device.</p> : null}
     </div>
   )
 }
