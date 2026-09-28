@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import io
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import subprocess
@@ -11,6 +13,8 @@ import unittest
 from supermega_runtime.supabase_auth import VerifiedSupabaseUser
 from tools.manage_client_owner_identity import (
     ClientOwnerIdentityError,
+    MAX_INPUT_BYTES,
+    _read_regular_file,
     build_owner_identity_plan,
     build_owner_identity_proof,
     compile_proof_bound_activation,
@@ -46,6 +50,33 @@ def _plan() -> dict[str, object]:
 
 
 class ClientOwnerIdentityTests(unittest.TestCase):
+    def test_input_read_is_bounded_before_size_rejection(self) -> None:
+        class BoundedReader(io.BytesIO):
+            def read(self, size=-1):
+                self.requested_size = size
+                return super().read(size)
+        reader = BoundedReader(b"x" * (MAX_INPUT_BYTES + 2))
+        with patch.object(Path, "is_symlink", return_value=False), patch.object(Path, "is_file", return_value=True), patch.object(Path, "open", return_value=reader):
+            with self.assertRaisesRegex(ClientOwnerIdentityError, "size"):
+                _read_regular_file("private-input", "Input")
+        self.assertEqual(reader.requested_size, MAX_INPUT_BYTES + 1)
+
+    def test_link_is_rejected_before_resolving_or_opening(self) -> None:
+        with patch.object(Path, "is_symlink", return_value=True), patch.object(Path, "resolve") as resolve, patch.object(Path, "open") as opened:
+            with self.assertRaisesRegex(ClientOwnerIdentityError, "regular file"):
+                _read_regular_file("linked-input", "Input")
+        resolve.assert_not_called()
+        opened.assert_not_called()
+
+    def test_regular_input_size_boundaries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input"
+            path.write_bytes(b"x" * MAX_INPUT_BYTES)
+            self.assertEqual(len(_read_regular_file(path, "Input")), MAX_INPUT_BYTES)
+            path.write_bytes(b"")
+            with self.assertRaisesRegex(ClientOwnerIdentityError, "size"):
+                _read_regular_file(path, "Input")
+
     @staticmethod
     def _time(value: datetime) -> str:
         return value.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
