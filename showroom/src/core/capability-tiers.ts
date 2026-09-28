@@ -147,7 +147,7 @@ export const capabilities: readonly Capability[] = [
   },
   {
     id: 'website-builder',
-    label: 'Website',
+    label: 'Sites',
     tier: 'free',
     outcome: 'Build and download business pages that capture enquiries.',
     reason: 'Runs entirely on your device.',

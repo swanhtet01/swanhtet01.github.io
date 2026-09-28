@@ -36,7 +36,7 @@ export const BUSINESS_COMMAND_PROMPTS = [
   { intent: 'shop_inventory', label: 'What stock is low?', question: 'What stock and Shop work need attention?' },
   { intent: 'plant_control', label: 'What blocks production?', question: 'What is blocking production?' },
   { intent: 'website_readiness', label: 'Is the website ready?', question: 'Is the website ready to release?' },
-  { intent: 'ecommerce_readiness', label: 'Are online orders ready?', question: 'Are Ecommerce setup and online orders ready?' },
+  { intent: 'ecommerce_readiness', label: 'Are online orders ready?', question: 'Are Commerce setup and online orders ready?' },
 ] as const satisfies ReadonlyArray<{ intent: BusinessCommandIntent; label: string; question: string }>
 
 export type LocalBusinessSnapshot = {
@@ -256,7 +256,7 @@ function unavailableAnswer(
   product: 'shop' | 'plant' | 'website' | 'ecommerce',
   status: BusinessDataStatus,
 ): BusinessCommandAnswer {
-  const productLabel = product === 'ecommerce' ? 'Ecommerce' : product[0].toUpperCase() + product.slice(1)
+  const productLabel = ({ shop: 'Shop', plant: 'Plant', website: 'Sites', ecommerce: 'Commerce' })[product]
   const invalid = status === 'invalid'
   const samplePath = product === 'shop'
     ? '/shop/?tab=counter'
@@ -300,7 +300,7 @@ function shopAnswer(snapshot: LocalBusinessSnapshot): BusinessCommandAnswer {
       : 'Validated Shop records show no low-stock, pending-payment, or refund exception. Continue the active order queue.',
     facts: [
       { label: 'Stock', value: `${shop.lowStock} low / ${shop.itemCount} SKUs`, detail: 'On-hand quantity is at or below the saved reorder point.' },
-      { label: 'Orders', value: `${shop.activeOrders} active`, detail: `${shop.incomingRequests} Ecommerce requests are retained in Shop.` },
+      { label: 'Orders', value: `${shop.activeOrders} active`, detail: `${shop.incomingRequests} Commerce requests are retained in Shop.` },
       { label: 'Money review', value: `${shop.paymentExceptions} payment / ${shop.refundsDue} refund`, detail: 'These records still need accountable review.' },
       { label: 'Supply', value: `${shop.openPurchaseOrders} open PO`, detail: 'Open and partially received purchase orders only.' },
     ],
@@ -340,17 +340,17 @@ function websiteAnswer(snapshot: LocalBusinessSnapshot): BusinessCommandAnswer {
     contract: 'supermega.local_business_answer.v1',
     intent: 'website_readiness',
     sourceCount: 1,
-    title: ready ? 'Website release evidence is complete' : 'Website still needs release evidence',
+    title: ready ? 'Sites release evidence is complete' : 'Sites still needs release evidence',
     summary: ready
-      ? 'The saved Website workspace has complete checks, current approval, and a current local release record.'
+      ? 'The saved Sites workspace has complete checks, current approval, and a current local release record.'
       : 'Complete the failed checks, then record current human approval and release evidence. This answer cannot publish a domain.',
     facts: [
-      { label: 'Pages', value: `${website.readyPages} ready / ${website.pageCount} total`, detail: 'Ready page state from the saved Website workspace.' },
+      { label: 'Pages', value: `${website.readyPages} ready / ${website.pageCount} total`, detail: 'Ready page state from the saved Sites workspace.' },
       { label: 'Checks', value: `${website.readinessPassed}/${website.readinessTotal} passed`, detail: 'Content, paths, navigation, destinations, and evidence.' },
       { label: 'Approval', value: website.approved ? 'Current' : 'Missing', detail: 'Evidence-bound human approval for this content revision.' },
       { label: 'Release record', value: website.released ? 'Current' : 'Missing', detail: 'Browser-local proof only; this is not a live domain claim.' },
     ],
-    nextAction: { label: ready ? 'Open Website' : 'Finish Website review', path: '/website/', product: 'website' },
+    nextAction: { label: ready ? 'Open Sites' : 'Finish Sites review', path: '/website/', product: 'website' },
     boundary,
   }
 }
@@ -363,17 +363,17 @@ function ecommerceAnswer(snapshot: LocalBusinessSnapshot): BusinessCommandAnswer
     contract: 'supermega.local_business_answer.v1',
     intent: 'ecommerce_readiness',
     sourceCount: ecommerce.shopSourceReady ? 2 : 1,
-    title: ready ? 'Ecommerce setup is ready for order review' : 'Ecommerce setup needs a source fix',
+    title: ready ? 'Commerce setup is ready for order review' : 'Commerce setup needs a source fix',
     summary: ready
       ? 'The current storefront draft is tied to a validated Shop source. Incoming requests still require Shop-side owner review.'
-      : 'Upgrade the draft or connect a validated Shop catalog before treating Ecommerce requests as operational orders.',
+      : 'Upgrade the draft or connect a validated Shop catalog before treating Commerce requests as operational orders.',
     facts: [
       { label: 'Draft', value: ecommerce.draftState === 'legacy' ? 'Upgrade needed' : 'Current', detail: 'Saved storefront draft schema and scope.' },
       { label: 'Catalog', value: `${ecommerce.selectedSkus} selected SKUs`, detail: ecommerce.shopSourceReady ? 'Validated Shop catalog is available.' : 'Validated Shop catalog is missing.' },
       { label: 'Requests', value: `${ecommerce.incomingRequests} in Shop`, detail: 'Retained requests only; not a claim of fulfilment or payment.' },
       { label: 'Order gate', value: ready ? 'Review ready' : 'Blocked', detail: 'Owner approval remains required before any Shop action.' },
     ],
-    nextAction: { label: ready ? 'Review Ecommerce orders' : 'Repair Ecommerce setup', path: '/ecommerce/', product: 'ecommerce' },
+    nextAction: { label: ready ? 'Review Commerce orders' : 'Repair Commerce setup', path: '/ecommerce/', product: 'ecommerce' },
     boundary,
   }
 }
@@ -429,8 +429,8 @@ function attentionAnswer(snapshot: LocalBusinessSnapshot): BusinessCommandAnswer
       facts: [
         { label: 'Shop', value: 'No source', detail: 'Catalog, stock, orders, and money review are unavailable.' },
         { label: 'Plant', value: 'No source', detail: 'Jobs, issues, quality, and equipment state are unavailable.' },
-        { label: 'Website', value: 'No source', detail: 'Pages, readiness, approval, and release evidence are unavailable.' },
-        { label: 'Ecommerce', value: 'No source', detail: 'Store draft and Shop review are unavailable.' },
+        { label: 'Sites', value: 'No source', detail: 'Pages, readiness, approval, and release evidence are unavailable.' },
+        { label: 'Commerce', value: 'No source', detail: 'Store draft and Shop review are unavailable.' },
       ],
       nextAction: { label: 'Open Shop sample', path: '/shop/?tab=counter', product: 'shop' },
       boundary,
