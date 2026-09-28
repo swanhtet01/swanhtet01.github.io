@@ -142,17 +142,22 @@ function reservePort() {
 }
 
 export class Cdp {
-  constructor(ws) {
+  constructor(ws, commandTimeoutMs = 15_000) {
     this.ws = ws
+    this.commandTimeoutMs = commandTimeoutMs
     this.nextId = 1
     this.pending = new Map()
     this.listeners = new Map()
+    const disconnected = () => this.rejectPending('browser websocket disconnected')
+    ws.addEventListener('close', disconnected)
+    ws.addEventListener('error', disconnected)
     ws.addEventListener('message', (event) => {
       const message = JSON.parse(event.data)
       if (message.id !== undefined) {
         const pending = this.pending.get(message.id)
         if (!pending) return
         this.pending.delete(message.id)
+        clearTimeout(pending.timer)
         if (message.error) pending.reject(new Error(`${pending.method}: ${message.error.message}`))
         else pending.resolve(message.result)
         return
@@ -181,11 +186,29 @@ export class Cdp {
     return new Cdp(ws)
   }
 
-  send(method, params = {}, sessionId = '') {
+  rejectPending(reason) {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer)
+      pending.reject(new Error(`${pending.method}: ${reason}`))
+    }
+    this.pending.clear()
+  }
+
+  send(method, params = {}, sessionId = '', timeoutMs = this.commandTimeoutMs) {
     const id = this.nextId++
-    this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }))
     return new Promise((resolveSent, reject) => {
-      this.pending.set(id, { resolve: resolveSent, reject, method })
+      const timer = setTimeout(() => {
+        this.pending.delete(id)
+        reject(new Error(`${method}: browser command timed out`))
+      }, timeoutMs)
+      this.pending.set(id, { resolve: resolveSent, reject, method, timer })
+      try {
+        this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }))
+      } catch {
+        clearTimeout(timer)
+        this.pending.delete(id)
+        reject(new Error(`${method}: browser command could not be sent`))
+      }
     })
   }
 
@@ -201,6 +224,7 @@ export class Cdp {
   }
 
   async close() {
+    this.rejectPending('browser connection closed')
     this.ws.close()
   }
 }
@@ -1176,7 +1200,7 @@ async function main() {
     }
   } finally {
     if (cdp) {
-      await cdp.send('Browser.close').catch(() => {})
+      await cdp.send('Browser.close', {}, '', 2_000).catch(() => {})
       await cdp.close().catch(() => {})
     }
     server.close()

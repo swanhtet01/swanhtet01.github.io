@@ -107,3 +107,48 @@ test('failure diagnostics retain bounded stderr and HTTP status, not response co
     return true
   })
 })
+
+test('CDP commands reject on timeout and discard pending state', async () => {
+  const { Cdp } = await import('./verify_app_entry_rendered.mjs')
+  const ws = new EventTarget()
+  ws.send = () => {}
+  ws.close = () => {}
+  const client = new Cdp(ws, 10)
+  await assert.rejects(client.send('Page.captureScreenshot'), /command timed out/)
+  assert.equal(client.pending.size, 0)
+})
+
+test('CDP registers before send and resolves an immediate response', async () => {
+  const { Cdp } = await import('./verify_app_entry_rendered.mjs')
+  const ws = new EventTarget()
+  ws.send = raw => ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ id: JSON.parse(raw).id, result: { ok: true } }) }))
+  ws.close = () => {}
+  const client = new Cdp(ws, 100)
+  assert.deepEqual(await client.send('Browser.getVersion'), { ok: true })
+  assert.equal(client.pending.size, 0)
+})
+
+test('CDP disconnect rejects all pending commands and explicit close is safe', async () => {
+  const { Cdp } = await import('./verify_app_entry_rendered.mjs')
+  for (const event of ['close', 'error']) {
+    const ws = new EventTarget()
+    ws.send = () => {}
+    ws.close = () => ws.dispatchEvent(new Event('close'))
+    const client = new Cdp(ws, 100)
+    const first = assert.rejects(client.send('Page.enable'), /disconnected/)
+    const second = assert.rejects(client.send('Browser.close'), /disconnected/)
+    ws.dispatchEvent(new Event(event))
+    await Promise.all([first, second])
+    assert.equal(client.pending.size, 0)
+    await client.close()
+  }
+})
+
+test('CDP send errors do not leak transport details or leave pending timers', async () => {
+  const { Cdp } = await import('./verify_app_entry_rendered.mjs')
+  const ws = new EventTarget()
+  ws.send = () => { throw new Error('private transport content') }
+  const client = new Cdp(ws, 100)
+  await assert.rejects(client.send('Page.enable'), error => error.message === 'Page.enable: browser command could not be sent')
+  assert.equal(client.pending.size, 0)
+})

@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.11
+Version: 1.2.12
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-28  
@@ -59,15 +59,15 @@ Prioritize the weakest required part of the customer lifecycle. Do not spend suc
 3. Release through the existing founder gate when Vercel access and independent PR approval are available; verify real-domain login, assigned product access, persistence and recovery afterward. Do not report a push as a deployment.
 4. Continue Shop, Website and Ecommerce task completion and visual refinement, then customer delivery, sales/marketing preparation and internal agent operations. Keep these workstreams in scope; CI monitoring alone is not product progress.
 
-Recent source changes simplify the launcher and Website editor, remove Ecommerce's technical fingerprint panel, and preserve underlying save/access controls. These changes are not yet confirmed in production. The next public-site slice removes remaining trial language from contact handoffs and shortens confirmation messages.
+Recent source changes simplify the launcher and Website editor, remove Ecommerce's technical fingerprint panel, and preserve underlying save/access controls. These changes are not yet confirmed in production. Contact handoffs and confirmations are simplified in pushed source. Customer acknowledgement cleanup is saved locally. The next technical slice bounds browser-command waits and teardown so CI produces a terminal result; rendered and hosted acceptance remain required.
 
 This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Branch `codex/site-app-cleanup-20260924`; pushed source `7a6fff17`, with saved local evidence reconciliation | Recheck refs and exact-candidate checks before release |
+| Source | Branch `codex/site-app-cleanup-20260924`; pushed `718eaca0`; acknowledgement cleanup saved in local `1f63ee0f` | Recheck refs and include subsequent browser reliability changes before release |
 | Integration | PR #596 is open, non-draft and mergeable; 573 changed files at af3e7ab7. Review API shows a COMMENTED review, no approval. Analytics findings match existing fix be64785c, verified locally by 71 telemetry checks plus initial-bootstrap assertions | Broad accumulated scope still needs genuine review; code verification is not independent approval |
-| CI | Full App CI on `3805b4b2` passed build verification, disposable PostgreSQL tests and desktop/390px journeys | Newer `7a6fff17` has its own active CI; no production/customer acceptance implied |
+| CI | `8c865629` passed full build verification; browser stage reported obsolete copy and hit the job limit. Copy expectations corrected in `718eaca0`; its full CI is active | No complete current rendered acceptance yet. Bound CDP commands and shutdown; retain all journey assertions |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
