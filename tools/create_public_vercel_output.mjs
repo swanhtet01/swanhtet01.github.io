@@ -528,9 +528,9 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Every sale. Every item. In view.', body:'Keep the counter, orders and stock together. See what is available and what needs replenishing.', image:'platform-stock.jpg', alt:'Stock screen with product availability, prices and reorder levels', features:['Sales counter','Stock and purchasing','Order tracking']},
- website: {title:'Your business, clearly presented.', body:'Bring your pages, business details and inquiries into one place. Edit the content that matters without rebuilding your site.', image:'platform-pages.jpg', alt:'Page editor with page paths and content checks', features:['Page editing','Search metadata','Inquiry inbox']},
- ecommerce: {title:'From your catalog to their next order.', body:'Put products and prices in front of customers. Your team confirms each order and payment. Arrange delivery with your customer. Manage stock in Shop.', image:'platform-catalog.jpg', alt:'Catalog with product cards, prices and cart controls', features:['Product catalog','Cart and requests','Order follow-through']},
+ shop: {title:'Sales and stock, in sync.', body:'Record sales, track orders and keep stock up to date.', image:'platform-stock.jpg', alt:'Stock screen with product availability, prices and reorder levels', features:['Sales counter','Stock and purchasing','Order tracking']},
+ website: {title:'A website that works for you.', body:'Manage your pages, services and inquiries without rebuilding your website.', image:'platform-pages.jpg', alt:'Page editor with page paths and content checks', features:['Page editing','Search metadata','Inquiry inbox']},
+ ecommerce: {title:'Turn your catalog into orders.', body:'Browse products and send an order. Your team confirms each order and payment. Arrange delivery with your customer. Manage stock in Shop.', image:'platform-catalog.jpg', alt:'Catalog with product cards, prices and cart controls', features:['Product catalog','Cart and requests','Order follow-through']},
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
@@ -538,7 +538,7 @@ function productStory(id, standalone = false) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Less busywork.<br>More business.</h1><p class="lede">Sales, stock, your website and online orders. Thoughtful tools for the work you do every day.</p></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">A clear place for your team to work.<br>A simpler way for customers to reach you.</p></main>`,
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Your business.<br>Working together.</h1><p class="lede">Manage sales and stock. Publish your website. Take orders online.</p></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">Shop. Sites. Commerce. One SuperMega account.</p></main>`,
 })
 
 function productLandingHtml(product,page) {
