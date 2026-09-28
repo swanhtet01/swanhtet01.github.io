@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.22
+Version: 1.2.23
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-29
@@ -26,7 +26,7 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 ### Immediate delivery sequence
 
-1. Exact-candidate CI passed at 9cb4adad. Complete independent review and authorized paired release, then hosted acceptance; the live redesign is not yet accepted.
+1. Finish the current candidate's CI, complete independent review and authorized paired release, then hosted acceptance. See section 3 for exact evidence; the live redesign is not yet accepted.
 2. Complete the private swanhtet@supermega.dev founder journey across Shop, Sites and Commerce: identity, memberships, save/reload, isolation and recovery. Account ownership intent is not provisioning evidence.
 3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
 4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The transfer package has 577 passing tests and three policy-blocked skips; VPS acceptance remains unproven.
@@ -64,12 +64,9 @@ Prioritize the weakest required part of the customer lifecycle. Do not spend suc
 
 ## 3. Current baseline and evidence boundaries
 
-### Current execution order - 29 September
+### Execution rule - 29 September
 
-1. Complete the approved founder invitation when Auth transport works; verify invited status and founder-confirmed sign-in. Preserve the authorization below.
-2. Preserve CI-accepted candidate 9cb4adad while independent review is pending. Then perform the separately authorized paired release, hosted persistence and recovery checks.
-3. Inspect the existing VPS through authenticated access, preserve trading workloads, and install the prepared worker only after target capacity and acceptance checks.
-4. During external waits, finish a concrete customer-flow defect, delivery asset or evaluated R&D result. Do not create status documents, arbitrary hardening changes or repeated unchanged checks merely to stay active.
+Use the immediate delivery sequence in section 2 as the single priority list. During external waits, finish a concrete customer-flow defect, delivery asset or evaluated R&D result. Do not create status documents, arbitrary hardening changes or repeated unchanged checks merely to stay active. The approved founder invitation can proceed when Auth transport works; authenticated VPS inspection can proceed when access works, preserving trading workloads.
 
 ### Sustained execution
 
@@ -83,9 +80,9 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Pushed 9cb4adad07b1b64bb98f177d8ad65d6e6ca60d61, including bounded founder identity input reads | This documentation update is newer; distinguish executable-source and document evidence |
+| Source | Pushed bbd744bc fixes the obsolete demo-copy assertion. Local f6763d44 corrects Shop catalog promises; 20d02bce removes the duplicate build without removing verification steps | Local commits await the active CI result before the next batched push; this document is newer |
 | Integration | PR #596 BLOCKED / REVIEW_REQUIRED, no approving review. Earlier analytics findings are fixed by be64785c and verified | Eligible independent approval remains required |
-| CI | App run 36470206319 SUCCESS at 9cb4adad, including canonical build and desktop/390px journeys; Kernel, hosting and dependency checks passed | Do not rerun unchanged executable source. Hosted/customer acceptance remains open |
+| CI | App run 36473828526 SUCCESS at dc7215ab, including canonical build and desktop/390px journeys. Later de5d107c failed an obsolete copy assertion; bbd744bc corrects it and run 36476548309 is active | Follow the existing run to terminal. Local release-workflow checks pass 156 checks for 20d02bce; full CI and hosted/customer acceptance remain open |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
