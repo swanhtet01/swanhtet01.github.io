@@ -51,7 +51,8 @@ test('kernel production uses one owner-gated immutable candidate and exact rollb
 
   assert.match(workflow, /resolve_vercel_rollback_target\.mjs alias console\.supermega\.dev "\$VERCEL_PROJECT_ID"/)
   assert.match(workflow, /resolve_vercel_rollback_target\.mjs deployment "\$PREVIOUS_URL" "\$PREVIOUS_ID"/)
-  assert.match(workflow, /vercel@56\.1\.0 --token="\$VERCEL_TOKEN" curl \/api\/status --deployment "\$CANDIDATE_URL" --yes/)
+  assert.match(workflow, /vercel@56\.1\.0 curl \/api\/status --deployment "\$CANDIDATE_URL" --yes/)
+  assert.doesNotMatch(workflow, /vercel@56\.1\.0[^\n]*--token[^\n]*curl \/api\/status/)
   assert.doesNotMatch(workflow, /vercel@56\.1\.0 curl \/api\/status[^\n]+--token/)
   assert.match(workflow, /value\.agentCompany\?\.plannerReady!==true/)
   assert.match(workflow, /value\.agentCompany\?\.externalWrites!==false/)
