@@ -67,6 +67,7 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
     "20260924194557_ecommerce_customer_review_storage.sql",
     "20260924231714_ecommerce_customer_decisions.sql",
     "20260929171000_ecommerce_decision_review_fk_index.sql",
+    "20260930010000_app_rls_initplan_optimization.sql",
 )
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
