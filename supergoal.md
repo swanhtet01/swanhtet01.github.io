@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.33
+Version: 1.2.34
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
-Updated: 2026-09-29
-Status: ACTIVE — the current release is live; founder, customer and commercial acceptance remain incomplete
+Updated: 2026-09-30
+Status: ACTIVE — the current release and first shared-shell redesign are live; authenticated founder, customer and commercial acceptance remain incomplete
 
 ## 1. Controlling objective
 
@@ -26,9 +26,9 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 ### Immediate delivery sequence
 
-Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The single founder identity and three private workspaces now exist, and the current app/public release has hosted acceptance. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain the white/cobalt design and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
+Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The single founder identity and three private workspaces now exist, and the current app/public release has hosted acceptance. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain one fixed light technical identity and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
-1. The approved paired production release completed on30September at `31cccf8a9e057c5abb9ad823405945ee6833e466` (workflow `36618471082`). Both Vercel projects were promoted through the coordinated gate. Live readback reports managed mode, schema and audit ready, writes enabled and Supabase token authentication ready; the browser renders the real Login form. Production schema13 is verified; never replay the migration.
+1. The latest approved paired production release completed on 30 September at `f9cfd10fbc7ec5d53072ff0e7aab9caaa01fb615` (workflow `36631267067`, PR622). Both Vercel projects are READY on that exact commit. Live readback reports managed mode, schema, audit and RLS ready, writes enabled and Supabase token authentication ready; the browser renders the real English-only Login form with no console errors. Production schema13 is verified; never replay the migration.
 2. Complete the private swanhtet@supermega.dev founder journey across the already assigned Shop, Sites and Commerce workspaces: use a current recovery email, set the password, sign in, save/reload each product and verify isolation/recovery. The account remains unconfirmed and has never signed in; do not call the founder showcase accepted yet.
 3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
 4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The current local catalog-validator build has 589 passing tests and three skips; useful model output and VPS acceptance remain unproven.
@@ -86,9 +86,9 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Main `31cccf8a9e057c5abb9ad823405945ee6833e466` includes PR619's optimized RLS contract | Current paired production release verified at this exact commit |
-| Integration | PR616 exact head passed all required checks and had no review threads; the original repository ruleset was restored and read back after merge | Routine scoped review/merge authority remains; no independent-review claim |
-| CI / release | Workflow `36618471082` SUCCESS: v13 database/RLS gate, standalone app, app/public candidates, identity barrier, both promotions, aliases and project controls | Hosted release checks do not establish founder or customer acceptance |
+| Source | Main `f9cfd10fbc7ec5d53072ff0e7aab9caaa01fb615` includes PR622's shared-shell and Shop redesign plus the previously released RLS contract | Current paired production release verified at this exact commit |
+| Integration | PR622 exact head `363c3915bb0c71dbc61bcdf92f7a1464886f2657` passed all required checks, desktop/390px journeys and fresh Codex review with no findings; its only review thread was fixed and resolved. The original repository ruleset was restored and read back after merge | Routine scoped review/merge authority remains; Codex review is automated review evidence, not an independent owner approval claim |
+| CI / release | Workflow `36631267067` SUCCESS: exact source, v13 database/RLS gate, immutable app/public candidates, identity barrier, both promotions, aliases and project controls | Hosted release checks do not establish authenticated founder or customer acceptance |
 | Production aliases | supermega.dev and app.supermega.dev return HTTP200 at the paired release; live health reports managed mode with schema, audit, writes and Auth ready, and rendered browser verification shows the real Login form | Founder sign-in/save/reload and customer acceptance remain incomplete. Public signup remains closed |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
@@ -119,7 +119,7 @@ Customer-facing product names are Shop, Sites and Commerce. Sites replaces Websi
 
 Plant is excluded from new customer acquisition and setup. Preserve retained records and recovery paths. SOL is a separate build: its public experience may inform requested research, but its code, infrastructure and customer data are outside this implementation scope.
 
-The owner replaced the green identity on 28 September: cobalt #2454e6, graphite #171b26 and cool white #f7f8fc now define the public website and has no theme toggle. Individual products also use the fixed light theme; no appearance controls. Cards, banners, proposals and social assets must match this palette. Existing screenshots need fresh captures of the actual recolored product before the public release; do not recolor screenshot pixels or imply that archived jade assets are current. Updated card, social banner and email signature are in outputs/supermega-business-card/cobalt. Use plain, confident language, short labels such as Login, clear hierarchy and fewer visible decisions. Remove generic AI hype, repeated approval prose and unsupported enterprise claims.
+The owner replaced the green identity on 28 September with a fixed light technical palette and no theme toggle. The public site currently uses cobalt `#2454e6`, graphite `#171b26` and cool white `#f7f8fc`; the released shared app shell now uses indigo `#5b4ee8`, graphite `#151521` and cool white `#f6f7fb`. This is an active inconsistency, not a finished brand system. Reconcile the public site, all three products, business card and marketing assets around the released white/graphite/indigo direction before capturing final screenshots. Existing cobalt assets under `outputs/supermega-business-card/cobalt` remain historical working assets until replaced. Do not recolor screenshot pixels or imply that archived jade/cobalt assets are current. Use plain, confident language, short labels such as Login, clear hierarchy and fewer visible decisions. Remove generic AI hype, repeated approval prose and unsupported enterprise claims.
 
 No trial/demo/sample detours as the primary customer experience. Private synthetic fixtures and isolated staging remain necessary engineering tools. Content review before publication is legitimate; do not confuse it with a fake product demonstration. Never remove provenance labels from existing synthetic records merely to satisfy copy cleanup.
 
@@ -156,7 +156,7 @@ Measure success using task completion, avoidable steps, errors, time to first us
 
 #### Current visual exploration record
 
-On 28 September 2026, three independent Shop counter concepts were generated in this chat, in displayed order. They are private design artifacts, not deployed products. Selection and implementation are pending. One bounded read-only design reviewer evaluated the SOL references; no additional build worker or local model was started.
+On 28 September 2026, three independent Shop counter concepts were generated in this chat, in displayed order. They remain private exploration artifacts. One bounded read-only design reviewer evaluated the SOL references; no additional build worker or local model was started.
 
 Artifacts are retained under `C:/Users/thesw/.codex/generated_images/01a0d249-2b5d-7d83-a769-79336eeb777c/`:
 
@@ -168,11 +168,11 @@ These absolute paths are local working references. Preserve the selected source 
 
 On 30 September a second three-direction board compared Editorial Precision, Operator Console and Spatial Workspace for the connected Shop experience at `C:/Users/thesw/.codex/generated_images/01a0d249-2b5d-7d83-a769-79336eeb777c/exec-8dc10d33-d6f2-4147-b7f2-c18f05038255.png`. The delegated selection is a hybrid of Editorial Precision and Operator Console: calm white structure, one strong work canvas, compact priorities and contextual detail. It rejects the Spatial Workspace hero treatment because imagery competes with daily work. Incumbent research supports searchable checkout, unified inventory/orders/customer context, staff controls and embedded next actions; capability lists alone do not establish parity.
 
-Latest owner direction: improve the whole product with Apple-like restraint and polish, not cosmetic choices. Remove the skin dropdown and dark-mode controls. Use one consistent light white/graphite/cobalt interface across the apps and public website. This supersedes the earlier selectable-skins proposal. Keep reusable design tokens internally; do not expose appearance controls without a new user request. Ignore previously saved appearance preferences when rendering the app. Preserve business records.
+Latest owner direction: improve the whole product with Apple-like restraint and polish, not cosmetic choices. Remove the skin dropdown and dark-mode controls. Converge on one consistent light white/graphite/indigo interface across the apps and public website. This supersedes the earlier selectable-skins proposal and the temporary public-site cobalt declaration. Keep reusable design tokens internally; do not expose appearance controls without a new user request. Ignore previously saved appearance preferences when rendering the app. Preserve business records.
 
 Design priorities: stronger typography and hierarchy, deliberate spacing, fewer borders and redundant labels, natural interaction feedback, and one clear next action. Retain essential status, accessibility and recovery information. Use the supplied SOL references as a quality benchmark; no wholesale brand cloning or new settings panels.
 
-Next design action: remove remaining production demo/trial surfaces, then implement the selected hierarchy in the shared shell and Shop selling path before carrying its interaction grammar into Sites and Commerce. Verify both the visual result and complete task behavior.
+PR622 implemented and released the selected Editorial Precision plus Operator Console hierarchy across the shared shell and Shop home: calmer fixed-light structure, clearer Priority/Continue flow, compact operating context and progressive disclosure. Its exact-head desktop and 390px journeys passed, including the corrected full borders on separated mobile metric cards. Next design action: remove remaining local-only Sample data/storage-risk presentation from the customer path, then carry the same interaction grammar into Sites and Commerce while preserving complete task behavior.
 
 ## 5. Authority, credentials and resource boundaries
 
@@ -202,15 +202,14 @@ Do not reinstate hourly scheduled tasks. Corporate automation remains paused unl
 
 Order: active security/data/money incident; release-blocking correctness; complete customer task; reliability/recovery; commercial delivery; measured UX/performance; agent productivity; speculative research. Corporate preparation can progress serially alongside technical work, but must not bury an unresolved product failure under new plans.
 
-1. Finish exact-head CI for the pushed candidate, then publish saved reconciliation notes. Use the current release-state table below; do not repeat already completed source fixes or credential probes.
-2. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries.
-3. Complete one cross-product interface slice using the fixed light design and current references; verify the real task, accessibility and responsive behavior together. Do not reintroduce appearance controls.
-4. Review managed Shop setup and reachable Website/Ecommerce paths for sample-first behavior, misleading activation, dead links and inconsistent terminology.
-   Local Ecommerce's empty-catalog action now opens Shop Stock directly; managed accounts retain their setup/access path. Focused route tests pass 22/22 and local build/artifact checks pass. Browser and hosted acceptance of this transition remain outstanding.
-5. Finish release prerequisites and hosted login, tenant, persistence and recovery evidence through the authorized path.
+1. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries. The founder Login route is hosted and clean; authenticated founder save/reload/recovery remains NOT RUN.
+2. Reconcile the public site, Shop, Sites, Commerce and current brand assets around the released white/graphite/indigo token direction; treat the current cobalt/indigo split as unfinished.
+3. Remove remaining local-only Sample data and storage-risk controls from the ordinary customer path without hiding genuine recovery or status evidence.
+4. Redesign Sites as a guided outcome flow: collect the minimum business facts, generate a coherent first site, make exact edits easy and keep publishing state/recovery explicit. Verify desktop and 390px behavior.
+5. Redesign Commerce around catalog readiness, orders, fulfillment and one clear next action. Preserve the corrected empty-catalog route into Shop Stock and verify real save/reload and order state.
 6. Deliver one consented real-business installation with an agreed task and acceptance criteria. Collect actual facts instead of inventing a cafe or shop.
-7. Convert accepted capability into one clear offer, marketing assets and support/commercial records.
-8. Automate the first repeated internal job with measured value and reliable failure handling.
+7. Convert accepted capability into a simple Basic/Pro or scoped-service offer with capability-backed pricing, delivery/support terms and current marketing assets before outreach.
+8. Automate the first repeated internal job with measured value, bounded authority, reliable failure handling and explicit operating cost.
 
 Update this queue in place. Completed tasks move to compact evidence records, not an indefinitely growing backlog here.
 
@@ -406,7 +405,7 @@ an adopt/reject result and a product change, not another strategy document.
 |---|---|---|
 | M1 Coherent entry | No primary demo detours; consistent routes/copy; useful real-data setup | INCOMPLETE |
 | M2 Reliable hosted core | Verified login, tenant isolation, persistence, recovery and core task | UNPROVEN |
-| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | PASS for `91a91e5e...` in hosted production |
+| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | PASS for `f9cfd10f...` in hosted production via workflow `36631267067` |
 | M4 Accepted installation | Consented business completes agreed task with reconciled records | UNPROVEN |
 | M5 Repeatable delivery | Offer, support, costs, payment evidence and reusable process | INCOMPLETE |
 | M6 Useful automation | Bounded jobs produce accepted results with recovery/measured value | PARTIAL local foundation |
@@ -426,7 +425,7 @@ Label future ambitions as future and proposals as proposals. Never present them 
 
 ### Lasting decisions
 
-- Fixed white/graphite/cobalt visual system; no customer theme picker or promotional trial/demo detours.
+- Fixed white/graphite/indigo visual system; no customer theme picker or promotional trial/demo detours. The public cobalt/app indigo split remains an explicit migration task until reconciled.
 - No automatic synthetic customer records. Private fixtures remain explicitly labelled and isolated.
 - Preserve saved work, tenant boundaries, money/stock correctness and recovery throughout interface cleanup.
 - Full exact-candidate CI, rendered journeys and separate hosted/customer acceptance are required.
