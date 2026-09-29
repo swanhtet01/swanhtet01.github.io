@@ -8,7 +8,7 @@ import json
 
 
 # Source-derived disposable PostgreSQL catalog. Never learned from a live target.
-ACCEPTANCE_CATALOG_DIGEST = "18f69b5e9c20a44e525163d5d69af14e12715548c756e60ee0f5317f22e9c1cf"
+ACCEPTANCE_CATALOG_DIGEST = "c2c8974ecbd01f92e599acb5e2361856cb115d969bde82f1af2a7dd00fb095c1"
 
 
 def acceptance_catalog_digest(cursor):
