@@ -1125,3 +1125,32 @@ test('unavailable account offers support and login without a setup or demo detou
     assert.equal(destination.searchParams.get('utm_medium'), 'business_setup')
   }
 })
+
+
+test('public login with no assigned workspace offers support and sign-out without activation', async () => {
+  await withAuth(async (mod, state) => {
+    state.location.hostname = 'app.supermega.dev'
+    state.page.runtime = { status: 'enterprise', signupPolicy: null }
+    state.signInWithPassword = async () => {
+      state.session = { ...fixedSession }
+      return { data: { session: state.session, user: fixedUser }, error: null }
+    }
+    let tree = login(mod, state)
+    input(tree, 'Email').props.onChange({ target: { value: fixedUser.email } })
+    tree = login(mod, state)
+    input(tree, 'Password').props.onChange({ target: { value: 'synthetic-password' } })
+    tree = login(mod, state)
+    await elements(tree).find(node => node.type === 'form').props.onSubmit({ preventDefault() {} })
+    await finishRequest()
+    tree = login(mod, state)
+    assert.match(content(tree), /No workspace assigned/)
+    assert.doesNotMatch(content(tree), /claim code|Activate my company|Claim your company/i)
+    assert.equal(elements(tree).some(node => node.type === 'form'), false)
+    assert.ok(elements(tree).some(node => node.type === 'a' && content(node) === 'Contact support'))
+    await button(tree, 'Sign out').props.onClick()
+    await finishRequest()
+    assert.equal(state.session, null)
+    assert.ok(elements(login(mod, state)).some(node => node.type === 'form' && node.props['aria-label'] === 'Login'))
+    assert.equal(state.calls.some(([name, , init]) => name === 'fetch' && init.method === 'POST'), false)
+  })
+})

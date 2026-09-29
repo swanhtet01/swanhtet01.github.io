@@ -140,14 +140,14 @@ export function ManagedLoginPage() {
           setActivating(!reviewReturnPath)
           setNotice(reviewReturnPath
             ? 'Your account is signed in, but no company is assigned. Ask SuperMega to check the account assigned to your review. Creating a company will not unlock it.'
-            : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
+            : publicApp ? `No workspace is assigned to ${signIn.email} yet.` : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
         } catch {
           // No usable session: stay on the sign-in form.
         }
       })
       .catch(() => setExistingIdentity(null))
     return () => { active = false }
-  }, [managedReady, reviewReturnPath])
+  }, [managedReady, reviewReturnPath, publicApp])
 
   async function openWorkspace(signIn: ManagedWorkspaceSignIn, selectedWorkspaceId: string, destination = portalEntryPath) {
     const identity = await completeManagedWorkspaceSignIn(signIn, selectedWorkspaceId)
@@ -179,7 +179,7 @@ export function ManagedLoginPage() {
         setActivating(!reviewReturnPath)
         setNotice(reviewReturnPath
           ? 'Your account is signed in, but no company is assigned. Ask SuperMega to check the account assigned to your review. Creating a company will not unlock it.'
-          : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
+          : publicApp ? `No workspace is assigned to ${signIn.email} yet.` : `No company is assigned to ${signIn.email} yet. Activate yours with the claim code.`)
         return
       }
       setDirectory(signIn)
@@ -201,7 +201,7 @@ export function ManagedLoginPage() {
 
   async function activate(event: FormEvent) {
     event.preventDefault()
-    if (!managedReady || reviewReturnPath || busy || accountRequestPending.current) return
+    if (!managedReady || publicApp || reviewReturnPath || busy || accountRequestPending.current) return
     accountRequestPending.current = true
     setBusy(true)
     setNoticeTone('quiet')
@@ -313,7 +313,14 @@ export function ManagedLoginPage() {
         <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(false)} type="button">Back to sign in</button>
         {sentRequest ? <button className="account-inline-link account-link-button" disabled={busy} onClick={() => chooseAccountMode(true)} type="button">Use another email</button> : null}
         <Link className="account-inline-link" to={managedAccountPath('/account/recovery', productIntent, location.search)}>Reset an existing password</Link>
-      </form> : managedReady && activating && !reviewReturnPath ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
+      </form> : managedReady && activating && publicApp && !reviewReturnPath ? <section className="managed-login-panel" aria-label="Workspace access">
+        <h2>No workspace assigned</h2>
+        <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
+        <div className="managed-login-actions">
+          <a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>
+          <button className="account-inline-link account-link-button" disabled={busy} onClick={() => void signOut()} type="button">Sign out</button>
+        </div>
+      </section> : managedReady && activating && !reviewReturnPath ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
         <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Enter your claim code to connect your company to this account.</p></div>
         <label>Claim code<input aria-describedby={claimCodeFieldError ? 'managed-login-notice' : undefined} aria-invalid={claimCodeFieldError} autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
         <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
