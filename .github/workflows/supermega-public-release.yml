@@ -265,6 +265,7 @@ jobs:
 
       - name: Generate and verify the prebuilt artifact
         env:
+          SUPERMEGA_HQ_VERIFY_MODE: release-contracts
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
         run: npm run public:prebuilt
 

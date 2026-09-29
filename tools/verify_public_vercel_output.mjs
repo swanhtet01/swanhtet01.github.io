@@ -281,7 +281,7 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
-for (const token of ['Less busywork.<br>More business.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"']) {
+for (const token of ['Your business.<br>Working together.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const retiredToken of [
