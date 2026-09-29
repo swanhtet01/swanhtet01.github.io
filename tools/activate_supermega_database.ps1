@@ -264,6 +264,7 @@ try {
   Write-Output '==> stage database and browser authentication values without enabling writes'
   try {
     Add-ManagedEnvironmentValue -Key 'SUPERMEGA_DATABASE_URL' -Value $resolved -Sensitive
+    Add-ManagedEnvironmentValue -Key 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL' -Value $resolvedStorageAudit -Sensitive
     Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_URL' -Value $supabaseUrl
     Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_PUBLISHABLE_KEY' -Value $resolvedPublishableKey
     Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_SCHEMA_VERSION' -Value $activationSchemaVersion

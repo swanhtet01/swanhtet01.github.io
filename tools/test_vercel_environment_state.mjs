@@ -42,6 +42,7 @@ const dormantSchedulerEnvironment = [
 ]
 const managedTrial = [
   env('SUPERMEGA_DATABASE_URL', { type: 'secret' }),
+  env('SUPERMEGA_STORAGE_AUDIT_DATABASE_URL', { type: 'secret' }),
   env('SUPERMEGA_TRIAL_SCHEMA_VERSION', { type: 'plain' }),
   env('SUPERMEGA_SUPABASE_PROJECT_REF', { type: 'plain' }),
   env('SUPERMEGA_TRIAL_WRITES_ENABLED', { type: 'plain' }),
@@ -60,6 +61,10 @@ const managed = run('app', managedTrial)
 assert.equal(managed.status, 0, 'managed_app_contract_failed')
 assert.equal(parse(managed).operatingMode, 'managed_trial_candidate', 'managed_app_mode_failed')
 assert.equal(parse(managed).valueVerificationRequired, true)
+
+const missingStorageAudit = run('app', managedTrial.filter(entry => entry.key !== 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL'))
+assert.notEqual(missingStorageAudit.status, 0)
+assert.ok(parse(missingStorageAudit).missing.includes('SUPERMEGA_STORAGE_AUDIT_DATABASE_URL'))
 
 const missingBilling = run('app', managedTrial.filter(entry => entry.key !== 'SUPERMEGA_BILLING_SCHEMA_VERSION'))
 assert.notEqual(missingBilling.status, 0)
