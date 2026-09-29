@@ -8,7 +8,24 @@ const chain = pkg.scripts?.['hq:verify:steps']
 
 if (!chain) throw new Error('hq_verify_steps_missing')
 
-const rawSteps = chain.split(' && ')
+const args = process.argv.slice(2)
+if (args.length > 1 || (args.length === 1 && args[0] !== '--release-contracts')) throw new Error('hq_verify_mode_invalid')
+const mode = process.env.SUPERMEGA_HQ_VERIFY_MODE || ''
+if (mode && mode !== 'release-contracts') throw new Error('hq_verify_mode_invalid')
+const releaseContracts = args[0] === '--release-contracts' || mode === 'release-contracts'
+const operationalChecks = new Map([
+  ['node tools/verify_release_stack_owner_gates.mjs --verify', 'node tools/verify_release_stack_owner_gates.mjs --self-test'],
+  ['npm run shop:pilot:day0-readiness', 'npm run shop:pilot:day0-readiness:self-test'],
+  ['node tools/verify_shop_pilot_launch_gate.mjs --verify', 'node tools/verify_shop_pilot_launch_gate.mjs --self-test'],
+])
+const originalSteps = chain.split(' && ')
+if (releaseContracts && [...operationalChecks.keys()].some(command => originalSteps.filter(step => step === command).length !== 1)) throw new Error('hq_operational_contract_step_missing')
+// An exact-main, writes-disabled artifact release is not a review branch or pilot handoff.
+// Keep those readiness assessors unchanged; exercise their contracts in this mode.
+// Authority, exact-head, provider configuration and hosted checks remain in the workflow.
+const rawSteps = releaseContracts
+  ? [...new Set(originalSteps.map(step => operationalChecks.get(step) || step))]
+  : originalSteps
 const totalSteps = rawSteps.length
 
 function npmScriptName(command) {
@@ -84,4 +101,5 @@ console.log(JSON.stringify({
   steps: totalSteps,
   seconds,
   externalWritesPerformed: false,
+  evidence: releaseContracts ? 'source_contracts_not_operational_readiness' : 'review_workspace_checks',
 }))
