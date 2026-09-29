@@ -51,7 +51,7 @@ _REDACTED_SPAN_NAME = "[redacted]"
 # local/international numbers with spaces, dots, parentheses or hyphens. The added rule
 # avoids matching inside opaque identifiers or longer digit sequences.
 MYANMAR_PHONE_PATTERN = re.compile(
-    r"(?<!\d)09\d{7,9}(?!\d)|(?<![\w+])(?:0|\+95[ .()\-]*|0095[ .()\-]*)9(?:[ .()\-]*\d){7,9}(?![ .()\-]*\d)"
+    r"(?<!\d)09\d{7,9}(?!\d)|(?<![\w+])(?:0[ .()\-]*|\+?9[ .()\-]*5[ .()\-]*|0[ .()\-]*0[ .()\-]*9[ .()\-]*5[ .()\-]*)9(?:[ .()\-]*\d){7,9}(?![ .()\-]*\d)"
 )
 
 # Rule 2: MMK amounts written as digits followed by "MMK" or "kyat(s)".

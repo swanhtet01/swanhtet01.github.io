@@ -636,6 +636,17 @@ class PhoneFormatRedactionTests(unittest.TestCase):
                 self.assertNotIn('stock.location', redact.scrub_attributes({'stock.location': phone}, frozenset()))
                 self.assertIn(phone, redact.extract_customer_content_values({'unmarked': phone}))
 
+    def test_storefront_punctuation_between_all_phone_digits(self):
+        # Storefront permits spaces, parentheses and hyphens anywhere after
+        # the first digit. Exercise prefix separators, not only subscriber digits.
+        for prefix in ('09', '+959', '00959', '959'):
+            for separator in (' ', '-', '(', ')', ' ()- '):
+                phone = separator.join(prefix + '123456789')
+                # Preserve the optional leading plus as part of the country prefix.
+                phone = phone.replace('+' + separator, '+', 1)
+                with self.subTest(phone=phone):
+                    self.assertFalse(redact.is_string_value_safe(phone, frozenset()))
+
     def test_short_numbers_and_opaque_identifiers_remain_safe(self):
         for value in ('WH-1', '09123', 'ws-091234567890123456'):
             with self.subTest(value=value):
