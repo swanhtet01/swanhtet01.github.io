@@ -1,7 +1,7 @@
 import unittest
 import urllib.error
 from unittest.mock import MagicMock
-from tools.check_acceptance_auth_transport import AUTH_HEALTH, check
+from tools.check_acceptance_auth_transport import AUTH_HEALTH, PRODUCTION_AUTH_HEALTH, check
 
 
 class AuthTransportTests(unittest.TestCase):
@@ -35,6 +35,31 @@ class AuthTransportTests(unittest.TestCase):
         opener = MagicMock()
         opener.return_value.__enter__.return_value = MagicMock(status=200,url='https://example.com/login')
         self.assertEqual(check(opener)['failure'], 'unexpected_redirect')
+
+    def test_production_target_is_explicit_and_credential_free(self):
+        opener = MagicMock()
+        opener.return_value.__enter__.return_value = MagicMock(status=200, url=PRODUCTION_AUTH_HEALTH)
+        result = check(opener, target='production')
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['target'], 'production')
+        request = opener.call_args.args[0]
+        self.assertEqual(request.full_url, PRODUCTION_AUTH_HEALTH)
+        self.assertEqual(request.header_items(), [])
+        self.assertIsNone(request.data)
+
+    def test_redirected_unauthorized_response_is_not_success(self):
+        opener = MagicMock(side_effect=urllib.error.HTTPError('https://example.com/private', 401, 'private', {}, None))
+        result = check(opener, target='production')
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['failure'], 'unexpected_redirect')
+        self.assertNotIn('example.com', str(result))
+
+    def test_unknown_target_cannot_make_requests(self):
+        opener = MagicMock()
+        with self.assertRaisesRegex(ValueError, 'unsupported_auth_target'):
+            check(opener, target='https://example.com')
+        opener.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
