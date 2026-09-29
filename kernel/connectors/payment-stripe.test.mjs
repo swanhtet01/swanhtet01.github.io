@@ -288,3 +288,27 @@ test('reconcile cannot settle payments with absent or malformed integrity metada
     assert.equal((await store.getProject(project.id)).deposit_status, 'unpaid')
   }
 })
+
+
+test('HTTP webhook times out an unfinished body once and ignores late completion', async (t) => {
+  const { EventEmitter } = await import('node:events')
+  const { default: handler } = await import('../api/stripe-webhook.mjs')
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const req = new EventEmitter()
+  req.method = 'POST'
+  req.headers = {}
+  let responses = 0
+  const res = { status(code) { this.code = code; return this }, json(body) { this.body = body; responses++ } }
+  const pending = handler(req, res)
+  req.emit('data', Buffer.from('{'))
+  t.mock.timers.tick(9999)
+  assert.equal(responses, 0)
+  t.mock.timers.tick(1)
+  await pending
+  assert.equal(res.code, 408)
+  assert.deepEqual(res.body, { ok: false, reason: 'body_read_timeout' })
+  req.emit('data', Buffer.from('private late data'))
+  req.emit('end')
+  req.emit('error', new Error('private transport error'))
+  assert.equal(responses, 1)
+})
