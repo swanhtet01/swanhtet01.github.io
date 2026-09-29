@@ -156,7 +156,7 @@ jobs:
           CANDIDATE_URL: ${{ steps.deploy-candidate.outputs.url }}
         run: |
           npx --yes vercel@56.1.0 inspect "$CANDIDATE_URL" --token="$VERCEL_TOKEN"
-          npx --yes vercel@56.1.0 curl /api/status --deployment "$CANDIDATE_URL" --yes --token="$VERCEL_TOKEN" | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(value.ok!==true||value.service!=='supermega-kernel'||value.agentCompany?.plannerReady!==true||value.agentCompany?.externalWrites!==false)process.exit(1)})"
+          npx --yes vercel@56.1.0 --token="$VERCEL_TOKEN" curl /api/status --deployment "$CANDIDATE_URL" --yes | node -e "let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const value=JSON.parse(input);if(value.ok!==true||value.service!=='supermega-kernel'||value.agentCompany?.plannerReady!==true||value.agentCompany?.externalWrites!==false)process.exit(1)})"
 
       - name: Reconfirm current main before promotion
         run: |
