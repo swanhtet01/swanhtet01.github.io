@@ -12,6 +12,13 @@ export function extractTrialEvidenceVersion(value) {
   return Number(match?.[1])
 }
 
+export function releaseVerificationPath(path, expectedCommit, attempt = 1) {
+  const commit = String(expectedCommit || '').trim().toLowerCase()
+  if (!/^[0-9a-f]{40}$/.test(commit)) return path
+  const separator = String(path).includes('?') ? '&' : '?'
+  return `${path}${separator}__supermega_release=${commit}&__attempt=${Math.max(1, Number(attempt) || 1)}`
+}
+
 export function verifyCurrentReleaseAssets({
   manifest,
   assetCorpus,
@@ -207,10 +214,14 @@ if (selfTest) {
   for (const source of invalidFixtures) {
     if (Number.isInteger(extractTrialEvidenceVersion(source))) throw new Error('invalid_trial_evidence_version_fixture_accepted')
   }
+  const releaseCommit = '0123456789abcdef0123456789abcdef01234567'
+  if (releaseVerificationPath('/assets/index.js', releaseCommit, 2) !== `/assets/index.js?__supermega_release=${releaseCommit}&__attempt=2`) throw new Error('release_verification_path_missing')
+  if (releaseVerificationPath('/api/health?scope=live', releaseCommit, 0) !== `/api/health?scope=live&__supermega_release=${releaseCommit}&__attempt=1`) throw new Error('release_verification_query_not_preserved')
+  if (releaseVerificationPath('/', '', 1) !== '/') throw new Error('availability_verification_path_changed')
   console.log(JSON.stringify({
     ok: true,
     contract: 'supermega_app_live_evidence_extractor.v1',
-    checks: fixtures.length + invalidFixtures.length,
+    checks: fixtures.length + invalidFixtures.length + 3,
   }, null, 2))
   process.exit(0)
 }
@@ -276,7 +287,17 @@ async function get(path, attempts = 7) {
         })
         return { response: null, body }
       }
-      const response = await fetch(`${baseUrl}${path}`, { headers: { accept: path.endsWith('.json') ? 'application/json' : 'text/html' }, redirect: 'error', signal: AbortSignal.timeout(15000) })
+      const requestPath = releaseVerificationPath(path, expectedCommit, attempt)
+      const response = await fetch(`${baseUrl}${requestPath}`, {
+        cache: 'no-store',
+        headers: {
+          accept: path.endsWith('.json') ? 'application/json' : 'text/html',
+          'cache-control': 'no-cache',
+          pragma: 'no-cache',
+        },
+        redirect: 'error',
+        signal: AbortSignal.timeout(15000),
+      })
       if (!response.ok) throw new Error(`${path}:${response.status}`)
       return { response, body: await response.text() }
     } catch (error) {

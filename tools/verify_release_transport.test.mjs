@@ -6,22 +6,25 @@ const app = await readFile(new URL('./verify_app_release_live.mjs', import.meta.
 const preview = await readFile(new URL('./verify_public_preview_live.mjs', import.meta.url), 'utf8')
 const publicSource = await readFile(new URL('./verify_public_release_live.mjs', import.meta.url), 'utf8')
 const extract = (s, start, end) => s.slice(s.indexOf(start), s.indexOf(end))
-const appGet = extract(app, 'async function get(', 'const pages = new Map()')
+const appReleasePath = extract(app, 'export function releaseVerificationPath', 'export function verifyCurrentReleaseAssets').replace('export ', '')
+const appGet = `${appReleasePath}\n${extract(app, 'async function get(', 'const pages = new Map()')}`
 
 test('app fetch rejects redirects without following another release endpoint', async () => {
   let options
   await assert.rejects(vm.runInNewContext(`${appGet}; get('/__release.json', 1)`, {
-    protectedPreview: false, baseUrl: 'https://app.supermega.dev', AbortSignal,
+    protectedPreview: false, baseUrl: 'https://app.supermega.dev', expectedCommit: '', AbortSignal,
     fetch: async (_, opts) => { options = opts; throw Error('redirect rejected') },
   }), /redirect rejected/)
   assert.equal(options.redirect, 'error')
+  assert.equal(options.cache, 'no-store')
+  assert.equal(options.headers['cache-control'], 'no-cache')
 })
 
 test('protected app and public page CLI reads have deadlines and preserve deployment arguments', async () => {
   for (const [code, invocation] of [[appGet, "get('/__release.json', 1)"], [extract(preview, 'function get(', 'for (const page of manifest.pages)'), "get('/__release.json')"]]) {
     let call
     const value = await vm.runInNewContext(`${code}; ${invocation}`, {
-      protectedPreview: true, baseUrl: 'https://candidate.vercel.app', process: {platform:'linux'}, cliEnv:{}, maxAttempts:1,
+      protectedPreview: true, baseUrl: 'https://candidate.vercel.app', expectedCommit: '', process: {platform:'linux'}, cliEnv:{}, maxAttempts:1,
       execFileSync: (exe,args,options) => { call={exe,args,options};return 'receipt' },
     })
     assert.ok(value)
