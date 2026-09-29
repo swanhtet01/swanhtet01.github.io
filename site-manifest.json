@@ -5,12 +5,12 @@
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
-    "version": "cobalt-v1-2026-09",
+    "version": "indigo-v1-2026-09",
     "mark": "terminal",
     "colors": {
-      "background": "#f7f8fc",
-      "accent": "#2454e6",
-      "ink": "#171b26"
+      "background": "#f6f7fb",
+      "accent": "#5b4ee8",
+      "ink": "#151521"
     }
   },
   "company": {

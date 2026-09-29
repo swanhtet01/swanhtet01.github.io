@@ -32,6 +32,8 @@ function countOccurrences(source, token) {
 const landingPages = manifest.pages.filter((page) => page.productId)
 check(landingPages.map((page) => page.route).join(',') === '/shop/,/plant/,/website/,/ecommerce/', 'landing_route_set')
 check(countOccurrences(publicGeneratorSource, skipLinkTouchTargetCss) === 1, 'landing_skip_link_touch_target_source_contract')
+check(publicGeneratorSource.includes('--blue: #5b4ee8;') && publicGeneratorSource.includes('background:#f1f0fb;border:1px solid #dedbf4;'), 'landing_indigo_visual_system_source_contract')
+check(!publicGeneratorSource.includes('#edf4f0') && !publicGeneratorSource.includes('#dce8e1'), 'landing_legacy_green_frames_removed')
 
 // Route resolution: landing routes must reach the filesystem handler untouched, while the
 // slash-less and deep variants must 308 onto the canonical landing route.
