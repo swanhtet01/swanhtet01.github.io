@@ -429,7 +429,7 @@ requireContract('remote dependency install contract', config.installCommand === 
 requireContract('coordinated release avoids redundant local app install',
   !workflow.includes('Install app dependencies')
   && !workflow.includes('working-directory: showroom\n        run: npm ci')
-  && workflow.includes('npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"'))
+  && workflow.includes('npx --yes vercel@56.1.0 build --prod --standalone --yes --token="$VERCEL_TOKEN"'))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
 requireContract('canonical SPA routes use one filesystem-first fallback behind the header floor',
@@ -569,7 +569,7 @@ requireContract('retired POS alias blocks release before and after promotion', (
   && retiredAliasVerifier.includes("contract: 'supermega_retired_vercel_alias_state'"))
 requireContract('all control URLs use explicit project identities', workflow.includes('api "/v9/projects/$APP_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('api "/v9/projects/$PUBLIC_VERCEL_PROJECT_ID"') && workflow.includes('/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID') && workflow.includes('/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID') && workflow.includes('projectId=$PUBLIC_VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID') && !workflow.includes('/v9/projects/megaos') && !workflow.includes('/v9/projects/supermega-public'))
 requireContract('managed mode is selected only after metadata and effective-value verification', workflow.includes('id: app-environment') && workflow.includes("operating_mode=%s") && workflow.includes("runtime_mode=%s") && workflow.includes("['isolated_demo','managed_trial_candidate']") && workflow.includes('verify_managed_runtime_environment_values.mjs managed_trial') && workflow.includes('verify_managed_runtime_environment_values.mjs staged') && workflow.includes('verify_managed_runtime_environment_values.mjs isolated_demo'))
-requireContract('immutable app build inherits the exact audited production environment', workflow.includes('Build the immutable app artifact') && workflow.includes('vercel@56.1.0 env run --environment=production') && workflow.includes('npx --yes vercel@56.1.0 build --prod --yes'))
+requireContract('immutable app build inherits the exact audited production environment', workflow.includes('Build the immutable app artifact') && workflow.includes('vercel@56.1.0 env run --environment=production') && workflow.includes('npx --yes vercel@56.1.0 build --prod --standalone --yes'))
 requireContract('managed database audit uses the exact app runtime environment before candidate creation',
   workflow.includes('Enforce exact app runtime database and RLS gate')
   && workflow.includes('VERCEL_PROJECT_ID: ${{ env.APP_VERCEL_PROJECT_ID }}')
