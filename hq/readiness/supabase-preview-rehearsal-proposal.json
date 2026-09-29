@@ -55,11 +55,11 @@
   },
   "migrationPlan": {
     "schemaVersion": 13,
-    "migrationCount": 23,
-    "privateMigrationCount": 22,
+    "migrationCount": 24,
+    "privateMigrationCount": 23,
     "publicBaseline": "20260711081300_public_legacy_baseline.sql",
-    "finalMigration": "20260929171000_ecommerce_decision_review_fk_index.sql",
-    "chainDigest": "sha256:45f2bcebf2579df328d236b01ee473a6af4d8b0e3cc742e7f7f53d37ba2e0f33",
+    "finalMigration": "20260930010000_app_rls_initplan_optimization.sql",
+    "chainDigest": "sha256:d569fc4dfdad1d97b31c3684b991807ea258aa44b6cc0391e930cc4d13b00e2a",
     "migrations": [
       {
         "name": "20260711081300_public_legacy_baseline.sql",
@@ -175,6 +175,11 @@
         "name": "20260929171000_ecommerce_decision_review_fk_index.sql",
         "path": "supabase/migrations/20260929171000_ecommerce_decision_review_fk_index.sql",
         "digest": "sha256:6ad14b664f4b9ad560a7cbaf37c6d4dcf8c26d3709e5bb44d40ea2f4029785c3"
+      },
+      {
+        "name": "20260930010000_app_rls_initplan_optimization.sql",
+        "path": "supabase/migrations/20260930010000_app_rls_initplan_optimization.sql",
+        "digest": "sha256:eda938f781a7e854c9d83567600ad912bd07cadc27f4479b1bf7ee410d451a57"
       }
     ],
     "browserQuarantine": {
@@ -257,7 +262,7 @@
     "customerContactAllowed": false,
     "paymentOrStockActionAllowed": false
   },
-  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:45f2bcebf2579df328d236b01ee473a6af4d8b0e3cc742e7f7f53d37ba2e0f33 on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:d569fc4dfdad1d97b31c3684b991807ea258aa44b6cc0391e930cc4d13b00e2a on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
   "sourceReceipts": [
     {
       "path": "package.json",
@@ -265,15 +270,15 @@
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:78ae7e548f5f133fc6fd1dbc7f60d95fb1d065ce0e1ce05f45d1af724c99ec74"
+      "digest": "sha256:1f78a1f119c2d74228799f29178c4c3e7c371c8a2a6e704e7f2af3b19865a06f"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
-      "digest": "sha256:f6b1aabbe54d418e32ea3b5b9d51aab39bca61d5cbf77c5bc9c2010a7d185db6"
+      "digest": "sha256:a3a562c3baaf5fda8f9dc10637367699e11dee9ab6c12448c671e8a592b4a324"
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:c79b71c549c73b7e41b5dfbe13f0a5ac24053ec612966f388d6d6e852b2b9d17"
+      "digest": "sha256:31ace4c67db71d77a2555ec17cb806bf2c52c3905e334c91232f3831aa5bbcaf"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -296,5 +301,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:6a0b4d2f3d342e15cf5eab90e4b5f50b32c3b34b45fcf0b2f981919ff100c64a"
+  "digest": "sha256:fd666c35d4758d8269e1d618e2a9fc9c121d8d72c274e51735f0d8ce62b66801"
 }
