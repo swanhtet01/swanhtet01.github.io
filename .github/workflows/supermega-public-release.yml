@@ -172,14 +172,13 @@ jobs:
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
         run: |
           npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
-            npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
+            npx --yes vercel@56.1.0 build --prod --standalone --yes --token="$VERCEL_TOKEN"
 
       - name: Verify generated app Python function contract
         run: |
           node --test tools/test_generated_python_function.mjs
           node tools/verify_generated_python_function.mjs
           python tools/test_packaged_app_import.py
-          python tools/verify_packaged_app_import.py --assemble-dependencies
           python tools/verify_packaged_app_import.py
 
       - name: Verify immutable app asset contract
