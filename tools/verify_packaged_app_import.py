@@ -33,6 +33,7 @@ SAFE_FAILURE_CODES = frozenset({
 PROBE_PHASES = frozenset({'layout', 'dependencies', 'native_imports', 'application_import', 'routes', 'module_origins'})
 ERROR_TYPES = frozenset({'ValueError', 'RuntimeError', 'ImportError', 'ModuleNotFoundError', 'FileNotFoundError', 'KeyError', 'TypeError', 'OSError', 'Exception'})
 _probe_phase = 'layout'
+_dependency_layout = 'unknown'
 
 
 def child_failure_report(text):
@@ -45,13 +46,14 @@ def child_failure_report(text):
     return {'ok': False, 'evidence': 'packaged_application_import',
             'reason': value.get('reason') if isinstance(value.get('reason'), str) and value['reason'] in SAFE_FAILURE_CODES else 'packaged_import_failed',
             'phase': value.get('phase') if isinstance(value.get('phase'), str) and value['phase'] in PROBE_PHASES else 'unknown',
+            'dependencyLayout': value.get('dependencyLayout') if value.get('dependencyLayout') in ('root_metadata', 'no_root_metadata') else 'unknown',
             'errorType': value.get('errorType') if isinstance(value.get('errorType'), str) and value['errorType'] in ERROR_TYPES else 'Exception'}
 
 
 def safe_failure(error):
     code = str(error)
     return {'ok': False, 'evidence': 'packaged_application_import',
-            'phase': _probe_phase,
+            'phase': _probe_phase, 'dependencyLayout': _dependency_layout,
             'reason': code if code in SAFE_FAILURE_CODES else 'package_probe_exception',
             'errorType': type(error).__name__ if type(error) in (
                 ValueError, RuntimeError, ImportError, ModuleNotFoundError,
@@ -73,6 +75,7 @@ def required_path(bundle, relative, missing_code):
 
 
 def layout(bundle):
+    global _dependency_layout
     bundle = bundle.resolve(strict=True)
     config = json.loads(required_path(bundle, '.vc-config.json', 'package_metadata_missing').read_text())
     expected = f'python{sys.version_info.major}.{sys.version_info.minor}'
@@ -91,6 +94,7 @@ def layout(bundle):
               and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)]
     if len(values) != 1 or not values[0] or Path(values[0]).is_absolute():
         raise ValueError('unsupported_vendor_layout')
+    _dependency_layout = 'root_metadata' if any(bundle.glob('*.dist-info/METADATA')) else 'no_root_metadata'
     vendor = required_path(bundle, values[0], 'package_vendor_missing')
     if not vendor.is_dir():
         raise ValueError('vendor_directory_missing')
