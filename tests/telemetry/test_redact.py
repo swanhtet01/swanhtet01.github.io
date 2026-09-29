@@ -549,6 +549,21 @@ class SpanNameRedactionTests(unittest.TestCase):
 
 
 class ExtractCustomerContentValuesTests(unittest.TestCase):
+    def test_marked_containers_protect_descendants_without_capturing_siblings(self) -> None:
+        body = {
+            "address": {"line1": "Synthetic Street 42", "parts": [{"value": "Synthetic District"}]},
+            "name": {"given": "Synthetic Person"},
+            "notes": [{"text": "Synthetic private instruction"}],
+            "routing": {"location": "WH-1"},
+        }
+        values = redact.extract_customer_content_values(body)
+        for private in ("Synthetic Street 42", "Synthetic District", "Synthetic Person", "Synthetic private instruction"):
+            self.assertIn(private, values)
+            self.assertEqual(redact.scrub_span_name(private, values), "[redacted]")
+            self.assertNotIn("stock.location", redact.scrub_attributes({"stock.location": private}, values))
+        self.assertNotIn("WH-1", values)
+        self.assertEqual(redact.scrub_attributes({"stock.location": "WH-1"}, values), {"stock.location": "WH-1"})
+
     def test_extract_customer_content_values_walks_nested_bodies(self) -> None:
         body = {
             "surface": "commerce",

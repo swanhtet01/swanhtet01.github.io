@@ -104,8 +104,11 @@ def pop_customer_content_scope(token: Token[frozenset[str]]) -> None:
 
 def _iter_leaf_values(node: Any, *, key_hint: str) -> Iterable[tuple[str, Any]]:
     if isinstance(node, Mapping):
+        inherited_content = any(marker in key_hint.casefold() for marker in CUSTOMER_CONTENT_FIELD_MARKERS)
         for key, value in node.items():
-            yield from _iter_leaf_values(value, key_hint=str(key))
+            # A marked object (address/name/notes) protects every descendant;
+            # replacing its hint with an unmarked key such as line1 loses PII.
+            yield from _iter_leaf_values(value, key_hint=key_hint if inherited_content else str(key))
     elif isinstance(node, (list, tuple)):
         for item in node:
             yield from _iter_leaf_values(item, key_hint=key_hint)
@@ -117,7 +120,7 @@ def extract_customer_content_values(payload: Any) -> frozenset[str]:
     """Walk a parsed JSON request body and collect customer-content leaves.
 
     A leaf value is collected when either is true:
-      * its immediate key contains one of `CUSTOMER_CONTENT_FIELD_MARKERS`
+      * its key or an ancestor key contains one of `CUSTOMER_CONTENT_FIELD_MARKERS`
         (rule 1: "the request body's customer-content fields"), or
       * the value itself already looks like a Myanmar phone number or an
         MMK amount (defense in depth for a field the caller renamed).
