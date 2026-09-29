@@ -614,7 +614,8 @@ requireContract('kernel release is manual current-main and environment gated',
 requireContract('kernel release promotes one exact isolated artifact',
   (kernelWorkflow.match(/vercel@56\.1\.0 deploy --prebuilt --prod --skip-domain --yes/g) || []).length === 1
   && (kernelWorkflow.match(/vercel@56\.1\.0 promote "\$CANDIDATE_URL"/g) || []).length === 1
-  && kernelWorkflow.includes('vercel@56.1.0 curl /api/status --deployment "$CANDIDATE_URL"')
+  && kernelWorkflow.includes('vercel@56.1.0 --token="$VERCEL_TOKEN" curl /api/status --deployment "$CANDIDATE_URL" --yes')
+  && !/vercel@56\.1\.0 curl \/api\/status[^\n]+--token/.test(kernelWorkflow)
   && kernelWorkflow.indexOf('Reconfirm current main before promotion') < kernelWorkflow.indexOf('Promote the exact verified candidate')
   && !kernelWorkflow.includes('npx vercel deploy --prod -y'))
 requireContract('kernel failed production verification restores the exact prior alias',
