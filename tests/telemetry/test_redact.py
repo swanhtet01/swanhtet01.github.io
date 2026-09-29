@@ -549,6 +549,19 @@ class SpanNameRedactionTests(unittest.TestCase):
 
 
 class ExtractCustomerContentValuesTests(unittest.TestCase):
+    def test_email_and_credential_values_are_redacted_but_token_counts_are_structural(self) -> None:
+        sensitive = {
+            "email": "synthetic@example.invalid", "access_token": "synthetic-access-value",
+            "refreshToken": "synthetic-refresh-value", "password": "synthetic-password-value",
+            "apiKey": "synthetic-key-value", "client_secret": "synthetic-secret-value",
+            "Authorization": "Bearer synthetic-value", "service_role_key": "synthetic-role-value",
+        }
+        values = redact.extract_customer_content_values({**sensitive, "token_count": 42, "token_type": "bearer"})
+        self.assertEqual(values, frozenset(sensitive.values()))
+        for private in sensitive.values():
+            self.assertEqual(redact.scrub_span_name(private, values), "[redacted]")
+            self.assertNotIn("stock.location", redact.scrub_attributes({"stock.location": private}, values))
+
     def test_marked_containers_protect_descendants_without_capturing_siblings(self) -> None:
         body = {
             "address": {"line1": "Synthetic Street 42", "parts": [{"value": "Synthetic District"}]},
