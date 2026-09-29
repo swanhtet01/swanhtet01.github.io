@@ -27,7 +27,15 @@ TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
 def _workspace_label_from_identifier(workspace_id: str) -> str:
     """Return a stable, readable directory label when setup is still empty."""
 
-    words = [part for part in re.split(r"[._-]+", workspace_id.strip()) if part]
+    normalized = workspace_id.strip()
+    try:
+        UUID(normalized)
+    except (ValueError, AttributeError):
+        pass
+    else:
+        return "Managed company"
+
+    words = [part for part in re.split(r"[._-]+", normalized) if part]
     label = " ".join("SuperMega" if word.casefold() == "supermega" else word.title() for word in words)
     return label if 1 <= len(label) <= 120 else "Managed company"
 

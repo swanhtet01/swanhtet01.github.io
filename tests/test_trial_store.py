@@ -708,6 +708,14 @@ class TrialStoreTests(unittest.TestCase):
         self.assertFalse(fallback_truncated)
         self.assertEqual(fallback_workspaces[0].label, "SuperMega Shop")
 
+        directory_row.update(
+            workspace_id="9d9735d6-1040-5536-9909-7f0218001c2b",
+            display_name=None,
+        )
+        uuid_workspaces, uuid_truncated = store.list_actor_workspaces(principal, limit=2)
+        self.assertFalse(uuid_truncated)
+        self.assertEqual(uuid_workspaces[0].label, "Managed company")
+
         session_active = False
         with self.assertRaisesRegex(TrialNotReadyError, "auth_session_active"):
             store.list_actor_workspaces(principal, limit=2)
