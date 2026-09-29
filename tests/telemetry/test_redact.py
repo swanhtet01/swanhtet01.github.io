@@ -626,3 +626,18 @@ class ExtractCustomerContentValuesTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PhoneFormatRedactionTests(unittest.TestCase):
+    def test_local_and_international_formats_never_export(self):
+        for phone in ('09123456789', '09-123-456-789', '09 123 456 789',
+                      '+95 9 123 456 789', '+959123456789', '0095 9 123456789'):
+            with self.subTest(phone=phone):
+                self.assertFalse(redact.is_string_value_safe(phone, frozenset()))
+                self.assertNotIn('stock.location', redact.scrub_attributes({'stock.location': phone}, frozenset()))
+                self.assertIn(phone, redact.extract_customer_content_values({'unmarked': phone}))
+
+    def test_short_numbers_and_opaque_identifiers_remain_safe(self):
+        for value in ('WH-1', '09123', 'ws-091234567890123456'):
+            with self.subTest(value=value):
+                self.assertTrue(redact.is_string_value_safe(value, frozenset()))
