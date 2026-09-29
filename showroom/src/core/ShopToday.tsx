@@ -375,7 +375,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
     <ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />
     </details>
 
-    <details aria-label="More Shop tools" className="shop-today-workspaces">
+    <details aria-label="More Shop tools — Customers, finance, channels, and purchasing" className="shop-today-workspaces">
       <summary><span><strong>Operations</strong><small>Customers, finance, channels and purchasing</small></span><b>{modules.length} areas</b></summary>
       <div className="shop-today-module-grid">
         {modules.map((module) => <Link data-tone={module.tone ?? 'ready'} key={module.label} to={module.to}>
