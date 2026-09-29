@@ -3111,7 +3111,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   })() : null
 
   const commerceWriteBanner = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
-    <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Sample data'}</span>
+    <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Company records' : 'Local workspace'}</span>
     <p>{commerceStorageError
       ? `Writes paused: ${commerceStorageError}${managedIdentity && workspaceMode === 'managed-ready' ? ' Reload Shop and check Orders before recording the sale again; it may already be saved.' : ''}`
       : commerceSync.status === 'checking'
@@ -3122,7 +3122,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
         : commerceSync.message || notice || (managedIdentity
           ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the company account.`
-          : 'Sample data on this device. Sign in for team data.')}</p>
+          : 'Saved on this device. Log in for shared team records.')}</p>
     {commerceSync.status === 'pending' || (managedIdentity && workspaceMode === 'managed-ready' && Boolean(commerceStorageError))
       ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
       : !commerceCanWrite && commerceSync.status !== 'checking'
