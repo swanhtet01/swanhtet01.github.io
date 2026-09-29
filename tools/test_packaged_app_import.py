@@ -110,6 +110,23 @@ class PackagedImportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             layout(self.bundle)
 
+    def test_missing_layout_files_have_fixed_diagnostics(self):
+        for relative, code in [('.vc-config.json', 'package_metadata_missing'),
+                               ('vc__handler__python.py', 'package_launcher_missing'),
+                               ('_vendor', 'package_vendor_missing'),
+                               ('api/app.py', 'package_entrypoint_missing')]:
+            with self.subTest(relative=relative):
+                path = self.bundle / relative
+                held = path.with_name(path.name + '.held')
+                path.rename(held)
+                try:
+                    result = run_probe(self.bundle)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(child_failure_report(result.stderr)['reason'], code)
+                    self.assertNotIn(str(self.bundle), result.stderr)
+                finally:
+                    held.rename(path)
+
     def test_rejects_different_interpreter(self):
         self.config['runtime'] = 'python0.0'
         self.write('.vc-config.json', json.dumps(self.config))

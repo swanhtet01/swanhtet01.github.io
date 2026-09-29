@@ -27,6 +27,8 @@ SAFE_FAILURE_CODES = frozenset({
     'application_origin_outside_bundle', 'dependency_origin_outside_bundle',
     'runtime_modules_missing', 'Linux_required_for_package_acceptance',
     'packaged_import_failed', 'invalid_probe_result',
+    'package_metadata_missing', 'package_launcher_missing', 'package_vendor_missing',
+    'package_entrypoint_missing',
 })
 PROBE_PHASES = frozenset({'layout', 'dependencies', 'native_imports', 'application_import', 'routes', 'module_origins'})
 ERROR_TYPES = frozenset({'ValueError', 'RuntimeError', 'ImportError', 'ModuleNotFoundError', 'FileNotFoundError', 'KeyError', 'TypeError', 'OSError', 'Exception'})
@@ -63,9 +65,16 @@ def contained(root, path):
     return path
 
 
+def required_path(bundle, relative, missing_code):
+    try:
+        return contained(bundle, bundle / relative)
+    except FileNotFoundError:
+        raise ValueError(missing_code) from None
+
+
 def layout(bundle):
     bundle = bundle.resolve(strict=True)
-    config = json.loads(contained(bundle, bundle / '.vc-config.json').read_text())
+    config = json.loads(required_path(bundle, '.vc-config.json', 'package_metadata_missing').read_text())
     expected = f'python{sys.version_info.major}.{sys.version_info.minor}'
     if config.get('runtime') != expected:
         raise ValueError('interpreter_runtime_mismatch')
@@ -75,17 +84,17 @@ def layout(bundle):
         raise ValueError('interpreter_architecture_mismatch')
     if config.get('handler') != 'vc__handler__python.vc_handler':
         raise ValueError('unsupported_launcher')
-    tree = ast.parse(contained(bundle, bundle / 'vc__handler__python.py').read_text())
+    tree = ast.parse(required_path(bundle, 'vc__handler__python.py', 'package_launcher_missing').read_text())
     values = [node.value.value for node in tree.body
               if isinstance(node, ast.Assign)
               and any(isinstance(t, ast.Name) and t.id == '_vendor_rel' for t in node.targets)
               and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)]
     if len(values) != 1 or not values[0] or Path(values[0]).is_absolute():
         raise ValueError('unsupported_vendor_layout')
-    vendor = contained(bundle, bundle / values[0])
+    vendor = required_path(bundle, values[0], 'package_vendor_missing')
     if not vendor.is_dir():
         raise ValueError('vendor_directory_missing')
-    contained(bundle, bundle / 'api/app.py')
+    required_path(bundle, 'api/app.py', 'package_entrypoint_missing')
     return bundle, vendor
 
 
