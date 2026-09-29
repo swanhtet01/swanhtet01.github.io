@@ -11,12 +11,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: showroom-ci-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  group: showroom-ci-${{ github.event_name }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   validate:
-    name: SuperMega App CI
+    # Same-repository commits always receive the full push check. Give the
+    # redundant PR event a DIFFERENT name so a skipped job cannot satisfy the
+    # required SuperMega App CI context. Fork PRs still run every check here.
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'Same-repository PR uses push checks' || 'SuperMega App CI' }}
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
