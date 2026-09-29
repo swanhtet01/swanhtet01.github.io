@@ -179,6 +179,7 @@ jobs:
           node --test tools/test_generated_python_function.mjs
           node tools/verify_generated_python_function.mjs
           python tools/test_packaged_app_import.py
+          python tools/verify_packaged_app_import.py --assemble-dependencies
           python tools/verify_packaged_app_import.py
 
       - name: Verify immutable app asset contract

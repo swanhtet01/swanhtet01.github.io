@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
+import tempfile
 import sys
 
 ROUTES = {
@@ -28,7 +30,8 @@ SAFE_FAILURE_CODES = frozenset({
     'runtime_modules_missing', 'Linux_required_for_package_acceptance',
     'packaged_import_failed', 'invalid_probe_result',
     'package_metadata_missing', 'package_launcher_missing', 'package_vendor_missing',
-    'package_entrypoint_missing',
+    'package_entrypoint_missing', 'builder_dependencies_missing',
+    'builder_dependency_link_forbidden', 'builder_dependency_file_invalid',
 })
 PROBE_PHASES = frozenset({'layout', 'dependencies', 'native_imports', 'application_import', 'routes', 'module_origins'})
 ERROR_TYPES = frozenset({'ValueError', 'RuntimeError', 'ImportError', 'ModuleNotFoundError', 'FileNotFoundError', 'KeyError', 'TypeError', 'OSError', 'Exception'})
@@ -74,7 +77,7 @@ def required_path(bundle, relative, missing_code):
         raise ValueError(missing_code) from None
 
 
-def layout(bundle):
+def layout(bundle, require_vendor=True):
     global _dependency_layout
     bundle = bundle.resolve(strict=True)
     config = json.loads(required_path(bundle, '.vc-config.json', 'package_metadata_missing').read_text())
@@ -95,11 +98,43 @@ def layout(bundle):
     if len(values) != 1 or not values[0] or Path(values[0]).is_absolute():
         raise ValueError('unsupported_vendor_layout')
     _dependency_layout = 'root_metadata' if any(bundle.glob('*.dist-info/METADATA')) else 'no_root_metadata'
-    vendor = required_path(bundle, values[0], 'package_vendor_missing')
-    if not vendor.is_dir():
+    vendor = (bundle / values[0]).resolve()
+    if not vendor.is_relative_to(bundle) or vendor == bundle:
+        raise ValueError('package_path_escape')
+    if require_vendor:
+        vendor = required_path(bundle, values[0], 'package_vendor_missing')
+    if vendor.exists() and not vendor.is_dir():
         raise ValueError('vendor_directory_missing')
     required_path(bundle, 'api/app.py', 'package_entrypoint_missing')
     return bundle, vendor
+
+
+def assemble_vendor(bundle, venv):
+    bundle, vendor = layout(bundle, require_vendor=False)
+    if vendor.exists():
+        return {'ok': True, 'evidence': 'packaged_dependency_assembly', 'action': 'existing_vendor_preserved'}
+    venv = venv.resolve(strict=True)
+    source = venv / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages'
+    if not source.is_dir() or not any(source.glob('*.dist-info/METADATA')):
+        raise ValueError('builder_dependencies_missing')
+    source = contained(venv, source)
+    # uv installs regular files/hardlinks. Do not follow ambient or cache symlinks.
+    for entry in source.rglob('*'):
+        if entry.is_symlink():
+            raise ValueError('builder_dependency_link_forbidden')
+        if not entry.is_file() and not entry.is_dir():
+            raise ValueError('builder_dependency_file_invalid')
+    stage = Path(tempfile.mkdtemp(prefix='.vendor-assembly-', dir=bundle))
+    try:
+        shutil.copytree(source, stage, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        vendor.parent.mkdir(parents=True, exist_ok=True)
+        stage.rename(vendor)
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage)
+    return {'ok': True, 'evidence': 'packaged_dependency_assembly',
+            'action': 'builder_dependencies_copied', 'hostedAcceptance': 'NOT RUN'}
 
 
 def probe(bundle):
@@ -196,9 +231,13 @@ def main():
             return
         if sys.platform != 'linux':
             raise ValueError('Linux_required_for_package_acceptance')
-        output = Path(sys.argv[1] if len(sys.argv) == 2 else '.vercel/output')
+        assemble = len(sys.argv) == 2 and sys.argv[1] == '--assemble-dependencies'
+        output = Path(sys.argv[1] if len(sys.argv) == 2 and not assemble else '.vercel/output')
         functions = (output / 'functions').resolve(strict=True)
         bundle = contained(functions, functions / 'api/app.func')
+        if assemble:
+            print(json.dumps(assemble_vendor(bundle, Path('.vercel/python/.venv'))))
+            return
         result = run_probe(bundle)
         if result.returncode:
             print(json.dumps(child_failure_report(result.stderr)), file=sys.stderr)

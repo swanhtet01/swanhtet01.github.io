@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from verify_packaged_app_import import ROUTES, layout, run_probe, safe_failure, child_failure_report
+from verify_packaged_app_import import ROUTES, layout, run_probe, safe_failure, child_failure_report, assemble_vendor
 
 
 class PackagedImportTests(unittest.TestCase):
@@ -136,6 +136,26 @@ class PackagedImportTests(unittest.TestCase):
         self.assertEqual(report['dependencyLayout'], 'root_metadata')
         self.assertNotIn(str(self.bundle), result.stderr)
         self.assertEqual(child_failure_report('{"dependencyLayout":"PRIVATE_SENTINEL"}')['dependencyLayout'], 'unknown')
+
+    def test_assembly_restores_missing_vendor_and_imports_offline(self):
+        venv = self.root / 'builder-venv'
+        source = venv / 'lib' / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages'
+        source.parent.mkdir(parents=True)
+        self.vendor.rename(source)
+        (source / 'unsafe.pth').write_text('raise RuntimeError("must not execute")\n')
+        report = assemble_vendor(self.bundle, venv)
+        self.assertEqual(report['action'], 'builder_dependencies_copied')
+        self.assertEqual(run_probe(self.bundle).returncode, 0)
+        self.assertTrue(source.is_dir())
+        self.assertEqual(assemble_vendor(self.bundle, venv)['action'], 'existing_vendor_preserved')
+
+    def test_assembly_rejects_empty_builder_environment(self):
+        self.vendor.rename(self.bundle / 'held_vendor')
+        venv = self.root / 'empty-venv'
+        venv.mkdir()
+        with self.assertRaisesRegex(ValueError, 'builder_dependencies_missing'):
+            assemble_vendor(self.bundle, venv)
+        self.assertFalse(self.vendor.exists())
 
     def test_rejects_different_interpreter(self):
         self.config['runtime'] = 'python0.0'
