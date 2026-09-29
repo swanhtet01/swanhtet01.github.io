@@ -3479,7 +3479,17 @@ def _run_validator(
         timeout=90,
     )
     if result.returncode != 0:
-        raise RehearsalFailure("database_validator_failed")
+        try:
+            failed_payload = json.loads(result.stdout.strip().splitlines()[-1])
+            failed_checks = failed_payload.get("failed_checks", [])
+            safe_checks = [
+                check for check in failed_checks[:12]
+                if isinstance(check, str) and re.fullmatch(r"[a-z0-9_]+", check)
+            ]
+        except (IndexError, json.JSONDecodeError, AttributeError, TypeError):
+            safe_checks = []
+        suffix = f":{','.join(safe_checks)}" if safe_checks else ""
+        raise RehearsalFailure(f"database_validator_failed{suffix}")
     try:
         payload = json.loads(result.stdout.strip().splitlines()[-1])
     except (IndexError, json.JSONDecodeError) as exc:
