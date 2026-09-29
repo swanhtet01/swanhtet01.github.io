@@ -17,6 +17,44 @@ ROUTES = {
     '/api/trial/v1/ecommerce-reviews/{review_id}/change-requests': 'post',
 }
 
+SAFE_FAILURE_CODES = frozenset({
+    'package_path_escape', 'interpreter_runtime_mismatch',
+    'interpreter_architecture_mismatch', 'unsupported_launcher',
+    'unsupported_vendor_layout', 'vendor_directory_missing',
+    'isolated_interpreter_required', 'offline_package_side_effect_forbidden',
+    'dependency_pins_missing', 'packaged_dependency_pin_mismatch',
+    'packaged_psycopg_binary_not_loaded', 'required_route_missing',
+    'application_origin_outside_bundle', 'dependency_origin_outside_bundle',
+    'runtime_modules_missing', 'Linux_required_for_package_acceptance',
+    'packaged_import_failed', 'invalid_probe_result',
+})
+PROBE_PHASES = frozenset({'layout', 'dependencies', 'native_imports', 'application_import', 'routes', 'module_origins'})
+ERROR_TYPES = frozenset({'ValueError', 'RuntimeError', 'ImportError', 'ModuleNotFoundError', 'FileNotFoundError', 'KeyError', 'TypeError', 'OSError', 'Exception'})
+_probe_phase = 'layout'
+
+
+def child_failure_report(text):
+    try:
+        value = json.loads(text)
+    except (ValueError, TypeError):
+        value = {}
+    if not isinstance(value, dict):
+        value = {}
+    return {'ok': False, 'evidence': 'packaged_application_import',
+            'reason': value.get('reason') if isinstance(value.get('reason'), str) and value['reason'] in SAFE_FAILURE_CODES else 'packaged_import_failed',
+            'phase': value.get('phase') if isinstance(value.get('phase'), str) and value['phase'] in PROBE_PHASES else 'unknown',
+            'errorType': value.get('errorType') if isinstance(value.get('errorType'), str) and value['errorType'] in ERROR_TYPES else 'Exception'}
+
+
+def safe_failure(error):
+    code = str(error)
+    return {'ok': False, 'evidence': 'packaged_application_import',
+            'phase': _probe_phase,
+            'reason': code if code in SAFE_FAILURE_CODES else 'package_probe_exception',
+            'errorType': type(error).__name__ if type(error) in (
+                ValueError, RuntimeError, ImportError, ModuleNotFoundError,
+                FileNotFoundError, KeyError, TypeError, OSError) else 'Exception'}
+
 
 def contained(root, path):
     path = path.resolve(strict=True)
@@ -52,6 +90,7 @@ def layout(bundle):
 
 
 def probe(bundle):
+    global _probe_phase
     # The child is launched with -I -S: ambient site-packages and PYTHONPATH are absent.
     if not sys.flags.isolated or not sys.flags.no_site:
         raise ValueError('isolated_interpreter_required')
@@ -66,6 +105,7 @@ def probe(bundle):
     sys.addaudithook(deny_side_effects)
     sys.path[:0] = [str(bundle), str(vendor)]
     # Deliberately no site.addsitedir: executable .pth files and launcher are not run.
+    _probe_phase = 'dependencies'
     pins = {}
     for raw in contained(bundle, bundle / 'requirements.txt').read_text().splitlines():
         line = raw.strip()
@@ -85,6 +125,7 @@ def probe(bundle):
         if installed.get(normalize(name)) != [version]:
             raise ValueError('packaged_dependency_pin_mismatch')
     # These native-backed dependencies are otherwise lazy or disabled by offline telemetry.
+    _probe_phase = 'native_imports'
     from importlib import import_module
     native_imports = []
     for pin, module_name in [('psycopg-binary', 'psycopg_binary'),
@@ -96,11 +137,14 @@ def probe(bundle):
                     raise ValueError('packaged_psycopg_binary_not_loaded')
             import_module(module_name)
             native_imports.append(module_name)
+    _probe_phase = 'application_import'
     from api.app import app
+    _probe_phase = 'routes'
     schema = app.openapi()
     for route, method in ROUTES.items():
         if method not in schema['paths'][route]:
             raise ValueError('required_route_missing')
+    _probe_phase = 'module_origins'
     runtime_count = 0
     for name, module in list(sys.modules.items()):
         origin = getattr(module, '__file__', None)
@@ -144,14 +188,15 @@ def main():
         bundle = contained(functions, functions / 'api/app.func')
         result = run_probe(bundle)
         if result.returncode:
-            raise ValueError('packaged_import_failed')
+            print(json.dumps(child_failure_report(result.stderr)), file=sys.stderr)
+            raise SystemExit(1)
         report = json.loads(result.stdout)
         if report.get('evidence') != 'packaged_application_import' or report.get('ok') is not True:
             raise ValueError('invalid_probe_result')
         print(json.dumps(report))
-    except Exception:
+    except Exception as error:
         # Never echo arbitrary import output or generated environment metadata.
-        print('FAIL: isolated packaged application import; no hosted acceptance', file=sys.stderr)
+        print(json.dumps(safe_failure(error)), file=sys.stderr)
         raise SystemExit(1)
 
 
