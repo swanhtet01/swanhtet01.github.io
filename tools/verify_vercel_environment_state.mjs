@@ -97,6 +97,7 @@ if (kind === 'app') {
   const core = schedulerActive ? schedulerEnvironment : []
   const managedRuntime = [
     'SUPERMEGA_DATABASE_URL',
+    'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL',
     'SUPERMEGA_TRIAL_SCHEMA_VERSION',
     'SUPERMEGA_BILLING_SCHEMA_VERSION',
     'SUPERMEGA_SUPABASE_PROJECT_REF',

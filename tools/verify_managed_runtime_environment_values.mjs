@@ -6,7 +6,30 @@ const root = resolve(import.meta.dirname, '..')
 const packageState = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const projectRef = String(packageState?.supermega?.productionSupabaseProjectRef || '').trim()
 const runtimeRole = 'supermega_trial_login'
+const storageAuditRole = 'supermega_storage_audit'
 const managedSchemaVersion = '13'
+
+const databaseTargetReadyForRole = (value, role) => {
+  try {
+    const parsed = new URL(value)
+    const sslmode = String(parsed.searchParams.get('sslmode') || '').toLowerCase()
+    const queryKeys = [...parsed.searchParams.keys()]
+    const username = decodeURIComponent(parsed.username)
+    const pooled = /^[a-z0-9-]+\.pooler\.supabase\.com$/.test(parsed.hostname)
+      && username === `${role}.${projectRef}`
+      && parsed.port === '6543'
+    return ['postgres:', 'postgresql:'].includes(parsed.protocol)
+      && Boolean(parsed.password)
+      && ['require', 'verify-ca', 'verify-full'].includes(sslmode)
+      && queryKeys.length === 1
+      && queryKeys[0] === 'sslmode'
+      && parsed.pathname === '/postgres'
+      && !parsed.hash
+      && pooled
+  } catch {
+    return false
+  }
+}
 
 const evaluate = (environment, expectedMode) => {
   const failures = []
@@ -14,6 +37,7 @@ const evaluate = (environment, expectedMode) => {
     if (!failures.includes(value)) failures.push(value)
   }
   const databaseUrl = String(environment.SUPERMEGA_DATABASE_URL || '').trim()
+  const storageAuditDatabaseUrl = String(environment.SUPERMEGA_STORAGE_AUDIT_DATABASE_URL || '').trim()
   const supabaseUrl = String(environment.VITE_SUPABASE_URL || '').trim()
   const publishableKey = String(environment.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim()
   const schemaVersion = String(environment.SUPERMEGA_TRIAL_SCHEMA_VERSION || '').trim()
@@ -29,27 +53,10 @@ const evaluate = (environment, expectedMode) => {
   const selfServeWindow = String(environment.SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW || '').trim()
   const writesEnabled = String(environment.SUPERMEGA_TRIAL_WRITES_ENABLED || '').trim().toLowerCase()
 
-  let databaseTargetReady = false
-  try {
-    const parsed = new URL(databaseUrl)
-    const sslmode = String(parsed.searchParams.get('sslmode') || '').toLowerCase()
-    const queryKeys = [...parsed.searchParams.keys()]
-    const username = decodeURIComponent(parsed.username)
-    const pooled = /^[a-z0-9-]+\.pooler\.supabase\.com$/.test(parsed.hostname)
-      && username === `${runtimeRole}.${projectRef}`
-      && parsed.port === '6543'
-    databaseTargetReady = ['postgres:', 'postgresql:'].includes(parsed.protocol)
-      && Boolean(parsed.password)
-      && ['require', 'verify-ca', 'verify-full'].includes(sslmode)
-      && queryKeys.length === 1
-      && queryKeys[0] === 'sslmode'
-      && parsed.pathname === '/postgres'
-      && !parsed.hash
-      && pooled
-  } catch {
-    databaseTargetReady = false
-  }
+  const databaseTargetReady = databaseTargetReadyForRole(databaseUrl, runtimeRole)
+  const storageAuditTargetReady = databaseTargetReadyForRole(storageAuditDatabaseUrl, storageAuditRole)
   if (!databaseTargetReady) addFailure('managed_database_target_or_tls_invalid')
+  if (!storageAuditTargetReady) addFailure('managed_storage_audit_target_or_tls_invalid')
   if (supabaseUrl !== `https://${projectRef}.supabase.co`) addFailure('managed_browser_auth_url_invalid')
   if (!/^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(publishableKey)) {
     addFailure('managed_browser_publishable_key_invalid')
@@ -69,7 +76,7 @@ const evaluate = (environment, expectedMode) => {
     addFailure('staged_environment_must_not_enable_writes')
   }
   if (expectedMode === 'isolated_demo') {
-    if ([databaseUrl, supabaseUrl, publishableKey, schemaVersion, billingSchemaVersion, boundProjectRef, configuredReleaseCommit, selfServeWindow, writesEnabled].some(Boolean)) {
+    if ([databaseUrl, storageAuditDatabaseUrl, supabaseUrl, publishableKey, schemaVersion, billingSchemaVersion, boundProjectRef, configuredReleaseCommit, selfServeWindow, writesEnabled].some(Boolean)) {
       addFailure('isolated_environment_contains_managed_runtime_values')
     } else {
       failures.splice(0, failures.length)
@@ -82,8 +89,10 @@ const evaluate = (environment, expectedMode) => {
     effectiveMode: ['managed_trial', 'self_serve'].includes(expectedMode) && failures.length === 0
       ? 'managed_trial'
       : 'isolated_demo',
-    projectRefMatched: databaseTargetReady && supabaseUrl === `https://${projectRef}.supabase.co`,
-    tlsRequired: databaseTargetReady,
+    projectRefMatched: databaseTargetReady && storageAuditTargetReady
+      && supabaseUrl === `https://${projectRef}.supabase.co`,
+    tlsRequired: databaseTargetReady && storageAuditTargetReady,
+    storageAuditReady: storageAuditTargetReady,
     browserAuthReady: supabaseUrl === `https://${projectRef}.supabase.co`
       && /^sb_publishable_[A-Za-z0-9_-]{16,}$/.test(publishableKey),
     schemaVersionMatched: schemaVersion === managedSchemaVersion,
@@ -99,6 +108,7 @@ const evaluate = (environment, expectedMode) => {
 if (process.argv.includes('--self-test')) {
   const valid = {
     SUPERMEGA_DATABASE_URL: `postgresql://${runtimeRole}.${projectRef}:hidden@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require`,
+    SUPERMEGA_STORAGE_AUDIT_DATABASE_URL: `postgresql://${storageAuditRole}.${projectRef}:hidden@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require`,
     VITE_SUPABASE_URL: `https://${projectRef}.supabase.co`,
     VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_1234567890abcdef',
     SUPERMEGA_TRIAL_SCHEMA_VERSION: managedSchemaVersion,
@@ -113,6 +123,7 @@ if (process.argv.includes('--self-test')) {
   assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_WRITES_ENABLED: 'true' }, 'self_serve').failures.includes('managed_self_serve_window_not_open'), true)
   assert.equal(evaluate({ ...valid, SUPERMEGA_TRIAL_SCHEMA_VERSION: '10' }, 'staged').failures.includes('managed_schema_version_invalid'), true)
   assert.equal(evaluate({ ...valid, SUPERMEGA_SUPABASE_PROJECT_REF: 'otherprojectref00000' }, 'staged').failures.includes('managed_project_binding_invalid'), true)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_STORAGE_AUDIT_DATABASE_URL: '' }, 'managed_trial').failures.includes('managed_storage_audit_target_or_tls_invalid'), true)
   assert.equal(evaluate({ ...valid, SUPERMEGA_RELEASE_COMMIT: 'not-a-commit' }, 'staged').failures.includes('managed_release_commit_invalid'), true)
   assert.equal(evaluate({ ...valid, SUPERMEGA_RELEASE_COMMIT: '', VERCEL_GIT_COMMIT_SHA: 'b'.repeat(40) }, 'staged').ok, true)
   assert.equal(evaluate({ ...valid, SUPERMEGA_RELEASE_COMMIT: '', GITHUB_SHA: 'c'.repeat(40) }, 'staged').ok, true)
