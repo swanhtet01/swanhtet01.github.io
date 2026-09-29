@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.29
+Version: 1.2.30
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-29
@@ -28,7 +28,7 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner now designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. This destination is approved product direction, but account provisioning, access and hosted acceptance remain unverified. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain the white/cobalt design and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
-1. Finish the approved paired release and verify live website/app journeys. Production schema13 and both Vercel schema flags13 are verified; never replay the completed migration. PR602 diagnostics are merged and release36511656857 is running at b1c85d9d5. Resolve any concrete packaging failure before promotion. See section3 for scope and remaining acceptance boundaries.
+1. The approved paired production release completed on29September at c69fab796a7a845a832a4dca310a79010a0a3e5f (workflow36519938271). Both domains passed hosted exact-release and project-control checks. Production schema13 and both schema flags13 are verified; never replay the migration. Complete founder Login and browser save/reload acceptance next. Local browser access still reports connection refused; distinguish this device limitation from hosted checks.
 2. Complete the private swanhtet@supermega.dev founder journey across Shop, Sites and Commerce: identity, memberships, save/reload, isolation and recovery. Account ownership intent is not provisioning evidence.
 3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
 4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The current local catalog-validator build has 589 passing tests and three skips; useful model output and VPS acceptance remain unproven.
@@ -86,10 +86,10 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Main b1c85d9d5 contains PR596–602, including the acceptance runner, environment contract repair and safe packaging diagnostics | Last verified production remains bbab9a63; verify aliases after release |
-| Integration | PR596–602 merged using owner-approved two-field review exceptions; original protections restored and verified | Standing routine PR authority applies; no independent-review claim |
-| CI / release | PR602 exact-head App CI36510776581 and required checks passed. Release36510128080 failed isolated packaged import before deployment; successor36511656857 runs with bounded diagnostics | Production schema13 and flags13 verified. Packaging diagnostics are not a fix or deployment proof; hosted browser acceptance remains open |
-| Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
+| Source | Main c69fab796a7a845a832a4dca310a79010a0a3e5f includes PR596–607 | Paired production release verified at this exact commit |
+| Integration | PR607 merged after all three required checks passed; original repository protections restored and read back | Routine scoped review/merge authority remains; no independent-review claim |
+| CI / release | Workflow36519938271 SUCCESS: standalone Python imports, app/public candidates, identity barrier, both promotions, production aliases and project controls | Contract and hosted release checks do not establish customer acceptance |
+| Production aliases | supermega.dev and app.supermega.dev hosted exact-release verification PASS at c69fab796a7a845a832a4dca310a79010a0a3e5f on29September | Local browser connection refused; founder access, managed writes and customer acceptance remain incomplete. Business writes remain false and signup closed |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |

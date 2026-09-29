@@ -20,7 +20,7 @@ function fixture() {
   const passwords = [], busyStates = []
   const noop = () => {}
   return { passwords, busyStates, context: {
-    managedReady: true, busy: false, accountRequestPending: { current: false }, directory: null, reviewReturnPath: null,
+    managedReady: true, publicApp: false, busy: false, accountRequestPending: { current: false }, directory: null, reviewReturnPath: null,
     email: 'synthetic@example.invalid', password: ['synthetic', 'test', 'input'].join('-'), workspaceId: '', existingIdentity: { workspaceId: 'one' },
     setBusy: value => busyStates.push(value), setPassword: value => passwords.push(value), setNoticeTone: noop, setNotice: noop,
     setActivating: noop, setDirectory: noop, setWorkspaceId: noop, setExistingIdentity: noop, setEmail: noop,
