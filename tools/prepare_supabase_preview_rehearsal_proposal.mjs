@@ -10,10 +10,10 @@ export const SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT = 'supermega.supabase-
 const root = resolve(import.meta.dirname, '..')
 const output = resolve(root, 'hq', 'readiness', 'supabase-preview-rehearsal-proposal.json')
 const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
-const EXPECTED_MIGRATION_COUNT = 22
-const EXPECTED_PRIVATE_MIGRATION_COUNT = 21
+const EXPECTED_MIGRATION_COUNT = 23
+const EXPECTED_PRIVATE_MIGRATION_COUNT = 22
 const EXPECTED_PUBLIC_BASELINE = '20260711081300_public_legacy_baseline.sql'
-const EXPECTED_FINAL_MIGRATION = '20260924231714_ecommerce_customer_decisions.sql'
+const EXPECTED_FINAL_MIGRATION = '20260929171000_ecommerce_decision_review_fk_index.sql'
 const EXPECTED_MIGRATIONS = Object.freeze([
   EXPECTED_PUBLIC_BASELINE,
   '20260722004500_private_trial_backend_role_preflight.sql',
@@ -36,6 +36,7 @@ const EXPECTED_MIGRATIONS = Object.freeze([
   '20260918011500_website_customer_acceptance.sql',
   '20260924190304_ecommerce_review_entitlement_proof.sql',
   '20260924194557_ecommerce_customer_review_storage.sql',
+  '20260924231714_ecommerce_customer_decisions.sql',
   EXPECTED_FINAL_MIGRATION,
 ])
 const EXPECTED_SOURCE_TARGET_SCHEMA_VERSION = 13

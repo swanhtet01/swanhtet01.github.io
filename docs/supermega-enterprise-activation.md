@@ -6,7 +6,7 @@ The validator is intentionally read-only. It does not apply migrations, create u
 
 ## Current full-candidate rehearsal packet (v3)
 
-The rehearsal packet now binds all 22 committed migrations: the legacy public baseline,
+The rehearsal packet now binds all 23 committed migrations: the legacy public baseline,
 the 14 private-core migrations through schema v13, and seven later migrations for durable
 signup attempts, Website and Ecommerce review storage, entitlement proof and customer decisions.
 Core schema version 13 alone does not prove those later features exist. Historical local

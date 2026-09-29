@@ -29,6 +29,7 @@ REVIEW_MIGRATIONS = (
     "20260924190304_ecommerce_review_entitlement_proof.sql",
     "20260924194557_ecommerce_customer_review_storage.sql",
     "20260924231714_ecommerce_customer_decisions.sql",
+    "20260929171000_ecommerce_decision_review_fk_index.sql",
 )
 WORKSPACE = "rehearsal-product"
 OWNER = "owner-product"

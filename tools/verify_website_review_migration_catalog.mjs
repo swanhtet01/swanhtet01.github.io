@@ -56,7 +56,7 @@ const expected = {
   functions: 'fabdb1987b7348fb24dc91bdb19c463a305552fda7a97d48660c2eb867c99d54',
   triggers: '8f423ef55794c3a5b8062011d8696064aff095f3f2c0093992f10c804bf8a707',
   constraints: 'e94c55ae5cc8565ddf5a3e44b098adfda6ac7461a8f42e423b9a5b318ab72b95',
-  indexes: '29e59aeef5344125b73cb6e6ba9a4f938cce2bf1b7501f6b9fd9d892276db382',
+  indexes: '91f5189cbce74557634e5865b89c53eaed35c79ac896f4bff02be34737244d7a',
 }
 
 export async function websiteReviewCatalogDigests(database) {
