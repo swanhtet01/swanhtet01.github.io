@@ -617,6 +617,11 @@ class TrialStoreTests(unittest.TestCase):
             "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3",
             "supabase",
         )
+        directory_row = {
+            "workspace_id": "company-a",
+            "capabilities": ["company.write", "commerce.write"],
+            "display_name": "Mingalar Fresh Mart",
+        }
 
         class Cursor:
             def __init__(self):
@@ -635,13 +640,7 @@ class TrialStoreTests(unittest.TestCase):
                 statements.append((self.query, parameters))
 
             def fetchall(self):
-                return [
-                    {
-                        "workspace_id": "company-a",
-                        "capabilities": ["company.write", "commerce.write"],
-                        "display_name": "Mingalar Fresh Mart",
-                    },
-                ]
+                return [directory_row]
 
             def fetchone(self):
                 if "supabase_session_is_active" in self.query:
@@ -703,6 +702,19 @@ class TrialStoreTests(unittest.TestCase):
 
         with self.assertRaises(TrialValidationError):
             store.list_actor_workspaces(principal, limit=51)
+
+        directory_row.update(workspace_id="supermega-shop", display_name=None)
+        fallback_workspaces, fallback_truncated = store.list_actor_workspaces(principal, limit=2)
+        self.assertFalse(fallback_truncated)
+        self.assertEqual(fallback_workspaces[0].label, "SuperMega Shop")
+
+        directory_row.update(
+            workspace_id="9d9735d6-1040-5536-9909-7f0218001c2b",
+            display_name=None,
+        )
+        uuid_workspaces, uuid_truncated = store.list_actor_workspaces(principal, limit=2)
+        self.assertFalse(uuid_truncated)
+        self.assertEqual(uuid_workspaces[0].label, "Managed company")
 
         session_active = False
         with self.assertRaisesRegex(TrialNotReadyError, "auth_session_active"):

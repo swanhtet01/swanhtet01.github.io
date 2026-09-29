@@ -23,6 +23,22 @@ from supermega_runtime.shop_inventory_runtime import (
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
 
+
+def _workspace_label_from_identifier(workspace_id: str) -> str:
+    """Return a stable, readable directory label when setup is still empty."""
+
+    normalized = workspace_id.strip()
+    try:
+        UUID(normalized)
+    except (ValueError, AttributeError):
+        pass
+    else:
+        return "Managed company"
+
+    words = [part for part in re.split(r"[._-]+", normalized) if part]
+    label = " ".join("SuperMega" if word.casefold() == "supermega" else word.title() for word in words)
+    return label if 1 <= len(label) <= 120 else "Managed company"
+
 _READINESS_LOG = logging.getLogger(__name__)
 _READINESS_STAGES = frozenset({
     "configuration", "connect", "transaction", "probe", "role", "schema",
@@ -3976,7 +3992,7 @@ class PostgresTrialStore:
                                 continue
                             display_name = str(row.get("display_name") or "").strip()
                             if not display_name or len(display_name) > 120:
-                                display_name = f"Managed company {len(workspaces) + 1}"
+                                display_name = _workspace_label_from_identifier(workspace_id)
                             workspaces.append(
                                 ManagedWorkspaceAccess(
                                     workspace_id=workspace_id,
