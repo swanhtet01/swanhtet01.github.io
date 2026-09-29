@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20260929171000_ecommerce_decision_review_fk_index.sql": "6ad14b664f4b9ad560a7cbaf37c6d4dcf8c26d3709e5bb44d40ea2f4029785c3",
     "20260924231714_ecommerce_customer_decisions.sql": "c14f514daddca921f1c1ea2dbad3c7504d2142bc8b0bbbef0da48eb7104069c7",
     "20260924194557_ecommerce_customer_review_storage.sql": "4bb3eb40ec26854bda021d3c2e19ba34bb0657272933f6bfd5ee8f6da6974b46",
     "20260924190304_ecommerce_review_entitlement_proof.sql": "84fdda564d5deb7003fd9c151dd1a1b64c21209fd64fd109062b25d0d3842fef",
@@ -236,6 +237,7 @@ def extend_contract(base):
         ('ecommerce_customer_decisions_pkey', ('workspace_id', 'actor_id', 'command_id'), True, True, 'p'),
         ('ecommerce_decisions_review_idx', ('workspace_id', 'review_id'), False, False, None),
         ('ecommerce_decisions_acceptance_idx', ('workspace_id', 'review_id'), True, False, None),
+        ('ecommerce_decisions_review_fk_idx', ('review_id',), False, False, None),
     ):
         base['EXPECTED_INDEX_CONTRACT'][index] = dict(table='ecommerce_customer_decisions', keys=keys, options=(0,)*len(keys), unique=unique, primary=primary, constraint=constraint)
     base['EXPECTED_INDEX_CONTRACT']['ecommerce_decisions_acceptance_idx']['predicate_expression'] = "(kind = 'acceptance'::text)"

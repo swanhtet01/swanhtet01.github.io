@@ -65,11 +65,11 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
-  assert.equal(built.migrationPlan.migrationCount, 22)
-  assert.equal(built.migrationPlan.privateMigrationCount, 21)
+  assert.equal(built.migrationPlan.migrationCount, 23)
+  assert.equal(built.migrationPlan.privateMigrationCount, 22)
   assert.equal(built.migrationPlan.schemaVersion, 13)
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
-  assert.equal(built.migrationPlan.finalMigration, '20260924231714_ecommerce_customer_decisions.sql')
+  assert.equal(built.migrationPlan.finalMigration, '20260929171000_ecommerce_decision_review_fk_index.sql')
   assert.equal(built.migrationPlan.sourceAheadOfLiveProduction, true)
   assert.equal(built.productionBaseline.evidenceClassification, 'historical-audit-only')
   assert.equal(built.productionBaseline.currentStateRevalidated, false)
@@ -86,10 +86,10 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
 })
 
-test('binds exact ordered public baseline and twenty-one private migrations including Ecommerce decisions', async () => {
+test('binds exact ordered public baseline and twenty-two private migrations including the FK index', async () => {
   const built = await proposal()
   const entries = built.migrationPlan.migrations
-  assert.deepEqual(entries.slice(-7).map(entry => entry.name), [
+  assert.deepEqual(entries.slice(-8).map(entry => entry.name), [
     '20260907024457_self_serve_durable_attempt_budget.sql',
     '20260915184728_website_customer_review_storage.sql',
     '20260915191528_website_review_entitlement_proof.sql',
@@ -97,6 +97,7 @@ test('binds exact ordered public baseline and twenty-one private migrations incl
     '20260924190304_ecommerce_review_entitlement_proof.sql',
     '20260924194557_ecommerce_customer_review_storage.sql',
     '20260924231714_ecommerce_customer_decisions.sql',
+    '20260929171000_ecommerce_decision_review_fk_index.sql',
   ])
   assert.equal(validatePreviewMigrationEntries(entries), entries)
   for (const mutate of [list => list.pop(), list => list.push({ ...list.at(-1) }),
