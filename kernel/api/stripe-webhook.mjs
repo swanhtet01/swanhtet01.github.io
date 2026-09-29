@@ -12,6 +12,7 @@ import { captureError } from '../alert.mjs'
 
 export const config = { api: { bodyParser: false } }
 const MAX_BODY_BYTES = 1024 * 1024
+const BODY_READ_TIMEOUT_MS = 10_000
 
 async function readRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -21,9 +22,11 @@ async function readRawBody(req) {
     const fail = (code) => {
       if (finished) return
       finished = true
+      clearTimeout(deadline)
       chunks.length = 0
       reject(Object.assign(new Error(code), { code }))
     }
+    const deadline = setTimeout(() => fail('body_read_timeout'), BODY_READ_TIMEOUT_MS)
     req.on('data', (c) => {
       if (finished) return
       size += c.length
@@ -33,6 +36,7 @@ async function readRawBody(req) {
     req.on('end', () => {
       if (finished) return
       finished = true
+      clearTimeout(deadline)
       resolve(Buffer.concat(chunks))
     })
     req.on('error', () => fail('body_read_error'))
@@ -51,7 +55,8 @@ export default async function handler(req, res) {
     rawBody = await readRawBody(req)
   } catch (error) {
     const oversized = error.code === 'body_too_large'
-    res.status(oversized ? 413 : 400).json({ ok: false, reason: oversized ? 'body_too_large' : 'body_read_error' })
+    const timedOut = error.code === 'body_read_timeout'
+    res.status(oversized ? 413 : timedOut ? 408 : 400).json({ ok: false, reason: oversized ? 'body_too_large' : timedOut ? 'body_read_timeout' : 'body_read_error' })
     return
   }
   const sig = req.headers['stripe-signature'] || ''
