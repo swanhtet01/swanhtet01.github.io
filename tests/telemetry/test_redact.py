@@ -624,5 +624,34 @@ class ExtractCustomerContentValuesTests(unittest.TestCase):
         self.assertIn("12,500 MMK", values)
 
 
+
+
+class PhoneFormatRedactionTests(unittest.TestCase):
+    def test_local_and_international_formats_never_export(self):
+        for phone in ('09123456789', '09-123-456-789', '09 123 456 789',
+                      '+95 9 123 456 789', '+959123456789', '0095 9 123456789', '+95 (9) 123 456 789',
+                      '09(123)456789', '+95 (9) 123-456-789'):
+            with self.subTest(phone=phone):
+                self.assertFalse(redact.is_string_value_safe(phone, frozenset()))
+                self.assertNotIn('stock.location', redact.scrub_attributes({'stock.location': phone}, frozenset()))
+                self.assertIn(phone, redact.extract_customer_content_values({'unmarked': phone}))
+
+    def test_storefront_punctuation_between_all_phone_digits(self):
+        # Storefront permits spaces, parentheses and hyphens anywhere after
+        # the first digit. Exercise prefix separators, not only subscriber digits.
+        for prefix in ('09', '+959', '00959', '959'):
+            for separator in (' ', '-', '(', ')', ' ()- '):
+                phone = separator.join(prefix + '123456789')
+                # Preserve the optional leading plus as part of the country prefix.
+                phone = phone.replace('+' + separator, '+', 1)
+                with self.subTest(phone=phone):
+                    self.assertFalse(redact.is_string_value_safe(phone, frozenset()))
+
+    def test_short_numbers_and_opaque_identifiers_remain_safe(self):
+        for value in ('WH-1', '09123', 'ws-091234567890123456'):
+            with self.subTest(value=value):
+                self.assertTrue(redact.is_string_value_safe(value, frozenset()))
+
+
 if __name__ == "__main__":
     unittest.main()
