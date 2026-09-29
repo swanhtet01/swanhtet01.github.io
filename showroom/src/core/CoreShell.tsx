@@ -506,7 +506,7 @@ export function CoreLayout() {
 
   useEffect(() => {
     document.documentElement.dataset.supermegaTheme = 'light'
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f6f4ee')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f6f7fb')
   }, [])
 
   if (sessionChanged) return <PortalAccessPanel title="Account changed in another tab" copy="Reload to verify the current account. Saved records are unchanged; unsaved edits may need to be entered again." action={<button className="core-button primary" onClick={() => window.location.reload()} type="button">Reload workspace</button>} />
