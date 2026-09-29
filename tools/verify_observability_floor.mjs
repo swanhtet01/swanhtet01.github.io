@@ -72,22 +72,37 @@ function safeOutput(value) {
     .replace(/([?&](?:access_token|api_key|apikey|jwt|key|password|secret|token)=)[^&\s]+/gi, '$1[redacted]')
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[redacted]')
     .replace(/\b(sk-[A-Za-z0-9._-]{12,})\b/g, '[redacted-key]')
+    .replace(/sb_secret_[A-Za-z0-9_-]+/g, '[redacted-key]')
     .replace(/\b(?:ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, '[redacted-github-token]')
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '[redacted-jwt]')
     .slice(0, 4_000)
+}
+
+function safeReceipt(value, key = '', depth = 0) {
+  if (depth > 12) return '[redacted-depth]'
+  if (/(?:password|secret|token|authorization|apikey|servicerolekey)$/i.test(key.replace(/[^a-z0-9]/gi, ''))) {
+    return '[redacted]'
+  }
+  if (typeof value === 'string') return safeOutput(value)
+  if (Array.isArray(value)) return value.map(item => safeReceipt(item, '', depth + 1))
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([name, item]) =>
+      [safeOutput(name), safeReceipt(item, name, depth + 1)]))
+  }
+  return value
 }
 
 function parseJsonLoose(value) {
   const text = String(value || '').trim()
   if (!text) return null
   try {
-    return JSON.parse(text)
+    return safeReceipt(JSON.parse(text))
   } catch {
     const first = text.indexOf('{')
     const last = text.lastIndexOf('}')
     if (first < 0 || last <= first) return null
     try {
-      return JSON.parse(text.slice(first, last + 1))
+      return safeReceipt(JSON.parse(text.slice(first, last + 1)))
     } catch {
       return null
     }
@@ -235,7 +250,7 @@ export function assessLiveEndpointEvidence(endpointResults, options = {}) {
     if (JSON.stringify(body).toLowerCase().includes('secret=')) failures.push(`${entry.id}:secret_value_literal_exposed`)
   }
 
-  return {
+  return safeReceipt({
     ok: failures.length === 0,
     status: failures.length === 0 ? 'pass' : 'fail',
     releaseIdentity: referenceIdentity,
@@ -251,7 +266,7 @@ export function assessLiveEndpointEvidence(endpointResults, options = {}) {
       commit: entry.body?.commit || null,
       operatingMode: entry.body?.operating_mode || null,
     })),
-  }
+  })
 }
 
 async function fetchJsonEndpoint(spec) {
