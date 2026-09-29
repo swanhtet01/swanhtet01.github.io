@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.31
+Version: 1.2.32
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-29
-Status: ACTIVE — implementation, hosted acceptance and commercial delivery remain incomplete
+Status: ACTIVE — the current release is live; founder, customer and commercial acceptance remain incomplete
 
 ## 1. Controlling objective
 
@@ -26,10 +26,10 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 ### Immediate delivery sequence
 
-Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner now designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. This destination is approved product direction, but account provisioning, access and hosted acceptance remain unverified. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain the white/cobalt design and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
+Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The single founder identity and three private workspaces now exist, and the current app/public release has hosted acceptance. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain the white/cobalt design and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
-1. The approved paired production release completed on29September at ea1c66f264bda030ab7820350809371eef625e47 (workflow36522459415). Both domains passed hosted exact-release and project-control checks. Production schema13 and both schema flags13 are verified; never replay the migration. Complete founder Login and browser save/reload acceptance next. Local browser access still reports connection refused; distinguish this device limitation from hosted checks.
-2. Complete the private swanhtet@supermega.dev founder journey across Shop, Sites and Commerce: identity, memberships, save/reload, isolation and recovery. Account ownership intent is not provisioning evidence.
+1. The approved paired production release completed on29September at `91a91e5e1577c245eaecb0abe08e1808366d4e7e` (workflow `36597449763`). Both Vercel projects are READY at that exact commit; aliases, project controls, rendered public routes and the real Login page passed hosted checks with no first-window runtime errors. Production schema13 and both schema flags13 are verified; never replay the migration.
+2. Complete the private swanhtet@supermega.dev founder journey across the already assigned Shop, Sites and Commerce workspaces: use a current recovery email, set the password, sign in, save/reload each product and verify isolation/recovery. The account remains unconfirmed and has never signed in; do not call the founder showcase accepted yet.
 3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
 4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The current local catalog-validator build has 589 passing tests and three skips; useful model output and VPS acceptance remain unproven.
 5. Align screenshots, product copy, business card and sales materials to the accepted release. Complete delivery/support and pricing evidence before outreach.
@@ -68,7 +68,7 @@ Prioritize the weakest required part of the customer lifecycle. Do not spend suc
 
 ### Execution rule - 29 September
 
-Use the immediate delivery sequence in section 2 as the single priority list. During external waits, finish a concrete customer-flow defect, delivery asset or evaluated R&D result. Do not create status documents, arbitrary hardening changes or repeated unchanged checks merely to stay active. The approved founder invitation can proceed when Auth transport works; authenticated VPS inspection can proceed when access works, preserving trading workloads.
+Use the immediate delivery sequence in section 2 as the single priority list. During external waits, finish a concrete customer-flow defect, delivery asset or evaluated R&D result. Do not create status documents, arbitrary hardening changes or repeated unchanged checks merely to stay active. Auth and local HTTPS transport are working. The next founder gate is the owner's password-recovery click followed by authenticated product acceptance. Reconcile the fresh Supabase advisor findings in source while that owner-only step is pending; authenticated VPS inspection can proceed when access works, preserving trading workloads.
 
 ### Sustained execution
 
@@ -76,24 +76,25 @@ A turn is not limited to three minutes. Continue through implementation, verific
 
 ### Existing founder-invitation authorization
 
-The owner-approved Supabase Auth invitation to swanhtet@supermega.dev was sent once on29September and independently verified as invited but unconfirmed. That one-send authorization is consumed. The original email used localhost; production Site URL and exact signup/recovery callbacks are now saved and reload-verified under app.supermega.dev/account/setup. The old email is not repaired by changing settings. Token-free Auth transport still failed from this machine; do not replay the private token or repeat an unchanged invitation. Confirm working transport and deployed account handling before preparing a replacement invitation. Memberships and identity self-confirmation are not authorized by the original invitation approval.
+The owner-approved Supabase Auth invitation to swanhtet@supermega.dev was sent once on29September and independently verified as invited but unconfirmed. The original localhost email is obsolete. Production Site URL and signup/recovery callbacks point to app.supermega.dev/account/setup, and one replacement recovery request was sent through the live route. Auth transport, deployed Login and the three founder-only memberships now pass provider/read-only checks. The founder still must request or use a current recovery email, set the password and complete first sign-in; never fabricate that owner action or create a duplicate identity.
 
 ### Standing routine PR authority
 
-On29September the owner explicitly approved PR597 and future routine PR review/merge without repeated permission questions. Use the previously explained temporary exception only when needed: required approvals0 and last-push approvalfalse, with every other rule preserved and immediate verified restoration in finally. Required checks must pass at the exact head and strict base; never fabricate an independent review or use an admin bypass. Reconcile current rule state before each exception. This does not authorize live database migrations, unrelated IAM changes, spending or customer contact. Existing explicit paired-release approval remains usable for the agreed deployment scope; material database/access changes require their own concrete authorization.
+On29September the owner explicitly approved PR597 and future routine PR review/merge without repeated permission questions. When the sole-owner repository cannot supply an independent reviewer, preserve the approval count and last-push rule and use only the proven exact-user `pull_request` bypass actor for the exact merge; remove it in `finally` and verify the original ruleset. Required checks must pass at the exact head and strict base, and all review threads must be resolved. Never fabricate an independent review or broaden the bypass beyond pull-request merging. This does not authorize live database migrations, unrelated IAM changes, spending or customer contact. Reconcile production authority for each materially new deployment or managed change.
 
 This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Main ea1c66f264bda030ab7820350809371eef625e47 includes PR596–608 | Paired production release verified at this exact commit |
-| Integration | PR608 merged after all three required checks passed; original repository protections restored and read back | Routine scoped review/merge authority remains; no independent-review claim |
-| CI / release | Workflow36522459415 SUCCESS: standalone Python imports, app/public candidates, identity barrier, both promotions, production aliases and project controls | Contract and hosted release checks do not establish customer acceptance |
-| Production aliases | supermega.dev and app.supermega.dev hosted exact-release verification PASS at ea1c66f264bda030ab7820350809371eef625e47 on29September | Local browser connection refused; founder access, managed writes and customer acceptance remain incomplete. Business writes remain false and signup closed |
+| Source | Main `91a91e5e1577c245eaecb0abe08e1808366d4e7e` includes PR596–616 | Current paired production release verified at this exact commit |
+| Integration | PR616 exact head passed all required checks and had no review threads; the original repository ruleset was restored and read back after merge | Routine scoped review/merge authority remains; no independent-review claim |
+| CI / release | Workflow `36597449763` SUCCESS: v13 database/storage-audit gate, standalone app, app/public candidates, identity barrier, both promotions, aliases and project controls | Hosted release checks do not establish founder or customer acceptance |
+| Production aliases | supermega.dev and app.supermega.dev hosted and rendered-browser verification PASS at `91a91e5e...`; Vercel reports both deployments READY/production with no runtime error clusters in the first15minutes | Founder sign-in/save/reload and customer acceptance remain incomplete. Public signup remains closed |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
-| Account entry | Paired release36522459415 promoted PR608 and passed exact-release checks on both production domains. Public routes require Login; unassigned public accounts show workspace access/support/sign-out rather than claim setup | Founder confirmation, assigned workspaces and authenticated browser save/reload remain unverified; business writes remain disabled |
+| Account entry | The live app redirects to `/login` and renders only the real account form/recovery/support actions. One founder identity and three founder-only Shop/Sites/Commerce memberships exist | Founder is unconfirmed and has never signed in; authenticated browser save/reload/recovery completion remain NOT RUN |
+| Data/security advisors | Supabase is ACTIVE_HEALTHY on PostgreSQL17.6.1; all15 app_private tables exist with RLS. Current release validates the restricted runtime and separate read-only storage auditor | Review leaked-password protection, legacy factory_payroll SECURITY DEFINER grants,13 app RLS init-plan warnings and the reported Ecommerce FK index before a new managed change |
 | Website/Ecommerce | Setup completion now uses workspace=1, matching the product switcher. Local route tests 22/22, app build and artifact verifier PASS. Website model tests previously passed 15/15; offering component checks now pass 11/11 | Existing browser QA records preserved. Hosted database save/reload and denial passed for Sites and Commerce; valid UI submit/save/reload remains unproven. Remaining sample-led paths need review |
 | Payments | 24 focused Stripe tests and full kernel verification with490 tests passed locally, including exact raw-byte signatures, interrupted/oversized requests, redacted persistence errors and successful retry. Kernel lint has0 errors and61 warnings after the outreach regex repair | No live charge or hosted settlement acceptance established; warnings remain to assess |
 | Local AI | Local build local-build-20260929.2 matches the idle loopback worker; catalog validation/comparison added; 589 tests pass, three skips | Synthetic model extraction failed quality; RAM admission prevents retry. No paid fallback or accepted VPS worker |
@@ -403,7 +404,7 @@ an adopt/reject result and a product change, not another strategy document.
 |---|---|---|
 | M1 Coherent entry | No primary demo detours; consistent routes/copy; useful real-data setup | INCOMPLETE |
 | M2 Reliable hosted core | Verified login, tenant isolation, persistence, recovery and core task | UNPROVEN |
-| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | UNPROVEN for current candidate |
+| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | PASS for `91a91e5e...` in hosted production |
 | M4 Accepted installation | Consented business completes agreed task with reconciled records | UNPROVEN |
 | M5 Repeatable delivery | Offer, support, costs, payment evidence and reusable process | INCOMPLETE |
 | M6 Useful automation | Bounded jobs produce accepted results with recovery/measured value | PARTIAL local foundation |
@@ -444,7 +445,7 @@ Acceptance `guard_ecommerce_decision()` is one SECURITY INVOKER trigger function
 
 Acceptance run36500651876 at8269ede60 passed real Auth sign-in, restricted-runtime save/reconnect/readback, idempotent retry and cross-user read/write denial for Shop, Sites and Commerce. Both synthetic users and all three workspaces were removed; independent provider readback confirms zero users/sessions/workspace rows and enabled guards. Four temporary GitHub secrets were deleted and absence verified. This consumes the approved single session; do not repeat it without new scope. The protected preview remains writes-disabled, so this is hosted database-runtime evidence, not browser/API write-path or customer acceptance.
 
-Existing release authorization: the owner approved the exact production upgrade, two schema flags and tested paired deployment through 2026-09-30T12:00UTC. Continue repairs and the agreed deployment without asking again. No new emails, payments, account grants, business-write activation or public signup are included. Database and flags are done; the remaining release action is packaging verification, paired promotion and hosted readback. Detailed run receipts stay in launch-control.
+The authorized production upgrade, two schema flags and paired deployment are complete. Release `91a91e5e...` passed workflow `36597449763` and independent live checks; there is no remaining promotion action for this candidate. Future material database, IAM, payment, customer-contact or public-signup changes need their own verified scope. Detailed run receipts stay in launch-control.
 
 #### Evidence locations and diagnostic limits
 
