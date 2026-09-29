@@ -385,7 +385,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       </div>
     </details>
 
-    <details className="shop-today-coverage">
+    <details aria-label="Shop safeguards" className="shop-today-coverage">
       <summary><span><strong>System coverage</strong><small>Capabilities working behind this view</small></span><b>6 areas</b></summary>
       <div>{capabilityGroups.map(([label, detail]) => <article key={label}><strong>{label}</strong><small>{detail}</small></article>)}</div>
       <p>SuperMega keeps consequential changes behind named human review. External payment, customer messaging, delivery, filing, and accounting posting require separately verified connections.</p>
