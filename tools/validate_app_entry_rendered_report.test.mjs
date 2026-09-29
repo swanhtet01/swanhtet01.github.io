@@ -23,11 +23,11 @@ test('receipt boundary must be visibly sized and inside the viewport', () => {
   assert.equal(receiptBoundaryVisible(null, 390, 844, style), false)
 })
 
-test('rendered harness follows current assisted Website and Ecommerce entry actions', () => {
+test('rendered harness follows current direct Sites and Ecommerce entry actions', () => {
   assert.match(renderedVerifierSource, /candidate\.textContent\.trim\(\) === 'Try sample request'/)
-  assert.match(renderedVerifierSource, /'Make this website yours'/)
-  assert.match(renderedVerifierSource, /'Setup needed'/)
-  assert.match(renderedVerifierSource, /'Prepare private draft'/)
+  assert.match(renderedVerifierSource, /'Tell us about the business'/)
+  assert.match(renderedVerifierSource, /'Create website'/)
+  assert.doesNotMatch(renderedVerifierSource, /'Prepare private draft'/)
   assert.doesNotMatch(renderedVerifierSource, /'Start sample order'/)
   assert.doesNotMatch(renderedVerifierSource, /'The working sample stays unchanged until you choose Customize demo\.'/)
 })
@@ -390,16 +390,16 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
 
 test('full visual cases pin current product truth copy and Plant canonicalization', async () => {
   const rootDir = process.cwd()
-  const [renderer, coreApp, websiteProduct, ecommerceProduct, ecommerceWorkspace] = await Promise.all([
+  const [renderer, coreApp, websiteStarterSetup, ecommerceProduct, ecommerceWorkspace] = await Promise.all([
     readFile(join(rootDir, 'tools', 'verify_app_entry_rendered.mjs'), 'utf8'),
     readFile(join(rootDir, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
-    readFile(join(rootDir, 'showroom', 'src', 'products', 'website', 'WebsiteProduct.tsx'), 'utf8'),
+    readFile(join(rootDir, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8'),
     readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
     readFile(join(rootDir, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8'),
   ])
   const sourceBoundText = [
-    [websiteProduct, 'Make this website yours'],
-    [websiteProduct, 'Setup needed'],
+    [websiteStarterSetup, 'Tell us about the business'],
+    [websiteStarterSetup, 'Create website'],
     [ecommerceProduct, 'Sample request saved locally'],
     [ecommerceWorkspace, 'This sample order request is saved on this device for Shop review.'],
     [ecommerceWorkspace, 'This browser demo retained the request.'],
