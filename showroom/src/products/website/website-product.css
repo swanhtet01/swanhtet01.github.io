@@ -3105,20 +3105,20 @@
   flex: 0 0 auto;
 }
 
-.website-trial-ready .website-panel-head {
+.website-download .website-panel-head {
   min-height: 92px;
   align-items: center;
   padding: 16px 18px;
 }
 
-.website-trial-ready-body {
+.website-download-body {
   display: grid;
   align-content: start;
   gap: 14px;
   padding: 16px;
 }
 
-.website-trial-ready-summary {
+.website-download-summary {
   display: grid;
   gap: 5px;
   border: 1px solid color-mix(in srgb, var(--website-green) 34%, var(--website-line));
@@ -3127,7 +3127,7 @@
   background: var(--website-green-soft);
 }
 
-.website-trial-ready-summary > span {
+.website-download-summary > span {
   color: var(--website-green);
   font-size: 0.6875rem;
   font-weight: var(--font-weight-black);
@@ -3135,21 +3135,21 @@
   text-transform: uppercase;
 }
 
-.website-trial-ready-summary > strong {
+.website-download-summary > strong {
   color: var(--website-ink);
   font-size: clamp(1.25rem, 3vw, 1.75rem);
   line-height: 1.15;
 }
 
-.website-trial-ready-summary > p,
-.website-trial-ready-steps p {
+.website-download-summary > p,
+.website-download-steps p {
   margin: 0;
   color: var(--website-muted);
   font-size: 0.8125rem;
   line-height: 1.45;
 }
 
-.website-trial-ready-steps {
+.website-download-steps {
   display: grid;
   gap: 0;
   margin: 0;
@@ -3160,7 +3160,7 @@
   list-style: none;
 }
 
-.website-trial-ready-steps > li {
+.website-download-steps > li {
   min-width: 0;
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
@@ -3169,11 +3169,11 @@
   padding: 13px 14px;
 }
 
-.website-trial-ready-steps > li:last-child {
+.website-download-steps > li:last-child {
   border-bottom: 0;
 }
 
-.website-trial-ready-steps > li > span {
+.website-download-steps > li > span {
   width: 30px;
   height: 30px;
   display: grid;
@@ -3185,18 +3185,18 @@
   font-weight: var(--font-weight-black);
 }
 
-.website-trial-ready-steps > li > div {
+.website-download-steps > li > div {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
 
-.website-trial-ready-steps strong {
+.website-download-steps strong {
   color: var(--website-ink);
   font-size: 0.875rem;
 }
 
-.website-trial-ready-boundary {
+.website-download-boundary {
   display: grid;
   gap: 3px;
   border-left: 3px solid var(--website-green);
@@ -3208,11 +3208,11 @@
   line-height: 1.4;
 }
 
-.website-trial-ready-boundary strong {
+.website-download-boundary strong {
   color: var(--website-ink);
 }
 
-.website-trial-download {
+.website-download-action {
   width: 100%;
   min-height: 50px;
 }
@@ -3275,13 +3275,13 @@
     padding-inline: 2px;
   }
 
-  .website-trial-ready .website-panel-head {
+  .website-download .website-panel-head {
     min-height: 0;
     align-items: flex-start;
     padding: 14px;
   }
 
-  .website-trial-ready-body {
+  .website-download-body {
     padding: 12px;
   }
 }
@@ -3384,7 +3384,7 @@
   }
 }
 
-/* A first-run business brief replaces the misleading publish-ready sample path. */
+/* A first-run business brief replaces the misleading publish-ready shortcut. */
 .website-action-bar[data-starter="true"] {
   grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -3411,17 +3411,6 @@
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--website-green-soft) 48%, transparent), transparent 44%),
     var(--website-panel);
-}
-
-/* The trade question sits above the fields it fills, so it needs to read as a separate step
-   rather than as the first of those fields. Uses --website-line, which flips with the theme;
-   a hardcoded rule here would be a hairline nobody can see in dark mode.
-
-   The selector is qualified because `.website-starter-form > label` resets border and padding
-   at a higher specificity -- as a bare class this rule measured 0px wide in the browser. */
-.website-starter-form > label.website-starter-trade {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--website-line);
 }
 
 .website-starter-form {
@@ -3469,13 +3458,13 @@
 .website-starter-actions {
   position: sticky;
   z-index: 3;
-  top: 0;
+  bottom: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin: 0;
-  border-bottom: 1px solid var(--website-line);
-  padding: 0 0 12px;
+  border-top: 1px solid var(--website-line);
+  padding: 12px 0 0;
   background: var(--website-panel);
 }
 
@@ -3494,7 +3483,7 @@
   }
 
   .website-starter-actions {
-    top: 54px;
+    bottom: 0;
     margin: 0;
     padding: 10px 0;
     background: color-mix(in srgb, var(--website-panel) 96%, transparent);
