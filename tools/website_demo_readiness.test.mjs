@@ -61,41 +61,20 @@ function contentChecks(workspace) {
   return readinessChecks(workspace).filter((check) => CONTENT_CHECK_IDS.includes(check.id))
 }
 
-test('assisted Website entry stays local-only and defers to recovery and edit states', async () => {
-  assert.match(websiteProductSource, /const canRequestWebsiteSetup = storageMode !== 'managed'/)
-  assert.match(websiteProductSource, /const showAssistedWebsitePreview = canRequestWebsiteSetup && surface === 'preview'/)
-  assert.match(websiteProductSource, /!storageIssue && !canRepairLocalStorage && !pendingRestoredDraft/)
-  assert.match(websiteProductSource, /!hasUnsavedChanges && !starterSetupActive/)
-  const safeLink = 'href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a>'
-  assert.equal(websiteProductSource.split(safeLink).length - 1, 1, 'operator workspace retains the direct setup route')
-  assert.equal(websiteProductSource.split('<BusinessBrief product="website" onOpenWorkspace=').length - 1, 1, 'customer preview uses the business-brief entry component')
-  assert.match(websiteProductSource, /canRequestWebsiteSetup && surface === 'work' \? <a/)
-  const expression = websiteProductSource.match(/const canRequestWebsiteSetup = ([\s\S]*?)\n\s*const showAssistedWebsitePreview/)?.[1]
-  assert.ok(expression)
-  const ready = { storageMode: 'local', view: 'content', storageIssue: '', canRepairLocalStorage: false, pendingRestoredDraft: null, hasUnsavedChanges: false, starterSetupActive: false }
-  for (const surface of ['preview', 'work']) {
-    assert.equal(runInNewContext(expression, {...ready, surface}), true)
-    for (const blocked of [{storageMode:'managed'}, {view:'publish'}, {storageIssue:'error'}, {canRepairLocalStorage:true}, {pendingRestoredDraft:{}}, {hasUnsavedChanges:true}, {starterSetupActive:true}]) {
-      assert.equal(runInNewContext(expression, {...ready, surface, ...blocked}), false)
-    }
-  }
-  assert.doesNotMatch(websiteProductSource, /website-assisted-intake|What to send/)
-  const brief = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
-  assert.doesNotMatch(brief, /Publishing needs your approval|Before we start/)
-  assert.match(brief, /Next: your contact details\./)
+test('Sites entry opens the real brief and preserves recovery priority', () => {
+  assert.doesNotMatch(websiteProductSource, /Request Website setup|<BusinessBrief product="website"/)
+  assert.match(websiteProductSource, /const showWebsiteEditorAction = true/)
+  assert.match(websiteProductSource, /if \(pendingRestoredDraft\) \{\s*focusRestoredDraftChoice\(\)/)
+  assert.match(websiteProductSource, /if \(starterAvailable \|\| starterSetupActive\) \{\s*openStarterSetup\(\)/)
+  assert.match(websiteProductSource, /starterSetupActive \? \(\s*<WebsiteStarterSetup/)
   assert.match(websiteProductSource, /disabled=\{portalViewOnly\} onClick=\{runWebsiteAutopilot\}/)
 })
 
-test('untouched assisted preview does not invite customers into the builder', () => {
+test('the Sites action remains available without a preview-only entry gate', () => {
   const expression = websiteProductSource.match(/const showWebsiteEditorAction = ([^\r\n]+)/)?.[1]
   assert.ok(expression)
-  for (const showAssistedWebsitePreview of [false, true]) {
-    for (const starterAvailable of [false, true]) {
-      assert.equal(runInNewContext(expression, { showAssistedWebsitePreview, starterAvailable }), !(showAssistedWebsitePreview && starterAvailable))
-    }
-  }
+  assert.equal(runInNewContext(expression), true)
   assert.match(websiteProductSource, /\{showWebsiteEditorAction \? <button[\s\S]*?\{websiteSurfaceActionLabel\}\s*<\/button> : null\}/)
-  assert.match(websiteProductSource, /if \(pendingRestoredDraft\) \{\s*focusRestoredDraftChoice\(\)/)
 })
 
 test('Website keeps readiness visible while detailed checks collapse before the preview', () => {
@@ -197,9 +176,9 @@ test('a recovered tab draft waits for an explicit provenance choice', () => {
     'restoration must hold the candidate aside instead of silently activating it',
   )
   assert.match(websiteProductSource, /Unsaved tab draft found/)
-  assert.match(websiteProductSource, /Current \{isUntouchedWebsiteStarter\(workspace\) \? 'sample' : 'saved Website'\}/)
+  assert.match(websiteProductSource, /Current \{isUntouchedWebsiteStarter\(workspace\) \? 'starter Website' : 'saved Website'\}/)
   assert.match(websiteProductSource, /Continue saved draft/)
-  assert.match(websiteProductSource, /Start from this \{isUntouchedWebsiteStarter\(workspace\) \? 'sample' : 'Website'\}/)
+  assert.match(websiteProductSource, /Start from this Website/)
   assert.match(websiteProductSource, /Nothing was overwritten, deployed, published, or sent\./)
   assert.match(
     websiteProductSource,
@@ -728,15 +707,10 @@ test('compact content status preserves storage and draft recovery priority', () 
 })
 
 
-test('assisted Website header never claims durable storage for session-only data', () => {
-  const expression = websiteProductSource.match(/const assistedWebsiteStorageNotice = ([^\r\n]+)/)?.[1]
-  assert.ok(expression)
-  assert.equal(runInNewContext(expression, { storageMode: 'browser-local' }), 'Saved on this device. Not published.')
-  const sessionNotice = runInNewContext(expression, { storageMode: 'session-only' })
-  assert.match(sessionNotice, /Session only/)
-  assert.match(sessionNotice, /Download/)
-  assert.doesNotMatch(sessionNotice, /Saved on this device/)
-  assert.ok(websiteProductSource.includes('showAssistedWebsitePreview ? assistedWebsiteStorageNotice : activeViewCopy.copy'))
+test('Sites header uses the current workspace state without assisted-mode copy', () => {
+  assert.match(websiteProductSource, /<p>\{activeViewCopy\.copy\}<\/p>/)
+  assert.match(websiteProductSource, /Website ready to edit\. Nothing has been published\./)
+  assert.doesNotMatch(websiteProductSource, /assistedWebsiteStorageNotice|showAssistedWebsitePreview/)
 })
 
 
