@@ -57,7 +57,6 @@ const swPath = resolve(distDir, 'sw.js')
 const OFFLINE_ENTRY_KEYS = ['index.html']
 const OFFLINE_CHUNK_NAMES = [
   'core-app',
-  'shop-bakery-demo-loader',
   'shop-batch-profit-control-first-use',
 ]
 
