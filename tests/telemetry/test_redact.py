@@ -629,7 +629,8 @@ class ExtractCustomerContentValuesTests(unittest.TestCase):
 class PhoneFormatRedactionTests(unittest.TestCase):
     def test_local_and_international_formats_never_export(self):
         for phone in ('09123456789', '09-123-456-789', '09 123 456 789',
-                      '+95 9 123 456 789', '+959123456789', '0095 9 123456789'):
+                      '+95 9 123 456 789', '+959123456789', '0095 9 123456789', '+95 (9) 123 456 789',
+                      '09(123)456789', '+95 (9) 123-456-789'):
             with self.subTest(phone=phone):
                 self.assertFalse(redact.is_string_value_safe(phone, frozenset()))
                 self.assertNotIn('stock.location', redact.scrub_attributes({'stock.location': phone}, frozenset()))

@@ -48,10 +48,10 @@ _MIN_SUBSTRING_MATCH_LENGTH = 4
 _REDACTED_SPAN_NAME = "[redacted]"
 
 # Retain the original contiguous local-number rule, and additionally catch
-# local/international numbers with spaces, dots or hyphens. The added rule
+# local/international numbers with spaces, dots, parentheses or hyphens. The added rule
 # avoids matching inside opaque identifiers or longer digit sequences.
 MYANMAR_PHONE_PATTERN = re.compile(
-    r"(?<!\d)09\d{7,9}(?!\d)|(?<![\w+])(?:0|\+95[ .-]?|0095[ .-]?)9(?:[ .-]?\d){7,9}(?![ .-]?\d)"
+    r"(?<!\d)09\d{7,9}(?!\d)|(?<![\w+])(?:0|\+95[ .()\-]*|0095[ .()\-]*)9(?:[ .()\-]*\d){7,9}(?![ .()\-]*\d)"
 )
 
 # Rule 2: MMK amounts written as digits followed by "MMK" or "kyat(s)".
