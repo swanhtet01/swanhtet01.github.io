@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.32
+Version: 1.2.33
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-29
@@ -28,7 +28,7 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The single founder identity and three private workspaces now exist, and the current app/public release has hosted acceptance. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain the white/cobalt design and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
-1. The approved paired production release completed on29September at `91a91e5e1577c245eaecb0abe08e1808366d4e7e` (workflow `36597449763`). Both Vercel projects are READY at that exact commit; aliases, project controls, rendered public routes and the real Login page passed hosted checks with no first-window runtime errors. Production schema13 and both schema flags13 are verified; never replay the migration.
+1. The approved paired production release completed on30September at `31cccf8a9e057c5abb9ad823405945ee6833e466` (workflow `36618471082`). Both Vercel projects were promoted through the coordinated gate. Live readback reports managed mode, schema and audit ready, writes enabled and Supabase token authentication ready; the browser renders the real Login form. Production schema13 is verified; never replay the migration.
 2. Complete the private swanhtet@supermega.dev founder journey across the already assigned Shop, Sites and Commerce workspaces: use a current recovery email, set the password, sign in, save/reload each product and verify isolation/recovery. The account remains unconfirmed and has never signed in; do not call the founder showcase accepted yet.
 3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
 4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The current local catalog-validator build has 589 passing tests and three skips; useful model output and VPS acceptance remain unproven.
@@ -86,10 +86,10 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Main `91a91e5e1577c245eaecb0abe08e1808366d4e7e` includes PR596–616 | Current paired production release verified at this exact commit |
+| Source | Main `31cccf8a9e057c5abb9ad823405945ee6833e466` includes PR619's optimized RLS contract | Current paired production release verified at this exact commit |
 | Integration | PR616 exact head passed all required checks and had no review threads; the original repository ruleset was restored and read back after merge | Routine scoped review/merge authority remains; no independent-review claim |
-| CI / release | Workflow `36597449763` SUCCESS: v13 database/storage-audit gate, standalone app, app/public candidates, identity barrier, both promotions, aliases and project controls | Hosted release checks do not establish founder or customer acceptance |
-| Production aliases | supermega.dev and app.supermega.dev hosted and rendered-browser verification PASS at `91a91e5e...`; Vercel reports both deployments READY/production with no runtime error clusters in the first15minutes | Founder sign-in/save/reload and customer acceptance remain incomplete. Public signup remains closed |
+| CI / release | Workflow `36618471082` SUCCESS: v13 database/RLS gate, standalone app, app/public candidates, identity barrier, both promotions, aliases and project controls | Hosted release checks do not establish founder or customer acceptance |
+| Production aliases | supermega.dev and app.supermega.dev return HTTP200 at the paired release; live health reports managed mode with schema, audit, writes and Auth ready, and rendered browser verification shows the real Login form | Founder sign-in/save/reload and customer acceptance remain incomplete. Public signup remains closed |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
@@ -166,11 +166,13 @@ Artifacts are retained under `C:/Users/thesw/.codex/generated_images/01a0d249-2b
 
 These absolute paths are local working references. Preserve the selected source alongside the implementation handoff before moving machines. Generated details such as optional tax rows, decorative branding and catalog imagery require product validation; they are not requirements merely because they appear in an image.
 
+On 30 September a second three-direction board compared Editorial Precision, Operator Console and Spatial Workspace for the connected Shop experience at `C:/Users/thesw/.codex/generated_images/01a0d249-2b5d-7d83-a769-79336eeb777c/exec-8dc10d33-d6f2-4147-b7f2-c18f05038255.png`. The delegated selection is a hybrid of Editorial Precision and Operator Console: calm white structure, one strong work canvas, compact priorities and contextual detail. It rejects the Spatial Workspace hero treatment because imagery competes with daily work. Incumbent research supports searchable checkout, unified inventory/orders/customer context, staff controls and embedded next actions; capability lists alone do not establish parity.
+
 Latest owner direction: improve the whole product with Apple-like restraint and polish, not cosmetic choices. Remove the skin dropdown and dark-mode controls. Use one consistent light white/graphite/cobalt interface across the apps and public website. This supersedes the earlier selectable-skins proposal. Keep reusable design tokens internally; do not expose appearance controls without a new user request. Ignore previously saved appearance preferences when rendering the app. Preserve business records.
 
 Design priorities: stronger typography and hierarchy, deliberate spacing, fewer borders and redundant labels, natural interaction feedback, and one clear next action. Retain essential status, accessibility and recovery information. Use the supplied SOL references as a quality benchmark; no wholesale brand cloning or new settings panels.
 
-Next design action: simplify the shared interface and improve the core selling/setup tasks. Verify both the visual result and complete task behavior.
+Next design action: remove remaining production demo/trial surfaces, then implement the selected hierarchy in the shared shell and Shop selling path before carrying its interaction grammar into Sites and Commerce. Verify both the visual result and complete task behavior.
 
 ## 5. Authority, credentials and resource boundaries
 
