@@ -643,6 +643,18 @@ def _bool(value: Any) -> bool:
     return value is True
 
 
+def _client_tls_active(connection: Any) -> bool | None:
+    """Read libpq's client-leg TLS state when the driver exposes it.
+
+    Supavisor terminates the client TLS session before its database hop, so
+    pg_stat_ssl can be false while the application connection is encrypted.
+    """
+
+    pg_connection = getattr(connection, "pgconn", None)
+    ssl_in_use = getattr(pg_connection, "ssl_in_use", None)
+    return ssl_in_use if isinstance(ssl_in_use, bool) else None
+
+
 def _nonnegative_int(value: Any) -> int | None:
     return value if type(value) is int and value >= 0 else None
 
@@ -750,6 +762,10 @@ def _safe_hosted_admin_membership(row: Mapping[str, Any]) -> bool:
 
 
 def _run_policy_self_test() -> dict[str, Any]:
+    class _EncryptedTestConnection:
+        class pgconn:
+            ssl_in_use = True
+
     membership = (
         "((workspace_id = ( select current_setting('app.workspace_id', true) as current_setting)) "
         "and (actor_id = ( select current_setting('app.actor_id', true) as current_setting)) "
@@ -775,6 +791,12 @@ def _run_policy_self_test() -> dict[str, Any]:
     ).hexdigest()
 
     cases = {
+        "accept_client_leg_tls_signal": (
+            _client_tls_active(_EncryptedTestConnection()) is True
+        ),
+        "missing_client_leg_tls_signal_is_unknown": (
+            _client_tls_active(object()) is None
+        ),
         "canonical_membership": _policy_expression_matches(membership, expected),
         "reject_dead_case_wrapper": not _policy_expression_matches(
             f"case when false then true else ({membership}) end",
@@ -1261,6 +1283,15 @@ def collect_snapshot(connection: Any, *, schema_profile: str = "legacy-v11") -> 
                 from current_login
                 join pg_auth_members membership
                   on membership.roleid = current_login.oid
+                join pg_roles member_role on member_role.oid = membership.member
+                join pg_roles grantor_role on grantor_role.oid = membership.grantor
+                where not (
+                  member_role.rolname = 'postgres'
+                  and grantor_role.rolname in ('postgres', 'supabase_admin')
+                  and membership.admin_option
+                  and not membership.inherit_option
+                  and not membership.set_option
+                )
               ) as no_runtime_role_members,
               coalesce((
                 select pg_has_role(current_login.oid, backend.oid, 'USAGE')
@@ -1275,6 +1306,9 @@ def collect_snapshot(connection: Any, *, schema_profile: str = "legacy-v11") -> 
             """
         )
         identity = _mapping(cursor.fetchone())
+        client_tls_active = _client_tls_active(connection)
+        if client_tls_active is not None:
+            identity["tls_active"] = client_tls_active
 
         cursor.execute(
             """
@@ -1703,6 +1737,9 @@ def collect_storage_snapshot(connection: Any) -> dict[str, Any]:
             """
         )
         storage_audit_connection = _mapping(cursor.fetchone())
+        client_tls_active = _client_tls_active(connection)
+        if client_tls_active is not None:
+            storage_audit_connection["storage_audit_tls_active"] = client_tls_active
         cursor.execute(
             """
             select

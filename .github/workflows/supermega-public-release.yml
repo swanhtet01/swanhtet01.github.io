@@ -193,7 +193,12 @@ jobs:
           case "$SELECTED_RUNTIME_MODE" in
             managed_trial)
               npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
-                python tools/validate_supermega_database_url.py --env-key SUPERMEGA_DATABASE_URL --ensure-schema --require-ready
+                python tools/validate_supermega_database_url.py \
+                  --env-key SUPERMEGA_DATABASE_URL \
+                  --storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL \
+                  --schema-profile v13-self-serve \
+                  --ensure-schema \
+                  --require-ready
               ;;
             staged)
               echo "Managed credentials are value-verified, but writes remain disabled; production stays isolated_demo while named-user signup is staged."
