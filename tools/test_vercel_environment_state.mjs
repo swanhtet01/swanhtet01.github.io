@@ -47,6 +47,7 @@ const managedTrial = [
   env('SUPERMEGA_TRIAL_WRITES_ENABLED', { type: 'plain' }),
   env('VITE_SUPABASE_URL', { type: 'plain' }),
   env('VITE_SUPABASE_PUBLISHABLE_KEY', { type: 'plain' }),
+  env('SUPERMEGA_BILLING_SCHEMA_VERSION', { type: 'encrypted' }),
 ]
 const managedGateway = env('SUPERMEGA_TRIAL_IDENTITY_SECRET')
 
@@ -59,6 +60,14 @@ const managed = run('app', managedTrial)
 assert.equal(managed.status, 0, 'managed_app_contract_failed')
 assert.equal(parse(managed).operatingMode, 'managed_trial_candidate', 'managed_app_mode_failed')
 assert.equal(parse(managed).valueVerificationRequired, true)
+
+const missingBilling = run('app', managedTrial.filter(entry => entry.key !== 'SUPERMEGA_BILLING_SCHEMA_VERSION'))
+assert.notEqual(missingBilling.status, 0)
+assert.ok(parse(missingBilling).missing.includes('SUPERMEGA_BILLING_SCHEMA_VERSION'))
+const scopedBilling = run('app', managedTrial.map(entry => entry.key === 'SUPERMEGA_BILLING_SCHEMA_VERSION'
+  ? { ...entry, target: ['production', 'preview'] } : entry))
+assert.notEqual(scopedBilling.status, 0)
+assert.ok(parse(scopedBilling).failures.includes('allowed_environment_scope_not_production_only'))
 
 const partialManaged = run('app', [managedTrial[0]])
 assert.notEqual(partialManaged.status, 0, 'partial_managed_app_allowed')
