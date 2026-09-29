@@ -127,6 +127,16 @@ class PackagedImportTests(unittest.TestCase):
                 finally:
                     held.rename(path)
 
+    def test_missing_vendor_reports_only_fixed_root_layout(self):
+        (self.vendor / 'fixture_dependency-1.0.dist-info').rename(self.bundle / 'fixture_dependency-1.0.dist-info')
+        self.vendor.rename(self.bundle / 'held_vendor')
+        result = run_probe(self.bundle)
+        report = child_failure_report(result.stderr)
+        self.assertEqual(report['reason'], 'package_vendor_missing')
+        self.assertEqual(report['dependencyLayout'], 'root_metadata')
+        self.assertNotIn(str(self.bundle), result.stderr)
+        self.assertEqual(child_failure_report('{"dependencyLayout":"PRIVATE_SENTINEL"}')['dependencyLayout'], 'unknown')
+
     def test_rejects_different_interpreter(self):
         self.config['runtime'] = 'python0.0'
         self.write('.vc-config.json', json.dumps(self.config))
