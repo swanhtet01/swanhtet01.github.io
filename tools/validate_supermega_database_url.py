@@ -2154,6 +2154,23 @@ def evaluate_snapshot(snapshot: Mapping[str, Any], *, schema_profile: str = "leg
     if schema_profile == "v13-self-serve":
         checks.update(profile["extension_checks"](snapshot))
     failed = [name for name, passed in checks.items() if not passed]
+    diagnostics: dict[str, Any] = {}
+    if failed and schema_profile == "v13-self-serve":
+        if __package__:
+            from .private_trial_v13_contract import observed_extension_digests
+        else:
+            from private_trial_v13_contract import observed_extension_digests
+        diagnostics = {
+            "extension_digests": observed_extension_digests(snapshot),
+            "policy_fingerprints": {
+                str(row.get("policy_name")): {
+                    "qual": _catalog_expression_fingerprint(row.get("qual")),
+                    "check": _catalog_expression_fingerprint(row.get("with_check")),
+                }
+                for row in policy_rows
+                if str(row.get("policy_name")) in profile["EXPECTED_POLICIES"]
+            },
+        }
     return {
         "ok": not failed,
         "ready": not failed,
@@ -2161,6 +2178,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any], *, schema_profile: str = "leg
         "contract": profile["CONTRACT"],
         "checks": checks,
         "failed_checks": failed,
+        **({"diagnostics": diagnostics} if diagnostics else {}),
         "evidence": {
             "engine": {
                 "postgres_major": postgres_major,

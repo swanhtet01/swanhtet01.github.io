@@ -1,22 +1,22 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
-  "asOf": "2026-09-29T17:54:35.761Z",
+  "asOf": "2026-09-29T18:51:02.652Z",
   "pilotMode": "owner_named",
   "localDatabase": {
     "contract": "supermega.hq.database-rehearsal.v3",
     "schemaVersion": 13,
     "schemaProfile": "v13-self-serve",
-    "migrationCount": 22,
-    "implementationCommit": "de29c0ce9b7b25818a02c2af7493b1466828f5df",
-    "implementationTree": "48658df257b1d1afba3ef7d5f9a3ecb07004eb36",
-    "implementationDigest": "sha256:50d985fb68a80d6b7e2432f6718f643a69e8b4f79a612a1868170f2cc02b22dc",
-    "receiptDigest": "sha256:21c130bc7abb58fccacd0f8ca872dc3a27cae59d11e89a8bd28901e091a03c16",
+    "migrationCount": 23,
+    "implementationCommit": "02d744790f624587eb987fd603fabb4928bde8a2",
+    "implementationTree": "2be33f834f36a1b32ec6868449b7a0cb7fa94265",
+    "implementationDigest": "sha256:8a1966eedbf8490168c4ffb94b17683293882c6f0b79e488a62bcba5f234b5ca",
+    "receiptDigest": "sha256:014a392e146e3c700c66415d251904b22c2edcdf8468b0e7351f9b00a978f044",
     "behaviorChecks": 74,
     "catalogChecksBefore": 33,
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:f5c1011a52a62fd7ba85a317a8b573c443d0838b1b226fa8eb23ca2057bcd33e",
+  "sourceDigest": "sha256:f1b13c7fe50f3ecb14a04f06c0934cd5da09aec556775578875ef132dc76e8a0",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -282,7 +282,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:46f47809a53267f7c8faa5c0c9fd7204c9cfa158a0227bd00d6b02c3e5f27057"
+      "digest": "sha256:b6bdb31872a0c952b452390171b8c6421bff247a1e9718e19066f4761602851a"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -314,7 +314,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:c8781bb9b068138b6fb2fdc4c62c26677d33130f7521f6eb7d20204552f6f04e"
+      "digest": "sha256:59200c71e9ffa154273b93f379ddeefa0cf03498f1ce1231586fe99ce9af6789"
     }
   ]
 }

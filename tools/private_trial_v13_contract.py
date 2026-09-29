@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20260930010000_app_rls_initplan_optimization.sql": "eda938f781a7e854c9d83567600ad912bd07cadc27f4479b1bf7ee410d451a57",
     "20260929171000_ecommerce_decision_review_fk_index.sql": "6ad14b664f4b9ad560a7cbaf37c6d4dcf8c26d3709e5bb44d40ea2f4029785c3",
     "20260924231714_ecommerce_customer_decisions.sql": "c14f514daddca921f1c1ea2dbad3c7504d2142bc8b0bbbef0da48eb7104069c7",
     "20260924194557_ecommerce_customer_review_storage.sql": "4bb3eb40ec26854bda021d3c2e19ba34bb0657272933f6bfd5ee8f6da6974b46",
@@ -57,19 +58,19 @@ FUNCTIONS = {
     "mark_self_serve_claim_conflict": ("admitted_at timestamp with time zone", "boolean"),
 }
 WEBSITE_POLICIES = {
-    "ecommerce_decisions_read": ("ecommerce_customer_decisions", "SELECT", "d5412641e31efceb903b3569ba4d284c5938af9a8fa0858d8105d4950da7d216", None),
-    "ecommerce_decisions_insert": ("ecommerce_customer_decisions", "INSERT", None, "a416e3e7d6f9d78a400a4a9def2448594d08c5c46e38288b4621cb5efec5e7f8"),
-    "ecommerce_reviews_read": ("ecommerce_customer_reviews", "SELECT", "da4c3b46a9403105ddaf8ed66ea4ec8fa35648f51ec170fa0300dd51f8d8303e", None),
-    "ecommerce_reviews_insert": ("ecommerce_customer_reviews", "INSERT", None, "37991bc21b558e0c1783ab3b07a5c36e92a2ae6ddccd23a00d9c1cba61cc4928"),
-    "ecommerce_reviews_update": ("ecommerce_customer_reviews", "UPDATE", "a58f2f95c57380135dd9c2a0e24defc7a276c12f74a7a742fda2648bf38041e5", "a58f2f95c57380135dd9c2a0e24defc7a276c12f74a7a742fda2648bf38041e5"),
+    "ecommerce_decisions_read": ("ecommerce_customer_decisions", "SELECT", "fa6ebfe157157ad6d5daf331058d4b8092da94f072e2758641d1c596776c9bdb", None),
+    "ecommerce_decisions_insert": ("ecommerce_customer_decisions", "INSERT", None, "d452ac0c7fcc944fc931f4ae2b2a3533ff9bb63882af8dee7ef7b43b2419bc8c"),
+    "ecommerce_reviews_read": ("ecommerce_customer_reviews", "SELECT", "e8b03e62dc2319a3798b075015f4b7e6ee20d6e78bd545941de0554befcd4423", None),
+    "ecommerce_reviews_insert": ("ecommerce_customer_reviews", "INSERT", None, "69563c4f1a99d258069ea8c0b08eac159118a3fe08b7ee2db359371d9952b9ec"),
+    "ecommerce_reviews_update": ("ecommerce_customer_reviews", "UPDATE", "700d57520ce0b8336ada1a3b837bd4be69553838cb049e5d1cbbdfbd667de73b", "700d57520ce0b8336ada1a3b837bd4be69553838cb049e5d1cbbdfbd667de73b"),
 
-    "website_acceptance_insert": ("website_customer_acceptances", "INSERT", None, "2b9ba696100e896e4f0ed4e46ef53ad83ad8828f8ea201ec1fc3a91be287f84e"),
-    "website_acceptance_read": ("website_customer_acceptances", "SELECT", "aa4e62ec5c29d1c54a81615cf224f208cc795c541a4f9102ac5bff7bf9c29b86", None),
-    "website_feedback_insert": ("website_customer_feedback", "INSERT", None, "c93ef7773593e0ed96f436fab247931dc3cf5ca1f59575833a4b879b068168b6"),
-    "website_feedback_read": ("website_customer_feedback", "SELECT", "aa4e62ec5c29d1c54a81615cf224f208cc795c541a4f9102ac5bff7bf9c29b86", None),
-    "website_reviews_insert": ("website_customer_reviews", "INSERT", None, "4622582ff8b62ad939ddfe03b99e3ebc33f7f5519e4342dafa8505d7a220cd01"),
-    "website_reviews_read": ("website_customer_reviews", "SELECT", "273b7332dc1b7dcfa4627edb4edd572a8c398c835ec6265abd16a20c1b09b0bc", None),
-    "website_reviews_update": ("website_customer_reviews", "UPDATE", "67b3bc6f31d708f4fbae90df69ca85692ce1ab11959fa4598169fb1811bcb8e6", "67b3bc6f31d708f4fbae90df69ca85692ce1ab11959fa4598169fb1811bcb8e6"),
+    "website_acceptance_insert": ("website_customer_acceptances", "INSERT", None, "79cb68951d10ae096a680ea000a705b731c9e4a970128bdadb030e420836463e"),
+    "website_acceptance_read": ("website_customer_acceptances", "SELECT", "e4cb734ea8424c0a3356a192628741a295e8dd10f6752ce16a099de0a0c1cede", None),
+    "website_feedback_insert": ("website_customer_feedback", "INSERT", None, "79cb68951d10ae096a680ea000a705b731c9e4a970128bdadb030e420836463e"),
+    "website_feedback_read": ("website_customer_feedback", "SELECT", "e4cb734ea8424c0a3356a192628741a295e8dd10f6752ce16a099de0a0c1cede", None),
+    "website_reviews_insert": ("website_customer_reviews", "INSERT", None, "f0694d12d71e62b3a88e9ca9894daf5b8099f24018a877e8e916bc5722be8afa"),
+    "website_reviews_read": ("website_customer_reviews", "SELECT", "6f4197083f7916fef03be3eeb7c23a2fed65a91ca37a9f4abda0bdb91f656301", None),
+    "website_reviews_update": ("website_customer_reviews", "UPDATE", "76646976533558b9556dd9cc703330b0fd4d4229ae0d0334e1d6d37a9d065743", "76646976533558b9556dd9cc703330b0fd4d4229ae0d0334e1d6d37a9d065743"),
 }
 POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budget_actor_only", *WEBSITE_POLICIES})
 # Exact PostgreSQL 17 output from the pinned migrations, with all row keys retained.
@@ -78,10 +79,10 @@ CATALOG_PINS = {
     "extension_columns_exact": "263730f2611d82cffec18b53d2c15a692d3613830e0707f434c5df2d9024d05c",
     "extension_constraints_exact": "6480dfb4c310398fefb446aaa59187990a976bde623d25364a8ea25d7577e3b1",
     "extension_functions_exact": "97562ea0ea0fa18f9cdac35e309b92b588d17909e9967df7005e66ee92bd4619",
-    "extension_policies_exact": "93fea93d76323b2e6555f3bc2c3536ec8a3eacc2a1905871fa15d14002310f69",
+    "extension_policies_exact": "cdfa8c8e52aeb1f00dca92a4bfc532c8de01c767afa49462f668ac005a391341",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
-               "self_serve_attempt_budget_actor_only": "b5ae50fbc65c43344b8d3f3938f7b8a26414ae3bbb1781b6e35bf609c954f82c"}
+               "self_serve_attempt_budget_actor_only": "75f43c59c93c94637dad16ee262f552380b037c4d94c987c1ddeffc446d7875a"}
 
 
 def rows_digest(rows):
