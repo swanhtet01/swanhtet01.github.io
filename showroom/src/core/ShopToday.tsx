@@ -263,14 +263,14 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
   )
 
   return <div className="shop-today">
-    <section className="shop-today-mission" aria-label="Next Shop action">
+    <section className="shop-today-mission" aria-label="Shop priority">
       <div>
-        <span className="core-eyebrow">Today</span>
+        <span className="core-eyebrow">Priority</span>
         <h2>{nextAction}</h2>
         <p>{nextDetail}</p>
       </div>
       <div className="shop-today-actions">
-        <Link className="core-button primary" to={nextTo}>Open next step</Link>
+        <Link className="core-button primary" to={nextTo}>Continue</Link>
         {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
       </div>
     </section>
@@ -283,7 +283,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
     </section>
 
     <details aria-label="Shop profit control" className="shop-today-workspaces shop-profit-control" data-state={profitControl.state} open={profitControl.criticalPriorityCount > 0}>
-      <summary><span><strong>Profit control</strong><small>Issues to review</small></span><b>{profitControl.criticalPriorityCount ? `${profitControl.criticalPriorityCount} critical · ${profitControl.openPriorityCount} open` : profitControl.openPriorityCount ? `${profitControl.openPriorityCount} open` : 'Controlled'}</b></summary>
+      <summary><span><strong>Priorities</strong><small>What needs attention now</small></span><b>{profitControl.criticalPriorityCount ? `${profitControl.criticalPriorityCount} critical · ${profitControl.openPriorityCount} open` : profitControl.openPriorityCount ? `${profitControl.openPriorityCount} open` : 'Clear'}</b></summary>
       <div className="shop-today-module-grid">
         {profitControl.priorities.map((priority) => <Link data-priority-id={priority.id} data-tone={priority.severity === 'critical' || priority.severity === 'attention' ? 'attention' : 'ready'} key={priority.id} to={priority.target}>
           <span>
@@ -301,7 +301,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
     </details>
 
     <details className="shop-today-workspaces">
-      <summary><span><strong>Profit and batch details</strong><small>Costs, margins and production estimates</small></span><b>{marginControl.costCoverage.state === 'complete' ? 'Costs reviewed' : 'Costs incomplete'}</b></summary>
+      <summary><span><strong>Profit</strong><small>Costs, margins and batch estimates</small></span><b>{marginControl.costCoverage.state === 'complete' ? 'Costs reviewed' : 'Costs incomplete'}</b></summary>
     <section aria-label="Shop cost coverage and margin at risk" className="shop-margin-control" id="shop-cost-coverage">
       <header>
         <div>
@@ -375,8 +375,8 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
     <ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />
     </details>
 
-    <details className="shop-today-workspaces">
-      <summary><span><strong>More Shop tools</strong><small>Customers, finance, channels, and purchasing</small></span><b>{modules.length} connected areas</b></summary>
+    <details aria-label="More Shop tools — Customers, finance, channels, and purchasing" className="shop-today-workspaces">
+      <summary><span><strong>Operations</strong><small>Customers, finance, channels and purchasing</small></span><b>{modules.length} areas</b></summary>
       <div className="shop-today-module-grid">
         {modules.map((module) => <Link data-tone={module.tone ?? 'ready'} key={module.label} to={module.to}>
           <span><strong>{module.label}</strong><small>{module.detail}</small></span>
@@ -385,8 +385,8 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       </div>
     </details>
 
-    <details className="shop-today-coverage">
-      <summary><span><strong>Shop safeguards</strong><small>What SuperMega checks while the screen stays simple</small></span><b>6 areas</b></summary>
+    <details aria-label="Shop safeguards" className="shop-today-coverage">
+      <summary><span><strong>System coverage</strong><small>Capabilities working behind this view</small></span><b>6 areas</b></summary>
       <div>{capabilityGroups.map(([label, detail]) => <article key={label}><strong>{label}</strong><small>{detail}</small></article>)}</div>
       <p>SuperMega keeps consequential changes behind named human review. External payment, customer messaging, delivery, filing, and accounting posting require separately verified connections.</p>
     </details>
