@@ -2651,6 +2651,18 @@ def _verify_upgrade_and_role_boundaries(
     adapter_principal = TrialPrincipal("rehearsal-a", "owner-a", "human")
     adapter_readiness = adapter.readiness(adapter_principal)
     if not adapter_readiness.read_ready:
+        from supermega_runtime.ecommerce_decision_schema import (
+            acceptance_catalog_digest as ecommerce_decision_catalog_digest,
+        )
+        from supermega_runtime.website_acceptance_schema import (
+            acceptance_catalog_digest as website_acceptance_catalog_digest,
+        )
+        with _connect(runtime_database_url) as diagnostic_connection:
+            with diagnostic_connection.cursor() as diagnostic_cursor:
+                print(json.dumps({"runtime_adapter_catalog_digests": {
+                    "ecommerce_decision": ecommerce_decision_catalog_digest(diagnostic_cursor),
+                    "website_acceptance": website_acceptance_catalog_digest(diagnostic_cursor),
+                }}, sort_keys=True))
         raise RehearsalFailure("runtime_adapter_readiness_failed")
     adapter_state = adapter.get_state(adapter_principal, "commerce")
     if adapter_state.workspace_id != "rehearsal-a" or adapter_state.version != 0:
