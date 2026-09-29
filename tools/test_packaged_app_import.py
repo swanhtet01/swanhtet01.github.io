@@ -7,10 +7,18 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from verify_packaged_app_import import ROUTES, layout, run_probe, safe_failure
+from verify_packaged_app_import import ROUTES, layout, run_probe, safe_failure, child_failure_report
 
 
 class PackagedImportTests(unittest.TestCase):
+    def test_child_diagnostic_forwards_only_fixed_vocabulary(self):
+        report = child_failure_report(json.dumps({'phase': 'application_import', 'errorType': 'ModuleNotFoundError', 'reason': 'PRIVATE_SENTINEL', 'details': 'PRIVATE_SENTINEL'}))
+        self.assertEqual(report['phase'], 'application_import')
+        self.assertEqual(report['errorType'], 'ModuleNotFoundError')
+        self.assertNotIn('PRIVATE_SENTINEL', json.dumps(report))
+        for value in ['PRIVATE_SENTINEL', '[]', '{"reason":[],"phase":{},"errorType":null}']:
+            self.assertFalse(child_failure_report(value)['ok'])
+
     def test_diagnostics_preserve_fixed_codes_without_arbitrary_messages(self):
         self.assertEqual(safe_failure(ValueError('unsupported_vendor_layout'))['reason'], 'unsupported_vendor_layout')
         for error in [RuntimeError('PRIVATE_SENTINEL'), ImportError('PRIVATE_SENTINEL'), ValueError('PRIVATE_SENTINEL')]:
