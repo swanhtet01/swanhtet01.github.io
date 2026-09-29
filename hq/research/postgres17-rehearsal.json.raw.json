@@ -162,7 +162,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:bf23300613672fa741e30cb0f97d870c4344dbd8a6ff26d64578935575f69b36",
+    "digest": "sha256:50d985fb68a80d6b7e2432f6718f643a69e8b4f79a612a1868170f2cc02b22dc",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -186,6 +186,7 @@
       "supabase/migrations/20260924190304_ecommerce_review_entitlement_proof.sql",
       "supabase/migrations/20260924194557_ecommerce_customer_review_storage.sql",
       "supabase/migrations/20260924231714_ecommerce_customer_decisions.sql",
+      "supabase/migrations/20260929171000_ecommerce_decision_review_fk_index.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -217,7 +218,7 @@
   },
   "migrations": {
     "catalog_contract": "supermega_private_trial_database_v13_self_serve_v1",
-    "count": 21,
+    "count": 22,
     "names": [
       "20260722004500_private_trial_backend_role_preflight.sql",
       "20260722005134_private_trial_backend_foundation.sql",
@@ -239,7 +240,8 @@
       "20260918011500_website_customer_acceptance.sql",
       "20260924190304_ecommerce_review_entitlement_proof.sql",
       "20260924194557_ecommerce_customer_review_storage.sql",
-      "20260924231714_ecommerce_customer_decisions.sql"
+      "20260924231714_ecommerce_customer_decisions.sql",
+      "20260929171000_ecommerce_decision_review_fk_index.sql"
     ],
     "production_validator_ready": true,
     "schema_profile": "v13-self-serve",
@@ -251,15 +253,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:3e18bf3520a2a1a5ec99a81d95d8137fc4e25eec1b4641bb1e2c1a83e8e92ebf",
-    "private_snapshot_before": "sha256:3e18bf3520a2a1a5ec99a81d95d8137fc4e25eec1b4641bb1e2c1a83e8e92ebf",
+    "private_snapshot_after": "sha256:fb286e464afffc6b53ffef9a80d9d7fcdd5612a7293a2514869dae5131f68727",
+    "private_snapshot_before": "sha256:fb286e464afffc6b53ffef9a80d9d7fcdd5612a7293a2514869dae5131f68727",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "9e1ad0a2eff23c822ad32dbeb6d834a44d58d62d",
-    "implementation_digest": "sha256:bf23300613672fa741e30cb0f97d870c4344dbd8a6ff26d64578935575f69b36",
-    "tree": "41c4a2b23ae06891a93230db2fc1004d8775fcbc"
+    "head": "de29c0ce9b7b25818a02c2af7493b1466828f5df",
+    "implementation_digest": "sha256:50d985fb68a80d6b7e2432f6718f643a69e8b4f79a612a1868170f2cc02b22dc",
+    "tree": "48658df257b1d1afba3ef7d5f9a3ecb07004eb36"
   },
   "status": "rehearsed",
   "storage": {
