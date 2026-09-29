@@ -3488,6 +3488,10 @@ def _run_validator(
             ]
         except (IndexError, json.JSONDecodeError, AttributeError, TypeError):
             safe_checks = []
+            failed_payload = {}
+        diagnostics = failed_payload.get("diagnostics", {})
+        if isinstance(diagnostics, dict) and diagnostics:
+            print(json.dumps({"validator_diagnostics": diagnostics}, sort_keys=True))
         suffix = f":{','.join(safe_checks)}" if safe_checks else ""
         raise RehearsalFailure(f"database_validator_failed{suffix}")
     try:
