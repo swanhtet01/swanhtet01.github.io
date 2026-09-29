@@ -122,6 +122,10 @@ const sharedRequired = [
   '<a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a>',
   '<script src="/vercel-insights.js"></script>',
   'href="/privacy/">Privacy</a>',
+  '--bg-raised: #f1f1fb;',
+  '--ink: #151521;',
+  '--blue: #5b4ee8;',
+  '.platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;',
 ]
 
 const forbiddenCopy = [
