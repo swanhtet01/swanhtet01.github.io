@@ -7,10 +7,17 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from verify_packaged_app_import import ROUTES, layout, run_probe
+from verify_packaged_app_import import ROUTES, layout, run_probe, safe_failure
 
 
 class PackagedImportTests(unittest.TestCase):
+    def test_diagnostics_preserve_fixed_codes_without_arbitrary_messages(self):
+        self.assertEqual(safe_failure(ValueError('unsupported_vendor_layout'))['reason'], 'unsupported_vendor_layout')
+        for error in [RuntimeError('PRIVATE_SENTINEL'), ImportError('PRIVATE_SENTINEL'), ValueError('PRIVATE_SENTINEL')]:
+            report = safe_failure(error)
+            self.assertNotIn('PRIVATE_SENTINEL', json.dumps(report))
+            self.assertFalse(report['ok'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='supermega-packaged-probe-')
         self.addCleanup(self.temp.cleanup)

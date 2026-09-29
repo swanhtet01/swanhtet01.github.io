@@ -17,6 +17,27 @@ ROUTES = {
     '/api/trial/v1/ecommerce-reviews/{review_id}/change-requests': 'post',
 }
 
+SAFE_FAILURE_CODES = frozenset({
+    'package_path_escape', 'interpreter_runtime_mismatch',
+    'interpreter_architecture_mismatch', 'unsupported_launcher',
+    'unsupported_vendor_layout', 'vendor_directory_missing',
+    'isolated_interpreter_required', 'offline_package_side_effect_forbidden',
+    'dependency_pins_missing', 'packaged_dependency_pin_mismatch',
+    'packaged_psycopg_binary_not_loaded', 'required_route_missing',
+    'application_origin_outside_bundle', 'dependency_origin_outside_bundle',
+    'runtime_modules_missing', 'Linux_required_for_package_acceptance',
+    'packaged_import_failed', 'invalid_probe_result',
+})
+
+
+def safe_failure(error):
+    code = str(error)
+    return {'ok': False, 'evidence': 'packaged_application_import',
+            'reason': code if code in SAFE_FAILURE_CODES else 'package_probe_exception',
+            'errorType': type(error).__name__ if type(error) in (
+                ValueError, RuntimeError, ImportError, ModuleNotFoundError,
+                FileNotFoundError, KeyError, TypeError, OSError) else 'Exception'}
+
 
 def contained(root, path):
     path = path.resolve(strict=True)
@@ -144,14 +165,22 @@ def main():
         bundle = contained(functions, functions / 'api/app.func')
         result = run_probe(bundle)
         if result.returncode:
+            try:
+                detail = json.loads(result.stderr)
+            except (ValueError, TypeError):
+                detail = {}
+            # Only forward the fixed diagnostic vocabulary, never child output.
+            reason = detail.get('reason')
+            if reason in SAFE_FAILURE_CODES:
+                raise ValueError(reason)
             raise ValueError('packaged_import_failed')
         report = json.loads(result.stdout)
         if report.get('evidence') != 'packaged_application_import' or report.get('ok') is not True:
             raise ValueError('invalid_probe_result')
         print(json.dumps(report))
-    except Exception:
+    except Exception as error:
         # Never echo arbitrary import output or generated environment metadata.
-        print('FAIL: isolated packaged application import; no hosted acceptance', file=sys.stderr)
+        print(json.dumps(safe_failure(error)), file=sys.stderr)
         raise SystemExit(1)
 
 
