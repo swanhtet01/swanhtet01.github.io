@@ -588,6 +588,10 @@ requireContract('managed database audit uses the exact app runtime environment b
   && workflow.indexOf('Enforce exact app runtime database and RLS gate') < workflow.indexOf('Deploy isolated production candidate'))
 requireContract('RLS and trigger validator rejects semantic bypasses',
   !databaseValidator.includes('def _contains_tokens')
+  && databaseValidator.includes('pgconn')
+  && databaseValidator.includes('ssl_in_use')
+  && databaseValidator.includes("member_role.rolname = 'postgres'")
+  && databaseValidator.includes("grantor_role.rolname in ('postgres', 'supabase_admin')")
   && databaseValidator.includes('def _policy_expression_matches')
   && databaseValidator.includes('EXPECTED_POLICY_FINGERPRINTS')
   && databaseValidator.includes('reject_dead_case_wrapper')
