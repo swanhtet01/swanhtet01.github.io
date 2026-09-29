@@ -47,11 +47,9 @@ MAX_ATTRIBUTE_LENGTH = 200
 _MIN_SUBSTRING_MATCH_LENGTH = 4
 _REDACTED_SPAN_NAME = "[redacted]"
 
-# Rule 2: Myanmar mobile numbers. `09` followed by 7-9 more digits, with no
-# adjacent digit on either side (so a longer digit run, e.g. inside a phone
-# number with a country code glued on, cannot slip through by accident, and
-# a *shorter* run inside a longer opaque token like a UUID cannot trigger a
-# false positive — see the false-redaction risk note in plan section 7).
+# Retain the original contiguous local-number rule, and additionally catch
+# local/international numbers with spaces, dots or hyphens. The added rule
+# avoids matching inside opaque identifiers or longer digit sequences.
 MYANMAR_PHONE_PATTERN = re.compile(
     r"(?<!\d)09\d{7,9}(?!\d)|(?<![\w+])(?:0|\+95[ .-]?|0095[ .-]?)9(?:[ .-]?\d){7,9}(?![ .-]?\d)"
 )

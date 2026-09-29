@@ -624,8 +624,6 @@ class ExtractCustomerContentValuesTests(unittest.TestCase):
         self.assertIn("12,500 MMK", values)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class PhoneFormatRedactionTests(unittest.TestCase):
@@ -641,3 +639,7 @@ class PhoneFormatRedactionTests(unittest.TestCase):
         for value in ('WH-1', '09123', 'ws-091234567890123456'):
             with self.subTest(value=value):
                 self.assertTrue(redact.is_string_value_safe(value, frozenset()))
+
+
+if __name__ == "__main__":
+    unittest.main()
