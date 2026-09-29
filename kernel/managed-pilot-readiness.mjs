@@ -459,7 +459,7 @@ export function validateManagedPilotReadiness(value) {
   const localDatabase = value.localDatabase
   if (!isRecord(localDatabase) || localDatabase.contract !== 'supermega.hq.database-rehearsal.v3'
     || localDatabase.schemaVersion !== CURRENT_DATABASE_SCHEMA || localDatabase.schemaProfile !== 'v13-self-serve'
-    || localDatabase.migrationCount !== 21 || localDatabase.behaviorChecks !== 74
+    || localDatabase.migrationCount !== 22 || localDatabase.behaviorChecks !== 74
     || localDatabase.catalogChecksBefore !== 33 || localDatabase.catalogChecksAfter !== 33
     || !/^[0-9a-f]{40}$/.test(localDatabase.implementationCommit || '')
     || !/^[0-9a-f]{40}$/.test(localDatabase.implementationTree || '')

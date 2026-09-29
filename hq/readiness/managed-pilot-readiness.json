@@ -1,22 +1,22 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
-  "asOf": "2026-09-29T16:10:50.240Z",
+  "asOf": "2026-09-29T17:54:35.761Z",
   "pilotMode": "owner_named",
   "localDatabase": {
     "contract": "supermega.hq.database-rehearsal.v3",
     "schemaVersion": 13,
     "schemaProfile": "v13-self-serve",
-    "migrationCount": 21,
-    "implementationCommit": "9e1ad0a2eff23c822ad32dbeb6d834a44d58d62d",
-    "implementationTree": "41c4a2b23ae06891a93230db2fc1004d8775fcbc",
-    "implementationDigest": "sha256:bf23300613672fa741e30cb0f97d870c4344dbd8a6ff26d64578935575f69b36",
-    "receiptDigest": "sha256:0e6cca3de899f456c0cf8b1780e80097c01c5e8bf6bd5ba594830029fc3c0993",
+    "migrationCount": 22,
+    "implementationCommit": "de29c0ce9b7b25818a02c2af7493b1466828f5df",
+    "implementationTree": "48658df257b1d1afba3ef7d5f9a3ecb07004eb36",
+    "implementationDigest": "sha256:50d985fb68a80d6b7e2432f6718f643a69e8b4f79a612a1868170f2cc02b22dc",
+    "receiptDigest": "sha256:21c130bc7abb58fccacd0f8ca872dc3a27cae59d11e89a8bd28901e091a03c16",
     "behaviorChecks": 74,
     "catalogChecksBefore": 33,
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:29d1788f61b56a3f35b587013e93d0c83a2e685223e07279d4c9407396ecb3e2",
+  "sourceDigest": "sha256:f5c1011a52a62fd7ba85a317a8b573c443d0838b1b226fa8eb23ca2057bcd33e",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -282,7 +282,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:95b656fbb89c521774d3d3171697e58c9b1786d5a569c3efcdda72a37e0869ff"
+      "digest": "sha256:46f47809a53267f7c8faa5c0c9fd7204c9cfa158a0227bd00d6b02c3e5f27057"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -314,7 +314,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:f8f9d739d42e41edf13dff92f180d922e0a5dea718c198805827414ef89ee37b"
+      "digest": "sha256:c8781bb9b068138b6fb2fdc4c62c26677d33130f7521f6eb7d20204552f6f04e"
     }
   ]
 }
