@@ -127,6 +127,33 @@ test('classifies HQ live drift as advisory when explicitly allowed', () => {
   assert.equal(result.status, 'advisory_drift')
 })
 
+test('redacts structured failure reasons and nested successful receipts', () => {
+  const providerSecret = ['sb', 'secret', 'syntheticAcceptanceValue'].join('_')
+  const nested = 'synthetic-private-credential'
+  for (const status of [0, 1]) {
+    const result = classifyCommandResult('privacy', {
+      status, stderr: '', stdout: JSON.stringify({
+        ok: status === 0, reason: `provider failure ${providerSecret}`,
+        details: [{ access_token: nested, apiKey: nested, password: nested }],
+        token_count: 42,
+      }),
+    })
+    const serialized = JSON.stringify(result)
+    assert.equal(serialized.includes(providerSecret), false)
+    assert.equal(serialized.includes(nested), false)
+    if (status === 0) assert.equal(result.summary.token_count, 42)
+    else assert.equal(result.status, 'fail')
+  }
+})
+
+test('live endpoint mismatches never echo provider secrets', () => {
+  const secret = ['sb', 'secret', 'syntheticEndpointValue'].join('_')
+  const result = assessLiveEndpointEvidence(endpointFixture({app_primary_health: {service: secret}}))
+  assert.equal(result.ok, false)
+  assert.equal(JSON.stringify(result).includes(secret), false)
+  assert.ok(result.failures.some(value => value.includes('service_')))
+})
+
 test('accepts healthy read-only live endpoint evidence', () => {
   const result = assessLiveEndpointEvidence(endpointFixture(), { expectedOperatingMode: 'isolated_demo' })
   assert.equal(result.ok, true)
