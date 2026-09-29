@@ -72,7 +72,16 @@ CUSTOMER_CONTENT_FIELD_MARKERS: tuple[str, ...] = (
     "amount",
     "total",
     "price",
+    "email",
 )
+
+
+def _is_sensitive_field(key: str) -> bool:
+    lowered = key.casefold()
+    normalized = re.sub(r"[^a-z0-9]", "", lowered)
+    return any(marker in lowered for marker in CUSTOMER_CONTENT_FIELD_MARKERS) or normalized.endswith(
+        ("password", "secret", "token", "authorization", "apikey", "servicerolekey")
+    )
 
 # Populated per-request by `supermega_runtime.telemetry.tracing`'s request
 # middleware, and read here at span-export time. A SpanProcessor has no
@@ -104,8 +113,11 @@ def pop_customer_content_scope(token: Token[frozenset[str]]) -> None:
 
 def _iter_leaf_values(node: Any, *, key_hint: str) -> Iterable[tuple[str, Any]]:
     if isinstance(node, Mapping):
+        inherited_content = _is_sensitive_field(key_hint)
         for key, value in node.items():
-            yield from _iter_leaf_values(value, key_hint=str(key))
+            # A marked object (address/name/notes) protects every descendant;
+            # replacing its hint with an unmarked key such as line1 loses PII.
+            yield from _iter_leaf_values(value, key_hint=key_hint if inherited_content else str(key))
     elif isinstance(node, (list, tuple)):
         for item in node:
             yield from _iter_leaf_values(item, key_hint=key_hint)
@@ -117,7 +129,7 @@ def extract_customer_content_values(payload: Any) -> frozenset[str]:
     """Walk a parsed JSON request body and collect customer-content leaves.
 
     A leaf value is collected when either is true:
-      * its immediate key contains one of `CUSTOMER_CONTENT_FIELD_MARKERS`
+      * its key or an ancestor key marks customer content or a credential
         (rule 1: "the request body's customer-content fields"), or
       * the value itself already looks like a Myanmar phone number or an
         MMK amount (defense in depth for a field the caller renamed).
@@ -137,8 +149,7 @@ def extract_customer_content_values(payload: Any) -> frozenset[str]:
         text = str(leaf).strip()
         if not text:
             continue
-        lowered_key = key_hint.casefold()
-        is_marked_field = any(marker in lowered_key for marker in CUSTOMER_CONTENT_FIELD_MARKERS)
+        is_marked_field = _is_sensitive_field(key_hint)
         looks_sensitive = bool(
             MYANMAR_PHONE_PATTERN.search(text) or MMK_AMOUNT_PATTERN.search(text)
         )

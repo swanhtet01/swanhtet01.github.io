@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.27
+Version: 1.2.28
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-29
@@ -86,15 +86,15 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
-| Source | Main382f97ee contains merged PR596 product cleanup and PR597 redacted release diagnostics | Last verified production remains bbab9a63; the new release stopped before deployment |
-| Integration | PR596 and PR597 merged using owner-approved two-field review exceptions; original protections restored and verified | Standing routine PR authority above supersedes the former one-release restriction |
-| CI / release | PR597 App CI36492086707 and duplicate repair36492077725 passed at9713e1499. Paired release36494294930 failed before deploy: managed_schema_version_invalid and managed_billing_schema_version_invalid | Fresh production metadata is schema11; app expects13. Hosted login/persistence remain unaccepted; do not retry unchanged release |
+| Source | Maincfbea6ca contains PR596–598; acceptance runner8269ede60 is pushed and awaits integration | Last verified production remains bbab9a63; the new release stopped before deployment |
+| Integration | PR596–598 merged using owner-approved two-field review exceptions; original protections restored and verified | Standing routine PR authority above supersedes the former one-release restriction |
+| CI / release | PR597 App CI36492086707 and duplicate repair36492077725 passed at9713e1499. Paired release36494294930 failed before deploy: managed_schema_version_invalid and managed_billing_schema_version_invalid | Fresh production metadata is schema11; app expects13. Acceptance Auth/database runtime passed36500651876; browser and production acceptance remain open. Do not retry unchanged release |
 | Production aliases | Vercel read-only lookup on 28 September: supermega.dev -> dpl_8cKWAmfBC6YwX1YZt4w51zEGUJuv and app.supermega.dev -> dpl_B7Up2BnbZsftGdDsEAhMwijJJpkx; both READY, production, commit bbab9a63ddb8329d38563bd9cadb3db420a0276b | Recent branch improvements are not deployed. READY proves deployment state only, not login/persistence/customer acceptance |
 | Fresh Shop | Initializer creates empty data; local setup no longer seeds products, appointments or sales | Source/tests verified; fresh-browser and hosted acceptance incomplete |
 | Catalog routing | Stock is `tab=inventory`; incorrect `tab=stock` links corrected | Fresh desktop and390px clicks reached Stock on28September; earlier failure not reproduced; fresh-data acceptance remains open |
 | Existing records | Older QA catalog and Spa context were preserved during browser inspection | Do not delete or relabel synthetic data as real customer records |
-| Account entry | Candidate public app routes require ready managed access and otherwise lead to Login; account recovery stays reachable. Production has not received this change. Last hosted health remains isolated_demo with enterprise_db_ready=false and writes disabled | Source routing does not prove managed sign-in, tenant isolation or persistence; hosted acceptance is outstanding |
-| Website/Ecommerce | Setup completion now uses workspace=1, matching the product switcher. Local route tests 22/22, app build and artifact verifier PASS. Website model tests previously passed 15/15; offering component checks now pass 11/11 | Existing browser QA records preserved. Fresh valid UI submit/save/reload and hosted persistence remain unproven. Remaining sample-led paths need review |
+| Account entry | Candidate public app routes require ready managed access and otherwise lead to Login; account recovery stays reachable. Production has not received this change. Production previously reported isolated_demo and database-not-ready. Isolated preview dpl_ESihHzvucKKjgwxiL1LFLLLboZuH reports database/role/schema ready, writes disabled | Real acceptance Auth sign-in and database tenant persistence/denial passed; public browser Login and founder access remain unaccepted |
+| Website/Ecommerce | Setup completion now uses workspace=1, matching the product switcher. Local route tests 22/22, app build and artifact verifier PASS. Website model tests previously passed 15/15; offering component checks now pass 11/11 | Existing browser QA records preserved. Hosted database save/reload and denial passed for Sites and Commerce; valid UI submit/save/reload remains unproven. Remaining sample-led paths need review |
 | Payments | 24 focused Stripe tests and full kernel verification with490 tests passed locally, including exact raw-byte signatures, interrupted/oversized requests, redacted persistence errors and successful retry. Kernel lint has0 errors and61 warnings after the outreach regex repair | No live charge or hosted settlement acceptance established; warnings remain to assess |
 | Local AI | Worker a7aab36 and transfer package outputs/workcell-vps-a7aab36: 111 files, 577 tests passed and three policy-blocked skips | Not deployed; target inventory, full-state recovery and one useful accepted remote job remain |
 | Corporate | Operating materials, acquisition pack and quote check exist | Last recorded Sheets write failed scope; no fresh cloud synchronization |
@@ -442,7 +442,9 @@ Production's last observed core schema is 11; the maintained release needs 13 pl
 
 Acceptance `guard_ecommerce_decision()` is one SECURITY INVOKER trigger function with an exact body digest match after CRLF-to-LF normalization only. The BEFORE INSERT/UPDATE/DELETE row trigger is enabled and table RLS is forced. This is catalog equivalence, not behavioral acceptance. The same-day control record subsequently confirms creation of the acceptance-only `supermega_trial_login`, backend-only membership, and independent transaction-pooler READ ONLY identity/privilege checks. Its recorded expiry is **2026-09-29T11:03:02.537791Z**. Reuse the existing owner-only private runtime credential within that expiry; do not rotate or recreate the role. Authenticated cached Supabase CLI branch configuration recovered supported admin access; the earlier missing-CLI/credential assumption is superseded. No credential value belongs in this file.
 
-Next acceptance action: after the candidate CI result, prepare one immutable preview with acceptance Auth/database bindings, schema 13 and all business writes/self-serve activation disabled. Verify exact release, managed readiness and write denial before separately authorized sign-in/persistence scenarios. Production approval and independent PR review remain distinct gates.
+Acceptance run36500651876 at8269ede60 passed real Auth sign-in, restricted-runtime save/reconnect/readback, idempotent retry and cross-user read/write denial for Shop, Sites and Commerce. Both synthetic users and all three workspaces were removed; independent provider readback confirms zero users/sessions/workspace rows and enabled guards. Four temporary GitHub secrets were deleted and absence verified. This consumes the approved single session; do not repeat it without new scope. The protected preview remains writes-disabled, so this is hosted database-runtime evidence, not browser/API write-path or customer acceptance.
+
+Next release action: integrate the acceptance runner and prepare the exact production schema11-to13 authorization. The nine reviewed files form one atomic batch; local PostgreSQL17 injected failure restored schema11 and catalog, while successful execution committed schema13. Do not apply until the founder authorizes this exact database scope. Use standing routine PR authority for integration; no independent-review claim is implied.
 
 #### Evidence locations and diagnostic limits
 

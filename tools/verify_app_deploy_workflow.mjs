@@ -66,19 +66,26 @@ requireContract('app CI covers every branch push without path exclusions', allBr
 requireContract('branch coverage rejects main-only or path-filtered pushes',
   !allBranchPushes(ciWorkflow.replace("branches: ['**']", "branches: ['main']"))
   && !allBranchPushes(ciWorkflow.replace("branches: ['**']", "branches: ['**']\n    paths: ['showroom/**']")))
-requireContract('push and PR CI share a fork-isolated source-branch concurrency group',
-  ciWorkflow.includes('group: showroom-ci-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}')
+requireContract('push and PR CI cannot cancel each other and fork branches remain isolated',
+  ciWorkflow.includes('group: showroom-ci-${{ github.event_name }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}')
   && ciWorkflow.includes('  cancel-in-progress: true\n'))
 const budgetSqlStep = ciWorkflow.split('      - name: Verify durable signup budgets on disposable PostgreSQL\n')[1]?.split('      - name:')[0] || ''
 requireContract('app CI executes real disposable PostgreSQL signup budget tests',
   budgetSqlStep.includes("SUPERMEGA_TEST_DISPOSABLE_PG17: '1'")
   && budgetSqlStep.includes('run: python -m unittest tests.test_self_serve_durable_budget -v')
   && !/^        (?:if|continue-on-error):/m.test(budgetSqlStep))
-requireContract('required check display names bind stable job IDs',
-  ciWorkflow.includes('  validate:\n    name: SuperMega App CI\n')
-  && kernelWorkflow.includes('  verify:\n    name: Kernel Console - Verify & Owner-Gated Release\n'))
+const appCiName = "    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'Same-repository PR uses push checks' || 'SuperMega App CI' }}"
+const appCiCondition = "    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}"
+const appCiHeader = ciWorkflow.split('  validate:\n')[1]?.split('    steps:\n')[0] || ''
+requireContract('only redundant same-repository PR events are skipped under a non-required name',
+  appCiHeader.includes(appCiName + '\n' + appCiCondition + '\n')
+  && !/^    continue-on-error:/m.test(appCiHeader)
+  && (appCiHeader.match(/^    if:/gm) || []).length === 1
+  && allBranchPushes(ciWorkflow))
+requireContract('kernel required check display name binds its stable job ID',
+  kernelWorkflow.includes('  verify:\n    name: Kernel Console - Verify & Owner-Gated Release\n'))
 requireContract('required verification jobs cannot be skipped or forgive errors',
-  [[ciWorkflow, 'validate'], [kernelWorkflow, 'verify']].every(([source, id]) => {
+  [[kernelWorkflow, 'verify']].every(([source, id]) => {
     const header = source.split(`  ${id}:\n`)[1]?.split('    steps:\n')[0]
     return header && !/^    (?:if|continue-on-error):/m.test(header)
   }))
@@ -117,7 +124,24 @@ if (aggregateScript) {
 }
 for (const name of ['SuperMega App CI', 'Dependency Security Audit', 'Kernel Console - Verify & Owner-Gated Release']) {
   requireContract(`unique required job ${name}`, [ciWorkflow, dependencyAuditWorkflow, kernelWorkflow]
-    .join('\n').split('\n').filter(line => line === `    name: ${name}`).length === 1)
+    .join('\n').replace(appCiName, '    name: SuperMega App CI').split('\n').filter(line => line === `    name: ${name}`).length === 1)
+}
+// These exact, validated GitHub boolean/string expressions also use JavaScript
+// operators. Evaluate the actual source for each event; a skipped job must NEVER
+// publish the protected context, and all executable paths must keep that name.
+if (appCiHeader.includes(appCiName + '\n' + appCiCondition + '\n')) {
+  const expression = line => line.slice(line.indexOf('${{') + 3, line.lastIndexOf('}}')).trim()
+  const nameFor = new Function('github', `return (${expression(appCiName)})`)
+  const runsFor = new Function('github', `return (${expression(appCiCondition)})`)
+  for (const [event, source, expected] of [
+    ['push', null, true], ['workflow_dispatch', null, true],
+    ['pull_request', 'owner/repo', false], ['pull_request', 'fork/repo', true],
+  ]) {
+    const github = { event_name: event, repository: 'owner/repo', event: source
+      ? { pull_request: { head: { repo: { full_name: source } } } } : {} }
+    requireContract(`CI event coverage ${event}/${source || 'no PR'}`,
+      runsFor(github) === expected && (nameFor(github) === 'SuperMega App CI') === expected)
+  }
 }
 
 

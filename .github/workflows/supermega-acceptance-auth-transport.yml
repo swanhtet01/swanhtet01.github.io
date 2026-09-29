@@ -1,0 +1,26 @@
+name: SuperMega Acceptance Auth Transport
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/acceptance-auth-transport-20260929]
+    paths:
+      - '.github/workflows/supermega-acceptance-auth-transport.yml'
+      - 'tools/check_acceptance_auth_transport.py'
+      - 'tests/test_acceptance_auth_transport.py'
+permissions:
+  contents: read
+concurrency:
+  group: supermega-acceptance-auth-transport
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify probe contract
+        run: python3 -m unittest tests.test_acceptance_auth_transport -q
+      - name: Check acceptance Auth reachability without credentials
+        run: python3 tools/check_acceptance_auth_transport.py
