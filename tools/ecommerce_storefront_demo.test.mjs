@@ -2936,14 +2936,14 @@ test('a bakery Ecommerce storefront reads trade-specific copy, not the generic w
   const collections = new Set(draft.merchandising.map((row) => row.collection))
   assert.ok(collections.has('Fresh today'), `bakery storefront must read 'Fresh today', saw ${JSON.stringify([...collections])}`)
   assert.ok(collections.has('Order ahead'), `bakery storefront must read 'Order ahead', saw ${JSON.stringify([...collections])}`)
-  assert.ok(!collections.has('Featured today'), 'generic demo wording must not appear once the trade resolves to bakery')
-  assert.ok(!collections.has('More to browse'), 'generic demo wording must not appear once the trade resolves to bakery')
+  assert.ok(!collections.has('Featured today'), 'generic wording must not appear once the trade resolves to bakery')
+  assert.ok(!collections.has('More to browse'), 'generic wording must not appear once the trade resolves to bakery')
   assert.ok(
     draft.summary.includes('Golden Bakery') && /bread|cake|pastr/i.test(draft.summary),
     `bakery summary must be trade-specific, saw ${draft.summary}`,
   )
   assert.ok(
-    draft.merchandising.every((row) => !row.note.startsWith('Demo social listing')),
+    draft.merchandising.every((row) => !row.note.startsWith('Confirm campaign copy')),
     'notes must read as bakery guidance, not the generic social-listing note',
   )
   // The trade's own hero SKUs (bread, croissant, cake, tart) must be preferred over the plain
@@ -2958,32 +2958,30 @@ test('a bakery Ecommerce storefront reads trade-specific copy, not the generic w
   )
 })
 
-// Literals captured from workingSamplePlan's output against this exact bakery-shaped catalog and
-// business name, on the commit immediately before ecommerce-trade-storefront.ts was introduced
-// (queue items 1-4 shipped, item 5 not yet started). This is the byte-identical-fallback baseline
-// TEMPLATE-EXPANSION.md's acceptance point demands -- an assertion, not an eyeballed read.
+// Neutral fallback contract for a catalog whose source trade is unavailable. It preserves the
+// generic workflow structure without presenting a demonstration as a live business storefront.
 const NO_TRADE_BASELINE = {
   'social-storefront': {
     summary: "Browse Golden Bakery's featured products and send one order request for Shop review.",
     selectedSkus: ['BUN-COCONUT', 'COFFEE-ICED', 'DONUT-GLAZED', 'WATER-500ML'],
     collections: ['Featured today', 'Featured today', 'More to browse', 'More to browse'],
-    note: 'Demo social listing: confirm campaign copy and availability before launch.',
+    note: 'Confirm campaign copy and availability before accepting the request.',
   },
   'pickup-preorder': {
     summary: 'Choose available items from Golden Bakery for pickup or preorder confirmation.',
     selectedSkus: ['BUN-COCONUT', 'DONUT-GLAZED', 'PUFF-CURRY', 'WATER-500ML'],
     collections: ['Pickup menu', 'Pickup menu', 'Pickup menu', 'Pickup menu'],
-    note: 'Demo pickup listing: confirm collection time and availability before launch.',
+    note: 'Confirm collection time and availability before accepting the request.',
   },
   'wholesale-request': {
     summary: "Browse Golden Bakery's trade assortment and request quantities for manager review.",
     selectedSkus: ['BUN-COCONUT', 'COFFEE-ICED', 'CROISSANT-BUTTER', 'DONUT-GLAZED', 'TART-EGG', 'WATER-500ML'],
     collections: Array(6).fill('Trade assortment'),
-    note: 'Demo trade listing: confirm quantities, pricing, and delivery terms before launch.',
+    note: 'Confirm quantities, pricing, and delivery terms before accepting the request.',
   },
 }
 
-test('with no resolvable Shop trade, Ecommerce working-sample copy is byte-identical to the pre-trade baseline', async () => {
+test('with no resolvable Shop trade, Ecommerce uses neutral workflow copy', async () => {
   const { activateLocalEcommerceWorkingSample } = await import(
     '../showroom/src/products/ecommerce/local-merchandising-import.ts'
   )

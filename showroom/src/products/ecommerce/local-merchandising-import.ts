@@ -72,9 +72,8 @@ function workingSamplePlan(
 ) {
   if (!workingSampleTemplateIds.includes(input.templateId)) throw new Error('Choose a supported Ecommerce working sample.')
   // trade is a second, orthogonal axis on top of the workflow template id above -- see
-  // ecommerce-trade-storefront.ts's file header. null (no trade, or a trade with no copy written
-  // yet) MUST reproduce today's exact generic wording below, byte for byte: an owner who imported
-  // their own CSV, where the trade cannot be determined, gets unchanged behavior.
+  // ecommerce-trade-storefront.ts's file header. null means the source trade cannot be determined,
+  // so use neutral operational wording rather than making a claim about the business type.
   const tradeCopy = ecommerceTradeStorefront(trade)
   // The client's own working-sample products come before the generic Shop seed items, so a
   // storefront shows that business rather than demo household goods left over from Shop's seed.
@@ -123,10 +122,10 @@ function workingSamplePlan(
       note: tradeCopy
         ? tradeCopy.note
         : input.templateId === 'social-storefront'
-          ? 'Demo social listing: confirm campaign copy and availability before launch.'
+          ? 'Confirm campaign copy and availability before accepting the request.'
           : input.templateId === 'pickup-preorder'
-            ? 'Demo pickup listing: confirm collection time and availability before launch.'
-            : 'Demo trade listing: confirm quantities, pricing, and delivery terms before launch.',
+            ? 'Confirm collection time and availability before accepting the request.'
+            : 'Confirm quantities, pricing, and delivery terms before accepting the request.',
     }
   })
   return { rows, summary }
