@@ -68,3 +68,18 @@ test('recognized cafe headings do not bypass declared foreign currency', async (
   assert.equal(result.totals.ready, 0)
   assert.ok(result.rows[0].issues.some(issue => issue.code === 'unsupported_currency'))
 })
+
+
+test('invalid model output cannot earn a correct-rejection score', async () => {
+  const { evaluateCatalogMappings } = await import('./evaluate_catalog_mapping.mjs')
+  const source = csv.replace('1200', '12.50')
+  const scenario = { id: 'fractional', csv: source, ready: 0, expectedRejection: 'import_validation_failed' }
+  for (const proposal of [null, {}, { ...(await proposalFor(source)), sourceDigest: 'stale' }]) {
+    const result = await evaluateCatalogMappings({ cases: [scenario] }, [{ id: scenario.id, proposal }])
+    assert.equal(result.technicalPass, false)
+  }
+  const valid = await evaluateCatalogMappings({ cases: [scenario] }, [{ id: scenario.id, proposal: await proposalFor(source) }])
+  assert.equal(valid.technicalPass, true)
+  assert.equal(valid.adoptionApproved, false)
+  await assert.rejects(evaluateCatalogMappings({ cases: [{ ...scenario, expectedRejection: undefined }] }, [{ id: scenario.id, proposal: null }]), /expected_rejection_required/)
+})

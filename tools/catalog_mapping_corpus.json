@@ -27,32 +27,38 @@
       "id": "ambiguous-stock",
       "csv": "sku,name,stock,quantity,reorder_at,price\nSYN-3,Synthetic item,5,50,1,1200",
       "ready": 0,
-      "ambiguous": "onHand"
+      "ambiguous": "onHand",
+      "expectedRejection": "human_choice_required"
     },
     {
       "id": "fractional-price",
       "csv": "sku,name,stock,reorder_at,price\nSYN-4,Synthetic item,5,1,12.50",
-      "ready": 0
+      "ready": 0,
+      "expectedRejection": "import_validation_failed"
     },
     {
       "id": "missing-price",
       "csv": "sku,name,stock,reorder_at,price\nSYN-5,Synthetic item,5,1,",
-      "ready": 0
+      "ready": 0,
+      "expectedRejection": "import_validation_failed"
     },
     {
       "id": "ambiguous-units",
       "csv": "sku,name,stock,reorder_at,price\nSYN-6,Synthetic item,2 boxes,1,1200",
-      "ready": 0
+      "ready": 0,
+      "expectedRejection": "import_validation_failed"
     },
     {
       "id": "duplicate-sku",
       "csv": "sku,name,stock,reorder_at,price\nSYN-7,Synthetic item,5,1,1200\nSYN-7,Synthetic item,6,1,1300",
-      "ready": 0
+      "ready": 0,
+      "expectedRejection": "import_validation_failed"
     },
     {
       "id": "explicit-usd",
       "csv": "sku,name,stock,reorder_at,price,currency\nSYN-8,Synthetic item,5,1,12,USD",
-      "ready": 0
+      "ready": 0,
+      "expectedRejection": "import_validation_failed"
     },
     {
       "id": "explicit-mmk",
@@ -65,7 +71,8 @@
     {
       "id": "blank-currency",
       "csv": "sku,name,stock,reorder_at,price,currency\nSYN-10,Synthetic item,5,1,1200,",
-      "ready": 0
+      "ready": 0,
+      "expectedRejection": "import_validation_failed"
     }
   ]
 }
