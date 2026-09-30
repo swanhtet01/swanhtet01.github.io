@@ -309,7 +309,14 @@ export function EcommerceProduct() {
   const [summary, setSummary] = useState(initialState.summary)
   const [selectedSkus, setSelectedSkus] = useState(initialState.selectedSkus)
   const [merchandising, setMerchandising] = useState<CommerceStorefrontMerchandising[] | null>(initialState.merchandising)
-  const device: PreviewDevice = window.matchMedia('(max-width: 760px)').matches ? 'phone' : 'desktop'
+  const [device, setDevice] = useState<PreviewDevice>(() => window.matchMedia('(max-width: 760px)').matches ? 'phone' : 'desktop')
+  useEffect(() => {
+    const viewport = window.matchMedia('(max-width: 760px)')
+    const syncDevice = () => setDevice(viewport.matches ? 'phone' : 'desktop')
+    viewport.addEventListener('change', syncDevice)
+    syncDevice()
+    return () => viewport.removeEventListener('change', syncDevice)
+  }, [])
   const [workspaceView, setWorkspaceView] = useState<'setup' | 'preview'>('preview')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
