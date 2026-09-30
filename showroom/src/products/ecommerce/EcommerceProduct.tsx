@@ -1778,7 +1778,6 @@ export function EcommerceProduct() {
           ? `${ecommerceCompletedOrderCount} completed`
           : 'No order yet'],
   ] as const
-  const ecommerceTodayGuided = importNeeded || storefrontSetupRequired
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -1882,9 +1881,9 @@ export function EcommerceProduct() {
         {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Request catalog setup</a> : null}
       </header>
 
-      <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-density={ecommerceTodayGuided ? 'guided' : 'compact'} data-state={ecommerceTodayState}>
+      <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
-          {!assistedCatalogEntry ? <span className="core-eyebrow">Start here</span> : null}
+          {!assistedCatalogEntry ? <span className="core-eyebrow">Next action</span> : null}
           <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Explore the catalog' : ecommerceTodayHeadline}</h2>
           {!assistedCatalogEntry ? <p>{ecommerceTodaySummary}</p> : null}
           {assistedCatalogEntry ? <>
@@ -1894,15 +1893,10 @@ export function EcommerceProduct() {
             </div>
           </> : <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>}
         </div>
-        {ecommerceTodayGuided ? (
-          <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
-            <StatusRows rows={ecommerceTodayMetrics} />
-          </div>
-        ) : null}
-        <div className="ecommerce-today-source" role="status">
-          <span>{sourceLabel}</span>
-          <small>Stock, payment, delivery, and the final order stay in Shop.</small>
+        <div aria-label="Commerce status" className="ecommerce-today-metrics" role="group">
+          <StatusRows rows={ecommerceTodayMetrics} />
         </div>
+        <p className="ecommerce-today-context" role="status">{sourceLabel} · Stock, payment, delivery, and the final order stay in Shop.</p>
       </section>
 
       <details className="ecommerce-business-controls">
