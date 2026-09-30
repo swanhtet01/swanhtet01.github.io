@@ -328,7 +328,7 @@ function rawCase(spec, index) {
     path: spec.surface === 'transition' ? '/shop/?tab=today' : spec.surface === 'shop' ? '/shop/?tab=counter&template=mini-mart' : spec.expectedPath || spec.route,
     rendered: { retirement: spec.surface === 'retired_plant' ? {
       policy: 'supermega.retired-product-preview.v1', caseId: spec.id, redirectVerified: true,
-      activeChooserVerified: true, retiredUiAbsent: true, retainedDataUnchanged: true,
+      target: spec.target, targetVerified: true, retiredUiAbsent: true, retainedDataUnchanged: true,
     } : null, pairedTransition: spec.surface === 'transition' ? {
       contract: 'supermega.paired-preview-transition.v1', publicOrigin: previewOrigins.public, appOrigin: previewOrigins.app,
       targetPath: '/shop/?tab=today', visibleActionActivated: true, destinationStable: true, pairOnlyRequests: true, noMutatingRequests: true,
@@ -797,11 +797,13 @@ test('rejects initial-correct cases that navigate across origins before screensh
   assert.match(duringCaptureNavigation.failures.join(' | '), /changed during screenshot capture/)
 })
 
-test('retirement cases require explicit policy, preservation and chooser proof', async () => {
+test('retirement cases require explicit policy, preservation and route-specific target proof', async () => {
   for (const mutate of [row => { row.path = '/plant/?tab=production' },
     row => { row.rendered.retirement = null },
     row => { row.rendered.retirement.policy = 'old' },
     row => { row.rendered.retirement.caseId = 'plant_desktop' },
+    row => { row.rendered.retirement.target = 'account-home' },
+    row => { row.rendered.retirement.targetVerified = false },
     row => { row.rendered.retirement.retainedDataUnchanged = false },
     row => { row.rendered.retirement.retiredUiAbsent = false }]) {
     const cases = EXACT_APP_PREVIEW_CASE_MATRIX.map(rawCase)
