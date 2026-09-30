@@ -3313,6 +3313,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     lowStockCount: lowStock.length,
     pendingAction: Boolean(pendingAction),
     pendingOnlineRequestCount: pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0),
+    reorderSoonCount: shopDemandIntelligence.summary.reorderSoon,
+    stockoutRiskCount: shopDemandIntelligence.summary.stockoutRisks,
   })
   const shopAgentJob = shopNextAction.job
   const shopAgentReason = shopNextAction.reason

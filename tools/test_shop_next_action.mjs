@@ -38,6 +38,8 @@ function baseline(overrides = {}) {
     actionOrderCount: 0,
     activePurchaseOrderCount: 0,
     lowStockCount: 0,
+    reorderSoonCount: 0,
+    stockoutRiskCount: 0,
     inventoryReady: true,
     ...overrides,
   }
@@ -164,6 +166,16 @@ function checkDecision(decision, label) {
   check(d.reason.includes('2'), 'active-pos: reason includes count')
 }
 
+// Forecast stockout outranks an open purchase order because open quantities are already included in the projection.
+{
+  const d = decideShopNextAction(baseline({ stockoutRiskCount: 2, activePurchaseOrderCount: 1, lowStockCount: 4 }))
+  checkDecision(d, 'stockout-risk')
+  check(d.job === 'Prevent forecast stockout', 'stockout-risk: job')
+  check(d.nextAction === 'Review demand risk', 'stockout-risk: next action')
+  check(d.track === 'Inventory', 'stockout-risk: track is Inventory')
+  check(d.reason.includes('2 items may'), 'stockout-risk: reason includes plural count')
+}
+
 // 16. active PO singular
 {
   const d = decideShopNextAction(baseline({ activePurchaseOrderCount: 1 }))
@@ -181,6 +193,17 @@ function checkDecision(decision, label) {
 {
   const d = decideShopNextAction(baseline({ activePurchaseOrderCount: 1, lowStockCount: 10 }))
   check(d.job === 'Receive purchase orders', 'active POs beat low stock')
+}
+
+// Active POs beat reorder-soon, while reorder-soon beats the static low-stock signal.
+{
+  const receiving = decideShopNextAction(baseline({ activePurchaseOrderCount: 1, reorderSoonCount: 2 }))
+  check(receiving.job === 'Receive purchase orders', 'active POs beat reorder-soon')
+  const demand = decideShopNextAction(baseline({ reorderSoonCount: 1, lowStockCount: 10 }))
+  checkDecision(demand, 'reorder-soon')
+  check(demand.job === 'Review upcoming demand', 'reorder-soon: job')
+  check(demand.nextAction === 'Open demand review', 'reorder-soon: next action')
+  check(demand.reason.includes('1 item covers'), 'reorder-soon: reason includes singular count')
 }
 
 // 19. lowStockCount → Reorder low stock
@@ -233,7 +256,8 @@ function checkDecision(decision, label) {
   const d = decideShopNextAction({
     canWrite: true, pendingAction: false, catalogItemCount: 10,
     pendingOnlineRequestCount: 0, actionOrderCount: 0,
-    activePurchaseOrderCount: 0, lowStockCount: 0, inventoryReady: true,
+    activePurchaseOrderCount: 0, lowStockCount: 0, reorderSoonCount: 0,
+    stockoutRiskCount: 0, inventoryReady: true,
   })
   check(d.job === 'Open counter for next sale', 'explicit zeros → counter')
 }
@@ -270,6 +294,18 @@ function checkDecision(decision, label) {
   check(threw, 'Infinity count throws')
 }
 
+// Demand intelligence counts receive the same validation as other inputs.
+{
+  let stockoutThrew = false
+  try { decideShopNextAction(baseline({ stockoutRiskCount: -1 })) }
+  catch { stockoutThrew = true }
+  check(stockoutThrew, 'negative stockout risk count throws')
+  let reorderThrew = false
+  try { decideShopNextAction(baseline({ reorderSoonCount: 1.5 })) }
+  catch { reorderThrew = true }
+  check(reorderThrew, 'fractional reorder-soon count throws')
+}
+
 // 30. all decision paths produce a non-empty ownerGate
 {
   const paths = [
@@ -278,7 +314,9 @@ function checkDecision(decision, label) {
     baseline({ catalogItemCount: 0 }),
     baseline({ pendingOnlineRequestCount: 1 }),
     baseline({ actionOrderCount: 1 }),
+    baseline({ stockoutRiskCount: 1 }),
     baseline({ activePurchaseOrderCount: 1 }),
+    baseline({ reorderSoonCount: 1 }),
     baseline({ lowStockCount: 1 }),
     baseline({ inventoryReady: false }),
     baseline(),
@@ -297,12 +335,14 @@ function checkDecision(decision, label) {
     baseline({ catalogItemCount: 0 }),
     baseline({ pendingOnlineRequestCount: 1 }),
     baseline({ actionOrderCount: 1 }),
+    baseline({ stockoutRiskCount: 1 }),
     baseline({ activePurchaseOrderCount: 1 }),
+    baseline({ reorderSoonCount: 1 }),
     baseline({ lowStockCount: 1 }),
     baseline({ inventoryReady: false }),
     baseline(),
   ].map((input) => decideShopNextAction(input).job)
-  check(new Set(jobs).size === jobs.length, `all 9 paths produce unique jobs: ${jobs.join(' | ')}`)
+  check(new Set(jobs).size === jobs.length, `all 11 paths produce unique jobs: ${jobs.join(' | ')}`)
 }
 
 // 32. canWrite false + zero catalog → still canWrite wins
@@ -332,12 +372,14 @@ function checkDecision(decision, label) {
     baseline({ catalogItemCount: 0 }),
     baseline({ pendingOnlineRequestCount: 1 }),
     baseline({ actionOrderCount: 1 }),
+    baseline({ stockoutRiskCount: 1 }),
     baseline({ activePurchaseOrderCount: 1 }),
+    baseline({ reorderSoonCount: 1 }),
     baseline({ lowStockCount: 1 }),
     baseline({ inventoryReady: false }),
     baseline(),
   ].map((input) => decideShopNextAction(input).stage)
-  check(new Set(stages).size === stages.length, `all 9 paths produce unique stages: ${stages.join(' | ')}`)
+  check(new Set(stages).size === stages.length, `all 11 paths produce unique stages: ${stages.join(' | ')}`)
 }
 
 console.log(`\ntest_shop_next_action: ${checks} checks passed\n`)

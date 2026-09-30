@@ -7,6 +7,8 @@ export type ShopNextActionInput = {
   lowStockCount: number
   pendingAction: boolean
   pendingOnlineRequestCount: number
+  reorderSoonCount: number
+  stockoutRiskCount: number
 }
 
 export type ShopNextActionDecision = {
@@ -20,7 +22,7 @@ export type ShopNextActionDecision = {
 }
 
 export function decideShopNextAction(input: ShopNextActionInput): ShopNextActionDecision {
-  const counts = [input.actionOrderCount, input.activePurchaseOrderCount, input.catalogItemCount, input.lowStockCount, input.pendingOnlineRequestCount]
+  const counts = [input.actionOrderCount, input.activePurchaseOrderCount, input.catalogItemCount, input.lowStockCount, input.pendingOnlineRequestCount, input.reorderSoonCount, input.stockoutRiskCount]
   if (!counts.every((count) => Number.isSafeInteger(count) && count >= 0)) throw new Error('Shop next-action counts must be non-negative safe integers.')
 
   if (!input.canWrite) return {
@@ -68,6 +70,15 @@ export function decideShopNextAction(input: ShopNextActionInput): ShopNextAction
     stage: 'Finish order queue',
     track: 'Orders',
   }
+  if (input.stockoutRiskCount) return {
+    job: 'Prevent forecast stockout',
+    nextAction: 'Review demand risk',
+    ownerGate: 'Review demand evidence, supplier terms, quantity, and arrival before creating a purchase request.',
+    path: '/shop/?tab=inventory',
+    reason: `${input.stockoutRiskCount} item${input.stockoutRiskCount === 1 ? ' may' : 's may'} run short in the current planning window after open purchase quantities are counted.`,
+    stage: 'Prevent forecast stockout',
+    track: 'Inventory',
+  }
   if (input.activePurchaseOrderCount) return {
     job: 'Receive purchase orders',
     nextAction: 'Open receiving queue',
@@ -75,6 +86,15 @@ export function decideShopNextAction(input: ShopNextActionInput): ShopNextAction
     path: '/shop/?tab=inventory',
     reason: `${input.activePurchaseOrderCount} purchase order${input.activePurchaseOrderCount === 1 ? '' : 's'} can be checked against received stock evidence.`,
     stage: 'Receive purchase orders',
+    track: 'Inventory',
+  }
+  if (input.reorderSoonCount) return {
+    job: 'Review upcoming demand',
+    nextAction: 'Open demand review',
+    ownerGate: 'Review sales evidence, supplier terms, and timing before creating a purchase request.',
+    path: '/shop/?tab=inventory',
+    reason: `${input.reorderSoonCount} item${input.reorderSoonCount === 1 ? '' : 's'} cover${input.reorderSoonCount === 1 ? 's' : ''} the current planning window but may need replenishment for the following week.`,
+    stage: 'Review upcoming demand',
     track: 'Inventory',
   }
   if (input.lowStockCount) return {

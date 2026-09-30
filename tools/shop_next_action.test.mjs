@@ -17,12 +17,16 @@ const base = {
   lowStockCount: 0,
   pendingAction: false,
   pendingOnlineRequestCount: 0,
+  reorderSoonCount: 0,
+  stockoutRiskCount: 0,
 }
 
 test('invalid counts throw before any decision is made', () => {
   assert.throws(() => decideShopNextAction({ ...base, actionOrderCount: -1 }), /non-negative safe integers/)
   assert.throws(() => decideShopNextAction({ ...base, lowStockCount: NaN }), /non-negative safe integers/)
   assert.throws(() => decideShopNextAction({ ...base, pendingOnlineRequestCount: 1.5 }), /non-negative safe integers/)
+  assert.throws(() => decideShopNextAction({ ...base, stockoutRiskCount: -1 }), /non-negative safe integers/)
+  assert.throws(() => decideShopNextAction({ ...base, reorderSoonCount: Infinity }), /non-negative safe integers/)
 })
 
 test('canWrite=false → Restore Shop readiness regardless of other flags', () => {
@@ -62,6 +66,15 @@ test('actionOrderCount > 0 → Finish fulfilment queue (outranks low-stock)', ()
   assert.equal(result.track, 'Orders')
 })
 
+test('stockoutRiskCount > 0 → Prevent forecast stockout (outranks receiving)', () => {
+  const result = decideShopNextAction({ ...base, stockoutRiskCount: 2, activePurchaseOrderCount: 1, lowStockCount: 4 })
+  assert.equal(result.job, 'Prevent forecast stockout')
+  assert.equal(result.nextAction, 'Review demand risk')
+  assert.equal(result.path, '/shop/?tab=inventory')
+  assert.equal(result.track, 'Inventory')
+  assert.ok(result.reason.startsWith('2 items may'), `reason: ${result.reason}`)
+})
+
 test('activePurchaseOrderCount > 0 → Receive purchase orders', () => {
   const result = decideShopNextAction({ ...base, activePurchaseOrderCount: 1 })
   assert.equal(result.job, 'Receive purchase orders')
@@ -69,6 +82,18 @@ test('activePurchaseOrderCount > 0 → Receive purchase orders', () => {
   assert.equal(result.path, '/shop/?tab=inventory')
   assert.equal(result.track, 'Inventory')
   assert.ok(result.reason.startsWith('1 purchase order '), `reason: ${result.reason}`)
+})
+
+test('reorderSoonCount > 0 → Review upcoming demand (after receiving, before static low stock)', () => {
+  const result = decideShopNextAction({ ...base, reorderSoonCount: 1, lowStockCount: 4 })
+  assert.equal(result.job, 'Review upcoming demand')
+  assert.equal(result.nextAction, 'Open demand review')
+  assert.equal(result.path, '/shop/?tab=inventory')
+  assert.equal(result.track, 'Inventory')
+  assert.ok(result.reason.startsWith('1 item covers'), `reason: ${result.reason}`)
+
+  const receiving = decideShopNextAction({ ...base, activePurchaseOrderCount: 1, reorderSoonCount: 2 })
+  assert.equal(receiving.job, 'Receive purchase orders')
 })
 
 test('lowStockCount > 0 → Reorder low stock', () => {
