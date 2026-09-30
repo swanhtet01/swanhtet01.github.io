@@ -30,37 +30,6 @@
   color-scheme: light;
 }
 
-.theme-dark .website-product {
-  --website-bg: #05080d;
-  --website-panel: #0d131b;
-  --website-panel-raised: #121b25;
-  --website-ink: #f5f8fb;
-  --website-muted: #a4b0be;
-  /* #718093 measures 4.31:1 against the dark panel, under the 4.5:1 AA floor for body
-     text. The identical value was already lifted to #7a8a9c (4.91:1) for --core-quiet in
-     core-app.css; this file kept the old one, so the same defect survived here. */
-  --website-quiet: #7a8a9c;
-  --website-line: rgba(166, 190, 214, .13);
-  --website-line-strong: rgba(166, 190, 214, .24);
-  --website-green: #56f0c1;
-  --website-green-soft: rgba(86, 240, 193, .11);
-  --website-warn: #ffcc7a;
-  --website-danger: #ff8291;
-  background: radial-gradient(circle at 82% -18%, rgba(42, 120, 133, .2), transparent 31%), var(--website-bg);
-  color-scheme: dark;
-}
-
-.theme-dark .website-product input,
-.theme-dark .website-product select,
-.theme-dark .website-product textarea {
-  border-color: var(--website-line-strong);
-  background: #090f16;
-  color: var(--website-ink);
-}
-.theme-dark .website-panel-actions { background: var(--website-panel); }
-.theme-dark .website-preview-toolbar { background: var(--website-panel); }
-.theme-dark .website-notice { border-color: rgba(86,240,193,.2); background: rgba(12,18,26,.96); }
-
 .website-product *,
 .website-product *::before,
 .website-product *::after {
@@ -623,22 +592,6 @@
 .website-button.is-primary:hover:not(:disabled) {
   border-color: #173bb0;
   background: #173bb0;
-}
-
-/* --website-green is a dark green (#2454e6) in light, where white text reads cleanly, and
-   a bright mint (#56f0c1) in dark, where white text measures 1.44:1 -- the primary action
-   in this product, effectively unreadable. The fill is what carries the brand here, so the
-   text flips to the dark background colour instead (13.4:1) rather than the fill changing.
-   Hover has to move with it: the light-theme hover is a dark green that would be invisible
-   under dark text, so dark mode gets a deeper mint that keeps the same ink (10.7:1). */
-.theme-dark .website-button.is-primary {
-  color: var(--website-bg);
-}
-
-.theme-dark .website-button.is-primary:hover:not(:disabled) {
-  border-color: #3ad9a8;
-  background: #3ad9a8;
-  color: var(--website-bg);
 }
 
 .website-button.is-quiet {
@@ -1439,44 +1392,6 @@
     margin: -52px auto 10px;
   }
 }
-
-/* ============================================================================
-   Design phase 3 -- P3.3 (2026-08-20): live rules re-homed from the gen-one
-   region per hq/strategy/WEBSITE-CSS-PIN-CATALOGUE.md section 5 (the minimum
-   move list) and section 4 (the websiteMobileCss safe re-anchor). True moves,
-   byte-identical rule bodies: the catalogue's move semantics override
-   DESIGN-PROGRAM's copy-in-place model so the P3.0 hex ratchet stays at 60
-   (a copy would have added #0b6b3a/#101512/#f4f2eb occurrences). Placed at
-   the HEAD of the live region, where the movers keep preceding every
-   live-region rule exactly as they did from the gen-one region -- the later
-   overrides (.preview-hero > .preview-cta font-size 14px, the max-640
-   panel-head/navigation-row/editor-panel restyles, the max-900 frame
-   collapse) all still win. The gen-one region above now holds only
-   catalogued-dead rules plus unpinned base rules awaiting P3.4's per-chunk
-   diff-review. The two "verify slice" comment markers below are load-bearing:
-   tools/verify_app_build.mjs slices websiteMobileCss between them (the old
-   anchors -- gen-one's first `@media (max-width: 640px)` and its only
-   `@media (prefers-reduced-motion` -- moved with this batch, so the slice
-   is re-anchored in the same PR). Preview-frame hexes below are permanently
-   exempt from tokenization (phase-2 item 12 ruling).
-
-   P3.4 (2026-08-20): the catalogued-dead remainder is deleted -- 625 source
-   lines across two family-contiguous chunks (chunk 1: the workspace-chrome
-   families incl. the live-region Task-first-era rules section 6 of the
-   catalogue under-enumerated; chunk 2: the handoff family and the emptied
-   gen-one max-640 block). Family-contiguous, not region-contiguous: the
-   theme surface contract fails a chunk that deletes a family's .theme-dark
-   override while any of its light surfaces survives elsewhere, so each
-   family left whole. Every deleted selector was re-verified at zero TSX/TS
-   consumers immediately before deletion (dynamic is-, view-, theme-
-   construction checked). What remains above this comment (:1-1439) is the
-   gen-one base rules for still-rendered classes -- byte-identical originals
-   whose live-region successors win by cascade order -- plus four mixed
-   selector lists whose dead members ride alongside live ones; retiring
-   those is P3.9-attrition or consolidation work, not dead-rule deletion.
-   The hex ratchet stayed at 60: the dead rules carried rgba()/var() only,
-   so DESIGN-PROGRAM's "52 gen-one hex vanish with P3.4" expectation was
-   wrong -- those literals sit in the surviving base rules. */
 
 .website-disclosure > summary::-webkit-details-marker {
   display: none;
@@ -2905,22 +2820,6 @@
   color: #fff;
 }
 
-/* A second copy of the white-on-primary pairing, and the reason fixing
-   `.theme-dark .website-button.is-primary` alone was not enough: this selector carries the
-   same specificity but is declared later, so it won and "Edit page" and "Save" stayed at
-   1.44:1 in dark mode while "Review edits" -- which only matches the base rule -- was
-   already fixed. Found by driving the builder into its editing state; the landing screen
-   never renders this action bar. */
-.theme-dark .website-primary-actions > .website-button.is-primary {
-  color: var(--website-bg);
-}
-
-.theme-dark .website-primary-actions > .website-button.is-primary:hover:not(:disabled) {
-  border-color: #3ad9a8;
-  background: #3ad9a8;
-  color: var(--website-bg);
-}
-
 .website-site-settings > summary::-webkit-details-marker {
   display: none;
 }
@@ -3519,34 +3418,6 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-/* Same white-on-mint pairing as the primary buttons: --website-green is a dark green in
-   light where white reads cleanly, and a bright mint in dark where white measures 1.44:1.
-   These two carry it on a hover state and a recovery action, both of which only appear in
-   states the landing screen never renders. */
-.theme-dark .website-notice-action:hover {
-  color: var(--website-bg);
-}
-
-/* THE SAME CASCADE TRAP AS #528 AND #530, third instance, found by tools/check_css_contracts.mjs
-   rule 3 rather than by eye. This rule is 0-2-1 and sits ~440 lines AFTER
-   `.website-recovery-actions > button.is-quiet` (:3031), which is ALSO 0-2-1, so source order
-   handed it the win and the quiet buttons' `color: var(--website-muted)` never rendered in dark.
-   Measured on the composited surface: the quiet button paints --website-panel #0d131b and was
-   getting --website-bg #05080d on it, which is 1.08:1 -- present in the DOM, invisible on screen.
-   As written it is --website-muted #a4b0be at 8.46:1. Those two buttons are "Cancel" and "Remove"
-   in the Website recovery panel, so this was a data-recovery control the owner could not read.
-   Scoped with :not(.is-quiet) rather than re-declaring the colour on a 0-3-1
-   `.theme-dark ... button.is-quiet`: raising specificity repairs the one rule that exists today
-   and leaves the trap armed for the next variant added, which is the reasoning #528 recorded.
-   The declaration is NOT redundant here -- unlike the two earlier instances it does real work and
-   could not simply be deleted. The base rule paints `color: #fff` on --website-green, which is a
-   bright mint in dark where white measures 1.44:1, so the flip is load-bearing for the plain
-   Download button; and `.is-danger` declares no colour of its own, so it takes --website-bg on
-   --website-danger #ff8291 from here too. Both keep it, byte-identical, because both still match. */
-.theme-dark .website-recovery-actions > button:not(.is-quiet) {
-  color: var(--website-bg);
 }
 
 /* 375px audit, deferred P2 sweep: the Website workspace's own controls kept desktop sizing

@@ -56,12 +56,8 @@
   backdrop-filter: blur(16px);
 }
 
-.theme-dark .ecommerce-workspace-switch { border-color: rgba(86,240,193,.12); background: rgba(12,18,26,.96); }
-
 .ecommerce-workspace-switch > span,
 .ecommerce-preview-size > span {
-  /* --core-muted is #526078 in light, so this is byte-identical there and only changes
-     dark mode, where the literal measured 3.07:1 on the themed panel behind it. */
   color: var(--core-muted);
   font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
@@ -74,10 +70,6 @@
   border: 1px solid rgba(37,48,74, .14);
   border-radius: 9px;
   padding: 0 34px 0 12px;
-  /* Design phase 2 item 12: #fff/#171b26 are byte-identical to --core-panel/--core-ink in
-     light. The .ecommerce-workspace-switch shell already flips dark (:56 above), so these
-     selects were the one part of it that did not -- tokenizing gives them the matching
-     .theme-dark remap the switch itself already has. */
   background: var(--core-panel);
   color: var(--core-ink);
   font: inherit;
@@ -1397,11 +1389,6 @@
   font-size: 0.625rem;
 }
 
-/* This block sits on the themed panel, so its light-theme literals carried straight into
-   dark mode and failed AA there: #66746b measured 3.80:1 and #2454e6 3.26:1 against
-   --core-panel. --core-green is exactly #2454e6 in light, so that one is byte-identical
-   there. #66746b is not a token; --core-quiet (#5f6f67 light) is the nearest and is a
-   shade darker, which only moves light mode further above the floor. */
 .ecommerce-after-purchase > summary small,
 .ecommerce-after-purchase > div p {
   color: var(--core-quiet);
@@ -1720,44 +1707,6 @@
   .ecommerce-buying-workspace {
     scroll-margin-top: 112px;
   }
-}
-
-/* The cockpits keep their light tints in dark mode -- see the .ecommerce-today-priority h2
-   note above for why the cards themselves cannot flip while their text is theme-blind. The
-   consequence is that any SHARED token-coloured text landing on them inherits the dark
-   theme's palette and disappears: --core-accent resolves to the bright mint #56f0c1, which
-   measured 1.36:1 on the ops cockpits and 1.44:1 on the AI desk across 23 elements.
-   Only reachable with the enterprise controls expanded, which is why earlier sweeps of this
-   route reported it clean.
-   The fix matches the rest of this file: on a theme-blind card, the text must be theme-blind
-   too. #2454e6 is exactly what --core-green resolves to in LIGHT, so these read identically
-   in both themes rather than introducing a new colour. Verified: 5.9:1 on the cockpit tint,
-   5.73:1 on white.
-   Attempting the opposite -- darkening the cards -- was measured and reverted: it took the
-   failures from 25 to 201, because it hid every deliberately dark literal already on them. */
-.theme-dark .ecommerce-ops-cockpit .core-eyebrow,
-.theme-dark .ecommerce-ops-cockpit .text-link,
-.theme-dark .ecommerce-ai-desk .core-eyebrow,
-.theme-dark .ecommerce-ai-desk .text-link {
-  color: #2454e6;
-}
-
-/* The mirror image of the block above, and the reason a blanket rule would be wrong here.
-   This summary sits on .ecommerce-business-controls, which DOES use var(--core-panel) and so
-   is genuinely dark in dark mode -- but its text is a theme-blind dark literal, giving
-   1.42:1 for the label and 3.8:1 for the sub-line. On a themed card the text must be themed
-   too, which is the exact opposite of what the light cockpits need. */
-.theme-dark .ecommerce-enterprise-controls > summary {
-  color: var(--core-ink);
-}
-
-/* Scoped to the enterprise-controls summary ALONE. The original rule these share also
-   styles .ecommerce-order-import-workspace summaries, which sit on a LIGHT cockpit -- and
-   --core-quiet resolves to #7a8a9c in dark, giving 3.34:1 there. Including it made one
-   surface better and another worse; the light one keeps its #66746b literal, which measures
-   4.6:1 on that tint. */
-.theme-dark .ecommerce-enterprise-controls > summary small {
-  color: var(--core-quiet);
 }
 
 /* 375px audit, deferred P2 sweep: interactive text below 12px and tap targets below 44px on
