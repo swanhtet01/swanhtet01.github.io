@@ -607,12 +607,12 @@ export function inspectBusinessBrief(document) {
 
 async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   const started = await evalInPage(cdp, sessionId, `(() => {
-    const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Try sample request');
+    const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Open customer ordering');
     if (!button || button.disabled) return false;
     button.click();
     return true;
   })()`)
-  if (!started) return { ok: false, error: 'Ecommerce sample-order action was not available' }
+  if (!started) return { ok: false, error: 'Ecommerce customer-order action was not available' }
 
   const readyDeadline = Date.now() + 10_000
   let formReady = false
@@ -634,7 +634,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
     const phone = form?.querySelector('input[autocomplete="tel"]');
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     if (!form || !name || !phone || !setter) return false;
-    setter.call(name, 'Demo Customer');
+    setter.call(name, 'May Thiri');
     name.dispatchEvent(new Event('input', { bubbles: true }));
     setter.call(phone, '09123456789');
     phone.dispatchEvent(new Event('input', { bubbles: true }));
@@ -649,7 +649,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
     state = await evalInPage(cdp, sessionId, `(() => {
       const receipt = document.querySelector('.ecommerce-request-receipt[data-current="true"]');
       const receiptBoundary = receipt ? [...receipt.querySelectorAll('p')]
-        .find((candidate) => candidate.textContent.includes('This browser demo retained the request.')) : null;
+        .find((candidate) => candidate.textContent.includes('Saved on this device for Shop review.')) : null;
       const box = receiptBoundary?.getBoundingClientRect();
       const todayTitle = document.querySelector('#ecommerce-today-title')?.textContent.trim() || '';
       const todaySummary = document.querySelector('.ecommerce-today-priority > p')?.textContent.trim() || '';
@@ -672,17 +672,17 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
         documentScrollWidth: document.documentElement?.scrollWidth || 0,
       };
     })()`)
-    if (state?.todayTitle === 'Sample request saved locally' && state?.receiptBoundary && state?.boundaryVisible) break
+    if (state?.todayTitle === 'Order request saved' && state?.receiptBoundary && state?.boundaryVisible) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
 
   const checks = {
-    localHeadline: state?.todayTitle === 'Sample request saved locally',
-    localSummary: state?.todaySummary.includes('saved on this device for Shop review')
-      && state?.todaySummary.includes('No Shop inbox write, charge, stock, delivery, or customer message happened.'),
-    localNotice: state?.notice.includes('saved on this device for Shop review')
+    localHeadline: state?.todayTitle === 'Order request saved',
+    localSummary: state?.todaySummary.includes('Saved on this device for Shop review')
+      && state?.todaySummary.includes('No order, charge, stock, delivery, or customer message changed.'),
+    localNotice: state?.notice.includes('Saved on this device for Shop review')
       && state?.notice.includes('No order, stock, message, or charge changed.'),
-    localReceipt: state?.receiptBoundary.includes('This browser demo retained the request.')
+    localReceipt: state?.receiptBoundary.includes('Saved on this device for Shop review.')
       && state?.receiptBoundary.includes('Shop still confirms stock, promise, payment, and delivery.'),
     boundaryVisible: Boolean(state?.boundaryVisible),
     managedHeadlineAbsent: !state?.oldManagedHeadlineVisible,
@@ -1114,13 +1114,13 @@ const tests = [
     seed: {},
   })),
   {
-    name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
+    name: 'desktop Ecommerce keeps a reviewed order request on this device',
     route: '/ecommerce/?workspace=1',
     width: 1280,
     height: 900,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Sample request saved locally', 'This sample order request is saved on this device for Shop review.', 'This browser demo retained the request.'],
+    expectedText: ['Commerce', 'Order request saved', 'Saved on this device for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-desktop-1280x900',
@@ -1128,14 +1128,14 @@ const tests = [
     seed: miniMartCounterFixture(),
   },
   {
-    name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
+    name: 'mobile Ecommerce keeps a reviewed order request on this device',
     route: '/ecommerce/?workspace=1',
     width: 390,
     height: 844,
     mobile: true,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Sample request saved locally', 'This sample order request is saved on this device for Shop review.', 'This browser demo retained the request.'],
+    expectedText: ['Commerce', 'Order request saved', 'Saved on this device for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-mobile-390x844',
