@@ -584,18 +584,24 @@ export function receiptBoundaryVisible(box, width, height, style) {
 }
 
 export function inspectBusinessBrief(document) {
-  const form = document.querySelector('.business-brief form')
-  const fields = form ? [...form.querySelectorAll('input, textarea')] : []
+  const websiteForm = document.querySelector('.website-starter-form')
+  const form = websiteForm || document.querySelector('.business-brief form')
+  const fields = form ? [...form.querySelectorAll(websiteForm ? 'input:not([type="file"]), textarea' : 'input, textarea')] : []
   const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')
   const editable = node => visible(node) && !node.disabled && !node.readOnly && node.tabIndex >= 0
   const named = node => [...(node.labels || [])].some(label => label.textContent.trim())
   const submit = form?.querySelector('button[type="submit"]')
-  const preview = submit?.textContent.trim() === 'Create preview'
-  const count = preview ? 2 : 3
+  const website = Boolean(websiteForm)
+  const count = website ? 5 : 3
+  const essentialsRequired = website
+    ? fields.length === count && fields[0].required && fields[1].required && !fields[2].required && fields[3].required && !fields[4].required
+    : fields.length === count && fields[0].required && fields[1].required && !fields[2].required
+  const nativeBlocked = website ? !form?.checkValidity() && !submit?.disabled : submit?.disabled
   return {
     fieldsReady: fields.length === count && fields.every(node => editable(node) && named(node)),
-    essentialsRequired: fields.length === count && fields[0].required && fields[1].required && (preview || !fields[2].required),
-    emptyContinueBlocked: fields.every(node => node.value === '') && visible(submit) && submit.disabled && submit.textContent.trim() === (preview ? 'Create preview' : 'Continue'),
+    essentialsRequired,
+    emptyContinueBlocked: fields.every(node => node.value === '') && visible(submit) && nativeBlocked
+      && submit.textContent.trim() === (website ? 'Create website' : 'Continue'),
   }
 }
 

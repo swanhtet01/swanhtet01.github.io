@@ -22,7 +22,7 @@ type WebsiteStarterSetupProps = {
 }
 
 const EMPTY_BRIEF: WebsiteStarterBrief = {
-  templateId: 'catalog-showcase',
+  templateId: 'business-presence',
   businessName: '',
   audience: '',
   offer: '',
