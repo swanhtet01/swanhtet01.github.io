@@ -275,6 +275,7 @@ export function assertCaseSemantics(testCase, expected) {
       'localNotice',
       'localReceipt',
       'boundaryVisible',
+      'compactMobileReceipt',
       'managedHeadlineAbsent',
       'companyReceiptClaimAbsent',
       'browserPersistencePresent',
