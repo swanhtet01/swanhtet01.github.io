@@ -532,7 +532,7 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sales and stock, in sync.', body:'Record sales, track orders and keep stock up to date.', image:'platform-stock.jpg', alt:'Stock screen with product availability, prices and reorder levels', features:['Sales counter','Stock and purchasing','Order tracking']},
+ shop: {title:'Sales and stock, in sync.', body:'Serve customers, follow orders and see stock risk before it slows the day down.', image:'platform-shop-dashboard-v2.jpg', alt:'Illustrative Shop dashboard with sales, orders, stock and next actions', features:['Sales counter','Stock and purchasing','Order tracking']},
  website: {title:'A website that works for you.', body:'Manage your pages, services and inquiries without rebuilding your website.', image:'platform-pages.jpg', alt:'Page editor with page paths and content checks', features:['Page editing','Search metadata','Inquiry inbox']},
  ecommerce: {title:'Turn your catalog into orders.', body:'Browse products and send an order. Your team confirms each order and payment. Arrange delivery with your customer. Manage stock in Shop.', image:'platform-catalog.jpg', alt:'Catalog with product cards, prices and cart controls', features:['Product catalog','Cart and requests','Order follow-through']},
 }
@@ -1295,7 +1295,7 @@ await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
-for (const image of ['platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+for (const image of ['platform-shop-dashboard-v2.jpg','platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
