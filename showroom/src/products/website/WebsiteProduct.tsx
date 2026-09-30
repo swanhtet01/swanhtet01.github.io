@@ -1012,6 +1012,9 @@ export function WebsiteProduct() {
     : storageMode === 'browser-local'
       ? 'Saved on this device'
       : 'Available in this browser session'
+  const editingRoutineStatus = view === 'content' && surface === 'work'
+    && websiteTodayState === 'ready' && !pendingRestoredDraft
+    && !storageIssue && !canRepairLocalStorage
   const websiteTodayContext = workingSampleTemplate
     ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current design' : 'starting design'} · ${websiteTodaySource}`
     : websiteTodaySource
@@ -1208,7 +1211,9 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
+          {!starterSetupActive ? <details className="website-status-disclosure" data-editing-routine={editingRoutineStatus} open={!editingRoutineStatus}>
+            <summary>Site status · {websiteAgentJob}</summary>
+            <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
               <span className="core-eyebrow">Next action</span>
               <h2 id="website-today-title">{websiteAgentJob}</h2>
@@ -1234,7 +1239,8 @@ export function WebsiteProduct() {
                 ) : null}
               </details>
             </div>
-          </section> : null}
+          </section>
+          </details> : null}
 
           {view === 'content' && !starterSetupActive ? (
             <section
