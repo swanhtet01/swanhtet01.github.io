@@ -29,9 +29,9 @@ export function assertLauncherProductLinks(links, expected = [['Shop', '/shop/']
 }
 
 const FULL_CASE_MATRIX = Object.freeze([
-  { name: 'desktop root shows launcher despite remembered product', route: '/', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: 'app-launcher-desktop-1280x900.png' },
-  { name: 'desktop choose query shows launcher', route: '/?choose=1', viewport: '1280x900', width: 1280, height: 900, path: '/?choose=1', screenshot: null },
-  { name: 'mobile root shows launcher', route: '/', viewport: '390x844 mobile', width: 390, height: 844, path: '/', screenshot: 'app-launcher-mobile-390x844.png' },
+  { name: 'desktop root presents login despite remembered product', route: '/', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: 'app-launcher-desktop-1280x900.png' },
+  { name: 'desktop choose query presents login', route: '/?choose=1', viewport: '1280x900', width: 1280, height: 900, path: '/?choose=1', screenshot: null },
+  { name: 'mobile root presents login', route: '/', viewport: '390x844 mobile', width: 390, height: 844, path: '/', screenshot: 'app-launcher-mobile-390x844.png' },
   { name: 'retired Shop demo query returns to account home', route: '/?demo=shop', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   {
     name: 'desktop trade link opens a complete mini-mart counter',
@@ -217,10 +217,9 @@ export function assertCaseSemantics(testCase, expected) {
     || rendered.documentScrollWidth > rendered.viewportWidth + 1
     || rendered.noHorizontalOverflow !== true) fail('app_entry_rendered_viewport_or_overflow_invalid')
 
-  if (expected.name === 'desktop root shows launcher despite remembered product'
-    || expected.name === 'desktop choose query shows launcher'
-    || expected.name === 'mobile root shows launcher') assertLauncherProductLinks(rendered.launcherLinks,
-      expected.name === 'desktop root shows launcher despite remembered product' ? [['Shop', '/shop/']] : [])
+  if (expected.name === 'desktop root presents login despite remembered product'
+    || expected.name === 'desktop choose query presents login'
+    || expected.name === 'mobile root presents login') assertLauncherProductLinks(rendered.launcherLinks, [])
 
   if (expected.semantics === 'retired-product') {
     assertLauncherProductLinks(rendered.launcherLinks, [])

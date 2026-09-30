@@ -68,15 +68,14 @@ function runGit(directory, args) {
   return String(result.stdout || '').trim()
 }
 
-test('launcher evidence binds exact visible product order and routes in the disk consumer', () => {
+test('login entry evidence rejects every visible workspace-product card in the disk consumer', () => {
   const links = [{ name: 'Shop', href: '/shop/' }, { name: 'Ecommerce', href: '/ecommerce/' }, { name: 'Website', href: '/website/' }]
   assert.doesNotThrow(() => assertLauncherProductLinks(links))
   const invalid = [undefined, [], links.slice(0, 2), [...links, { name: 'Plant', href: '/plant/' }],
     [links[1], links[0], links[2]], [links[0], links[0], links[2]],
     [links[0], { name: 'Ecommerce', href: '/login' }, links[2]]]
-  for (const name of ['desktop root shows launcher despite remembered product', 'desktop choose query shows launcher', 'mobile root shows launcher']) {
-    const savedShop = name === 'desktop root shows launcher despite remembered product'
-    const visibleLinks = savedShop ? [links[0]] : []
+  for (const name of ['desktop root presents login despite remembered product', 'desktop choose query presents login', 'mobile root presents login']) {
+    const visibleLinks = []
     const width = name.startsWith('mobile') ? 390 : 1280
     const height = width === 390 ? 844 : 900
     const expected = { name, width, height }
@@ -85,7 +84,7 @@ test('launcher evidence binds exact visible product order and routes in the disk
       rendered: { viewportWidth: width, viewportHeight: height, documentScrollWidth: width, noHorizontalOverflow: true, launcherLinks: visibleLinks } }
     assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
     for (const wrong of [undefined, links, ...invalid.filter(value => value?.length),
-      ...(savedShop ? [[], [{ name: 'Shop', href: '/login' }]] : [[links[0]]])]) {
+      [[links[0]], [{ name: 'Shop', href: '/login' }]]]) {
       assert.throws(() => assertCaseSemantics({ ...entry, rendered: { ...entry.rendered, launcherLinks: wrong } }, expected), /launcher_products_mismatch/)
     }
   }
@@ -223,21 +222,21 @@ async function createFixture(context) {
 function fullCaseMatrixFixture() {
   return [
     {
-      name: 'desktop root shows launcher despite remembered product',
+      name: 'desktop root presents login despite remembered product',
       route: '/',
       viewport: '1280x900',
       path: '/',
       screenshot: { file: 'app-launcher-desktop-1280x900.png' },
     },
     {
-      name: 'desktop choose query shows launcher',
+      name: 'desktop choose query presents login',
       route: '/?choose=1',
       viewport: '1280x900',
       path: '/?choose=1',
       screenshot: null,
     },
     {
-      name: 'mobile root shows launcher',
+      name: 'mobile root presents login',
       route: '/',
       viewport: '390x844 mobile',
       path: '/',

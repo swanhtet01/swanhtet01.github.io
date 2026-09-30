@@ -965,7 +965,7 @@ function gitHead() {
 const launcherText = [
   'Welcome back',
   'Login',
-  'Your business, in one place.',
+  'Sign in to your business.',
 ]
 
 const shopSetup = {
@@ -987,30 +987,30 @@ const shopSetup = {
 
 const tests = [
   {
-    name: 'desktop root shows launcher despite remembered product',
+    name: 'desktop root presents login despite remembered product',
     requireLauncherProducts: true,
-    expectedLauncherProducts: [['Shop', '/shop/']],
+    expectedLauncherProducts: [],
     route: '/',
     width: 1280,
     height: 900,
     expectedPath: '/',
-    expectedText: ['Welcome back', 'Login', 'Shop', 'Pilot Spa Workspace', 'Saved on this device'],
+    expectedText: launcherText,
     screenshotName: 'app-launcher-desktop-1280x900',
     seed: { lastProduct: 'production', productSetups: shopSetup },
   },
   {
-    name: 'desktop choose query shows launcher',
+    name: 'desktop choose query presents login',
     requireLauncherProducts: true,
     expectedLauncherProducts: [],
     route: '/?choose=1',
     width: 1280,
     height: 900,
     expectedPath: '/?choose=1',
-    expectedText: ['Welcome back', 'Login', 'Your business, in one place.'],
+    expectedText: launcherText,
     seed: { lastProduct: 'commerce' },
   },
   {
-    name: 'mobile root shows launcher',
+    name: 'mobile root presents login',
     requireLauncherProducts: true,
     expectedLauncherProducts: [],
     route: '/',
@@ -1018,7 +1018,7 @@ const tests = [
     height: 844,
     mobile: true,
     expectedPath: '/',
-    expectedText: ['Welcome back', 'Login', 'Your business, in one place.'],
+    expectedText: launcherText,
     screenshotName: 'app-launcher-mobile-390x844',
     seed: { lastProduct: 'ecommerce' },
   },
