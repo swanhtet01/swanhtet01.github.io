@@ -45,16 +45,18 @@ test('confirmed action requests controlled tracking without preparing another qu
 })
 
 test('quote recovery ignores expired-only history and starts a fresh cart', () => {
-  const start = source.indexOf('  function prepareQuoteRecovery() {')
+  const start = source.indexOf('  function prepareQuoteRecovery(event?: ReactMouseEvent<HTMLButtonElement>) {')
   const body = source.slice(start, source.indexOf('\n  // The cart and checkout', start))
   const calls = []
-  runInNewContext(`${body}; prepareQuoteRecovery()`, {
+  runInNewContext(`${body.replace('event?: ReactMouseEvent<HTMLButtonElement>', 'event')}; prepareQuoteRecovery()`, {
     actionablePendingManagedRequests: [],
     buyingReady: true,
     customerPreviewItems: [{ sku: 'FRESH-SKU' }],
     addToCart: sku => calls.push(`cart:${sku}`),
+    Date,
     finishStorefrontSetup: () => calls.push('setup'),
     navigate: () => calls.push('navigate'),
+    setOrderOpsNow() {},
   })
   assert.deepEqual(calls, ['cart:FRESH-SKU'])
 })
@@ -70,4 +72,5 @@ test('filtered request inbox excludes expired history from Shop actions', () => 
   assert.match(source, /const pickupReviewCount = actionablePendingManagedRequests\.filter/)
   assert.match(source, /requestQuoteIsExpired\(ecommerceAttentionRequest, actionNow\)/)
   assert.match(source, /requestQuoteIsExpired\(customerFollowUpRequest\)[\s\S]*previous quote expired/)
+  assert.match(source, /requestQuoteIsExpired\(recoveryRequest, actionNow\)/)
 })

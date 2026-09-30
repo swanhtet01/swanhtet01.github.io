@@ -29,3 +29,11 @@ test('includes an off-window target while preserving the twenty-card bound', () 
 test('rejects an invalid limit', () => {
   assert.throws(() => shopInboxRequestWindow(requests, null, 0), /positive safe integer/)
 })
+
+test('retains an off-window target until the order composer closes', () => {
+  assert.match(source, /const \[focusedEcommerceRequestId, setFocusedEcommerceRequestId\] = useState<string \| null>\(null\)/)
+  assert.match(source, /const activeEcommerceInboxRequestId = requestedRequestId \?\? focusedEcommerceRequestId/)
+  assert.match(source, /shopInboxRequestWindow\(pendingStorefrontRequests, activeEcommerceInboxRequestId\)/)
+  assert.match(source, /setFocusedEcommerceRequestId\(requestedStorefrontRequestIsWaiting \? requestedRequestId : null\)/)
+  assert.match(source, /onClose=\{\(\) => \{\s*setFocusedEcommerceRequestId\(null\)/)
+})

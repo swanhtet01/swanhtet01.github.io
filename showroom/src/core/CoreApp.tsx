@@ -1690,6 +1690,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [orderDraftSaving, setOrderDraftSaving] = useState(false)
   const [orderDraftConflict, setOrderDraftConflict] = useState(false)
   const [orderDraftInitializedScope, setOrderDraftInitializedScope] = useState('')
+  const [focusedEcommerceRequestId, setFocusedEcommerceRequestId] = useState<string | null>(null)
   const orderDraftInitialized = orderDraftInitializedScope === orderDraftScope
   const orderComposerRef = useRef<HTMLDialogElement>(null)
   const pendingOrderComposerReveal = useRef<'' | 'ecommerce-request' | 'ecommerce-inbox' | 'ecommerce-inbox-request'>('')
@@ -2053,7 +2054,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     requestedRequestId
     && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
   )
-  const visiblePendingStorefrontRequests = shopInboxRequestWindow(pendingStorefrontRequests, requestedRequestId)
+  const activeEcommerceInboxRequestId = requestedRequestId ?? focusedEcommerceRequestId
+  const visiblePendingStorefrontRequests = shopInboxRequestWindow(pendingStorefrontRequests, activeEcommerceInboxRequestId)
   const purchaseOrderRows = commercePurchaseOrders(commerce)
     .map((purchaseOrder) => ({
       purchaseOrder,
@@ -2957,6 +2959,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       || !managedIdentity
       || workspaceMode !== 'managed-ready') return
     consumedEcommerceInboxSource.current = sourceKey
+    setFocusedEcommerceRequestId(requestedStorefrontRequestIsWaiting ? requestedRequestId : null)
     setOrderEntryMode('online')
     setOrderDraftActive(true)
     setResumedOrderDraft(null)
@@ -6869,6 +6872,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       onScheduleChange={(schedule) => setScheduleSnapshot({ key: scheduleScopeKey, schedule })}
     /></Suspense> : null}
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
+      setFocusedEcommerceRequestId(null)
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
       setOrderDraftConflict(false)
@@ -6906,7 +6910,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             return <div className="website-intake-ready" key={request.id}>
               <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
-              <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
+              <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
             </div>
           }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Commerce</Link>
