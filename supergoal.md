@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.35
+Version: 1.2.36
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-30
@@ -26,7 +26,7 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 ### Immediate delivery sequence
 
-Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The single founder identity and three private workspaces now exist, and the current app/public release has hosted acceptance. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain one fixed light technical identity and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
+Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The last recorded provider inspection found one founder identity and three private workspaces. Historical hosted release checks do not accept later pending source changes. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain one fixed light technical identity and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
 1. Finish the pending product release through the existing authorized workflow. PR641 head `3958206384b6caa990ca5ea3a7d75383b1597e5b` passed CI `36746738665`; this is source acceptance, not deployment. Reconcile the stacked PR638–641 release path and current provider state before promotion. Preserve production schema13; do not replay migrations.
 2. Complete founder sign-in and authenticated save/reload/isolation across the existing three workspaces. Confirmation was incomplete at the last recorded inspection; recheck before claiming current account state. Do not create another identity or send duplicate invitations.
@@ -83,7 +83,7 @@ The owner-approved Supabase Auth invitation to swanhtet@supermega.dev was sent o
 
 The owner approved routine PR work without repeated permission questions. Review, save and push within that scope. Required checks and eligible review requirements still apply. Earlier bypass instructions are superseded: automatic approval review rejected the ruleset-bypass action; do not retry it, fabricate an independent reviewer or weaken protections. Continue useful independent work while an unchanged external review gate remains. Reconcile exact production authority before each materially new deployment or managed change.
 
-This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
+The table below is retained historical evidence from the PR622 release, not the current deployment inventory. Use the latest verified launch-control receipt and fresh provider state for release decisions; do not reuse these hashes as the latest release.
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
@@ -116,7 +116,7 @@ Do not copy credentials, customer records, raw logs or the whole conversation in
 
 ## 4. Scope and settled product direction
 
-Customer-facing product names are Shop, Sites and Commerce. Sites replaces Website and Commerce replaces Ecommerce in presentation; retain website/ecommerce route IDs, API values and storage keys for compatibility. Shop covers the counter and stock; Sites covers business pages; Commerce covers online catalogs and orders. The public `supermega.dev` site explains these clearly. `app.supermega.dev` is the connected customer workspace. Additional subdomains require a clear audience and purpose; do not multiply portals to imitate organizational scale.
+Customer-facing product names are Shop, Sites and Commerce. Sites replaces Website and Commerce replaces Ecommerce in presentation; retain website/ecommerce route IDs, API values and storage keys for compatibility. Shop covers the counter and stock; Sites covers business pages; Commerce covers online catalogs and orders. The public `supermega.dev` site explains these clearly. `app.supermega.dev` is the Login-protected founder showcase and R&D entry designated by the owner; preserve existing authenticated product routes and workspace isolation. It is not a public demo launcher. Additional subdomains require a clear audience and purpose; do not multiply portals to imitate organizational scale.
 
 Plant is excluded from new customer acquisition and setup. Preserve retained records and recovery paths. SOL is a separate build: its public experience may inform requested research, but its code, infrastructure and customer data are outside this implementation scope.
 
@@ -298,7 +298,7 @@ Use this compact queue, not a separate fleet or duplicate project board. This is
 | Reliability operator | Deterministic checks with primary triage | An actionable signal tied to a version and affected task | Reproducible failure, severity, next action; no repeated unchanged alerts |
 | R&D engineer | Bounded review now; workcell experiment after capacity passes | Catalog-mapping experiment below | Baseline comparison, integrity checks, measured correction time, adopt/reject |
 
-**Staffing and capacity, 30 September:** one active primary operator; no accepted persistent VPS development or R&D team. Registered roles are configurations, not working employees. Local coding admission measured 2,091,544,576 available bytes against 2,684,354,560 required and refused model launch. Installed tools and a generic ready flag do not override admission or quality checks. The read-only Windows capacity probe is prepared at `C:/Users/thesw/OneDrive - BDA/outputs/inspect-supermega-windows-capacity.ps1`; its local test is not Contabo evidence. Preserve known failed-quality outputs for diagnosis; do not present them as accepted work.
+**Staffing and capacity, 30 September:** one active primary operator; no accepted persistent VPS development or R&D team. Registered roles are configurations, not working employees. The latest local coding admission measured 1,301,999,616 available bytes against 2,684,354,560 required and refused model launch. Installed tools and a generic ready flag do not override admission or quality checks. The read-only Windows capacity probe is prepared at `C:/Users/thesw/OneDrive - BDA/outputs/inspect-supermega-windows-capacity.ps1`; its local test is not Contabo evidence. Preserve known failed-quality outputs for diagnosis; do not present them as accepted work.
 
 One coordinator assigns and accepts work. Roles share a serial executor until
 measured capacity and workload isolation support scaling. Delegated reviews
@@ -308,6 +308,13 @@ The existing Contabo Windows host has historical trading-workload evidence;
 verify workload isolation and capacity before deploying company agents there.
 
 The corporate task last reported a Sheets write-scope rejection; this is historical evidence, not a fresh authentication test. Do not restart its paused automation or resend unchanged requests. SOL retains separate ownership. Keep at most one bounded worker; review its result and return to zero workers before another assignment.
+
+### System ownership and reuse
+
+- **Product runtime:** existing Vercel/Supabase applications and isolated workspaces. A worker package is not a replacement for this hosting.
+- **Private engineering/R&D worker:** maintained `local-agent-company` source. Current transfer is `outputs/workcell-vps-67ecc89`; extracted-package tests ran 609 cases with three skips. Target inventory, installation, restoration and useful model output remain unaccepted.
+- **Corporate browser/voice service:** the separate `supermega-agent-company` Render service belongs to the `Automate SuperMega corporate ops` task. Its latest recorded report says browser-agent activation and a restricted Vapi key remain pending. Reconcile that task before changing the service; it is not evidence of an operating private dev team. No paid voice/model fallback is implied.
+- **Coordination:** one primary operator integrates evidence. Preserve paused automations and owner-controlled sessions. Do not create a second queue, service or framework merely because access to the existing one is temporarily unavailable.
 
 ### Founder product access and cloud capacity
 
@@ -383,13 +390,13 @@ preserving every supplied price, currency, quantity and SKU?
    unflagged ambiguity. Adopt only with zero such failures and measured reduction
    in correction time versus baseline. Otherwise keep deterministic import.
 
-Status: deterministic baseline PASS on ten synthetic cases in
+Status: deterministic baseline PASS on eleven synthetic cases (including a two-row batch) in
 `tools/catalog_mapping_corpus.json`, exercised by `tools/test_catalog_mapping_baseline.mjs`.
 The existing importer is MMK-only; currency detection/conversion is not proven.
 Explicit currency columns now reject non-MMK or blank declarations. This does
 not implement conversion or all possible currency-labelled headers. The mapping-suggestion contract now binds proposals to the source digest, preserves
 deterministic mappings, rejects ambiguous choices and returns review-only previews.
-Recognized foreign-currency price headers are rejected. Next: compare real model
+Recognized foreign-currency codes and Unicode currency symbols in price headers are rejected. Evaluation requires the expected rejection reason, exact batch count and per-row expected values; malformed proposals cannot earn a passing negative-case score. Next: compare real model
 output against this contract on a capacity-qualified runtime. AI usefulness and operator time savings remain NOT RUN. R&D produces
 an adopt/reject result and a product change, not another strategy document.
 
@@ -399,7 +406,7 @@ an adopt/reject result and a product change, not another strategy document.
 |---|---|---|
 | M1 Coherent entry | No primary demo detours; consistent routes/copy; useful real-data setup | INCOMPLETE |
 | M2 Reliable hosted core | Verified login, tenant isolation, persistence, recovery and core task | UNPROVEN |
-| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | PASS for `f9cfd10f...` in hosted production via workflow `36631267067` |
+| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | Historical release PASS; current PR638–641 stack pending. Use fresh exact-head CI, eligible review and provider receipts |
 | M4 Accepted installation | Consented business completes agreed task with reconciled records | UNPROVEN |
 | M5 Repeatable delivery | Offer, support, costs, payment evidence and reusable process | INCOMPLETE |
 | M6 Useful automation | Bounded jobs produce accepted results with recovery/measured value | PARTIAL local foundation |
