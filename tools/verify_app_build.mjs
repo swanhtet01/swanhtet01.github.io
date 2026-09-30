@@ -1366,10 +1366,10 @@ if (!coreShellSource.includes("import { activeCommerceTab, commerceTabs } from '
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }')) fail('shop_mobile_task_nav_missing')
 if (!coreShellSource.includes("theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}")
   || coreShellSource.includes("theme === 'dark' ? ' shop-shell'")
-  || !coreCssSource.includes('.theme-dark {')
-  || !coreCssSource.includes('.theme-dark .core-topbar {')
+  || !coreCssSource.includes(':root {\n  color-scheme: light;')
+  || coreCssSource.includes('.theme-toggle')
   || !coreCssSource.includes('.shop-product-shell .core-main { padding-bottom: calc(154px + env(safe-area-inset-bottom)); }')
-  || coreCssSource.includes('.shop-shell')) fail('theme_and_shop_route_styling_not_separated')
+  || coreCssSource.includes('.shop-shell')) fail('fixed_light_and_shop_route_styling_not_separated')
 const routeContentIndex = coreShellSource.indexOf('className="core-route-content"')
 const productSystemNavigatorIndex = coreShellSource.indexOf('<ProductSystemNavigator')
 if (routeContentIndex < 0
