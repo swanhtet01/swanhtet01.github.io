@@ -1,9 +1,9 @@
 # SuperMega Supergoal
 
-Version: 1.2.37
+Version: 1.2.38
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
-Updated: 2026-09-30
+Updated: 2026-10-01
 Status: ACTIVE — product improvements await release; next independent milestone is a qualified internal worker and evaluated R&D output. Founder, customer and commercial acceptance remain incomplete.
 
 ## 1. Controlling objective
@@ -446,6 +446,28 @@ Label future ambitions as future and proposals as proposals. Never present them 
 - Full exact-candidate CI, rendered journeys and separate hosted/customer acceptance are required.
 - One primary writer; at most one explicitly requested bounded reviewer. Local models remain memory-gated and scale-to-zero.
 - Keep product delivery, commercial operations and evaluated AI machinery in scope; do not substitute document or agent counts for outcomes.
+
+### 2026-10-01 — managed app entry and next operating slice
+
+The unauthenticated app root is a deliberately small Login entry. It must not
+read or display browser-saved workspace names, product setup state, samples,
+trials, reset actions or device-specific notices. Product cards appear only
+after managed authentication and only for assigned products. Direct product
+routes continue to enforce their existing access decisions; this entry cleanup
+does not grant access or migrate stored data.
+
+Source revision `d5374ff1c` implements this boundary. Local production build,
+lint and browser inspection passed: the root contains the SuperMega home link,
+Login and the sign-in message only. The change is pending the existing stacked
+PR release path and must not be described as deployed before exact-head CI,
+eligible review and provider promotion evidence exist.
+
+Next active operating slice: qualify an existing VPS with the read-only
+capacity inspector, workload-isolation inventory and backup/restore evidence.
+Only after that PASS may one scale-to-zero, local-provider engineering job and
+one catalog-mapping R&D evaluation run. No host install, model launch, paid
+provider fallback, external customer action or infrastructure spend is implied
+by this sequence.
 
 Chronological receipts belong in `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md`. Section 3 is the single current-state table. Prior database evidence includes 18 signup-budget tests, 74 rehearsal checks and 37 HQ checks; revalidate source binding when relevant code changes.
 
