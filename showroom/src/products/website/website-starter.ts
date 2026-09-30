@@ -10,6 +10,7 @@ import {
   type WebsiteWorkspace,
 } from './website-model.ts'
 import { readStoredWebsiteLeads, websiteInboxLeads } from './website-leads.ts'
+import { createTemplateManifestRegistry, templateManifestKey, validateTemplateManifest, type TemplateManifest } from '../../core/template-manifest.ts'
 
 export const websiteStarterTemplates = [
   { id: 'business-presence', label: 'Business presence', detail: 'Home, About, and Contact for a clear company website.' },
@@ -18,6 +19,34 @@ export const websiteStarterTemplates = [
 ] as const
 
 export type WebsiteStarterTemplateId = (typeof websiteStarterTemplates)[number]['id']
+
+function buildWebsiteStarterTemplateManifest(template: (typeof websiteStarterTemplates)[number]): TemplateManifest {
+  const slots = template.id === 'catalog-showcase'
+    ? { identity: true, catalog: true, content: true }
+    : template.id === 'lead-generation'
+      ? { identity: true, services: true, content: true }
+      : { identity: true, content: true }
+  const manifest = validateTemplateManifest({
+    schema: 'supermega.template-manifest.v1',
+    id: `sites-${template.id}`,
+    version: 'v1',
+    capabilities: ['website.presence', 'website.inquiries'],
+    slots,
+  })
+  if (!templateManifestKey(manifest).startsWith(`sites-${template.id}@`)) throw new Error(`${template.id} has an invalid manifest key.`)
+  return manifest
+}
+
+/** Portable, versioned capability declarations for the shipped Sites layouts. */
+export const websiteStarterTemplateManifests = createTemplateManifestRegistry(
+  websiteStarterTemplates.map(buildWebsiteStarterTemplateManifest),
+)
+
+export function websiteStarterTemplateManifest(id: WebsiteStarterTemplateId): TemplateManifest {
+  const manifest = websiteStarterTemplateManifests.find(`sites-${id}`, 'v1')
+  if (!manifest) throw new Error(`${id} has no registered Sites manifest.`)
+  return manifest
+}
 
 export type WebsiteStarterBrief = {
   templateId: WebsiteStarterTemplateId
@@ -89,6 +118,8 @@ export function websiteStarterBriefIssues(brief: WebsiteStarterBrief) {
 
   if (!websiteStarterTemplates.some((template) => template.id === brief.templateId)) {
     issues.push({ field: 'templateId', message: 'Choose a supported website layout.' })
+  } else {
+    websiteStarterTemplateManifest(brief.templateId)
   }
   if (!isBoundedLine(brief.businessName, 60)) {
     issues.push({ field: 'businessName', message: 'Add a business name of 60 characters or fewer.' })

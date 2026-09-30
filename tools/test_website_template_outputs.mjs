@@ -3,11 +3,26 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createInitialWorkspace, createWebsitePreviewArtifact, restoreWorkspace, createWebsiteEditSession, updateWebsiteEditSession, commitWebsiteEditSession, mutateWebsiteWorkspace, loadWebsiteWorkspace } from '../showroom/src/products/website/website-model.ts'
 import { buildWebsiteHtml } from '../showroom/src/products/website/website-export.ts'
-import { applyWebsiteStarterBrief, installWebsiteWorkingSample, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
+import { applyWebsiteStarterBrief, installWebsiteWorkingSample, websiteStarterTemplateManifest, websiteStarterTemplateManifests, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
 import { websiteTradeBrief, websiteTradeBriefOptions } from '../showroom/src/products/website/website-trade-brief.ts'
 
 const capturedAt = '2026-09-18T00:00:00.000Z'
 const brief = { businessName: 'Example Studio', audience: 'local businesses', offer: 'Print design for local businesses', proof: 'Owner-supplied description for review.', contactHref: '' }
+test('Sites layouts resolve through portable manifests with only supported customer-facing slots', () => {
+  assert.equal(websiteStarterTemplateManifests.manifests.length, websiteStarterTemplates.length)
+  for (const template of websiteStarterTemplates) {
+    const manifest = websiteStarterTemplateManifest(template.id)
+    assert.equal(manifest.id, `sites-${template.id}`)
+    assert.equal(manifest.version, 'v1')
+    assert.deepEqual(manifest.capabilities, ['website.presence', 'website.inquiries'])
+    assert.equal(manifest.slots.identity, true)
+    assert.equal(manifest.slots.content, true)
+  }
+  assert.equal(websiteStarterTemplateManifest('catalog-showcase').slots.catalog, true)
+  assert.equal(websiteStarterTemplateManifest('lead-generation').slots.services, true)
+  assert.equal(websiteStarterTemplateManifest('business-presence').slots.catalog, undefined)
+})
+
 const expected = {
   'business-presence': { slug: '/about', label: 'Ask about our business', need: 'which service or information' },
   'lead-generation': { slug: '/services', label: 'Discuss your requirements', need: 'scope of the work' },
