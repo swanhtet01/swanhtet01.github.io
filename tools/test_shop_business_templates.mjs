@@ -18,7 +18,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 const bundle = await build({
   stdin: {
     contents: `
-      export { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv } from './business-templates.ts'
+      export { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, shopBusinessTemplateManifest } from './business-templates.ts'
       export { createClientImportPreview } from '../../core/client-onboarding.ts'
     `,
     resolveDir: 'showroom/src/products/shop',
@@ -32,7 +32,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, createClientImportPreview } = await import(
+const { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, shopBusinessTemplateManifest, createClientImportPreview } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -59,6 +59,8 @@ for (const template of shopBusinessTemplates) {
   check(MYANMAR.test(template.name?.my ?? ''), `${where} has a genuinely Myanmar-script name, not a Latin placeholder`)
 
   check(shopBusinessTemplate(template.id) === template, `${where} is retrievable by its own id`)
+  const manifest = shopBusinessTemplateManifest(template.id)
+  check(manifest.id === `shop-${template.id}` && manifest.capabilities.includes('commerce.storefront'), `${where} has a portable Shop/Sites/Commerce capability manifest`)
 
   // --- catalog ---------------------------------------------------------------
   check(template.catalog.length > 0, `${where} ships a non-empty catalog`)
