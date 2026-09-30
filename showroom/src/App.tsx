@@ -32,16 +32,6 @@ function ProductLoading({ name }: { name: string }) {
   return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>{name}</p></div>
 }
 
-function productDemoPath(value: string | null) {
-  const demo = value?.toLowerCase()
-  if (demo === 'plant' || demo === 'factory') return '/?choose=1'
-  if (demo === 'shop' || demo === 'retail') return '/shop/?tab=counter'
-  if (demo === 'website' || demo === 'site') return '/website/'
-  if (demo === 'ecommerce' || demo === 'storefront' || demo === 'online-orders') return '/ecommerce/'
-  if (visionPreviewEnabled && (demo === 'vision' || demo === 'computer-vision')) return '/vision/'
-  return null
-}
-
 function setupProductFromQuery(value: string | null) {
   const product = value?.toLowerCase()
   if (product === 'shop' || product === 'commerce') return 'commerce' as const
@@ -51,11 +41,7 @@ function setupProductFromQuery(value: string | null) {
 }
 
 function LegacyEntryRedirect() {
-  const location = useLocation()
-  const params = new URLSearchParams(location.search)
-  const route = productDemoPath(params.get('demo'))
-
-  return <Navigate replace to={route ?? '/'} />
+  return <Navigate replace to="/" />
 }
 
 function SettingsEntry() {
@@ -82,7 +68,7 @@ export default function App() {
         <Route path="ecommerce/review/:reviewId" element={<Suspense fallback={<ProductLoading name="Catalog review" />}><EcommerceCustomerReview /></Suspense>} />
         <Route path="website/review/:reviewId" element={<Suspense fallback={<ProductLoading name="Website review" />}><WebsiteCustomerReview /></Suspense>} />
         <Route element={<CoreLayout />}>
-          <Route element={<ProductHomeEntry productDemoPath={productDemoPath} />} index />
+          <Route element={<ProductHomeEntry />} index />
           <Route element={<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage product="commerce" /></Suspense>} path="shop/*" />
           <Route element={<Navigate replace to="/?choose=1" />} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />

@@ -20,7 +20,7 @@ class Boundary extends React.Component {state={failed:false};static getDerivedSt
 try {
  const {CoreLayout,ProductHomeEntry}=await import('./src/core/CoreShell');
  const {ManagedLoginPage}=await import('./src/core/ManagedLoginPage');
- createRoot(document.getElementById('root')).render(<Boundary><MemoryRouter initialEntries={['/login']}><nav aria-label="Fixture routes"><Link to="/login">Test login</Link><Link to="/?choose=1">Test chooser</Link><Link to="/">Test root</Link></nav><Routes><Route element={<CoreLayout/>}><Route path="login" element={<ManagedLoginPage/>}/><Route index element={<ProductHomeEntry productDemoPath={()=>null}/>}/></Route></Routes></MemoryRouter></Boundary>);
+ createRoot(document.getElementById('root')).render(<Boundary><MemoryRouter initialEntries={['/login']}><nav aria-label="Fixture routes"><Link to="/login">Test login</Link><Link to="/?choose=1">Test chooser</Link><Link to="/">Test root</Link></nav><Routes><Route element={<CoreLayout/>}><Route path="login" element={<ManagedLoginPage/>}/><Route index element={<ProductHomeEntry/>}/></Route></Routes></MemoryRouter></Boundary>);
  report('Storage denied; network blocked; actual shell and entry components loaded.');
 } catch(error) {report('FAIL: '+error.message)}
 ` }, jsx:'automatic',bundle:true,format:'esm',target:'es2022',define:{'import.meta.env':'{}'},outfile:resolve(out,'fixture.js') })
