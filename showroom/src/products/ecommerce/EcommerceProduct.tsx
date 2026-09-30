@@ -1055,9 +1055,11 @@ export function EcommerceProduct() {
     }
     const lines = commerceStorefrontRequestLines(customerFollowUpRequest)
     const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
-    const reason = requestHasStockRisk(customerFollowUpRequest)
-      ? 'availability check'
-      : requestIsExpiring(customerFollowUpRequest)
+    const reason = requestQuoteIsExpired(customerFollowUpRequest)
+      ? 'a fresh customer quote because the previous quote expired'
+      : requestHasStockRisk(customerFollowUpRequest)
+        ? 'availability check'
+        : requestIsExpiring(customerFollowUpRequest)
         ? 'quote refresh'
         : requestNeedsPaymentReview(customerFollowUpRequest)
           ? 'manual payment review'
