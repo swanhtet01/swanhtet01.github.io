@@ -1,6 +1,5 @@
 export type EcommerceAttentionInput = {
   agedRequestCount: number
-  expiredQuoteCount: number
   expiringQuoteCount: number
   paymentAttentionCount: number
   paymentRiskCount: number
@@ -11,9 +10,9 @@ export type EcommerceAttentionInput = {
 
 export type EcommerceAttentionDecision = {
   action: string
-  filter: 'aged' | 'all' | 'expired' | 'expiring' | 'payment' | 'stock'
+  filter: 'aged' | 'all' | 'expiring' | 'payment' | 'stock'
   headline: string
-  kind: 'commerce-requote' | 'shop-orders' | 'shop-request'
+  kind: 'shop-orders' | 'shop-request'
   summary: string
 }
 
@@ -30,7 +29,7 @@ export function ecommerceAttentionRequestRank(
 }
 
 export function decideEcommerceAttention(input: EcommerceAttentionInput): EcommerceAttentionDecision | null {
-  const counts = [input.agedRequestCount, input.expiredQuoteCount, input.expiringQuoteCount, input.paymentAttentionCount, input.paymentRiskCount, input.pendingRequestCount, input.refundAttentionCount, input.stockRiskCount]
+  const counts = [input.agedRequestCount, input.expiringQuoteCount, input.paymentAttentionCount, input.paymentRiskCount, input.pendingRequestCount, input.refundAttentionCount, input.stockRiskCount]
   if (!counts.every((count) => Number.isSafeInteger(count) && count >= 0)) throw new Error('Commerce attention counts must be non-negative safe integers.')
 
   if (input.refundAttentionCount) return {
@@ -53,13 +52,6 @@ export function decideEcommerceAttention(input: EcommerceAttentionInput): Ecomme
     headline: `${input.stockRiskCount} request${input.stockRiskCount === 1 ? '' : 's'} exceed available stock`,
     kind: 'shop-request',
     summary: 'Open the affected request first. Shop confirms stock, substitutions, promise, payment, and customer contact.',
-  }
-  if (input.expiredQuoteCount) return {
-    action: 'Review expired quote',
-    filter: 'expired',
-    headline: `${input.expiredQuoteCount} quote${input.expiredQuoteCount === 1 ? ' has' : 's have'} expired`,
-    kind: 'commerce-requote',
-    summary: 'Review the retained request and its current items before asking Shop to confirm a new total.',
   }
   if (input.expiringQuoteCount) return {
     action: 'Review expiring quote',

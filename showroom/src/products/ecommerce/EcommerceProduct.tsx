@@ -1246,27 +1246,28 @@ export function EcommerceProduct() {
     ? managedReturnedUnits
     : localEcommerceOrders.reduce((total, order) => total + (order.returns ?? []).reduce((returned, record) => returned + record.quantity, 0), 0)
   const importNeeded = catalog.source === 'unavailable' || catalog.items.length === 0
-  const orderOpsAgingCount = pendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
-  const orderOpsExpiredCount = pendingManagedRequests.filter((request) => {
+  const requestQuoteIsExpired = (request: typeof pendingManagedRequests[number]) => {
     const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
     return minutes !== null && minutes <= 0
-  }).length
-  const orderOpsExpiringCount = pendingManagedRequests.filter((request) => {
+  }
+  const actionablePendingManagedRequests = pendingManagedRequests.filter((request) => !requestQuoteIsExpired(request))
+  const expiredPendingRequestCount = pendingManagedRequests.length - actionablePendingManagedRequests.length
+  const orderOpsAgingCount = actionablePendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
+  const orderOpsExpiringCount = actionablePendingManagedRequests.filter((request) => {
     const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
     return minutes !== null && minutes > 0 && minutes <= 15
   }).length
-  const orderOpsStockRiskCount = pendingManagedRequests.filter((request) => commerceStorefrontRequestLines(request).some((line) => {
+  const orderOpsStockRiskCount = actionablePendingManagedRequests.filter((request) => commerceStorefrontRequestLines(request).some((line) => {
     const item = catalog.items.find((candidate) => candidate.sku === line.sku)
     return !item || item.onHand < line.quantity
   })).length
-  const orderOpsPaymentRiskCount = pendingManagedRequests.filter((request) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual').length
+  const orderOpsPaymentRiskCount = actionablePendingManagedRequests.filter((request) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual').length
   const ecommerceAttention = decideEcommerceAttention({
     agedRequestCount: orderOpsAgingCount,
-    expiredQuoteCount: orderOpsExpiredCount,
     expiringQuoteCount: orderOpsExpiringCount,
     paymentAttentionCount: ecommercePaymentAttentionCount,
     paymentRiskCount: orderOpsPaymentRiskCount,
-    pendingRequestCount: pendingManagedRequests.length,
+    pendingRequestCount: actionablePendingManagedRequests.length,
     refundAttentionCount: ecommerceRefundAttentionCount,
     stockRiskCount: orderOpsStockRiskCount,
   })
@@ -1277,8 +1278,10 @@ export function EcommerceProduct() {
     ? 'Import catalog before checkout'
     : !savedDraftIsCurrent
       ? 'Save store before checkout'
-      : pendingManagedRequests.length
+      : actionablePendingManagedRequests.length
         ? 'Review payment and delivery'
+        : expiredPendingRequestCount
+          ? 'New customer quote needed'
         : buyingCart.length
           ? 'Quote payment and delivery'
           : 'Checkout controls ready'
@@ -1292,8 +1295,10 @@ export function EcommerceProduct() {
           ? 'Refresh expiring quotes'
           : orderOpsAgingCount
             ? 'Clear aged requests'
-            : pendingManagedRequests.length
+            : actionablePendingManagedRequests.length
               ? 'Review next request'
+              : expiredPendingRequestCount
+                ? 'Wait for requote'
               : ecommerceActiveOrderCount
                 ? 'Continue fulfilment'
                 : importNeeded
@@ -1302,7 +1307,7 @@ export function EcommerceProduct() {
                     ? 'Ready for customer orders'
                     : 'Save store'
   const orderOpsRows = [
-    ['Review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'Clear'],
+    ['Review', actionablePendingManagedRequests.length ? `${actionablePendingManagedRequests.length} waiting` : expiredPendingRequestCount ? `${expiredPendingRequestCount} expired` : 'Clear'],
     ['Fulfil', ecommerceActiveOrderCount ? `${ecommerceActiveOrderCount} active` : 'Clear'],
     ['Payment', ecommercePaymentAttentionCount ? `${ecommercePaymentAttentionCount} blocking` : 'Clear'],
     ['Refund', ecommerceRefundAttentionCount ? `${ecommerceRefundAttentionCount} due` : 'Clear'],
@@ -1366,7 +1371,7 @@ export function EcommerceProduct() {
   }
   const requestNeedsPaymentReview = (request: typeof pendingManagedRequests[number]) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual'
   const ecommerceAttentionRequests = ecommerceAttention?.kind === 'shop-request'
-    ? pendingManagedRequests.filter((request) => ecommerceAttention.filter === 'stock'
+    ? actionablePendingManagedRequests.filter((request) => ecommerceAttention.filter === 'stock'
       ? requestHasStockRisk(request)
       : ecommerceAttention.filter === 'expiring'
         ? requestIsExpiring(request)
@@ -1737,7 +1742,7 @@ export function EcommerceProduct() {
   const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
   const ecommerceTodayState = importNeeded || storefrontSetupRequired
     ? 'setup'
-    : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || pendingManagedRequests.length || customerRequestState === 'waiting_shop_review'
+    : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || actionablePendingManagedRequests.length || customerRequestState === 'waiting_shop_review'
       ? 'attention'
       : 'ready'
   const ecommerceTodayHeadline = importNeeded
@@ -1798,8 +1803,10 @@ export function EcommerceProduct() {
   const ecommerceTodayMetrics = [
     ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Ready'],
     ['2. Cart', ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
-    ['3. Shop', pendingManagedRequests.length
-      ? `${pendingManagedRequests.length} to review`
+    ['3. Shop', actionablePendingManagedRequests.length
+      ? `${actionablePendingManagedRequests.length} to review`
+      : expiredPendingRequestCount
+        ? `${expiredPendingRequestCount} expired · requote required`
       : customerRequestState === 'waiting_shop_review'
         ? ecommerceWaitingMetric
       : ecommerceActiveOrderCount
@@ -1831,15 +1838,11 @@ export function EcommerceProduct() {
       navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(ecommerceAttentionRequest.id)}`)
       return
     }
-    if (ecommerceAttention?.kind === 'commerce-requote') {
-      focusCurrentRequestReceipt()
-      return
-    }
     if (ecommerceAttention) {
       navigate('/shop/?tab=orders')
       return
     }
-    if (pendingManagedRequests.length) {
+    if (actionablePendingManagedRequests.length) {
       navigate('/shop/?tab=orders&source=ecommerce-inbox')
       return
     }

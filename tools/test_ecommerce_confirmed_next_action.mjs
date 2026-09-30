@@ -9,6 +9,7 @@ const context = {
   ecommercePaymentAttentionCount: 0, pendingManagedRequests: [], customerRequestState: 'confirmed',
   ecommerceTodayCartUnits: 1, ecommerceActiveOrderCount: 1, managedIdentity: null, orderImportReview: null,
   ecommerceAttention: null, ecommerceAttentionRequest: null,
+  actionablePendingManagedRequests: [],
 }
 function value(name, next, overrides = {}) {
   const start = source.indexOf(`  const ${name} = `) + `  const ${name} = `.length
