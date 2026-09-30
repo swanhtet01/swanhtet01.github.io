@@ -264,22 +264,21 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
 
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Shop priority">
-      <div>
-        <span className="core-eyebrow">Priority</span>
+      <div className="shop-today-brief">
+        <span className="core-eyebrow">Next action</span>
         <h2>{nextAction}</h2>
         <p>{nextDetail}</p>
+        <div className="shop-today-actions">
+          <Link className="core-button primary" to={nextTo}>Open task</Link>
+          {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
+        </div>
       </div>
-      <div className="shop-today-actions">
-        <Link className="core-button primary" to={nextTo}>Continue</Link>
-        {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
+      <div className="shop-today-metrics" aria-label="Shop summary">
+        {metrics.map((metric) => <article data-tone={metric.tone ?? 'ready'} key={metric.label}>
+          <small>{metric.label}</small>
+          <strong>{metric.value}</strong>
+        </article>)}
       </div>
-    </section>
-
-    <section className="shop-today-metrics" aria-label="Shop summary">
-      {metrics.map((metric) => <article data-tone={metric.tone ?? 'ready'} key={metric.label}>
-        <small>{metric.label}</small>
-        <strong>{metric.value}</strong>
-      </article>)}
     </section>
 
     <details aria-label="Shop profit control" className="shop-today-workspaces shop-profit-control" data-state={profitControl.state} open={profitControl.criticalPriorityCount > 0}>
