@@ -1032,7 +1032,7 @@ export function expectedText(spec, publicHomepageExpectedText) {
     }
     return [...publicHomepageExpectedText]
   }
-  if (spec.surface === 'shop') return ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'LOCAL DEMO']
+  if (spec.surface === 'shop') return ['Mini-mart & grocery', 'Products', 'Premium rice 25kg', 'LOCAL DEMO']
   if (spec.surface === 'shop_profit_control') return [
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.heading,
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.explanation,

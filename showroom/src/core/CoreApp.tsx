@@ -1345,19 +1345,10 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   }
 
   const counterContextLabel = businessTemplate && sampleCatalogActive
-    ? `${businessTemplate.name.en} · Shop Counter`
+    ? `${businessTemplate.name.en} · Counter`
     : industryPack && sampleCatalogActive
-    ? `${industryPack.name} working sample`
-    : industryPack
-      ? 'Existing Shop catalog'
-      : bi('Counter open')
-  const packContext = businessTemplate && sampleCatalogActive
-    ? `${businessTemplate.description} This sample stays on this device; Cash, KBZPay, WavePay, AYA Pay, and MMQR stay manual until the sale is reviewed.`
-    : industryPack
-    ? sampleCatalogActive
-      ? `${industryPack.firstWorkflow} ${industryPack.name} sample items are loaded.`
-      : `Your existing items were kept. The ${industryPack.name} appointment schedule is separate.`
-    : ''
+    ? `${industryPack.name} · Counter`
+    : 'Counter'
 
   return <section aria-label="Sales counter" className="shop-counter-surface">
     <div className="shop-counter-grid">
@@ -1365,11 +1356,8 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
         <header className="shop-catalog-head">
           <div>
             <span className="core-eyebrow">{counterContextLabel}</span>
-            <h2>{bi('Tap an item to add it')}</h2>
+            <h2>Products</h2>
             {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Tickets on this device ({parked.length} parked)</button> : null}
-            {businessTemplate && sampleCatalogActive
-              ? <p className="shop-pack-context"><span>{packContext}</span></p>
-              : industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}
             {openOrderCount > 0 || lowStockCount > 0 || localDemoStatus ? <nav aria-label="Shop attention" className="shop-counter-summary">
               {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} open orders</Link> : null}
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
