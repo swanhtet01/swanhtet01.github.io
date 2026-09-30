@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.34
+Version: 1.2.35
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-30
-Status: ACTIVE — the current release and first shared-shell redesign are live; authenticated founder, customer and commercial acceptance remain incomplete
+Status: ACTIVE — product improvements await release; next independent milestone is a qualified internal worker and evaluated R&D output. Founder, customer and commercial acceptance remain incomplete.
 
 ## 1. Controlling objective
 
@@ -16,9 +16,9 @@ This is the maintained project brief. It does not override higher-priority instr
 
 ### Replacement objective for the active Codex goal
 
-> Execute the SuperMega company and platform goal defined in `C:/Users/thesw/Projects/supermega-platform-worktrees/paired-preview-navigation-20260919/supergoal.md`. Read its current version at meaningful planning and release transitions. Build, verify and maintain Shop, Sites, Commerce, the public site, and the internal commercial and AI operating systems through real customer outcomes. Prioritize incidents and release blockers, then complete the customer lifecycle and revenue operations. Continue useful authorized work autonomously, preserving founder approval for final production releases, live database writes, IAM/access changes, spending and customer contact. Keep evidence, next actions and this brief current. Do not mistake local tests, plans, running services or generated drafts for hosted/customer acceptance. Complete defined milestones only when their acceptance evidence exists; maintain the ongoing company mission through successive measurable milestones.
+> Execute the repository-root `supergoal.md` in the verified active SuperMega checkout. Deliver dependable Shop, Sites, Commerce and public customer journeys, and build the internal machinery that operates them. Close demonstrated release defects; while external acceptance is pending, qualify existing VPS capacity, run one constrained engineering job and one evaluated R&D experiment, then scale only on accepted results and measured cost. Reuse existing systems, preserve customer and trading workloads, and keep evidence and next actions current. Respect founder authority for production, access, spending and customer contact. Local tests, running services and generated drafts do not establish hosted or customer acceptance.
 
-The absolute path identifies this checkout. If the repository moves, verify the new checkout and update the thread reference and this paragraph together. Maintain one canonical file; link to it rather than distributing conflicting copies. The current goal tool can change status but cannot edit an active objective's text; the replacement paragraph is ready for the owner's goal editor. Do not falsely complete the old goal to work around that limitation.
+Maintain this repository file through version control, not conflicting copies in separate worktrees. The current goal tool can change status but cannot edit an active objective's text. This replacement is ready for the goal editor; keep the existing goal active rather than falsely completing it to replace its text.
 
 ## 2. How to apply this document
 
@@ -28,11 +28,12 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The single founder identity and three private workspaces now exist, and the current app/public release has hosted acceptance. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain one fixed light technical identity and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
-1. The latest approved paired production release completed on 30 September at `f9cfd10fbc7ec5d53072ff0e7aab9caaa01fb615` (workflow `36631267067`, PR622). Both Vercel projects are READY on that exact commit. Live readback reports managed mode, schema, audit and RLS ready, writes enabled and Supabase token authentication ready; the browser renders the real English-only Login form with no console errors. Production schema13 is verified; never replay the migration.
-2. Complete the private swanhtet@supermega.dev founder journey across the already assigned Shop, Sites and Commerce workspaces: use a current recovery email, set the password, sign in, save/reload each product and verify isolation/recovery. The account remains unconfirmed and has never signed in; do not call the founder showcase accepted yet.
-3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
-4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The current local catalog-validator build has 589 passing tests and three skips; useful model output and VPS acceptance remain unproven.
-5. Align screenshots, product copy, business card and sales materials to the accepted release. Complete delivery/support and pricing evidence before outreach.
+1. Finish the pending product release through the existing authorized workflow. PR641 head `3958206384b6caa990ca5ea3a7d75383b1597e5b` passed CI `36746738665`; this is source acceptance, not deployment. Reconcile the stacked PR638–641 release path and current provider state before promotion. Preserve production schema13; do not replay migrations.
+2. Complete founder sign-in and authenticated save/reload/isolation across the existing three workspaces. Confirmation was incomplete at the last recorded inspection; recheck before claiming current account state. Do not create another identity or send duplicate invitations.
+3. **Next independent execution priority: background machinery.** Inspect the existing Contabo host read-only using the prepared capacity probe, verify OS, free RAM/disk and workload isolation, and reconcile the existing worker package. Preserve trading services. If authenticated inspection is unavailable, improve the portable package and its dry-run acceptance; do not loop failed credentials or invent server readiness.
+4. Qualify one serial engineering worker: bounded repository task, isolated checkout, explicit command/network policy, timeout and resource limits, durable receipt, meaningful tests, human-readable diff and failure recovery. No worker receives production credentials or automatic merge/deploy authority. Acceptance requires a useful reviewed change, not merely a running process.
+5. Run the catalog-mapping R&D experiment against its deterministic baseline using synthetic or authorized data. Measure correctness, correction time, latency and cost; record adopt/reject. Expand roles only after accepted output. Reuse the existing workcell rather than installing a second orchestration stack.
+6. Align current screenshots, product copy and sales materials to the accepted release; finish delivery/support and pricing evidence before outreach.
 
 Infrastructure shortlist: existing Contabo if inspection proves fit; Hetzner Linux cloud or DigitalOcean Droplets as alternatives. Compare the same RAM/CPU/storage, region, backups, tax and total monthly ceiling before recommending a purchase. The current Compose baseline reserves8GiB total; this is a resource budget, not a model-performance guarantee. Avoid new frameworks until a concrete missing capability is identified.
 
@@ -80,7 +81,7 @@ The owner-approved Supabase Auth invitation to swanhtet@supermega.dev was sent o
 
 ### Standing routine PR authority
 
-On29September the owner explicitly approved PR597 and future routine PR review/merge without repeated permission questions. When the sole-owner repository cannot supply an independent reviewer, preserve the approval count and last-push rule and use only the proven exact-user `pull_request` bypass actor for the exact merge; remove it in `finally` and verify the original ruleset. Required checks must pass at the exact head and strict base, and all review threads must be resolved. Never fabricate an independent review or broaden the bypass beyond pull-request merging. This does not authorize live database migrations, unrelated IAM changes, spending or customer contact. Reconcile production authority for each materially new deployment or managed change.
+The owner approved routine PR work without repeated permission questions. Review, save and push within that scope. Required checks and eligible review requirements still apply. Earlier bypass instructions are superseded: automatic approval review rejected the ruleset-bypass action; do not retry it, fabricate an independent reviewer or weaken protections. Continue useful independent work while an unchanged external review gate remains. Reconcile exact production authority before each materially new deployment or managed change.
 
 This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
 
@@ -129,7 +130,7 @@ Serve a broad small-business audience with appropriate Myanmar language/payment/
 
 Owner direction, 28 September 2026: use visual exploration, interface images and deliberate design before substantial UI implementation. Make every product coherent, premium, simple to understand and effective in daily work. This applies to the public site, connected workspace, Shop, Sites, Commerce and internal operating tools. It is a maintained practice, not a one-off cosmetic redesign.
 
-The three owner-supplied SOL concepts (dashboard, boutique counter and appointment calendar) establish a craft reference: focused navigation, strong hierarchy, useful imagery, calm spacing and task-oriented panels. Transfer those qualities into SuperMega's white/graphite/cobalt identity. Do not copy SOL branding, customer identities, decorative slogans or permanent panels that do not help the task. SOL implementation remains separate.
+The three owner-supplied SOL concepts (dashboard, boutique counter and appointment calendar) establish a craft reference: focused navigation, strong hierarchy, useful imagery, calm spacing and task-oriented panels. Transfer those qualities into SuperMega's white/graphite/indigo identity. Do not copy SOL branding, customer identities, decorative slogans or permanent panels that do not help the task. SOL implementation remains separate.
 
 #### Required cycle for substantial UI work
 
@@ -284,7 +285,7 @@ Use structured logs, correlation IDs and appropriate traces/error reporting. Ope
 
 Incident loop: detect → classify → contain within authority → preserve evidence → repair → verify → communicate where authorized → prevent recurrence. Automated analysis must not invent incidents or execute destructive remediation. Notify meaningful changes rather than repeated unchanged status.
 
-### Current coordinated work queue — 28 September
+### Current coordinated work queue — 30 September
 
 Use this compact queue, not a separate fleet or duplicate project board. This is an assignment sequence, not a claim that multiple agents are running.
 
@@ -297,14 +298,7 @@ Use this compact queue, not a separate fleet or duplicate project board. This is
 | Reliability operator | Deterministic checks with primary triage | An actionable signal tied to a version and affected task | Reproducible failure, severity, next action; no repeated unchanged alerts |
 | R&D engineer | Bounded review now; workcell experiment after capacity passes | Catalog-mapping experiment below | Baseline comparison, integrity checks, measured correction time, adopt/reject |
 
-**Actual staffing snapshot, 28 September:** primary operator plus one bounded
-strategy reviewer (review completed); no persistent specialist Codex workers.
-The local workcell reports15 registered roles,0 active jobs,0 running missions,
-0 resident role processes and0 loaded models. Coordinator identity matches.
-Available RAM1.38GiB is below the2.5GiB inference threshold despite the generic
-capacity endpoint reporting ready. These are measured runtime facts, not a
-claim that15 employees are working. Queue status `complete` alone does not
-establish quality acceptance. Preserve the four known quality failures.
+**Staffing and capacity, 30 September:** one active primary operator; no accepted persistent VPS development or R&D team. Registered roles are configurations, not working employees. Local coding admission measured 2,091,544,576 available bytes against 2,684,354,560 required and refused model launch. Installed tools and a generic ready flag do not override admission or quality checks. The read-only Windows capacity probe is prepared at `C:/Users/thesw/OneDrive - BDA/outputs/inspect-supermega-windows-capacity.ps1`; its local test is not Contabo evidence. Preserve known failed-quality outputs for diagnosis; do not present them as accepted work.
 
 One coordinator assigns and accepts work. Roles share a serial executor until
 measured capacity and workload isolation support scaling. Delegated reviews
