@@ -82,8 +82,9 @@ test('Ecommerce checkout proof explicitly opens the workspace and requires local
   const source = await readFile(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const needles = expectedText({ surface: 'ecommerce' })
   for (const needle of needles) assert.ok(source.includes(needle))
-  assert.ok(needles.includes('Browse a sample catalog. Requests stay on this device and are not live orders.'))
-  assert.ok(needles.includes('Try sample request'))
+  assert.ok(needles.includes('Browse your catalog and take order requests. Requests stay on this device until Shop review.'))
+  assert.ok(needles.includes('Open customer ordering'))
+  assert.ok(!needles.some(needle => /sample|demo|preview options/i.test(needle)))
 })
 const reportGeneratedAt = '2026-08-28T12:05:00.000Z'
 const expectedCommit = 'a'.repeat(40)

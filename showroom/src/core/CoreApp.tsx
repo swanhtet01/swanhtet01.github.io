@@ -1345,19 +1345,10 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   }
 
   const counterContextLabel = businessTemplate && sampleCatalogActive
-    ? `${businessTemplate.name.en} · Shop Counter`
+    ? `${businessTemplate.name.en} · Counter`
     : industryPack && sampleCatalogActive
-    ? `${industryPack.name} working sample`
-    : industryPack
-      ? 'Existing Shop catalog'
-      : bi('Counter open')
-  const packContext = businessTemplate && sampleCatalogActive
-    ? `${businessTemplate.description} This sample stays on this device; Cash, KBZPay, WavePay, AYA Pay, and MMQR stay manual until the sale is reviewed.`
-    : industryPack
-    ? sampleCatalogActive
-      ? `${industryPack.firstWorkflow} ${industryPack.name} sample items are loaded.`
-      : `Your existing items were kept. The ${industryPack.name} appointment schedule is separate.`
-    : ''
+    ? `${industryPack.name} · Counter`
+    : 'Counter'
 
   return <section aria-label="Sales counter" className="shop-counter-surface">
     <div className="shop-counter-grid">
@@ -1365,16 +1356,14 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
         <header className="shop-catalog-head">
           <div>
             <span className="core-eyebrow">{counterContextLabel}</span>
-            <h2>{bi('Tap an item to add it')}</h2>
+            <h2>Products</h2>
             {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Tickets on this device ({parked.length} parked)</button> : null}
-            {businessTemplate && sampleCatalogActive
-              ? <p className="shop-pack-context"><span>{packContext}</span></p>
-              : industryPack ? <p className="shop-pack-context"><span>{packContext}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}
-            {openOrderCount > 0 || lowStockCount > 0 || localDemoStatus ? <nav aria-label="Shop attention" className="shop-counter-summary">
+            {openOrderCount > 0 || lowStockCount > 0 || localDemoStatus === 'records-at-risk' ? <nav aria-label="Shop attention" className="shop-counter-summary">
               {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} open orders</Link> : null}
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
-              {localDemoStatus ? <Link className="shop-counter-local-link" data-risk={localDemoStatus === 'records-at-risk' ? 'true' : undefined} to="/settings/#controls">{localDemoStatus === 'records-at-risk' ? 'Local records · backup needed' : 'Saved on this device'}</Link> : null}
+              {localDemoStatus === 'records-at-risk' ? <Link className="shop-counter-local-link" data-risk="true" to="/settings/#workspace-recovery">Back up records</Link> : null}
             </nav> : null}
+            {persistLocalDraft ? <span className="shop-counter-device-boundary">This device only</span> : null}
           </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
@@ -1442,7 +1431,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           <Link to="/shop/?tab=orders">Review recorded orders</Link></div> : null}
         {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
-        <header><div><span className="core-eyebrow">{activeLabel || bi('Current sale')}</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : bi('Ready for the first item')}</h2></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">{bi('Clear')}</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
+        <header><div><span className="core-eyebrow">{`${activeLabel || bi('Current sale')}${persistLocalDraft ? ' · this device' : ''}`}</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : bi('Ready for the first item')}</h2></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
         {persistLocalDraft && (parked.length > 0 || unitCount > 0 || recoveryPaused) ? <details className="shop-sale-details shop-parked-tickets" open={ticketsOpen} onToggle={event => setTicketsOpen(event.currentTarget.open)}><summary>Parked tickets ({parked.length}) · this device</summary>
           <p>Saved here only; not sent to kitchen, paid or stock-reserved. Review current prices when resumed.</p>
           <label>Table or ticket name<input maxLength={40} placeholder={activeLabel || 'Table 1'} value={ticketLabel} onChange={event => setTicketLabel(event.target.value)} /></label>
@@ -3111,7 +3100,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   })() : null
 
   const commerceWriteBanner = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
-    <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Company records' : 'Local workspace'}</span>
+    <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Company records' : 'Private device'}</span>
     <p>{commerceStorageError
       ? `Writes paused: ${commerceStorageError}${managedIdentity && workspaceMode === 'managed-ready' ? ' Reload Shop and check Orders before recording the sale again; it may already be saved.' : ''}`
       : commerceSync.status === 'checking'
@@ -3122,7 +3111,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
         : commerceSync.message || notice || (managedIdentity
           ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the company account.`
-          : 'Saved on this device. Log in for shared team records.')}</p>
+          : 'Records on this device stay separate. Log in to use shared team records.')}</p>
     {commerceSync.status === 'pending' || (managedIdentity && workspaceMode === 'managed-ready' && Boolean(commerceStorageError))
       ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
       : !commerceCanWrite && commerceSync.status !== 'checking'
