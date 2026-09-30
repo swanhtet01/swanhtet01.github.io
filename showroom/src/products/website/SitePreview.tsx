@@ -15,15 +15,15 @@ export function SitePreview({ device, page, pages, siteName, onSelectPage }: Sit
   const safeStandaloneCta = ctaHref.startsWith('https://') || ctaHref.startsWith('#') ? ctaHref : ''
 
   return (
-    <section className="website-preview-panel" aria-label={siteName + ' page preview'}>
+    <section className="website-preview-panel" aria-label={siteName + ' site canvas'}>
 
 
       <div className="website-preview-stage">
         <div className={'website-preview-frame is-' + device}>
-          <article className="website-preview-site" aria-label={page.internalName + ' page preview'} role="document">
+          <article className="website-preview-site" aria-label={page.internalName + ' page canvas'} role="document">
             <header className="preview-site-header">
               <strong>{siteName || 'Untitled site'}</strong>
-              <nav aria-label="Preview navigation">
+              <nav aria-label="Site navigation">
                 {visiblePages.map((candidate) => (
                   <button
                     aria-current={candidate.id === page.id ? 'page' : undefined}
@@ -80,7 +80,7 @@ export function SitePreview({ device, page, pages, siteName, onSelectPage }: Sit
 
             <footer className="preview-site-footer">
               <span>{siteName || 'Untitled site'}</span>
-              <small>Local draft preview · not deployed</small>
+              <small>Draft · not published</small>
             </footer>
           </article>
         </div>
