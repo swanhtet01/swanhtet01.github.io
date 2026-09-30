@@ -1744,6 +1744,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-counter-summary a:hover, .shop-counter-summary a:focus-visible { color: var(--core-green); text-decoration: underline; }
 .shop-counter-summary a + a { border-left: 0.0625rem solid var(--core-line-strong); padding-left: 0.75rem; }
 .shop-counter-summary .shop-counter-local-link[data-risk="true"] { color: var(--core-warn); }
+.shop-counter-device-boundary { display: none; }
 .shop-item-search { width: min(16.25rem,38%); }
 .shop-item-search input { min-height: 2.75rem; border-radius: 0.75rem; padding-left: 0.8125rem; }
 .shop-item-grid { min-height: 0; display: grid; grid-template-columns: repeat(auto-fill,minmax(9.6875rem,1fr)); align-content: start; gap: 0.625rem; overflow-y: auto; padding: 0.0625rem 0.1875rem 0.5rem 0.0625rem; scrollbar-color: rgba(86,240,193,.25) transparent; }
@@ -1872,6 +1873,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .topbar-title, .topbar-meta > span { display: none !important; }
   .topbar-meta > a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; color: var(--core-muted); font-size: 0.75rem; font-weight: var(--font-weight-bold); text-decoration: none; }
   .core-topbar .runtime-badge { display: none; }
+  .shop-counter-device-boundary { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--core-quiet); font-family: var(--core-mono); font-size: 0.75rem; text-transform: uppercase; }
   .core-topbar .mobile-signup-topbar-link { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; color: var(--core-green); font-size: 0.75rem; font-weight: var(--font-weight-bold); text-decoration: none; }
   .mobile-nav { position: fixed; inset: auto 0 0; z-index: 40; width: 100%; max-width: 100%; min-height: 64px; display: grid; grid-template-columns: repeat(auto-fit,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line); padding-bottom: env(safe-area-inset-bottom); background: rgba(255,255,255,.97); box-shadow: 0 -12px 34px rgba(23,27,38,.1); backdrop-filter: blur(18px); }
   .mobile-nav a { min-width: 0; display: grid; place-items: center; border-top: 2px solid transparent; padding-inline: 2px; overflow: hidden; color: var(--core-quiet); font-size: 0.75rem; font-weight: var(--font-weight-bold); text-align: center; text-overflow: ellipsis; text-decoration: none; white-space: nowrap; }

@@ -1055,7 +1055,7 @@ export function expectedText(spec, publicHomepageExpectedText) {
     'What do you sell or provide?',
     'Create website',
   ]
-  return ['Ecommerce', 'Sample store', 'Browse a sample catalog. Requests stay on this device and are not live orders.', 'Request catalog setup', 'Try sample request']
+  return ['Ecommerce', 'Online store', 'Browse your catalog and take order requests. Requests stay on this device until Shop review.', 'Request catalog setup', 'Open customer ordering']
 }
 
 function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {

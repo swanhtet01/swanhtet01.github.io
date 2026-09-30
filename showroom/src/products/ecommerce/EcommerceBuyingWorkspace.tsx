@@ -1248,7 +1248,7 @@ export function EcommerceBuyingWorkspace({
       setQuoteClock(quotedAt.getTime())
       setNotice(onRecordManagedRequest
         ? 'This order request is in the Company Shop inbox and local recovery. No order, stock, message, or charge changed.'
-        : 'This sample order request is saved on this device for Shop review. No order, stock, message, or charge changed.')
+        : 'Saved on this device for Shop review. No order, stock, message, or charge changed.')
     } catch (error) {
       if (stillCurrent()) setNotice(error instanceof Error ? error.message : 'Checkout review failed closed.')
     } finally {
@@ -1376,7 +1376,7 @@ export function EcommerceBuyingWorkspace({
               </select>
             </label>
             {usingSamplePaymentFallback && availablePaymentAdapters.length
-              ? <p className="form-notice" role="status">Browser-local sample payment. No charge or payment-provider request is made.</p>
+              ? <p className="form-notice" role="status">Payment is selected for this request only. No charge or payment-provider request is made.</p>
               : !availablePaymentAdapters.length
                 ? <p className="form-notice" role="status">Set up an active Shop payment method for {fulfilment} before reviewing an order.</p>
                 : null}
@@ -1422,7 +1422,7 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Payment</small><b>{paymentLabel(latestRequest.quote.payment.adapter)} · not charged</b></span>
               </div>
               <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
-              <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : onRecordManagedRequest ? 'Saved on this device. Company Shop delivery is not verified here.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
+              <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : onRecordManagedRequest ? 'Saved on this device. Company Shop delivery is not verified here.' : 'Saved on this device for Shop review.'} Shop still confirms stock, promise, payment, and delivery.</p>
               <button className="core-button secondary" disabled={disabled || recoveryBlocked || !receiptCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
                 {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>

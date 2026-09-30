@@ -24,7 +24,7 @@ test('receipt boundary must be visibly sized and inside the viewport', () => {
 })
 
 test('rendered harness follows current direct Sites and Ecommerce entry actions', () => {
-  assert.match(renderedVerifierSource, /candidate\.textContent\.trim\(\) === 'Try sample request'/)
+  assert.match(renderedVerifierSource, /submit\?\.textContent\.trim\(\) !== 'Save request on this device'/)
   assert.match(renderedVerifierSource, /'Tell us about the business'/)
   assert.match(renderedVerifierSource, /'Create website'/)
   assert.doesNotMatch(renderedVerifierSource, /'Prepare private draft'/)
@@ -117,6 +117,7 @@ function ecommerceCase({ file, screenshot, viewport, width, height }) {
         localNotice: true,
         localReceipt: true,
         boundaryVisible: true,
+        compactMobileReceipt: true,
         managedHeadlineAbsent: true,
         companyReceiptClaimAbsent: true,
         browserPersistencePresent: true,
@@ -400,9 +401,9 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
   const sourceBoundText = [
     [websiteStarterSetup, 'Tell us about the business'],
     [websiteStarterSetup, 'Create website'],
-    [ecommerceProduct, 'Sample request saved locally'],
-    [ecommerceWorkspace, 'This sample order request is saved on this device for Shop review.'],
-    [ecommerceWorkspace, 'This browser demo retained the request.'],
+    [ecommerceProduct, 'Order request saved'],
+    [ecommerceWorkspace, 'Saved on this device for Shop review.'],
+    [ecommerceWorkspace, 'Shop still confirms stock, promise, payment, and delivery.'],
   ]
   for (const [source, text] of sourceBoundText) {
     assert.ok(source.includes(text), `missing current product authority: ${text}`)
@@ -466,6 +467,16 @@ test('rejects changed screenshot bytes and a re-signed managed receipt claim', a
   assert.equal(originalMobile, true)
   await writeFile(fixture.mobilePath, Buffer.from('89504e470d0a1a0a-mobile', 'utf8'))
   fixture.report.cases[1].claimBoundary.companyReceiptClaimVisible = true
+  await writeSignedReport(fixture.reportPath, fixture.report)
+  await assert.rejects(() => validateRenderedProofReport({
+    reportPath: fixture.reportPath,
+    expectedHead: fixture.commit,
+    expectedScope: 'ecommerce-claim',
+    rootDir: fixture.rootDir,
+  }), /ecommerce_claim_boundary_failed/)
+
+  fixture.report.cases[1].claimBoundary.companyReceiptClaimVisible = false
+  fixture.report.cases[1].claimBoundary.checks.compactMobileReceipt = false
   await writeSignedReport(fixture.reportPath, fixture.report)
   await assert.rejects(() => validateRenderedProofReport({
     reportPath: fixture.reportPath,
