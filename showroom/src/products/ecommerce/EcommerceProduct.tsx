@@ -1824,7 +1824,7 @@ export function EcommerceProduct() {
           ? `${ecommerceCompletedOrderCount} completed`
           : 'No order yet'],
   ] as const
-  function runOrderAutopilot() {
+  function runOrderAutopilot(event: ReactMouseEvent<HTMLButtonElement>) {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
       product: 'ecommerce',
@@ -1844,6 +1844,9 @@ export function EcommerceProduct() {
       return
     }
     if (ecommerceAttention?.kind === 'shop-request' && ecommerceAttentionRequest) {
+      const actionNow = Math.round(globalThis.performance.timeOrigin + event.timeStamp)
+      setOrderOpsNow(actionNow)
+      if (requestQuoteIsExpired(ecommerceAttentionRequest, actionNow)) return
       navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(ecommerceAttentionRequest.id)}`)
       return
     }

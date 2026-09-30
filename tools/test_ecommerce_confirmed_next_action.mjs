@@ -32,9 +32,9 @@ test('unsubmitted cart still leads to checkout and setup keeps priority', () => 
   }), 'Review next request')
 })
 test('confirmed action requests controlled tracking without preparing another quote', () => {
-  const body = source.slice(source.indexOf('  function runOrderAutopilot() {'), source.indexOf('\n  useEffect(() => {', source.indexOf('  function runOrderAutopilot() {')))
+  const body = source.slice(source.indexOf('  function runOrderAutopilot(event: ReactMouseEvent<HTMLButtonElement>) {'), source.indexOf('\n  useEffect(() => {', source.indexOf('  function runOrderAutopilot(event: ReactMouseEvent<HTMLButtonElement>) {')))
   const calls = []
-  runInNewContext(`${body.replaceAll('<HTMLElement>', '')}; runOrderAutopilot()`, {
+  runInNewContext(`${body.replaceAll('<HTMLElement>', '').replace('event: ReactMouseEvent<HTMLButtonElement>', 'event')}; runOrderAutopilot()`, {
     ...context, recordBehaviorSignal() {}, window: { localStorage: {} }, location: { pathname: '/', search: '' },
     orderAutopilotStage: 'Continue fulfilment', openBuyingWorkspace: () => calls.push('open'),
     focusCurrentRequestReceipt: () => calls.push('focus'), navigate: () => calls.push('navigate'),
@@ -68,4 +68,5 @@ test('filtered request inbox excludes expired history from Shop actions', () => 
   assert.match(source, /requestQuoteIsExpired\(requestInboxNextRequest, actionNow\)/)
   assert.match(source, /const deliveryReviewCount = actionablePendingManagedRequests\.filter/)
   assert.match(source, /const pickupReviewCount = actionablePendingManagedRequests\.filter/)
+  assert.match(source, /requestQuoteIsExpired\(ecommerceAttentionRequest, actionNow\)/)
 })
