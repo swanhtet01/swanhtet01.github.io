@@ -225,10 +225,12 @@ export function assertCaseSemantics(testCase, expected) {
   if (expected.semantics === 'retired-product') {
     assertLauncherProductLinks(rendered.launcherLinks, [])
     const proof = rendered.retirement
+    const retiredSpec = RETIRED_PRODUCT_CASES.find(spec => spec.id === expected.name)
     if (!isObject(proof) || proof.policy !== RETIRED_PRODUCT_PREVIEW_POLICY || proof.caseId !== expected.name
-      || proof.redirectVerified !== true || proof.activeChooserVerified !== true
+      || !retiredSpec || proof.redirectVerified !== true || proof.target !== retiredSpec.target
+      || proof.targetVerified !== true
       || proof.retiredUiAbsent !== true || proof.retainedDataUnchanged !== true
-      || Object.keys(proof).length !== 6) fail('app_entry_rendered_retirement_invalid')
+      || Object.keys(proof).length !== 7) fail('app_entry_rendered_retirement_invalid')
   }
   if (expected.semantics === 'shop-counter') {
     const layout = testCase.layout

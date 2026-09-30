@@ -423,14 +423,15 @@ test('disk consumer rejects absent, old and false retirement evidence', () => {
   const spec = RETIRED_PRODUCT_CASES[0]
   const expected = { name: spec.id, width: spec.width, height: spec.height, semantics: 'retired-product' }
   const retirement = { policy: RETIRED_PRODUCT_PREVIEW_POLICY, caseId: spec.id,
-    redirectVerified: true, activeChooserVerified: true, retiredUiAbsent: true, retainedDataUnchanged: true }
+    redirectVerified: true, target: spec.target, targetVerified: true, retiredUiAbsent: true, retainedDataUnchanged: true }
   const entry = { ok: true, failures: [], runtime: { clean: true, errors: [] }, bodyLength: 100,
     path: '/?choose=1', viewport: '1280x900', network: { mutatingRequestCount: 0, mutatingRequests: [] },
     rendered: { viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280, noHorizontalOverflow: true,
       launcherLinks: [], retirement } }
   assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
   for (const wrong of [undefined, { ...retirement, policy: 'old' }, { ...retirement, caseId: 'plant_desktop' },
-    ...['redirectVerified', 'activeChooserVerified', 'retiredUiAbsent', 'retainedDataUnchanged'].map(key => ({ ...retirement, [key]: false }))]) {
+    { ...retirement, target: 'account-home' },
+    ...['redirectVerified', 'targetVerified', 'retiredUiAbsent', 'retainedDataUnchanged'].map(key => ({ ...retirement, [key]: false }))]) {
     assert.throws(() => assertCaseSemantics({ ...entry, rendered: { ...entry.rendered, retirement: wrong } }, expected), /retirement_invalid/)
   }
   const oldMatrix = fullCaseMatrixFixture().filter(row => !row.name.startsWith('retired_plant_'))

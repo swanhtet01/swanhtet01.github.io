@@ -14,7 +14,7 @@ These are operator-led local demo playbooks, not instructions customers must com
 - Public site: `https://supermega.dev` — current product entries are `/shop/`, `/website/` and `/ecommerce/`, with `/contact/` and `/privacy/`. The retained `/plant/` route is compatibility, not an active offering. The header carries `Login`.
 - App: `https://app.supermega.dev` is the intended hosted app origin, not proof this commit is deployed. In the current source, a fresh visitor sees the service-first entry; retained setups can resume, and `/?choose=1` opens product choice. The sidebar includes `Switch product` and `Login`; local samples show `Local workspace`. Verify the exact hosted release before using these instructions with a customer.
 - Legacy internal rehearsal setup (not a public acquisition CTA): `https://app.supermega.dev/settings/?product=shop`, `/settings/?product=plant`, `/settings/?product=website`, `/settings/?product=ecommerce`. The product parameter also accepts the internal aliases `commerce`, `production`, `retail`, and `factory`.
-- Legacy entry: the app root and the `legacy-entry` route accept a demo query parameter with the values `shop`, `retail`, `plant`, `factory`, `website`, `site`, `ecommerce`, `storefront`, and `online-orders`, redirecting to the matching product route.
+- Retired entries: old `demo` query links and `/legacy-entry` return to the account home. They no longer select or open a product.
 
 ## Before any demo
 

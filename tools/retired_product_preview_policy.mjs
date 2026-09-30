@@ -14,7 +14,9 @@ export const RETIRED_PRODUCT_CASES = Object.freeze(RETIRED_PRODUCT_ROUTES.flatMa
   [{ width: 1280, height: 900, mobile: false }, { width: 390, height: 844, mobile: true }]
     .map(viewport => Object.freeze({
       id: `retired_plant_${index}_${viewport.mobile ? 'mobile' : 'desktop'}`,
-      route, ...viewport, expectedPath: route.startsWith('/?demo=') ? '/' : '/?choose=1',
+      route, ...viewport,
+      target: route.startsWith('/?demo=') ? 'account-home' : 'product-chooser',
+      expectedPath: route.startsWith('/?demo=') ? '/' : '/?choose=1',
     }))))
 
 const fail = code => { throw new Error(`retired_product_preview_${code}`) }
@@ -43,6 +45,6 @@ export function validateRetiredProductObservation({ policy, caseId, origin, befo
         || state.retained[key] !== retainedBefore[key])) fail('retained_data_changed')
   }
   // No raw local records are returned in the evidence summary.
-  return { policy, caseId, redirectVerified: true, activeChooserVerified: true,
+  return { policy, caseId, redirectVerified: true, target: spec.target, targetVerified: true,
     retiredUiAbsent: true, retainedDataUnchanged: true }
 }
