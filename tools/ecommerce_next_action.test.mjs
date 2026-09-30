@@ -10,6 +10,7 @@ const { decideEcommerceAttention, ecommerceAttentionRequestRank } = await import
 
 const base = {
   agedRequestCount: 0,
+  expiredQuoteCount: 0,
   expiringQuoteCount: 0,
   paymentAttentionCount: 0,
   paymentRiskCount: 0,
@@ -47,10 +48,14 @@ test('prioritizes refunds, then payment, before request risks', () => {
   assert.equal(payment?.action, 'Review payments in Shop')
 })
 
-test('prioritizes stock risk, expiring quotes, payment requests, aged requests, then the normal queue', () => {
+test('prioritizes stock risk, expired quotes, expiring quotes, payment requests, aged requests, then the normal queue', () => {
   const stock = decideEcommerceAttention({ ...base, stockRiskCount: 2, expiringQuoteCount: 2, agedRequestCount: 2, pendingRequestCount: 4 })
   assert.equal(stock?.filter, 'stock')
   assert.equal(stock?.action, 'Review stock-risk request')
+
+  const expired = decideEcommerceAttention({ ...base, expiredQuoteCount: 2, expiringQuoteCount: 2, pendingRequestCount: 4 })
+  assert.equal(expired?.kind, 'commerce-requote')
+  assert.equal(expired?.action, 'Review expired quote')
 
   const expiring = decideEcommerceAttention({ ...base, expiringQuoteCount: 2, agedRequestCount: 2, pendingRequestCount: 4 })
   assert.equal(expiring?.filter, 'expiring')

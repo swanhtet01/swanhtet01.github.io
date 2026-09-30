@@ -25,6 +25,7 @@ let checks = 0
 const check = (condition, label) => { checks += 1; assert.ok(condition, label) }
 const input = (overrides = {}) => ({
   agedRequestCount: 0,
+  expiredQuoteCount: 0,
   expiringQuoteCount: 0,
   paymentAttentionCount: 0,
   paymentRiskCount: 0,
@@ -38,6 +39,7 @@ const decisions = [
   decideEcommerceAttention(input({ refundAttentionCount: 1 })),
   decideEcommerceAttention(input({ paymentAttentionCount: 1 })),
   decideEcommerceAttention(input({ stockRiskCount: 1 })),
+  decideEcommerceAttention(input({ expiredQuoteCount: 1 })),
   decideEcommerceAttention(input({ expiringQuoteCount: 1 })),
   decideEcommerceAttention(input({ paymentRiskCount: 1 })),
   decideEcommerceAttention(input({ agedRequestCount: 1 })),
@@ -54,6 +56,7 @@ check(decideEcommerceAttention(input()) === null, 'clear queue returns null')
 check(decideEcommerceAttention(input({ refundAttentionCount: 1, paymentAttentionCount: 1 }))?.action === 'Review refunds in Shop', 'refund outranks payment')
 check(decideEcommerceAttention(input({ paymentAttentionCount: 1, stockRiskCount: 1 }))?.action === 'Review payments in Shop', 'payment outranks stock')
 check(decideEcommerceAttention(input({ stockRiskCount: 1, expiringQuoteCount: 1 }))?.filter === 'stock', 'stock outranks expiry')
+check(decideEcommerceAttention(input({ expiredQuoteCount: 1, expiringQuoteCount: 1 }))?.filter === 'expired', 'expired quote outranks upcoming expiry')
 check(decideEcommerceAttention(input({ expiringQuoteCount: 1, agedRequestCount: 1 }))?.filter === 'expiring', 'expiry outranks age')
 check(decideEcommerceAttention(input({ paymentRiskCount: 1, agedRequestCount: 1 }))?.filter === 'payment', 'payment request outranks age')
 check(decideEcommerceAttention(input({ agedRequestCount: 1, pendingRequestCount: 1 }))?.filter === 'aged', 'age outranks normal queue')

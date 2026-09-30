@@ -1247,9 +1247,13 @@ export function EcommerceProduct() {
     : localEcommerceOrders.reduce((total, order) => total + (order.returns ?? []).reduce((returned, record) => returned + record.quantity, 0), 0)
   const importNeeded = catalog.source === 'unavailable' || catalog.items.length === 0
   const orderOpsAgingCount = pendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
+  const orderOpsExpiredCount = pendingManagedRequests.filter((request) => {
+    const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
+    return minutes !== null && minutes <= 0
+  }).length
   const orderOpsExpiringCount = pendingManagedRequests.filter((request) => {
     const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
-    return minutes !== null && minutes <= 15
+    return minutes !== null && minutes > 0 && minutes <= 15
   }).length
   const orderOpsStockRiskCount = pendingManagedRequests.filter((request) => commerceStorefrontRequestLines(request).some((line) => {
     const item = catalog.items.find((candidate) => candidate.sku === line.sku)
@@ -1258,6 +1262,7 @@ export function EcommerceProduct() {
   const orderOpsPaymentRiskCount = pendingManagedRequests.filter((request) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual').length
   const ecommerceAttention = decideEcommerceAttention({
     agedRequestCount: orderOpsAgingCount,
+    expiredQuoteCount: orderOpsExpiredCount,
     expiringQuoteCount: orderOpsExpiringCount,
     paymentAttentionCount: ecommercePaymentAttentionCount,
     paymentRiskCount: orderOpsPaymentRiskCount,
@@ -1357,7 +1362,7 @@ export function EcommerceProduct() {
   })
   const requestIsExpiring = (request: typeof pendingManagedRequests[number]) => {
     const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
-    return minutes !== null && minutes <= 15
+    return minutes !== null && minutes > 0 && minutes <= 15
   }
   const requestNeedsPaymentReview = (request: typeof pendingManagedRequests[number]) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual'
   const ecommerceAttentionRequests = ecommerceAttention?.kind === 'shop-request'
@@ -1824,6 +1829,10 @@ export function EcommerceProduct() {
     }
     if (ecommerceAttention?.kind === 'shop-request' && ecommerceAttentionRequest) {
       navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(ecommerceAttentionRequest.id)}`)
+      return
+    }
+    if (ecommerceAttention?.kind === 'commerce-requote') {
+      focusCurrentRequestReceipt()
       return
     }
     if (ecommerceAttention) {
@@ -2381,7 +2390,7 @@ export function EcommerceProduct() {
               disabled={catalogHydrating}
               onCartChange={setBuyingCart}
               recoverSessionCart={recoverSessionCart}
-              onContinueInShop={(requestId) => navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(requestId)}`)}
+              onContinueInShop={() => navigate('/shop/?tab=orders')}
               onDraft={openShopDraft}
               onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(requestId)}`) : undefined}
               onOpenCancellation={(intent: EcommerceCancellationIntent) => navigate('/shop/?tab=orders', { state: { ecommerceCancellationIntent: intent } })}
