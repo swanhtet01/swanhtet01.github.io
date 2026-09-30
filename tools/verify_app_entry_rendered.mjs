@@ -648,6 +648,10 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   while (Date.now() < resultDeadline) {
     state = await evalInPage(cdp, sessionId, `(() => {
       const receipt = document.querySelector('.ecommerce-request-receipt[data-current="true"]');
+      const receiptBox = receipt?.getBoundingClientRect();
+      const boundaryGrid = receipt?.querySelector('.ecommerce-quote-boundaries');
+      const boundaryItems = boundaryGrid ? [...boundaryGrid.children] : [];
+      const boundaryRows = new Set(boundaryItems.map((item) => Math.round(item.getBoundingClientRect().top))).size;
       const receiptBoundary = receipt ? [...receipt.querySelectorAll('p')]
         .find((candidate) => candidate.textContent.includes('Saved on this device for Shop review.')) : null;
       const box = receiptBoundary?.getBoundingClientRect();
@@ -661,6 +665,8 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
         todaySummary,
         notice,
         receiptPresent: Boolean(receipt),
+        receiptHeight: receiptBox?.height || 0,
+        boundaryRows,
         receiptBoundary: receiptBoundary?.textContent.trim() || '',
         boundaryVisible: (${receiptBoundaryVisible.toString()})(box, window.innerWidth, window.innerHeight, receiptBoundary ? getComputedStyle(receiptBoundary) : null),
         oldManagedHeadlineVisible: bodyText.includes('Request sent to Shop'),
@@ -685,6 +691,8 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
     localReceipt: state?.receiptBoundary.includes('Saved on this device for Shop review.')
       && state?.receiptBoundary.includes('Shop still confirms stock, promise, payment, and delivery.'),
     boundaryVisible: Boolean(state?.boundaryVisible),
+    compactMobileReceipt: Number(state?.viewportWidth || 0) > 560
+      || (Number(state?.boundaryRows || 0) <= 2 && Number(state?.receiptHeight || 0) <= 380),
     managedHeadlineAbsent: !state?.oldManagedHeadlineVisible,
     companyReceiptClaimAbsent: !state?.companyReceiptClaimVisible,
     browserPersistencePresent: Boolean(state?.localBuyingStatePresent),
