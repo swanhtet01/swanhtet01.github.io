@@ -1181,7 +1181,7 @@ export async function createClientImportPreview(
     const currencyHeaders = headers.filter((header) => ['currency', 'currency_code', 'price_currency'].includes(normalizeHeader(header)))
     const priceHeader = mapping.price ?? ''
     const foreignPriceHeader = /(?:^|_)(?:usd|thb|eur|gbp|sgd|cny|rmb|jpy|aud|cad|inr|krw|hkd|vnd|idr|myr|php|chf)(?:_|$)/.test(normalizeHeader(priceHeader))
-      || /[$€£¥฿₹₩]/.test(priceHeader)
+      || /\p{Sc}/u.test(priceHeader)
     for (const row of rows) {
       if (foreignPriceHeader || currencyHeaders.some((header) => row.source[header]?.trim().toUpperCase() !== 'MMK')) {
         row.status = 'invalid'
