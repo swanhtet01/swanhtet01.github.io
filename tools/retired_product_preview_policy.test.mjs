@@ -7,7 +7,7 @@ import { RETIRED_PRODUCT_PREVIEW_POLICY as policy, RETIRED_PRODUCT_CASES as case
 
 function fixture(spec = cases[0]) {
   const retainedBefore = Object.fromEntries(keys.map(key => [key, `synthetic-preserved:${key}`]))
-  const state = { origin: 'https://isolated.example', path: '/?choose=1', hash: '',
+  const state = { origin: 'https://isolated.example', path: spec.expectedPath, hash: '',
     viewportWidth: spec.width, viewportHeight: spec.height,
     launcherLinks: [],
     retiredToolVisible: false, retiredActionVisible: false, retained: { ...retainedBefore } }
