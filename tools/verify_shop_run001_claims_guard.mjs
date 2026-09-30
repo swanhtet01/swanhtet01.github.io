@@ -221,7 +221,7 @@ check(!onboardingText.includes('Creates local sample records, then opens the fir
 check(!onboardingText.includes('Shop pilot proof rule'), 'operator_pilot_rules_must_not_crowd_customer_setup')
 
 check(!coreAppText.includes('Spa pilot first sale path') && !coreAppText.includes('Reject bad redemption'), 'internal_pilot_checklist_must_not_crowd_sales_counter')
-requireSnippet(coreAppText, 'Open schedule', files.coreApp)
+check(!coreAppText.includes('Open schedule'), 'cross_product_schedule_must_not_crowd_sales_counter')
 requireSnippet(coreAppText, "['Cash', 'KBZPay', 'WavePay', 'AYA Pay', 'MMQR']", files.coreApp)
 
 requireSnippet(ownerPacketText, 'prove one useful operating workflow before any managed activation', files.ownerPacket)
