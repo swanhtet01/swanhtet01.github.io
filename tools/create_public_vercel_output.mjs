@@ -414,13 +414,17 @@ const sharedStyle = `
   .editorial-hero h1 {font-size:clamp(48px,7.5vw,100px);line-height:1.02;letter-spacing:-.065em;margin:20px 0 28px;font-weight:650}
   .editorial-hero .lede {max-width:610px;font-size:21px;line-height:1.6;color:var(--muted)}
   .platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;border-radius:24px;overflow:hidden}
-  .platform-image img {width:100%;height:auto;display:block;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08)}
+  .platform-image img {width:100%;max-width:960px;height:auto;display:block;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08)}
   .platform-image figcaption {padding:16px 0 0;color:#615f73;font-size:12px}
   .product-story {padding:80px 0;border-top:1px solid var(--line)}
   .story-heading {display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:end;margin-bottom:32px}
   .story-heading h2 {font-size:clamp(32px,4vw,52px);letter-spacing:-.045em;line-height:1.12;margin:12px 0 0}
   .story-heading p {font-size:18px;line-height:1.65;color:var(--muted);margin:0;max-width:500px}
   .feature-line {display:flex;flex-wrap:wrap;gap:12px 30px;list-style:none;padding:24px 0 0;margin:0;font-size:14px;color:#49465f}
+  .feature-line > li {flex:1 1 240px;min-width:0;padding:12px 0}
+  .feature-line h3 {margin:0 0 10px;font-size:18px;letter-spacing:-.025em;color:var(--ink)}
+  .feature-line p {margin:0;max-width:34ch;font-size:15px;line-height:1.7;color:var(--muted)}
+  .platform-image img[width="940"] {max-width:940px}
   .platform-note {padding:36px 0 80px;max-width:700px;font-size:24px;line-height:1.5;letter-spacing:-.025em}
   .site-header {background:#fff}
   @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.feature-line{gap:12px 20px}}
@@ -532,9 +536,26 @@ const stories = {
  website: {title:'A website that works for you.', body:'Manage your pages, services and inquiries without rebuilding your website.', image:'platform-pages.jpg', alt:'Page editor with page paths and content checks', features:['Page editing','Search metadata','Inquiry inbox']},
  ecommerce: {title:'Turn your catalog into orders.', body:'Browse products and send an order. Your team confirms each order and payment. Arrange delivery with your customer. Manage stock in Shop.', image:'platform-catalog.jpg', alt:'Catalog with product cards, prices and cart controls', features:['Product catalog','Cart and requests','Order follow-through']},
 }
+const productOutcomes = {
+ shop: [
+  ['Serve the next customer', 'Find products, build a sale and record payment from the counter. Keep the order available for receipts and follow-up.'],
+  ['Know what needs restocking', 'Review stock levels, purchasing and demand together. Move from a shortage to the items that need attention.'],
+  ['Close with clear records', 'Follow open orders, review payment exceptions and prepare a daily close with accounting exports.'],
+ ],
+ website: [
+  ['Start with your business', 'Bring your services, contact details and business information into one place. Build your pages around what customers need to know.'],
+  ['Keep every page current', 'Edit page content and search metadata. Check missing information before preparing the site for publication.'],
+  ['Turn interest into follow-up', 'Keep customer inquiries in an inbox so your team can review the request and decide the next step.'],
+ ],
+ ecommerce: [
+  ['Sell from one catalog', 'Use your Shop products and prices to build a storefront. Customers choose items and review their cart.'],
+  ['Bring online requests into Shop', 'Open the exact customer request for stock, payment and fulfilment review. Confirmed orders continue through Shop.'],
+  ['Handle the next exception', 'See which request needs attention first. Review payment issues, expiring quotes and refunds from the same workflow.'],
+ ],
+}
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
- return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><span class="eyebrow">${label}</span><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<figure class="platform-image"><img src="/images/${item.image}" alt="${item.alt}" width="${id === 'ecommerce' ? 940 : 960}" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="lazy" /><figcaption>${label} interface &middot; illustrative records</figcaption></figure><ul class="feature-line">${item.features.map(f=>`<li>${f}</li>`).join('')}</ul></section>`
+ return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><span class="eyebrow">${label}</span><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<figure class="platform-image"><img src="/images/${item.image}" alt="${item.alt}" width="${id === 'ecommerce' ? 940 : 960}" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="lazy" /><figcaption>${label} interface &middot; illustrative records</figcaption></figure><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
