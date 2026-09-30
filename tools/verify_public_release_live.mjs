@@ -240,7 +240,7 @@ async function verifyOnce() {
   const interfaceImages = {
     shop: 'platform-shop-dashboard-v2.jpg',
     website: 'platform-sites-workspace-v2.jpg',
-    ecommerce: 'platform-catalog.jpg',
+    ecommerce: 'platform-commerce-workflow-v2.jpg',
   }
   for (const product of publicProducts) {
     const filename = interfaceImages[product.id]

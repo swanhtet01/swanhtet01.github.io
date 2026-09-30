@@ -534,7 +534,7 @@ assert(typeof homePage.description === 'string' && homePage.description.length >
 const stories = {
  shop: {title:'Sales and stock, in sync.', body:'Serve customers, follow orders and see stock risk before it slows the day down.', image:'platform-shop-dashboard-v2.jpg', alt:'Illustrative Shop dashboard with sales, orders, stock and next actions', features:['Sales counter','Stock and purchasing','Order tracking']},
  website: {title:'A website that works for you.', body:'Edit pages, see what is ready and keep customer inquiries in one focused workspace.', image:'platform-sites-workspace-v2.jpg', alt:'Illustrative Sites workspace with page editing, checks and inquiries', features:['Page editing','Search metadata','Inquiry inbox']},
- ecommerce: {title:'Turn your catalog into orders.', body:'Browse products and send an order. Your team confirms each order and payment. Arrange delivery with your customer. Manage stock in Shop.', image:'platform-catalog.jpg', alt:'Catalog with product cards, prices and cart controls', features:['Product catalog','Cart and requests','Order follow-through']},
+ ecommerce: {title:'Turn your catalog into orders.', body:'Move from catalog to confirmed order, delivery follow-through and stock visibility in one flow. Your team confirms each order and payment. Arrange delivery with your customer.', image:'platform-commerce-workflow-v2.jpg', alt:'Illustrative Commerce workspace with catalog, order and delivery follow-through', features:['Product catalog','Cart and requests','Order follow-through']},
 }
 const productOutcomes = {
  shop: [
@@ -1295,7 +1295,7 @@ await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
-for (const image of ['platform-shop-dashboard-v2.jpg','platform-sites-workspace-v2.jpg','platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+for (const image of ['platform-shop-dashboard-v2.jpg','platform-sites-workspace-v2.jpg','platform-commerce-workflow-v2.jpg','platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
