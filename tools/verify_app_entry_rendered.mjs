@@ -594,7 +594,7 @@ export function inspectBusinessBrief(document) {
   const website = Boolean(websiteForm)
   const count = website ? 5 : 3
   const essentialsRequired = website
-    ? fields.length === count && fields[0].required && fields[1].required && !fields[2].required && fields[3].required && !fields[4].required
+    ? fields.length === count && fields[0].required && fields[1].required && !fields[2].required && fields[3].required && fields[4].required
     : fields.length === count && fields[0].required && fields[1].required && !fields[2].required
   const nativeBlocked = website ? !form?.checkValidity() && !submit?.disabled : submit?.disabled
   return {

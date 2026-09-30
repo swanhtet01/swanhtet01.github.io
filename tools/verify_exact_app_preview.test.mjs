@@ -1033,7 +1033,7 @@ test('actual brief harness expression rejects unusable DOM controls', async () =
   assert.ok(line)
   async function inspect(change = () => {}, website = false) {
     const field = required => ({ required, value: '', disabled: false, readOnly: false, tabIndex: 0, labels: [{ textContent: 'Field' }], getClientRects: () => [{}], visibility: 'visible' })
-    const data = { fields: website ? [field(true), field(true), field(false), field(true), field(false)] : [field(true), field(true), field(false)],
+    const data = { fields: website ? [field(true), field(true), field(false), field(true), field(true)] : [field(true), field(true), field(false)],
       submit: { ...field(false), disabled: !website, textContent: website ? 'Create website' : 'Continue' }, absent: false, valid: false }
     change(data)
     const form = { querySelectorAll: () => data.fields, querySelector: () => data.submit, checkValidity: () => data.valid }
@@ -1044,6 +1044,7 @@ test('actual brief harness expression rejects unusable DOM controls', async () =
   }
   assert.ok(Object.values(await inspect()).every(value => value === true))
   assert.ok(Object.values(await inspect(() => {}, true)).every(value => value === true))
+  assert.equal((await inspect(d => { d.fields[4].required = false }, true)).essentialsRequired, false)
   assert.equal((await inspect(d => { d.valid = true }, true)).emptyContinueBlocked, false)
   for (const change of [
     d => { d.absent = true }, d => { d.fields.pop() }, d => { d.fields.push(d.fields[0]) },
