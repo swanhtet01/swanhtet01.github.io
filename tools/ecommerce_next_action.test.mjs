@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 
 const root = resolve(import.meta.dirname, '..')
-const { decideEcommerceAttention } = await import(
+const { decideEcommerceAttention, ecommerceAttentionRequestRank } = await import(
   pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-next-action.ts')).href
 )
 
@@ -26,6 +26,15 @@ test('rejects invalid counts', () => {
 
 test('returns no attention action when the queue is clear', () => {
   assert.equal(decideEcommerceAttention(base), null)
+})
+
+test('ranks time-based request work by the earliest valid timestamp', () => {
+  const older = { createdAt: '2026-09-30T08:00:00.000Z', expiresAt: '2026-09-30T10:00:00.000Z' }
+  const newer = { createdAt: '2026-09-30T09:00:00.000Z', expiresAt: '2026-09-30T11:00:00.000Z' }
+  assert.ok(ecommerceAttentionRequestRank('aged', older) < ecommerceAttentionRequestRank('aged', newer))
+  assert.ok(ecommerceAttentionRequestRank('expiring', older) < ecommerceAttentionRequestRank('expiring', newer))
+  assert.equal(ecommerceAttentionRequestRank('all', older), 0)
+  assert.equal(ecommerceAttentionRequestRank('expiring', { createdAt: older.createdAt }), Number.MAX_SAFE_INTEGER)
 })
 
 test('prioritizes refunds, then payment, before request risks', () => {

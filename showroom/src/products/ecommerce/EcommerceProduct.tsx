@@ -78,7 +78,7 @@ import {
   type StorefrontDraftReadResult,
 } from './storefront-draft'
 import './ecommerce-product.css'
-import { decideEcommerceAttention } from './ecommerce-next-action'
+import { decideEcommerceAttention, ecommerceAttentionRequestRank } from './ecommerce-next-action'
 
 type PreviewDevice = 'phone' | 'desktop'
 type RequestInboxFilter = 'all' | 'stock' | 'expiring' | 'payment' | 'delivery'
@@ -1360,8 +1360,8 @@ export function EcommerceProduct() {
     return minutes !== null && minutes <= 15
   }
   const requestNeedsPaymentReview = (request: typeof pendingManagedRequests[number]) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual'
-  const ecommerceAttentionRequest = ecommerceAttention?.kind === 'shop-request'
-    ? pendingManagedRequests.find((request) => ecommerceAttention.filter === 'stock'
+  const ecommerceAttentionRequests = ecommerceAttention?.kind === 'shop-request'
+    ? pendingManagedRequests.filter((request) => ecommerceAttention.filter === 'stock'
       ? requestHasStockRisk(request)
       : ecommerceAttention.filter === 'expiring'
         ? requestIsExpiring(request)
@@ -1369,8 +1369,16 @@ export function EcommerceProduct() {
           ? requestNeedsPaymentReview(request)
           : ecommerceAttention.filter === 'aged'
             ? Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000
-            : true) ?? null
-    : null
+            : true)
+    : []
+  const ecommerceAttentionRequest = ecommerceAttentionRequests
+    .sort((left, right) => ecommerceAttentionRequestRank(ecommerceAttention?.filter ?? 'all', {
+      createdAt: left.createdAt,
+      expiresAt: 'quote' in left ? left.quote.expiresAt : undefined,
+    }) - ecommerceAttentionRequestRank(ecommerceAttention?.filter ?? 'all', {
+      createdAt: right.createdAt,
+      expiresAt: 'quote' in right ? right.quote.expiresAt : undefined,
+    }))[0] ?? null
   const requestInboxFilteredRequests = pendingManagedRequests.filter((request) => (
     requestInboxFilter === 'all'
       || (requestInboxFilter === 'stock' && requestHasStockRisk(request))

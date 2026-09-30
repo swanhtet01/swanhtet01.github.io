@@ -6,7 +6,7 @@ const requireFromShowroom = createRequire(pathToFileURL('showroom/package.json')
 const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuild')).href)
 const bundle = await build({
   stdin: {
-    contents: `export { decideEcommerceAttention } from './ecommerce-next-action.ts'`,
+    contents: `export { decideEcommerceAttention, ecommerceAttentionRequestRank } from './ecommerce-next-action.ts'`,
     resolveDir: 'showroom/src/products/ecommerce',
     sourcefile: 'showroom/src/products/ecommerce/ecommerce-next-action-test-entry.ts',
     loader: 'ts',
@@ -17,7 +17,7 @@ const bundle = await build({
   write: false,
   logLevel: 'error',
 })
-const { decideEcommerceAttention } = await import(
+const { decideEcommerceAttention, ecommerceAttentionRequestRank } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -60,5 +60,15 @@ check(decideEcommerceAttention(input({ agedRequestCount: 1, pendingRequestCount:
 let invalidRejected = false
 try { decideEcommerceAttention(input({ expiringQuoteCount: Number.NaN })) } catch { invalidRejected = true }
 check(invalidRejected, 'invalid count rejected')
+check(
+  ecommerceAttentionRequestRank('aged', { createdAt: '2026-09-30T08:00:00.000Z' })
+    < ecommerceAttentionRequestRank('aged', { createdAt: '2026-09-30T09:00:00.000Z' }),
+  'aged requests rank oldest first',
+)
+check(
+  ecommerceAttentionRequestRank('expiring', { createdAt: '2026-09-30T08:00:00.000Z', expiresAt: '2026-09-30T10:00:00.000Z' })
+    < ecommerceAttentionRequestRank('expiring', { createdAt: '2026-09-30T08:00:00.000Z', expiresAt: '2026-09-30T11:00:00.000Z' }),
+  'expiring requests rank earliest deadline first',
+)
 
 console.log(`\ntest_ecommerce_next_action: ${checks} checks passed\n`)

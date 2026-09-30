@@ -16,6 +16,18 @@ export type EcommerceAttentionDecision = {
   summary: string
 }
 
+export function ecommerceAttentionRequestRank(
+  filter: EcommerceAttentionDecision['filter'],
+  request: { createdAt: string; expiresAt?: string },
+) {
+  const timestamp = filter === 'expiring'
+    ? Date.parse(request.expiresAt ?? '')
+    : filter === 'aged'
+      ? Date.parse(request.createdAt)
+      : 0
+  return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER
+}
+
 export function decideEcommerceAttention(input: EcommerceAttentionInput): EcommerceAttentionDecision | null {
   const counts = [input.agedRequestCount, input.expiringQuoteCount, input.paymentAttentionCount, input.paymentRiskCount, input.pendingRequestCount, input.refundAttentionCount, input.stockRiskCount]
   if (!counts.every((count) => Number.isSafeInteger(count) && count >= 0)) throw new Error('Commerce attention counts must be non-negative safe integers.')
