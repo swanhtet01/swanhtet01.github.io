@@ -62,8 +62,8 @@ const AA_FLOOR = 4.5
 // as aliases (`--core-warning: var(--core-warn)`), and because a var() inside a custom
 // property is substituted against the element the property is DECLARED on, a :root alias
 // freezes to the :root value -- which is exactly what the browser does in light mode, so
-// following the chain here reproduces it. .theme-dark redeclares both the alias and its
-// target, which is why this section only ever speaks about light mode.
+// following the chain here reproduces it. The remaining legacy dark declarations are
+// inactive under the fixed-light shell, so this section deliberately speaks only about light mode.
 function tokenValue(name, seen = new Set()) {
   assert.ok(!seen.has(name), `token ${name} does not alias in a cycle`)
   seen.add(name)
@@ -84,7 +84,7 @@ function ruleBody(selector) {
 }
 
 // The file-level parseColour() above returns {luminance, alpha} -- enough for the
-// light-surface scan, but compositing needs the actual channels, so this returns rgba.
+// contrast recomputation needs the actual channels, so this returns rgba.
 function aaColour(text) {
   const hex = text.trim().match(/^#([0-9a-f]{6})$/i)
   if (hex) {
