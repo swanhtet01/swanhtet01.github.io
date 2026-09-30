@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.36
+Version: 1.2.37
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-09-30
@@ -315,6 +315,20 @@ The corporate task last reported a Sheets write-scope rejection; this is histori
 - **Private engineering/R&D worker:** maintained `local-agent-company` source. Current transfer is `outputs/workcell-vps-67ecc89`; extracted-package tests ran 609 cases with three skips. Target inventory, installation, restoration and useful model output remain unaccepted.
 - **Corporate browser/voice service:** the separate `supermega-agent-company` Render service belongs to the `Automate SuperMega corporate ops` task. Its latest recorded report says browser-agent activation and a restricted Vapi key remain pending. Reconcile that task before changing the service; it is not evidence of an operating private dev team. No paid voice/model fallback is implied.
 - **Coordination:** one primary operator integrates evidence. Preserve paused automations and owner-controlled sessions. Do not create a second queue, service or framework merely because access to the existing one is temporarily unavailable.
+
+### Open-source adoption queue — updated owner objective
+
+The goal attachment adds a reuse shortlist; it does not require every tool to be installed. Evaluate one missing capability at a time against the existing system, maintenance burden, license, isolation and total operating cost. A repository description is not deployment or security acceptance.
+
+| Candidate | Concrete evaluation | Current decision |
+|---|---|---|
+| [Coolify](https://github.com/coollabsio/coolify) | Private application deployment management on an authenticated, qualified host | Evaluate after host access; do not replace functioning Vercel hosting merely to change tools |
+| [n8n](https://github.com/n8n-io/n8n) | One internal workflow needing connectors beyond the existing queue | Candidate only; upstream describes fair-code licensing, so inspect applicable license before embedding/reselling |
+| [PostHog](https://github.com/PostHog/posthog) | Product funnel and failure measurement tied to actual customer tasks | First inventory existing telemetry; define minimal events and privacy rules before adding SDK or session recording |
+| Ollama and Supabase | Reuse existing inference and product-data systems | Existing systems; no duplicate deployment implied, model and hosted acceptance remain separate |
+| Documenso, Cal.com, Penpot, NocoDB, Excalidraw, Immich, Plausible, AppFlowy, Listmonk, Dub | Retained owner-supplied candidates for signatures, scheduling, design, records, diagrams, media, analytics, knowledge, email and links | Not yet evaluated; choose only for a demonstrated gap, avoid parallel analytics/CRM/knowledge stores |
+
+Initial primary-source review covered Coolify, n8n and PostHog on30September. Next adoption deliverable is a bounded comparison against an observed workflow, with a data boundary, deployment requirements, acceptance test and removal path. Do not install a service to manufacture a department or claim a free unattended workforce.
 
 ### Founder product access and cloud capacity
 
