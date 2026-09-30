@@ -4,9 +4,9 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
-test('launcher promises a local request, not a delivered Shop order', () => {
+test('launcher presents Commerce without claiming a delivered Shop order', () => {
   const shell = readFileSync(new URL('../showroom/src/core/CoreShell.tsx', import.meta.url), 'utf8')
-  assert.ok(shell.includes("['Ecommerce', 'A product catalog and customer requests.', 'Open Ecommerce', '/ecommerce/']"))
+  assert.ok(shell.includes("['Ecommerce', 'A product catalog and customer requests.', 'Ecommerce', '/ecommerce/']"))
   assert.ok(!shell.includes('Send a sample order to Shop'))
 })
 const ts = require('typescript')
@@ -21,42 +21,40 @@ test('phone catalog remains readable with a retained Desktop preview selection',
   }
   assert.ok(block.includes('> .storefront-request-button { grid-column: 1 / -1; grid-row: 5; }'))
 })
-test('local entry consistently names a sample request in source and acceptance contracts', () => {
-  for (const path of ['../showroom/src/products/ecommerce/EcommerceProduct.tsx', './verify_app_build.mjs', './verify_app_release_live.mjs', './verify_exact_app_preview.mjs']) {
+test('local entry uses an honest order-request flow without sample language', () => {
+  for (const path of ['../showroom/src/products/ecommerce/EcommerceProduct.tsx']) {
     const text = readFileSync(new URL(path, import.meta.url), 'utf8')
-    if (path !== './verify_exact_app_preview.mjs') assert.ok(text.includes("'Try one sample request'"), path)
-    else assert.ok(text.includes("'Request catalog setup'"), path)
-    assert.ok(text.includes("'Try sample request'"), path)
-    assert.doesNotMatch(text, /'Try one customer order'|'Start sample order'/)
+    assert.doesNotMatch(text, /sample request|browser demo/i, path)
   }
+  const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
+  assert.ok(product.includes("'Open customer ordering'"))
 })
 test('assisted catalog setup stays available in both local views and preserves the draft tab', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const expression = product.match(/const showAssistedCatalogSetup = ([\s\S]*?)\n\s*const assistedCatalogEntry/)?.[1]
   assert.ok(expression)
   const ready = { catalogHydrating: false, managedIdentity: null, catalog: { source: 'sample' }, draftIssue: '', draftBusy: false, workspaceView: 'preview' }
-  assert.equal(vm.runInNewContext(expression, ready), true)
-  assert.equal(vm.runInNewContext(expression, {...ready,workspaceView:'setup'}), true)
+  assert.equal(vm.runInNewContext(expression, { ...ready, URLSearchParams, location: { search: '' } }), true)
+  assert.equal(vm.runInNewContext(expression, {...ready,workspaceView:'setup', URLSearchParams, location: { search: '' }}), true)
   for (const workspaceView of ['preview','setup']) {
     for (const blocked of [{catalogHydrating:true}, {managedIdentity:{}}, {catalog:{source:'unavailable'}}, {draftIssue:'read failed'}, {draftBusy:true}]) {
-      assert.equal(vm.runInNewContext(expression, {...ready,workspaceView,...blocked}), false)
+      assert.equal(vm.runInNewContext(expression, {...ready,workspaceView,...blocked, URLSearchParams, location: { search: '' }}), false)
     }
   }
   assert.ok(product.includes('href="/ecommerce/?setup=1"'))
   assert.ok(product.includes("search.delete('setup')"))
-  assert.match(product, /Requests stay on this device and are not live orders/)
+  assert.match(product, /Requests stay on this device until Shop review/)
   assert.match(product, /: ecommerceTodayHeadline\}/)
 })
 
-test('fresh assisted entry yields to retained work, carts, attention and editor state', () => {
+test('the assisted entry only appears before an explicit workspace route', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const expression = product.match(/const assistedCatalogEntry = ([\s\S]*?)\n\s*if \(/)?.[1]
   assert.ok(expression)
-  const ready = { showAssistedCatalogSetup: true, workspaceView: 'preview', savedDraft: null, ecommerceTodayAction: 'Try sample request', ecommerceTodayState: 'ready', ecommerceTodayCartUnits: 0 }
+  const ready = { showAssistedCatalogSetup: true, URLSearchParams, location: { search: '' } }
   assert.equal(vm.runInNewContext(expression, ready), true)
-  for (const blocked of [{ showAssistedCatalogSetup: false }, { workspaceView: 'setup' }, { savedDraft: { revision: 1 } }, { ecommerceTodayAction: 'Review checkout' }, { ecommerceTodayAction: 'View request receipt' }, { ecommerceTodayAction: 'Fix order import' }, { ecommerceTodayState: 'attention' }, { ecommerceTodayState: 'setup' }, { ecommerceTodayCartUnits: 1 }]) {
-    assert.equal(vm.runInNewContext(expression, { ...ready, ...blocked }), false)
-  }
+  assert.equal(vm.runInNewContext(expression, { ...ready, location: { search: '?workspace=1' } }), false)
+  assert.equal(vm.runInNewContext(expression, { ...ready, showAssistedCatalogSetup: false }), false)
   assert.ok(product.includes('{!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">'))
   assert.ok(product.includes('Explore the catalog'))
   assert.ok(!product.includes('Let SuperMega prepare your catalog'))
@@ -64,7 +62,7 @@ test('fresh assisted entry yields to retained work, carts, attention and editor 
   const action = product.slice(product.indexOf('{assistedCatalogEntry ? <>'), product.indexOf('{ecommerceTodayGuided ? ('))
   assert.doesNotMatch(action, /ecommerce-assisted-intake|What to send/)
   assert.match(action, /<AssistedDeliveryScope product="ecommerce" \/>/)
-  assert.match(action, /<button className="core-button secondary" onClick=\{runOrderAutopilot\} type="button">Try sample request/)
+  assert.match(action, /<button className="core-button secondary" onClick=\{runOrderAutopilot\} type="button">Open customer ordering/)
 })
 const source = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('buying.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
