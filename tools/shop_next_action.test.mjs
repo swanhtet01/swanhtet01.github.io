@@ -70,7 +70,7 @@ test('stockoutRiskCount > 0 → Prevent forecast stockout (outranks receiving)',
   const result = decideShopNextAction({ ...base, stockoutRiskCount: 2, activePurchaseOrderCount: 1, lowStockCount: 4 })
   assert.equal(result.job, 'Prevent forecast stockout')
   assert.equal(result.nextAction, 'Review demand risk')
-  assert.equal(result.path, '/shop/?tab=inventory')
+  assert.equal(result.path, '/shop/?tab=inventory#demand-review')
   assert.equal(result.track, 'Inventory')
   assert.ok(result.reason.startsWith('2 items may'), `reason: ${result.reason}`)
 })
@@ -88,7 +88,7 @@ test('reorderSoonCount > 0 → Review upcoming demand (after receiving, before s
   const result = decideShopNextAction({ ...base, reorderSoonCount: 1, lowStockCount: 4 })
   assert.equal(result.job, 'Review upcoming demand')
   assert.equal(result.nextAction, 'Open demand review')
-  assert.equal(result.path, '/shop/?tab=inventory')
+  assert.equal(result.path, '/shop/?tab=inventory#demand-review')
   assert.equal(result.track, 'Inventory')
   assert.ok(result.reason.startsWith('1 item covers'), `reason: ${result.reason}`)
 

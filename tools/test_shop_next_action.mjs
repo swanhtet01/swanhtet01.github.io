@@ -173,6 +173,7 @@ function checkDecision(decision, label) {
   check(d.job === 'Prevent forecast stockout', 'stockout-risk: job')
   check(d.nextAction === 'Review demand risk', 'stockout-risk: next action')
   check(d.track === 'Inventory', 'stockout-risk: track is Inventory')
+  check(d.path === '/shop/?tab=inventory#demand-review', 'stockout-risk: opens demand review')
   check(d.reason.includes('2 items may'), 'stockout-risk: reason includes plural count')
 }
 
@@ -203,6 +204,7 @@ function checkDecision(decision, label) {
   checkDecision(demand, 'reorder-soon')
   check(demand.job === 'Review upcoming demand', 'reorder-soon: job')
   check(demand.nextAction === 'Open demand review', 'reorder-soon: next action')
+  check(demand.path === '/shop/?tab=inventory#demand-review', 'reorder-soon: opens demand review')
   check(demand.reason.includes('1 item covers'), 'reorder-soon: reason includes singular count')
 }
 
