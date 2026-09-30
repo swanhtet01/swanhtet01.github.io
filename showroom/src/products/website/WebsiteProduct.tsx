@@ -47,7 +47,6 @@ import {
   LEGACY_WEBSITE_STORAGE_KEY,
   listWebsiteRecoveryArchives,
   MAX_WEBSITE_PAGES,
-  previewDevices,
   readinessChecks,
   readWebsiteRecoveryArchive,
   recordWebsiteEvidence,
@@ -80,7 +79,7 @@ const DEFAULT_NOTICE = 'Website ready to edit. Nothing has been published.'
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
     title: 'Edit page',
-    copy: 'Edit one section, preview it, then save or discard.',
+    copy: 'Edit one section, review it, then save or discard.',
   },
   publish: {
     title: 'Prepare website file',
@@ -124,7 +123,7 @@ function DownloadWorkspace({
         <ol className="website-download-steps">
           <li>
             <span aria-hidden="true">1</span>
-            <div><strong>Preview</strong><p>Go back, then Preview to check desktop, tablet, or mobile.</p></div>
+            <div><strong>Review</strong><p>Go back, then Review page. The layout follows your screen automatically.</p></div>
           </li>
           <li>
             <span aria-hidden="true">2</span>
@@ -199,8 +198,24 @@ export function WebsiteProduct() {
   const editSessionRef = useRef<WebsiteEditSessionState | null>(null)
   const restoredDraftHeadingRef = useRef<HTMLHeadingElement>(null)
   const [device, setDevice] = useState<PreviewDevice>(() => (
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop'
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 560px)').matches
+      ? 'mobile'
+      : typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches
+        ? 'tablet'
+        : 'desktop'
   ))
+  useEffect(() => {
+    const mobileQuery = window.matchMedia('(max-width: 560px)')
+    const tabletQuery = window.matchMedia('(max-width: 1024px)')
+    const syncPreviewDevice = () => setDevice(mobileQuery.matches ? 'mobile' : tabletQuery.matches ? 'tablet' : 'desktop')
+    syncPreviewDevice()
+    mobileQuery.addEventListener('change', syncPreviewDevice)
+    tabletQuery.addEventListener('change', syncPreviewDevice)
+    return () => {
+      mobileQuery.removeEventListener('change', syncPreviewDevice)
+      tabletQuery.removeEventListener('change', syncPreviewDevice)
+    }
+  }, [])
   const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
   const [localLeadLedger, setLocalLeadLedger] = useState(() => {
@@ -264,7 +279,7 @@ export function WebsiteProduct() {
           ? 'Your changes are not saved. Return to edit to save or discard them.'
           : selectedPage.stage === 'draft'
             ? 'This page is saved as a draft. Select Edit page to update it and mark it ready.'
-            : 'Check the selected page at desktop, tablet, or mobile size.',
+            : 'Review the selected page. Its layout follows your screen automatically.',
       }
     : view === 'publish' && storageMode === 'session-only'
       ? {
@@ -292,11 +307,11 @@ export function WebsiteProduct() {
           : 'Session only'
   const websiteSurfaceActionLabel = surface === 'preview'
     ? 'Edit page'
-    : 'Preview'
+    : 'Review page'
   const showWebsiteEditorAction = true
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
-    ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
+    ? 'The saved Website changed after this edit session started. Your draft is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
     : storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
   const noticePriority = editConflict || storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
   const repairArmed = canRepairLocalStorage
@@ -391,7 +406,7 @@ export function WebsiteProduct() {
 
   function openWorkspaceView(nextView: WebsiteView) {
     if (nextView === 'publish' && hasUnsavedChanges) {
-      setNotice('Save or discard the unsaved Website preview before reviewing the file checklist.')
+      setNotice('Save or discard the unsaved Website draft before reviewing the file checklist.')
       return
     }
     if (nextView === 'publish' && !canReview) {
@@ -453,7 +468,7 @@ export function WebsiteProduct() {
     try {
       window.sessionStorage.setItem(websiteEditSessionStorageKey(next.scope), JSON.stringify(next.session))
     } catch {
-      setNotice('The unsaved preview is held in this tab only. Browser draft recovery is unavailable, but Save and Discard still work.')
+      setNotice('The unsaved draft is held in this tab only. Browser draft recovery is unavailable, but Save and Discard still work.')
     }
   }
 
@@ -524,7 +539,7 @@ export function WebsiteProduct() {
     }
     const base = retained?.session ?? createWebsiteEditSession(workspace)
     if (!websiteEditSessionMatches(base, workspace)) {
-      setNotice('The saved Website changed after this edit session started. Discard the preview before making more changes.')
+      setNotice('The saved Website changed after this edit session started. Discard the draft before making more changes.')
       return null
     }
     const result = updateWebsiteEditSession(base, update)
@@ -543,7 +558,7 @@ export function WebsiteProduct() {
     const retained = editSessionRef.current
     if (!retained || retained.scope !== editSessionScope) return
     if (!websiteEditSessionMatches(retained.session, workspace)) {
-      setNotice('This preview started from an older saved version. Nothing was overwritten; discard it and review the newer Website.')
+      setNotice('This draft started from an older saved version. Nothing was overwritten; discard it and review the newer Website.')
       return
     }
     setSavingDraft(true)
@@ -557,7 +572,7 @@ export function WebsiteProduct() {
     if (editSessionRef.current === retained) clearEditSession(retained)
     setNotice(result.changed
       ? `Website saved once as content revision ${result.workspace.contentRevision}. Nothing was deployed.`
-      : 'The preview already matched the saved Website. No revision was added.')
+      : 'The draft already matched the saved Website. No revision was added.')
   }
 
   function discardDraft() {
@@ -573,7 +588,7 @@ export function WebsiteProduct() {
 
   function requireSavedWorkspace(action: string) {
     if (!hasUnsavedChanges) return true
-    setNotice(`Save or discard the unsaved Website preview before ${action}.`)
+    setNotice(`Save or discard the unsaved Website draft before ${action}.`)
     return false
   }
 
@@ -689,7 +704,7 @@ export function WebsiteProduct() {
       setSelectedPageId(staged.workspace.selectedPageId)
       openWorkspaceView('content')
       setDeleteCandidateId('')
-      setNotice('New page added to the unsaved preview.')
+      setNotice('New page added to the unsaved draft.')
     }
   }
 
@@ -714,7 +729,7 @@ export function WebsiteProduct() {
       route: location.pathname + location.search,
       detail: `Website starter brief generated: ${brief.businessName}`,
     })
-    setNotice('Your three-page site is ready as an unsaved preview. Review every page, then Save or Discard.')
+    setNotice('Your three-page site is ready. Review every page, then Save or Discard.')
     return true
   }
 
@@ -741,7 +756,7 @@ export function WebsiteProduct() {
       setSelectedPageId(staged.workspace.selectedPageId)
       openWorkspaceView('content')
       setDeleteCandidateId('')
-      setNotice('Page copy added to the unsaved preview with navigation hidden.')
+      setNotice('Page copy added to the unsaved draft with navigation hidden.')
     }
   }
 
@@ -766,7 +781,7 @@ export function WebsiteProduct() {
     if (staged) {
       setSelectedPageId(staged.workspace.selectedPageId)
       setDeleteCandidateId('')
-      setNotice('Draft page removed from the unsaved preview.')
+      setNotice('Draft page removed from the website draft.')
     }
   }
 
@@ -780,7 +795,7 @@ export function WebsiteProduct() {
       pages.splice(nextIndex, 0, page)
       return { ...current, pages }
     })
-    if (staged) setNotice('Navigation order changed in the unsaved preview.')
+    if (staged) setNotice('Navigation order changed in the website draft.')
   }
 
   async function addEvidence(input: {
@@ -866,13 +881,13 @@ export function WebsiteProduct() {
           event: 'first_value_completed',
           product: 'website',
           route: location.pathname + location.search,
-          detail: 'Produced a reviewable Website preview file from saved content.',
+          detail: 'Produced a reviewable Website file from saved content.',
         })
         emitMetric({ product: 'website', capability: 'website-builder', action: 'file.downloaded', ts: Date.now() })
       } catch {
         // Optional telemetry cannot turn a requested download into a failure.
       }
-      setNotice(`${download.filename} downloaded. It is a standalone preview; no site or domain was deployed.`)
+      setNotice(`${download.filename} downloaded. It is a standalone website file; no site or domain was deployed.`)
     } catch (error) {
       setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
     }
@@ -920,7 +935,7 @@ export function WebsiteProduct() {
         : hasUnsavedChanges
           ? 'Save or discard edits'
           : localPreviewReady
-            ? 'Download your website preview'
+            ? 'Download your website'
           : failingContentChecks.length
             ? 'Fix page checks'
             : leadCounts.new
@@ -941,7 +956,7 @@ export function WebsiteProduct() {
       : starterAvailable
         ? 'Add the business details once. SuperMega will prepare the pages, wording and navigation.'
         : hasUnsavedChanges
-          ? 'Save the preview or discard it before review.'
+          ? 'Save the draft or discard it before review.'
           : localPreviewReady
             ? 'Your saved customization is ready as a standalone review file. Page checks and managed approval remain separate before go-live.'
           : failingContentChecks.length
@@ -964,7 +979,7 @@ export function WebsiteProduct() {
       : starterAvailable
         ? 'No page changes until you create the website.'
         : hasUnsavedChanges
-          ? 'Save or discard the preview.'
+          ? 'Save or discard the draft.'
           : localPreviewReady
             ? 'Downloading does not deploy a site, connect a domain, or approve a managed release.'
           : failingContentChecks.length
@@ -1285,22 +1300,6 @@ export function WebsiteProduct() {
               </span>
               {!starterSetupActive ? (
                 <div className="website-primary-actions">
-                <details className="compact-disclosure">
-                  <summary>Preview options</summary>
-                <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
-                  {previewDevices.map((option) => (
-                    <button
-                      aria-pressed={device === option.id}
-                      key={option.id}
-                      onClick={() => setDevice(option.id)}
-                      title={option.label + ' preview'}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                </details>
                 {surface === 'work' ? (
                   <details
                     className="website-site-settings"
@@ -1393,7 +1392,7 @@ export function WebsiteProduct() {
                       className="website-button is-primary"
                       disabled={editConflict || savingDraft}
                       onClick={() => void saveDraft()}
-                      title={editConflict ? 'Discard this preview and review the newer saved version' : 'Save all preview changes as one revision'}
+                      title={editConflict ? 'Discard this draft and review the newer saved version' : 'Save all draft changes as one revision'}
                       type="button"
                     >
                       {savingDraft ? 'Saving…' : 'Save'}
