@@ -28,6 +28,15 @@ check(Object.isFrozen(manifest), 'validated manifest is immutable')
 check(model.templateManifestKey(manifest) === 'city-cafe@v1', 'manifest key is stable and versioned')
 check(model.templateManifestSupports(manifest, 'commerce.storefront'), 'declared capability is available')
 check(!model.templateManifestSupports(manifest, 'plant.production'), 'undeclared capability remains unavailable')
+const nextManifest = { ...valid, id: 'clinic-services', version: 'v2', capabilities: ['website.presence', 'website.inquiries'], slots: { identity: true, content: true } }
+const registry = model.createTemplateManifestRegistry([nextManifest, valid])
+check(Object.isFrozen(registry), 'manifest registry is immutable')
+check(Object.isFrozen(registry.manifests), 'manifest registry entries are immutable')
+check(registry.manifests.map(model.templateManifestKey).join(',') === 'city-cafe@v1,clinic-services@v2', 'registry order is stable')
+check(registry.find('clinic-services', 'v2')?.id === 'clinic-services', 'registry resolves a versioned custom manifest')
+check(registry.find('city-cafe')?.version === 'v1', 'registry resolves a manifest by portable identifier')
+check(registry.find('unknown') === null && registry.find('city-cafe', 'v3') === null, 'registry leaves unknown manifests unavailable')
+rejects([valid, valid], 'duplicate manifest registry entry')
 for (const [input, label] of [
   [{ ...valid, id: 'Cafe!' }, 'noncanonical identifier'],
   [{ ...valid, version: '1' }, 'nonversioned revision'],

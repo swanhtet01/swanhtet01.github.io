@@ -21,6 +21,11 @@ export type TemplateManifest = Readonly<{
   slots: Readonly<Partial<Record<TemplateSlot, true>>>
 }>
 
+export type TemplateManifestRegistry = Readonly<{
+  manifests: readonly TemplateManifest[]
+  find: (id: string, version?: string) => TemplateManifest | null
+}>
+
 const capabilitySet = new Set<string>(templateCapabilities)
 const slotSet = new Set<TemplateSlot>(['identity', 'catalog', 'services', 'content', 'fulfilment', 'operations'])
 const plainObject = (value: unknown): value is Record<string, unknown> =>
@@ -67,4 +72,31 @@ export function templateManifestKey(manifest: TemplateManifest): string {
 
 export function templateManifestSupports(manifest: TemplateManifest, capability: TemplateCapability): boolean {
   return manifest.capabilities.includes(capability)
+}
+
+/**
+ * Builds a read-only catalog of already-validated manifest definitions. The registry is a
+ * configuration boundary only: it deliberately stores neither tenant facts nor executable
+ * extensions. Products can ask for a declared manifest and retain their generic fallback when
+ * no compatible pack is registered.
+ */
+export function createTemplateManifestRegistry(inputs: readonly unknown[]): TemplateManifestRegistry {
+  const byKey = new Map<string, TemplateManifest>()
+  for (const input of inputs) {
+    const manifest = validateTemplateManifest(input)
+    const key = templateManifestKey(manifest)
+    if (byKey.has(key)) fail(`duplicate manifest ${key}`)
+    byKey.set(key, manifest)
+  }
+  const manifests = Object.freeze([...byKey.values()].sort((left, right) =>
+    templateManifestKey(left).localeCompare(templateManifestKey(right)),
+  ))
+  return Object.freeze({
+    manifests,
+    find(id: string, version?: string) {
+      if (typeof id !== 'string' || (version !== undefined && typeof version !== 'string')) return null
+      if (version) return byKey.get(`${id}@${version}`) ?? null
+      return manifests.find((manifest) => manifest.id === id) ?? null
+    },
+  })
 }
