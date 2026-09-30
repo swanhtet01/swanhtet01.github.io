@@ -6,6 +6,10 @@
 // hosted acceptance; those require their own journey checks.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const postcss = require('../showroom/node_modules/postcss')
 
 let checks = 0
 function check(condition, label) {
@@ -46,6 +50,10 @@ check(
   'the core stylesheet contains no theme-toggle control styling',
 )
 check(!coreSource.includes('.theme-dark'), 'the core stylesheet contains no dark-theme selectors')
+const parsedCoreSelectors = new Set(postcss.parse(readFileSync('showroom/src/core/core-app.css', 'utf8')).nodes.map((node) => node.selector))
+check(parsedCoreSelectors.has('.core-shell'), 'the parsed core stylesheet retains the application shell')
+check(parsedCoreSelectors.has('.shop-counter-grid'), 'the parsed core stylesheet retains the Shop counter grid')
+check(parsedCoreSelectors.has('.shop-product-tile'), 'the parsed core stylesheet retains Shop product tile styling')
 check(!ecommerceSource.includes('.theme-dark'), 'the Commerce stylesheet contains no dark-theme selectors')
 check(!websiteSource.includes('.theme-dark'), 'the Sites stylesheet contains no dark-theme selectors')
 check(!coreSource.includes('color-scheme: dark;'), 'the core stylesheet has no dark color scheme')
