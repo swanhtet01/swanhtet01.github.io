@@ -14,7 +14,7 @@ export const RETIRED_PRODUCT_CASES = Object.freeze(RETIRED_PRODUCT_ROUTES.flatMa
   [{ width: 1280, height: 900, mobile: false }, { width: 390, height: 844, mobile: true }]
     .map(viewport => Object.freeze({
       id: `retired_plant_${index}_${viewport.mobile ? 'mobile' : 'desktop'}`,
-      route, ...viewport, expectedPath: '/?choose=1',
+      route, ...viewport, expectedPath: route.startsWith('/?demo=') ? '/' : '/?choose=1',
     }))))
 
 const fail = code => { throw new Error(`retired_product_preview_${code}`) }
