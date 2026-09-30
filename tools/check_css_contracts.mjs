@@ -75,8 +75,8 @@ const PUBLISH_CSS = 'showroom/src/products/website/publish-workspace.css'
 // or rem for a px length) instead of widening the budget.
 const CEILINGS = new Map([
   ['showroom/src/core/core-app.css', { hex: 96, px: 2114 }],
-  ['showroom/src/products/ecommerce/ecommerce-product.css', { hex: 109, px: 330 }],
-  ['showroom/src/products/website/website-product.css', { hex: 60, px: 652 }],
+  ['showroom/src/products/ecommerce/ecommerce-product.css', { hex: 109, px: 320 }],
+  ['showroom/src/products/website/website-product.css', { hex: 60, px: 642 }],
   ['showroom/src/products/website/publish-workspace.css', { hex: 1, px: 195 }],
 ])
 
