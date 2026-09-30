@@ -3581,7 +3581,7 @@ if (addToCartStart < 0
   || ['saveCurrentStorefront', 'saveManagedCommerceCommand', 'saveStorefrontDraft', 'prepareEcommerceShopDraftV2', 'navigate(', 'fetch('].some((marker) => addToCartAction.includes(marker))
   || prepareQuoteRecoveryStart < 0
   || prepareQuoteRecoveryEnd < 0
-  || !prepareQuoteRecoveryAction.includes("navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(pendingManagedRequests[0].id)}`)")
+  || !prepareQuoteRecoveryAction.includes("navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(actionablePendingManagedRequests[0].id)}`)")
   || !prepareQuoteRecoveryAction.includes('finishStorefrontSetup()')
   || !prepareQuoteRecoveryAction.includes('addToCart(customerPreviewItems[0].sku)')
   || ['saveCurrentStorefront', 'saveManagedCommerceCommand', 'saveStorefrontDraft', 'prepareEcommerceShopDraftV2', 'recordCommerceStorefrontRequest', 'fetch('].some((marker) => prepareQuoteRecoveryAction.includes(marker))

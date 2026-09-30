@@ -43,3 +43,18 @@ test('confirmed action requests controlled tracking without preparing another qu
   })
   assert.deepEqual(calls, [4])
 })
+
+test('quote recovery ignores expired-only history and starts a fresh cart', () => {
+  const start = source.indexOf('  function prepareQuoteRecovery() {')
+  const body = source.slice(start, source.indexOf('\n  // The cart and checkout', start))
+  const calls = []
+  runInNewContext(`${body}; prepareQuoteRecovery()`, {
+    actionablePendingManagedRequests: [],
+    buyingReady: true,
+    customerPreviewItems: [{ sku: 'FRESH-SKU' }],
+    addToCart: sku => calls.push(`cart:${sku}`),
+    finishStorefrontSetup: () => calls.push('setup'),
+    navigate: () => calls.push('navigate'),
+  })
+  assert.deepEqual(calls, ['cart:FRESH-SKU'])
+})

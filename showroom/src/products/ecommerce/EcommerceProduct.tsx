@@ -988,8 +988,8 @@ export function EcommerceProduct() {
   }, [catalogHydrating, previewResult.preview, digest, managedIdentity, savedDraftIsCurrent, buyingCart])
 
   function prepareQuoteRecovery() {
-    if (pendingManagedRequests[0]) {
-      navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(pendingManagedRequests[0].id)}`)
+    if (actionablePendingManagedRequests[0]) {
+      navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(actionablePendingManagedRequests[0].id)}`)
       return
     }
     if (!buyingReady || !customerPreviewItems.length) {
