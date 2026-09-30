@@ -6230,7 +6230,7 @@ if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') ret
   || !i18nActionsTable.includes("'Scan to pay':")
   || !shopCounterContract.includes('<h2>Products</h2>')
   || !shopCounterContract.includes("{bi('Current sale')}")
-  || !shopCounterContract.includes("{bi('Clear')}")
+  || !shopCounterContract.includes('type="button">Clear</button>')
   || !shopCounterContract.includes("{bi('Total')}")
   || !shopCounterContract.includes("{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? 'Review & complete sale' : bi('Review order')}")) fail('shop_counter_bilingual_wiring_missing')
 // The product tile's accessible NAME is assembled by REFERENCE -- aria-labelledby
@@ -7341,11 +7341,10 @@ if (!coreSource.includes("const commerceTab = requestedShopTemplateId && request
   || !coreSource.includes("const requestedTabIsCanonical = requestedTab === activeTab")
   || !coreSource.includes("if (view === 'commerce' && requestedShopTemplateId) canonicalParams.set('template', requestedShopTemplateId)")
   || !coreSource.includes("!requestedTabIsCanonical")) fail('product_default_tab_not_canonicalized')
-// Lockstep with the G1 counter slice: the cart's Clear control renders through
-// bi('Clear'), whose table entry is CONFIRMED, so this is one of the two places on
-// the counter where Burmese actually reaches the operator today. The control, its
-// handler and its conditional rendering are protected, including unavailable saved SKUs.
-if (!coreSource.includes('{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">{bi(\'Clear\')}</button> : null}')
+// Keep the compact cart action in English so it does not wrap beside the close
+// control on narrow screens. Its handler and conditional rendering remain protected,
+// including unavailable saved SKUs.
+if (!coreSource.includes('{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}')
   || !coreSource.includes('{unitCount ? <><div className="shop-sale-details">')
   || !coreSource.includes('disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale}')
   || !coreSource.includes('!tickets.checkpoint()')) fail('shop_counter_recovery_gate_missing')
