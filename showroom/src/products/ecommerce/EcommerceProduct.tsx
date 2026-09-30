@@ -78,6 +78,7 @@ import {
   type StorefrontDraftReadResult,
 } from './storefront-draft'
 import './ecommerce-product.css'
+import { decideEcommerceAttention } from './ecommerce-next-action'
 
 type PreviewDevice = 'phone' | 'desktop'
 type RequestInboxFilter = 'all' | 'stock' | 'expiring' | 'payment' | 'delivery'
@@ -988,7 +989,7 @@ export function EcommerceProduct() {
 
   function prepareQuoteRecovery() {
     if (pendingManagedRequests[0]) {
-      navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(pendingManagedRequests[0].id)}`)
+      navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(pendingManagedRequests[0].id)}`)
       return
     }
     if (!buyingReady || !customerPreviewItems.length) {
@@ -1099,7 +1100,7 @@ export function EcommerceProduct() {
 
   function openFilteredRequestInShop() {
     if (!requestInboxNextRequest) return
-    navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestInboxNextRequest.id)}`)
+    navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(requestInboxNextRequest.id)}`)
   }
 
   async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {
@@ -1255,6 +1256,15 @@ export function EcommerceProduct() {
     return !item || item.onHand < line.quantity
   })).length
   const orderOpsPaymentRiskCount = pendingManagedRequests.filter((request) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual').length
+  const ecommerceAttention = decideEcommerceAttention({
+    agedRequestCount: orderOpsAgingCount,
+    expiringQuoteCount: orderOpsExpiringCount,
+    paymentAttentionCount: ecommercePaymentAttentionCount,
+    paymentRiskCount: orderOpsPaymentRiskCount,
+    pendingRequestCount: pendingManagedRequests.length,
+    refundAttentionCount: ecommerceRefundAttentionCount,
+    stockRiskCount: orderOpsStockRiskCount,
+  })
   const deliveryReviewCount = pendingManagedRequests.filter((request) => request.fulfilment === 'delivery').length
   const pickupReviewCount = pendingManagedRequests.filter((request) => request.fulfilment === 'pickup').length
   const controlPaymentsVisible = buyingReady || pendingManagedRequests.length > 0
@@ -1350,6 +1360,17 @@ export function EcommerceProduct() {
     return minutes !== null && minutes <= 15
   }
   const requestNeedsPaymentReview = (request: typeof pendingManagedRequests[number]) => 'quote' in request && request.quote.payment.adapter === 'kbzpay_manual'
+  const ecommerceAttentionRequest = ecommerceAttention?.kind === 'shop-request'
+    ? pendingManagedRequests.find((request) => ecommerceAttention.filter === 'stock'
+      ? requestHasStockRisk(request)
+      : ecommerceAttention.filter === 'expiring'
+        ? requestIsExpiring(request)
+        : ecommerceAttention.filter === 'payment'
+          ? requestNeedsPaymentReview(request)
+          : ecommerceAttention.filter === 'aged'
+            ? Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000
+            : true) ?? null
+    : null
   const requestInboxFilteredRequests = pendingManagedRequests.filter((request) => (
     requestInboxFilter === 'all'
       || (requestInboxFilter === 'stock' && requestHasStockRisk(request))
@@ -1710,16 +1731,12 @@ export function EcommerceProduct() {
     ? 'Connect your products to start selling'
     : storefrontSetupRequired
       ? 'Finish the store customers will see'
-      : ecommerceRefundAttentionCount
-        ? `${ecommerceRefundAttentionCount} refund${ecommerceRefundAttentionCount === 1 ? '' : 's'} need evidence`
-        : ecommercePaymentAttentionCount
-          ? `${ecommercePaymentAttentionCount} payment${ecommercePaymentAttentionCount === 1 ? '' : 's'} need confirmation`
-          : pendingManagedRequests.length
-            ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
-            : customerRequestState === 'confirmed'
-              ? 'Your order is confirmed'
-            : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
-              ? ecommerceWaitingHeadline
+      : ecommerceAttention
+        ? ecommerceAttention.headline
+        : customerRequestState === 'confirmed'
+          ? 'Your order is confirmed'
+          : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
+            ? ecommerceWaitingHeadline
             : ecommerceActiveOrderCount && !ecommerceTodayCartUnits
               ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
               : ecommerceTodayCartUnits
@@ -1731,8 +1748,8 @@ export function EcommerceProduct() {
     ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
     : storefrontSetupRequired
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
-      : pendingManagedRequests.length
-        ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
+      : ecommerceAttention
+        ? ecommerceAttention.summary
         : customerRequestState === 'confirmed'
           ? 'Track this order, or use Reorder to review another purchase.'
         : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
@@ -1752,8 +1769,8 @@ export function EcommerceProduct() {
         ? 'Download order packet'
         : orderImportReview?.status === 'blocked'
           ? 'Fix order import'
-          : pendingManagedRequests.length
-            ? 'Review orders in Shop'
+          : ecommerceAttention
+            ? ecommerceAttention.action
             : customerRequestState === 'confirmed'
               ? 'View order'
             : customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits
@@ -1797,8 +1814,16 @@ export function EcommerceProduct() {
       downloadOrderImportReviewPacket()
       return
     }
+    if (ecommerceAttention?.kind === 'shop-request' && ecommerceAttentionRequest) {
+      navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(ecommerceAttentionRequest.id)}`)
+      return
+    }
+    if (ecommerceAttention) {
+      navigate('/shop/?tab=orders')
+      return
+    }
     if (pendingManagedRequests.length) {
-      navigate('/shop/?tab=orders&source=ecommerce')
+      navigate('/shop/?tab=orders&source=ecommerce-inbox')
       return
     }
     if (customerRequestState === 'confirmed') {
@@ -2348,9 +2373,9 @@ export function EcommerceProduct() {
               disabled={catalogHydrating}
               onCartChange={setBuyingCart}
               recoverSessionCart={recoverSessionCart}
-              onContinueInShop={(requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`)}
+              onContinueInShop={(requestId) => navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(requestId)}`)}
               onDraft={openShopDraft}
-              onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`) : undefined}
+              onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(requestId)}`) : undefined}
               onOpenCancellation={(intent: EcommerceCancellationIntent) => navigate('/shop/?tab=orders', { state: { ecommerceCancellationIntent: intent } })}
               onOpenCorrection={(intent) => navigate('/shop/?tab=orders', { state: { ecommerceCorrectionIntent: intent } })}
               onOpenAmendment={(intent: EcommerceOrderAmendmentIntent) => navigate('/shop/?tab=orders', { state: { ecommerceOrderAmendmentIntent: intent } })}
