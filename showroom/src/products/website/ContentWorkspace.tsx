@@ -98,7 +98,7 @@ export function ContentWorkspace({
           <legend>Hero</legend>
           <div className="website-form-grid">
             <label>
-              <span>Eyebrow</span>
+              <span>Short label above the headline</span>
               <input
                 maxLength={80}
                 onChange={(event) => editPage((current) => ({
@@ -134,7 +134,7 @@ export function ContentWorkspace({
             </label>
             <div className="website-form-grid two-columns">
               <label>
-                <span>CTA label</span>
+                <span>Button text</span>
                 <input
                   maxLength={40}
                   onChange={(event) => editPage((current) => ({
@@ -145,7 +145,7 @@ export function ContentWorkspace({
                 />
               </label>
               <label>
-                <span>CTA destination</span>
+                <span>Button link</span>
                 <input
                   autoCapitalize="none"
                   maxLength={160}
@@ -212,7 +212,7 @@ export function ContentWorkspace({
                 </header>
                 <div className="website-form-grid">
                   <label>
-                    <span>Eyebrow</span>
+                    <span>Short label above the heading</span>
                     <input
                       maxLength={60}
                       onChange={(event) => editPage((current) => ({
