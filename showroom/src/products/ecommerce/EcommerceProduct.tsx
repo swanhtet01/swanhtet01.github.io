@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type ChangeEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
 import { readSessionCart, readSessionCartSnapshot, saveSessionCart } from './cart-session'
@@ -1098,8 +1098,11 @@ export function EcommerceProduct() {
     setDeliveryAreaTemplateDraft(`Review draft only: save ${area} as a delivery-area template after Shop approves fee, rider assignment, ${paymentPolicy}, cut-off, and stock confirmation. Reuse stays locked until go-live setup proves audit, roles, and write controls. Reference ${deliveryReviewRequest.id}.`)
   }
 
-  function openFilteredRequestInShop() {
+  function openFilteredRequestInShop(event: ReactMouseEvent<HTMLButtonElement>) {
     if (!requestInboxNextRequest) return
+    const actionNow = Math.round(globalThis.performance.timeOrigin + event.timeStamp)
+    setOrderOpsNow(actionNow)
+    if (requestQuoteIsExpired(requestInboxNextRequest, actionNow)) return
     navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(requestInboxNextRequest.id)}`)
   }
 
@@ -1246,8 +1249,8 @@ export function EcommerceProduct() {
     ? managedReturnedUnits
     : localEcommerceOrders.reduce((total, order) => total + (order.returns ?? []).reduce((returned, record) => returned + record.quantity, 0), 0)
   const importNeeded = catalog.source === 'unavailable' || catalog.items.length === 0
-  const requestQuoteIsExpired = (request: typeof pendingManagedRequests[number]) => {
-    const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, orderOpsNow)
+  const requestQuoteIsExpired = (request: typeof pendingManagedRequests[number], now = orderOpsNow) => {
+    const minutes = minutesUntil('quote' in request ? request.quote.expiresAt : undefined, now)
     return minutes !== null && minutes <= 0
   }
   const actionablePendingManagedRequests = pendingManagedRequests.filter((request) => !requestQuoteIsExpired(request))
@@ -1271,8 +1274,8 @@ export function EcommerceProduct() {
     refundAttentionCount: ecommerceRefundAttentionCount,
     stockRiskCount: orderOpsStockRiskCount,
   })
-  const deliveryReviewCount = pendingManagedRequests.filter((request) => request.fulfilment === 'delivery').length
-  const pickupReviewCount = pendingManagedRequests.filter((request) => request.fulfilment === 'pickup').length
+  const deliveryReviewCount = actionablePendingManagedRequests.filter((request) => request.fulfilment === 'delivery').length
+  const pickupReviewCount = actionablePendingManagedRequests.filter((request) => request.fulfilment === 'pickup').length
   const controlPaymentsVisible = buyingReady || pendingManagedRequests.length > 0
   const paymentDeliveryStage = importNeeded
     ? 'Import catalog before checkout'

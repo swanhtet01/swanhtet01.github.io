@@ -64,4 +64,8 @@ test('filtered request inbox excludes expired history from Shop actions', () => 
   assert.doesNotMatch(source, /const requestInboxFilteredRequests = pendingManagedRequests\.filter/)
   assert.match(source, /expiredPendingRequestCount\s*\? 'New customer quote needed'/)
   assert.match(source, /Expired history needs a fresh customer quote\./)
+  assert.match(source, /const actionNow = Math\.round\(globalThis\.performance\.timeOrigin \+ event\.timeStamp\)/)
+  assert.match(source, /requestQuoteIsExpired\(requestInboxNextRequest, actionNow\)/)
+  assert.match(source, /const deliveryReviewCount = actionablePendingManagedRequests\.filter/)
+  assert.match(source, /const pickupReviewCount = actionablePendingManagedRequests\.filter/)
 })
