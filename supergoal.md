@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.43
+Version: 1.2.44
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-01
@@ -28,7 +28,7 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The last recorded provider inspection found one founder identity and three private workspaces. Historical hosted release checks do not accept later pending source changes. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain one fixed light technical identity and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
 
-1. Finish the pending product release through the existing authorized workflow. PR641 head `b8016df98ded08a6e6fd4b51f62fd1a6ff588abb` carries the fixed-light startup and verifier contract after the managed Login-entry, real Shop/Sites/Commerce hierarchy and public workspace visuals. Fresh exact-head App CI is pending; preceding exact heads passed. This is source acceptance work, not deployment. The remaining repository gate is an eligible independent review; do not self-approve, bypass protection or broaden authority. Reconcile the stacked PR638–641 release path and current provider state before promotion. Preserve production schema13; do not replay migrations.
+1. Finish the pending product release through the existing authorized workflow. PR641 head `0b6413ed100a29a0b45016aa688ff6e655cccf5d` carries the fixed-light source contract and parsed Shop surface guard after the managed Login-entry, real Shop/Sites/Commerce hierarchy and public workspace visuals. Exact-head App CI `36774266431` passed. This is source acceptance work, not deployment. The remaining repository gate is an eligible independent review; do not self-approve, bypass protection or broaden authority. Reconcile the stacked PR638–641 release path and current provider state before promotion. Preserve production schema13; do not replay migrations.
 2. Complete founder sign-in and authenticated save/reload/isolation across the existing three workspaces. Confirmation was incomplete at the last recorded inspection; recheck before claiming current account state. Do not create another identity or send duplicate invitations.
 3. **Next independent execution priority: background machinery.** The owner-authenticated Contabo panel exposes services, API, backups, private networking, firewall and server controls; the read-only service-inventory navigation timed out before an instance could be identified. Inspect the existing host read-only using the prepared capacity probe once a stable authenticated session is available, verify OS, free RAM/disk and workload isolation, and reconcile the existing worker package. Preserve trading services. If authenticated inspection is unavailable, improve the portable package and its dry-run acceptance; do not loop failed credentials or invent server readiness.
 4. Qualify one serial engineering worker: bounded repository task, isolated checkout, explicit command/network policy, timeout and resource limits, durable receipt, meaningful tests, human-readable diff and failure recovery. No worker receives production credentials or automatic merge/deploy authority. Acceptance requires a useful reviewed change, not merely a running process.
@@ -470,6 +470,12 @@ Only after that PASS may one scale-to-zero, local-provider engineering job and
 one catalog-mapping R&D evaluation run. No host install, model launch, paid
 provider fallback, external customer action or infrastructure spend is implied
 by this sequence.
+
+### 2026-10-01 — visual platform direction
+
+The public and in-app visual baseline is a calm white canvas, graphite hierarchy and indigo action system: dense enough to make the next business decision visible, restrained enough to keep one primary task clear. Product screens should use practical dashboard patterns—measured signals, working queues, purposeful tables and concise follow-up—instead of decorative cards, empty space or generic AI copy. The public page explains the connected work loop in one compact, non-interactive rail before showing real implemented product surfaces. It must keep one Login entry, no promotional trial/demo/preview path and no fictional customer claim.
+
+This direction is a reusable standard, not a skin picker. Each product keeps its own workflow and may use domain cues only where they improve recognition. Validate redesigned surfaces in rendered desktop and phone states, including empty, error and recovery paths, before treating visual work as accepted.
 
 ### 2026-10-01 — local workcell admission
 

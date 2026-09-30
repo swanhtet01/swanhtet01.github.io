@@ -426,8 +426,13 @@ const sharedStyle = `
   .feature-line p {margin:0;max-width:34ch;font-size:15px;line-height:1.7;color:var(--muted)}
   .platform-image img[width="940"] {max-width:940px}
   .platform-note {padding:36px 0 80px;max-width:700px;font-size:24px;line-height:1.5;letter-spacing:-.025em}
+  .platform-loop {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;max-width:920px;margin:36px 0 0;padding:0;list-style:none;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden}
+  .platform-loop li {position:relative;min-height:94px;display:grid;grid-template-columns:32px minmax(0,1fr);align-content:center;gap:12px;padding:20px 22px;color:var(--muted);font-size:15px;line-height:1.45}
+  .platform-loop li+li {border-left:1px solid var(--line)}
+  .platform-loop b {width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#f1f0fb;color:var(--blue);font-size:12px;font-variant-numeric:tabular-nums}
+  .platform-loop strong {display:block;margin-bottom:3px;color:var(--ink);font-size:15px;letter-spacing:-.015em}
   .site-header {background:#fff}
-  @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.feature-line{gap:12px 20px}}
+  @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.platform-loop{grid-template-columns:1fr;margin-top:28px}.platform-loop li{min-height:0;padding:16px 18px}.platform-loop li+li{border-top:1px solid var(--line);border-left:0}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.feature-line{gap:12px 20px}}
 
 `
 
@@ -559,7 +564,7 @@ function productStory(id, standalone = false) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Sales, stock, a working website and customer orders—one platform, built to stay in step.</p></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">Shop. Sites. Commerce. One connected operating system.</p></main>`,
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Sales, stock, a working website and customer orders—one platform, built to stay in step.</p><ol class="platform-loop" aria-label="How SuperMega products connect"><li><b>01</b><span><strong>Shop</strong>Sell at the counter.</span></li><li><b>02</b><span><strong>Sites</strong>Publish what customers need.</span></li><li><b>03</b><span><strong>Commerce</strong>Carry each request through delivery.</span></li></ol></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">Shop. Sites. Commerce. One connected operating system.</p></main>`,
 })
 
 function productLandingHtml(product,page) {

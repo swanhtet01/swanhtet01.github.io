@@ -198,6 +198,11 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(body), `no_app_detours:${route}`)
 }
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
+const platformLoop = home.match(/<ol class="platform-loop"[^>]*>([\s\S]*?)<\/ol>/)?.[1] || ''
+check((platformLoop.match(/<li>/g) || []).length === 3, 'home_platform_loop_three_steps')
+for (const token of ['Sell at the counter.', 'Publish what customers need.', 'Carry each request through delivery.']) {
+  check(platformLoop.includes(token), `home_platform_loop_outcome:${token}`)
+}
 for (const filename of ['platform-shop-dashboard-v2.jpg', 'platform-sites-workspace-v2.jpg', 'platform-commerce-workflow-v2.jpg', 'platform-stock.jpg', 'platform-pages.jpg', 'platform-catalog.jpg']) {
   const image = readFileSync(resolve(staticDir, 'images', filename))
   check(image.subarray(0, 3).equals(Buffer.from([255,216,255])), `screenshot_jpeg:${filename}`)
