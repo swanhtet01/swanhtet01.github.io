@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.38
+Version: 1.2.39
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-01
@@ -468,6 +468,23 @@ Only after that PASS may one scale-to-zero, local-provider engineering job and
 one catalog-mapping R&D evaluation run. No host install, model launch, paid
 provider fallback, external customer action or infrastructure spend is implied
 by this sequence.
+
+### 2026-10-01 — local workcell admission
+
+The local workcell has now passed its current read-only admission check: one
+serial slot, zero loaded models, 5,090,103,296 bytes available memory and no
+queued or running mission. `local-code.cmd --check` also admits the active
+SuperMega source tree using local-only `llama3.2:1b`. This supersedes the prior
+low-memory observation for local-code admission only; it is not VPS capacity,
+model-output quality or deployment evidence.
+
+Seven retained historical quality failures still require review before retry.
+They include source-limit violations, interrupted model shutdown and stale or
+unbound evidence manifests. Keep them preserved as negative evidence. Do not
+retry them automatically, convert them into agent outputs or dispatch a new
+model job until one concrete task, protected paths, expected validation and
+receipt criteria are chosen. The worker remains scale-to-zero and external
+writes remain disabled.
 
 Chronological receipts belong in `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md`. Section 3 is the single current-state table. Prior database evidence includes 18 signup-budget tests, 74 rehearsal checks and 37 HQ checks; revalidate source binding when relevant code changes.
 
