@@ -279,7 +279,7 @@ export function WebsiteProduct() {
           ? 'Your changes are not saved. Return to edit to save or discard them.'
           : selectedPage.stage === 'draft'
             ? 'This page is saved as a draft. Select Edit page to update it and mark it ready.'
-            : 'Review the selected page. Its layout follows your screen automatically.',
+            : 'Edit your pages, review inquiries and download your site.',
       }
     : view === 'publish' && storageMode === 'session-only'
       ? {
@@ -957,7 +957,7 @@ export function WebsiteProduct() {
         : hasUnsavedChanges
           ? 'Save the draft or discard it before review.'
           : localPreviewReady
-            ? 'Your saved customization is ready as a standalone review file. Page checks and managed approval remain separate before go-live.'
+            ? 'Download an HTML file of your saved site. This does not publish it.'
           : failingContentChecks.length
             ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
             : leadCounts.new
@@ -1377,11 +1377,7 @@ export function WebsiteProduct() {
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
                     Prepare file
                   </button>
-                ) : null : localPreviewReady ? (
-                  <button className="website-button is-primary" onClick={downloadWebsiteFile} type="button">
-                    Download website file
-                  </button>
-                ) : null}
+                ) : null : null}
                 </div>
               ) : null}
             </section>
@@ -1390,7 +1386,7 @@ export function WebsiteProduct() {
           {storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
             ? <WebsiteReviewInbox key={`${managedWorkspaceId}:${managedActorId}`} workspaceId={managedWorkspaceId} actorId={managedActorId} /> : null}
           {!starterSetupActive ? <details className="website-start-tools website-business-controls">
-            <summary><span><strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small></span><b>{leadCounts.new} new</b></summary>
+            <summary><span><strong>Inquiries</strong><small>Customer requests and follow-up</small></span><b>{leadCounts.new} new</b></summary>
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
