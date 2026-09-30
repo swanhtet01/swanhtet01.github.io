@@ -7,7 +7,7 @@ import { RETIRED_PRODUCT_PREVIEW_POLICY as policy, RETIRED_PRODUCT_CASES as case
 
 function fixture(spec = cases[0]) {
   const retainedBefore = Object.fromEntries(keys.map(key => [key, `synthetic-preserved:${key}`]))
-  const state = { origin: 'https://isolated.example', path: '/?choose=1', hash: '',
+  const state = { origin: 'https://isolated.example', path: spec.expectedPath, hash: '',
     viewportWidth: spec.width, viewportHeight: spec.height,
     launcherLinks: [],
     retiredToolVisible: false, retiredActionVisible: false, retained: { ...retainedBefore } }
@@ -51,7 +51,14 @@ test('exact generated observation script detects rendered retired headings and a
 test('all seven retired entry routes have distinct desktop/mobile cases', () => {
   assert.equal(cases.length, 14)
   assert.equal(new Set(cases.map(item => item.id)).size, 14)
-  for (const spec of cases) assert.equal(validate(fixture(spec)).retainedDataUnchanged, true)
+  for (const spec of cases) {
+    const result = validate(fixture(spec))
+    assert.equal(result.retainedDataUnchanged, true)
+    assert.equal(result.target, spec.target)
+    assert.equal(result.targetVerified, true)
+  }
+  assert.deepEqual(new Set(cases.filter(item => item.route.startsWith('/?demo=')).map(item => item.target)), new Set(['account-home']))
+  assert.deepEqual(new Set(cases.filter(item => !item.route.startsWith('/?demo=')).map(item => item.target)), new Set(['product-chooser']))
 })
 test('old policy and unknown cases cannot be relabelled', () => {
   assert.throws(() => validate({ ...fixture(), policy: 'old-plant-rendered' }), /policy_mismatch/)

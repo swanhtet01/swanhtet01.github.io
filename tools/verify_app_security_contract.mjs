@@ -885,7 +885,7 @@ requireContract('managed storage privacy proof is bounded, read-only, owner-conf
 requireContract('Vision product preview is gated out of normal production routing',
   /const visionPreviewEnabled = import\.meta\.env\.DEV \|\| import\.meta\.env\.VITE_SUPERMEGA_VISION_PREVIEW === '1'/.test(appRouter)
   && /visionPreviewEnabled && VisionProduct \? <Route[\s\S]*path="vision\/\*"/.test(appRouter)
-  && /visionPreviewEnabled && \(demo === 'vision'/.test(appRouter)
+  && !/productDemoPath|params\.get\('demo'\)/.test(appRouter)
   && /location\.pathname\.startsWith\('\/vision\/'\)[\s\S]{0,80}\? 'Vision'/.test(coreShell)
   && /if \(location\.pathname\.startsWith\('\/vision\/'\)\) return/.test(coreShell))
 requireContract('Vision preview is bound to the source-authenticated privacy-reduced proof',

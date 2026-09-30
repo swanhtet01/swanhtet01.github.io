@@ -621,9 +621,9 @@ function normalizeBrowserCase(value, spec, expectedOrigin, publicOrigin) {
   let retirement = null
   if (spec.surface === 'retired_plant') {
     const proof = value.rendered?.retirement
-    exactKeys(proof, ['policy', 'caseId', 'redirectVerified', 'activeChooserVerified', 'retiredUiAbsent', 'retainedDataUnchanged'], `exact_app_preview_retirement_invalid:${spec.id}`)
+    exactKeys(proof, ['policy', 'caseId', 'redirectVerified', 'target', 'targetVerified', 'retiredUiAbsent', 'retainedDataUnchanged'], `exact_app_preview_retirement_invalid:${spec.id}`)
     if (proof.policy !== RETIRED_PRODUCT_PREVIEW_POLICY || proof.caseId !== spec.id
-      || proof.redirectVerified !== true || proof.activeChooserVerified !== true
+      || proof.redirectVerified !== true || proof.target !== spec.target || proof.targetVerified !== true
       || proof.retiredUiAbsent !== true || proof.retainedDataUnchanged !== true) fail(`exact_app_preview_retirement_invalid:${spec.id}`)
     retirement = { ...proof }
   } else if (value.rendered?.retirement != null) fail(`exact_app_preview_retirement_unexpected:${spec.id}`)

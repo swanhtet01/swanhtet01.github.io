@@ -582,15 +582,16 @@ const customerProducts = [
   ['Ecommerce', 'A product catalog and customer requests.', 'Ecommerce', '/ecommerce/'],
 ] as const
 
-export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
+export function ProductHomeEntry() {
   const location = useLocation()
   const portalAccess = useContext(ManagedPortalAccessContext)
   const params = new URLSearchParams(location.search)
-  const route = productDemoPath(params.get('demo'))
+  const retiredDemoQuery = params.has('demo')
   const choosingProduct = params.get('choose') === '1'
-  const lastProduct = !route && !choosingProduct && typeof window !== 'undefined'
+  const lastProduct = !choosingProduct && typeof window !== 'undefined'
     ? readLastProduct()
     : null
+  if (retiredDemoQuery) return <Navigate replace to="/" />
   if (portalAccess.status === 'checking') {
     return <PortalAccessPanel copy="Checking products." title="Opening…" />
   }
@@ -599,10 +600,9 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
     return <PortalAccessPanel action={<Link className="button" to={managedLoginPath(lastProduct)}>Sign in again</Link>} copy={portalAccess.message} title="Access issue" />
   }
   if (portalAccess.status === 'ready') {
-    const requestedRouteProduct = route ? productFromPathname(route) : null
     const decision = resolveManagedProductHome({
-      requestedProduct: requestedRouteProduct,
-      requestedPath: route,
+      requestedProduct: null,
+      requestedPath: null,
       rememberedProduct: lastProduct,
       choosingProduct,
       assignedProducts: portalAccess.products,
@@ -611,7 +611,7 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
       ? <ProductHomePage />
       : <Navigate replace to={decision.path} />
   }
-  return route ? <Navigate replace to={route} /> : <ProductHomePage />
+  return <ProductHomePage />
 }
 
 export function ProductHomePage() {
