@@ -1940,7 +1940,7 @@ export function EcommerceProduct() {
           <h1>Commerce</h1>
           <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Browse your catalog and take order requests. Requests stay on this device until Shop review.'}</p>
         </div>
-        {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Request catalog setup</a> : null}
+        {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Get catalog help</a> : null}
       </header>
 
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>

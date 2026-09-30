@@ -62,7 +62,7 @@ const FULL_CASE_MATRIX = Object.freeze([
   { name: 'mobile Website opens real business setup', route: '/website/?workspace=1', viewport: '390x844 mobile', width: 390, height: 844, path: '/website/?workspace=1', screenshot: 'website-business-setup-mobile-390x844.png' },
   { name: 'retired Commerce demo query returns to account home', route: '/?demo=ecommerce', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
-    name: `empty Ecommerce offers real catalog setup at ${size.width}px`,
+    name: `empty Ecommerce offers catalog help at ${size.width}px`,
     route: '/ecommerce/?workspace=1',
     viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
     width: size.width, height: size.height,

@@ -295,7 +295,7 @@ function fullCaseMatrixFixture() {
       screenshot: null,
     },
     ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
-      name: `empty Ecommerce offers real catalog setup at ${size.width}px`,
+      name: `empty Ecommerce offers catalog help at ${size.width}px`,
       route: '/ecommerce/?workspace=1',
       viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
       path: '/ecommerce/?workspace=1',

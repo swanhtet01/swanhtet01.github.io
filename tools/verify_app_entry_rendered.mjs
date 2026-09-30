@@ -1108,7 +1108,7 @@ const tests = [
     seed: {},
   },
   ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(viewport => ({
-    name: `empty Ecommerce offers real catalog setup at ${viewport.width}px`,
+    name: `empty Ecommerce offers catalog help at ${viewport.width}px`,
     route: '/ecommerce/?workspace=1',
     ...viewport,
     expectedPath: '/ecommerce/?workspace=1',
