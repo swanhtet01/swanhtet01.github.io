@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { currentManagedIdentity, loadManagedEcommerceReview, loadManagedEcommerceDecisions, sendManagedEcommerceDecision, sameManagedIdentity, type ManagedIdentity, type EcommerceReviewDecision } from '../../core/managed-trial'
 import { customerEcommerceReviewLoginPath } from '../../core/account-routes'
@@ -30,8 +30,8 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
   const [command, setCommand] = useState(() => ({ identity: null as ManagedIdentity | null,
     pending: null as { payload: EcommerceReviewDecision; identity: ManagedIdentity } | null }))
 
-  async function readDecisions(identity: ManagedIdentity, currentReview: PreparedCatalogReview,
-    epoch: number, pending?: EcommerceReviewDecision | null) {
+  const readDecisions = useCallback(async (identity: ManagedIdentity, currentReview: PreparedCatalogReview,
+    epoch: number, pending?: EcommerceReviewDecision | null) => {
     let after: string | undefined
     for (let pageNumber = 0; pageNumber < 20; pageNumber++) {
       if (!await access.commit(epoch, identity, currentReview.expiresAt, () => {})) throw Error()
@@ -40,7 +40,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
       after = page.nextAfter
     }
     throw Error()
-  }
+  }, [access, reviewId])
 
   async function submit(kind: 'acceptance' | 'feedback') {
     if (busy.current || !review || !decisions || (decisions.decisions.length && !command.pending) || !command.identity) return
@@ -122,7 +122,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     window.addEventListener('storage', refresh)
     window.addEventListener('focus', refresh)
     return () => { active = false; access.invalidate(); window.removeEventListener('storage', refresh); window.removeEventListener('focus', refresh) }
-  }, [reviewId, attempt, access])
+  }, [reviewId, attempt, access, readDecisions])
 
   useEffect(() => {
     if (!review) return

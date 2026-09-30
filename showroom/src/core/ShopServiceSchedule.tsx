@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
 import {
@@ -90,13 +90,15 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', allowLocal 
 }) {
   const [initial] = useState<{ schedule: ShopServiceSchedule | null; error: string }>({ schedule: null, error: '' })
   const [schedule, setScheduleState] = useState<ShopServiceSchedule | null>(initial.schedule)
+  const onScheduleChangeRef = useRef(onScheduleChange)
+  useEffect(() => { onScheduleChangeRef.current = onScheduleChange }, [onScheduleChange])
   // Every path that changes the book goes through here, so an observer -- today, the close
   // screen's "completed but not rung up" list -- cannot miss a completion. Notifying is
   // strictly read-only: observers receive the book, they do not get to change it.
-  function setSchedule(next: ShopServiceSchedule | null) {
+  const setSchedule = useCallback((next: ShopServiceSchedule | null) => {
     setScheduleState(next)
-    onScheduleChange?.(next)
-  }
+    onScheduleChangeRef.current?.(next)
+  }, [])
   const [notice, setNotice] = useState(initial.error)
   const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)
   const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', appointmentUpdates: 'declined' as 'allowed' | 'declined', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', roomId: '', startsAt: nextLocalStart(), note: '' })
@@ -128,6 +130,8 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', allowLocal 
   const vocabulary = shopScheduleVocabulary(schedule?.industryPackId ?? '')
   const disabled = externallyDisabled || managedLoading || managedSaving
   const capitalizedSingular = `${vocabulary.singular.charAt(0).toUpperCase()}${vocabulary.singular.slice(1)}`
+  const expectedWorkspaceId = expectedIdentity?.workspaceId ?? ''
+  const expectedUserId = expectedIdentity?.userId ?? ''
 
   useEffect(() => {
     if (!initiallyOpen) return
@@ -140,7 +144,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', allowLocal 
     void currentManagedIdentity().then(async (identity) => {
       if (!active) return
       if (!identity) {
-        if (!allowLocal || expectedIdentity) {
+        if (!allowLocal || expectedWorkspaceId) {
           setSchedule(null)
           setNotice('Account changed. Reload to open the current company schedule.')
           return
@@ -154,7 +158,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', allowLocal 
         setNotice(local.error)
         return
       }
-      if (!expectedIdentity || identity.workspaceId !== expectedIdentity.workspaceId || identity.userId !== expectedIdentity.userId) {
+      if (!expectedWorkspaceId || identity.workspaceId !== expectedWorkspaceId || identity.userId !== expectedUserId) {
         setSchedule(null)
         setNotice('Account changed. Reload to open the current company schedule.')
         return
@@ -189,7 +193,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', allowLocal 
       if (active) setManagedLoading(false)
     })
     return () => { active = false; managedIdentityRef.current = null }
-  }, [])
+  }, [allowLocal, expectedWorkspaceId, expectedUserId, setSchedule])
 
   // Company schedules remain server-owned; never copy them into the local appointment book.
   async function isCurrentScheduleIdentity(identity: ManagedIdentity) {
