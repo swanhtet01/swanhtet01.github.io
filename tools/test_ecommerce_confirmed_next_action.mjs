@@ -58,3 +58,10 @@ test('quote recovery ignores expired-only history and starts a fresh cart', () =
   })
   assert.deepEqual(calls, ['cart:FRESH-SKU'])
 })
+
+test('filtered request inbox excludes expired history from Shop actions', () => {
+  assert.match(source, /const requestInboxFilteredRequests = actionablePendingManagedRequests\.filter/)
+  assert.doesNotMatch(source, /const requestInboxFilteredRequests = pendingManagedRequests\.filter/)
+  assert.match(source, /expiredPendingRequestCount\s*\? 'New customer quote needed'/)
+  assert.match(source, /Expired history needs a fresh customer quote\./)
+})

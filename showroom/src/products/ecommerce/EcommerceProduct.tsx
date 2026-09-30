@@ -1389,7 +1389,7 @@ export function EcommerceProduct() {
       createdAt: right.createdAt,
       expiresAt: 'quote' in right ? right.quote.expiresAt : undefined,
     }))[0] ?? null
-  const requestInboxFilteredRequests = pendingManagedRequests.filter((request) => (
+  const requestInboxFilteredRequests = actionablePendingManagedRequests.filter((request) => (
     requestInboxFilter === 'all'
       || (requestInboxFilter === 'stock' && requestHasStockRisk(request))
       || (requestInboxFilter === 'expiring' && requestIsExpiring(request))
@@ -1403,13 +1403,15 @@ export function EcommerceProduct() {
       ? 'Save store before order review'
       : requestInboxFilteredRequests.length
         ? 'Open filtered Shop review'
-        : pendingManagedRequests.length
+        : actionablePendingManagedRequests.length
           ? 'Switch filter to find requests'
+          : expiredPendingRequestCount
+            ? 'New customer quote needed'
           : buyingReady
             ? 'Inbox ready for requests'
             : 'Request inbox locked'
   const requestInboxRows = [
-    ['All', `${pendingManagedRequests.length}`],
+    ['All', `${actionablePendingManagedRequests.length}`],
     ['Stock', `${orderOpsStockRiskCount}`],
     ['Expiring', `${orderOpsExpiringCount}`],
     ['Payment', `${orderOpsPaymentRiskCount}`],
@@ -1424,8 +1426,10 @@ export function EcommerceProduct() {
   ] as const
   const requestInboxNextSummary = requestInboxNextRequest
     ? `${requestInboxNextRequest.customerReference} · ${commerceStorefrontRequestLines(requestInboxNextRequest).length} line${commerceStorefrontRequestLines(requestInboxNextRequest).length === 1 ? '' : 's'} · ${formatMmk(requestInboxNextRequest.totalMmk)}`
-    : pendingManagedRequests.length
-      ? 'No request matches this filter.'
+    : actionablePendingManagedRequests.length
+      ? 'No actionable request matches this filter.'
+      : expiredPendingRequestCount
+        ? 'Expired history needs a fresh customer quote.'
       : 'No customer request is waiting.'
   const quoteRecoveryStage = importNeeded
     ? 'Import catalog before recovery'
@@ -1435,8 +1439,10 @@ export function EcommerceProduct() {
         ? 'Prepare quote refresh'
         : orderOpsAgingCount
           ? 'Recover aged request'
-          : pendingManagedRequests.length
+          : actionablePendingManagedRequests.length
             ? 'Open Shop recovery'
+            : expiredPendingRequestCount
+              ? 'Start a fresh customer order'
             : buyingCart.length
               ? 'Review recovery quote'
               : 'Prepare recovery cart'
