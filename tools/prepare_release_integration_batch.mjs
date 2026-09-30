@@ -339,7 +339,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-four-product-build-depth', authority: 'candidate', file: 'tools/verify_app_build.mjs', tokens: [
-      '<details className="shop-today-workspaces">', 'Services and resources', 'Ecommerce today status', 'Order lifecycle queue',
+      '<details className="shop-today-workspaces">', 'Services and resources', 'Commerce status', 'Order lifecycle queue',
       'Review one quote. Shop confirms the order, stock, delivery, and payment.',
     ],
   },
