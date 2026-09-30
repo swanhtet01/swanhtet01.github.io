@@ -83,3 +83,26 @@ test('invalid model output cannot earn a correct-rejection score', async () => {
   assert.equal(valid.adoptionApproved, false)
   await assert.rejects(evaluateCatalogMappings({ cases: [{ ...scenario, expectedRejection: undefined }] }, [{ id: scenario.id, proposal: null }]), /expected_rejection_required/)
 })
+
+
+test('reference proposals satisfy every fixed corpus expectation', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { evaluateCatalogMappings } = await import('./evaluate_catalog_mapping.mjs')
+  const corpus = JSON.parse(await readFile(new URL('./catalog_mapping_corpus.json', import.meta.url), 'utf8'))
+  const responses = []
+  for (const scenario of corpus.cases) {
+    const baseline = await createShopCatalogImportPreview(scenario.csv, [])
+    const mapping = { ...baseline.mapping }
+    // Deliberately choose a competing source for this negative fixture. The
+    // guard must still insist on human choice, not trust the proposed mapping.
+    if (scenario.ambiguous) mapping[scenario.ambiguous] = 'stock'
+    responses.push({ id: scenario.id, proposal: { sourceDigest: baseline.sourceDigest, mapping } })
+  }
+  const result = await evaluateCatalogMappings(corpus, responses)
+  assert.equal(result.technicalPass, true, JSON.stringify(result.results))
+  assert.equal(result.results.length, corpus.cases.length)
+  assert.equal(result.modelCalled, false)
+  assert.equal(result.adoptionApproved, false)
+  const malformed = await evaluateCatalogMappings(corpus, responses.map(row => ({ ...row, proposal: null })))
+  assert.equal(malformed.results.filter(row => row.expectationMet).length, 0)
+})
