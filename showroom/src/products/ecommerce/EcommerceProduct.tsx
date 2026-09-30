@@ -987,8 +987,8 @@ export function EcommerceProduct() {
     })
   }, [catalogHydrating, previewResult.preview, digest, managedIdentity, savedDraftIsCurrent, buyingCart])
 
-  function prepareQuoteRecovery(event?: ReactMouseEvent<HTMLButtonElement>) {
-    const actionNow = event ? Math.round(globalThis.performance.timeOrigin + event.timeStamp) : Date.now()
+  function prepareQuoteRecovery(event: ReactMouseEvent<HTMLButtonElement>) {
+    const actionNow = Math.round(globalThis.performance.timeOrigin + event.timeStamp)
     setOrderOpsNow(actionNow)
     const recoveryRequest = actionablePendingManagedRequests[0]
     if (recoveryRequest && !requestQuoteIsExpired(recoveryRequest, actionNow)) {
@@ -1014,11 +1014,11 @@ export function EcommerceProduct() {
     return true
   }
 
-  function focusCurrentRequestReceipt() {
+  function focusCurrentRequestReceipt(event: ReactMouseEvent<HTMLButtonElement>) {
     const receipt = document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="true"]')
       ?? document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="false"]')
     if (!receipt) {
-      prepareQuoteRecovery()
+      prepareQuoteRecovery(event)
       return
     }
     const workspace = document.getElementById('ecommerce-buying-workspace')
@@ -1868,7 +1868,7 @@ export function EcommerceProduct() {
       return
     }
     if (customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits) {
-      focusCurrentRequestReceipt()
+      focusCurrentRequestReceipt(event)
       return
     }
     if (ecommerceActiveOrderCount && !ecommerceTodayCartUnits) {
@@ -1881,7 +1881,7 @@ export function EcommerceProduct() {
     // it is what put the cart in this state) nothing changed at all, so the primary action
     // did nothing in exactly the situation it advertises. Open the checkout instead.
     if (ecommerceTodayCartUnits && openBuyingWorkspace()) return
-    prepareQuoteRecovery()
+    prepareQuoteRecovery(event)
   }
 
   useEffect(() => {

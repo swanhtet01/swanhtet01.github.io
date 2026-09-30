@@ -45,16 +45,16 @@ test('confirmed action requests controlled tracking without preparing another qu
 })
 
 test('quote recovery ignores expired-only history and starts a fresh cart', () => {
-  const start = source.indexOf('  function prepareQuoteRecovery(event?: ReactMouseEvent<HTMLButtonElement>) {')
+  const start = source.indexOf('  function prepareQuoteRecovery(event: ReactMouseEvent<HTMLButtonElement>) {')
   const body = source.slice(start, source.indexOf('\n  // The cart and checkout', start))
   const calls = []
-  runInNewContext(`${body.replace('event?: ReactMouseEvent<HTMLButtonElement>', 'event')}; prepareQuoteRecovery()`, {
+  runInNewContext(`${body.replace('event: ReactMouseEvent<HTMLButtonElement>', 'event')}; prepareQuoteRecovery({ timeStamp: 7 })`, {
     actionablePendingManagedRequests: [],
     buyingReady: true,
     customerPreviewItems: [{ sku: 'FRESH-SKU' }],
     addToCart: sku => calls.push(`cart:${sku}`),
-    Date,
     finishStorefrontSetup: () => calls.push('setup'),
+    globalThis: { performance: { timeOrigin: 100 } },
     navigate: () => calls.push('navigate'),
     setOrderOpsNow() {},
   })
