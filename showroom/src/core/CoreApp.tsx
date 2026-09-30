@@ -559,6 +559,14 @@ function ecommerceReschedulePromiseAllowed(draft: EcommerceShopDraftV2, intent: 
     && requested >= reviewed + draft.pricing.shipping.promiseMinutes * 60_000
 }
 
+export function shopInboxRequestWindow<T extends { id: string }>(requests: readonly T[], requestedId: string | null, limit = 20) {
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('Shop inbox window limit must be a positive safe integer.')
+  const visible = requests.slice(0, limit)
+  if (!requestedId || visible.some((request) => request.id === requestedId)) return visible
+  const target = requests.find((request) => request.id === requestedId)
+  return target ? [target, ...visible.slice(0, limit - 1)] : visible
+}
+
 function productCanonicalPath(product: ProductId) {
   return product === 'commerce' ? '/shop/' : '/plant/'
 }
@@ -2045,6 +2053,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     requestedRequestId
     && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
   )
+  const visiblePendingStorefrontRequests = shopInboxRequestWindow(pendingStorefrontRequests, requestedRequestId)
   const purchaseOrderRows = commercePurchaseOrders(commerce)
     .map((purchaseOrder) => ({
       purchaseOrder,
@@ -6892,7 +6901,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
         <section className="website-intake">
           <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
-          {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => {
+          {managedIdentity && pendingStorefrontRequests.length ? visiblePendingStorefrontRequests.map((request) => {
             const lines = commerceStorefrontRequestLines(request)
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             return <div className="website-intake-ready" key={request.id}>
