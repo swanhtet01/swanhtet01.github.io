@@ -105,8 +105,8 @@
 
 .ecommerce-today {
   display: grid;
-  grid-template-columns: minmax(260px, .8fr) minmax(0, 1.35fr);
-  gap: 14px;
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.15fr);
+  gap: 12px 18px;
   margin: 0 0 12px;
   border: 1px solid rgba(37,48,74, .14);
   border-radius: 14px;
@@ -117,27 +117,6 @@
 
 .ecommerce-today[data-state="attention"] { border-color: rgba(183, 105, 27, .28); }
 .ecommerce-today[data-state="setup"] { border-color: rgba(54, 106, 184, .25); }
-
-.ecommerce-today[data-density="compact"] {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 9px;
-  padding: 12px 14px;
-}
-
-.ecommerce-today[data-density="compact"] .ecommerce-today-priority {
-  grid-template-areas:
-    "eyebrow action"
-    "headline action"
-    "summary action";
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 18px;
-}
-
-.ecommerce-today[data-density="compact"] .ecommerce-today-priority > .core-eyebrow { grid-area: eyebrow; }
-.ecommerce-today[data-density="compact"] .ecommerce-today-priority > h2 { grid-area: headline; font-size: clamp(1.25rem, 2vw, 1.6875rem); }
-.ecommerce-today[data-density="compact"] .ecommerce-today-priority > p { grid-area: summary; margin-bottom: 0; }
-.ecommerce-today[data-density="compact"] .ecommerce-today-priority > .core-button { grid-area: action; min-width: 132px; }
 
 .ecommerce-today-priority > .ecommerce-service-actions {
   grid-area: action;
@@ -180,6 +159,7 @@
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-self: stretch;
   overflow: hidden;
   border: 1px solid rgba(37,48,74, .12);
   border-radius: 11px;
@@ -198,8 +178,7 @@
 
 .ecommerce-today-metrics span:last-child { border-right: 0; }
 
-.ecommerce-today-metrics small,
-.ecommerce-today-source small {
+.ecommerce-today-metrics small {
   /* Also deliberately a literal, for the same reason as the heading above: this sits on the
      same hardcoded light gradient. Measured on that card, #6b786f is 4.62:1 and passes;
      var(--core-quiet) resolves to #7a8a9c in dark and drops to 3.53:1. An earlier reading of
@@ -219,24 +198,14 @@
   white-space: nowrap;
 }
 
-.ecommerce-today-source {
+.ecommerce-today-context {
   grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 8px 16px;
+  margin: 0;
   border-top: 1px solid rgba(37,48,74, .1);
   padding-top: 10px;
-}
-
-.ecommerce-today-source span {
   color: #345444;
   font-size: 0.6875rem;
-  font-weight: var(--font-weight-bold);
-}
-
-.ecommerce-today-source small {
-  margin-left: auto;
-  text-align: right;
+  font-weight: var(--font-weight-semibold);
 }
 
 .ecommerce-business-controls {
@@ -1602,44 +1571,11 @@
     padding: 13px;
   }
 
-  .ecommerce-today[data-density="compact"] {
-    gap: 8px;
-    padding: 12px;
-  }
-
-  .ecommerce-today[data-density="compact"] .ecommerce-today-priority {
-    grid-template-areas:
-      "eyebrow"
-      "headline"
-      "summary"
-      "action";
-    grid-template-columns: minmax(0, 1fr);
-    gap: 5px;
-  }
-
-  .ecommerce-today[data-density="compact"] .ecommerce-today-source {
-    padding-top: 8px;
-  }
-
-  .ecommerce-today[data-density="compact"] .ecommerce-today-source small {
-    display: none;
-  }
-
   .ecommerce-today-priority .core-button { width: 100%; }
 
   .ecommerce-today-metrics span {
     min-height: 58px;
     padding: 8px;
-  }
-
-  .ecommerce-today-source {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .ecommerce-today-source small {
-    margin-left: 0;
-    text-align: left;
   }
 
   .ecommerce-ai-desk {

@@ -3099,7 +3099,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     </section>
   })() : null
 
-  const commerceWriteBanner = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
+  const localEvictionWarningReplacesWriteBanner = !managedIdentity
+    && commerceCanWrite
+    && !commerceStorageError
+    && commerceSync.status === 'ready'
+    && storageDurability.state === 'denied'
+    && !storageDurability.quotaExceeded
+  const commerceWriteBanner = localEvictionWarningReplacesWriteBanner ? null : <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Company records' : 'Private device'}</span>
     <p>{commerceStorageError
       ? `Writes paused: ${commerceStorageError}${managedIdentity && workspaceMode === 'managed-ready' ? ' Reload Shop and check Orders before recording the sale again; it may already be saved.' : ''}`
@@ -3134,7 +3140,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <span className="status-pill pending">{storageDurability.quotaExceeded ? 'Storage full' : 'Records at risk'}</span>
       <p>{storageDurability.quotaExceeded
         ? 'This device has run out of storage space. New Shop entries may not be saved until space is freed up on the device.'
-        : 'This browser would not promise to keep Shop records on this device. If the device runs low on space, records saved here can be cleared without warning.'}</p>
+        : 'This browser may clear local Shop records when storage is low.'}</p>
       {storageDurability.quotaExceeded
         ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
         : <Link to="/settings/#workspace-recovery">Back up records</Link>}

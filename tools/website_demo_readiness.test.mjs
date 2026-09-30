@@ -77,19 +77,23 @@ test('the Sites action remains available without a preview-only entry gate', () 
   assert.match(websiteProductSource, /\{showWebsiteEditorAction \? <button[\s\S]*?\{websiteSurfaceActionLabel\}\s*<\/button> : null\}/)
 })
 
-test('Website keeps readiness visible while detailed checks collapse before the preview', () => {
-  assert.match(websiteProductSource, /<details className="website-today-checks">\s*<summary>Site checks · \{websiteTodayMetrics\[1\]\[1\]\}<\/summary>/)
-  const checks = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))
+test('Website keeps the next action and readiness visible while detailed checks collapse', () => {
+  assert.match(websiteProductSource, /<span className="core-eyebrow">Next action<\/span>/)
+  assert.match(websiteProductSource, /<div className="website-today-signals">[\s\S]*?<details className="website-today-checks">\s*<summary>Review site checks · \{websiteTodayMetrics\[1\]\[1\]\}<\/summary>/)
+  const checks = websiteProductSource.slice(websiteProductSource.indexOf('<div className="website-today-signals">'), websiteProductSource.indexOf('</section> : null}', websiteProductSource.indexOf('<div className="website-today-signals">')))
   assert.match(checks, /aria-label="Website today status"/)
   assert.match(checks, /websiteTodayMetrics\.map/)
   assert.match(checks, /<\/details>/)
-  assert.match(websiteProductSource, /!compactWebsiteStatus \? <div className="website-today-source" role="status">[\s\S]*?<small>\{websiteReviewNote\}<\/small>/)
+  assert.match(websiteProductSource, /<small className="website-today-context">\{websiteTodayContext\}<\/small>/)
+  assert.doesNotMatch(websiteProductSource, /compactWebsiteStatus|websiteReviewNote|website-today-source/)
   assert.match(websiteProductCss, /\.website-today-checks > summary \{\s*min-height: 2\.75rem;/)
   assert.match(websiteProductCss, /\.website-today-checks > summary:focus-visible \{ outline: \.125rem solid var\(--website-green\);/)
 })
 
 test('expanded checks explain failures without inviting assisted customers to publish or edit', () => {
-  const panel = websiteProductSource.slice(websiteProductSource.indexOf('<details className="website-today-checks">'), websiteProductSource.indexOf('<div className="website-today-source"'))
+  const start = websiteProductSource.indexOf('<details className="website-today-checks">')
+  const end = websiteProductSource.indexOf('</details>', start)
+  const panel = websiteProductSource.slice(start, end + '</details>'.length)
   assert.match(panel, /hasUnsavedChanges \? \([\s\S]*Save or discard your draft[\s\S]*\) : failingContentChecks.length > 0 \? /)
   assert.match(panel, /failingContentChecks\.map\(\(check\) => <li key=\{check.id\}><strong>\{check.label\}<\/strong><p>\{check.detail\}<\/p><\/li>\)/)
   assert.doesNotMatch(panel, /Need help with these checks|Request Website setup/)
@@ -143,7 +147,8 @@ test('all Website status values wrap in container-fitting cells and keep the mob
     'the guarded status must remain the current source-owned FILE truth',
   )
 
-  assert.match(websiteProductCss, /\.website-today-metrics \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 8rem\), 1fr\)\);/, 'tablet panels must fit cells to their own width, not force five columns')
+  assert.match(websiteProductCss, /\.website-today-metrics \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/, 'status signals must use a stable two-column command surface')
+  assert.match(websiteProductCss, /\.website-today-metrics span:last-child \{ grid-column: 1 \/ -1; \}/, 'the fifth signal must span the final row')
   const valueRules = [...websiteProductCss.matchAll(/\.website-today-metrics[^{}]*strong\s*\{([^}]*)\}/g)].map((match) => match[1]).join('\n')
   assert.match(valueRules, /white-space: normal;/, 'every status can wrap, not only FILE')
   assert.match(valueRules, /overflow-wrap: anywhere;/, 'long status tokens cannot force overflow')
@@ -695,15 +700,9 @@ test('applyWebsiteWorkspaceUpdate and importWebsitePageDrafts behave correctly',
 })
 
 
-test('compact content status preserves storage and draft recovery priority', () => {
-  const expression = websiteProductSource.match(/const compactWebsiteStatus = ([^\r\n]+)/)?.[1]
-  assert.ok(expression)
-  for (const view of ['content', 'publish']) {
-    for (const blocker of ['none', 'storage', 'repair', 'draft']) {
-      const context = { view, showAssistedWebsitePreview: false, storageIssue: blocker === 'storage', canRepairLocalStorage: blocker === 'repair', pendingRestoredDraft: blocker === 'draft' }
-      assert.equal(runInNewContext(expression, context), view === 'content' && blocker === 'none')
-    }
-  }
+test('Website never hides its next action behind a healthy-state compact mode', () => {
+  assert.doesNotMatch(websiteProductSource, /compactWebsiteStatus|data-preview=/)
+  assert.match(websiteProductSource, /<div className="website-today-priority">[\s\S]*?\{websiteAgentJob\}[\s\S]*?onClick=\{runWebsiteAutopilot\}/)
 })
 
 
