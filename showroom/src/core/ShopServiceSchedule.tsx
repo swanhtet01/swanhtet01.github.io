@@ -189,7 +189,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', allowLocal 
       if (active) setManagedLoading(false)
     })
     return () => { active = false; managedIdentityRef.current = null }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- CoreApp keys each immutable identity scope, so this boundary must load exactly once.
 
   // Company schedules remain server-owned; never copy them into the local appointment book.
   async function isCurrentScheduleIdentity(identity: ManagedIdentity) {

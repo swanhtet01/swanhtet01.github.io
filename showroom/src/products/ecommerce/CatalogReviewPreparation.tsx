@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { currentManagedIdentity, sameManagedIdentity, loadManagedEcommerceReviews, loadManagedEcommerceOperatorDecisions, loadManagedEcommercePreparation, loadManagedEcommerceRecipients, prepareManagedEcommerceReview, withdrawManagedEcommerceReview, reconcileManagedEcommerceReview, resolveExpiredManagedEcommerceReview, type ManagedIdentity } from '../../core/managed-trial'
 import { verifyCatalogReviewDirectory, type CatalogSavedReview, verifyCatalogOperatorDecisions, verifyCatalogPreparation, verifyCatalogRecipients, verifyCatalogPreparationReceipt, verifyCatalogWithdrawal, verifyCatalogReconciliation, verifyCatalogExpiredAbsence, readCatalogCommand, retainCatalogCommand, clearCatalogCommand, type CatalogPreparation, type CatalogRecipients, type CatalogPreparationCommand, type CatalogPreparationReceipt } from './operator-review-contract'
 import { PreparedCatalog } from './PreparedCatalog'
@@ -16,12 +16,13 @@ export function CatalogReviewPreparation({ workspaceId, actorId }: { workspaceId
   const [responses, setResponses] = useState<ReturnType<typeof verifyCatalogOperatorDecisions> | null>(null)
   const [directory, setDirectory] = useState<ReturnType<typeof verifyCatalogReviewDirectory> | null>(null)
   const [chosen, setChosen] = useState<CatalogSavedReview | null>(null)
+  const invalidateEpoch = useCallback(() => { epoch.current++ }, [])
   useEffect(() => {
-    const clear = () => { epoch.current++; setSource(null); setRecipients(null); setSelected(''); setPending(null); setReceipt(null); setResponses(null); setDirectory(null); setChosen(null); setMessage('Open the saved catalog to continue.') }
+    const clear = () => { invalidateEpoch(); setSource(null); setRecipients(null); setSelected(''); setPending(null); setReceipt(null); setResponses(null); setDirectory(null); setChosen(null); setMessage('Open the saved catalog to continue.') }
     clear()
     window.addEventListener('focus', clear); window.addEventListener('storage', clear)
-    return () => { epoch.current++; window.removeEventListener('focus', clear); window.removeEventListener('storage', clear) }
-  }, [workspaceId, actorId])
+    return () => { invalidateEpoch(); window.removeEventListener('focus', clear); window.removeEventListener('storage', clear) }
+  }, [workspaceId, actorId, invalidateEpoch])
   async function identity() {
     const who = await currentManagedIdentity()
     if (!who || who.workspaceId !== workspaceId || who.userId !== actorId) {

@@ -122,7 +122,7 @@ function CatalogReviewContent({ reviewId }: { reviewId: string }) {
     window.addEventListener('storage', refresh)
     window.addEventListener('focus', refresh)
     return () => { active = false; access.invalidate(); window.removeEventListener('storage', refresh); window.removeEventListener('focus', refresh) }
-  }, [reviewId, attempt, access])
+  }, [reviewId, attempt, access]) // eslint-disable-line react-hooks/exhaustive-deps -- The keyed review instance keeps this access-scoped reader stable.
 
   useEffect(() => {
     if (!review) return

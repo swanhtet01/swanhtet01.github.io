@@ -1133,10 +1133,17 @@ test('eviction warning leads directly to the existing backup panel', async () =>
   const page = await readFile(new URL('../showroom/src/core/WorkspaceControlsPage.tsx', import.meta.url), 'utf8')
   const notice = core.slice(core.indexOf('const storageDurabilityNotice ='), core.indexOf('// Stuck-till escape hatch.'))
   assert.ok(notice.includes('<Link to="/settings/#workspace-recovery">Back up records</Link>'))
+  assert.ok(notice.includes('This browser may clear local Shop records when storage is low.'))
   assert.ok(!notice.includes('to="/settings/#controls"'))
   assert.ok(page.includes('id="workspace-recovery"'))
   assert.ok(page.includes("window.location.hash === '#workspace-recovery'"))
   assert.ok(page.includes("scrollIntoView({ block: 'start' })"))
+})
+
+test('eviction warning replaces the overlapping local workspace banner', async () => {
+  const core = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  assert.ok(core.includes('const localEvictionWarningReplacesWriteBanner = !managedIdentity'))
+  assert.ok(core.includes('const commerceWriteBanner = localEvictionWarningReplacesWriteBanner ? null :'))
 })
 
 test('the device warning stays out of the product workspaces', async () => {

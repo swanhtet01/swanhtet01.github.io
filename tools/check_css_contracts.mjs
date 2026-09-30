@@ -66,18 +66,24 @@ const PUBLISH_CSS = 'showroom/src/products/website/publish-workspace.css'
 // comments - 10 in var() fallbacks; publish-workspace 1). Px measured 2026-08-20 with
 // this file's own scanner, after P3.6a converted core-app.css font-sizes to rem.
 //
-// HOW THIS TABLE CHANGES. It only goes DOWN, and the tool does the writing: when a run
-// measures fewer live hexes or px than a ceiling, it rewrites that number below in place --
-// commit the change with the batch that retired the literals. Raising a number by hand is
-// the one forbidden move; if this check fails, retire the literal you just added (use a
-// token, a color-mix() of tokens, a var() fallback for hex, or rem for a px length)
-// instead of widening the budget.
+// HOW THIS TABLE CHANGES. It only goes DOWN. Normal verification is read-only and reports
+// any tighter values. Run this script with --write-ceilings to rewrite those numbers, then
+// commit the change with the batch that retired the literals. Keeping writes explicit is
+// important because this verifier runs before release gates that require a clean checkout.
+// Raising a number by hand is the one forbidden move; if this check fails, retire the
+// literal you just added (use a token, a color-mix() of tokens, a var() fallback for hex,
+// or rem for a px length) instead of widening the budget.
 const CEILINGS = new Map([
-  ['showroom/src/core/core-app.css', { hex: 96, px: 2117 }],
-  ['showroom/src/products/ecommerce/ecommerce-product.css', { hex: 109, px: 330 }],
-  ['showroom/src/products/website/website-product.css', { hex: 60, px: 652 }],
+  ['showroom/src/core/core-app.css', { hex: 96, px: 2114 }],
+  ['showroom/src/products/ecommerce/ecommerce-product.css', { hex: 109, px: 320 }],
+  ['showroom/src/products/website/website-product.css', { hex: 60, px: 642 }],
   ['showroom/src/products/website/publish-workspace.css', { hex: 1, px: 195 }],
 ])
+
+const args = process.argv.slice(2)
+const writeCeilings = args.includes('--write-ceilings')
+const unknownArgs = args.filter((arg) => arg !== '--write-ceilings')
+assert.deepEqual(unknownArgs, [], `unknown arguments: ${unknownArgs.join(', ')}`)
 
 // What "the same cascade" means for rule 2, per scanned file. index.css is loaded
 // unconditionally by main.tsx and core-app.css by the shell every route renders inside, so
@@ -356,8 +362,9 @@ check(
         .join('\n')}\n  Define the property in the cascade, add a fallback, or fix the name -- this is the silent-dead-token shape of the shadow-ramp and --website-quiet incidents.`,
 )
 
-// Ratchet lowering: write the new floors in place (see HOW THIS TABLE CHANGES above), and
-// say so loudly enough that the re-stamped file gets committed with the batch.
+// Ratchet lowering is an explicit maintenance action. Verification reports the same pending
+// floors without mutating the checkout, so downstream release gates inspect the source that
+// was actually checked out rather than a verifier-generated edit.
 if (lowerings.length) {
   let next = selfSource
   for (const { path, kind, from, to } of lowerings) {
@@ -366,10 +373,16 @@ if (lowerings.length) {
       : new RegExp(`(\\['${escapeForRegex(path)}', \\{ hex: \\d+, px: )${from}( \\}\\])`)
     next = next.replace(pattern, `$1${to}$2`)
   }
-  check(next !== selfSource, 'ceiling lowering rewrote this file')
-  writeFileSync(SELF, next)
-  for (const { path, kind, from, to } of lowerings) console.log(`css contracts: ${kind} ceiling for ${path} lowered ${from} -> ${to}`)
-  console.log('css contracts: NEW FLOORS WRITTEN to tools/check_css_contracts.mjs -- commit this file with the batch that retired the literals')
+  check(next !== selfSource, 'ceiling lowering can rewrite this file')
+  for (const { path, kind, from, to } of lowerings) {
+    console.log(`css contracts: ${kind} ceiling for ${path} can lower ${from} -> ${to}`)
+  }
+  if (writeCeilings) {
+    writeFileSync(SELF, next)
+    console.log('css contracts: NEW FLOORS WRITTEN to tools/check_css_contracts.mjs -- commit this file with the batch that retired the literals')
+  } else {
+    console.log('css contracts: ceilings unchanged; run with --write-ceilings to record the tighter floors')
+  }
 }
 
 // A truncated name can hide the only distinction between two sellable items.

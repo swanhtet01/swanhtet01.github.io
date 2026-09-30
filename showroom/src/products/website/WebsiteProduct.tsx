@@ -923,7 +923,6 @@ export function WebsiteProduct() {
               : releaseRecordRequired && !publishIsCurrent
                 ? 'file'
                 : 'ready'
-  const compactWebsiteStatus = view === 'content' && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Sites workspace'
     : pendingRestoredDraft
@@ -970,29 +969,6 @@ export function WebsiteProduct() {
                   : releaseRecordRequired
                     ? 'Review the go-live checklist. Deployment still happens separately.'
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
-  const websiteReviewNote = storageIssue || canRepairLocalStorage
-    ? 'Export a backup or confirm repair before continuing.'
-    : pendingRestoredDraft
-      ? 'Neither choice overwrites the saved Website until you review and save edits.'
-    : starterSetupActive
-      ? 'Review the generated pages before saving.'
-      : starterAvailable
-        ? 'No page changes until you create the website.'
-        : hasUnsavedChanges
-          ? 'Save or discard the draft.'
-          : localPreviewReady
-            ? 'Downloading does not deploy a site, connect a domain, or approve a managed release.'
-          : failingContentChecks.length
-            ? 'Fix content, navigation, proof, and contact readiness.'
-            : leadCounts.new
-              ? 'You qualify or close each inquiry; no customer message is sent here.'
-              : releaseRecordRequired && !approvalIsCurrent
-                ? 'You record review evidence.'
-                : releaseRecordRequired && !publishIsCurrent
-                  ? 'You create the website file.'
-                  : releaseRecordRequired
-                    ? 'You review the go-live checklist before deployment planning.'
-                    : 'You decide where it goes live.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
     : pendingRestoredDraft
@@ -1232,33 +1208,32 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <section aria-label="Website status" className="website-today" data-preview={compactWebsiteStatus || undefined} data-state={websiteTodayState} data-step={websiteTodayStep}>
-            {!compactWebsiteStatus ? <div className="website-today-priority">
-              <span className="core-eyebrow">Start here</span>
+          {!starterSetupActive ? <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
+            <div className="website-today-priority">
+              <span className="core-eyebrow">Next action</span>
               <h2 id="website-today-title">{websiteAgentJob}</h2>
               <p>{websiteAgentReason}</p>
               <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
-            </div> : null}
-            <details className="website-today-checks">
-              <summary>Site checks · {websiteTodayMetrics[1][1]}</summary>
+              <small className="website-today-context">{websiteTodayContext}</small>
+            </div>
+            <div className="website-today-signals">
               <div aria-label="Website today status" className="website-today-metrics" role="group">
                 {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
               </div>
-              {hasUnsavedChanges ? (
-                <p className="website-check-guidance">Save or discard your draft before checking the saved website. These checks do not approve or publish it.</p>
-              ) : failingContentChecks.length > 0 ? (
-                <div className="website-check-guidance">
-                  <h3>Needs attention</h3>
-                  <ul>
-                    {failingContentChecks.map((check) => <li key={check.id}><strong>{check.label}</strong><p>{check.detail}</p></li>)}
-                  </ul>
-                </div>
-              ) : null}
-            </details>
-            {!compactWebsiteStatus ? <div className="website-today-source" role="status">
-              <span>{websiteTodayContext}</span>
-              <small>{websiteReviewNote}</small>
-            </div> : null}
+              <details className="website-today-checks">
+                <summary>Review site checks · {websiteTodayMetrics[1][1]}</summary>
+                {hasUnsavedChanges ? (
+                  <p className="website-check-guidance">Save or discard your draft before checking the saved website. These checks do not approve or publish it.</p>
+                ) : failingContentChecks.length > 0 ? (
+                  <div className="website-check-guidance">
+                    <h3>Needs attention</h3>
+                    <ul>
+                      {failingContentChecks.map((check) => <li key={check.id}><strong>{check.label}</strong><p>{check.detail}</p></li>)}
+                    </ul>
+                  </div>
+                ) : null}
+              </details>
+            </div>
           </section> : null}
 
           {view === 'content' && !starterSetupActive ? (
