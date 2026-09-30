@@ -282,16 +282,8 @@ test('provisioning seeds one pending request that never earns the Shop proof', a
 // ---------------------------------------------------------------------------
 // Per-trade Commerce storefront copy.
 //
-// Every shipped Shop template has a commerce definition. The generic branch remains reserved for
-// an unselected or unrecognised imported catalog, where it is safer to remain neutral than guess.
-const STOREFRONT_TRADES_WITH_COPY = [
-  'mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware',
-  'tea-coffee', 'auto-parts', 'restaurant', 'beauty-spa', 'bakery',
-]
-
-// The generic social-storefront wording every trade without written copy falls back to. Pinned as
-// literals, deliberately: workingSamplePlan's null-trade branch must stay byte-identical, which is
-// item 5's own acceptance criterion.
+// Every shipped Shop template has a Commerce definition. The generic branch is reserved for an
+// unselected or unrecognised imported catalog, where it is safer to remain neutral than guess.
 const GENERIC_SOCIAL_COLLECTIONS = ['Featured today', 'More to browse']
 
 function packWorkspace(sampleId, sampleName, items) {
@@ -331,23 +323,18 @@ async function activateStorefront(state, businessName) {
 }
 
 test('every shipped Shop template resolves to a Commerce storefront definition', async () => {
-  const { ecommerceTradeStorefront } = await import(
+  const { ecommerceTradeStorefront, ecommerceTradeStorefrontIds } = await import(
     '../showroom/src/products/ecommerce/ecommerce-trade-storefront.ts'
   )
   const { shopBusinessTemplates } = await import('../showroom/src/products/shop/business-templates.ts')
-  const withCopy = shopBusinessTemplates
-    .map((template) => template.id)
-    .filter((id) => ecommerceTradeStorefront(id) !== null)
-    .sort()
-  // When this fails because a trade GAINED copy, that is the good failure: update this pin and
-  // give that trade a real vocabulary test instead of the fallback assertions below.
+  const shopTradeIds = shopBusinessTemplates.map((template) => template.id).sort()
   assert.deepEqual(
-    withCopy,
-    [...STOREFRONT_TRADES_WITH_COPY].sort(),
+    ecommerceTradeStorefrontIds,
+    shopTradeIds,
     'every shipped Shop template must have a Commerce storefront definition',
   )
   assert.equal(ecommerceTradeStorefront(null), null, 'no trade resolves to no trade copy')
-  for (const id of STOREFRONT_TRADES_WITH_COPY) {
+  for (const id of shopTradeIds) {
     const storefront = ecommerceTradeStorefront(id)
     assert.ok(storefront, `${id} must resolve`)
     assert.doesNotMatch(storefront.note, /demo|preview|trial/i, `${id} uses operational, not demo, wording`)
