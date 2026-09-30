@@ -2660,6 +2660,12 @@ if (!coreSource.includes('See today’s next job and key numbers.')
   || !coreSource.includes('{commerce.items.length ? shopCatalogOnboarding : null}')
   || !coreSource.includes("commerceLocation.hash === '#shop-catalog-import'")
   || !coreSource.includes("document.getElementById('shop-catalog-import')")
+  || !coreSource.includes("commerceLocation.hash === '#demand-review'")
+  || !coreSource.includes("document.getElementById('demand-review')")
+  || !coreSource.includes('const actionableDemandRows = demandForecastRows.filter')
+  || !coreSource.includes('const visibleDemandRows = actionableDemandRows.length ? actionableDemandRows : demandForecastRows.slice(0, 4)')
+  || !coreSource.includes('visibleDemandRows.map((row) =>')
+  || !coreSource.includes('id="demand-review" tabIndex={-1}')
   || !coreSource.includes("target?.scrollIntoView({ block: 'start' })")
   || !coreSource.includes('target?.focus({ preventScroll: true })')
   || !coreSource.includes('tabIndex={-1}')
@@ -2667,6 +2673,9 @@ if (!coreSource.includes('See today’s next job and key numbers.')
   || !shopNextActionSource.includes("'Review online order requests'")
   || !shopNextActionSource.includes("'Finish fulfilment queue'")
   || !shopNextActionSource.includes("'Receive purchase orders'")
+  || !shopNextActionSource.includes("'Prevent forecast stockout'")
+  || !shopNextActionSource.includes("'Review upcoming demand'")
+  || !shopNextActionSource.includes("'/shop/?tab=inventory#demand-review'")
   || !shopNextActionSource.includes("'Reorder low stock'")
   || !shopNextActionSource.includes("'Set up stock locations'")
   || !coreSource.includes('const shopAutopilotStage =')
@@ -20374,6 +20383,8 @@ async function verifyShopNextActionRuntime() {
     lowStockCount: 0,
     pendingAction: false,
     pendingOnlineRequestCount: 0,
+    reorderSoonCount: 0,
+    stockoutRiskCount: 0,
     ...patch,
   })
   try {
@@ -20388,8 +20399,12 @@ async function verifyShopNextActionRuntime() {
     assert(online.job === 'Review online order requests' && online.reason.startsWith('2 online requests'), 'shop_next_action_online_request_priority_wrong')
     const orders = model.decideShopNextAction(input({ actionOrderCount: 2, activePurchaseOrderCount: 3 }))
     assert(orders.job === 'Finish fulfilment queue' && orders.track === 'Orders', 'shop_next_action_fulfilment_priority_wrong')
-    const receiving = model.decideShopNextAction(input({ activePurchaseOrderCount: 2, lowStockCount: 3 }))
+    const stockout = model.decideShopNextAction(input({ stockoutRiskCount: 2, activePurchaseOrderCount: 2, lowStockCount: 3 }))
+    assert(stockout.job === 'Prevent forecast stockout' && stockout.nextAction === 'Review demand risk' && stockout.path.endsWith('#demand-review'), 'shop_next_action_stockout_priority_wrong')
+    const receiving = model.decideShopNextAction(input({ activePurchaseOrderCount: 2, reorderSoonCount: 2, lowStockCount: 3 }))
     assert(receiving.job === 'Receive purchase orders' && receiving.nextAction === 'Open receiving queue', 'shop_next_action_receiving_priority_wrong')
+    const demand = model.decideShopNextAction(input({ reorderSoonCount: 1, lowStockCount: 3 }))
+    assert(demand.job === 'Review upcoming demand' && demand.nextAction === 'Open demand review' && demand.path.endsWith('#demand-review'), 'shop_next_action_upcoming_demand_priority_wrong')
     const reorder = model.decideShopNextAction(input({ lowStockCount: 2, inventoryReady: false }))
     assert(reorder.job === 'Reorder low stock' && reorder.reason.startsWith('2 items are'), 'shop_next_action_reorder_priority_wrong')
     const inventory = model.decideShopNextAction(input({ inventoryReady: false }))
