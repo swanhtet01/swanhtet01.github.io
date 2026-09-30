@@ -123,7 +123,7 @@ function DownloadWorkspace({
         <ol className="website-download-steps">
           <li>
             <span aria-hidden="true">1</span>
-            <div><strong>Review</strong><p>Go back, then Review page. The layout follows your screen automatically.</p></div>
+            <div><strong>Review</strong><p>Open Website view to check the page on the screen you use every day.</p></div>
           </li>
           <li>
             <span aria-hidden="true">2</span>
@@ -306,8 +306,8 @@ export function WebsiteProduct() {
           ? 'Saved on this device'
           : 'Session only'
   const websiteSurfaceActionLabel = surface === 'preview'
-    ? 'Edit page'
-    : 'Review page'
+    ? 'Edit website'
+    : 'View website'
   const showWebsiteEditorAction = true
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
