@@ -278,7 +278,7 @@ export function WebsiteProduct() {
         copy: hasUnsavedChanges
           ? 'Your changes are not saved. Return to edit to save or discard them.'
           : selectedPage.stage === 'draft'
-            ? 'This page is saved as a draft. Select Edit page to update it and mark it ready.'
+            ? 'This page is saved as a draft. Select Edit website to update it and mark it ready.'
             : 'Edit your pages, review inquiries and download your site.',
       }
     : view === 'publish' && storageMode === 'session-only'
