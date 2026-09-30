@@ -4,7 +4,7 @@ import test from 'node:test'
 import { runInNewContext } from 'node:vm'
 
 const source = readFileSync(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
-const start = source.indexOf('  function downloadTrialSite() {')
+const start = source.indexOf('  function downloadWebsiteFile() {')
 const end = source.indexOf('\n  const failingContentChecks', start)
 assert.ok(start >= 0 && end > start)
 const handler = source.slice(start, end)
@@ -31,7 +31,7 @@ function run(failure) {
     emitMetric() { if (failure === 'metric') throw new Error('optional metric failed') },
     setNotice: value => { notice = value },
   }
-  runInNewContext(handler + '\ndownloadTrialSite()', context)
+  runInNewContext(handler + '\ndownloadWebsiteFile()', context)
   return { notice, clicks }
 }
 

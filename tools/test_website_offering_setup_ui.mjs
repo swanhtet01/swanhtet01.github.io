@@ -15,7 +15,7 @@ const ts = require('typescript')
 const source = readFileSync(new URL('../showroom/src/products/website/WebsiteStarterSetup.tsx', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 
-function harness({ fillBusiness = true } = {}) {
+function harness({ fillBusiness = true, initialTradeId = null, initialBusinessName = null } = {}) {
   const state = [], created = []
   let cursor = 0, tree
   const exports = {}
@@ -30,7 +30,7 @@ function harness({ fillBusiness = true } = {}) {
     if (name === './website-offering-import') return offeringImport
     throw new Error('Unexpected component dependency: ' + name)
   } })
-  function render() { cursor = 0; tree = exports.WebsiteStarterSetup({ onCreate: value => created.push(value) }); return tree }
+  function render() { cursor = 0; tree = exports.WebsiteStarterSetup({ initialTradeId, initialBusinessName, onCreate: value => created.push(value) }); return tree }
   function nodes(node = tree) {
     if (Array.isArray(node)) return node.flatMap(item => nodes(item))
     if (!node || typeof node !== 'object' || !node.props) return []
@@ -63,12 +63,10 @@ test('empty business details block creation', () => {
   assert.ok(ui.nodes().some(node => node.props['aria-invalid'] === true))
 })
 
-test('business type chooses the layout without a customer template selector', () => {
-  const ui = harness()
-  assert.equal(ui.nodes().some(node => node.type === 'select' && node.props.value === 'catalog-showcase'), false)
+test('existing Shop context chooses the layout without a customer selector', () => {
   const businessType = trade.websiteTradeBriefOptions()[0].id
-  const selector = ui.find(node => node.type === 'select' && node.props.value === '')
-  selector.props.onChange({ target: { value: businessType } }); ui.render()
+  const ui = harness({ initialTradeId: businessType, initialBusinessName: 'Connected Cafe' })
+  assert.equal(ui.nodes().some(node => node.type === 'select'), false)
   ui.submit()
   assert.equal(ui.created.length, 1)
   const brief = ui.created[0]
@@ -97,11 +95,11 @@ test('incomplete and delimiter-bearing names block creation and reveal the error
   assert.equal(ui.created.length, 1)
 })
 
-test('trade changes retain reviewed offering details and the fourth entry disables add', () => {
-  const ui = harness()
+test('Shop context retains reviewed offering details and the fourth entry disables add', () => {
+  const ui = harness({ initialTradeId: 'restaurant' })
   for (let index = 0; index < 4; index++) { ui.click('Add featured entry'); ui.edit(index, 'Entry ' + index, 'Details ' + index) }
   assert.equal(ui.find(node => node.type === 'button' && node.props.children === 'Add featured entry').props.disabled, true)
-  ui.find(node => node.type === 'select').props.onChange({ target: { value: 'restaurant' } }); ui.render(); ui.submit()
+  ui.submit()
   assert.equal(ui.created.length, 1)
   assert.equal(ui.created[0].offerings, [0, 1, 2, 3].map(index => `Entry ${index} | Details ${index}`).join('\n'))
 })
@@ -115,18 +113,16 @@ test('removing a middle entry preserves remaining content and removing all remai
   assert.equal(ui.created[1].offerings, '')
 })
 
-test('new/existing business guidance never rewrites entered offerings', () => {
+test('catalog import remains optional and never rewrites entered offerings', () => {
   const ui = harness()
   ui.click('Add featured entry'); ui.edit(0, 'Owner service', 'Confirmed description')
-  ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.onChange({ target: { value: 'existing' } }); ui.render()
-  assert.match(ui.find(node => node.props.id === 'website-business-stage-help').props.children, /Use your current menu, services or product list/)
+  assert.ok(ui.find(node => node.type === 'input' && node.props.type === 'file'))
   ui.submit()
   assert.equal(ui.created[0].offerings, 'Owner service | Confirmed description')
 })
 
 test('CSV selection is preview-only until explicitly accepted and cannot replace entered rows', async () => {
   const ui = harness()
-  ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.onChange({ target: { value: 'existing' } }); ui.render()
   const selectFile = async () => {
     ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [{ name: 'menu.csv', size: 40, text: async () => 'name,description\nTea,2000 MMK' }], value: 'menu.csv' } })
     await new Promise(resolve => setImmediate(resolve)); ui.render()
@@ -137,43 +133,41 @@ test('CSV selection is preview-only until explicitly accepted and cannot replace
   ui.submit()
   assert.equal(ui.created.length, 0)
   assert.match(ui.find(node => node.props.id === 'website-import-pending').props.children, /discard/)
-  ui.click('Use reviewed entries'); ui.submit()
+  ui.click('Add reviewed entries'); ui.submit()
   assert.equal(ui.created[0].offerings, 'Tea | 2000 MMK')
   await selectFile()
-  assert.equal(ui.find(node => node.type === 'button' && node.props.children === 'Use reviewed entries').props.disabled, true)
-  ui.click('Discard preview'); ui.submit()
+  assert.equal(ui.find(node => node.type === 'button' && node.props.children === 'Add reviewed entries').props.disabled, true)
+  ui.click('Discard file'); ui.submit()
   assert.equal(ui.created[1].offerings, 'Tea | 2000 MMK')
 })
 
 test('canceling a slow read ignores its late result and allows another preview', async () => {
   const ui = harness()
-  ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.onChange({ target: { value: 'existing' } }); ui.render()
   let finish
   const slow = new Promise(resolve => { finish = resolve })
   const select = file => { ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [file], value: file.name } }); ui.render() }
   select({ name: 'slow.csv', size: 40, text: () => slow })
   await new Promise(resolve => setImmediate(resolve)); ui.render()
   assert.equal(ui.find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, true)
-  assert.equal(ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.disabled, true)
+  assert.equal(ui.find(node => node.type === 'input' && node.props.type === 'file').props.disabled, true)
   ui.submit()
   assert.equal(ui.created.length, 0)
-  ui.click('Cancel file preview')
+  ui.click('Cancel import')
   assert.equal(ui.find(node => node.type === 'button' && node.props.type === 'submit').props.disabled, false)
   select({ name: 'new.csv', size: 40, text: async () => 'name,description\nNew entry,Confirmed details' })
   await new Promise(resolve => setImmediate(resolve)); ui.render()
   finish('name,description\nOld entry,Outdated details')
   await new Promise(resolve => setImmediate(resolve)); ui.render()
-  ui.click('Use reviewed entries'); ui.submit()
+  ui.click('Add reviewed entries'); ui.submit()
   assert.equal(ui.created[0].offerings, 'New entry | Confirmed details')
 })
 
 test('rejected file keeps entered content and does not expose an apply action', async () => {
   const ui = harness()
   ui.click('Add featured entry'); ui.edit(0, 'Keep me', 'Approved details')
-  ui.find(node => node.type === 'select' && node.props['aria-describedby'] === 'website-business-stage-help').props.onChange({ target: { value: 'existing' } }); ui.render()
   ui.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [{ name: 'menu.csv', size: 50, text: async () => 'name,description\nBad,"unclosed' }], value: 'menu.csv' } })
   await new Promise(resolve => setImmediate(resolve)); ui.render()
-  assert.equal(ui.nodes().some(node => node.type === 'button' && node.props.children === 'Use reviewed entries'), false)
+  assert.equal(ui.nodes().some(node => node.type === 'button' && node.props.children === 'Add reviewed entries'), false)
   assert.match(ui.find(node => node.props.id === 'website-import-status').props.children, /unclosed/)
   ui.submit()
   assert.equal(ui.created[0].offerings, 'Keep me | Approved details')

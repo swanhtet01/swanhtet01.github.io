@@ -390,7 +390,7 @@ function Brand() {
 // on several Android system fonts). Plain stroke SVGs render identically everywhere
 // and pick up the button's own color via currentColor.
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Local workspace'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Private device'}</span>
 }
 
 export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: string; title: string; copy: string; actions?: ReactNode }) {
@@ -562,7 +562,7 @@ export function CoreLayout() {
               the entire shell — the exact blank page the boundary exists to prevent, reached
               by a different door. It is secondary furniture, so its own boundary is enough:
               the route content beside it keeps working. */}
-          {routeProduct && managedProductAllowed ? <details className="product-tools-disclosure"><summary>Workspace tools</summary><RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary></details> : null}
+          {routeProduct && managedProductAllowed ? <details className="product-tools-disclosure"><summary>More</summary><RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary></details> : null}
         </main>
       </div>
     </div>

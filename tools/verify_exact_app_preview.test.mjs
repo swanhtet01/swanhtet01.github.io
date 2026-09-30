@@ -61,17 +61,18 @@ test('protected release probes bind credentials to the exact pair and reject red
 })
 
 const operationsGeneratedAt = '2026-08-28T12:00:00.000Z'
-test('Website default preview requires the business brief and review boundaries', async () => {
+test('Website exact preview requires the direct Sites brief', async () => {
   const needles = expectedText({ surface: 'website' })
-  const source = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
+  const source = (await Promise.all([
+    readFile(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../showroom/src/products/website/WebsiteStarterSetup.tsx', import.meta.url), 'utf8'),
+  ])).join('\n')
   for (const needle of needles) assert.ok(source.includes(needle), `Website source missing ${needle}`)
-  assert.ok(needles.includes('Preview on this device. Not published.'))
-  assert.ok(needles.includes('Create preview'))
-  assert.ok(needles.includes('What does your business offer?'))
-  assert.ok(needles.includes('Open preview'))
+  assert.ok(needles.includes('Tell us about the business'))
+  assert.ok(needles.includes('Create website'))
+  assert.ok(needles.includes('What do you sell or provide?'))
   assert.ok(!needles.includes('Request Website setup'))
-  assert.ok(!needles.includes('Make this website yours'))
-  assert.ok(!needles.includes('Nothing has been deployed.'))
+  assert.ok(!needles.includes('Create preview'))
 })
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 test('Ecommerce checkout proof explicitly opens the workspace and requires local-only copy', async () => {
@@ -81,8 +82,9 @@ test('Ecommerce checkout proof explicitly opens the workspace and requires local
   const source = await readFile(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const needles = expectedText({ surface: 'ecommerce' })
   for (const needle of needles) assert.ok(source.includes(needle))
-  assert.ok(needles.includes('Browse a sample catalog. Requests stay on this device and are not live orders.'))
-  assert.ok(needles.includes('Try sample request'))
+  assert.ok(needles.includes('Browse your catalog and take order requests. Requests stay on this device until Shop review.'))
+  assert.ok(needles.includes('Open customer ordering'))
+  assert.ok(!needles.some(needle => /sample|demo|preview options/i.test(needle)))
 })
 const reportGeneratedAt = '2026-08-28T12:05:00.000Z'
 const expectedCommit = 'a'.repeat(40)
@@ -494,7 +496,7 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   assert.match(renderedHarnessSource, /clean: errors\.length === 0 && warnings\.length === 0/)
   assert.deepEqual(SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION, expectedFreshSeedProfitControl)
   assert.equal(
-    commerceWorkspaceSource.split("return persistInitialState(storage, createSeedCommerce(Date.now()), 'seed')").length - 1,
+    commerceWorkspaceSource.split("return persistInitialState(storage, createEmptyCommerce(), 'current')").length - 1,
     1,
   )
   const seedStart = commerceWorkspaceSource.indexOf('export function createSeedCommerce(')
@@ -527,9 +529,9 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   const publicExpectedText = await loadPublicHomepageExpectedText()
   assert.deepEqual(publicExpectedText, [
     'Your business.',
-    'A clearer day.',
-    'Find your business tool',
-    'Open app',
+    'Working together.',
+    'Shop. Sites. Commerce. One SuperMega account.',
+    'Login',
   ])
   assert.deepEqual(
     derivePublicHomepageExpectedText({ manifest, generatorSource }),
@@ -542,9 +544,9 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
     'Your business.',
   )
   for (const binding of [
-    '<h1>Your business.<br>A clearer day.</h1>',
-    'href="https://app.supermega.dev/?choose=1">Open app</a>',
-    'href="#products">Find your business tool <span aria-hidden="true">↗</span></a>',
+    '<h1>Your business.<br>Working together.</h1>',
+    '<p class="lede">Manage sales and stock. Publish your website. Take orders online.</p>',
+    'href="https://app.supermega.dev/login">Login</a>',
   ]) {
     assert.throws(
       () => derivePublicHomepageExpectedText({
@@ -1005,7 +1007,10 @@ test('Ecommerce default brief has separate desktop and mobile entry cases', asyn
   assert.equal(cases.length, 2)
   assert.ok(cases.every(spec => spec.route === '/ecommerce/'))
   assert.deepEqual(cases.map(spec => spec.width), [1280, 390])
-  const source = await readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8')
+  const source = (await Promise.all([
+    readFile(new URL('../showroom/src/products/AssistedDeliveryScope.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8'),
+  ])).join('\n')
   for (const text of expectedText({ surface: 'ecommerce_brief' })) assert.ok(source.includes(text), text)
 })
 
@@ -1027,17 +1032,21 @@ test('actual brief harness expression rejects unusable DOM controls', async () =
   const source = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
   const line = source.split('\n').find(line => line.includes('const briefControls = testCase.inspectBusinessBrief'))
   assert.ok(line)
-  async function inspect(change = () => {}) {
+  async function inspect(change = () => {}, website = false) {
     const field = required => ({ required, value: '', disabled: false, readOnly: false, tabIndex: 0, labels: [{ textContent: 'Field' }], getClientRects: () => [{}], visibility: 'visible' })
-    const data = { fields: [field(true), field(true), field(false)], submit: { ...field(false), disabled: true, textContent: 'Continue' }, absent: false }
+    const data = { fields: website ? [field(true), field(true), field(false), field(true), field(true)] : [field(true), field(true), field(false)],
+      submit: { ...field(false), disabled: !website, textContent: website ? 'Create website' : 'Continue' }, absent: false, valid: false }
     change(data)
-    const document = { querySelector: () => data.absent ? null : { querySelectorAll: () => data.fields, querySelector: () => data.submit } }
+    const form = { querySelectorAll: () => data.fields, querySelector: () => data.submit, checkValidity: () => data.valid }
+    const document = { querySelector: selector => data.absent ? null : selector === '.website-starter-form' ? (website ? form : null) : (!website ? form : null) }
     const context = { testCase: { inspectBusinessBrief: true }, cdp: {}, sessionId: 'synthetic', inspectBusinessBrief,
       evalInPage: async (_cdp, _session, expression) => runInNewContext(expression, { document, getComputedStyle: node => ({ visibility: node.visibility }) }) }
     return runInNewContext(`(async () => { ${line}; return briefControls })()`, context)
   }
   assert.ok(Object.values(await inspect()).every(value => value === true))
-  assert.ok(Object.values(await inspect(d => { d.fields.pop(); d.submit.textContent = 'Create preview' })).every(value => value === true))
+  assert.ok(Object.values(await inspect(() => {}, true)).every(value => value === true))
+  assert.equal((await inspect(d => { d.fields[4].required = false }, true)).essentialsRequired, false)
+  assert.equal((await inspect(d => { d.valid = true }, true)).emptyContinueBlocked, false)
   for (const change of [
     d => { d.absent = true }, d => { d.fields.pop() }, d => { d.fields.push(d.fields[0]) },
     d => { d.fields[0].getClientRects = () => [] }, d => { d.fields[0].visibility = 'hidden' },

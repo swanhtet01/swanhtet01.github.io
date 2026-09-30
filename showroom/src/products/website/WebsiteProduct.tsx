@@ -8,7 +8,6 @@ import {
   readLocalShopBusinessTemplateId,
 } from '../../core/product-onboarding-runtime'
 import { ContentWorkspace } from './ContentWorkspace'
-import { BusinessBrief } from '../AssistedDeliveryScope'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
 import { SitePreview } from './SitePreview'
@@ -48,7 +47,6 @@ import {
   LEGACY_WEBSITE_STORAGE_KEY,
   listWebsiteRecoveryArchives,
   MAX_WEBSITE_PAGES,
-  previewDevices,
   readinessChecks,
   readWebsiteRecoveryArchive,
   recordWebsiteEvidence,
@@ -76,12 +74,12 @@ type WebsiteEditSessionState = {
   session: WebsiteEditSession
 }
 
-const DEFAULT_NOTICE = 'Website example loaded. Nothing has been deployed.'
+const DEFAULT_NOTICE = 'Website ready to edit. Nothing has been published.'
 
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
     title: 'Edit page',
-    copy: 'Edit one section, preview it, then save or discard.',
+    copy: 'Edit one section, review it, then save or discard.',
   },
   publish: {
     title: 'Prepare website file',
@@ -89,7 +87,7 @@ const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   },
 }
 
-function TrialReadyWorkspace({
+function DownloadWorkspace({
   checks,
   onDownload,
   retentionLabel,
@@ -105,7 +103,7 @@ function TrialReadyWorkspace({
   const readyPages = workspace.pages.filter((page) => page.stage === 'ready')
 
   return (
-    <section className="website-editor-panel website-trial-ready" aria-labelledby="website-ready-title">
+    <section className="website-editor-panel website-download" aria-labelledby="website-ready-title">
       <header className="website-panel-head">
         <div>
           <span className="website-eyebrow">Ready to use</span>
@@ -115,17 +113,17 @@ function TrialReadyWorkspace({
         <span className="website-status is-ready">Ready</span>
       </header>
 
-      <div className="website-editor-scroll website-trial-ready-body">
-        <div className="website-trial-ready-summary">
+      <div className="website-editor-scroll website-download-body">
+        <div className="website-download-summary">
           <span>{retentionLabel}</span>
           <strong>{workspace.siteName}</strong>
           <p>{readyPages.length} ready page{readyPages.length === 1 ? '' : 's'} · {passedChecks}/{websiteChecks.length} website checks passed</p>
         </div>
 
-        <ol className="website-trial-ready-steps">
+        <ol className="website-download-steps">
           <li>
             <span aria-hidden="true">1</span>
-            <div><strong>Preview</strong><p>Go back, then Preview to check desktop, tablet, or mobile.</p></div>
+            <div><strong>Review</strong><p>Go back, then Review page. The layout follows your screen automatically.</p></div>
           </li>
           <li>
             <span aria-hidden="true">2</span>
@@ -133,12 +131,12 @@ function TrialReadyWorkspace({
           </li>
         </ol>
 
-        <div className="website-trial-ready-boundary" role="note">
+        <div className="website-download-boundary" role="note">
           <strong>Not online yet</strong>
           <span>Downloading does not deploy a site, connect a domain, or send customer data.</span>
         </div>
 
-        <button className="website-button is-primary website-trial-download" onClick={onDownload} type="button">
+        <button className="website-button is-primary website-download-action" onClick={onDownload} type="button">
           Download website
         </button>
       </div>
@@ -152,7 +150,6 @@ function formatRecoveryDate(value: string) {
 }
 
 export function WebsiteProduct() {
-  const [workspaceOpened, setWorkspaceOpened] = useState(false)
   const location = useLocation()
   const {
     workspace,
@@ -201,8 +198,24 @@ export function WebsiteProduct() {
   const editSessionRef = useRef<WebsiteEditSessionState | null>(null)
   const restoredDraftHeadingRef = useRef<HTMLHeadingElement>(null)
   const [device, setDevice] = useState<PreviewDevice>(() => (
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop'
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches
+      ? 'mobile'
+      : typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches
+        ? 'tablet'
+        : 'desktop'
   ))
+  useEffect(() => {
+    const mobileQuery = window.matchMedia('(max-width: 720px)')
+    const tabletQuery = window.matchMedia('(max-width: 1024px)')
+    const syncPreviewDevice = () => setDevice(mobileQuery.matches ? 'mobile' : tabletQuery.matches ? 'tablet' : 'desktop')
+    syncPreviewDevice()
+    mobileQuery.addEventListener('change', syncPreviewDevice)
+    tabletQuery.addEventListener('change', syncPreviewDevice)
+    return () => {
+      mobileQuery.removeEventListener('change', syncPreviewDevice)
+      tabletQuery.removeEventListener('change', syncPreviewDevice)
+    }
+  }, [])
   const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
   const [localLeadLedger, setLocalLeadLedger] = useState(() => {
@@ -266,7 +279,7 @@ export function WebsiteProduct() {
           ? 'Your changes are not saved. Return to edit to save or discard them.'
           : selectedPage.stage === 'draft'
             ? 'This page is saved as a draft. Select Edit page to update it and mark it ready.'
-            : 'Check the selected page at desktop, tablet, or mobile size.',
+            : 'Review the selected page. Its layout follows your screen automatically.',
       }
     : view === 'publish' && storageMode === 'session-only'
       ? {
@@ -294,17 +307,11 @@ export function WebsiteProduct() {
           : 'Session only'
   const websiteSurfaceActionLabel = surface === 'preview'
     ? 'Edit page'
-    : 'Preview'
-  const canRequestWebsiteSetup = storageMode !== 'managed'
-    && view === 'content'
-    && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft
-    && !hasUnsavedChanges && !starterSetupActive
-  const showAssistedWebsitePreview = canRequestWebsiteSetup && surface === 'preview'
-  const assistedWebsiteStorageNotice = storageMode === 'browser-local' ? 'Saved on this device. Not published.' : 'Session only. Download your website file to keep it.'
-  const showWebsiteEditorAction = !(showAssistedWebsitePreview && starterAvailable)
+    : 'Review page'
+  const showWebsiteEditorAction = true
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
-    ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
+    ? 'The saved Website changed after this edit session started. Your draft is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
     : storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
   const noticePriority = editConflict || storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
   const repairArmed = canRepairLocalStorage
@@ -399,7 +406,7 @@ export function WebsiteProduct() {
 
   function openWorkspaceView(nextView: WebsiteView) {
     if (nextView === 'publish' && hasUnsavedChanges) {
-      setNotice('Save or discard the unsaved Website preview before reviewing the file checklist.')
+      setNotice('Save or discard the unsaved Website draft before reviewing the file checklist.')
       return
     }
     if (nextView === 'publish' && !canReview) {
@@ -461,7 +468,7 @@ export function WebsiteProduct() {
     try {
       window.sessionStorage.setItem(websiteEditSessionStorageKey(next.scope), JSON.stringify(next.session))
     } catch {
-      setNotice('The unsaved preview is held in this tab only. Browser draft recovery is unavailable, but Save and Discard still work.')
+      setNotice('The unsaved draft is held in this tab only. Browser draft recovery is unavailable, but Save and Discard still work.')
     }
   }
 
@@ -508,7 +515,7 @@ export function WebsiteProduct() {
     setSurface('work')
     setSiteSettingsOpen(false)
     requestHeadingFocus()
-    setNotice(`Started from the current ${workspace.siteName} ${isUntouchedWebsiteStarter(workspace) ? 'sample' : 'saved Website'}. The older tab draft was discarded; nothing was deployed.`)
+    setNotice(`Started from the current ${workspace.siteName} ${isUntouchedWebsiteStarter(workspace) ? 'starting design' : 'saved Website'}. The older tab draft was discarded; nothing was deployed.`)
   }
 
   function stageWorkspace(update: WebsiteWorkspaceUpdate) {
@@ -532,7 +539,7 @@ export function WebsiteProduct() {
     }
     const base = retained?.session ?? createWebsiteEditSession(workspace)
     if (!websiteEditSessionMatches(base, workspace)) {
-      setNotice('The saved Website changed after this edit session started. Discard the preview before making more changes.')
+      setNotice('The saved Website changed after this edit session started. Discard the draft before making more changes.')
       return null
     }
     const result = updateWebsiteEditSession(base, update)
@@ -551,7 +558,7 @@ export function WebsiteProduct() {
     const retained = editSessionRef.current
     if (!retained || retained.scope !== editSessionScope) return
     if (!websiteEditSessionMatches(retained.session, workspace)) {
-      setNotice('This preview started from an older saved version. Nothing was overwritten; discard it and review the newer Website.')
+      setNotice('This draft started from an older saved version. Nothing was overwritten; discard it and review the newer Website.')
       return
     }
     setSavingDraft(true)
@@ -565,7 +572,7 @@ export function WebsiteProduct() {
     if (editSessionRef.current === retained) clearEditSession(retained)
     setNotice(result.changed
       ? `Website saved once as content revision ${result.workspace.contentRevision}. Nothing was deployed.`
-      : 'The preview already matched the saved Website. No revision was added.')
+      : 'The draft already matched the saved Website. No revision was added.')
   }
 
   function discardDraft() {
@@ -581,7 +588,7 @@ export function WebsiteProduct() {
 
   function requireSavedWorkspace(action: string) {
     if (!hasUnsavedChanges) return true
-    setNotice(`Save or discard the unsaved Website preview before ${action}.`)
+    setNotice(`Save or discard the unsaved Website draft before ${action}.`)
     return false
   }
 
@@ -697,7 +704,7 @@ export function WebsiteProduct() {
       setSelectedPageId(staged.workspace.selectedPageId)
       openWorkspaceView('content')
       setDeleteCandidateId('')
-      setNotice('New page added to the unsaved preview.')
+      setNotice('New page added to the unsaved draft.')
     }
   }
 
@@ -722,7 +729,7 @@ export function WebsiteProduct() {
       route: location.pathname + location.search,
       detail: `Website starter brief generated: ${brief.businessName}`,
     })
-    setNotice('Your three-page site is ready as an unsaved preview. Review every page, then Save or Discard.')
+    setNotice('Your three-page site is ready. Review every page, then Save or Discard.')
     return true
   }
 
@@ -749,7 +756,7 @@ export function WebsiteProduct() {
       setSelectedPageId(staged.workspace.selectedPageId)
       openWorkspaceView('content')
       setDeleteCandidateId('')
-      setNotice('Page copy added to the unsaved preview with navigation hidden.')
+      setNotice('Page copy added to the unsaved draft with navigation hidden.')
     }
   }
 
@@ -774,7 +781,7 @@ export function WebsiteProduct() {
     if (staged) {
       setSelectedPageId(staged.workspace.selectedPageId)
       setDeleteCandidateId('')
-      setNotice('Draft page removed from the unsaved preview.')
+      setNotice('Draft page removed from the website draft.')
     }
   }
 
@@ -788,7 +795,7 @@ export function WebsiteProduct() {
       pages.splice(nextIndex, 0, page)
       return { ...current, pages }
     })
-    if (staged) setNotice('Navigation order changed in the unsaved preview.')
+    if (staged) setNotice('Navigation order changed in the website draft.')
   }
 
   async function addEvidence(input: {
@@ -856,7 +863,7 @@ export function WebsiteProduct() {
     }
   }
 
-  function downloadTrialSite() {
+  function downloadWebsiteFile() {
     if (!requireSavedWorkspace('downloading the Website')) return
     try {
       const download = createWebsiteHtmlDownload(createWebsitePreviewArtifact(workspace))
@@ -874,13 +881,13 @@ export function WebsiteProduct() {
           event: 'first_value_completed',
           product: 'website',
           route: location.pathname + location.search,
-          detail: 'Produced a reviewable Website preview file from saved content.',
+          detail: 'Produced a reviewable Website file from saved content.',
         })
         emitMetric({ product: 'website', capability: 'website-builder', action: 'file.downloaded', ts: Date.now() })
       } catch {
         // Optional telemetry cannot turn a requested download into a failure.
       }
-      setNotice(`${download.filename} downloaded. It is a standalone preview; no site or domain was deployed.`)
+      setNotice(`${download.filename} downloaded. It is a standalone website file; no site or domain was deployed.`)
     } catch (error) {
       setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
     }
@@ -916,7 +923,7 @@ export function WebsiteProduct() {
               : releaseRecordRequired && !publishIsCurrent
                 ? 'file'
                 : 'ready'
-  const compactWebsiteStatus = showAssistedWebsitePreview || (view === 'content' && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft)
+  const compactWebsiteStatus = view === 'content' && !storageIssue && !canRepairLocalStorage && !pendingRestoredDraft
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Sites workspace'
     : pendingRestoredDraft
@@ -924,11 +931,11 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Answer 5 questions'
     : starterAvailable
-        ? 'Customize this demo'
+        ? 'Add business details'
         : hasUnsavedChanges
           ? 'Save or discard edits'
           : localPreviewReady
-            ? 'Download your website preview'
+            ? 'Download your website'
           : failingContentChecks.length
             ? 'Fix page checks'
             : leadCounts.new
@@ -947,9 +954,9 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Answer a short brief to replace the example with client-specific pages.'
       : starterAvailable
-        ? 'Review the working sample first. Customize it only when you are ready to add business details.'
+        ? 'Add the business details once. SuperMega will prepare the pages, wording and navigation.'
         : hasUnsavedChanges
-          ? 'Save the preview or discard it before review.'
+          ? 'Save the draft or discard it before review.'
           : localPreviewReady
             ? 'Your saved customization is ready as a standalone review file. Page checks and managed approval remain separate before go-live.'
           : failingContentChecks.length
@@ -970,9 +977,9 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Review the generated pages before saving.'
       : starterAvailable
-        ? 'The working sample stays unchanged until you choose Customize demo.'
+        ? 'No page changes until you create the website.'
         : hasUnsavedChanges
-          ? 'Save or discard the preview.'
+          ? 'Save or discard the draft.'
           : localPreviewReady
             ? 'Downloading does not deploy a site, connect a domain, or approve a managed release.'
           : failingContentChecks.length
@@ -991,7 +998,7 @@ export function WebsiteProduct() {
     : pendingRestoredDraft
       ? 'Choose Website'
     : starterSetupActive || starterAvailable
-      ? 'Customize demo'
+      ? 'Add business details'
       : hasUnsavedChanges
         ? 'Review edits'
         : localPreviewReady
@@ -1030,7 +1037,7 @@ export function WebsiteProduct() {
       ? 'Saved on this device'
       : 'Available in this browser session'
   const websiteTodayContext = workingSampleTemplate
-    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'working sample' : 'starting template'} · ${websiteTodaySource}`
+    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current design' : 'starting design'} · ${websiteTodaySource}`
     : websiteTodaySource
   const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
     contract: 'supermega.website.lead-export.v1',
@@ -1069,7 +1076,7 @@ export function WebsiteProduct() {
       return
     }
     if (localPreviewReady) {
-      downloadTrialSite()
+      downloadWebsiteFile()
       return
     }
     if (hasUnsavedChanges || failingContentChecks.length) {
@@ -1101,7 +1108,7 @@ export function WebsiteProduct() {
     }
   }
 
-  async function captureDemoInquiry(event: FormEvent<HTMLFormElement>) {
+  async function captureInquiry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     try {
       const next = captureWebsiteLead(leadLedger, {
@@ -1164,15 +1171,6 @@ export function WebsiteProduct() {
     }
   }
 
-  if (showAssistedWebsitePreview && starterAvailable && !workspaceOpened && searchParams.get('workspace') !== '1') {
-    return <BusinessBrief product="website" onOpenWorkspace={() => {
-      setWorkspaceOpened(true)
-      const next = new URLSearchParams(searchParams)
-      next.set('workspace', '1')
-      setSearchParams(next, { replace: true })
-    }} />
-  }
-
   return (
     <div className="website-product">
       <div className="website-shell">
@@ -1206,9 +1204,8 @@ export function WebsiteProduct() {
           <header className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
-              <p>{showAssistedWebsitePreview ? assistedWebsiteStorageNotice : activeViewCopy.copy}</p>
+              <p>{activeViewCopy.copy}</p>
             </div>
-            {canRequestWebsiteSetup && surface === 'work' ? <a className="website-button is-secondary" href="https://supermega.dev/contact/?product=website&source=website-preview" target="_blank" rel="noopener noreferrer">Request Website setup<span className="sr-only"> (opens in a new tab)</span></a> : null}
             {view === 'publish' ? (
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
@@ -1220,7 +1217,7 @@ export function WebsiteProduct() {
                 <span className="core-eyebrow">Unsaved tab draft found</span>
                 <h2 id="website-restored-draft-title" ref={restoredDraftHeadingRef} tabIndex={-1}>Choose what to customize</h2>
                 <p>
-                  Current {isUntouchedWebsiteStarter(workspace) ? 'sample' : 'saved Website'}: <strong>{workspace.siteName}</strong>.
+                  Current {isUntouchedWebsiteStarter(workspace) ? 'starter Website' : 'saved Website'}: <strong>{workspace.siteName}</strong>.
                   {' '}Unsaved tab draft: <strong>{pendingRestoredDraft.session.workspace.siteName}</strong>.
                 </p>
                 <p>{websiteDraftDifference(workspace, pendingRestoredDraft.session.workspace)}</p>
@@ -1229,7 +1226,7 @@ export function WebsiteProduct() {
               <div className="website-restored-draft-actions">
                 <button className="website-button is-secondary" onClick={continueRestoredDraft} type="button">Continue saved draft</button>
                 <button className="website-button is-primary" onClick={startFromCurrentWebsite} type="button">
-                  Start from this {isUntouchedWebsiteStarter(workspace) ? 'sample' : 'Website'}
+                  Start from this Website
                 </button>
               </div>
             </section>
@@ -1264,7 +1261,7 @@ export function WebsiteProduct() {
             </div> : null}
           </section> : null}
 
-          {view === 'content' ? (
+          {view === 'content' && !starterSetupActive ? (
             <section
               aria-label="Website actions"
               className="website-action-bar"
@@ -1303,22 +1300,6 @@ export function WebsiteProduct() {
               </span>
               {!starterSetupActive ? (
                 <div className="website-primary-actions">
-                <details className="compact-disclosure">
-                  <summary>Preview options</summary>
-                <div className="website-preview-controls" role="group" aria-label="Responsive preview size">
-                  {previewDevices.map((option) => (
-                    <button
-                      aria-pressed={device === option.id}
-                      key={option.id}
-                      onClick={() => setDevice(option.id)}
-                      title={option.label + ' preview'}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                </details>
                 {surface === 'work' ? (
                   <details
                     className="website-site-settings"
@@ -1411,7 +1392,7 @@ export function WebsiteProduct() {
                       className="website-button is-primary"
                       disabled={editConflict || savingDraft}
                       onClick={() => void saveDraft()}
-                      title={editConflict ? 'Discard this preview and review the newer saved version' : 'Save all preview changes as one revision'}
+                      title={editConflict ? 'Discard this draft and review the newer saved version' : 'Save all draft changes as one revision'}
                       type="button"
                     >
                       {savingDraft ? 'Saving…' : 'Save'}
@@ -1422,7 +1403,7 @@ export function WebsiteProduct() {
                     Prepare file
                   </button>
                 ) : null : localPreviewReady ? (
-                  <button className="website-button is-primary" onClick={downloadTrialSite} type="button">
+                  <button className="website-button is-primary" onClick={downloadWebsiteFile} type="button">
                     Download website file
                   </button>
                 ) : null}
@@ -1438,11 +1419,11 @@ export function WebsiteProduct() {
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
-                  <div><span className="core-eyebrow">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} Nothing is sent to customers, CRM, or Shop from this screen.</p></div>
+                  <div><span className="core-eyebrow">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Contact data stays in this browser.'} Nothing is sent to customers, CRM, or Shop from this screen.</p></div>
                   <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
                 </header>
 
-                <form className="website-lead-capture-form" onSubmit={captureDemoInquiry}>
+                <form className="website-lead-capture-form" onSubmit={captureInquiry}>
                   <label>Name<input autoComplete="name" disabled={portalViewOnly} maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
                   <label>Phone or email<input autoComplete="email" disabled={portalViewOnly} maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
                   <label className="website-lead-request">What do they need?<textarea disabled={portalViewOnly} maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
@@ -1456,7 +1437,7 @@ export function WebsiteProduct() {
                   {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
                     <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Person: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
                     {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
-                  </article>) : <p className="website-lead-empty">No inquiry yet. Add one above to test capture, assignment, decision, persistence, and export.</p>}
+                  </article>) : <p className="website-lead-empty">No inquiries yet.</p>}
                 </div>
                 {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export inquiries</a> : null}
               </section>
@@ -1508,9 +1489,9 @@ export function WebsiteProduct() {
                     workspace={workspace}
                   />
                 ) : (
-                  <TrialReadyWorkspace
+                  <DownloadWorkspace
                     checks={checks}
-                    onDownload={downloadTrialSite}
+                    onDownload={downloadWebsiteFile}
                     retentionLabel="Available in this session"
                     workspace={workspace}
                   />

@@ -47,7 +47,6 @@ const SECRET_PATTERN = /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-
 const PRIVATE_PATH_PATTERN = /(?:[A-Z]:\\Users\\|\/Users\/|\/home\/|OneDrive - )/iu
 const CREDENTIAL_URL_PATTERN = /https?:\/\/[^/\s:@]+:[^/\s@]+@/iu
 const PNG_SIGNATURE = Object.freeze([137, 80, 78, 71, 13, 10, 26, 10])
-const PUBLIC_HOME_EXPLORE_LABEL = 'Find your business tool'
 const RETIRED_PUBLIC_HOME_EXPECTED_TEXT = Object.freeze([
   'Pick one product and try the working sample.',
   'Choose a product',
@@ -141,16 +140,15 @@ export function derivePublicHomepageExpectedText({ manifest, generatorSource }) 
     fail('exact_app_preview_public_generator_invalid')
   }
   const requiredGeneratorBindings = [
-    'function shopProfitControlAction()',
-    'const SHOP_PROFIT_CONTROL_ACTION = shopProfitControlAction()',
-    '<h1>Your business.<br>A clearer day.</h1>',
-    `href="#products">${PUBLIC_HOME_EXPLORE_LABEL} <span aria-hidden="true">↗</span></a>`,
-    'href="https://app.supermega.dev/?choose=1">Open app</a>',
+    '<h1>Your business.<br>Working together.</h1>',
+    '<p class="lede">Manage sales and stock. Publish your website. Take orders online.</p>',
+    '<p class="platform-note">Shop. Sites. Commerce. One SuperMega account.</p>',
+    'href="https://app.supermega.dev/login">Login</a>',
   ]
   if (requiredGeneratorBindings.some((fragment) => !occursExactlyOnce(generatorSource, fragment))) {
     fail('exact_app_preview_public_generator_binding_drift')
   }
-  const expected = ['Your business.', 'A clearer day.', PUBLIC_HOME_EXPLORE_LABEL, 'Open app']
+  const expected = ['Your business.', 'Working together.', 'Shop. Sites. Commerce. One SuperMega account.', 'Login']
   if (RETIRED_PUBLIC_HOME_EXPECTED_TEXT.some((retired) => (
     generatorSource.includes(retired) || expected.some((value) => value.includes(retired))
   ))) fail('exact_app_preview_public_retired_copy_present')
@@ -1029,12 +1027,12 @@ function expectedPath(spec) {
 export function expectedText(spec, publicHomepageExpectedText) {
   if (spec.surface === 'transition') return ['Profit control', 'Current leak → accountable owner → objective closure']
   if (spec.surface === 'public') {
-    if (!Array.isArray(publicHomepageExpectedText) || publicHomepageExpectedText.length !== 3) {
+    if (!Array.isArray(publicHomepageExpectedText) || publicHomepageExpectedText.length !== 4) {
       fail('exact_app_preview_public_expected_text_invalid')
     }
     return [...publicHomepageExpectedText]
   }
-  if (spec.surface === 'shop') return ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'LOCAL DEMO']
+  if (spec.surface === 'shop') return ['Mini-mart & grocery', 'Products', 'Premium rice 25kg', 'LOCAL DEMO']
   if (spec.surface === 'shop_profit_control') return [
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.heading,
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.explanation,
@@ -1047,9 +1045,17 @@ export function expectedText(spec, publicHomepageExpectedText) {
     SHOP_PROFIT_CONTROL_PREVIEW_EXPECTATION.boundary,
   ]
   if (spec.surface === 'retired_plant') return ['Shop', 'Website', 'Ecommerce']
-  if (spec.surface === 'ecommerce_brief') return ['Ecommerce', 'Your products, ready to browse.', 'Business name', 'What do you sell?', 'Existing page or catalog', 'Continue', 'Next: your contact details.', 'Open preview']
-  if (spec.surface === 'website') return ['Website', 'Your business, online.', 'Business name', 'What does your business offer?', 'Create preview', 'Preview on this device. Not published.', 'Open preview']
-  return ['Ecommerce', 'Sample store', 'Browse a sample catalog. Requests stay on this device and are not live orders.', 'Request catalog setup', 'Try sample request']
+  if (spec.surface === 'ecommerce_brief') return ['Ecommerce', 'Your products, ready to browse.', 'Business name', 'What do you sell?', 'Existing page or catalog', 'Continue', 'Next: your contact details.']
+  if (spec.surface === 'website') return [
+    'Website',
+    'Your website',
+    ...(spec.mobile ? [] : ['Tell us about the business']),
+    'Business name',
+    'Main customers',
+    'What do you sell or provide?',
+    'Create website',
+  ]
+  return ['Ecommerce', 'Online store', 'Browse your catalog and take order requests. Requests stay on this device until Shop review.', 'Request catalog setup', 'Open customer ordering']
 }
 
 function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {

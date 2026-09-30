@@ -584,29 +584,35 @@ export function receiptBoundaryVisible(box, width, height, style) {
 }
 
 export function inspectBusinessBrief(document) {
-  const form = document.querySelector('.business-brief form')
-  const fields = form ? [...form.querySelectorAll('input, textarea')] : []
+  const websiteForm = document.querySelector('.website-starter-form')
+  const form = websiteForm || document.querySelector('.business-brief form')
+  const fields = form ? [...form.querySelectorAll(websiteForm ? 'input:not([type="file"]), textarea' : 'input, textarea')] : []
   const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')
   const editable = node => visible(node) && !node.disabled && !node.readOnly && node.tabIndex >= 0
   const named = node => [...(node.labels || [])].some(label => label.textContent.trim())
   const submit = form?.querySelector('button[type="submit"]')
-  const preview = submit?.textContent.trim() === 'Create preview'
-  const count = preview ? 2 : 3
+  const website = Boolean(websiteForm)
+  const count = website ? 5 : 3
+  const essentialsRequired = website
+    ? fields.length === count && fields[0].required && fields[1].required && !fields[2].required && fields[3].required && fields[4].required
+    : fields.length === count && fields[0].required && fields[1].required && !fields[2].required
+  const nativeBlocked = website ? !form?.checkValidity() && !submit?.disabled : submit?.disabled
   return {
     fieldsReady: fields.length === count && fields.every(node => editable(node) && named(node)),
-    essentialsRequired: fields.length === count && fields[0].required && fields[1].required && (preview || !fields[2].required),
-    emptyContinueBlocked: fields.every(node => node.value === '') && visible(submit) && submit.disabled && submit.textContent.trim() === (preview ? 'Create preview' : 'Continue'),
+    essentialsRequired,
+    emptyContinueBlocked: fields.every(node => node.value === '') && visible(submit) && nativeBlocked
+      && submit.textContent.trim() === (website ? 'Create website' : 'Continue'),
   }
 }
 
 async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   const started = await evalInPage(cdp, sessionId, `(() => {
-    const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Try sample request');
+    const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent.trim() === 'Open customer ordering');
     if (!button || button.disabled) return false;
     button.click();
     return true;
   })()`)
-  if (!started) return { ok: false, error: 'Ecommerce sample-order action was not available' }
+  if (!started) return { ok: false, error: 'Ecommerce customer-order action was not available' }
 
   const readyDeadline = Date.now() + 10_000
   let formReady = false
@@ -628,7 +634,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
     const phone = form?.querySelector('input[autocomplete="tel"]');
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     if (!form || !name || !phone || !setter) return false;
-    setter.call(name, 'Demo Customer');
+    setter.call(name, 'May Thiri');
     name.dispatchEvent(new Event('input', { bubbles: true }));
     setter.call(phone, '09123456789');
     phone.dispatchEvent(new Event('input', { bubbles: true }));
@@ -642,8 +648,12 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   while (Date.now() < resultDeadline) {
     state = await evalInPage(cdp, sessionId, `(() => {
       const receipt = document.querySelector('.ecommerce-request-receipt[data-current="true"]');
+      const receiptBox = receipt?.getBoundingClientRect();
+      const boundaryGrid = receipt?.querySelector('.ecommerce-quote-boundaries');
+      const boundaryItems = boundaryGrid ? [...boundaryGrid.children] : [];
+      const boundaryRows = new Set(boundaryItems.map((item) => Math.round(item.getBoundingClientRect().top))).size;
       const receiptBoundary = receipt ? [...receipt.querySelectorAll('p')]
-        .find((candidate) => candidate.textContent.includes('This browser demo retained the request.')) : null;
+        .find((candidate) => candidate.textContent.includes('Saved on this device for Shop review.')) : null;
       const box = receiptBoundary?.getBoundingClientRect();
       const todayTitle = document.querySelector('#ecommerce-today-title')?.textContent.trim() || '';
       const todaySummary = document.querySelector('.ecommerce-today-priority > p')?.textContent.trim() || '';
@@ -655,6 +665,8 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
         todaySummary,
         notice,
         receiptPresent: Boolean(receipt),
+        receiptHeight: receiptBox?.height || 0,
+        boundaryRows,
         receiptBoundary: receiptBoundary?.textContent.trim() || '',
         boundaryVisible: (${receiptBoundaryVisible.toString()})(box, window.innerWidth, window.innerHeight, receiptBoundary ? getComputedStyle(receiptBoundary) : null),
         oldManagedHeadlineVisible: bodyText.includes('Request sent to Shop'),
@@ -666,19 +678,21 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
         documentScrollWidth: document.documentElement?.scrollWidth || 0,
       };
     })()`)
-    if (state?.todayTitle === 'Sample request saved locally' && state?.receiptBoundary && state?.boundaryVisible) break
+    if (state?.todayTitle === 'Order request saved' && state?.receiptBoundary && state?.boundaryVisible) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
 
   const checks = {
-    localHeadline: state?.todayTitle === 'Sample request saved locally',
-    localSummary: state?.todaySummary.includes('saved on this device for Shop review')
-      && state?.todaySummary.includes('No Shop inbox write, charge, stock, delivery, or customer message happened.'),
-    localNotice: state?.notice.includes('saved on this device for Shop review')
+    localHeadline: state?.todayTitle === 'Order request saved',
+    localSummary: state?.todaySummary.includes('Saved on this device for Shop review')
+      && state?.todaySummary.includes('No order, charge, stock, delivery, or customer message changed.'),
+    localNotice: state?.notice.includes('Saved on this device for Shop review')
       && state?.notice.includes('No order, stock, message, or charge changed.'),
-    localReceipt: state?.receiptBoundary.includes('This browser demo retained the request.')
+    localReceipt: state?.receiptBoundary.includes('Saved on this device for Shop review.')
       && state?.receiptBoundary.includes('Shop still confirms stock, promise, payment, and delivery.'),
     boundaryVisible: Boolean(state?.boundaryVisible),
+    compactMobileReceipt: Number(state?.viewportWidth || 0) > 560
+      || (Number(state?.boundaryRows || 0) <= 2 && Number(state?.receiptHeight || 0) <= 380),
     managedHeadlineAbsent: !state?.oldManagedHeadlineVisible,
     companyReceiptClaimAbsent: !state?.companyReceiptClaimVisible,
     browserPersistencePresent: Boolean(state?.localBuyingStatePresent),
@@ -1025,7 +1039,7 @@ const tests = [
     height: 900,
     expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
     expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
-    expectedText: ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'LOCAL WORKSPACE'],
+    expectedText: ['Mini-mart & grocery', 'Products', 'Premium rice 25kg', 'PRIVATE DEVICE'],
     exerciseShopCounter: true,
     noHorizontalOverflow: true,
     screenshotName: 'shop-counter-mini-mart-desktop-1280x900',
@@ -1040,7 +1054,7 @@ const tests = [
     mobile: true,
     expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
     expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
-    expectedText: ['Mini-mart & grocery', 'Tap an item to add it', 'Premium rice 25kg', 'Login'],
+    expectedText: ['Mini-mart & grocery', 'Products', 'Premium rice 25kg', 'CURRENT SALE · THIS DEVICE', 'Login'],
     exerciseShopCounter: true,
     noHorizontalOverflow: true,
     screenshotName: 'shop-counter-mini-mart-mobile-390x844',
@@ -1062,7 +1076,7 @@ const tests = [
     height: 900,
     expectedPath: (path) => path.startsWith('/website/'),
     expectedPathLabel: '/website/',
-    expectedText: ['Your website', 'Add business details', 'Main customers', 'What do you sell or provide?', 'Prepare private draft'],
+    expectedText: ['Your website', 'Tell us about the business', 'Main customers', 'What do you sell or provide?', 'Create website'],
     seed: {},
   },
   {
@@ -1071,7 +1085,7 @@ const tests = [
     width: 1280,
     height: 900,
     expectedPath: '/website/?workspace=1',
-    expectedText: ['Your website', 'Add business details', 'Main customers', 'What do you sell or provide?', 'Prepare private draft'],
+    expectedText: ['Your website', 'Tell us about the business', 'Main customers', 'What do you sell or provide?', 'Create website'],
     screenshotName: 'website-business-setup-desktop-1280x900',
     seed: {},
   },
@@ -1082,7 +1096,7 @@ const tests = [
     height: 844,
     mobile: true,
     expectedPath: '/website/?workspace=1',
-    expectedText: ['Your website', 'Add business details', 'Main customers', 'What do you sell or provide?', 'Prepare private draft'],
+    expectedText: ['Your website', 'Main customers', 'What do you sell or provide?', 'Create website'],
     screenshotName: 'website-business-setup-mobile-390x844',
     seed: {},
   },
@@ -1108,13 +1122,13 @@ const tests = [
     seed: {},
   })),
   {
-    name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
+    name: 'desktop Ecommerce keeps a reviewed order request on this device',
     route: '/ecommerce/?workspace=1',
     width: 1280,
     height: 900,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Sample request saved locally', 'This sample order request is saved on this device for Shop review.', 'This browser demo retained the request.'],
+    expectedText: ['Commerce', 'Order request saved', 'Saved on this device for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-desktop-1280x900',
@@ -1122,14 +1136,14 @@ const tests = [
     seed: miniMartCounterFixture(),
   },
   {
-    name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
+    name: 'mobile Ecommerce keeps a reviewed order request on this device',
     route: '/ecommerce/?workspace=1',
     width: 390,
     height: 844,
     mobile: true,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Sample request saved locally', 'This sample order request is saved on this device for Shop review.', 'This browser demo retained the request.'],
+    expectedText: ['Commerce', 'Order request saved', 'Saved on this device for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-mobile-390x844',
