@@ -710,7 +710,7 @@ export function WebsiteProduct() {
 
   function startWithBusiness(brief: WebsiteStarterBrief) {
     if (!starterAvailable) {
-      setNotice('The Website example has already changed. Nothing was replaced.')
+      setNotice('This setup has already changed. Nothing was replaced.')
       return false
     }
     const staged = stageWorkspace((current) => (
@@ -951,7 +951,7 @@ export function WebsiteProduct() {
     : pendingRestoredDraft
       ? `This tab has an unsaved ${pendingRestoredDraft.session.workspace.siteName} draft, while the current Website is ${workspace.siteName}. Choose one before editing.`
     : starterSetupActive
-      ? 'Answer a short brief to replace the example with client-specific pages.'
+      ? 'Answer a short brief to prepare client-specific pages.'
       : starterAvailable
         ? 'Add the business details once. SuperMega will prepare the pages, wording and navigation.'
         : hasUnsavedChanges
@@ -1016,7 +1016,7 @@ export function WebsiteProduct() {
     && websiteTodayState === 'ready' && !pendingRestoredDraft
     && !storageIssue && !canRepairLocalStorage
   const websiteTodayContext = workingSampleTemplate
-    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current design' : 'starting design'} · ${websiteTodaySource}`
+    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current layout' : 'selected layout'} · ${websiteTodaySource}`
     : websiteTodaySource
   const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
     contract: 'supermega.website.lead-export.v1',

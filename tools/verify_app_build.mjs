@@ -4181,7 +4181,7 @@ if (!websiteModelSource.includes("contract: 'supermega.website.working-sample.v1
   || !websiteModelSource.includes('export function websiteEditSessionStorageKey(scope: string)')
   || !websiteStarterSource.includes('readStoredWebsiteLeads(storage')
   || productOnboardingPageSource.includes('activateLocalWebsiteWorkingSample')
-  || !websiteSource.includes("? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current design' : 'starting design'} · ${websiteTodaySource}")
+  || !websiteSource.includes("? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current layout' : 'selected layout'} · ${websiteTodaySource}")
   || !websiteSource.includes('websiteTodayContext')) fail('website_working_sample_activation_missing')
 if ((websiteSource.match(/onClick=\{runWebsiteAutopilot\}/g) ?? []).length !== 1
   || !websiteSource.includes("{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>")
