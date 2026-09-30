@@ -1846,10 +1846,10 @@
 }
 
 .website-status-disclosure { min-width: 0; }
-.website-status-disclosure > summary { min-height: 44px; padding: 12px 16px; cursor: pointer; border: 1px solid var(--website-line); border-radius: 12px; font-weight: 600; }
-.website-status-disclosure > summary:focus-visible { outline: 2px solid var(--website-green); outline-offset: 2px; }
+.website-status-disclosure > summary { min-height: 2.75rem; padding: .75rem 1rem; cursor: pointer; border: .0625rem solid var(--website-line); border-radius: .75rem; font-weight: 600; }
+.website-status-disclosure > summary:focus-visible { outline: .125rem solid var(--website-green); outline-offset: .125rem; }
 .website-status-disclosure[data-editing-routine='false'] > summary { display: none; }
-.website-status-disclosure[open][data-editing-routine='true'] > summary { margin-bottom: 12px; }
+.website-status-disclosure[open][data-editing-routine='true'] > summary { margin-bottom: .75rem; }
 .website-today {
   order: 1;
   display: grid;
