@@ -2395,7 +2395,7 @@ export function EcommerceProduct() {
               </div>
             ) : (
               <div className="ecommerce-preview-empty">
-                <strong>Preview needs attention</strong>
+                <strong>Store needs attention</strong>
                 <p>{previewResult.error}</p>
               </div>
             )}
