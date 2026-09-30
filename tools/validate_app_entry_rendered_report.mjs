@@ -32,7 +32,7 @@ const FULL_CASE_MATRIX = Object.freeze([
   { name: 'desktop root shows launcher despite remembered product', route: '/', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: 'app-launcher-desktop-1280x900.png' },
   { name: 'desktop choose query shows launcher', route: '/?choose=1', viewport: '1280x900', width: 1280, height: 900, path: '/?choose=1', screenshot: null },
   { name: 'mobile root shows launcher', route: '/', viewport: '390x844 mobile', width: 390, height: 844, path: '/', screenshot: 'app-launcher-mobile-390x844.png' },
-  { name: 'retired Shop demo query stays on account home', route: '/?demo=shop', viewport: '1280x900', width: 1280, height: 900, path: '/?demo=shop', screenshot: null },
+  { name: 'retired Shop demo query returns to account home', route: '/?demo=shop', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   {
     name: 'desktop trade link opens a complete mini-mart counter',
     route: '/shop/?template=mini-mart',
@@ -57,10 +57,10 @@ const FULL_CASE_MATRIX = Object.freeze([
     viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
     width: spec.width, height: spec.height, path: spec.expectedPath,
     screenshot: `${spec.id}.png`, semantics: 'retired-product' })),
-  { name: 'retired Website demo query stays on account home', route: '/?demo=website', viewport: '1280x900', width: 1280, height: 900, path: '/?demo=website', screenshot: null },
+  { name: 'retired Website demo query returns to account home', route: '/?demo=website', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   { name: 'desktop Website opens real business setup', route: '/website/?workspace=1', viewport: '1280x900', width: 1280, height: 900, path: '/website/?workspace=1', screenshot: 'website-business-setup-desktop-1280x900.png' },
   { name: 'mobile Website opens real business setup', route: '/website/?workspace=1', viewport: '390x844 mobile', width: 390, height: 844, path: '/website/?workspace=1', screenshot: 'website-business-setup-mobile-390x844.png' },
-  { name: 'retired Commerce demo query stays on account home', route: '/?demo=ecommerce', viewport: '1280x900', width: 1280, height: 900, path: '/?demo=ecommerce', screenshot: null },
+  { name: 'retired Commerce demo query returns to account home', route: '/?demo=ecommerce', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
     name: `empty Ecommerce offers real catalog setup at ${size.width}px`,
     route: '/ecommerce/?workspace=1',

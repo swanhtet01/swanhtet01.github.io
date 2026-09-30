@@ -244,10 +244,10 @@ function fullCaseMatrixFixture() {
       screenshot: { file: 'app-launcher-mobile-390x844.png' },
     },
     {
-      name: 'retired Shop demo query stays on account home',
+      name: 'retired Shop demo query returns to account home',
       route: '/?demo=shop',
       viewport: '1280x900',
-      path: '/?demo=shop',
+      path: '/',
       screenshot: null,
     },
     {
@@ -268,10 +268,10 @@ function fullCaseMatrixFixture() {
       viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
       path: spec.expectedPath, screenshot: { file: `${spec.id}.png` } })),
     {
-      name: 'retired Website demo query stays on account home',
+      name: 'retired Website demo query returns to account home',
       route: '/?demo=website',
       viewport: '1280x900',
-      path: '/?demo=website',
+      path: '/',
       screenshot: null,
     },
     {
@@ -289,10 +289,10 @@ function fullCaseMatrixFixture() {
       screenshot: { file: 'website-business-setup-mobile-390x844.png' },
     },
     {
-      name: 'retired Commerce demo query stays on account home',
+      name: 'retired Commerce demo query returns to account home',
       route: '/?demo=ecommerce',
       viewport: '1280x900',
-      path: '/?demo=ecommerce',
+      path: '/',
       screenshot: null,
     },
     ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
@@ -540,9 +540,9 @@ test('demo query routing is retired from the application entry', async () => {
   assert.equal(source.includes('function productDemoPath('), false)
   assert.equal(source.includes("params.get('demo')"), false)
   for (const [name, path] of [
-    ['retired Shop demo query stays on account home', '/?demo=shop'],
-    ['retired Website demo query stays on account home', '/?demo=website'],
-    ['retired Commerce demo query stays on account home', '/?demo=ecommerce'],
+    ['retired Shop demo query returns to account home', '/'],
+    ['retired Website demo query returns to account home', '/'],
+    ['retired Commerce demo query returns to account home', '/'],
   ]) {
     const entryCase = renderedVerifierSource.split(`name: '${name}'`)[1].split('seed:')[0]
     assert.ok(entryCase.includes(`expectedPath: '${path}'`))

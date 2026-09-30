@@ -586,10 +586,12 @@ export function ProductHomeEntry() {
   const location = useLocation()
   const portalAccess = useContext(ManagedPortalAccessContext)
   const params = new URLSearchParams(location.search)
+  const retiredDemoQuery = params.has('demo')
   const choosingProduct = params.get('choose') === '1'
   const lastProduct = !choosingProduct && typeof window !== 'undefined'
     ? readLastProduct()
     : null
+  if (retiredDemoQuery) return <Navigate replace to="/" />
   if (portalAccess.status === 'checking') {
     return <PortalAccessPanel copy="Checking products." title="Opening…" />
   }
