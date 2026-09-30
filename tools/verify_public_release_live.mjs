@@ -239,7 +239,7 @@ async function verifyOnce() {
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   const interfaceImages = {
     shop: 'platform-shop-dashboard-v2.jpg',
-    website: 'platform-pages.jpg',
+    website: 'platform-sites-workspace-v2.jpg',
     ecommerce: 'platform-catalog.jpg',
   }
   for (const product of publicProducts) {
