@@ -259,6 +259,14 @@ Define each workflow's input schema, identity, state machine, idempotency, retry
 
 Reuse established Auth, PostgreSQL and hosting. Evaluate new frameworks against license, maintenance, operating cost, portability and integration burden. Avoid duplicate CRMs, identities and overlapping queues. Link business, operational job and result records with stable IDs rather than copying private data everywhere.
 
+### Template and customization contract
+
+Build capability primitives once, then assemble them through versioned template manifests: industry vocabulary, catalog/service shapes, fulfillment rules, content blocks, visual tokens, permissions and automation policies. A template may extend only declared slots; it cannot inject executable code, weaken tenant boundaries, or bypass validation. Customer facts and brand assets remain tenant data, never copied into a shared template.
+
+The shipped templates are maintained reference packs, not a ceiling. A custom solution begins with a schema-validated manifest and explicit capability choices, carries a stable version and migration path, and falls back safely when an optional product-specific presentation is absent. Product surfaces must consume the same manifest identifiers or a deliberate generic fallback; adding a vertical must not require a parallel Shop, Sites and Commerce application.
+
+Measure template quality through completed operator tasks, customer clarity, setup time, error/recovery rate, performance and support load. Promote a custom implementation into a reusable pack only after repeated evidence. "Infinite customization" means an extensible governed system, not unbounded per-customer forks.
+
 ## 11. Data safety and financial correctness
 
 Separate production, acceptance and local environments. Use least privilege in API and database layers. PostgreSQL RLS checks include allowed/denied access, cross-tenant attempts, role changes and stale identity. Never assume a client-side filter is a security boundary.
