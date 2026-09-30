@@ -18,7 +18,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 const bundle = await build({
   stdin: {
     contents: `
-      export { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, shopBusinessTemplateManifest } from './business-templates.ts'
+      export { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, shopBusinessTemplateManifest, shopBusinessTemplateManifests } from './business-templates.ts'
       export { createClientImportPreview } from '../../core/client-onboarding.ts'
     `,
     resolveDir: 'showroom/src/products/shop',
@@ -32,7 +32,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, shopBusinessTemplateManifest, createClientImportPreview } = await import(
+const { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, shopBusinessTemplateManifest, shopBusinessTemplateManifests, createClientImportPreview } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -46,6 +46,10 @@ check(shopBusinessTemplates.length >= 7, `at least the seven shipped templates a
 check(
   new Set(shopBusinessTemplates.map((template) => template.id)).size === shopBusinessTemplates.length,
   'template ids are unique, so selecting one cannot be ambiguous',
+)
+check(
+  shopBusinessTemplateManifests.manifests.length === shopBusinessTemplates.length,
+  'every shipped Shop pack is registered once for cross-product capability lookup',
 )
 
 const MYANMAR = /[က-႟ꩠ-ꩿꧠ-꧿]/
