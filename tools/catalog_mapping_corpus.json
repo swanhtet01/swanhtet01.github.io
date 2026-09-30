@@ -73,6 +73,27 @@
       "csv": "sku,name,stock,reorder_at,price,currency\nSYN-10,Synthetic item,5,1,1200,",
       "ready": 0,
       "expectedRejection": "import_validation_failed"
+    },
+    {
+      "id": "two-row-catalog",
+      "csv": "sku,name,stock,reorder_at,price\nSYN-A,Tea,5,1,1200\nSYN-B,Coffee,9,2,3500",
+      "ready": 2,
+      "valuesByRow": [
+        {
+          "sku": "SYN-A",
+          "name": "Tea",
+          "onHand": "5",
+          "reorderAt": "1",
+          "price": "1200"
+        },
+        {
+          "sku": "SYN-B",
+          "name": "Coffee",
+          "onHand": "9",
+          "reorderAt": "2",
+          "price": "3500"
+        }
+      ]
     }
   ]
 }

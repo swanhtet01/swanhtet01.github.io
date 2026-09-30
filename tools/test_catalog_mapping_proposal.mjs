@@ -106,3 +106,15 @@ test('reference proposals satisfy every fixed corpus expectation', async () => {
   const malformed = await evaluateCatalogMappings(corpus, responses.map(row => ({ ...row, proposal: null })))
   assert.equal(malformed.results.filter(row => row.expectationMet).length, 0)
 })
+
+
+test('batch evaluation checks row count and later-row values', async () => {
+  const { evaluateCatalogMappings } = await import('./evaluate_catalog_mapping.mjs')
+  const source = csv + '\nSYN-2,Second item,8,2,2400'
+  const response = [{ id: 'batch', proposal: await proposalFor(source) }]
+  const scenario = { id: 'batch', csv: source, ready: 2, valuesByRow: [{ price: '1200' }, { price: '2400', onHand: '8' }] }
+  assert.equal((await evaluateCatalogMappings({ cases: [scenario] }, response)).technicalPass, true)
+  assert.equal((await evaluateCatalogMappings({ cases: [{ ...scenario, valuesByRow: [{ price: '1200' }, { price: '1' }] }] }, response)).technicalPass, false)
+  assert.equal((await evaluateCatalogMappings({ cases: [{ ...scenario, ready: 1 }] }, response)).technicalPass, false)
+  await assert.rejects(evaluateCatalogMappings({ cases: [{ ...scenario, valuesByRow: undefined }] }, response), /batch_expectations_required/)
+})

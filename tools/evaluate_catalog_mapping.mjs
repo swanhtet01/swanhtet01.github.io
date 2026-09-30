@@ -11,13 +11,18 @@ export async function evaluateCatalogMappings(corpus, responses) {
   if (corpus.cases.some(row => row.ready === 0 && !['human_choice_required', 'import_validation_failed'].includes(row.expectedRejection))) {
     throw new Error('expected_rejection_required')
   }
+  if (corpus.cases.some(row => row.ready > 1 && (!Array.isArray(row.valuesByRow) || row.valuesByRow.length !== row.ready))) {
+    throw new Error('batch_expectations_required')
+  }
   const results = []
   for (const scenario of corpus.cases) {
     const response = responses.find(row => row.id === scenario.id)
     const result = await reviewCatalogMappingProposal(scenario.csv, [], response.proposal)
     const reviewable = result.status === 'review_required'
-    const preserved = !reviewable || Object.entries(scenario.values ?? {}).every(([key, value]) =>
-      String(result.preview.rows[0]?.item?.[key]) === value)
+    const expectedRows = scenario.valuesByRow ?? [scenario.values ?? {}]
+    const preserved = !reviewable || (result.preview.rows.length === scenario.ready
+      && expectedRows.every((values, index) => Object.entries(values).every(([key, value]) =>
+        String(result.preview.rows[index]?.item?.[key]) === value)))
     results.push({ id: scenario.id, status: result.status, reason: result.reason ?? null,
       expectationMet: scenario.ready > 0
         ? reviewable && preserved
