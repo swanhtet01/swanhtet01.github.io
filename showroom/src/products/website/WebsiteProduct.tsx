@@ -198,14 +198,14 @@ export function WebsiteProduct() {
   const editSessionRef = useRef<WebsiteEditSessionState | null>(null)
   const restoredDraftHeadingRef = useRef<HTMLHeadingElement>(null)
   const [device, setDevice] = useState<PreviewDevice>(() => (
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 560px)').matches
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches
       ? 'mobile'
       : typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches
         ? 'tablet'
         : 'desktop'
   ))
   useEffect(() => {
-    const mobileQuery = window.matchMedia('(max-width: 560px)')
+    const mobileQuery = window.matchMedia('(max-width: 720px)')
     const tabletQuery = window.matchMedia('(max-width: 1024px)')
     const syncPreviewDevice = () => setDevice(mobileQuery.matches ? 'mobile' : tabletQuery.matches ? 'tablet' : 'desktop')
     syncPreviewDevice()
