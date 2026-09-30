@@ -559,7 +559,7 @@ function productStory(id, standalone = false) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Your business.<br>Working together.</h1><p class="lede">Manage sales and stock. Publish your website. Take orders online.</p></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">Shop. Sites. Commerce. One SuperMega account.</p></main>`,
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Sales, stock, a working website and customer orders—one platform, built to stay in step.</p></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">Shop. Sites. Commerce. One connected operating system.</p></main>`,
 })
 
 function productLandingHtml(product,page) {

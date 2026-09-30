@@ -127,7 +127,7 @@ async function verifyOnce() {
   const pendingRoutes = new Set()
   const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map(pageResults)
-  assert(pages.get('/')?.includes('Your business.<br>Working together.'), 'homepage_headline_wrong')
+  assert(pages.get('/')?.includes('Run the business.<br>Without the busywork.'), 'homepage_headline_wrong')
   assert(pages.get('/')?.includes('href="https://app.supermega.dev/login">Login</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
@@ -302,7 +302,7 @@ async function verifyOnce() {
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })
   assert(www.status === 200, 'www_http_error', { status: www.status })
   const wwwHtml = await www.text()
-  assert(wwwHtml.includes('Your business.<br>Working together.'), 'www_release_drift')
+  assert(wwwHtml.includes('Run the business.<br>Without the busywork.'), 'www_release_drift')
 
   return {
     pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),
