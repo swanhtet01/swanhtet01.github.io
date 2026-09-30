@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.41
+Version: 1.2.42
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-01
@@ -168,6 +168,8 @@ Artifacts are retained under `C:/Users/thesw/.codex/generated_images/01a0d249-2b
 These absolute paths are local working references. Preserve the selected source alongside the implementation handoff before moving machines. Generated details such as optional tax rows, decorative branding and catalog imagery require product validation; they are not requirements merely because they appear in an image.
 
 On 30 September a second three-direction board compared Editorial Precision, Operator Console and Spatial Workspace for the connected Shop experience at `C:/Users/thesw/.codex/generated_images/01a0d249-2b5d-7d83-a769-79336eeb777c/exec-8dc10d33-d6f2-4147-b7f2-c18f05038255.png`. The delegated selection is a hybrid of Editorial Precision and Operator Console: calm white structure, one strong work canvas, compact priorities and contextual detail. It rejects the Spatial Workspace hero treatment because imagery competes with daily work. Incumbent research supports searchable checkout, unified inventory/orders/customer context, staff controls and embedded next actions; capability lists alone do not establish parity.
+
+On 1 October, the selected product reference sharpened the direction further: a white operating canvas, an unmistakable daily decision, compact status cards, practical tables and one contextual follow-up rail. SuperMega adopts the underlying interaction model—not its branding or illustrative business data. The implementation rule is: show the current decision and outcome first; group metrics by operational meaning; make the next useful action obvious; disclose advanced controls progressively; preserve real data, recovery and permission boundaries. Public product images may illustrate the workspaces, but the products themselves must satisfy the same hierarchy with actual state.
 
 Latest owner direction: improve the whole product with Apple-like restraint and polish, not cosmetic choices. Remove the skin dropdown and dark-mode controls. Converge on one consistent light white/graphite/indigo interface across the apps and public website. This supersedes the earlier selectable-skins proposal and the temporary public-site cobalt declaration. Keep reusable design tokens internally; do not expose appearance controls without a new user request. Ignore previously saved appearance preferences when rendering the app. Preserve business records.
 
