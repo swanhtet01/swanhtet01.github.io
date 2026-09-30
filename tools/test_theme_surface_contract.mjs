@@ -26,6 +26,12 @@ const coreSource = readFileSync('showroom/src/core/core-app.css', 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '')
 const shellSource = readFileSync('showroom/src/core/CoreShell.tsx', 'utf8')
 const appSource = readFileSync('showroom/src/index.css', 'utf8').replaceAll('\r\n', '\n')
+const ecommerceSource = readFileSync('showroom/src/products/ecommerce/ecommerce-product.css', 'utf8')
+  .replaceAll('\r\n', '\n')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+const websiteSource = readFileSync('showroom/src/products/website/website-product.css', 'utf8')
+  .replaceAll('\r\n', '\n')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
 
 check(
   coreSource.includes(':root {\n  color-scheme: light;'),
@@ -39,6 +45,12 @@ check(
   !coreSource.includes('.theme-toggle'),
   'the core stylesheet contains no theme-toggle control styling',
 )
+check(!coreSource.includes('.theme-dark'), 'the core stylesheet contains no dark-theme selectors')
+check(!ecommerceSource.includes('.theme-dark'), 'the Commerce stylesheet contains no dark-theme selectors')
+check(!websiteSource.includes('.theme-dark'), 'the Sites stylesheet contains no dark-theme selectors')
+check(!coreSource.includes('color-scheme: dark;'), 'the core stylesheet has no dark color scheme')
+check(!ecommerceSource.includes('color-scheme: dark;'), 'the Commerce stylesheet has no dark color scheme')
+check(!websiteSource.includes('color-scheme: dark;'), 'the Sites stylesheet has no dark color scheme')
 check(
   shellSource.includes("document.documentElement.dataset.supermegaTheme = 'light'"),
   'CoreShell pins the document theme dataset to light',

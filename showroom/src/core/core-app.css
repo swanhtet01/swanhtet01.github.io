@@ -1598,59 +1598,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .ecommerce-request-receipt small { color: var(--core-quiet); font-size: 0.5rem; }
 
 /* Shared dark theme for every product. */
-.theme-dark {
-  color-scheme: dark;
-  --core-on-accent: #03140f;
-  --core-field-line: rgba(166, 190, 214, .5);
-  --core-scroll-accent: rgba(86, 240, 193, .25);
-  --core-bg: #05080d;
-  --core-panel: #0d131b;
-  --core-panel-raised: #121b25;
-  --core-surface-soft: #111923;
-  --core-ink: #f5f8fb;
-  --core-muted: #a4b0be;
-  /* #718093 measured 4.31:1 against the raised panel behind the counter tiles — under the
-     4.5:1 AA floor for text this size, and it carries the stock reading. Lightened just far
-     enough to clear it at 4.91:1 rather than restyling the palette. */
-  --core-quiet: #7a8a9c;
-  --core-line: rgba(166,190,214,.13);
-  --core-line-strong: rgba(166,190,214,.24);
-  --core-green: #56f0c1;
-  --core-green-soft: rgba(86,240,193,.11);
-  --core-success: #56f0c1;
-  --core-success-soft: rgba(86,240,193,.11);
-  --core-warn: #ffcc7a;
-  --core-danger: #ff8291;
-  /* The aliases must be restated here. A var() inside a custom property is substituted
-     against the element the property is DECLARED on — :root — not the element that uses it,
-     so `--core-accent: var(--core-green)` on :root freezes at the light green and never sees
-     this block. .theme-dark is a descendant div, not :root, so it cannot retroactively
-     change what :root already computed. Verified: before this, --core-accent read #2454e6
-     and --core-text read #171b26 inside dark mode. */
-  --core-accent: var(--core-green);
-  --core-focus: var(--core-green);
-  --core-warning: var(--core-warn);
-  --core-text: var(--core-ink);
-  --core-soft: var(--core-panel-raised);
-  --core-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .38);
-  /* The dark elevation shared by the raised surfaces further down. A token rather than a
-     repeated literal because .theme-dark .production-mode-banner needs this shadow WITHOUT
-     the background/border-color its old grouped rule also carried -- see the note there.
-     Declaring the two px lengths once means splitting that rule costs the P3.6a px ratchet
-     nothing. Dark-only on purpose: light surfaces carry their own shadow in their base rule,
-     and nothing outside .theme-dark consumes this. */
-  --core-panel-shadow: 0 18px 48px rgba(0,0,0,.22);
-  background: radial-gradient(circle at 72% -10%, rgba(42,120,133,.2), transparent 32%), #05080d;
-  color: var(--core-ink);
-}
-.theme-dark .core-sidebar { border-color: var(--core-line); background: rgba(7,11,17,.96); }
-.theme-dark .core-topbar { border-color: var(--core-line); background: rgba(6,10,15,.9); }
-.theme-dark .plant-job-import-repair span { border-color: rgba(217,119,6,.25); background: rgba(40,30,8,.9); }
-.theme-dark .plant-job-import-repair small { color: #e89a4a; }
-.theme-dark .website-intake { border-color: rgba(86,240,193,.2); background: linear-gradient(110deg, rgba(86,240,193,.07), var(--core-panel) 48%); }
-.theme-dark .core-main { background: transparent; }
-.theme-dark .core-nav a:hover { background: rgba(86,240,193,.07); }
-.theme-dark .core-nav a.active { border-color: rgba(86,240,193,.22); background: rgba(86,240,193,.1); }
+
 /* THE SAME CASCADE TRAP AS THE BANNERS -- disarmed the same way. Only `background` differs
    from the base rule here. `.core-button` at :180 already declares
    `border: 1px solid var(--core-line-strong)` and `color: var(--core-ink)`, and BOTH tokens
@@ -1673,11 +1621,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
    and 0-3-0 and sit later still; both are unaffected, verified by measurement.
    See THE CONVENTION on the banner rule below: a `.theme-dark <class>` rule declares only
    what actually differs from the base rule. Do not restate a base-rule token here. */
-.theme-dark .core-button { background: #121a23; }
-.theme-dark .core-button:hover { border-color: var(--core-green); background: rgba(86,240,193,.1); }
-.theme-dark .core-button.primary { border-color: var(--core-green); background: var(--core-green); color: var(--core-on-accent); }
-.theme-dark input, .theme-dark select, .theme-dark textarea { border-color: var(--core-line-strong); background: #090f16; color: var(--core-ink); }
-.theme-dark input::placeholder, .theme-dark textarea::placeholder { color: #657386; }
+
 /* CASCADE TRAP, DISARMED -- read this before adding a selector to the rule below.
    .production-mode-banner used to be a member of this group and did not need to be. The
    banner's base rule already declares `border: 1px solid var(--core-line)` and
@@ -1699,14 +1643,6 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
    out-cascades every equal-specificity variant that was written earlier in the file.
    Do not add background or border-color to the banner rule below; that re-arms the trap, and
    tools/test_theme_surface_contract.mjs fails if you do. */
-.theme-dark .core-panel, .theme-dark .accountable-action-gate, .theme-dark .receipt-dialog { border-color: var(--core-line); background: var(--core-panel); box-shadow: var(--core-panel-shadow); }
-.theme-dark .production-mode-banner { box-shadow: var(--core-panel-shadow); }
-.theme-dark .runtime-badge.demo, .theme-dark .runtime-badge.enterprise { border-color: rgba(86,240,193,.22); color: var(--core-green); }
-.theme-dark .mobile-nav { border-color: var(--core-line); background: rgba(7,11,17,.97); box-shadow: 0 -12px 34px rgba(0,0,0,.28); }
-.theme-dark .mobile-nav a.active { border-color: var(--core-green); color: var(--core-green); }
-.theme-dark .accountable-action-gate::backdrop { background: rgba(0,3,7,.76); }
-.theme-dark .receipt-dialog::backdrop { background: rgba(0,3,7,.68); }
-.theme-dark :focus-visible { outline-color: rgba(86,240,193,.48); }
 
 .commerce-screen { gap: 10px; }
 .commerce-screen .page-heading { min-height: 54px; align-items: center; }
@@ -2614,7 +2550,6 @@ body { font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, Blink
    litany demotion, and the mobile trio (blur, 320px clamp).
    ========================================================================== */
 input, select, textarea,
-.theme-dark input, .theme-dark select, .theme-dark textarea { border-color: var(--core-field-line); }
 
 /* The counter scrollbars and tile art shipped dark-tuned on the LIGHT default
    route — dark-navy art blocks on cream tiles, mint scrollbars on white. Light
@@ -2626,11 +2561,6 @@ input, select, textarea,
 .shop-product-tile[data-art="2"] { --art: #c07a1e; --art-soft: #f8ead7; --art-detail: #7c450e; }
 .shop-product-tile[data-art="3"] { --art: #7a55b8; --art-soft: #eee7f8; --art-detail: #4c2b7b; }
 .shop-product-tile[data-art="4"] { --art: #c74f6e; --art-soft: #fae5eb; --art-detail: #7d263d; }
-.theme-dark .shop-product-tile { --art: #56f0c1; --art-soft: #153a34; --art-detail: #071b17; }
-.theme-dark .shop-product-tile[data-art="1"] { --art: #63c7ff; --art-soft: #142f42; --art-detail: #082034; }
-.theme-dark .shop-product-tile[data-art="2"] { --art: #ffbd6e; --art-soft: #3d2c19; --art-detail: #2a1906; }
-.theme-dark .shop-product-tile[data-art="3"] { --art: #c7a5ff; --art-soft: #302343; --art-detail: #1f1232; }
-.theme-dark .shop-product-tile[data-art="4"] { --art: #ff829e; --art-soft: #40202c; --art-detail: #2b101a; }
 
 /* Compliance footer reads as caption, not amber warning (was 8px alert box). */
 .storefront-preview > footer { background: transparent; color: var(--core-quiet); font-size: var(--font-size-sm); padding: 12px; }
@@ -2638,7 +2568,7 @@ input, select, textarea,
 @media (max-width: 840px) {
   /* blur(18px) on two fixed bars sandwiching the scroll region drops Helio
      P22-class GPUs below 30fps; at .92-.97 alpha it is barely visible anyway. */
-  .core-topbar, .mobile-nav, .theme-dark .core-topbar, .theme-dark .mobile-nav { backdrop-filter: none; background: var(--core-panel); }
+  .core-topbar, .mobile-nav { backdrop-filter: none; background: var(--core-panel); }
   .shop-cart-backdrop, .plant-output-backdrop { backdrop-filter: none; }
 }
 @media (max-width: 359px) {
@@ -2669,11 +2599,6 @@ input, select, textarea,
    rendering the light shadow in dark mode. Restated here, mirroring the dark
    --core-shadow values, so every :root token has a .theme-dark counterpart.
    ========================================================================== */
-.theme-dark {
-  --shadow-1: 0 8px 24px rgba(0, 0, 0, .38);
-  --shadow-2: var(--core-shadow);
-  --shadow-3: 0 30px 90px rgba(0, 0, 0, .55);
-}
 
 /* ============================================================================
    Design phase 2 — item 5: status-pill traffic-light semantics.
