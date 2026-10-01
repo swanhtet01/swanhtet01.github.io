@@ -6,9 +6,12 @@ import test from 'node:test'
 import {
   PROVIDER_READBACK_CONTRACT,
   RECOVERY_PLAN_CONTRACT,
+  REPAIR_RECEIPT_CONTRACT,
   buildRecoveryPlan,
   contentDigest,
   selectRecoveryAction,
+  validatePreviewRepairReceipt,
+  validatePreviewRepairReceiptShape,
   validateRecoveryPlan,
   validateRecoveryPlanShape,
 } from './prepare_supabase_preview_recovery_plan.mjs'
@@ -16,6 +19,7 @@ import {
 const root = resolve(import.meta.dirname, '..')
 const readbackPath = resolve(root, 'hq', 'readiness', 'supabase-provider-readback-20261001.json')
 const planPath = resolve(root, 'hq', 'readiness', 'supabase-preview-recovery-plan.json')
+const receiptPath = resolve(root, 'hq', 'readiness', 'supabase-preview-repair-receipt-20261002.json')
 const readback = JSON.parse(await readFile(readbackPath, 'utf8'))
 
 function sourceShape(plan) {
@@ -96,4 +100,34 @@ test('the generated plan verifies byte-for-byte against current source and readb
   const validated = await validateRecoveryPlan(plan)
   assert.equal(validated.decision.action, 'repair')
   assert.equal(validated.execution.authorized, false)
+})
+
+test('the repair receipt binds the exact source migrations and retained provider limitation', async () => {
+  const plan = JSON.parse(await readFile(planPath, 'utf8'))
+  const receipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+  const validated = await validatePreviewRepairReceipt(receipt, plan)
+  assert.equal(validated.contract, REPAIR_RECEIPT_CONTRACT)
+  assert.equal(validated.integrationCommit, '4ead3bcb82ea94a0f391940e105c4e9a937e4c6f')
+  assert.equal(validated.appliedMigrations.length, 2)
+  assert.equal(validated.postconditions.migrationCount, 23)
+  assert.equal(validated.acceptance.providerBranchStatusReconciled, false)
+})
+
+test('the repair receipt rejects migration drift and unsafe control claims', async () => {
+  const plan = JSON.parse(await readFile(planPath, 'utf8'))
+  const receipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+  for (const [mutate, pattern] of [
+    [(record) => { record.appliedMigrations[0].sourceDigest = `sha256:${'0'.repeat(64)}` }, /receipt_migrations/],
+    [(record) => { record.appliedMigrations[0].name = 'different_migration' }, /receipt_migrations/],
+    [(record) => { record.appliedMigrations[0].sourcePath = 'supabase\/migrations\/different.sql' }, /receipt_migrations/],
+    [(record) => { record.controls.productionDatabaseWrites = 1 }, /receipt_controls/],
+    [(record) => { record.controls.authUsersCreated = 1 }, /receipt_controls/],
+    [(record) => { record.controls.customerRowsWritten = 1 }, /receipt_controls/],
+    [(record) => { record.acceptance.hostedSignIn = 'PASS' }, /receipt_acceptance/],
+    [(record) => { record.acceptance.providerBranchStatusReconciled = true }, /receipt_acceptance/],
+  ]) {
+    const altered = structuredClone(receipt)
+    mutate(altered)
+    assert.throws(() => validatePreviewRepairReceiptShape(altered, plan), pattern)
+  }
 })
