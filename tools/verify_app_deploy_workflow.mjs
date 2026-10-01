@@ -669,6 +669,8 @@ requireContract('unlinked preview deployment is retired',
   previewServer.includes('PREVIEW_DEPLOY_MODE = "canonical_preview"')
   && previewServer.includes('CANONICAL_VERCEL_TEAM_ID = "team_wI4l7ZgSxcEztQPSlCCYVeJ5"')
   && previewServer.includes('CANONICAL_APP_VERCEL_PROJECT_ID = "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"')
+  && previewServer.includes('for name in ("VERCEL_TOKEN", "VERCEL_OIDC_TOKEN")')
+  && previewServer.includes('vercel_credential_missing')
   && previewServer.includes('_require_canonical_preview_deploy_target()')
   && previewServer.includes('vercel@56.1.0')
   && !previewServer.includes('deploy_claimable_preview.sh')

@@ -636,8 +636,12 @@ def _canonical_preview_target_state(
         blockers.append("canonical_vercel_team_environment_missing")
     if environment_project_id != CANONICAL_APP_VERCEL_PROJECT_ID:
         blockers.append("canonical_vercel_project_environment_missing")
-    if not str(environment.get("VERCEL_TOKEN", "")).strip():
-        blockers.append("vercel_token_missing")
+    has_vercel_credential = any(
+        str(environment.get(name, "")).strip()
+        for name in ("VERCEL_TOKEN", "VERCEL_OIDC_TOKEN")
+    )
+    if not has_vercel_credential:
+        blockers.append("vercel_credential_missing")
     return {
         "contract": "supermega.canonical-preview-target.v1",
         "ready": not blockers,
