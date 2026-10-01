@@ -284,7 +284,6 @@ function StatusRows({ rows }: { rows: readonly (readonly string[])[] }) {
 const CatalogReviewPreparation = lazy(() => import('./CatalogReviewPreparation').then(module => ({ default: module.CatalogReviewPreparation })))
 
 export function EcommerceProduct() {
-  const [workspaceOpened, setWorkspaceOpened] = useState(false)
   const [orderOpsNow, setOrderOpsNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setOrderOpsNow(Date.now()), 30_000)
@@ -1898,14 +1897,8 @@ export function EcommerceProduct() {
   const assistedCatalogEntry = showAssistedCatalogSetup
     && new URLSearchParams(location.search).get('workspace') !== '1'
 
-  if ((showAssistedCatalogSetup && new URLSearchParams(location.search).get('setup') === '1') || (assistedCatalogEntry && !workspaceOpened && new URLSearchParams(location.search).get('workspace') !== '1')) {
-    return <BusinessBrief product="ecommerce" onOpenWorkspace={() => {
-      setWorkspaceOpened(true)
-      const search = new URLSearchParams(location.search)
-      search.delete('setup')
-      search.set('workspace', '1')
-      navigate({ pathname: location.pathname, search: search.toString() }, { replace: true })
-    }} />
+  if ((showAssistedCatalogSetup && new URLSearchParams(location.search).get('setup') === '1') || (assistedCatalogEntry && new URLSearchParams(location.search).get('workspace') !== '1')) {
+    return <BusinessBrief product="ecommerce" />
   }
 
   if (!catalogHydrating && !managedIdentity && catalog.source === 'shop-local'
