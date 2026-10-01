@@ -22,6 +22,7 @@ import {
   type CommerceSyncStatus,
 } from './commerce-sync-outbox'
 import { requestStorageDurability } from './storage-durability'
+import { reportManagedPersistenceFailure } from './client-error-reporter'
 import {
   currentManagedIdentity,
   loadManagedBootstrap,
@@ -711,6 +712,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       })
       .catch((error) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
+        reportManagedPersistenceFailure('shop.load', error, 'Managed Shop could not be loaded.')
         const next = { state: createEmptyCommerce(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Shop could not be loaded.', writeReady: false }
         snapshotRef.current = next
         setManagedSnapshot(next)
@@ -879,6 +881,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
         } catch (refreshError) {
+          reportManagedPersistenceFailure('shop.reconcile', refreshError, 'Shop changed and the latest revision could not be loaded.')
           const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Shop changed and the latest revision could not be loaded.'
           const rejected = { ...snapshotRef.current, error: refreshMessage }
           snapshotRef.current = rejected
@@ -887,6 +890,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         }
         throw new ShopReviewRequiredError('Shop changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
+      reportManagedPersistenceFailure('shop.save', error, 'The managed Shop write was not confirmed.')
       if (identityRef.current && sameManagedIdentity(identityRef.current, managedIdentity)) {
         const rejected = { ...snapshotRef.current, error: message }
         snapshotRef.current = rejected
@@ -966,6 +970,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
       })
       .catch((error) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
+        reportManagedPersistenceFailure('plant.load', error, 'Managed Plant could not be loaded.')
         const next = { state: createEmptyProduction(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Plant could not be loaded.', writeReady: false }
         snapshotRef.current = next
         setManagedSnapshot(next)
@@ -1080,6 +1085,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
         } catch (refreshError) {
+          reportManagedPersistenceFailure('plant.reconcile', refreshError, 'Plant changed and the latest revision could not be loaded.')
           const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Plant changed and the latest revision could not be loaded.'
           const rejected = { ...snapshotRef.current, error: refreshMessage }
           snapshotRef.current = rejected
@@ -1088,6 +1094,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
         }
         throw new PlantReviewRequiredError('Plant changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
+      reportManagedPersistenceFailure('plant.save', error, 'The managed Plant write was not confirmed.')
       if (identityRef.current && sameManagedIdentity(identityRef.current, managedIdentity)) {
         const rejected = { ...snapshotRef.current, error: message }
         snapshotRef.current = rejected
