@@ -7,10 +7,12 @@ import { fileURLToPath } from 'node:url'
 
 export const RECOVERY_PLAN_CONTRACT = 'supermega.supabase-preview-recovery-plan.v1'
 export const PROVIDER_READBACK_CONTRACT = 'supermega.supabase-provider-readback.v1'
+export const REPAIR_RECEIPT_CONTRACT = 'supermega.supabase-preview-repair-receipt.v1'
 
 const root = resolve(import.meta.dirname, '..')
 const providerReadbackPath = resolve(root, 'hq', 'readiness', 'supabase-provider-readback-20261001.json')
 const outputPath = resolve(root, 'hq', 'readiness', 'supabase-preview-recovery-plan.json')
+const receiptPath = resolve(root, 'hq', 'readiness', 'supabase-preview-repair-receipt-20261002.json')
 const migrationDirectory = resolve(root, 'supabase', 'migrations')
 const expectedProductionRef = 'zvtzwcimpvvtkowflhda'
 const expectedAcceptanceRef = 'twflgmlwfkykgzsxnegc'
@@ -302,6 +304,90 @@ export async function validateRecoveryPlan(plan) {
   return actual
 }
 
+export function validatePreviewRepairReceiptShape(receipt, plan) {
+  if (!isRecord(receipt) || receipt.contract !== REPAIR_RECEIPT_CONTRACT) {
+    fail('supabase_preview_repair_receipt_contract')
+  }
+  if (receipt.state !== 'database-parity-repaired-provider-status-stale'
+    || Number.isNaN(Date.parse(receipt.capturedAt))
+    || !/^[0-9a-f]{40}$/.test(receipt.integrationCommit || '')
+    || receipt.pullRequest !== 639) {
+    fail('supabase_preview_repair_receipt_identity')
+  }
+  if (receipt.sourcePlan?.path !== 'hq/readiness/supabase-preview-recovery-plan.json'
+    || receipt.sourcePlan.contract !== RECOVERY_PLAN_CONTRACT
+    || receipt.sourcePlan.digest !== plan.digest
+    || receipt.sourcePlan.integrationBaseCommit !== plan.integrationBaseCommit) {
+    fail('supabase_preview_repair_receipt_plan_binding')
+  }
+  const target = receipt.target
+  if (target?.projectRef !== expectedAcceptanceRef
+    || target.parentProjectRef !== expectedProductionRef
+    || target.branchId !== '8ceada93-22b2-405d-98fd-4e682471b9bd'
+    || target.providerStatusBefore !== 'MIGRATIONS_FAILED'
+    || target.providerStatusAfter !== 'MIGRATIONS_FAILED'
+    || target.previewProjectStatus !== 'ACTIVE_HEALTHY'
+    || target.schemaVersionBefore !== expectedSchemaVersion
+    || target.schemaVersionAfter !== expectedSchemaVersion) {
+    fail('supabase_preview_repair_receipt_target')
+  }
+  const expectedBefore = plan.providerReadback.acceptance.appliedMigrationNames
+  const expectedApplied = plan.decision.missingMigrations.map((entry, index) => ({
+    name: entry.logicalName,
+    sourcePath: entry.path,
+    sourceDigest: entry.digest,
+    providerVersion: ['20261001180832', '20261001180915'][index],
+  }))
+  const expectedAfter = [...expectedBefore, ...expectedApplied.map((entry) => entry.name)]
+  if (JSON.stringify(receipt.preconditions?.appliedMigrationNames) !== JSON.stringify(expectedBefore)
+    || receipt.preconditions.migrationCount !== expectedBefore.length
+    || receipt.preconditions.indexPresent !== false
+    || receipt.preconditions.policyCount !== 13
+    || JSON.stringify(receipt.preconditions.rowCounts) !== JSON.stringify(plan.providerReadback.acceptance.rowCounts)) {
+    fail('supabase_preview_repair_receipt_preconditions')
+  }
+  if (JSON.stringify(receipt.appliedMigrations) !== JSON.stringify(expectedApplied)) {
+    fail('supabase_preview_repair_receipt_migrations')
+  }
+  if (JSON.stringify(receipt.postconditions?.appliedMigrationNames) !== JSON.stringify(expectedAfter)
+    || receipt.postconditions.migrationCount !== expectedAfter.length
+    || receipt.postconditions.indexPresent !== true
+    || receipt.postconditions.policyCount !== 13
+    || receipt.postconditions.cachedPolicySubqueries !== true
+    || JSON.stringify(receipt.postconditions.rowCounts) !== JSON.stringify(plan.providerReadback.acceptance.rowCounts)) {
+    fail('supabase_preview_repair_receipt_postconditions')
+  }
+  if (receipt.controls?.productionDatabaseWrites !== 0
+    || receipt.controls.previewDatabaseWrites !== 2
+    || receipt.controls.authUsersCreated !== 0
+    || receipt.controls.customerRowsWritten !== 0
+    || receipt.controls.vercelDeployments !== 0
+    || receipt.controls.iamChanges !== 0
+    || receipt.controls.credentialValuesRead !== false) {
+    fail('supabase_preview_repair_receipt_controls')
+  }
+  if (receipt.acceptance?.providerBranchStatusReconciled !== false
+    || receipt.acceptance.hostedSignIn !== 'NOT RUN'
+    || receipt.acceptance.saveReload !== 'NOT RUN'
+    || receipt.acceptance.crossTenantDenial !== 'NOT RUN'
+    || receipt.acceptance.recovery !== 'NOT RUN') {
+    fail('supabase_preview_repair_receipt_acceptance')
+  }
+  return receipt
+}
+
+export async function validatePreviewRepairReceipt(receipt, plan) {
+  const actual = validatePreviewRepairReceiptShape(receipt, plan)
+  const source = await sourceMigrationChain()
+  for (const applied of actual.appliedMigrations) {
+    const migration = source.migrations.find((entry) => entry.path === applied.sourcePath)
+    if (!migration || migration.digest !== applied.sourceDigest) {
+      fail('supabase_preview_repair_receipt_source_digest')
+    }
+  }
+  return actual
+}
+
 async function writeCurrentPlan() {
   const plan = await currentPlan()
   await mkdir(dirname(outputPath), { recursive: true })
@@ -338,12 +424,18 @@ async function main() {
   }
   if (arg === '--verify') {
     const plan = await validateRecoveryPlan(JSON.parse(await readFile(outputPath, 'utf8')))
+    const receipt = await validatePreviewRepairReceipt(
+      JSON.parse(await readFile(receiptPath, 'utf8')),
+      plan,
+    )
     console.log(JSON.stringify({
       ok: true,
       contract: plan.contract,
       action: plan.decision.action,
       missingMigrationCount: plan.decision.missingMigrations.length,
       authorized: plan.execution.authorized,
+      receiptContract: receipt.contract,
+      receiptState: receipt.state,
     }))
     return
   }
