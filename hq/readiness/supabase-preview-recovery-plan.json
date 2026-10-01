@@ -74,151 +74,151 @@
   "migrationPlan": {
     "count": 24,
     "schemaVersion": 13,
-    "chainDigest": "sha256:ce3e475701e316b1dca99d77738aeeea76b620c69b2b852251191b984b372fbd",
+    "chainDigest": "sha256:20bccde952b20be1d30ed4b6c88a3a988e8eac9dc419acb87301a42c3a57073e",
     "migrations": [
       {
         "name": "20260711081300_public_legacy_baseline.sql",
         "logicalName": "public_legacy_baseline",
         "path": "supabase/migrations/20260711081300_public_legacy_baseline.sql",
-        "digest": "sha256:f4b64112f2fff9aa8752e4889ff966c365edad87e349277999276af7aadfa292"
+        "digest": "sha256:40e54bfd6a31cf7d3f70de87cac34a4587f38412d7aa89ad27f77f33c1b3d72e"
       },
       {
         "name": "20260722004500_private_trial_backend_role_preflight.sql",
         "logicalName": "private_trial_backend_role_preflight",
         "path": "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
-        "digest": "sha256:a7f553222a5bca17fa6899b8ee61dce669c9cfbd4036759fe62c04faa7229bca"
+        "digest": "sha256:a1a5077b1834c291c54658d5ba2c7625bd9bf37da78b9a8ac919d10f16c4ddae"
       },
       {
         "name": "20260722005134_private_trial_backend_foundation.sql",
         "logicalName": "private_trial_backend_foundation",
         "path": "supabase/migrations/20260722005134_private_trial_backend_foundation.sql",
-        "digest": "sha256:ddebec4d1a74366cc4733379075efe4005ad916869c23053693bf06080d4c2a0"
+        "digest": "sha256:dd4e8c16c4405ba003f13688fa7313da9c89fb33c46f092ec7a6d856c35c76b9"
       },
       {
         "name": "20260722142801_private_trial_backend_v2.sql",
         "logicalName": "private_trial_backend_v2",
         "path": "supabase/migrations/20260722142801_private_trial_backend_v2.sql",
-        "digest": "sha256:c239cea8f0ab00203ca8a62064425a5102b7a2f880fcbdb0c3d82eeb0459f6d8"
+        "digest": "sha256:aac79f1696602705e4d3521f2978b86f00a53afd1aac907de91cb257469fed42"
       },
       {
         "name": "20260723094500_private_trial_backend_v3_website.sql",
         "logicalName": "private_trial_backend_v3_website",
         "path": "supabase/migrations/20260723094500_private_trial_backend_v3_website.sql",
-        "digest": "sha256:fee752b8ba3daf2ca10ace118ab19e401091a81561815f2ef9f617a7e51edcdf"
+        "digest": "sha256:6db99a0eef5b200bef77808de0562bdb1a35c8c5752e7b4831c5f95e8c441343"
       },
       {
         "name": "20260723144500_private_trial_backend_v4_hardening.sql",
         "logicalName": "private_trial_backend_v4_hardening",
         "path": "supabase/migrations/20260723144500_private_trial_backend_v4_hardening.sql",
-        "digest": "sha256:30f7b336f5844019b8ed004ce31fd5fd52f01829112e638b1ca577512692d1d5"
+        "digest": "sha256:a475e5d88ba3c5c761e2c05f563bbda6707da1bce8b26e1abe47339028c1e435"
       },
       {
         "name": "20260724204920_private_trial_backend_v5_read_capabilities.sql",
         "logicalName": "private_trial_backend_v5_read_capabilities",
         "path": "supabase/migrations/20260724204920_private_trial_backend_v5_read_capabilities.sql",
-        "digest": "sha256:15a942112010b5eb25a8b030a408dcf57972aacee6f88c858ba316daf2119f77"
+        "digest": "sha256:5d63e803dffb8580109629a245695519040f774007a5178af21960e14d356998"
       },
       {
         "name": "20260730113000_private_trial_backend_v6_managed_activation.sql",
         "logicalName": "private_trial_backend_v6_managed_activation",
         "path": "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
-        "digest": "sha256:3b0e02358b53b389e0df7dbe3fe2705e2f305bff3b79cb116a49e449444f5ca0"
+        "digest": "sha256:cb796a132bfd49662deeac3d5a0a11a8961ed7743127f40994a27c359596955c"
       },
       {
         "name": "20260730123000_private_trial_backend_v7_workspace_discovery.sql",
         "logicalName": "private_trial_backend_v7_workspace_discovery",
         "path": "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
-        "digest": "sha256:bd039301ecba91045126f11c9c1d0350a5ed73a986e7fc4adc901c0eac24cecb"
+        "digest": "sha256:1012f1a744186eedf87b0c16f03c8a363a7668dfed576943e258bb8fd54bc201"
       },
       {
         "name": "20260802161500_private_trial_backend_v8_rls_initplan.sql",
         "logicalName": "private_trial_backend_v8_rls_initplan",
         "path": "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
-        "digest": "sha256:2886d53c39a08cbd129ca0a3def051b9129bbc96c49add058122520ee3d7d0ab"
+        "digest": "sha256:61e711bb62e9fee8f0f8724004d68ff715696d5183a52a9dca418db003c241c6"
       },
       {
         "name": "20260803063822_private_trial_backend_v9_metadata_rls.sql",
         "logicalName": "private_trial_backend_v9_metadata_rls",
         "path": "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
-        "digest": "sha256:1dc908aeaf88bc91e03c566e31652816fba699aaf0bcce5b0d5c512ad9ab0115"
+        "digest": "sha256:11db3e7ebb9698b6572c1405120efd887bf4cc5d9d4a440681ed8156cc967c1d"
       },
       {
         "name": "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
         "logicalName": "private_trial_backend_v10_supabase_session_revocation",
         "path": "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
-        "digest": "sha256:ea626332cab997ad17f2c5727c687b84eb8e0faf3e79698aa64915662074979f"
+        "digest": "sha256:0a112ee27bda7ca238f3992ffab841c414268e44aad6b68023c75915afa40cde"
       },
       {
         "name": "20260816120000_private_trial_backend_v11_self_serve_grants.sql",
         "logicalName": "private_trial_backend_v11_self_serve_grants",
         "path": "supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql",
-        "digest": "sha256:133105acb69e7c305876d86e0c6a55b53164efabd166a962b5fb90dfac0ab2de"
+        "digest": "sha256:12c70c75f0da98e457a5661dfcb77b3eb2483e08beaf33a8010fdf5a3b01817d"
       },
       {
         "name": "20260817090000_private_trial_backend_v12_billing_rail.sql",
         "logicalName": "private_trial_backend_v12_billing_rail",
         "path": "supabase/migrations/20260817090000_private_trial_backend_v12_billing_rail.sql",
-        "digest": "sha256:5fd091341f8d05f2b859d8e0e2120e707431df7097f14aa6c984ea4b2724df76"
+        "digest": "sha256:19cf4077c26336d74d3f5ea5ba4d60c20a2525604f4c8aa1673fd2b3b243a033"
       },
       {
         "name": "20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
         "logicalName": "private_trial_backend_v13_billing_entitlement_read",
         "path": "supabase/migrations/20260818090000_private_trial_backend_v13_billing_entitlement_read.sql",
-        "digest": "sha256:8f5e88c779b2c32e1f8ad0ebf6c2f3872f004e11665a9b1deba99297495cb93b"
+        "digest": "sha256:784ba3a4fd29c61abebbc9b73eb37d0a68e40780c7d98d4b0b8953fee31b777f"
       },
       {
         "name": "20260907024457_self_serve_durable_attempt_budget.sql",
         "logicalName": "self_serve_durable_attempt_budget",
         "path": "supabase/migrations/20260907024457_self_serve_durable_attempt_budget.sql",
-        "digest": "sha256:7b028034344910891235773a6388f750867f369f546b1c31f5efd1a11872b77c"
+        "digest": "sha256:94aa2c57d1d7e55ee844cb8c29b41dcad54093390d321c48f5caf9da67ef606f"
       },
       {
         "name": "20260915184728_website_customer_review_storage.sql",
         "logicalName": "website_customer_review_storage",
         "path": "supabase/migrations/20260915184728_website_customer_review_storage.sql",
-        "digest": "sha256:f03dc2cb73ac7b749f910c722c726e55048a280c9fbdce090832e42abb7cb213"
+        "digest": "sha256:349ad34204b4d111a0ce344e9c8d79576be0c6df2eb50b84c3901f4cf98ae5be"
       },
       {
         "name": "20260915191528_website_review_entitlement_proof.sql",
         "logicalName": "website_review_entitlement_proof",
         "path": "supabase/migrations/20260915191528_website_review_entitlement_proof.sql",
-        "digest": "sha256:3a0069fab22fcad45c5ca6ca236a5c9274f982ce99667ef7ff42fd59fe8592a0"
+        "digest": "sha256:75755426b58dfe01b6efde4bd3480e2defdf5556c3e9d1352bc96c48587adf62"
       },
       {
         "name": "20260918011500_website_customer_acceptance.sql",
         "logicalName": "website_customer_acceptance",
         "path": "supabase/migrations/20260918011500_website_customer_acceptance.sql",
-        "digest": "sha256:e6b2fbdf38c37780f4798cb15755dc583e62697b19dc89635679a48596dc9b73"
+        "digest": "sha256:2ffe0304564175d9682af8525873c348d1a3638c87671d16c682e5414a2347b1"
       },
       {
         "name": "20260924190304_ecommerce_review_entitlement_proof.sql",
         "logicalName": "ecommerce_review_entitlement_proof",
         "path": "supabase/migrations/20260924190304_ecommerce_review_entitlement_proof.sql",
-        "digest": "sha256:e36102bdc29f1947c3feaf06a7703822ae53ba235009d15aafd8961da87fde01"
+        "digest": "sha256:84fdda564d5deb7003fd9c151dd1a1b64c21209fd64fd109062b25d0d3842fef"
       },
       {
         "name": "20260924194557_ecommerce_customer_review_storage.sql",
         "logicalName": "ecommerce_customer_review_storage",
         "path": "supabase/migrations/20260924194557_ecommerce_customer_review_storage.sql",
-        "digest": "sha256:19fa433ff66dd770e04d6d0352c7d8316617dd676026d96c486145fa1df78d03"
+        "digest": "sha256:4bb3eb40ec26854bda021d3c2e19ba34bb0657272933f6bfd5ee8f6da6974b46"
       },
       {
         "name": "20260924231714_ecommerce_customer_decisions.sql",
         "logicalName": "ecommerce_customer_decisions",
         "path": "supabase/migrations/20260924231714_ecommerce_customer_decisions.sql",
-        "digest": "sha256:1939d4031d444d7c092aca0a64ff5e739adef27b35bf96eb7c8635b2f728c4e1"
+        "digest": "sha256:c14f514daddca921f1c1ea2dbad3c7504d2142bc8b0bbbef0da48eb7104069c7"
       },
       {
         "name": "20260929171000_ecommerce_decision_review_fk_index.sql",
         "logicalName": "ecommerce_decision_review_fk_index",
         "path": "supabase/migrations/20260929171000_ecommerce_decision_review_fk_index.sql",
-        "digest": "sha256:231c7234263eba6af51f351597ba5a3deb66f6191c4f2938df3aad365c759b79"
+        "digest": "sha256:6ad14b664f4b9ad560a7cbaf37c6d4dcf8c26d3709e5bb44d40ea2f4029785c3"
       },
       {
         "name": "20260930010000_app_rls_initplan_optimization.sql",
         "logicalName": "app_rls_initplan_optimization",
         "path": "supabase/migrations/20260930010000_app_rls_initplan_optimization.sql",
-        "digest": "sha256:d4034ac9626d84a897dd646b8dee4216f7f68a5bd030c28744b0ebbf12752f3e"
+        "digest": "sha256:eda938f781a7e854c9d83567600ad912bd07cadc27f4479b1bf7ee410d451a57"
       }
     ]
   },
@@ -236,13 +236,13 @@
         "name": "20260929171000_ecommerce_decision_review_fk_index.sql",
         "logicalName": "ecommerce_decision_review_fk_index",
         "path": "supabase/migrations/20260929171000_ecommerce_decision_review_fk_index.sql",
-        "digest": "sha256:231c7234263eba6af51f351597ba5a3deb66f6191c4f2938df3aad365c759b79"
+        "digest": "sha256:6ad14b664f4b9ad560a7cbaf37c6d4dcf8c26d3709e5bb44d40ea2f4029785c3"
       },
       {
         "name": "20260930010000_app_rls_initplan_optimization.sql",
         "logicalName": "app_rls_initplan_optimization",
         "path": "supabase/migrations/20260930010000_app_rls_initplan_optimization.sql",
-        "digest": "sha256:d4034ac9626d84a897dd646b8dee4216f7f68a5bd030c28744b0ebbf12752f3e"
+        "digest": "sha256:eda938f781a7e854c9d83567600ad912bd07cadc27f4479b1bf7ee410d451a57"
       }
     ],
     "scope": "acceptance-branch-only",
@@ -280,5 +280,5 @@
     "credentialValuesIncluded": false,
     "nextOwnerGate": "Apply only the two named migrations to acceptance branch twflgmlwfkykgzsxnegc, then stop for read-only verification."
   },
-  "digest": "sha256:e2e4f0dca51ade07bd677d93a0db680929d750c9036ad52bb96d92ad074dcc79"
+  "digest": "sha256:20bf89c7904f016972d0f79cf5257f63551ac70838f1969b24acfa5d74c41690"
 }

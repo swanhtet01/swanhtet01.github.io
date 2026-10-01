@@ -7,6 +7,7 @@ import {
   PROVIDER_READBACK_CONTRACT,
   RECOVERY_PLAN_CONTRACT,
   buildRecoveryPlan,
+  contentDigest,
   selectRecoveryAction,
   validateRecoveryPlan,
   validateRecoveryPlanShape,
@@ -20,6 +21,11 @@ const readback = JSON.parse(await readFile(readbackPath, 'utf8'))
 function sourceShape(plan) {
   return { privateMigrations: plan.migrationPlan.migrations.slice(1) }
 }
+
+test('migration content digests are stable across Windows and Linux line endings', () => {
+  assert.equal(contentDigest('select 1;\nselect 2;\n'), contentDigest('select 1;\r\nselect 2;\r\n'))
+  assert.equal(contentDigest(Buffer.from('select 1;\r\n')), contentDigest('select 1;\n'))
+})
 
 test('builds a read-only repair decision for the current acceptance branch', async () => {
   const plan = await buildRecoveryPlan(readback)

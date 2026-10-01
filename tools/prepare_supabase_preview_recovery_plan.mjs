@@ -31,11 +31,16 @@ function fail(code) {
 }
 
 function sha256(value) {
-  return createHash('sha256').update(value).digest('hex')
+  const text = Buffer.isBuffer(value) ? value.toString('utf8') : String(value)
+  return createHash('sha256').update(text.replace(/\r\n?/g, '\n')).digest('hex')
 }
 
 function digestJson(value) {
   return `sha256:${sha256(JSON.stringify(value))}`
+}
+
+export function contentDigest(value) {
+  return `sha256:${sha256(value)}`
 }
 
 function normalizeMigrationName(filename) {
@@ -59,7 +64,7 @@ async function sourceMigrationChain() {
       name,
       logicalName: normalizeMigrationName(name),
       path: `supabase/migrations/${name}`,
-      digest: `sha256:${sha256(content)}`,
+      digest: contentDigest(content),
     })
   }
   return {
