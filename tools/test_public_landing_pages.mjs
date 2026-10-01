@@ -54,6 +54,11 @@ check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status
 
 // Page content markers, SEO metadata, and CTA wiring.
 const descriptions = []
+const productScreens = {
+  shop: ['platform-shop-dashboard-v2.jpg', 'platform-stock.jpg'],
+  website: ['platform-sites-workspace-v2.jpg', 'platform-pages.jpg'],
+  ecommerce: ['platform-commerce-workflow-v2.jpg', 'platform-catalog.jpg'],
+}
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
   check(Boolean(product), `landing_product_exists:${page.productId}`)
@@ -89,7 +94,9 @@ for (const page of landingPages) {
   check(schema['@context'] === 'https://schema.org' && schema['@type'] === 'Product' && schema.name === product.name && schema.url === canonical && schema.description === description, `landing_structured_data:${page.route}`)
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check((html.match(/<h1>/g) || []).length === 1, `landing_single_headline:${page.route}`)
-  check(html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
+  check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
+  check(countOccurrences(html, '<figure class="platform-image') === 2, `landing_two_product_views:${page.route}`)
+  for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
@@ -198,6 +205,7 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(body), `no_app_detours:${route}`)
 }
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
+check(countOccurrences(home, '<figure class="platform-image') === activeIds.length * 2, 'home_two_views_per_active_product')
 const platformLoop = home.match(/<ol class="platform-loop"[^>]*>([\s\S]*?)<\/ol>/)?.[1] || ''
 check((platformLoop.match(/<li>/g) || []).length === 3, 'home_platform_loop_three_steps')
 for (const token of ['Sell and control stock.', 'Publish and capture demand.', 'Fulfil every order.']) {
