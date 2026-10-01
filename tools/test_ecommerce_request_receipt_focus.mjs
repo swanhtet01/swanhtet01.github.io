@@ -17,7 +17,7 @@ test('a submitted request waits for the rendered receipt before moving focus', (
 
 test('the browser-local truth boundary is the element brought into view', () => {
   assert.match(source, /<p>\{managedDeliveryConfirmed/)
-  assert.match(source, /This browser demo retained the request\./)
+  assert.match(source, /Saved on this device for Shop review\./)
   assert.match(source, /Shop still confirms stock, promise, payment, and delivery\./)
   assert.doesNotMatch(source, /requestReceiptRef/)
 })
@@ -48,36 +48,17 @@ test('expired and changed requests retain a read-only receipt with honest delive
     assert.match(visible, /has not been deleted/)
     assert.match(visible, /not a confirmed order/)
     assert.match(visible, /cannot confirm the old quote/)
-    assert.match(visible, delivery === 'confirmed' ? /Company Shop received/ : delivery === 'unverified' ? /delivery is not verified/ : /browser demo retained/)
+    assert.match(visible, delivery === 'confirmed' ? /Company Shop received/ : delivery === 'unverified' ? /delivery is not verified/ : /browser retained/)
     assert.equal(nodes(tree).some(n => ['button', 'form', 'a', 'input'].includes(n.type) || n.props?.dangerouslySetInnerHTML), false)
   }
   assert.match(source, /!latestRequestOrder \? <SavedRequestReceipt/)
   assert.match(source, /expired=\{Date\.parse\(latestRequest\.quote\.expiresAt\) <= quoteClock\}/)
 })
 
-test('View receipt focuses the retained receipt before falling back to checkout recovery', async () => {
-  const require = createRequire(new URL('../showroom/package.json', import.meta.url))
-  const ts = require('typescript')
-  const product = await readFile(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
-  const start = product.indexOf('  function focusCurrentRequestReceipt()')
-  const end = product.indexOf('\n  function prepareCustomerFollowUpDraft()', start)
-  assert.ok(start >= 0 && end > start)
-  const js = ts.transpileModule(product.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-  for (const available of ['current', 'retained', 'none']) {
-    let focused = 0, scrolled = 0, recovered = 0
-    class Details { open = false }
-    const workspace = new Details(), receipt = { focus() { focused++ }, scrollIntoView() { scrolled++ } }
-    const run = runInNewContext(`${js}; focusCurrentRequestReceipt`, {
-      document: { querySelector: selector => available === 'none' ? null : selector.includes(available === 'current' ? '"true"' : '"false"') ? receipt : null,
-        getElementById: () => workspace }, HTMLDetailsElement: Details,
-      requestAnimationFrame: fn => fn(), prepareQuoteRecovery: () => { recovered++ },
-    })
-    run()
-    assert.equal(recovered, available === 'none' ? 1 : 0)
-    assert.equal(workspace.open, available !== 'none')
-    assert.equal(focused, available === 'none' ? 0 : 2)
-    assert.equal(scrolled, available === 'none' ? 0 : 1)
-  }
+test('the current receipt focus stays within the buying workspace', () => {
+  assert.match(source, /const focusRequestReceipt = useCallback\(\(receipt: HTMLElement \| null\) =>/)
+  assert.match(source, /receipt\.querySelector\('p'\)\?\.scrollIntoView\(\{ block: 'center' \}\)/)
+  assert.match(source, /receipt\.focus\(\{ preventScroll: true \}\)/)
 })
 
 test('retained receipts use a wrapping single column and readable evidence text', async () => {

@@ -1122,8 +1122,15 @@ test('unavailable account offers support and login without a setup or demo detou
     assert.equal(destination.origin, 'https://supermega.dev')
     assert.equal(destination.pathname, '/contact/')
     assert.equal(destination.searchParams.get('product'), product)
-    assert.equal(destination.searchParams.get('utm_medium'), 'business_setup')
+    assert.equal(destination.searchParams.get('utm_medium'), 'account_access')
   }
+})
+
+test('login account-access handoff has no assisted-setup wording', () => {
+  const page = readFileSync(new URL('../showroom/src/core/ManagedLoginPage.tsx', import.meta.url), 'utf8')
+  assert.match(page, /New account creation is not open\. Sign in or contact support\./)
+  assert.doesNotMatch(page, /request assisted setup/i)
+  assert.equal(new URL(managedAccountRequestUrl('shop')).searchParams.get('utm_medium'), 'account_access')
 })
 
 

@@ -528,9 +528,9 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   ]) assert.equal(paymentPrioritySource.split(sourceBinding).length - 1, 1)
   const publicExpectedText = await loadPublicHomepageExpectedText()
   assert.deepEqual(publicExpectedText, [
-    'Your business.',
-    'Working together.',
-    'Shop. Sites. Commerce. One SuperMega account.',
+    'Run the business.',
+    'Without the busywork.',
+    'Shop. Sites. Commerce. One connected operating system.',
     'Login',
   ])
   assert.deepEqual(
@@ -541,11 +541,11 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   changedManifest.company.headline = 'Current source-owned homepage claim.'
   assert.equal(
     derivePublicHomepageExpectedText({ manifest: changedManifest, generatorSource })[0],
-    'Your business.',
+    'Run the business.',
   )
   for (const binding of [
-    '<h1>Your business.<br>Working together.</h1>',
-    '<p class="lede">Manage sales and stock. Publish your website. Take orders online.</p>',
+    '<h1>Run the business.<br>Without the busywork.</h1>',
+    '<p class="lede">Sales, stock, a working website and customer orders—one platform, built to stay in step.</p>',
     'href="https://app.supermega.dev/login">Login</a>',
   ]) {
     assert.throws(

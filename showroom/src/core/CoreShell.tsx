@@ -1,5 +1,5 @@
 import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
-import { Link, Navigate, NavLink, Outlet, useLocation, useOutletContext } from 'react-router'
+import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 import { productionEntryDecision } from './production-entry'
 
 import './core-app.css'
@@ -615,59 +615,14 @@ export function ProductHomeEntry() {
 }
 
 export function ProductHomePage() {
-  const runtime = useOutletContext<RuntimeHealth | undefined>()
-  const [authConfigured, setAuthConfigured] = useState(false)
-  useEffect(() => {
-    if (runtime?.status !== 'enterprise') return
-    let active = true
-    void import('./managed-login-availability').then(({ managedTrialAuthConfigured }) => {
-      if (active) setAuthConfigured(managedTrialAuthConfigured())
-    }).catch(() => { if (active) setAuthConfigured(false) })
-    return () => { active = false }
-  }, [runtime?.status])
-  const loginAvailable = runtime?.status === 'enterprise' && authConfigured
   const portalAccess = useContext(ManagedPortalAccessContext)
   const managedPortal = portalAccess.status === 'ready'
   const emptyCompany = managedPortal && !customerProducts.some(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
-  const [localProductSetups, setLocalProductSetups] = useState<Record<SetupProductId, { startedAt?: string; workspace: string } | null> | null>(null)
-  const [activeSetupIds, setActiveSetupIds] = useState<SetupProductId[]>([])
-  const [savedWebsiteName, setSavedWebsiteName] = useState<string | null>(null)
-  const [setupLoadFailed, setSetupLoadFailed] = useState(false)
-  const [setupLoadAttempt, setSetupLoadAttempt] = useState(0)
-  useEffect(() => {
-    let active = true
-    if (managedPortal || typeof window === 'undefined') return () => { active = false }
-    void Promise.all([import('./product-setup'), import('./saved-website-entry')]).then(([{ readProductSetup, activeSetupProductContracts }, { savedWebsiteEntry }]) => {
-      if (!active) return
-      setSavedWebsiteName(savedWebsiteEntry(window.localStorage))
-      setActiveSetupIds(activeSetupProductContracts.map(product => product.id))
-      setLocalProductSetups({
-        commerce: readProductSetup(window.localStorage, 'commerce'),
-        production: readProductSetup(window.localStorage, 'production'),
-        website: readProductSetup(window.localStorage, 'website'),
-        ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
-      })
-    }).catch(() => {
-      // A missing setup chunk must not invent first-run or saved-workspace state.
-      if (active) {
-        setLocalProductSetups(null)
-        setSetupLoadFailed(true)
-      }
-    })
-    return () => { active = false }
-  }, [managedPortal, setupLoadAttempt])
-  const productSetups = managedPortal ? null : localProductSetups
-  const anyStarted = Boolean(savedWebsiteName) || (productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false)
-  if (!managedPortal && !productSetups) {
-    return setupLoadFailed
-      ? <PortalAccessPanel action={<button className="button" onClick={() => { setSetupLoadFailed(false); setSetupLoadAttempt(attempt => attempt + 1) }} type="button">Try again</button>} copy="We could not open your saved workspace. Check that browser storage is available and try again." title="Workspace unavailable" />
-      : <PortalAccessPanel copy="Opening your saved work." title="Loading workspace" />
-  }
   return (
     <div className="workspace-screen product-home-screen">
       {managedPortal
         ? emptyCompany ? null : <PageHeading copy="" eyebrow="SuperMega" title="Workspace" />
-        : <PageHeading copy={loginAvailable ? "Sign in to your business." : "Your business, in one place."} eyebrow="SuperMega" title="Welcome back" actions={<Link className="core-button primary" to={managedLoginPath(null)}>Login</Link>} />}
+        : <PageHeading copy="Sign in to your business." eyebrow="SuperMega" title="Welcome back" actions={<Link className="core-button primary" to={managedLoginPath(null)}>Login</Link>} />}
       {managedPortal ? <section aria-label="Active company" className="company-portal-identity">
         <div>
           <span>Active company</span>
@@ -682,32 +637,21 @@ export function ProductHomePage() {
       {emptyCompany
         ? <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Contact support</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
         : null}
-      {!emptyCompany && (managedPortal || anyStarted) ? <nav aria-label="Your workspace" className="product-track-grid">
-        {customerProducts.filter(([name]) => managedPortal
-          ? managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name])
-          : Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]?.startedAt) || (name === 'Website' && Boolean(savedWebsiteName)))
-          .sort(([left], [right]) => managedPortal ? 0
-            : (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[left]))
-              - (activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right]) < 0 ? activeSetupIds.length : activeSetupIds.indexOf(PRODUCT_SETUP_KEY[right])))
+      {!emptyCompany && managedPortal ? <nav aria-label="Your workspace" className="product-track-grid">
+        {customerProducts.filter(([name]) => managedProductIsVisible(portalAccess.products, PRODUCT_SETUP_KEY[name]))
           .map(([name, outcome, , path]) => {
           const setupKey = PRODUCT_SETUP_KEY[name]
-          if (managedPortal && !managedProductIsVisible(portalAccess.products, setupKey)) return null
-          const setup = productSetups?.[setupKey]
-          if (!managedPortal && !activeSetupIds.includes(setupKey) && !setup) return null
-          const workspaceName = name === 'Website' && savedWebsiteName ? savedWebsiteName : setup?.startedAt ? setup.workspace : null
-          const workspacePath = !managedPortal && (name === 'Website' || name === 'Ecommerce') ? `${path}?workspace=1` : path
-          return <Link aria-label={name} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={workspacePath}>
+          if (!managedProductIsVisible(portalAccess.products, setupKey)) return null
+          return <Link aria-label={name} className="product-track-card" key={name} to={path}>
               <span className="product-track-copy">
-                {!managedPortal ? <small>On this device</small> : null}
                 <h2>{name}</h2>
-                <p>{workspaceName || outcome}</p>
+                <p>{outcome}</p>
               </span>
               <span aria-hidden="true" className="product-track-open">→</span>
             </Link>
         })}
       </nav> : null}
       {managedPortal && !emptyCompany ? <Suspense fallback={null}><ManagedProductConnections products={portalAccess.products.filter(product => product !== 'production')} /></Suspense> : null}
-      {!managedPortal && anyStarted ? <p className="product-home-note">Saved on this device.</p> : null}
     </div>
   )
 }

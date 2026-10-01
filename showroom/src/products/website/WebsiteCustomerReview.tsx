@@ -64,7 +64,7 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
           setMessage(recovered ? 'Retry your saved change request to confirm it.' : retainedDecision.status === 'accepted_for_operator_release_review'
             ? 'Your acceptance is saved. Publishing needs review.'
             : retainedDecision.status === 'changes_requested' ? 'Changes saved. A new revision will follow.'
-              : 'Private preview. Not published.')
+              : 'Private review. Not published.')
         })
         if (!accepted && access.isCurrent(epoch)) {
           setReview(null); setActor(null); pending.current = null; setUnconfirmed(false); setNote('')
@@ -177,11 +177,11 @@ export function PreparedWebsitePage({ review, pageId, onPageChange }: { review: 
   const destination = reviewContactDestination(page.hero.ctaHref)
   return <>
       <nav className="customer-review-actions" aria-label="Prepared pages">{review.preview.pages.map(item => <button type="button" key={item.id} aria-current={item.id === page.id ? 'page' : undefined} onClick={() => onPageChange(item.id)}>{item.navigation.label || item.seo.title || 'Page'}</button>)}</nav>
-      <article className="website-preview-site" aria-label="Prepared page preview">
-        <header className="preview-site-header"><strong>{review.preview.siteName}</strong><span>Private preview</span></header>
+      <article className="website-preview-site" aria-label="Prepared page review">
+        <header className="preview-site-header"><strong>{review.preview.siteName}</strong><span>Private review</span></header>
         <div className="preview-site-main"><section className="preview-hero"><span>{page.hero.eyebrow}</span><h2>{page.hero.headline}</h2><p>{page.hero.summary}</p>{page.hero.ctaLabel && <span className="preview-cta" aria-disabled="true">{page.hero.ctaLabel}</span>}</section>
           <section className="preview-section-grid">{page.sections.map(section => <article key={section.id}><span>{section.eyebrow}</span><h3>{section.title}</h3><p>{section.body}</p></article>)}</section></div>
-        <footer className="preview-site-footer">Preview only · links and publishing are disabled</footer>
+        <footer className="preview-site-footer">Review only · links and publishing are disabled</footer>
       </article>
       <details className="customer-review-details" key={page.id}>
         <summary>Check contact destination and search listing</summary>

@@ -13,7 +13,7 @@ await build({
     createRoot(document.getElementById('root')).render(<>
       <p>Synthetic navigation check. No request is sent.</p>
       {params.has('review') ? <><h1>Local brief review</h1><p>Use browser Back to return.</p><pre>{new URLSearchParams(location.hash.slice(1)).get('goal')}</pre></>
-        : <BusinessBrief product={product} onOpenWorkspace={()=>{}}/>}
+        : <BusinessBrief product={product}/>}
     </>);
   ` },
   plugins: [{ name: 'isolate-brief-navigation', setup(b) {

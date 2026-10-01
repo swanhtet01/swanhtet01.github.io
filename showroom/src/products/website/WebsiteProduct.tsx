@@ -123,7 +123,7 @@ function DownloadWorkspace({
         <ol className="website-download-steps">
           <li>
             <span aria-hidden="true">1</span>
-            <div><strong>Review</strong><p>Go back, then Review page. The layout follows your screen automatically.</p></div>
+            <div><strong>Review</strong><p>Open Website view to check the page on the screen you use every day.</p></div>
           </li>
           <li>
             <span aria-hidden="true">2</span>
@@ -278,8 +278,8 @@ export function WebsiteProduct() {
         copy: hasUnsavedChanges
           ? 'Your changes are not saved. Return to edit to save or discard them.'
           : selectedPage.stage === 'draft'
-            ? 'This page is saved as a draft. Select Edit page to update it and mark it ready.'
-            : 'Review the selected page. Its layout follows your screen automatically.',
+            ? 'This page is saved as a draft. Select Edit website to update it and mark it ready.'
+            : 'Edit your pages, review inquiries and download your site.',
       }
     : view === 'publish' && storageMode === 'session-only'
       ? {
@@ -306,8 +306,8 @@ export function WebsiteProduct() {
           ? 'Saved on this device'
           : 'Session only'
   const websiteSurfaceActionLabel = surface === 'preview'
-    ? 'Edit page'
-    : 'Review page'
+    ? 'Edit website'
+    : 'View website'
   const showWebsiteEditorAction = true
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
@@ -710,7 +710,7 @@ export function WebsiteProduct() {
 
   function startWithBusiness(brief: WebsiteStarterBrief) {
     if (!starterAvailable) {
-      setNotice('The Website example has already changed. Nothing was replaced.')
+      setNotice('This setup has already changed. Nothing was replaced.')
       return false
     }
     const staged = stageWorkspace((current) => (
@@ -951,13 +951,13 @@ export function WebsiteProduct() {
     : pendingRestoredDraft
       ? `This tab has an unsaved ${pendingRestoredDraft.session.workspace.siteName} draft, while the current Website is ${workspace.siteName}. Choose one before editing.`
     : starterSetupActive
-      ? 'Answer a short brief to replace the example with client-specific pages.'
+      ? 'Answer a short brief to prepare client-specific pages.'
       : starterAvailable
         ? 'Add the business details once. SuperMega will prepare the pages, wording and navigation.'
         : hasUnsavedChanges
           ? 'Save the draft or discard it before review.'
           : localPreviewReady
-            ? 'Your saved customization is ready as a standalone review file. Page checks and managed approval remain separate before go-live.'
+            ? 'Download an HTML file of your saved site. This does not publish it.'
           : failingContentChecks.length
             ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
             : leadCounts.new
@@ -1012,8 +1012,11 @@ export function WebsiteProduct() {
     : storageMode === 'browser-local'
       ? 'Saved on this device'
       : 'Available in this browser session'
+  const editingRoutineStatus = view === 'content' && surface === 'work'
+    && websiteTodayState === 'ready' && !pendingRestoredDraft
+    && !storageIssue && !canRepairLocalStorage
   const websiteTodayContext = workingSampleTemplate
-    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current design' : 'starting design'} · ${websiteTodaySource}`
+    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current layout' : 'selected layout'} · ${websiteTodaySource}`
     : websiteTodaySource
   const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
     contract: 'supermega.website.lead-export.v1',
@@ -1208,7 +1211,9 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
+          {!starterSetupActive ? <details className="website-status-disclosure" data-editing-routine={editingRoutineStatus} open={!editingRoutineStatus}>
+            <summary>Site status · {websiteAgentJob}</summary>
+            <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
               <span className="core-eyebrow">Next action</span>
               <h2 id="website-today-title">{websiteAgentJob}</h2>
@@ -1234,7 +1239,8 @@ export function WebsiteProduct() {
                 ) : null}
               </details>
             </div>
-          </section> : null}
+          </section>
+          </details> : null}
 
           {view === 'content' && !starterSetupActive ? (
             <section
@@ -1377,11 +1383,7 @@ export function WebsiteProduct() {
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
                     Prepare file
                   </button>
-                ) : null : localPreviewReady ? (
-                  <button className="website-button is-primary" onClick={downloadWebsiteFile} type="button">
-                    Download website file
-                  </button>
-                ) : null}
+                ) : null : null}
                 </div>
               ) : null}
             </section>
@@ -1390,7 +1392,7 @@ export function WebsiteProduct() {
           {storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
             ? <WebsiteReviewInbox key={`${managedWorkspaceId}:${managedActorId}`} workspaceId={managedWorkspaceId} actorId={managedActorId} /> : null}
           {!starterSetupActive ? <details className="website-start-tools website-business-controls">
-            <summary><span><strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small></span><b>{leadCounts.new} new</b></summary>
+            <summary><span><strong>Inquiries</strong><small>Customer requests and follow-up</small></span><b>{leadCounts.new} new</b></summary>
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>

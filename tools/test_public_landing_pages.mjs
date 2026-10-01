@@ -54,6 +54,11 @@ check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status
 
 // Page content markers, SEO metadata, and CTA wiring.
 const descriptions = []
+const productScreens = {
+  shop: ['platform-shop-dashboard-v2.jpg', 'platform-stock.jpg'],
+  website: ['platform-sites-workspace-v2.jpg', 'platform-pages.jpg'],
+  ecommerce: ['platform-commerce-workflow-v2.jpg', 'platform-catalog.jpg'],
+}
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
   check(Boolean(product), `landing_product_exists:${page.productId}`)
@@ -89,7 +94,9 @@ for (const page of landingPages) {
   check(schema['@context'] === 'https://schema.org' && schema['@type'] === 'Product' && schema.name === product.name && schema.url === canonical && schema.description === description, `landing_structured_data:${page.route}`)
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check((html.match(/<h1>/g) || []).length === 1, `landing_single_headline:${page.route}`)
-  check(html.includes('class="platform-image"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
+  check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
+  check(countOccurrences(html, '<figure class="platform-image') === 2, `landing_two_product_views:${page.route}`)
+  for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
@@ -190,15 +197,28 @@ const shopLanding = readStatic('shop/index.html')
 const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
 for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, readStatic(`${id}/index.html`)])]) {
   const body = html.slice(html.indexOf('<body')).replace(/<script[\s\S]*?<\/script>/g, '')
+  const interfaceFigureCount = (body.match(/<figure class="platform-image/g) || []).length
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
-  check(!/<button\b/.test(body), `no_extra_buttons:${route}`)
+  check((body.match(/<button\b/g) || []).length === 0, `marketing_has_no_controls:${route}`)
+  check(interfaceFigureCount > 0, `interface_figures_present:${route}`)
+  check(countOccurrences(body, 'Illustrative interface and records.') === interfaceFigureCount, `interface_disclosure_per_figure:${route}`)
   for (const forbidden of ['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
     check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
   }
   check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(body), `no_app_detours:${route}`)
 }
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
-for (const filename of ['platform-stock.jpg', 'platform-pages.jpg', 'platform-catalog.jpg']) {
+for (const id of activeIds) {
+  const route = manifest.pages.find((page) => page.productId === id)?.route
+  check(typeof route === 'string' && countOccurrences(home, `class="eyebrow story-link" href="${route}"`) === 1, `home_product_story_link:${id}`)
+}
+check(countOccurrences(home, '<figure class="platform-image') === activeIds.length * 2, 'home_two_views_per_active_product')
+const platformLoop = home.match(/<ol class="platform-loop"[^>]*>([\s\S]*?)<\/ol>/)?.[1] || ''
+check((platformLoop.match(/<li>/g) || []).length === 3, 'home_platform_loop_three_steps')
+for (const token of ['Sell and control stock.', 'Publish and capture demand.', 'Fulfil every order.']) {
+  check(platformLoop.includes(token), `home_platform_loop_outcome:${token}`)
+}
+for (const filename of ['platform-shop-dashboard-v2.jpg', 'platform-sites-workspace-v2.jpg', 'platform-commerce-workflow-v2.jpg', 'platform-stock.jpg', 'platform-pages.jpg', 'platform-catalog.jpg']) {
   const image = readFileSync(resolve(staticDir, 'images', filename))
   check(image.subarray(0, 3).equals(Buffer.from([255,216,255])), `screenshot_jpeg:${filename}`)
   check(image.length > 10000, `screenshot_not_empty:${filename}`)
@@ -317,7 +337,12 @@ check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.
 
 
 check((home.match(/class="product-story"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
-check(home.includes('Myanmar Text'), 'home_myanmar_language_and_font_fallback')
+check(home.includes('SuperMega Noto Sans'), 'home_noto_font')
+for (const html of [home, shopLanding]) {
+  check(html.includes('<html lang="en">'), 'marketing_page_english')
+  check(!html.includes('data-language-toggle') && !html.includes('src="/site-language.js"'), 'marketing_page_has_no_language_control')
+  check(!html.includes('data-i18n=') && !/[\u1000-\u109f]/u.test(html), 'marketing_page_has_no_myanmar_copy')
+}
 for (const id of activeIds) {
   const html = readStatic(`${id}/index.html`)
   check(!html.includes('<details class="frame product-details">'), `workflows_not_hidden:${id}`)
