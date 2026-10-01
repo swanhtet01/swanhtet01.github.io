@@ -7,6 +7,7 @@ const root = resolve(import.meta.dirname, '..')
 const reporter = await readFile(resolve(root, 'showroom/src/core/client-error-reporter.ts'), 'utf8')
 const runtime = await readFile(resolve(root, 'showroom/src/core/workspace-runtime.ts'), 'utf8')
 const coreApp = await readFile(resolve(root, 'showroom/src/core/CoreApp.tsx'), 'utf8')
+const managedTrial = await readFile(resolve(root, 'showroom/src/core/managed-trial.ts'), 'utf8')
 
 test('direct error reports remain production-host gated and privacy bounded', () => {
   const reportClass = reporter.slice(reporter.indexOf('function reportClass('), reporter.indexOf('export function report('))
@@ -48,4 +49,19 @@ test('managed load failures expose identity-bound read-only retry controls', () 
   assert.equal((runtime.match(/\}, \[managedIdentity, managedLoadAttempt\]\)/g) ?? []).length, 2)
   assert.equal((coreApp.match(/Retry company account/g) ?? []).length, 2)
   assert.equal((coreApp.match(/effectiveMode === 'managed-error' \? <button className="core-button primary"/g) ?? []).length, 2)
+})
+
+test('managed bootstrap fails closed instead of spinning forever', () => {
+  const bootstrap = managedTrial.slice(
+    managedTrial.indexOf('export async function loadManagedBootstrap'),
+    managedTrial.indexOf('export async function loadManagedCompanyBrief'),
+  )
+  assert.match(managedTrial, /const MANAGED_BOOTSTRAP_TIMEOUT_MS = 8000/)
+  assert.match(bootstrap, /cache: 'no-store'/)
+  assert.match(bootstrap, /redirect: 'error'/)
+  assert.match(bootstrap, /credentials: 'omit'/)
+  assert.match(bootstrap, /signal: AbortSignal\.timeout\(MANAGED_BOOTSTRAP_TIMEOUT_MS\)/)
+  assert.match(bootstrap, /error\.name === 'TimeoutError'/)
+  assert.match(bootstrap, /code: 'managed_bootstrap_timeout'/)
+  assert.match(bootstrap, /true,\s*expectedIdentity/)
 })

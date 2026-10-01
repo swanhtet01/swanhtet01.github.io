@@ -51,6 +51,7 @@ const AUTH_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const AUTH_CODE = /^[A-Za-z0-9._~-]{16,2048}$/
 const AUTH_TOKEN = /^[A-Za-z0-9._~-]{16,16384}$/
 const ALL_ZERO_HEX = /^0+$/
+const MANAGED_BOOTSTRAP_TIMEOUT_MS = 8000
 
 /**
  * Opaque random hex for a W3C trace/span id — never derived from request
@@ -3481,13 +3482,27 @@ export async function saveManagedPlantEquipmentMaintenanceStrategy(request: {
 }
 
 export async function loadManagedBootstrap(expectedIdentity?: ManagedIdentity) {
-  const bootstrap = await authorizedRequest<ManagedBootstrap>(
-    '/api/trial/v1/bootstrap',
-    {},
-    true,
-    expectedIdentity,
-  )
-  return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
+  try {
+    const bootstrap = await authorizedRequest<ManagedBootstrap>(
+      '/api/trial/v1/bootstrap',
+      {
+        cache: 'no-store',
+        redirect: 'error',
+        credentials: 'omit',
+        signal: AbortSignal.timeout(MANAGED_BOOTSTRAP_TIMEOUT_MS),
+      },
+      true,
+      expectedIdentity,
+    )
+    return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new ManagedTrialError('Company account took too long to respond. Try again.', {
+        code: 'managed_bootstrap_timeout',
+      })
+    }
+    throw error
+  }
 }
 
 export async function loadManagedCompanyBrief(
