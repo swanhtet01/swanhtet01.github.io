@@ -94,6 +94,7 @@ const expectedStaticFiles = new Set([
   'fonts/noto-sans-latin.woff2',
   'fonts/noto-sans-latin-OFL.txt',
   'vercel-insights.js',
+  'site-language.js',
   'images/platform-shop-dashboard-v2.jpg',
   'images/platform-sites-workspace-v2.jpg',
   'images/platform-commerce-workflow-v2.jpg',
@@ -237,7 +238,7 @@ if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
 const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
 for (const [route, page] of pages) {
-  const expectedExecutable = route === '/contact/' ? 2 : 1
+  const expectedExecutable = route === '/contact/' || route === '/' || route === '/shop/' ? 2 : 1
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
   const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
@@ -335,6 +336,13 @@ for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${
 for (const product of publicProducts) {
   const productRoute = manifest.pages.find(page => page.productId === product.id)?.route
   if (typeof productRoute !== 'string' || countOccurrences(home, `class="eyebrow story-link" href="${productRoute}"`) !== 1) fail('homepage_product_link_missing', { product: product.id })
+}
+
+const shopPage = pages.get('/shop/')?.html || ''
+for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
+  if (!html.includes('<html lang="en" data-locale="en">')) fail('localized_page_default_drift', { route })
+  if (!html.includes('data-language-toggle') || !html.includes('src="/site-language.js"')) fail('localized_page_control_missing', { route })
+  if (!html.includes('data-i18n="my" lang="my"') || !html.includes('data-i18n="en" lang="en"')) fail('localized_page_copy_missing', { route })
 }
 
 const contact = pages.get('/contact/')?.html || ''

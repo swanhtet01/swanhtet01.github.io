@@ -198,7 +198,7 @@ const shopProduct = manifest.customerProducts.find(product => product.id === 'sh
 for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, readStatic(`${id}/index.html`)])]) {
   const body = html.slice(html.indexOf('<body')).replace(/<script[\s\S]*?<\/script>/g, '')
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
-  check(!/<button\b/.test(body), `no_extra_buttons:${route}`)
+  check((body.match(/<button\b/g) || []).length === (route === '/' || route === '/shop/' ? 1 : 0), `language_toggle_only_button:${route}`)
   for (const forbidden of ['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
     check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
   }
@@ -335,6 +335,11 @@ check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.
 
 check((home.match(/class="product-story"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
 check(home.includes('SuperMega Noto Sans Myanmar') && home.includes('SuperMega Noto Sans'), 'home_noto_font_pair')
+for (const html of [home, shopLanding]) {
+  check(html.includes('<html lang="en" data-locale="en">'), 'localized_page_english_default')
+  check(html.includes('data-language-toggle') && html.includes('src="/site-language.js"'), 'localized_page_control_and_script')
+  check(html.includes('data-i18n="my" lang="my"') && html.includes('data-i18n="en" lang="en"'), 'localized_page_bilingual_lead')
+}
 for (const id of activeIds) {
   const html = readStatic(`${id}/index.html`)
   check(!html.includes('<details class="frame product-details">'), `workflows_not_hidden:${id}`)
