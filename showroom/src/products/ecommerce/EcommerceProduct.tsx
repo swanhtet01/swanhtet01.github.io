@@ -1599,7 +1599,7 @@ export function EcommerceProduct() {
     : !selectedSkus.length
       ? 'Choose sellable products'
       : !previewResult.preview
-        ? 'Repair storefront preview'
+        ? 'Repair storefront'
         : !savedDraftIsCurrent
           ? 'Save store'
           : pendingManagedRequests.length
@@ -2177,13 +2177,17 @@ export function EcommerceProduct() {
         </div>
       </details>
 
-      {!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">
-        <span>View</span>
-        <select aria-controls={workspaceView === 'preview' ? 'ecommerce-preview-panel' : 'ecommerce-setup-panel'} aria-label="Storefront view" onChange={(event) => showWorkspace(event.target.value as 'setup' | 'preview')} value={workspaceView}>
-          <option value="preview">Store</option>
-          <option value="setup">Edit store</option>
-        </select>
-      </label> : null}
+      {!assistedCatalogEntry ? <div className="ecommerce-workspace-switch">
+        <button
+          aria-controls={workspaceView === 'preview' ? 'ecommerce-setup-panel' : 'ecommerce-preview-panel'}
+          aria-label={workspaceView === 'preview' ? 'Edit store' : 'View store'}
+          className="core-button secondary"
+          onClick={() => showWorkspace(workspaceView === 'preview' ? 'setup' : 'preview')}
+          type="button"
+        >
+          {workspaceView === 'preview' ? 'Edit store' : 'View store'}
+        </button>
+      </div> : null}
 
       <div className="ecommerce-workspace" data-view={workspaceView}>
         <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
@@ -2213,7 +2217,7 @@ export function EcommerceProduct() {
           {missingSavedSkus.length ? (
             <p className="ecommerce-selection-warning" role="status">
               Saved products no longer in this Shop: <strong>{missingSavedSkus.join(', ')}</strong>. {missingSelectionReviewed
-                ? 'Current product selection reviewed; save when the preview is ready.'
+                ? 'Current product selection reviewed; save when the store is ready.'
                 : 'Select or remove a current product to confirm the replacement before saving.'}
             </p>
           ) : null}

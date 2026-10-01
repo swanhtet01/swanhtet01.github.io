@@ -29,7 +29,7 @@ test('local entry uses an honest order-request flow without sample language', ()
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   assert.ok(product.includes("'Open customer ordering'"))
 })
-test('assisted catalog setup stays available in both local views and preserves the draft tab', () => {
+test('assisted catalog setup stays available in both local views and preserves the explicit workspace', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const expression = product.match(/const showAssistedCatalogSetup = ([\s\S]*?)\n\s*const assistedCatalogEntry/)?.[1]
   assert.ok(expression)
@@ -42,7 +42,7 @@ test('assisted catalog setup stays available in both local views and preserves t
     }
   }
   assert.ok(product.includes('href="/ecommerce/?setup=1"'))
-  assert.ok(product.includes("search.delete('setup')"))
+  assert.ok(product.includes("new URLSearchParams(location.search).get('workspace') !== '1'"))
   assert.match(product, /Requests stay on this device until Shop review/)
   assert.match(product, /: ecommerceTodayHeadline\}/)
 })
@@ -55,7 +55,9 @@ test('the assisted entry only appears before an explicit workspace route', () =>
   assert.equal(vm.runInNewContext(expression, ready), true)
   assert.equal(vm.runInNewContext(expression, { ...ready, location: { search: '?workspace=1' } }), false)
   assert.equal(vm.runInNewContext(expression, { ...ready, showAssistedCatalogSetup: false }), false)
-  assert.ok(product.includes('{!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">'))
+  assert.ok(product.includes('{!assistedCatalogEntry ? <div className="ecommerce-workspace-switch">'))
+  assert.ok(product.includes("aria-label={workspaceView === 'preview' ? 'Edit store' : 'View store'}"))
+  assert.ok(!product.includes('aria-label="Storefront view"'))
   assert.ok(product.includes('Explore the catalog'))
   assert.ok(!product.includes('Let SuperMega prepare your catalog'))
   assert.ok(!product.includes('Review your catalog before launch.'))

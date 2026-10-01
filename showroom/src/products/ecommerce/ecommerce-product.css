@@ -42,28 +42,17 @@
 
 .ecommerce-workspace-switch {
   order: 1;
-  width: min(100%, 360px);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: 12px;
-  border: 1px solid rgba(37,48,74, .12);
-  border-radius: 12px;
-  padding: 5px 6px 5px 12px;
-  background: color-mix(in srgb, var(--core-panel) 92%, var(--core-accent) 8%);
-  box-shadow: 0 .5rem 1.25rem rgba(23, 27, 38, .06);
-  backdrop-filter: blur(16px);
 }
 
-.ecommerce-workspace-switch > span,
 .ecommerce-preview-size > span {
   color: var(--core-muted);
   font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
 }
 
-.ecommerce-workspace-switch select,
 .ecommerce-preview-size select {
   min-height: 46px;
   min-width: 0;
@@ -1693,7 +1682,12 @@
     z-index: 18;
     top: 54px;
     width: 100%;
+    padding: 8px 0;
+    background: color-mix(in srgb, var(--core-bg) 94%, transparent);
+    backdrop-filter: blur(16px);
   }
+
+  .ecommerce-workspace-switch > .core-button { width: 100%; }
 
   .ecommerce-setup,
   .ecommerce-preview-panel {
