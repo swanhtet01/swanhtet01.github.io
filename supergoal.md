@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.46
+Version: 1.2.47
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-01
@@ -98,7 +98,7 @@ The table below is retained historical evidence from the PR622 release, not the 
 | Data/security advisors | Supabase is ACTIVE_HEALTHY on PostgreSQL17.6.1; all15 app_private tables exist with RLS. Current release validates the restricted runtime and separate read-only storage auditor | Review leaked-password protection, legacy factory_payroll SECURITY DEFINER grants,13 app RLS init-plan warnings and the reported Ecommerce FK index before a new managed change |
 | Website/Ecommerce | Setup completion now uses workspace=1, matching the product switcher. Local route tests 22/22, app build and artifact verifier PASS. Website model tests previously passed 15/15; offering component checks now pass 11/11 | Existing browser QA records preserved. Hosted database save/reload and denial passed for Sites and Commerce; valid UI submit/save/reload remains unproven. Remaining sample-led paths need review |
 | Payments | 24 focused Stripe tests and full kernel verification with490 tests passed locally, including exact raw-byte signatures, interrupted/oversized requests, redacted persistence errors and successful retry. Kernel lint has0 errors and61 warnings after the outreach regex repair | No live charge or hosted settlement acceptance established; warnings remain to assess |
-| Local AI | Local build local-build-20260929.2 matches the idle loopback worker; catalog validation/comparison added; 589 tests pass, three skips | Synthetic model extraction failed quality; RAM admission prevents retry. No paid fallback or accepted VPS worker |
+| Local AI | `local-agent-company` PR #4 exact head `40cf0473e5b31a51be260eff09f259a7663215ff` passes 614 current-source tests with three skips, CodeQL, GitGuardian and the complete Windows/Ubuntu Python 3.11–3.13 CI matrix. The sealed transfer has an offline integrity verifier | The retained package receipt records 609 extracted-package tests; target inventory, installation, restoration and one useful VPS job remain `NOT RUN`. Local RAM admission still prevents model retry; no paid fallback is authorized |
 | Corporate | Operating materials, acquisition pack and quote check exist | Last recorded Sheets write failed scope; no fresh cloud synchronization |
 | Commercial | No accepted installation or paid conversion established in this review | Global customer/revenue totals are unknown, not assumed zero |
 | Founder event | Owner confirmed12 October 2026,10:00–16:00 through TBS context | Bangkok timezone assumed; other-session access unknown |
@@ -322,7 +322,7 @@ The corporate task last reported a Sheets write-scope rejection; this is histori
 ### System ownership and reuse
 
 - **Product runtime:** existing Vercel/Supabase applications and isolated workspaces. A worker package is not a replacement for this hosting.
-- **Private engineering/R&D worker:** maintained `local-agent-company` source. Current transfer is `outputs/workcell-vps-67ecc89`; extracted-package tests ran 609 cases with three skips. Target inventory, installation, restoration and useful model output remain unaccepted.
+- **Private engineering/R&D worker:** maintained `local-agent-company` source. PR #4 exact head `40cf0473e5b31a51be260eff09f259a7663215ff` passes CodeQL, GitGuardian, all six Windows/Ubuntu Python matrix legs and the required aggregate gate; current source passes 614 tests with three skips. Transfer `outputs/workcell-vps-67ecc89` independently verifies both archives, reconciles 125 source entries to 114 deployable files and retains its original 609-test extracted-package receipt. Target inventory, installation, restoration and a useful accepted VPS job remain `NOT RUN`.
 - **Corporate browser/voice service:** the separate `supermega-agent-company` Render service belongs to the `Automate SuperMega corporate ops` task. Its latest recorded report says browser-agent activation and a restricted Vapi key remain pending. Reconcile that task before changing the service; it is not evidence of an operating private dev team. No paid voice/model fallback is implied.
 - **Coordination:** one primary operator integrates evidence. Preserve paused automations and owner-controlled sessions. Do not create a second queue, service or framework merely because access to the existing one is temporarily unavailable.
 
