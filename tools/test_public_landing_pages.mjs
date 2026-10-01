@@ -197,8 +197,11 @@ const shopLanding = readStatic('shop/index.html')
 const shopProduct = manifest.customerProducts.find(product => product.id === 'shop')
 for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, readStatic(`${id}/index.html`)])]) {
   const body = html.slice(html.indexOf('<body')).replace(/<script[\s\S]*?<\/script>/g, '')
+  const interfaceFigureCount = (body.match(/<figure class="platform-image/g) || []).length
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
   check((body.match(/<button\b/g) || []).length === 0, `marketing_has_no_controls:${route}`)
+  check(interfaceFigureCount > 0, `interface_figures_present:${route}`)
+  check(countOccurrences(body, 'Illustrative interface and records.') === interfaceFigureCount, `interface_disclosure_per_figure:${route}`)
   for (const forbidden of ['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
     check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
   }

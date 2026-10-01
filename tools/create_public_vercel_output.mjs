@@ -572,11 +572,12 @@ const productOutcomes = {
   ['Handle the next exception', 'See which request needs attention first. Review payment issues, expiring quotes and refunds from the same workflow.'],
  ],
 }
+const interfaceDisclosure = 'Illustrative interface and records.'
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
  assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
- const gallery=item.screens.map(([image,alt,caption],index)=>`<figure class="platform-image${index ? ' is-supporting' : ''}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="960" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)}</figcaption></figure>`).join('')
+ const gallery=item.screens.map(([image,alt,caption],index)=>`<figure class="platform-image${index ? ' is-supporting' : ''}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="960" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure}</figcaption></figure>`).join('')
  return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<div class="platform-gallery">${gallery}</div><ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
