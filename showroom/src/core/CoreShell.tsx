@@ -575,14 +575,14 @@ export function CoreLayout() {
 const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
   Shop: 'commerce',
   Plant: 'production',
-  Website: 'website',
-  Ecommerce: 'ecommerce',
+  Sites: 'website',
+  Commerce: 'ecommerce',
 }
 
 const customerProducts = [
   ['Shop', 'Sales, stock and your daily totals.', 'Shop', '/shop/'],
-  ['Website', 'Your services, photos and contact details.', 'Website', '/website/'],
-  ['Ecommerce', 'A product catalog and customer requests.', 'Ecommerce', '/ecommerce/'],
+  ['Sites', 'Your services, photos and contact details.', 'Sites', '/website/'],
+  ['Commerce', 'A product catalog and customer requests.', 'Commerce', '/ecommerce/'],
 ] as const
 
 export function ProductHomeEntry() {

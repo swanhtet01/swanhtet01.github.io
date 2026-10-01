@@ -6,7 +6,7 @@ import vm from 'node:vm'
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
 test('launcher presents Commerce without claiming a delivered Shop order', () => {
   const shell = readFileSync(new URL('../showroom/src/core/CoreShell.tsx', import.meta.url), 'utf8')
-  assert.ok(shell.includes("['Ecommerce', 'A product catalog and customer requests.', 'Ecommerce', '/ecommerce/']"))
+  assert.ok(shell.includes("['Commerce', 'A product catalog and customer requests.', 'Commerce', '/ecommerce/']"))
   assert.ok(!shell.includes('Send a sample order to Shop'))
 })
 const ts = require('typescript')
