@@ -149,7 +149,6 @@ import {
   receiveCommerceProductionBatch,
   returnCommerceStockFromProduction,
   loadCommerceWorkspace,
-  restoreBrowserLocalSamplePaymentPolicies,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 import {
@@ -2630,7 +2629,7 @@ test('issueCommerceStockToProduction and receiveCommerceProductionBatch manage p
   assert.equal(receiveCommerceProductionBatch(base, freshRelease, earlyRecvProof), null)
 })
 
-test('loadCommerceWorkspace and restoreBrowserLocalSamplePaymentPolicies cover workspace boot and payment policy recovery', () => {
+test('loadCommerceWorkspace covers workspace boot without fabricating payment policy recovery', () => {
   // --- loadCommerceWorkspace ---
 
   // null storage → recovery snapshot with error.
@@ -2679,30 +2678,6 @@ test('loadCommerceWorkspace and restoreBrowserLocalSamplePaymentPolicies cover w
   assert.equal(badResult.source, 'recovery')
   assert.ok(badResult.error.length > 0)
 
-  // --- restoreBrowserLocalSamplePaymentPolicies ---
-
-  // Get an approved seed payment decision for pay_on_pickup + pickup.
-  const seedPolicies = createSeedCommerce().paymentPolicies ?? []
-  const seedDecision = commercePaymentDecision(seedPolicies, 'pay_on_pickup', 'pickup', 10000, CAPTURED_AT)
-  assert.ok(seedDecision !== null && seedDecision.status === 'approved', 'seed pay_on_pickup+pickup decision must be approved')
-
-  // State with no payment policies → policies restored.
-  const blankState = createEmptyCommerce()
-  assert.equal(commercePaymentPolicies(blankState).length, 0)
-  const restored = restoreBrowserLocalSamplePaymentPolicies(blankState, seedDecision, 'pickup', 10000)
-  assert.ok(restored !== null, 'restoreBrowserLocalSamplePaymentPolicies must succeed')
-  assert.ok(commercePaymentPolicies(restored).length > 0, 'payment policies must be restored')
-
-  // State that already has payment policies → returns state with policies unchanged.
-  const stateWithPolicies = createSeedCommerce()
-  const policyCountBefore = commercePaymentPolicies(stateWithPolicies).length
-  const kept = restoreBrowserLocalSamplePaymentPolicies(stateWithPolicies, seedDecision, 'pickup', 10000)
-  assert.ok(kept !== null)
-  assert.equal(commercePaymentPolicies(kept).length, policyCountBefore)
-
-  // Tampered decision (policyRevision differs from what the function would compute) → null.
-  const tampered = { ...seedDecision, policyRevision: 99999 }
-  assert.equal(restoreBrowserLocalSamplePaymentPolicies(blankState, tampered, 'pickup', 10000), null)
 })
 
 test('returnCommerceStockFromProduction returns stock from production and rejects malformed inputs', () => {
