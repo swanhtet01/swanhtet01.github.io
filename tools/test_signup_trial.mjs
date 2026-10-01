@@ -326,18 +326,18 @@ check(coreCss.includes('.signup-entry-screen summary { min-height: 2.75rem;'), '
 const storageSource = readFileSync('showroom/src/core/local-workspace-storage.ts', 'utf8')
 check(
   storageSource.includes(`'${TRIAL_SIGNUP_KEY}'`),
-  `${TRIAL_SIGNUP_KEY} is a registered workspace key, so "Reset this device" erases the stored email`,
+  `${TRIAL_SIGNUP_KEY} is a registered workspace key, so company controls can manage the stored email`,
 )
 
 // The terms checkbox is wired into the form, above the submit button, in the same 12px
 // signup-consent styling as the email consent row.
-check(pageSource.includes('I accept the SuperMega trial terms'), 'the signup form offers the terms checkbox')
+check(pageSource.includes('I accept the SuperMega workspace terms'), 'the workspace form offers the terms checkbox')
 check(
   pageSource.split('className="signup-consent"').length - 1 === 2,
   'both consent-style rows share the signup-consent styling',
 )
 check(
-  pageSource.indexOf('I accept the SuperMega trial terms') < pageSource.indexOf('Try ${selectedProductChoice.label} on this device'),
+  pageSource.indexOf('I accept the SuperMega workspace terms') < pageSource.indexOf('Create ${selectedProductChoice.label} workspace'),
   'the terms checkbox sits above the submit button',
 )
 check(pageSource.includes("product: selectedProduct"), 'the saved trial records the product the owner selected')
@@ -346,17 +346,23 @@ check(pageSource.includes("selectedProduct === 'commerce' ? selectedProductChoic
 // A new visitor can request real access without first creating a local trial or visiting an
 // inactive login. Existing trial claims retain their separate, explicitly reviewed handoff.
 const newVisitorPage = pageSource.slice(pageSource.indexOf('<PageHeading eyebrow="Get started"'))
-check(newVisitorPage.indexOf('aria-label="Company account"') < newVisitorPage.indexOf('<form'), 'company account request is visible before the local sample form')
+check(newVisitorPage.indexOf('aria-label="Company account"') < newVisitorPage.indexOf('<form'), 'account access is visible before the device workspace form')
 check(newVisitorPage.includes('href={managedAccountRequestUrl(selectedProductChoice.slug)}'), 'new account requests do not require a saved claim')
 check(newVisitorPage.includes("{managedReady ? <Link") && newVisitorPage.includes("managedAccountPath('/login', selectedProductChoice.slug)"), 'sign-in is offered only when runtime and auth are available')
 check(newVisitorPage.includes('{ACCOUNT_REQUEST_DETAIL}') && trialSignupDoors({ managedReady: false })[1].detail.includes('Account setup and moving local records need separate review.'), 'shared request copy requires review instead of claiming account creation')
-check(newVisitorPage.includes('No company account, team sync, or cloud backup.'), 'local sample keeps its cloud boundary visible')
+check(newVisitorPage.includes('No company account, team sync, or cloud backup.'), 'device workspace keeps its cloud boundary visible')
 check(newVisitorPage.includes('value={choice.id}>{choice.label}</option>'), 'product chooser keeps short, readable labels instead of clipped descriptions')
 const optionalFields = newVisitorPage.match(/<details[^>]+onInvalidCapture[\s\S]*?<\/details>/)?.[0] ?? ''
 check(optionalFields.includes('Optional name and email') && optionalFields.includes('Email (optional)') && optionalFields.includes('Your name (optional)'), 'optional fields are grouped in a closed-by-default disclosure')
 check(!optionalFields.includes(' open=') && optionalFields.includes('event.currentTarget.open = true'), 'optional details reveal invalid hidden controls before browser validation focuses them')
 check(optionalFields.includes('It is not sent to SuperMega.'), 'saving contact locally is not represented as a contact request')
 check(pageSource.includes('Not a password or proof of account access'), 'claim code is not represented as authentication')
+for (const removedCopy of ['Trial reference:', 'Your local trial', 'Current trial', 'local sample', 'Reset this device', 'SuperMega trial terms', 'Read the trial terms', 'Try ${selectedProductChoice.label} on this device', 'supermega-trial-']) {
+  check(!pageSource.includes(removedCopy), `account entry omits removed customer-facing copy: ${removedCopy}`)
+}
+check(pageSource.includes('<h2>Sign in</h2>') && pageSource.includes('>Sign in</Link>'), 'account entry uses a direct sign-in label')
+check(pageSource.includes('<h2>Create a workspace on this device</h2>'), 'device-only workspace creation is explicit')
+check(pageSource.includes('supermega-workspace-${record.claimCode}.json'), 'workspace claim export uses a professional filename')
 const submission = pageSource.slice(pageSource.indexOf('async function startTrial'), pageSource.indexOf('function downloadClaim'))
 check(submission.indexOf('const identity = createTrialSignupRecord(') < submission.indexOf('provisionLocalShopIndustryPack('), 'typed-field validation happens before sample provisioning')
 check(submission.includes('...identity,') && submission.includes('shopIndustryPackId: industryPackId'), 'validated identity is retained with the actually preserved industry pack')
