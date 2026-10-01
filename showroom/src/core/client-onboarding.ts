@@ -620,6 +620,14 @@ const clientDemoPreparationReviewChecklist = [
   'Approve this exact bundle digest before any managed activation.',
 ] as const
 
+const legacyClientDemoPreparationReviewChecklist = [
+  'Confirm the workspace, owner, selected templates, and industry packs.',
+  'Review every normalized source row and resolve client-data corrections.',
+  'Open each product demo path and complete its operational proof scenario.',
+  'Confirm Shop, Plant, Website, and Ecommerce cross-product checks.',
+  'Approve this exact bundle digest before any managed activation.',
+] as const
+
 const sha256Pattern = /^sha256:[0-9a-f]{64}$/
 
 const clientDemoRunbookContracts: Record<ClientSolutionId, {
@@ -1688,7 +1696,7 @@ export async function prepareClientDemoInBrowser(
     bundleDigest,
     review: {
       status: 'awaiting_founder_review',
-      confirmation: `APPROVE CLIENT DEMO ${bundleDigest}`,
+      confirmation: `APPROVE CLIENT WORKSPACE ${bundleDigest}`,
       checklist: [...clientDemoPreparationReviewChecklist],
     },
   }
@@ -1862,10 +1870,13 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
     checks: source.checks,
     controls: source.controls,
   }
+  const currentReview = source.review.confirmation === `APPROVE CLIENT WORKSPACE ${source.bundleDigest}`
+    && JSON.stringify(source.review.checklist) === JSON.stringify(clientDemoPreparationReviewChecklist)
+  const legacyReview = source.review.confirmation === `APPROVE CLIENT DEMO ${source.bundleDigest}`
+    && JSON.stringify(source.review.checklist) === JSON.stringify(legacyClientDemoPreparationReviewChecklist)
   if (await sha256(JSON.stringify(payload)) !== source.bundleDigest
     || source.review.status !== 'awaiting_founder_review'
-    || source.review.confirmation !== `APPROVE CLIENT DEMO ${source.bundleDigest}`
-    || JSON.stringify(source.review.checklist) !== JSON.stringify(clientDemoPreparationReviewChecklist)) return null
+    || !currentReview && !legacyReview) return null
   return source
 }
 
