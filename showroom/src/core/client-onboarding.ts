@@ -265,7 +265,7 @@ function zipStore(entries: Array<{ filename: string; bytes: Uint8Array }>) {
 
 export function buildClientCsvStarterPack(blueprintValue: unknown): ClientCsvStarterPack {
   const blueprint = canonicalClientDemoBlueprint(blueprintValue)
-  if (!blueprint) throw new Error('Create a valid client demo before downloading its CSV starter pack.')
+  if (!blueprint) throw new Error('Create a valid client workspace before downloading its CSV starter pack.')
   const encoder = new TextEncoder()
   const entries = blueprint.products.map((product) => ({
     product: product.product,
@@ -615,7 +615,7 @@ const clientDemoProductDetails: Record<ClientSolutionId, { label: string; demoPa
 const clientDemoPreparationReviewChecklist = [
   'Confirm the workspace, owner, selected templates, and industry packs.',
   'Review every normalized source row and resolve client-data corrections.',
-  'Open each product demo path and complete its operational proof scenario.',
+  'Open each product workspace and complete its operational proof scenario.',
   'Confirm Shop, Plant, Website, and Ecommerce cross-product checks.',
   'Approve this exact bundle digest before any managed activation.',
 ] as const
@@ -1394,7 +1394,7 @@ export function buildClientDemoBlueprint(input: {
     ? shopBusinessTemplateCatalogCsv(businessTemplate.id)
     : null
   if (input.selections.length < 1 || input.selections.length > clientDemoProductOrder.length) {
-    throw new Error('Choose between one and four products for this client demo.')
+    throw new Error('Choose between one and four products for this client workspace.')
   }
   const byProduct = new Map<ClientSolutionId, string>()
   for (const selection of input.selections) {
@@ -1509,7 +1509,7 @@ function hasExactKeys(value: object, keys: readonly string[]) {
 export function buildClientDemoKit(blueprintValue: unknown, exportedAtValue: unknown): ClientDemoKit {
   const blueprint = canonicalClientDemoBlueprint(blueprintValue)
   const exportedAt = canonicalTimestamp(exportedAtValue)
-  if (!blueprint || !exportedAt) throw new Error('The client demo setup kit is invalid.')
+  if (!blueprint || !exportedAt) throw new Error('The client workspace setup kit is invalid.')
   const kit: ClientDemoKit = {
     schema: CLIENT_DEMO_KIT_SCHEMA,
     blueprint,
@@ -1520,7 +1520,7 @@ export function buildClientDemoKit(blueprintValue: unknown, exportedAtValue: unk
       humanReviewRequired: true,
     },
   }
-  if (byteLength(JSON.stringify(kit)) > CLIENT_DEMO_KIT_MAX_BYTES) throw new Error('The client demo setup kit is too large.')
+  if (byteLength(JSON.stringify(kit)) > CLIENT_DEMO_KIT_MAX_BYTES) throw new Error('The client workspace setup kit is too large.')
   return kit
 }
 
@@ -1531,7 +1531,7 @@ export function clientDemoKitReadiness(blueprintValue: unknown, exportedAtValue:
     return {
       ready: false as const,
       kit: null,
-      reason: 'The saved client demo no longer matches the current setup contract. Rebuild it before downloading or preparing client files.',
+      reason: 'The saved client workspace no longer matches the current setup contract. Rebuild it before downloading or preparing client files.',
     }
   }
 }
@@ -1587,7 +1587,7 @@ export async function prepareClientDemoInBrowser(
 ): Promise<ClientDemoPreparationArtifact> {
   const kit = restoreClientDemoKit(kitValue)
   const preparedAt = canonicalTimestamp(preparedAtValue)
-  if (!kit || !preparedAt) throw new Error('The client demo setup kit is invalid.')
+  if (!kit || !preparedAt) throw new Error('The client workspace setup kit is invalid.')
   if (!Array.isArray(sourcesValue) || sourcesValue.length > kit.blueprint.products.length) {
     throw new Error('Choose no more than one CSV for each selected product.')
   }
@@ -1624,7 +1624,7 @@ export async function prepareClientDemoInBrowser(
       product.templateId,
     )
     if (!preview.readyForStaging || preview.totals.ready !== preview.totals.rows) {
-      throw new Error(`${product.label} data needs correction before this demo can be prepared.`)
+      throw new Error(`${product.label} data needs correction before this workspace can be prepared.`)
     }
     const stagingPackage = buildClientImportStagingPackage(preview, {
       workflowTemplateId: product.templateId,
@@ -1650,7 +1650,7 @@ export async function prepareClientDemoInBrowser(
 
   const checks = clientDemoPreparationChecks(products.map((product) => product.stagingPackage))
   if (Object.values(checks).some((check) => check !== true)) {
-    throw new Error('The selected files do not yet form one connected four-product demo.')
+    throw new Error('The selected files do not yet form one connected four-product workspace.')
   }
   const verifiedChecks: ClientDemoPreparationArtifact['checks'] = {
     ecommerceCatalogAligned: true,
@@ -1693,10 +1693,10 @@ export async function prepareClientDemoInBrowser(
     },
   }
   if (byteLength(JSON.stringify(artifact)) > CLIENT_DEMO_PREPARATION_MAX_BYTES) {
-    throw new Error('The prepared client demo is larger than 5 MB.')
+    throw new Error('The prepared client workspace is larger than 5 MB.')
   }
   const restored = await restoreClientDemoPreparationArtifact(artifact)
-  if (!restored) throw new Error('The client demo failed its final local integrity check.')
+  if (!restored) throw new Error('The client workspace failed its final local integrity check.')
   return restored
 }
 
@@ -1893,7 +1893,7 @@ function canonicalProgress(value: unknown, product: ClientSolutionId): ClientDem
 export function createClientDemoWorkspace(blueprintValue: unknown, updatedAtValue: unknown): ClientDemoWorkspace {
   const blueprint = canonicalClientDemoBlueprint(blueprintValue)
   const updatedAt = canonicalTimestamp(updatedAtValue)
-  if (!blueprint || !updatedAt) throw new Error('The client demo workspace package is invalid.')
+  if (!blueprint || !updatedAt) throw new Error('The client workspace package is invalid.')
   return {
     schema: CLIENT_DEMO_WORKSPACE_SCHEMA,
     blueprint,
@@ -1944,13 +1944,13 @@ export function updateClientDemoWorkspaceProgress(
 ): ClientDemoWorkspace {
   const workspace = restoreClientDemoWorkspace(workspaceValue)
   if (!workspace || !progressValue || typeof progressValue !== 'object' || Array.isArray(progressValue)) {
-    throw new Error('The client demo workspace progress is invalid.')
+    throw new Error('The client workspace progress is invalid.')
   }
   const product = (progressValue as Partial<ClientDemoProductProgress>).product as ClientSolutionId
   const index = workspace.products.findIndex((candidate) => candidate.product === product)
   const progress = index >= 0 ? canonicalProgress(progressValue, product) : null
   const updatedAt = canonicalTimestamp(updatedAtValue)
-  if (!progress || !updatedAt) throw new Error('The client demo workspace progress is invalid.')
+  if (!progress || !updatedAt) throw new Error('The client workspace progress is invalid.')
   return {
     ...workspace,
     products: workspace.products.map((candidate, candidateIndex) => candidateIndex === index ? { ...progress, updatedAt } : candidate),
@@ -1975,7 +1975,7 @@ function clientDemoEvidenceTimestamp(value: unknown, field: string) {
 function canonicalClientDemoEvidence(value: unknown): ClientDemoOperationalEvidence {
   if (!value || typeof value !== 'object' || Array.isArray(value)
     || !hasExactKeys(value, ['commerce', 'production', 'website', 'ecommerce'])) {
-    throw new Error('The client demo operational evidence is invalid.')
+    throw new Error('The client workspace operational evidence is invalid.')
   }
   const source = value as Partial<ClientDemoOperationalEvidence>
   if (!source.commerce || !source.production || !source.website || !source.ecommerce
@@ -1983,7 +1983,7 @@ function canonicalClientDemoEvidence(value: unknown): ClientDemoOperationalEvide
     || !hasExactKeys(source.production, ['releasedBatches', 'latestReleasedAt'])
     || !hasExactKeys(source.website, ['approvedReleases', 'latestApprovedAt'])
     || !hasExactKeys(source.ecommerce, ['savedStorefronts', 'reviewedRequests', 'latestSavedStorefrontAt', 'latestReviewedRequestAt'])) {
-    throw new Error('The client demo operational evidence is invalid.')
+    throw new Error('The client workspace operational evidence is invalid.')
   }
   return {
     commerce: {
@@ -2014,7 +2014,7 @@ function evidenceFollowsBaseline(value: string | null, baseline: string) {
 
 export function buildClientDemoRunbook(workspaceValue: unknown, evidenceValue: unknown): ClientDemoRunbook {
   const workspace = restoreClientDemoWorkspace(workspaceValue)
-  if (!workspace) throw new Error('The client demo workspace is invalid.')
+  if (!workspace) throw new Error('The client workspace is invalid.')
   const evidence = canonicalClientDemoEvidence(evidenceValue)
   const proofByProduct: Record<ClientSolutionId, { ready: boolean; observed: string }> = {
     commerce: {

@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.2.47
+Version: 1.2.48
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-01
@@ -34,6 +34,8 @@ Current owner direction (29 September): public marketing is English-only, concis
 4. Qualify one serial engineering worker: bounded repository task, isolated checkout, explicit command/network policy, timeout and resource limits, durable receipt, meaningful tests, human-readable diff and failure recovery. No worker receives production credentials or automatic merge/deploy authority. Acceptance requires a useful reviewed change, not merely a running process.
 5. Run the catalog-mapping R&D experiment against its deterministic baseline using synthetic or authorized data. Measure correctness, correction time, latency and cost; record adopt/reject. Expand roles only after accepted output. Reuse the existing workcell rather than installing a second orchestration stack.
 6. Align current screenshots, product copy and sales materials to the accepted release; finish delivery/support and pricing evidence before outreach.
+
+Current product-language guard (1 October): the reachable internal client builder is a real **client workspace** flow. It may create or load workspace templates and private client packages, but it must not advertise demos, trials, previews, sample-packet loaders or trial resets. The two synthetic Ecommerce packet builders were removed from the reachable Settings UI. Keep versioned `client_demo`, `managed_trial`, `preview` and storage identifiers only where changing them would break persisted data, APIs or compatibility; do not expose those identifiers as product language.
 
 Infrastructure shortlist: existing Contabo if inspection proves fit; Hetzner Linux cloud or DigitalOcean Droplets as alternatives. Compare the same RAM/CPU/storage, region, backups, tax and total monthly ceiling before recommending a purchase. The current Compose baseline reserves8GiB total; this is a resource budget, not a model-performance guarantee. Avoid new frameworks until a concrete missing capability is identified.
 
