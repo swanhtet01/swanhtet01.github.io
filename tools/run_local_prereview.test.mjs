@@ -16,6 +16,7 @@ import {
   evaluateReceipt,
   parseCliArguments,
   parseNameStatus,
+  resolveDefaultLauncher,
   runLocalPrereview,
   validateRange,
 } from './run_local_prereview.mjs'
@@ -101,6 +102,20 @@ test('range validation accepts lane ranges and rejects option injection', () => 
   for (const bad of ['--exec=evil', '-rf', 'a b', 'a;b', '$(cmd)', '', '   ', 'a'.repeat(201)]) {
     assert.throws(() => validateRange(bad), (error) => error instanceof PrereviewError && error.reason === 'local_prereview_range_invalid')
   }
+})
+
+test('launcher discovery supports canonical checkouts and managed worktrees', () => {
+  const canonical = 'C:\\Users\\founder\\Projects\\supermega-platform'
+  assert.equal(
+    resolveDefaultLauncher(canonical, (path) => path === 'C:\\Users\\founder\\Projects\\local-agent-company\\local-code.cmd'),
+    'C:\\Users\\founder\\Projects\\local-agent-company\\local-code.cmd',
+  )
+
+  const worktree = 'C:\\Users\\founder\\Projects\\supermega-platform-worktrees\\lane'
+  assert.equal(
+    resolveDefaultLauncher(worktree, (path) => path === 'C:\\Users\\founder\\Projects\\local-agent-company\\local-code.cmd'),
+    'C:\\Users\\founder\\Projects\\local-agent-company\\local-code.cmd',
+  )
 })
 
 test('CLI argument parsing is strict', () => {
