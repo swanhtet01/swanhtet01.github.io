@@ -416,6 +416,11 @@ const sharedStyle = `
   .platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;border-radius:24px;overflow:hidden}
   .platform-image img {width:100%;max-width:960px;height:auto;display:block;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08)}
   .platform-image figcaption {padding:16px 0 0;color:#615f73;font-size:12px}
+  .product-proof {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden;list-style:none;padding:0}
+  .product-proof li {min-width:0;padding:18px 20px}
+  .product-proof li+li {border-left:1px solid var(--line)}
+  .product-proof span {display:block;margin-bottom:8px;color:var(--blue-strong);font-family:"SFMono-Regular",Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .product-proof strong {display:block;font-size:15px;line-height:1.4}
   .product-story {padding:80px 0;border-top:1px solid var(--line)}
   .story-heading {display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:end;margin-bottom:32px}
   .story-heading h2 {font-size:clamp(32px,4vw,52px);letter-spacing:-.045em;line-height:1.12;margin:12px 0 0}
@@ -432,7 +437,7 @@ const sharedStyle = `
   .platform-loop b {width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#f1f0fb;color:var(--blue);font-size:12px;font-variant-numeric:tabular-nums}
   .platform-loop strong {display:block;margin-bottom:3px;color:var(--ink);font-size:15px;letter-spacing:-.015em}
   .site-header {background:#fff}
-  @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.platform-loop{grid-template-columns:1fr;margin-top:28px}.platform-loop li{min-height:0;padding:16px 18px}.platform-loop li+li{border-top:1px solid var(--line);border-left:0}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.feature-line{gap:12px 20px}}
+  @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.platform-loop{grid-template-columns:1fr;margin-top:28px}.platform-loop li{min-height:0;padding:16px 18px}.platform-loop li+li{border-top:1px solid var(--line);border-left:0}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}}
 
 `
 
@@ -537,9 +542,9 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sales and stock, in sync.', body:'Serve customers, follow orders and see stock risk before it slows the day down.', image:'platform-shop-dashboard-v2.jpg', alt:'Illustrative Shop dashboard with sales, orders, stock and next actions', features:['Sales counter','Stock and purchasing','Order tracking']},
- website: {title:'A website that works for you.', body:'Edit pages, see what is ready and keep customer inquiries in one focused workspace.', image:'platform-sites-workspace-v2.jpg', alt:'Illustrative Sites workspace with page editing, checks and inquiries', features:['Page editing','Search metadata','Inquiry inbox']},
- ecommerce: {title:'Turn your catalog into orders.', body:'Move from catalog to confirmed order, delivery follow-through and stock visibility in one flow. Your team confirms each order and payment. Arrange delivery with your customer.', image:'platform-commerce-workflow-v2.jpg', alt:'Illustrative Commerce workspace with catalog, order and delivery follow-through', features:['Product catalog','Cart and requests','Order follow-through']},
+ shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', image:'platform-shop-dashboard-v2.jpg', alt:'Illustrative Shop dashboard with sales, orders, stock and next actions', proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
+ website: {title:'Publish clearly. Capture every inquiry.', body:'Manage pages, readiness checks and customer inquiries without assembling a separate toolchain.', image:'platform-sites-workspace-v2.jpg', alt:'Illustrative Sites workspace with page editing, checks and inquiries', proof:[['Record','Pages, services and metadata'],['Action','Edit, check and publish'],['Result','Qualified inquiries in one inbox']]},
+ ecommerce: {title:'Take the order through delivery.', body:'Connect the catalog, customer request, payment review and fulfilment follow-through. Your team confirms each order and payment. Arrange delivery with your customer.', image:'platform-commerce-workflow-v2.jpg', alt:'Illustrative Commerce workspace with catalog, order and delivery follow-through', proof:[['Record','Catalog, customer and order'],['Action','Confirm, pack and dispatch'],['Result','One traceable fulfilment flow']]},
 }
 const productOutcomes = {
  shop: [
@@ -560,11 +565,11 @@ const productOutcomes = {
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
- return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><span class="eyebrow">${label}</span><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<figure class="platform-image"><img src="/images/${item.image}" alt="${item.alt}" width="${id === 'ecommerce' ? 940 : 960}" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="lazy" /><figcaption>${label} interface &middot; illustrative records</figcaption></figure><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
+ return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><span class="eyebrow">${label}</span><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<figure class="platform-image"><img src="/images/${item.image}" alt="${item.alt}" width="${id === 'ecommerce' ? 940 : 960}" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="lazy" /><figcaption>${label} product interface &middot; representative records</figcaption></figure><ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Sales, stock, a working website and customer orders—one platform, built to stay in step.</p><ol class="platform-loop" aria-label="How SuperMega products connect"><li><b>01</b><span><strong>Shop</strong>Sell at the counter.</span></li><li><b>02</b><span><strong>Sites</strong>Publish what customers need.</span></li><li><b>03</b><span><strong>Commerce</strong>Carry each request through delivery.</span></li></ol></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">Shop. Sites. Commerce. One connected operating system.</p></main>`,
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Sell, publish and fulfil from one connected platform. Every product keeps the record, next action and result together.</p><ol class="platform-loop" aria-label="How SuperMega products connect"><li><b>01</b><span><strong>Shop</strong>Sell and control stock.</span></li><li><b>02</b><span><strong>Sites</strong>Publish and capture demand.</span></li><li><b>03</b><span><strong>Commerce</strong>Fulfil every order.</span></li></ol></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">One customer. One catalog. One operating record across Shop, Sites and Commerce.</p></main>`,
 })
 
 function productLandingHtml(product,page) {

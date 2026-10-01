@@ -112,6 +112,8 @@ test('saved Plant setup survives visibility projection byte-for-byte', () => {
 test('generated public home and contact offer only active products', async () => {
   const home = main(await html('index.html')), contact = main(await html('contact/index.html'))
   assert.equal((home.match(/class="product-story"/g)??[]).length, 3)
+  assert.equal((home.match(/class="product-proof"/g)??[]).length, 3)
+  assert.match(home, /One customer\. One catalog\. One operating record/)
   assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
   assert.deepEqual([...contact.matchAll(/<option value="([^"]+)">/g)].map(m=>m[1]), ['guide','shop','ecommerce','website'])
   for (const product of activeProductContracts(manifest)) {

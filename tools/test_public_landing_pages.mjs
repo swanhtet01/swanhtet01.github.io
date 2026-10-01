@@ -89,7 +89,7 @@ for (const page of landingPages) {
   check(schema['@context'] === 'https://schema.org' && schema['@type'] === 'Product' && schema.name === product.name && schema.url === canonical && schema.description === description, `landing_structured_data:${page.route}`)
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check((html.match(/<h1>/g) || []).length === 1, `landing_single_headline:${page.route}`)
-  check(html.includes('class="platform-image"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
+  check(html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
@@ -200,7 +200,7 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
 const platformLoop = home.match(/<ol class="platform-loop"[^>]*>([\s\S]*?)<\/ol>/)?.[1] || ''
 check((platformLoop.match(/<li>/g) || []).length === 3, 'home_platform_loop_three_steps')
-for (const token of ['Sell at the counter.', 'Publish what customers need.', 'Carry each request through delivery.']) {
+for (const token of ['Sell and control stock.', 'Publish and capture demand.', 'Fulfil every order.']) {
   check(platformLoop.includes(token), `home_platform_loop_outcome:${token}`)
 }
 for (const filename of ['platform-shop-dashboard-v2.jpg', 'platform-sites-workspace-v2.jpg', 'platform-commerce-workflow-v2.jpg', 'platform-stock.jpg', 'platform-pages.jpg', 'platform-catalog.jpg']) {
