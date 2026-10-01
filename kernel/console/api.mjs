@@ -111,6 +111,28 @@ function operatorAiBudgetStatus(usage, window, capUnits) {
 
 const ok = (json) => ({ status: 200, json })
 const bad = (status, reason) => ({ status, json: { ok: false, reason } })
+
+export async function createLead(body = {}, { insertLead = store.insertLead } = {}) {
+  try {
+    const lead = await insertLead({
+      id:      String(body.id || '').slice(0, 80) || undefined,
+      source:  String(body.source || 'manual').slice(0, 40),
+      name:    String(body.name || '').slice(0, 200),
+      company: String(body.company || '').slice(0, 200),
+      contact: String(body.contact || '').slice(0, 200),
+      package: String(body.package || '').slice(0, 80),
+      message: String(body.message || '').slice(0, 4000),
+      score:   body.score != null ? Number(body.score) : undefined,
+      stage:   body.stage ? String(body.stage).slice(0, 40) : undefined,
+      created_at: body.created_at ? String(body.created_at) : undefined,
+    })
+    return ok({ ok: true, lead })
+  } catch {
+    // Lead intake can contain customer PII. Keep provider/database details out of both the
+    // response and logs while giving callers a stable retryable service contract.
+    return bad(503, 'lead_store_unavailable')
+  }
+}
 const safeMetaValue = (value, limit = 120) => {
   if (value === null || value === undefined) return null
   if (typeof value === 'number' || typeof value === 'boolean') return value
@@ -245,19 +267,7 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         } catch (e) { return ok({ ok: true, mode: store.mode, leads: [], dbStatus: 'error', dbError: String(e.message).slice(0, 140) }) }
       }
       if (method === 'POST' && !seg[1]) {
-        const lead = await store.insertLead({
-          id:      String(body.id || '').slice(0, 80) || undefined,
-          source:  String(body.source || 'manual').slice(0, 40),
-          name:    String(body.name || '').slice(0, 200),
-          company: String(body.company || '').slice(0, 200),
-          contact: String(body.contact || '').slice(0, 200),
-          package: String(body.package || '').slice(0, 80),
-          message: String(body.message || '').slice(0, 4000),
-          score:   body.score != null ? Number(body.score) : undefined,
-          stage:   body.stage ? String(body.stage).slice(0, 40) : undefined,
-          created_at: body.created_at ? String(body.created_at) : undefined,
-        })
-        return ok({ ok: true, lead })
+        return createLead(body)
       }
       if (method === 'PATCH' && seg[1] && !seg[2]) {
         // store.updateLead maps: stage→lead_stage, score→lead_score only.

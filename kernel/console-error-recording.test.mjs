@@ -381,3 +381,23 @@ test('console error handling contract records safe metadata and never request bo
   assert.match(source, /console\.deal_graduation_failed/)
   assert.match(source, /console\.project_shipped_graduation_failed/)
 })
+
+test('lead intake returns a bounded retryable response when durable storage fails', async () => {
+  const { createLead } = await import(`./console/api.mjs?lead-store-unavailable=${Date.now()}-${Math.random()}`)
+  const submitted = {
+    name: 'Private customer name',
+    contact: 'private@example.invalid',
+    message: 'private customer request',
+  }
+  const result = await createLead(submitted, {
+    insertLead: async () => {
+      throw new Error('database host and credential details must not escape')
+    },
+  })
+
+  assert.deepEqual(result, {
+    status: 503,
+    json: { ok: false, reason: 'lead_store_unavailable' },
+  })
+  assert.doesNotMatch(JSON.stringify(result), /Private customer|private@example|database host|credential/i)
+})
