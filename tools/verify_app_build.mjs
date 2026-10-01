@@ -727,7 +727,7 @@ if (await exists(resolve(dist, '.vite', 'manifest.json'))) fail('vite_manifest_s
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Local workspace', 'Name your workspace', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Local workspace', 'Name your workspace', 'Request managed activation', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 // A storefront with no saved draft opens under the owner's own business name. Pinned because
