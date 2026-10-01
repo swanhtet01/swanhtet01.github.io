@@ -312,15 +312,21 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// Navigation is shared across all marketing pages: skip, home, Login, Contact, Privacy.
+// Navigation is shared across all marketing pages: skip, home, Login, Contact,
+// Privacy. The homepage adds one restrained internal link for each product story.
 for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
-  if ((body.match(/<a\b/g) || []).length !== 5) fail('marketing_link_surface_drift', { route })
+  const expectedLinks = route === '/' ? 5 + publicProducts.length : 5
+  if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
   if (!body.includes('class="platform-image"') || !body.includes('class="feature-line"')) fail('product_visual_missing', { route })
   for (const token of ['Request assisted setup', 'Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
     if (body.includes(token)) fail('retired_acquisition_surface', { route, token })
   }
+}
+for (const product of publicProducts) {
+  const productRoute = manifest.pages.find(page => page.productId === product.id)?.route
+  if (typeof productRoute !== 'string' || countOccurrences(home, `class="eyebrow story-link" href="${productRoute}"`) !== 1) fail('homepage_product_link_missing', { product: product.id })
 }
 
 const contact = pages.get('/contact/')?.html || ''

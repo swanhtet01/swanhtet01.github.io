@@ -431,6 +431,10 @@ const sharedStyle = `
   .feature-line > li {flex:1 1 240px;min-width:0;padding:12px 0}
   .feature-line h2, .feature-line h3 {margin:0 0 10px;font-size:18px;letter-spacing:-.025em;color:var(--ink)}
   .feature-line p {margin:0;max-width:34ch;font-size:15px;line-height:1.7;color:var(--muted)}
+  .story-link {display:inline-flex;align-items:center;gap:7px;color:var(--blue);text-decoration:none}
+  .story-link:hover, .story-link:focus-visible {text-decoration:underline;text-underline-offset:4px}
+  .story-link span {font-size:14px;transition:transform .18s ease}
+  .story-link:hover span, .story-link:focus-visible span {transform:translateX(3px)}
   .platform-image img[width="940"] {max-width:940px}
   .platform-note {padding:36px 0 80px;max-width:700px;font-size:24px;line-height:1.5;letter-spacing:-.025em}
   .platform-loop {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;max-width:920px;margin:36px 0 0;padding:0;list-style:none;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden}
@@ -567,8 +571,10 @@ const productOutcomes = {
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
+ const route=manifest.pages.find(page=>page.productId===id)?.route
+ assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
  const gallery=item.screens.map(([image,alt,caption],index)=>`<figure class="platform-image${index ? ' is-supporting' : ''}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="960" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)}</figcaption></figure>`).join('')
- return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><span class="eyebrow">${label}</span><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<div class="platform-gallery">${gallery}</div><ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
+ return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<div class="platform-gallery">${gallery}</div><ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},

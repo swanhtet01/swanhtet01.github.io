@@ -205,6 +205,10 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(body), `no_app_detours:${route}`)
 }
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
+for (const id of activeIds) {
+  const route = manifest.pages.find((page) => page.productId === id)?.route
+  check(typeof route === 'string' && countOccurrences(home, `class="eyebrow story-link" href="${route}"`) === 1, `home_product_story_link:${id}`)
+}
 check(countOccurrences(home, '<figure class="platform-image') === activeIds.length * 2, 'home_two_views_per_active_product')
 const platformLoop = home.match(/<ol class="platform-loop"[^>]*>([\s\S]*?)<\/ol>/)?.[1] || ''
 check((platformLoop.match(/<li>/g) || []).length === 3, 'home_platform_loop_three_steps')
