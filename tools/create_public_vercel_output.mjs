@@ -109,7 +109,6 @@ const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" 
 
 const sharedStyle = `
   @font-face { font-family: "SuperMega Noto Sans"; src: url("/fonts/noto-sans-latin.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
-  @font-face { font-family: "SuperMega Noto Sans Myanmar"; src: url("/fonts/noto-sans-myanmar.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; unicode-range: U+1000-109F,U+200C-200D,U+25CC,U+A92E,U+A9E0-A9FE,U+AA60-AA7F,U+116D0-116E3; }
   :root {
     color-scheme: light;
     --bg: #ffffff;
@@ -130,11 +129,10 @@ const sharedStyle = `
     --shadow: 0 22px 65px rgba(28,26,48, .1);
     --radius: 16px;
     --font-latin: "SuperMega Noto Sans", "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
-    --font-myanmar: "SuperMega Noto Sans Myanmar", "Myanmar Text", "Noto Sans Myanmar";
   }
   * { box-sizing: border-box; }
   html { min-width: 320px; scroll-behavior: smooth; background: var(--bg); }
-  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: var(--font-latin), var(--font-myanmar), sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
+  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: var(--font-latin), sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
   body::before { display: none; content: ""; }
   body::after { display: none; content: ""; }
   a { color: inherit; }
@@ -447,13 +445,8 @@ const sharedStyle = `
   .platform-loop b {width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#f1f0fb;color:var(--blue);font-size:12px;font-variant-numeric:tabular-nums}
   .platform-loop strong {display:block;margin-bottom:3px;color:var(--ink);font-size:15px;letter-spacing:-.015em}
   .site-header {background:#fff}
-  html[data-locale="en"] [data-i18n="my"],html[data-locale="my"] [data-i18n="en"]{display:none!important}
   .header-actions{display:flex;align-items:center;gap:8px}
-  .language-toggle{min-height:40px;min-width:58px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:10px;background:#fff;color:var(--ink);font-size:12px;font-weight:760;cursor:pointer}
-  .language-toggle:hover,.language-toggle:focus-visible{border-color:var(--blue);outline-offset:2px}
-  [data-i18n="my"]{font-family:var(--font-myanmar),sans-serif;line-height:1.7;letter-spacing:0}
   @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.platform-loop{grid-template-columns:1fr;margin-top:28px}.platform-loop li{min-height:0;padding:16px 18px}.platform-loop li+li{border-top:1px solid var(--line);border-left:0}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}}
-  @media(max-width:760px){.language-toggle{min-width:54px}.header-actions{gap:6px}}
 
 `
 
@@ -462,9 +455,7 @@ function brandHtml() {
 }
 
 function headerHtml(route) {
-  const languageToggle = route === '/' || route === '/shop/'
-    ? '<button class="language-toggle" type="button" data-language-toggle aria-label="မြန်မာဘာသာသို့ ပြောင်းရန်">မြန်မာ</button>' : ''
-  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<div class="header-actions">${languageToggle}<a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></div></header>`
+  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<div class="header-actions"><a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></div></header>`
 }
 
 function footerHtml(route) {
@@ -517,41 +508,11 @@ const publicObservabilityScript = `(function () {
 })()
 `
 
-const siteLanguageScript = `(function () {
-  var root = document.documentElement
-  if (!root.hasAttribute('data-locale')) return
-  var key = 'supermega.public.language'
-  var saved = null
-  try { saved = localStorage.getItem(key) } catch (_) {}
-  var locale = saved === 'my' ? 'my' : 'en'
-  function apply() {
-    root.lang = locale
-    root.dataset.locale = locale
-    var toggle = document.querySelector('[data-language-toggle]')
-    if (!toggle) return
-    toggle.textContent = locale === 'en' ? 'မြန်မာ' : 'EN'
-    toggle.setAttribute('aria-label', locale === 'en' ? 'မြန်မာဘာသာသို့ ပြောင်းရန်' : 'Switch to English')
-  }
-  apply()
-  document.addEventListener('DOMContentLoaded', function () {
-    apply()
-    var toggle = document.querySelector('[data-language-toggle]')
-    if (!toggle) return
-    toggle.addEventListener('click', function () {
-      locale = locale === 'en' ? 'my' : 'en'
-      try { localStorage.setItem(key, locale) } catch (_) {}
-      apply()
-    })
-  })
-})()
-`
-
 function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
   const shareImageUrl = canonical(shareImage)
-  const localized = route === '/' || route === '/shop/'
   return `<!doctype html>
-<html lang="en"${localized ? ' data-locale="en"' : ''}>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -574,7 +535,6 @@ function documentHtml({ route, title, description, content, schema = null, robot
     <meta property="og:image:height" content="${OG_CARD_HEIGHT}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="${escapeHtml(shareImageUrl)}" />${structuredDataHtml(schema)}
-    ${localized ? '<script src="/site-language.js"></script>' : ''}
     <style>${sharedStyle}</style>
   </head>
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
@@ -612,9 +572,6 @@ const productOutcomes = {
   ['Handle the next exception', 'See which request needs attention first. Review payment issues, expiring quotes and refunds from the same workflow.'],
  ],
 }
-function localizedText(my, en) {
- return `<span data-i18n="my" lang="my">${escapeHtml(my)}</span><span data-i18n="en" lang="en">${escapeHtml(en)}</span>`
-}
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
@@ -624,14 +581,12 @@ function productStory(id, standalone = false) {
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">${localizedText('အရောင်း၊ စတော့နဲ့ အော်ဒါတွေကို တစ်နေရာတည်းမှာ ကြည့်ပါ။','Sell, publish and fulfil from one connected platform. Every product keeps the record, next action and result together.')}</p><ol class="platform-loop" aria-label="How SuperMega products connect"><li><b>01</b><span><strong>Shop</strong>Sell and control stock.</span></li><li><b>02</b><span><strong>Sites</strong>Publish and capture demand.</span></li><li><b>03</b><span><strong>Commerce</strong>Fulfil every order.</span></li></ol></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">One customer. One catalog. One operating record across Shop, Sites and Commerce.</p></main>`,
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Sell, publish and fulfil from one connected platform. Every product keeps the record, next action and result together.</p><ol class="platform-loop" aria-label="How SuperMega products connect"><li><b>01</b><span><strong>Shop</strong>Sell and control stock.</span></li><li><b>02</b><span><strong>Sites</strong>Publish and capture demand.</span></li><li><b>03</b><span><strong>Commerce</strong>Fulfil every order.</span></li></ol></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">One customer. One catalog. One operating record across Shop, Sites and Commerce.</p></main>`,
 })
 
 function productLandingHtml(product,page) {
  const description=page.description||product.description
- const storyBody=product.id === 'shop'
-  ? localizedText('အရောင်းမှတ်တမ်း၊ စတော့နဲ့ အော်ဒါတွေကို စစ်ဆေးပြီး တစ်နေ့တာစာရင်းကို ပိတ်ပါ။', stories[product.id].body)
-  : escapeHtml(stories[product.id].body)
+ const storyBody=escapeHtml(stories[product.id].body)
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
  schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
  content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>`})
@@ -1364,13 +1319,10 @@ await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
 for (const image of ['platform-shop-dashboard-v2.jpg','platform-sites-workspace-v2.jpg','platform-commerce-workflow-v2.jpg','platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
-await writeStatic('fonts/noto-sans-myanmar.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-myanmar.woff2')))
-await writeStatic('fonts/noto-sans-myanmar-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-myanmar-OFL.txt')))
 await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-latin.woff2')))
 await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
-await writeStatic('site-language.js', siteLanguageScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
 for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)

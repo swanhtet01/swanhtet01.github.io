@@ -89,12 +89,9 @@ const expectedStaticFiles = new Set([
   '404.html',
   '__release.json',
   'favicon.svg',
-  'fonts/noto-sans-myanmar.woff2',
-  'fonts/noto-sans-myanmar-OFL.txt',
   'fonts/noto-sans-latin.woff2',
   'fonts/noto-sans-latin-OFL.txt',
   'vercel-insights.js',
-  'site-language.js',
   'images/platform-shop-dashboard-v2.jpg',
   'images/platform-sites-workspace-v2.jpg',
   'images/platform-commerce-workflow-v2.jpg',
@@ -133,10 +130,8 @@ const sharedRequired = [
   '--bg-raised: #f1f1fb;',
   '--ink: #151521;',
   '--blue: #5b4ee8;',
-  'font-family: "SuperMega Noto Sans Myanmar"',
   'font-family: "SuperMega Noto Sans"',
   '--font-latin: "SuperMega Noto Sans"',
-  '--font-myanmar: "SuperMega Noto Sans Myanmar"',
   '.platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;',
 ]
 
@@ -238,7 +233,7 @@ if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
 const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
 for (const [route, page] of pages) {
-  const expectedExecutable = route === '/contact/' || route === '/' || route === '/shop/' ? 2 : 1
+  const expectedExecutable = route === '/contact/' ? 2 : 1
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
   const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
@@ -340,9 +335,9 @@ for (const product of publicProducts) {
 
 const shopPage = pages.get('/shop/')?.html || ''
 for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
-  if (!html.includes('<html lang="en" data-locale="en">')) fail('localized_page_default_drift', { route })
-  if (!html.includes('data-language-toggle') || !html.includes('src="/site-language.js"')) fail('localized_page_control_missing', { route })
-  if (!html.includes('data-i18n="my" lang="my"') || !html.includes('data-i18n="en" lang="en"')) fail('localized_page_copy_missing', { route })
+  if (!html.includes('<html lang="en">')) fail('marketing_page_not_english', { route })
+  if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
+  if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
 }
 
 const contact = pages.get('/contact/')?.html || ''
