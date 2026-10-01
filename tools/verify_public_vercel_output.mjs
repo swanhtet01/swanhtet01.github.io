@@ -279,9 +279,9 @@ if (publicObservability.indexOf("window.si('beforeSend'") > publicObservability.
 if (/(?:conversion|contact-form|customer|email|payment|proof_|window\.va\('event')/i.test(publicObservability)) fail('public_observability_private_or_custom_event_surface')
 
 const home = pages.get('/')?.html || ''
-const expectedHomeDescription = 'Sales and stock, business websites, and customer requests. Shop, Sites and Commerce for your business.'
+const expectedHomeDescription = 'Sell, publish and fulfil from one connected platform. Shop, Sites and Commerce keep the record, next action and result together.'
 if (homePage?.file !== 'index.html') fail('home_manifest_entry_invalid')
-if (homePage.title !== 'SuperMega | Business tools for Myanmar') fail('home_manifest_title_drift')
+if (homePage.title !== 'SuperMega | Run the business without the busywork') fail('home_manifest_title_drift')
 if (homePage.description !== expectedHomeDescription) fail('home_manifest_description_source_drift')
 for (const staleToken of [
   '<title>SuperMega | Four products</title>',
