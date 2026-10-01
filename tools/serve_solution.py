@@ -9061,7 +9061,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
     ) -> None:
         """Fail before build when Preview cannot support the managed sign-in journey."""
         preview_environment_path = REPO_ROOT / ".vercel" / ".env.preview.local"
-        verifier_path = REPO_ROOT / "tools" / "verify_managed_runtime_environment_values.mjs"
+        verifier_path = REPO_ROOT / "tools" / "verify_acceptance_runtime_environment.mjs"
         node_path = shutil.which("node")
         if not preview_environment_path.is_file() or not verifier_path.is_file() or not node_path:
             raise HTTPException(
@@ -9077,7 +9077,7 @@ def create_app(site_root: Path, pilot_data: Path) -> FastAPI:
         verifier_environment["SUPERMEGA_RELEASE_COMMIT"] = revision
         try:
             completed = subprocess.run(
-                [node_path, str(verifier_path), "managed_trial"],
+                [node_path, str(verifier_path), revision],
                 cwd=str(REPO_ROOT),
                 env=verifier_environment,
                 capture_output=True,
