@@ -3677,7 +3677,7 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('!paymentPolicyReady')
   || !ecommerceBuyingUiSource.includes('latestRequest.quote.payment.adapter === effectivePaymentAdapter')
   || !ecommerceBuyingUiSource.includes('paymentAdapter: effectivePaymentAdapter')
-  || !ecommerceBuyingUiSource.includes('const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])')
+  || ecommerceBuyingUiSource.includes('samplePaymentPolicies')
   // The buyer screen's cancellation, amendment and reschedule loops read acknowledgements out
   // of ONE reader memoized on the workspace, never one validation per intent. They sit in the
   // component body rather than a memo, so the per-call shape re-validated the whole workspace
@@ -3686,10 +3686,10 @@ if (addToCartStart < 0
   // two lines are what stop the per-call shape creeping back into this file specifically.
   || !ecommerceBuyingUiSource.includes('const readOrderAcknowledgement = useMemo(() => commerceOrderAcknowledgementReader(commerceState), [commerceState])')
   || ecommerceBuyingUiSource.includes('commerceOrderAcknowledgement(commerceState')
-  || !ecommerceBuyingUiSource.includes('const usingSamplePaymentFallback = !onRecordManagedRequest')
-  || !ecommerceBuyingUiSource.includes('&& configuredPaymentPolicies.length === 0')
-  || !ecommerceBuyingUiSource.includes('currentPaymentPolicies: checkoutPaymentPolicies')
-  || !ecommerceBuyingUiSource.includes('Payment is selected for this request only. No charge or payment-provider request is made.')
+  || ecommerceBuyingUiSource.includes('usingSamplePaymentFallback')
+  || !ecommerceBuyingUiSource.includes('const availablePaymentAdapters = configuredPaymentAdapters')
+  || !ecommerceBuyingUiSource.includes('currentPaymentPolicies: configuredPaymentPolicies')
+  || ecommerceBuyingUiSource.includes('Payment is selected for this request only.')
   || !ecommerceBuyingUiSource.includes('const latestRequestConfirmed = Boolean(latestRequestOrder && receiptCurrent)')
   || !ecommerceBuyingUiSource.includes("latestRequestConfirmed || !receiptCurrent")
   || !ecommerceBuyingUiSource.includes('Confirmed in Shop')
