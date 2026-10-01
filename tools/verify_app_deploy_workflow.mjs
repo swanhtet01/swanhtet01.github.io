@@ -695,6 +695,11 @@ requireContract('preview release review is exact and server-owned',
 requireContract('canonical preview deploys one pinned prebuilt artifact',
   previewServer.includes('deploy_environment["SUPERMEGA_RELEASE_COMMIT"] = normalized_revision')
   && previewServer.includes('["pull", "--yes", "--environment=preview"]')
+  && previewServer.includes('_require_canonical_preview_managed_runtime(normalized_revision, deploy_environment)')
+  && previewServer.includes('verify_managed_runtime_environment_values.mjs')
+  && previewServer.includes('[node_path, str(verifier_path), "managed_trial"]')
+  && previewServer.includes('dotenv_values(preview_environment_path, interpolate=False)')
+  && previewServer.includes('canonical_preview_managed_runtime_not_ready:')
   && previewServer.includes('["build", "--yes"]')
   && previewServer.includes('"--prebuilt"')
   && previewServer.includes('f"githubCommitSha={normalized_revision}"')
@@ -706,6 +711,7 @@ requireContract('canonical preview deploys one pinned prebuilt artifact',
   && !previewServer.includes('"--token"')
   && !previewServer.includes('"urls": urls')
   && previewServer.indexOf('["pull", "--yes", "--environment=preview"]') < previewServer.indexOf('["build", "--yes"]')
+  && previewServer.indexOf('_require_canonical_preview_managed_runtime(normalized_revision, deploy_environment)') < previewServer.indexOf('["build", "--yes"]')
   && previewServer.indexOf('["build", "--yes"]') < previewServer.indexOf('"deploy",\n                "--prebuilt"'))
 
 const normalizeCrons = (crons) => (crons || [])
