@@ -1609,7 +1609,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     status: 'checking' | 'ready' | 'error'
     intake: WebsiteEcommerceHandoffContext | null
   }>({ status: 'checking', intake: null })
-  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange] = useCommerceWorkspace(managedIdentity)
+  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange, retryManagedCommerceLoad] = useCommerceWorkspace(managedIdentity)
   // Workspace headroom. LOCAL SHOPS ONLY: a company account keeps the ledger server-side
   // and neither local ceiling applies to it (workspace-runtime.ts branches on
   // !managedIdentity long before any of this), so a signed-in operator must never be told
@@ -3106,7 +3106,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Shop</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{commerceStorageError || 'Shop remains read-only until the authenticated tenant state is confirmed.'}</p>
-      <div className="form-actions"><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
+      <div className="form-actions">{effectiveMode === 'managed-error' ? <button className="core-button primary" onClick={retryManagedCommerceLoad} type="button">Retry company account</button> : null}<Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
     </section>
   })() : null
 
@@ -8065,7 +8065,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
 function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
   const productionLocation = useLocation()
   const navigate = useNavigate()
-  const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite] = useProductionWorkspace(managedIdentity)
+  const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite, retryManagedProductionLoad] = useProductionWorkspace(managedIdentity)
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
   const relatedCommerceRef = useRef(relatedCommerce)
   const productionRef = useRef(production)
@@ -8878,7 +8878,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Plant</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{productionStorageError || 'Plant remains read-only until the authenticated tenant state is confirmed.'}</p>
-      <div className="form-actions"><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
+      <div className="form-actions">{effectiveMode === 'managed-error' ? <button className="core-button primary" onClick={retryManagedProductionLoad} type="button">Retry company account</button> : null}<Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
     </section>
   }
 
