@@ -329,7 +329,7 @@ export function WebsiteProduct() {
   }, [hasUnsavedChanges])
 
   useEffect(() => {
-    document.title = 'Website | SuperMega'
+    document.title = 'Sites | SuperMega'
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
 

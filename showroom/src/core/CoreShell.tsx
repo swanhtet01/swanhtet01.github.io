@@ -182,8 +182,8 @@ function productFromPathname(pathname: string): ClientSolutionId | null {
 function productDisplayName(product: string) {
   if (product === 'commerce') return 'Shop'
   if (product === 'production') return 'Plant'
-  if (product === 'website') return 'Website'
-  if (product === 'ecommerce') return 'Ecommerce'
+  if (product === 'website') return 'Sites'
+  if (product === 'ecommerce') return 'Commerce'
   return 'SuperMega'
 }
 
@@ -388,10 +388,9 @@ function Brand() {
   )
 }
 
-// Design phase 2 item 10: the toggle used to render as the raw glyphs ☼/◐, which
-// have inconsistent font coverage across platforms (missing or mismatched-weight
-// on several Android system fonts). Plain stroke SVGs render identically everywhere
-// and pick up the button's own color via currentColor.
+// Operational and internal settings screens can expose runtime state when it is
+// needed for a concrete decision. The customer shell intentionally omits this
+// badge so product navigation stays focused on the work itself.
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
   return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Private device'}</span>
 }
@@ -447,9 +446,9 @@ export function CoreLayout() {
     : sensitiveAccountRoute
       ? (location.pathname.startsWith('/account/recovery') ? 'Account recovery' : 'Account setup')
       : location.pathname.startsWith('/website/')
-      ? 'Website'
+      ? 'Sites'
       : location.pathname.startsWith('/ecommerce/')
-      ? 'Ecommerce'
+      ? 'Commerce'
       : location.pathname.startsWith('/vision/')
         ? 'Vision'
       : internalBuilderRoute
@@ -526,10 +525,10 @@ export function CoreLayout() {
         {activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
-        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}</div>
+        <div className="sidebar-foot">{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}</div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}{!accountEntryRoute ? <RuntimeBadge status={runtime.status} /> : null}</div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}</div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every
