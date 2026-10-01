@@ -291,7 +291,10 @@ function useRuntimeHealth() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('/api/health', { headers: { accept: 'application/json' }, cache: 'no-store', credentials: 'omit', redirect: 'error', signal: controller.signal })
+    // Keep credentials confined to this origin. Protected Vercel previews use a
+    // same-origin cookie before the application can reach its own health route;
+    // omitting it made a healthy managed preview fail closed as an isolated demo.
+    fetch('/api/health', { headers: { accept: 'application/json' }, cache: 'no-store', credentials: 'same-origin', redirect: 'error', signal: controller.signal })
       .then(async (response) => {
         const type = response.headers.get('content-type') ?? ''
         if (!response.ok || !type.includes('application/json')) throw new Error('health_unavailable')
