@@ -52,7 +52,9 @@ check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_
 // The public surface presents products through screenshots and one Login.
 // Historical contact links below remain valid app/support routes, not public CTAs.
 check(generator.includes('href="https://app.supermega.dev/login">Login</a>'), 'generator_single_login_route')
-check(generator.includes('class="platform-image"'), 'generator_product_screenshots')
+check(generator.includes('class="platform-gallery"')
+  && generator.includes('class="platform-image${index ? \' is-supporting\' : \'\'}"')
+  && generator.includes('item.screens.map('), 'generator_product_screenshots')
 check(!generator.includes('function assistedSetupAction('), 'generator_setup_funnel_removed')
 check(!generator.includes('Open Shop Profit Control'), 'generator_profit_control_action_removed')
 check(generator.includes('href="/contact/">Contact</a>'), 'generator_contact_footer')
