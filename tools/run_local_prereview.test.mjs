@@ -105,16 +105,18 @@ test('range validation accepts lane ranges and rejects option injection', () => 
 })
 
 test('launcher discovery supports canonical checkouts and managed worktrees', () => {
-  const canonical = 'C:\\Users\\founder\\Projects\\supermega-platform'
+  const projects = resolve('fixtures', 'Projects')
+  const expected = resolve(projects, 'local-agent-company', 'local-code.cmd')
+  const canonical = resolve(projects, 'supermega-platform')
   assert.equal(
-    resolveDefaultLauncher(canonical, (path) => path === 'C:\\Users\\founder\\Projects\\local-agent-company\\local-code.cmd'),
-    'C:\\Users\\founder\\Projects\\local-agent-company\\local-code.cmd',
+    resolveDefaultLauncher(canonical, (path) => path === expected),
+    expected,
   )
 
-  const worktree = 'C:\\Users\\founder\\Projects\\supermega-platform-worktrees\\lane'
+  const worktree = resolve(projects, 'supermega-platform-worktrees', 'lane')
   assert.equal(
-    resolveDefaultLauncher(worktree, (path) => path === 'C:\\Users\\founder\\Projects\\local-agent-company\\local-code.cmd'),
-    'C:\\Users\\founder\\Projects\\local-agent-company\\local-code.cmd',
+    resolveDefaultLauncher(worktree, (path) => path === expected),
+    expected,
   )
 })
 
