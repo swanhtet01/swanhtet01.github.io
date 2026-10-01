@@ -334,7 +334,7 @@ check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.
 
 
 check((home.match(/class="product-story"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
-check(home.includes('Myanmar Text'), 'home_myanmar_language_and_font_fallback')
+check(home.includes('SuperMega Noto Sans Myanmar') && home.includes('SuperMega Noto Sans'), 'home_noto_font_pair')
 for (const id of activeIds) {
   const html = readStatic(`${id}/index.html`)
   check(!html.includes('<details class="frame product-details">'), `workflows_not_hidden:${id}`)

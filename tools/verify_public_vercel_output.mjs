@@ -89,6 +89,10 @@ const expectedStaticFiles = new Set([
   '404.html',
   '__release.json',
   'favicon.svg',
+  'fonts/noto-sans-myanmar.woff2',
+  'fonts/noto-sans-myanmar-OFL.txt',
+  'fonts/noto-sans-latin.woff2',
+  'fonts/noto-sans-latin-OFL.txt',
   'vercel-insights.js',
   'images/platform-shop-dashboard-v2.jpg',
   'images/platform-sites-workspace-v2.jpg',
@@ -128,6 +132,10 @@ const sharedRequired = [
   '--bg-raised: #f1f1fb;',
   '--ink: #151521;',
   '--blue: #5b4ee8;',
+  'font-family: "SuperMega Noto Sans Myanmar"',
+  'font-family: "SuperMega Noto Sans"',
+  '--font-latin: "SuperMega Noto Sans"',
+  '--font-myanmar: "SuperMega Noto Sans Myanmar"',
   '.platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;',
 ]
 

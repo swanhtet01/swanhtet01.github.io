@@ -108,6 +108,8 @@ if (previewAppBinding) release.previewNavigation = previewAppBinding
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision"><rect width="64" height="64" rx="8" fill="${brand.colors.background}"/><rect x="1" y="1" width="62" height="62" rx="7" fill="none" stroke="${brand.colors.ink}" stroke-opacity=".16"/><path d="M13 18 27 32 13 46" fill="none" stroke="${brand.colors.accent}" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/><path d="M34 46h17" fill="none" stroke="${brand.colors.ink}" stroke-width="4.5" stroke-linecap="square"/></svg>\n`
 
 const sharedStyle = `
+  @font-face { font-family: "SuperMega Noto Sans"; src: url("/fonts/noto-sans-latin.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "SuperMega Noto Sans Myanmar"; src: url("/fonts/noto-sans-myanmar.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; unicode-range: U+1000-109F,U+200C-200D,U+25CC,U+A92E,U+A9E0-A9FE,U+AA60-AA7F,U+116D0-116E3; }
   :root {
     color-scheme: light;
     --bg: #ffffff;
@@ -127,10 +129,12 @@ const sharedStyle = `
     --blue-soft: rgba(91,78,232, .1);
     --shadow: 0 22px 65px rgba(28,26,48, .1);
     --radius: 16px;
+    --font-latin: "SuperMega Noto Sans", "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
+    --font-myanmar: "SuperMega Noto Sans Myanmar", "Myanmar Text", "Noto Sans Myanmar";
   }
   * { box-sizing: border-box; }
   html { min-width: 320px; scroll-behavior: smooth; background: var(--bg); }
-  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Myanmar Text", "Noto Sans Myanmar", sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
+  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: var(--font-latin), var(--font-myanmar), sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
   body::before { display: none; content: ""; }
   body::after { display: none; content: ""; }
   a { color: inherit; }
@@ -1315,6 +1319,10 @@ await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
 for (const image of ['platform-shop-dashboard-v2.jpg','platform-sites-workspace-v2.jpg','platform-commerce-workflow-v2.jpg','platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+await writeStatic('fonts/noto-sans-myanmar.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-myanmar.woff2')))
+await writeStatic('fonts/noto-sans-myanmar-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-myanmar-OFL.txt')))
+await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-latin.woff2')))
+await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
