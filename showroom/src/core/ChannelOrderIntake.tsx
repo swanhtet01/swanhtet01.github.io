@@ -43,8 +43,8 @@ function emptyChannelAttributions(): Record<ChannelOrderField, ChannelAttributio
 function channelDraftBlockerLabel(blocker: string) {
   const field = channelOrderFields.find((candidate) => blocker.startsWith(`${candidate}_`))
   const fieldLabel = field ? channelFieldLabels[field] : ''
-  if (blocker === 'source_label_required') return 'Add a message ID or approved sample label.'
-  if (blocker === 'source_message_required') return 'Paste one approved or synthetic message.'
+  if (blocker === 'source_label_required') return 'Add the message ID, thread ID, or call reference.'
+  if (blocker === 'source_message_required') return 'Paste the customer message for this order.'
   if (blocker === 'source_message_too_long') return `Keep the single message under ${CHANNEL_ORDER_MESSAGE_MAX.toLocaleString()} characters.`
   if (blocker === 'channel_invalid') return 'Choose Messenger, Viber, Telegram, TikTok, or Phone.'
   if (blocker === 'customer_required') return 'Add a customer reference.'
@@ -236,7 +236,7 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
     <div className="channel-intake-heading"><span className="core-eyebrow">AI-assisted intake</span><h3>Turn one message into an order draft</h3><p>Paste one customer message. AI proposes the details; a person still reviews and confirms the order.</p></div>
     <form aria-busy={aiBusy} className="core-form channel-intake-form" onSubmit={reviewMessage}>
       <div className="form-row">
-        <label>Message reference<input disabled={controlsDisabled} maxLength={120} onChange={(event) => { setSourceLabel(event.target.value); invalidateReview() }} placeholder="Message ID or approved sample" required value={sourceLabel} /></label>
+        <label>Message reference<input disabled={controlsDisabled} maxLength={120} onChange={(event) => { setSourceLabel(event.target.value); invalidateReview() }} placeholder="e.g. Messenger thread 1842" required value={sourceLabel} /></label>
         <label>Received through<select disabled={controlsDisabled} onChange={(event) => { setChannel(event.target.value); invalidateReview() }} value={channel}>{channelOrderChannels.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
       </div>
       <label>Single message<textarea disabled={controlsDisabled} maxLength={CHANNEL_ORDER_MESSAGE_MAX} onChange={(event) => { setMessage(event.target.value); invalidateReview() }} placeholder="Paste only the message needed to prepare this order." required value={message} /></label>

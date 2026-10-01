@@ -108,6 +108,7 @@ if (previewAppBinding) release.previewNavigation = previewAppBinding
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision"><rect width="64" height="64" rx="8" fill="${brand.colors.background}"/><rect x="1" y="1" width="62" height="62" rx="7" fill="none" stroke="${brand.colors.ink}" stroke-opacity=".16"/><path d="M13 18 27 32 13 46" fill="none" stroke="${brand.colors.accent}" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/><path d="M34 46h17" fill="none" stroke="${brand.colors.ink}" stroke-width="4.5" stroke-linecap="square"/></svg>\n`
 
 const sharedStyle = `
+  @font-face { font-family: "SuperMega Noto Sans"; src: url("/fonts/noto-sans-latin.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
   :root {
     color-scheme: light;
     --bg: #ffffff;
@@ -127,10 +128,11 @@ const sharedStyle = `
     --blue-soft: rgba(91,78,232, .1);
     --shadow: 0 22px 65px rgba(28,26,48, .1);
     --radius: 16px;
+    --font-latin: "SuperMega Noto Sans", "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
   }
   * { box-sizing: border-box; }
   html { min-width: 320px; scroll-behavior: smooth; background: var(--bg); }
-  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Myanmar Text", "Noto Sans Myanmar", sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
+  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: var(--font-latin), sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
   body::before { display: none; content: ""; }
   body::after { display: none; content: ""; }
   a { color: inherit; }
@@ -413,17 +415,38 @@ const sharedStyle = `
   .editorial-hero {padding:100px 0 64px;max-width:940px}
   .editorial-hero h1 {font-size:clamp(48px,7.5vw,100px);line-height:1.02;letter-spacing:-.065em;margin:20px 0 28px;font-weight:650}
   .editorial-hero .lede {max-width:610px;font-size:21px;line-height:1.6;color:var(--muted)}
+  .platform-gallery {display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,.75fr);gap:18px;align-items:stretch}
   .platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;border-radius:24px;overflow:hidden}
-  .platform-image img {width:100%;height:auto;display:block;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08)}
+  .platform-image.is-supporting {display:flex;flex-direction:column;justify-content:center}
+  .platform-image img {width:100%;max-width:960px;height:auto;display:block;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08)}
   .platform-image figcaption {padding:16px 0 0;color:#615f73;font-size:12px}
+  .product-proof {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden;list-style:none;padding:0}
+  .product-proof li {min-width:0;padding:18px 20px}
+  .product-proof li+li {border-left:1px solid var(--line)}
+  .product-proof span {display:block;margin-bottom:8px;color:var(--blue-strong);font-family:"SFMono-Regular",Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .product-proof strong {display:block;font-size:15px;line-height:1.4}
   .product-story {padding:80px 0;border-top:1px solid var(--line)}
   .story-heading {display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:end;margin-bottom:32px}
   .story-heading h2 {font-size:clamp(32px,4vw,52px);letter-spacing:-.045em;line-height:1.12;margin:12px 0 0}
   .story-heading p {font-size:18px;line-height:1.65;color:var(--muted);margin:0;max-width:500px}
   .feature-line {display:flex;flex-wrap:wrap;gap:12px 30px;list-style:none;padding:24px 0 0;margin:0;font-size:14px;color:#49465f}
+  .feature-line > li {flex:1 1 240px;min-width:0;padding:12px 0}
+  .feature-line h2, .feature-line h3 {margin:0 0 10px;font-size:18px;letter-spacing:-.025em;color:var(--ink)}
+  .feature-line p {margin:0;max-width:34ch;font-size:15px;line-height:1.7;color:var(--muted)}
+  .story-link {display:inline-flex;align-items:center;gap:7px;color:var(--blue);text-decoration:none}
+  .story-link:hover, .story-link:focus-visible {text-decoration:underline;text-underline-offset:4px}
+  .story-link span {font-size:14px;transition:transform .18s ease}
+  .story-link:hover span, .story-link:focus-visible span {transform:translateX(3px)}
+  .platform-image img[width="940"] {max-width:940px}
   .platform-note {padding:36px 0 80px;max-width:700px;font-size:24px;line-height:1.5;letter-spacing:-.025em}
+  .platform-loop {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;max-width:920px;margin:36px 0 0;padding:0;list-style:none;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden}
+  .platform-loop li {position:relative;min-height:94px;display:grid;grid-template-columns:32px minmax(0,1fr);align-content:center;gap:12px;padding:20px 22px;color:var(--muted);font-size:15px;line-height:1.45}
+  .platform-loop li+li {border-left:1px solid var(--line)}
+  .platform-loop b {width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#f1f0fb;color:var(--blue);font-size:12px;font-variant-numeric:tabular-nums}
+  .platform-loop strong {display:block;margin-bottom:3px;color:var(--ink);font-size:15px;letter-spacing:-.015em}
   .site-header {background:#fff}
-  @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.feature-line{gap:12px 20px}}
+  .header-actions{display:flex;align-items:center;gap:8px}
+  @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.platform-loop{grid-template-columns:1fr;margin-top:28px}.platform-loop li{min-height:0;padding:16px 18px}.platform-loop li+li{border-top:1px solid var(--line);border-left:0}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}}
 
 `
 
@@ -431,8 +454,8 @@ function brandHtml() {
   return `<a class="brand" href="/" aria-label="SuperMega home"><span class="brand-mark" aria-hidden="true">&gt;_</span><span class="brand-name">SUPERMEGA</span></a>`
 }
 
-function headerHtml() {
-  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></header>`
+function headerHtml(route) {
+  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<div class="header-actions"><a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></div></header>`
 }
 
 function footerHtml(route) {
@@ -528,24 +551,46 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sales and stock, in sync.', body:'Record sales, track orders and keep stock up to date.', image:'platform-stock.jpg', alt:'Stock screen with product availability, prices and reorder levels', features:['Sales counter','Stock and purchasing','Order tracking']},
- website: {title:'A website that works for you.', body:'Manage your pages, services and inquiries without rebuilding your website.', image:'platform-pages.jpg', alt:'Page editor with page paths and content checks', features:['Page editing','Search metadata','Inquiry inbox']},
- ecommerce: {title:'Turn your catalog into orders.', body:'Browse products and send an order. Your team confirms each order and payment. Arrange delivery with your customer. Manage stock in Shop.', image:'platform-catalog.jpg', alt:'Catalog with product cards, prices and cart controls', features:['Product catalog','Cart and requests','Order follow-through']},
+ shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['platform-shop-dashboard-v2.jpg','Shop dashboard with sales, orders, stock and next actions','Today and next actions'],['platform-stock.jpg','Shop stock workspace with inventory quantities and reorder signals','Stock and replenishment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
+ website: {title:'Publish clearly. Capture every inquiry.', body:'Manage pages, readiness checks and customer inquiries without assembling a separate toolchain.', screens:[['platform-sites-workspace-v2.jpg','Sites workspace with page editing, checks and inquiries','Page workspace and inquiries'],['platform-pages.jpg','Sites page manager with content sections and publication checks','Pages and readiness checks']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and publish'],['Result','Qualified inquiries in one inbox']]},
+ ecommerce: {title:'Take the order through delivery.', body:'Connect the catalog, customer request, payment review and fulfilment follow-through. Your team confirms each order and payment. Arrange delivery with your customer.', screens:[['platform-commerce-workflow-v2.jpg','Commerce workspace with catalog, order and delivery follow-through','Order and delivery workflow'],['platform-catalog.jpg','Commerce catalog with products, quantities and current order','Catalog and current order']], proof:[['Record','Catalog, customer and order'],['Action','Confirm, pack and dispatch'],['Result','One traceable fulfilment flow']]},
 }
+const productOutcomes = {
+ shop: [
+  ['Serve the next customer', 'Find products, build a sale and record payment from the counter. Keep the order available for receipts and follow-up.'],
+  ['Know what needs restocking', 'Review stock levels, purchasing and demand together. Move from a shortage to the items that need attention.'],
+  ['Close with clear records', 'Follow open orders, review payment exceptions and prepare a daily close with accounting exports.'],
+ ],
+ website: [
+  ['Start with your business', 'Bring your services, contact details and business information into one place. Build your pages around what customers need to know.'],
+  ['Keep every page current', 'Edit page content and search metadata. Check missing information before preparing the site for publication.'],
+  ['Turn interest into follow-up', 'Keep customer inquiries in an inbox so your team can review the request and decide the next step.'],
+ ],
+ ecommerce: [
+  ['Sell from one catalog', 'Use your Shop products and prices to build a storefront. Customers choose items and review their cart.'],
+  ['Bring online requests into Shop', 'Open the exact customer request for stock, payment and fulfilment review. Confirmed orders continue through Shop.'],
+  ['Handle the next exception', 'See which request needs attention first. Review payment issues, expiring quotes and refunds from the same workflow.'],
+ ],
+}
+const interfaceDisclosure = 'Illustrative interface and records.'
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
- return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><span class="eyebrow">${label}</span><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<figure class="platform-image"><img src="/images/${item.image}" alt="${item.alt}" width="${id === 'ecommerce' ? 940 : 960}" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="lazy" /><figcaption>${label} interface &middot; illustrative records</figcaption></figure><ul class="feature-line">${item.features.map(f=>`<li>${f}</li>`).join('')}</ul></section>`
+ const route=manifest.pages.find(page=>page.productId===id)?.route
+ assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
+ const gallery=item.screens.map(([image,alt,caption],index)=>`<figure class="platform-image${index ? ' is-supporting' : ''}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="960" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure}</figcaption></figure>`).join('')
+ return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<div class="platform-gallery">${gallery}</div><ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Your business.<br>Working together.</h1><p class="lede">Manage sales and stock. Publish your website. Take orders online.</p></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">Shop. Sites. Commerce. One SuperMega account.</p></main>`,
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Sell, publish and fulfil from one connected platform. Every product keeps the record, next action and result together.</p><ol class="platform-loop" aria-label="How SuperMega products connect"><li><b>01</b><span><strong>Shop</strong>Sell and control stock.</span></li><li><b>02</b><span><strong>Sites</strong>Publish and capture demand.</span></li><li><b>03</b><span><strong>Commerce</strong>Fulfil every order.</span></li></ol></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">One customer. One catalog. One operating record across Shop, Sites and Commerce.</p></main>`,
 })
 
 function productLandingHtml(product,page) {
  const description=page.description||product.description
+ const storyBody=escapeHtml(stories[product.id].body)
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
  schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${stories[product.id].body}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>`})
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>`})
 }
 
 const contactScript = `<script>(function(){
@@ -1274,7 +1319,9 @@ await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
-for (const image of ['platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+for (const image of ['platform-shop-dashboard-v2.jpg','platform-sites-workspace-v2.jpg','platform-commerce-workflow-v2.jpg','platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-latin.woff2')))
+await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)

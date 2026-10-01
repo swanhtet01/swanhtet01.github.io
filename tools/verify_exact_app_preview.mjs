@@ -140,15 +140,15 @@ export function derivePublicHomepageExpectedText({ manifest, generatorSource }) 
     fail('exact_app_preview_public_generator_invalid')
   }
   const requiredGeneratorBindings = [
-    '<h1>Your business.<br>Working together.</h1>',
-    '<p class="lede">Manage sales and stock. Publish your website. Take orders online.</p>',
-    '<p class="platform-note">Shop. Sites. Commerce. One SuperMega account.</p>',
+    '<h1>Run the business.<br>Without the busywork.</h1>',
+    '<p class="lede">Sales, stock, a working website and customer orders—one platform, built to stay in step.</p>',
+    '<p class="platform-note">Shop. Sites. Commerce. One connected operating system.</p>',
     'href="https://app.supermega.dev/login">Login</a>',
   ]
   if (requiredGeneratorBindings.some((fragment) => !occursExactlyOnce(generatorSource, fragment))) {
     fail('exact_app_preview_public_generator_binding_drift')
   }
-  const expected = ['Your business.', 'Working together.', 'Shop. Sites. Commerce. One SuperMega account.', 'Login']
+  const expected = ['Run the business.', 'Without the busywork.', 'Shop. Sites. Commerce. One connected operating system.', 'Login']
   if (RETIRED_PUBLIC_HOME_EXPECTED_TEXT.some((retired) => (
     generatorSource.includes(retired) || expected.some((value) => value.includes(retired))
   ))) fail('exact_app_preview_public_retired_copy_present')
@@ -1055,7 +1055,7 @@ export function expectedText(spec, publicHomepageExpectedText) {
     'What do you sell or provide?',
     'Create website',
   ]
-  return ['Ecommerce', 'Online store', 'Browse your catalog and take order requests. Requests stay on this device until Shop review.', 'Request catalog setup', 'Open customer ordering']
+  return ['Ecommerce', 'Online store', 'Browse your catalog and take order requests. Requests stay on this device until Shop review.', 'Get catalog help', 'Open customer ordering']
 }
 
 function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {

@@ -19,6 +19,6 @@ export function SavedRequestReceipt({ reference, total, expiresAt, expired, deli
     <small>The saved request has not been deleted. Review the current cart and details before requesting a new total; this receipt cannot confirm the old quote.</small>
     </details>
     <p>{delivery === 'confirmed' ? 'Company Shop received this request.' : delivery === 'unverified'
-      ? 'Saved on this device. Company Shop delivery is not verified here.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
+      ? 'Saved on this device. Company Shop delivery is not verified here.' : 'This browser retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
   </article>
 }

@@ -127,7 +127,7 @@ async function verifyOnce() {
   const pendingRoutes = new Set()
   const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map(pageResults)
-  assert(pages.get('/')?.includes('Your business.<br>Working together.'), 'homepage_headline_wrong')
+  assert(pages.get('/')?.includes('Run the business.<br>Without the busywork.'), 'homepage_headline_wrong')
   assert(pages.get('/')?.includes('href="https://app.supermega.dev/login">Login</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
@@ -238,9 +238,9 @@ async function verifyOnce() {
   // The screenshots are part of the release, not optional decoration. Verify
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   const interfaceImages = {
-    shop: 'platform-stock.jpg',
-    website: 'platform-pages.jpg',
-    ecommerce: 'platform-catalog.jpg',
+    shop: 'platform-shop-dashboard-v2.jpg',
+    website: 'platform-sites-workspace-v2.jpg',
+    ecommerce: 'platform-commerce-workflow-v2.jpg',
   }
   for (const product of publicProducts) {
     const filename = interfaceImages[product.id]
@@ -302,7 +302,7 @@ async function verifyOnce() {
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })
   assert(www.status === 200, 'www_http_error', { status: www.status })
   const wwwHtml = await www.text()
-  assert(wwwHtml.includes('Your business.<br>Working together.'), 'www_release_drift')
+  assert(wwwHtml.includes('Run the business.<br>Without the busywork.'), 'www_release_drift')
 
   return {
     pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),

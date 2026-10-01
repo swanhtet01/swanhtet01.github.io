@@ -89,7 +89,12 @@ const expectedStaticFiles = new Set([
   '404.html',
   '__release.json',
   'favicon.svg',
+  'fonts/noto-sans-latin.woff2',
+  'fonts/noto-sans-latin-OFL.txt',
   'vercel-insights.js',
+  'images/platform-shop-dashboard-v2.jpg',
+  'images/platform-sites-workspace-v2.jpg',
+  'images/platform-commerce-workflow-v2.jpg',
   'images/platform-stock.jpg',
   'images/platform-pages.jpg',
   'images/platform-catalog.jpg',
@@ -125,6 +130,8 @@ const sharedRequired = [
   '--bg-raised: #f1f1fb;',
   '--ink: #151521;',
   '--blue: #5b4ee8;',
+  'font-family: "SuperMega Noto Sans"',
+  '--font-latin: "SuperMega Noto Sans"',
   '.platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;',
 ]
 
@@ -285,7 +292,7 @@ for (const staleToken of [
   if (home.includes(staleToken)) fail('stale_home_metadata_present', { token: staleToken })
 }
 if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
-for (const token of ['Your business.<br>Working together.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"']) {
+for (const token of ['Run the business.<br>Without the busywork.', 'id="products"', 'class="platform-image"', 'href="https://app.supermega.dev/login"']) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const retiredToken of [
@@ -309,15 +316,28 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-// Navigation is shared across all marketing pages: skip, home, Login, Contact, Privacy.
+// Navigation is shared across all marketing pages: skip, home, Login, Contact,
+// Privacy. The homepage adds one restrained internal link for each product story.
 for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
-  if ((body.match(/<a\b/g) || []).length !== 5) fail('marketing_link_surface_drift', { route })
+  const expectedLinks = route === '/' ? 5 + publicProducts.length : 5
+  if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
   if (!body.includes('class="platform-image"') || !body.includes('class="feature-line"')) fail('product_visual_missing', { route })
   for (const token of ['Request assisted setup', 'Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
     if (body.includes(token)) fail('retired_acquisition_surface', { route, token })
   }
+}
+for (const product of publicProducts) {
+  const productRoute = manifest.pages.find(page => page.productId === product.id)?.route
+  if (typeof productRoute !== 'string' || countOccurrences(home, `class="eyebrow story-link" href="${productRoute}"`) !== 1) fail('homepage_product_link_missing', { product: product.id })
+}
+
+const shopPage = pages.get('/shop/')?.html || ''
+for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
+  if (!html.includes('<html lang="en">')) fail('marketing_page_not_english', { route })
+  if (html.includes('data-language-toggle') || html.includes('src="/site-language.js"')) fail('marketing_language_control_present', { route })
+  if (html.includes('data-i18n=') || /[\u1000-\u109f]/u.test(html)) fail('marketing_myanmar_copy_present', { route })
 }
 
 const contact = pages.get('/contact/')?.html || ''

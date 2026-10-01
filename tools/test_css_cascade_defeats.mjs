@@ -200,8 +200,8 @@ const REGRESSIONS = [
     name: 'PR #528 -- .theme-dark .production-mode-banner defeats the storage banner tints',
     patches: [
       [
-        '.theme-dark .core-panel, .theme-dark .accountable-action-gate, .theme-dark .receipt-dialog { border-color: var(--core-line); background: var(--core-panel); box-shadow: var(--core-panel-shadow); }\n.theme-dark .production-mode-banner { box-shadow: var(--core-panel-shadow); }',
-        '.theme-dark .core-panel, .theme-dark .production-mode-banner, .theme-dark .accountable-action-gate, .theme-dark .receipt-dialog { border-color: var(--core-line); background: var(--core-panel); box-shadow: 0 18px 48px rgba(0,0,0,.22); }',
+        '/* Headroom tints. These carried an extra `.production-mode-banner` class purely to reach',
+        '.theme-dark .production-mode-banner { border-color: var(--core-line); background: var(--core-panel); box-shadow: var(--core-panel-shadow); }\n/* Headroom tints. These carried an extra `.production-mode-banner` class purely to reach',
       ],
       // The headroom tints carried an extra class purely to reach 0-3-0 and escape this trap; #528
       // dropped the crutch once the trap was gone. Restoring the trap restores the crutch, or the
@@ -232,19 +232,20 @@ const REGRESSIONS = [
     name: 'PR #530 -- .theme-dark .core-button defeats .core-button.danger',
     patches: [
       [
-        '.theme-dark .core-button { background: #121a23; }',
-        '.theme-dark .core-button { border-color: var(--core-line-strong); background: #121a23; color: var(--core-ink); }',
+        '/* THE SAME CASCADE TRAP AS THE BANNERS -- disarmed the same way. Only `background` differs',
+        '.theme-dark .core-button { border-color: var(--core-line-strong); background: #121a23; color: var(--core-ink); }\n/* THE SAME CASCADE TRAP AS THE BANNERS -- disarmed the same way. Only `background` differs',
       ],
     ],
-    // Exactly the two declarations #530 deleted. `background: #121a23` must NOT appear: the base
-    // rule paints #fff, so it is load-bearing and #530 kept it. A fixture that flagged all three
-    // would be a scanner that cannot tell a bug from a necessary override -- and note the SHAPE IS
-    // INVERTED from #528, where background was the no-op. The scanner has to derive which is which
-    // rather than know it.
+    // The two danger declarations #530 deleted and the two primary declarations a late
+    // theme rule would also suppress. `background: #121a23` must NOT appear: the base rule paints
+    // #fff, so it is load-bearing. This remains the inverted shape from #528, where background was
+    // the no-op: the scanner has to derive which declarations are redundant rather than know it.
     defeatedBy: '.theme-dark .core-button',
     expected: [
       '.core-button.danger border-color',
       '.core-button.danger color',
+      '.core-button.primary border-color',
+      '.core-button.primary color',
     ],
   },
 ]

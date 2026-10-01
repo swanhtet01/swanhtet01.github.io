@@ -202,7 +202,7 @@ test('client preparation compiles one validated four-product founder-review arti
       activationStatus: 'not_applied',
     })
     assert.equal(artifact.review.status, 'awaiting_founder_review')
-    assert.equal(artifact.review.confirmation, `APPROVE CLIENT DEMO ${artifact.bundleDigest}`)
+    assert.equal(artifact.review.confirmation, `APPROVE CLIENT WORKSPACE ${artifact.bundleDigest}`)
     assert.equal(artifact.review.checklist.length, 5)
     assert.deepEqual(verifyClientDemoPreparation(artifact), {
       ok: true,

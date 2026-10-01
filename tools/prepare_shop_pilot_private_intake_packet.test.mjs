@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import test from 'node:test'
 
 import {
@@ -16,7 +17,8 @@ test('builds a public-safe owner private intake packet only', () => {
   assert.equal(packet.status, 'owner_private_intake_ready')
   assert.equal(packet.product, 'shop')
   assert.equal(packet.pilotMode, 'owner_named')
-  assert.deepEqual(packet.portfolioBoundary.customerProducts, ['shop', 'plant', 'website', 'ecommerce'])
+  assert.deepEqual(packet.portfolioBoundary.customerProducts, ['shop', 'website', 'ecommerce'])
+  assert.deepEqual(packet.portfolioBoundary.nextProductSequenceAfterShop, ['website', 'ecommerce'])
   assert.equal(packet.portfolioBoundary.aiIsSharedCapability, true)
   assert.equal(packet.publicSafeRules.privateWorkspaceRequired, true)
   assert.equal(packet.publicSafeRules.publicIdentityAllowed, false)
@@ -119,12 +121,21 @@ test('rejects missing scripts and tampered packets', () => {
     () => validateShopPilotPrivateIntakePacket({ ...packet, digest: `sha256:${'f'.repeat(64)}` }),
     /shop_pilot_private_intake_packet_digest_invalid/,
   )
+
+  const wrongPortfolio = structuredClone(packet)
+  wrongPortfolio.portfolioBoundary.customerProducts = ['shop', 'plant', 'website', 'ecommerce']
+  wrongPortfolio.digest = `sha256:${createHash('sha256').update(JSON.stringify({ ...wrongPortfolio, digest: undefined })).digest('hex')}`
+  assert.throws(
+    () => validateShopPilotPrivateIntakePacket(wrongPortfolio),
+    /shop_pilot_private_intake_packet_portfolio_invalid/,
+  )
 })
 
 test('renders markdown without private identity or credential-shaped text', () => {
   const packet = buildShopPilotPrivateIntakePacket(sampleShopPilotPrivateIntakeInput())
   const markdown = renderShopPilotPrivateIntakeMarkdown(packet)
   assert.match(markdown, /Owner-private intake preparation only/)
+  assert.match(markdown, /Plant is not part of this pilot intake/)
   assert.match(markdown, /Promotion evidence still requires 20 consecutive accepted real runs whose accepted streak covers pilot days 1 through 5 and at least 5 distinct observed calendar dates/)
   assert.match(markdown, /current accepted observed date count is 0/)
   assert.doesNotMatch(markdown, /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu)

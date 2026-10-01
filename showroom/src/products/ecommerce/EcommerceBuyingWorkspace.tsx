@@ -51,7 +51,6 @@ import {
   commerceOrderCorrectionExpectation,
   commerceStorefrontOrderTimeline,
   commerceStorefrontRequests,
-  createSeedCommerce,
   type CommerceItem,
   type CommerceCorrectionKind,
   type CommerceCorrectionReasonCode,
@@ -253,8 +252,6 @@ export function EcommerceBuyingWorkspace({
       receipt.focus({ preventScroll: true })
     })
   }, [])
-  const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])
-
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
   const activeBuyingState = buyingState.scope === scope
     ? {
@@ -541,18 +538,7 @@ export function EcommerceBuyingWorkspace({
     Math.max(1, cartTotal),
     new Date(quoteClock).toISOString(),
   )
-  const usingSamplePaymentFallback = !onRecordManagedRequest
-    && configuredPaymentPolicies.length === 0
-    && configuredPaymentAdapters.length === 0
-  const checkoutPaymentPolicies = usingSamplePaymentFallback ? samplePaymentPolicies : configuredPaymentPolicies
-  const availablePaymentAdapters = usingSamplePaymentFallback
-    ? ecommerceAvailablePaymentAdapters(
-        checkoutPaymentPolicies,
-        fulfilment,
-        Math.max(1, cartTotal),
-        new Date(quoteClock).toISOString(),
-      )
-    : configuredPaymentAdapters
+  const availablePaymentAdapters = configuredPaymentAdapters
   const effectivePaymentAdapter = availablePaymentAdapters.includes(paymentAdapter)
     ? paymentAdapter
     : availablePaymentAdapters[0] ?? paymentAdapter
@@ -633,9 +619,7 @@ export function EcommerceBuyingWorkspace({
       Math.max(1, cartTotal),
       reviewedAt,
     )
-    const nextPaymentAdapters = !onRecordManagedRequest && configuredNextPaymentAdapters.length === 0
-      ? ecommerceAvailablePaymentAdapters(samplePaymentPolicies, next, Math.max(1, cartTotal), reviewedAt)
-      : configuredNextPaymentAdapters
+    const nextPaymentAdapters = configuredNextPaymentAdapters
     setFulfilment(next)
     setPaymentAdapter((current) => nextPaymentAdapters.includes(current)
       ? current
@@ -1273,7 +1257,7 @@ export function EcommerceBuyingWorkspace({
         currentCatalog,
         currentPromotionPolicies: commerceState.promotionPolicies ?? [],
         currentShippingPolicies: commerceState.shippingPolicies ?? [],
-        currentPaymentPolicies: checkoutPaymentPolicies,
+        currentPaymentPolicies: configuredPaymentPolicies,
         currentTaxConfigurations: commerceState.taxConfigurations ?? [],
         catalogRevision: commerceState.catalogChanges?.length ?? 0,
         confirmedAt: new Date().toISOString(),
@@ -1375,11 +1359,9 @@ export function EcommerceBuyingWorkspace({
                   : <option value="">No Shop payment method</option>}
               </select>
             </label>
-            {usingSamplePaymentFallback && availablePaymentAdapters.length
-              ? <p className="form-notice" role="status">Payment is selected for this request only. No charge or payment-provider request is made.</p>
-              : !availablePaymentAdapters.length
-                ? <p className="form-notice" role="status">Set up an active Shop payment method for {fulfilment} before reviewing an order.</p>
-                : null}
+            {!availablePaymentAdapters.length
+              ? <p className="form-notice" role="status">Set up an active Shop payment method for {fulfilment} before reviewing an order.</p>
+              : null}
             <details className="compact-disclosure">
               <summary>{promotionCode.trim() ? `Promotion: ${promotionCode.trim()}` : 'Add a promotion code'}</summary>
             <label>

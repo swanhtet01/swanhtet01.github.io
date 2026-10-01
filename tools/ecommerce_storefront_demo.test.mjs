@@ -149,7 +149,6 @@ import {
   receiveCommerceProductionBatch,
   returnCommerceStockFromProduction,
   loadCommerceWorkspace,
-  restoreBrowserLocalSamplePaymentPolicies,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 import {
@@ -280,31 +279,10 @@ test('provisioning seeds one pending request that never earns the Shop proof', a
 })
 
 // ---------------------------------------------------------------------------
-// Per-trade Ecommerce storefront copy: what is actually written, and what is not.
+// Per-trade Commerce storefront copy.
 //
-// ecommerce-trade-storefront.ts's TRADE_STOREFRONT table is INTENTIONALLY PARTIAL -- see that
-// file's header and hq/strategy/TEMPLATE-EXPANSION.md section (e), whose item 5 acceptance bar
-// was `bakery` alone and item 6 added `hardware` as the delivery example. Every other Shop trade
-// deliberately falls through to the generic workflow wording.
-//
-// The three tests below originally asserted spa/retail/gym vocabulary ("Treatments", "Trade
-// essentials", "Coaching"). That copy has NEVER existed in this repo -- not in the trade table,
-// not anywhere else -- and the tests had never run, because this file is unreachable from
-// app:verify. They are rewritten here to assert the honest current contract. They are NOT
-// weakened: STOREFRONT_TRADES_WITH_COPY below pins the exact set of trades that have copy, so the
-// day a native trade writer supplies spa/fashion/etc. copy, that pin fails and these three tests
-// must be revisited rather than silently continuing to assert the fallback.
-//
-// CONTENT GAP (not a code defect): Ecommerce storefront copy -- summary, featured/rest collection
-// labels, merchandising note, hero SKUs -- is still unwritten for 7 of the 10 Shop trades:
-// mini-mart, pharmacy, phone-electronics, fashion, tea-coffee, auto-parts, and restaurant.
-// Beauty Spa reuses the already-reviewed Spa onboarding and Website promises and stays explicit
-// that Ecommerce takes home-care pickup requests rather than booking treatments.
-const STOREFRONT_TRADES_WITH_COPY = ['bakery', 'beauty-spa', 'hardware']
-
-// The generic social-storefront wording every trade without written copy falls back to. Pinned as
-// literals, deliberately: workingSamplePlan's null-trade branch must stay byte-identical, which is
-// item 5's own acceptance criterion.
+// Every shipped Shop template has a Commerce definition. The generic branch is reserved for an
+// unselected or unrecognised imported catalog, where it is safer to remain neutral than guess.
 const GENERIC_SOCIAL_COLLECTIONS = ['Featured today', 'More to browse']
 
 function packWorkspace(sampleId, sampleName, items) {
@@ -343,23 +321,23 @@ async function activateStorefront(state, businessName) {
   return readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, storageAdapter).draft.merchandising
 }
 
-test('exactly the trades with written Ecommerce copy resolve to a trade storefront', async () => {
-  const { ecommerceTradeStorefront } = await import(
+test('every shipped Shop template resolves to a Commerce storefront definition', async () => {
+  const { ecommerceTradeStorefront, ecommerceTradeStorefrontIds } = await import(
     '../showroom/src/products/ecommerce/ecommerce-trade-storefront.ts'
   )
   const { shopBusinessTemplates } = await import('../showroom/src/products/shop/business-templates.ts')
-  const withCopy = shopBusinessTemplates
-    .map((template) => template.id)
-    .filter((id) => ecommerceTradeStorefront(id) !== null)
-    .sort()
-  // When this fails because a trade GAINED copy, that is the good failure: update this pin and
-  // give that trade a real vocabulary test instead of the fallback assertions below.
+  const shopTradeIds = shopBusinessTemplates.map((template) => template.id).sort()
   assert.deepEqual(
-    withCopy,
-    [...STOREFRONT_TRADES_WITH_COPY].sort(),
-    'the set of trades with written Ecommerce storefront copy changed -- revisit the fallback tests below',
+    ecommerceTradeStorefrontIds,
+    shopTradeIds,
+    'every shipped Shop template must have a Commerce storefront definition',
   )
   assert.equal(ecommerceTradeStorefront(null), null, 'no trade resolves to no trade copy')
+  for (const id of shopTradeIds) {
+    const storefront = ecommerceTradeStorefront(id)
+    assert.ok(storefront, `${id} must resolve`)
+    assert.doesNotMatch(storefront.note, /demo|preview|trial/i, `${id} uses operational, not demo, wording`)
+  }
 })
 
 test('a spa storefront uses honest home-care pickup wording without claiming appointment booking', async () => {
@@ -370,7 +348,7 @@ test('a spa storefront uses honest home-care pickup wording without claiming app
   assert.ok(spaCopy, 'beauty-spa must carry written storefront copy')
   assert.equal(spaCopy.collections.featured, 'Home care')
   assert.equal(spaCopy.collections.rest, 'More for your routine')
-  assert.deepEqual(spaCopy.preferredSkus, ['SPA-OIL-100ML', 'SPA-COMPRESS'])
+  assert.deepEqual(spaCopy.preferredSkus, ['SPA-OIL-AROMA', 'SPA-SERUM', 'SPA-THANAKA', 'SPA-ROLLON'])
   assert.deepEqual(spaCopy.guidedOrder, { fulfilment: 'pickup', paymentAdapter: 'pay_on_pickup' })
   const summary = spaCopy.summary('Yangon Wellness Spa')
   assert.match(summary, /home-care products/i)
@@ -418,20 +396,21 @@ function retailWorkspace() {
   return installed
 }
 
-test('a retail storefront falls back to generic wording -- retail copy is unwritten', async () => {
-  // fashion is the real Shop trade a clothing shop resolves to. Same shape as beauty-spa above:
-  // the trade resolves, the table has no entry, the generic wording is what ships.
+test('a fashion storefront uses its own catalog language while an unselected trade remains generic', async () => {
+  // Fashion is a real Shop trade and must no longer fall back to generic social-storefront language.
   const { ecommerceTradeStorefront } = await import(
     '../showroom/src/products/ecommerce/ecommerce-trade-storefront.ts'
   )
-  assert.equal(ecommerceTradeStorefront('fashion'), null, 'fashion has no written storefront copy')
+  const fashionCopy = ecommerceTradeStorefront('fashion')
+  assert.ok(fashionCopy, 'fashion must carry written storefront copy')
+  assert.deepEqual(fashionCopy.collections, { featured: 'New arrivals', rest: 'Wardrobe staples' })
 
   const rows = await activateStorefront(packWorkspace('fashion', 'Fashion', RETAIL_ITEMS), 'Rangoon Threads')
   const collections = [...new Set(rows.map((row) => row.collection))].sort()
   assert.deepEqual(
     collections,
-    [...GENERIC_SOCIAL_COLLECTIONS].sort(),
-    'a resolvable trade with no written copy gets the documented generic fallback',
+    ['New arrivals', 'Wardrobe staples'].sort(),
+    'a resolved Fashion trade gets its own storefront collections',
   )
   // Still true and still worth guarding: no other trade's copy may leak onto this storefront.
   assert.ok(!collections.includes('Fresh today'), 'bakery wording must not bleed onto a clothing storefront')
@@ -441,9 +420,9 @@ test('a retail storefront falls back to generic wording -- retail copy is unwrit
     `all storefront rows must be client products, saw ${JSON.stringify(rows.map((row) => row.sku))}`,
   )
 
-  // The unresolvable pack id 'retail' reads identically.
+  // The unresolvable generic retail pack does not guess Fashion vocabulary.
   const unresolved = await activateStorefront(retailWorkspace(), 'Rangoon Threads')
-  assert.deepEqual([...new Set(unresolved.map((row) => row.collection))].sort(), collections)
+  assert.deepEqual([...new Set(unresolved.map((row) => row.collection))].sort(), [...GENERIC_SOCIAL_COLLECTIONS].sort())
 })
 
 const GYM_ITEMS = [
@@ -2650,7 +2629,7 @@ test('issueCommerceStockToProduction and receiveCommerceProductionBatch manage p
   assert.equal(receiveCommerceProductionBatch(base, freshRelease, earlyRecvProof), null)
 })
 
-test('loadCommerceWorkspace and restoreBrowserLocalSamplePaymentPolicies cover workspace boot and payment policy recovery', () => {
+test('loadCommerceWorkspace covers workspace boot without fabricating payment policy recovery', () => {
   // --- loadCommerceWorkspace ---
 
   // null storage → recovery snapshot with error.
@@ -2699,30 +2678,6 @@ test('loadCommerceWorkspace and restoreBrowserLocalSamplePaymentPolicies cover w
   assert.equal(badResult.source, 'recovery')
   assert.ok(badResult.error.length > 0)
 
-  // --- restoreBrowserLocalSamplePaymentPolicies ---
-
-  // Get an approved seed payment decision for pay_on_pickup + pickup.
-  const seedPolicies = createSeedCommerce().paymentPolicies ?? []
-  const seedDecision = commercePaymentDecision(seedPolicies, 'pay_on_pickup', 'pickup', 10000, CAPTURED_AT)
-  assert.ok(seedDecision !== null && seedDecision.status === 'approved', 'seed pay_on_pickup+pickup decision must be approved')
-
-  // State with no payment policies → policies restored.
-  const blankState = createEmptyCommerce()
-  assert.equal(commercePaymentPolicies(blankState).length, 0)
-  const restored = restoreBrowserLocalSamplePaymentPolicies(blankState, seedDecision, 'pickup', 10000)
-  assert.ok(restored !== null, 'restoreBrowserLocalSamplePaymentPolicies must succeed')
-  assert.ok(commercePaymentPolicies(restored).length > 0, 'payment policies must be restored')
-
-  // State that already has payment policies → returns state with policies unchanged.
-  const stateWithPolicies = createSeedCommerce()
-  const policyCountBefore = commercePaymentPolicies(stateWithPolicies).length
-  const kept = restoreBrowserLocalSamplePaymentPolicies(stateWithPolicies, seedDecision, 'pickup', 10000)
-  assert.ok(kept !== null)
-  assert.equal(commercePaymentPolicies(kept).length, policyCountBefore)
-
-  // Tampered decision (policyRevision differs from what the function would compute) → null.
-  const tampered = { ...seedDecision, policyRevision: 99999 }
-  assert.equal(restoreBrowserLocalSamplePaymentPolicies(blankState, tampered, 'pickup', 10000), null)
 })
 
 test('returnCommerceStockFromProduction returns stock from production and rejects malformed inputs', () => {
@@ -2943,14 +2898,14 @@ test('a bakery Ecommerce storefront reads trade-specific copy, not the generic w
   const collections = new Set(draft.merchandising.map((row) => row.collection))
   assert.ok(collections.has('Fresh today'), `bakery storefront must read 'Fresh today', saw ${JSON.stringify([...collections])}`)
   assert.ok(collections.has('Order ahead'), `bakery storefront must read 'Order ahead', saw ${JSON.stringify([...collections])}`)
-  assert.ok(!collections.has('Featured today'), 'generic demo wording must not appear once the trade resolves to bakery')
-  assert.ok(!collections.has('More to browse'), 'generic demo wording must not appear once the trade resolves to bakery')
+  assert.ok(!collections.has('Featured today'), 'generic wording must not appear once the trade resolves to bakery')
+  assert.ok(!collections.has('More to browse'), 'generic wording must not appear once the trade resolves to bakery')
   assert.ok(
     draft.summary.includes('Golden Bakery') && /bread|cake|pastr/i.test(draft.summary),
     `bakery summary must be trade-specific, saw ${draft.summary}`,
   )
   assert.ok(
-    draft.merchandising.every((row) => !row.note.startsWith('Demo social listing')),
+    draft.merchandising.every((row) => !row.note.startsWith('Confirm campaign copy')),
     'notes must read as bakery guidance, not the generic social-listing note',
   )
   // The trade's own hero SKUs (bread, croissant, cake, tart) must be preferred over the plain
@@ -2965,32 +2920,30 @@ test('a bakery Ecommerce storefront reads trade-specific copy, not the generic w
   )
 })
 
-// Literals captured from workingSamplePlan's output against this exact bakery-shaped catalog and
-// business name, on the commit immediately before ecommerce-trade-storefront.ts was introduced
-// (queue items 1-4 shipped, item 5 not yet started). This is the byte-identical-fallback baseline
-// TEMPLATE-EXPANSION.md's acceptance point demands -- an assertion, not an eyeballed read.
+// Neutral fallback contract for a catalog whose source trade is unavailable. It preserves the
+// generic workflow structure without presenting a demonstration as a live business storefront.
 const NO_TRADE_BASELINE = {
   'social-storefront': {
     summary: "Browse Golden Bakery's featured products and send one order request for Shop review.",
     selectedSkus: ['BUN-COCONUT', 'COFFEE-ICED', 'DONUT-GLAZED', 'WATER-500ML'],
     collections: ['Featured today', 'Featured today', 'More to browse', 'More to browse'],
-    note: 'Demo social listing: confirm campaign copy and availability before launch.',
+    note: 'Confirm campaign copy and availability before accepting the request.',
   },
   'pickup-preorder': {
     summary: 'Choose available items from Golden Bakery for pickup or preorder confirmation.',
     selectedSkus: ['BUN-COCONUT', 'DONUT-GLAZED', 'PUFF-CURRY', 'WATER-500ML'],
     collections: ['Pickup menu', 'Pickup menu', 'Pickup menu', 'Pickup menu'],
-    note: 'Demo pickup listing: confirm collection time and availability before launch.',
+    note: 'Confirm collection time and availability before accepting the request.',
   },
   'wholesale-request': {
     summary: "Browse Golden Bakery's trade assortment and request quantities for manager review.",
     selectedSkus: ['BUN-COCONUT', 'COFFEE-ICED', 'CROISSANT-BUTTER', 'DONUT-GLAZED', 'TART-EGG', 'WATER-500ML'],
     collections: Array(6).fill('Trade assortment'),
-    note: 'Demo trade listing: confirm quantities, pricing, and delivery terms before launch.',
+    note: 'Confirm quantities, pricing, and delivery terms before accepting the request.',
   },
 }
 
-test('with no resolvable Shop trade, Ecommerce working-sample copy is byte-identical to the pre-trade baseline', async () => {
+test('with no resolvable Shop trade, Ecommerce uses neutral workflow copy', async () => {
   const { activateLocalEcommerceWorkingSample } = await import(
     '../showroom/src/products/ecommerce/local-merchandising-import.ts'
   )

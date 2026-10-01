@@ -154,7 +154,6 @@ import {
   recordCommerceOrderCorrection,
   registerCommerceItem,
   reserveCommerceOrder,
-  restoreBrowserLocalSamplePaymentPolicies,
   saveCommerceClose,
   settleCommerceRefund,
   updateCommerceItem,
@@ -1421,7 +1420,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
             return <button aria-describedby={describedBy} aria-labelledby={labelledBy} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
               <span className="shop-product-copy"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}<b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
-              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
+              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">Add</span>}
             </button>
           })}
         </div> : <Empty>{items.length
@@ -1610,7 +1609,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     status: 'checking' | 'ready' | 'error'
     intake: WebsiteEcommerceHandoffContext | null
   }>({ status: 'checking', intake: null })
-  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange] = useCommerceWorkspace(managedIdentity)
+  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange, retryManagedCommerceLoad] = useCommerceWorkspace(managedIdentity)
   // Workspace headroom. LOCAL SHOPS ONLY: a company account keeps the ledger server-side
   // and neither local ceiling applies to it (workspace-runtime.ts branches on
   // !managedIdentity long before any of this), so a signed-in operator must never be told
@@ -3107,7 +3106,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Shop</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{commerceStorageError || 'Shop remains read-only until the authenticated tenant state is confirmed.'}</p>
-      <div className="form-actions"><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
+      <div className="form-actions">{effectiveMode === 'managed-error' ? <button className="core-button primary" onClick={retryManagedCommerceLoad} type="button">Retry company account</button> : null}<Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
     </section>
   })() : null
 
@@ -4309,22 +4308,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       apply: async (action) => {
         const ownedOrder = { ...order, owner: action.actor }
         const proof = commerceActionProof(action)
-        await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => {
-          const paymentPolicyState = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
-            && !managedIdentity
-            && paymentDecision
-            && (current.paymentPolicies?.length ?? 0) === 0
-            ? restoreBrowserLocalSamplePaymentPolicies(
-                current,
-                paymentDecision,
-                ecommerceDraft.fulfilment,
-                ecommerceDraft.totalMmk,
-              )
-            : current
-          return paymentPolicyState
-            ? reserveCommerceOrder(paymentPolicyState, ownedOrder, proof)
-            : null
-        })
+        await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => (
+          reserveCommerceOrder(current, ownedOrder, proof)
+        ))
         emitMetric({ product: 'shop', capability: 'shop-orders', action: 'order.created', ts: Date.now() })
         if (ecommerceDraft) {
           consumedEcommerceDraftId.current = ecommerceDraft.id
@@ -8079,7 +8065,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
 function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
   const productionLocation = useLocation()
   const navigate = useNavigate()
-  const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite] = useProductionWorkspace(managedIdentity)
+  const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite, retryManagedProductionLoad] = useProductionWorkspace(managedIdentity)
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
   const relatedCommerceRef = useRef(relatedCommerce)
   const productionRef = useRef(production)
@@ -8892,7 +8878,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Plant</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{productionStorageError || 'Plant remains read-only until the authenticated tenant state is confirmed.'}</p>
-      <div className="form-actions"><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
+      <div className="form-actions">{effectiveMode === 'managed-error' ? <button className="core-button primary" onClick={retryManagedProductionLoad} type="button">Retry company account</button> : null}<Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
     </section>
   }
 

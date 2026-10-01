@@ -700,8 +700,10 @@ test('applyWebsiteWorkspaceUpdate and importWebsitePageDrafts behave correctly',
 })
 
 
-test('Website never hides its next action behind a healthy-state compact mode', () => {
+test('Website retains its next action and collapses only routine editing status', () => {
   assert.doesNotMatch(websiteProductSource, /compactWebsiteStatus|data-preview=/)
+  assert.match(websiteProductSource, /const editingRoutineStatus = view === 'content' && surface === 'work'\s*&& websiteTodayState === 'ready' && !pendingRestoredDraft\s*&& !storageIssue && !canRepairLocalStorage/)
+  assert.match(websiteProductSource, /data-editing-routine=\{editingRoutineStatus\} open=\{!editingRoutineStatus\}/)
   assert.match(websiteProductSource, /<div className="website-today-priority">[\s\S]*?\{websiteAgentJob\}[\s\S]*?onClick=\{runWebsiteAutopilot\}/)
 })
 

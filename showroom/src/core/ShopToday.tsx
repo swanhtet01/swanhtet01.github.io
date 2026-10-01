@@ -265,7 +265,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Shop priority">
       <div className="shop-today-brief">
-        <span className="core-eyebrow">Next action</span>
+        <span className="core-eyebrow">Today</span>
         <h2>{nextAction}</h2>
         <p>{nextDetail}</p>
         <div className="shop-today-actions">
@@ -274,9 +274,10 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
         </div>
       </div>
       <div className="shop-today-metrics" aria-label="Shop summary">
-        {metrics.map((metric) => <article data-tone={metric.tone ?? 'ready'} key={metric.label}>
+        {metrics.map((metric, index) => <article data-index={index} data-tone={metric.tone ?? 'ready'} key={metric.label}>
           <small>{metric.label}</small>
           <strong>{metric.value}</strong>
+          <span>{metric.tone === 'attention' ? 'Needs review' : 'On track'}</span>
         </article>)}
       </div>
     </section>

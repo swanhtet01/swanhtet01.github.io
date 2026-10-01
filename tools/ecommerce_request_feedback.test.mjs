@@ -56,7 +56,7 @@ for (const managed of [false, true]) for (const failure of ['', 'storage', 'beha
     assert.equal(result.delivered, managed ? 1 : 0)
     assert.equal(result.fresh, 'REQUEST')
     assert.equal(result.busy, false)
-    assert.match(result.notice, managed ? /Company Shop inbox and local recovery/ : /saved on this device/)
+    assert.match(result.notice, managed ? /Company Shop inbox and local recovery/ : /saved on this device/i)
   })
 }
 for (const failure of ['save', 'delivery']) {

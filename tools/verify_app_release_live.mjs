@@ -35,7 +35,7 @@ export function verifyCurrentReleaseAssets({
   activationRunbookChunk,
 }) {
   const groups = [
-    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Website', 'Ecommerce', 'Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.', 'Saved on this device.', 'Welcome back', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Website', 'Ecommerce', 'Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.', 'Welcome back', 'Sign in to your business.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['guided_outcomes', productOnboardingChunk, ['Add your first product', 'Continue to catalog', 'Run a sample production job', 'Create Plant and open the job', 'Prepare your business website', 'Continue to website setup', 'Set up your online store', 'Continue to store setup']],
     ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'Prepare your business content to continue.', 'First useful result:', 'Saves your setup, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
     ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'One review records payment, handoff, stock, and the order record.', 'Keep as open order', 'Create order', 'Creates an open order; payment and handoff stay for Orders.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'It does not charge a wallet or card', 'No payment is captured']],
@@ -61,7 +61,7 @@ export function verifyCurrentReleaseAssets({
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
-  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
+  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.', 'Saved on this device.']) {
     checks += 1
     if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
   }
