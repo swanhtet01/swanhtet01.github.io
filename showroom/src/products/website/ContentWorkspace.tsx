@@ -60,15 +60,25 @@ export function ContentWorkspace({
       </header>
 
       <div className="website-editor-scroll" data-editor-section={editorSection}>
-        <label className="website-editor-section-picker">
-          <span>Edit</span>
-          <select aria-label="Page section to edit" onChange={(event) => setEditorSection(event.target.value as EditorSection)} value={editorSection}>
-            <option value="hero">Hero</option>
-            <option value="sections">Content sections</option>
-            <option value="page">Page details</option>
-            <option value="seo">Search metadata</option>
-          </select>
-        </label>
+        <div aria-label="Page section to edit" className="website-editor-section-picker" role="tablist">
+          {([
+            ['hero', 'Hero'],
+            ['sections', 'Sections'],
+            ['page', 'Page details'],
+            ['seo', 'Search'],
+          ] as const).map(([section, label]) => (
+            <button
+              aria-selected={editorSection === section}
+              className={editorSection === section ? 'is-active' : ''}
+              key={section}
+              onClick={() => setEditorSection(section)}
+              role="tab"
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         <fieldset className="website-fieldset" data-content-section="page">
           <legend>Page record</legend>

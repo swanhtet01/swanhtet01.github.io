@@ -47,6 +47,7 @@ import {
   LEGACY_WEBSITE_STORAGE_KEY,
   listWebsiteRecoveryArchives,
   MAX_WEBSITE_PAGES,
+  pageIssues,
   readinessChecks,
   readWebsiteRecoveryArchive,
   recordWebsiteEvidence,
@@ -78,8 +79,8 @@ const DEFAULT_NOTICE = 'Website ready to edit. Nothing has been published.'
 
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
-    title: 'Edit page',
-    copy: 'Edit one section, review it, then save or discard.',
+    title: 'Website',
+    copy: 'Shape every page, check what is missing and publish when it is ready.',
   },
   publish: {
     title: 'Prepare website file',
@@ -894,6 +895,7 @@ export function WebsiteProduct() {
   }
 
   const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
+  const selectedPageIssues = pageIssues(selectedPage)
   const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
     && Boolean(page.hero.ctaLabel.trim())
     && Boolean(page.hero.ctaHref.trim()))
@@ -1256,19 +1258,9 @@ export function WebsiteProduct() {
                   <strong>Business website</strong>
                 </div>
               ) : (
-                <div className="website-page-control">
-                  <label htmlFor="website-page-select">Page</label>
-                  <select
-                    id="website-page-select"
-                    onChange={(event) => selectPage(event.currentTarget.value)}
-                    value={selectedPage.id}
-                  >
-                    {editorWorkspace.pages.map((page) => (
-                      <option key={page.id} value={page.id}>
-                        {page.internalName || 'Untitled page'} — {page.slug || 'No path'} ({page.stage})
-                      </option>
-                    ))}
-                  </select>
+                <div className="website-action-context">
+                  <strong>{selectedPage.internalName || 'Untitled page'}</strong>
+                  <span>{selectedPage.slug || 'No path'} · {selectedPage.stage}</span>
                 </div>
               )}
               <span
@@ -1391,7 +1383,7 @@ export function WebsiteProduct() {
 
           {storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
             ? <WebsiteReviewInbox key={`${managedWorkspaceId}:${managedActorId}`} workspaceId={managedWorkspaceId} actorId={managedActorId} /> : null}
-          {!starterSetupActive ? <details className="website-start-tools website-business-controls">
+          {!starterSetupActive ? <details className="website-start-tools website-business-controls" id="website-inquiries">
             <summary><span><strong>Inquiries</strong><small>Customer requests and follow-up</small></span><b>{leadCounts.new} new</b></summary>
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
@@ -1437,14 +1429,80 @@ export function WebsiteProduct() {
                     onCreate={startWithBusiness}
                   />
                 ) : (
-                  <ContentWorkspace
-                    canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
-                    deleteArmed={deleteCandidateId === selectedPage.id}
-                    onDuplicate={copySelectedPage}
-                    onRequestDelete={requestDeletePage}
-                    onUpdatePage={(update) => updatePage(selectedPage.id, update)}
-                    page={selectedPage}
-                  />
+                  <div className="website-editor-workbench">
+                    <nav aria-label="Website pages" className="website-page-rail">
+                      <div className="website-page-rail-head">
+                        <span>Pages</span>
+                        <button
+                          aria-label="Add page"
+                          disabled={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES}
+                          onClick={addPage}
+                          title={editorWorkspace.pages.length >= MAX_WEBSITE_PAGES ? 'The four-page workspace limit is reached' : 'Add page'}
+                          type="button"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <ul className="website-page-list">
+                        {editorWorkspace.pages.map((page) => (
+                          <li key={page.id}>
+                            <button
+                              aria-current={page.id === selectedPage.id ? 'page' : undefined}
+                              className={page.id === selectedPage.id ? 'is-active' : ''}
+                              onClick={() => selectPage(page.id)}
+                              type="button"
+                            >
+                              <span>{page.internalName || 'Untitled page'}</span>
+                              <small>{page.slug || 'No path'}</small>
+                              <i data-stage={page.stage}>{page.stage}</i>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </nav>
+
+                    <ContentWorkspace
+                      canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
+                      deleteArmed={deleteCandidateId === selectedPage.id}
+                      onDuplicate={copySelectedPage}
+                      onRequestDelete={requestDeletePage}
+                      onUpdatePage={(update) => updatePage(selectedPage.id, update)}
+                      page={selectedPage}
+                    />
+
+                    <aside className="website-editor-insights">
+                      <section aria-labelledby="website-page-checks-title" className="website-insight-card">
+                        <header>
+                          <div>
+                            <span>Page checks</span>
+                            <strong id="website-page-checks-title">{selectedPageIssues.length ? `${selectedPageIssues.length} to fix` : 'Ready'}</strong>
+                          </div>
+                          <b className={selectedPageIssues.length ? 'has-issues' : 'is-complete'}>{selectedPageIssues.length ? '!' : '✓'}</b>
+                        </header>
+                        {selectedPageIssues.length ? (
+                          <ul>{selectedPageIssues.slice(0, 4).map((issue) => <li key={issue}>{issue}</li>)}</ul>
+                        ) : (
+                          <p>Content, path, action and search details are complete.</p>
+                        )}
+                      </section>
+
+                      <section aria-labelledby="website-inquiry-summary-title" className="website-insight-card">
+                        <header>
+                          <div>
+                            <span>Inquiries</span>
+                            <strong id="website-inquiry-summary-title">{leadCounts.new ? `${leadCounts.new} new` : 'Inbox clear'}</strong>
+                          </div>
+                          <b>{websiteLeads.length}</b>
+                        </header>
+                        <div className="website-inquiry-summary">
+                          <span><strong>{leadCounts.new}</strong><small>New</small></span>
+                          <span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span>
+                          <span><strong>{leadCounts.closed}</strong><small>Closed</small></span>
+                        </div>
+                        <a href="#website-inquiries">Open inquiry workspace</a>
+                      </section>
+                    </aside>
+                  </div>
                 )
               ) : null}
 
