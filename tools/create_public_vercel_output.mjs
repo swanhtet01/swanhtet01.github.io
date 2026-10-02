@@ -439,14 +439,23 @@ const sharedStyle = `
   .story-link:hover span, .story-link:focus-visible span {transform:translateX(3px)}
   .platform-image img[width="940"] {max-width:940px}
   .platform-note {padding:36px 0 80px;max-width:700px;font-size:24px;line-height:1.5;letter-spacing:-.025em}
-  .platform-loop {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;max-width:920px;margin:36px 0 0;padding:0;list-style:none;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden}
-  .platform-loop li {position:relative;min-height:94px;display:grid;grid-template-columns:32px minmax(0,1fr);align-content:center;gap:12px;padding:20px 22px;color:var(--muted);font-size:15px;line-height:1.45}
-  .platform-loop li+li {border-left:1px solid var(--line)}
-  .platform-loop b {width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#f1f0fb;color:var(--blue);font-size:12px;font-variant-numeric:tabular-nums}
-  .platform-loop strong {display:block;margin-bottom:3px;color:var(--ink);font-size:15px;letter-spacing:-.015em}
+  .product-cards {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:0 0 76px}
+  .product-card-compact {min-width:0;display:flex;flex-direction:column;padding:14px;border:1px solid var(--line-strong);border-radius:24px;background:var(--panel-solid);box-shadow:0 18px 60px rgba(28,26,48,.06)}
+  .product-card-compact .platform-image {padding:10px;border-radius:14px}
+  .product-card-compact .platform-image figcaption {padding:10px 4px 2px}
+  .product-card-copy {display:flex;flex:1;flex-direction:column;padding:24px 10px 10px}
+  .product-card-copy h2 {margin:12px 0 12px;font-size:clamp(26px,2.6vw,38px);line-height:1.08;letter-spacing:-.045em}
+  .product-card-copy > p {margin:0;color:var(--muted);font-size:16px;line-height:1.6}
+  .product-card-flow {display:flex;flex-wrap:wrap;gap:7px;margin:22px 0 24px;padding:0;list-style:none}
+  .product-card-flow li {padding:7px 10px;border:1px solid var(--line);border-radius:999px;color:#49465f;font-size:12px;line-height:1.2}
+  .product-card-copy .story-link {margin-top:auto;padding-top:4px;font-size:14px;font-weight:700}
+  .home-contact {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:28px;margin:0 0 80px;padding:34px 36px;border:1px solid #d9d5fb;border-radius:24px;background:linear-gradient(135deg,#f6f5ff,#eeecff)}
+  .home-contact h2 {margin:0 0 8px;font-size:clamp(28px,3vw,42px);line-height:1.1;letter-spacing:-.04em}
+  .home-contact p {max-width:650px;margin:0;color:var(--muted);font-size:16px;line-height:1.6}
   .site-header {background:#fff}
   .header-actions{display:flex;align-items:center;gap:8px}
-  @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.platform-loop{grid-template-columns:1fr;margin-top:28px}.platform-loop li{min-height:0;padding:16px 18px}.platform-loop li+li{border-top:1px solid var(--line);border-left:0}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}}
+  @media(max-width:980px){.product-cards{grid-template-columns:1fr}.product-card-compact{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(0,1.1fr);align-items:stretch}.product-card-copy{padding:20px 18px}.product-card-compact .platform-image{display:flex;flex-direction:column;justify-content:center}}
+  @media(max-width:760px){.editorial-hero{padding:56px 0 38px}.editorial-hero h1{font-size:clamp(44px,15vw,66px)}.editorial-hero .lede{font-size:18px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex}.product-card-copy{padding:20px 8px 10px}.product-card-copy h2{font-size:30px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
 
 `
 
@@ -455,7 +464,7 @@ function brandHtml() {
 }
 
 function headerHtml(route) {
-  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<div class="header-actions"><a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></div></header>`
+  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<div class="header-actions"><a class="nav-link" href="/contact/">Contact</a><a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></div></header>`
 }
 
 function footerHtml(route) {
@@ -580,9 +589,16 @@ function productStory(id, standalone = false) {
  const gallery=item.screens.map(([image,alt,caption],index)=>`<figure class="platform-image${index ? ' is-supporting' : ''}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="960" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure}</figcaption></figure>`).join('')
  return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<div class="platform-gallery">${gallery}</div><ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
+function productCard(id) {
+ const item=stories[id], label=publicProducts.find(product=>product.id===id).name
+ const route=manifest.pages.find(page=>page.productId===id)?.route
+ assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
+ const [image,alt,caption]=item.screens[0]
+ return `<article class="product-card-compact" id="${id}"><figure class="platform-image"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="960" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="lazy" /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure}</figcaption></figure><div class="product-card-copy"><span class="eyebrow">${label}</span><h2>${item.title}</h2><p>${item.body}</p><ul class="product-card-flow" aria-label="${label} includes">${item.proof.map(([,value])=>`<li>${escapeHtml(value)}</li>`).join('')}</ul><a class="story-link" href="${escapeHtml(route)}">Explore ${label}<span aria-hidden="true">&rarr;</span></a></div></article>`
+}
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Sell, publish and fulfil from one connected platform. Every product keeps the record, next action and result together.</p><ol class="platform-loop" aria-label="How SuperMega products connect"><li><b>01</b><span><strong>Shop</strong>Sell and control stock.</span></li><li><b>02</b><span><strong>Sites</strong>Publish and capture demand.</span></li><li><b>03</b><span><strong>Commerce</strong>Fulfil every order.</span></li></ol></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">One customer. One catalog. One operating record across Shop, Sites and Commerce.</p></main>`,
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Run in-store sales, your website and online orders from one clear platform.</p></section><div class="product-cards" id="products">${['shop','website','ecommerce'].map(id => productCard(id)).join('')}</div><section class="home-contact" aria-labelledby="home-contact-title"><div><h2 id="home-contact-title">Not sure where to start?</h2><p>Tell us how your business works today. We’ll help you choose the right product.</p></div><a class="button" href="/contact/">Contact SuperMega</a></section></main>`,
 })
 
 function productLandingHtml(product,page) {

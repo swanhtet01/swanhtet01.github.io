@@ -210,14 +210,11 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
 for (const id of activeIds) {
   const route = manifest.pages.find((page) => page.productId === id)?.route
-  check(typeof route === 'string' && countOccurrences(home, `class="eyebrow story-link" href="${route}"`) === 1, `home_product_story_link:${id}`)
+  check(typeof route === 'string' && countOccurrences(home, `class="story-link" href="${route}"`) === 1, `home_product_story_link:${id}`)
 }
-check(countOccurrences(home, '<figure class="platform-image') === activeIds.length * 2, 'home_two_views_per_active_product')
-const platformLoop = home.match(/<ol class="platform-loop"[^>]*>([\s\S]*?)<\/ol>/)?.[1] || ''
-check((platformLoop.match(/<li>/g) || []).length === 3, 'home_platform_loop_three_steps')
-for (const token of ['Sell and control stock.', 'Publish and capture demand.', 'Fulfil every order.']) {
-  check(platformLoop.includes(token), `home_platform_loop_outcome:${token}`)
-}
+check(countOccurrences(home, '<figure class="platform-image') === activeIds.length, 'home_one_view_per_active_product')
+check(countOccurrences(home, 'class="product-card-flow"') === activeIds.length, 'home_compact_product_flows')
+check(home.includes('href="/contact/">Contact SuperMega</a>'), 'home_clear_contact_action')
 for (const filename of ['platform-shop-dashboard-v2.jpg', 'platform-sites-workspace-v2.jpg', 'platform-commerce-workflow-v2.jpg', 'platform-stock.jpg', 'platform-pages.jpg', 'platform-catalog.jpg']) {
   const image = readFileSync(resolve(staticDir, 'images', filename))
   check(image.subarray(0, 3).equals(Buffer.from([255,216,255])), `screenshot_jpeg:${filename}`)
@@ -336,7 +333,7 @@ check(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/.test(sitemap), 'sitemap_lastmod_fo
 check(readStatic('robots.txt').includes('Sitemap: https://supermega.dev/sitemap.xml'), 'robots_references_sitemap')
 
 
-check((home.match(/class="product-story"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
+check((home.match(/class="product-card-compact"/g) || []).length === activeIds.length, 'home_one_card_per_active_product')
 check(home.includes('SuperMega Noto Sans'), 'home_noto_font')
 for (const html of [home, shopLanding]) {
   check(html.includes('<html lang="en">'), 'marketing_page_english')
