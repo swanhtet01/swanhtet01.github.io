@@ -18,4 +18,13 @@ test('base counter quantity controls support tablet touch without a phone breakp
   const addCue = css.match(/\.shop-product-add \{([^}]+)\}/)?.[1]
   assert.match(addCue, /min-width: 44px;/)
   assert.match(addCue, /text-transform: uppercase;/)
+  const paymentButtons = css.match(/\.shop-payment-options button \{([^}]+)\}/)?.[1]
+  const customerInput = css.match(/\.shop-sale-details label input \{([^}]+)\}/)?.[1]
+  assert.match(paymentButtons, /min-height: 44px;/)
+  assert.match(customerInput, /min-height: 44px;/)
+  assert.match(app, /aria-keyshortcuts="\/"/)
+  assert.match(app, /document\.addEventListener\('keydown', focusCounterSearch\)/)
+  assert.match(app, /document\.removeEventListener\('keydown', focusCounterSearch\)/)
+  assert.match(app, /parked\.length \? `Parked sales \(\$\{parked\.length\}\)` : 'Save sale for later'/)
+  assert.doesNotMatch(app, /Parked tickets \(\{parked\.length\}\) · this device/)
 })
