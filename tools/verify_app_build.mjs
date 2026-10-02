@@ -4701,9 +4701,16 @@ if (ordersTabStart < 0
   || orderListIndex < orderQueueIndex
   || orderWorkflowIndex < orderListIndex
   || serviceScheduleIndex < orderWorkflowIndex
+  || !ordersTabContract.includes('className="order-workspace-grid"')
+  || !ordersTabContract.includes('aria-label="Order insights"')
+  || !ordersTabContract.includes('id="shop-order-list-heading"')
+  || !ordersTabContract.includes('What needs attention')
   || !ordersTabContract.includes('<summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>')
   || !ordersTabContract.includes('<summary><span>Order overview</span>')
   || !coreSource.includes('className="order-record-details"')
+  || !coreCssSource.includes('.order-workspace-grid {')
+  || !coreCssSource.includes('.order-insight-rail {')
+  || !coreCssSource.includes('.order-health-list {')
   || !coreCssSource.includes('.order-record-details > summary { min-height: 44px;')) fail('shop_orders_task_first_layout_missing')
 if (!orderListContract.includes("const settleRefundIsPrimary = !reconcileIsPrimary && order.refundStatus === 'due'")
   || !orderListContract.includes('const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder')

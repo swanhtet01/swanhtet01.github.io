@@ -6715,6 +6715,25 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   })
   const stockAttentionRows = stockRows.filter(({ item }) => item.onHand <= item.reorderAt)
   const stockCatalogRows = stockRows.filter(({ item }) => item.onHand > item.reorderAt)
+  const nextOrder = actionOrders[0]
+  const nextOrderAction = !nextOrder
+    ? 'The queue is clear'
+    : nextOrder.refundStatus === 'due'
+      ? 'Record the settled refund'
+      : nextOrder.paymentStatus === 'pending'
+        ? 'Review payment and handover'
+        : nextOrder.status === 'confirmed'
+          ? 'Start preparing the order'
+          : nextOrder.status === 'preparing'
+            ? 'Mark the order ready'
+            : 'Complete the handover'
+  const nextOrderDetail = nextOrder
+    ? `${nextOrder.customer} · ${commerceOrderDisplayReference(nextOrder.id)} · ${formatMoney(nextOrder.total)}`
+    : 'No payment, fulfilment or refund action is waiting.'
+  const urgentOrderCount = actionOrders.filter((order) => {
+    const urgency = commerceOrderPromiseUrgency(order, purchaseOrderClock)
+    return urgency === 'late' || urgency === 'due_soon' || urgency === 'unrecorded'
+  }).length
 
   function renderStockRow({ item }: (typeof stockRows)[number]) {
     const active = activePurchaseOrderBySku.get(item.sku)
@@ -6757,7 +6776,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Order workspace</span><h2>Orders</h2><p className="order-queue-subtitle">Review the next order, then record each handoff.</p></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2><p className="order-queue-subtitle">See what needs attention, finish the handoff and keep one accountable record.</p></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       <dl className="order-queue-summary" aria-label="Order status"><div><dt>Need action</dt><dd>{actionOrders.length}</dd></div><div><dt>In fulfilment</dt><dd>{openOrders.length}</dd></div><div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div></dl>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
@@ -6816,7 +6835,28 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
+      <div className="order-workspace-grid">
+        <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
+          <div className="order-queue-section-head"><div><span className="core-eyebrow">Live queue</span><h3 id="shop-order-list-heading">Orders to finish</h3></div><small>{actionOrders.length ? `${actionOrders.length} active` : 'All caught up'}</small></div>
+          <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
+        </section>
+        <aside aria-label="Order insights" className="order-insight-rail">
+          <section className="order-insight-card is-primary">
+            <span className="core-eyebrow">Next action</span>
+            <h3>{nextOrderAction}</h3>
+            <p>{nextOrderDetail}</p>
+            {nextOrder ? <a className="core-button primary compact" href={`#${commerceOrderTargetId(nextOrder.id)}`}>Open next order</a> : <Link className="core-button compact" to="/shop/?tab=counter">Open the counter</Link>}
+          </section>
+          <section className="order-insight-card">
+            <div className="order-insight-heading"><span className="core-eyebrow">Queue health</span><strong>What needs attention</strong></div>
+            <dl className="order-health-list">
+              <div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div>
+              <div><dt>Promise attention</dt><dd>{urgentOrderCount}</dd></div>
+              <div><dt>Refunds due</dt><dd>{refundExposureOrders.length}</dd></div>
+            </dl>
+          </section>
+        </aside>
+      </div>
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
