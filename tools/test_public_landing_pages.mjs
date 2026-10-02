@@ -55,10 +55,11 @@ check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status
 // Page content markers, SEO metadata, and CTA wiring.
 const descriptions = []
 const productScreens = {
-  shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png', 'actual-shop-stock.png'],
-  website: ['actual-sites-setup.png', 'actual-sites-editor.png', 'actual-sites-pages.png'],
-  ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
+  shop: ['actual-shop-today.png', 'actual-shop-sell.png'],
+  website: ['actual-sites-editor.png'],
+  ecommerce: ['actual-commerce-order-request.png'],
 }
+check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
   check(Boolean(product), `landing_product_exists:${page.productId}`)
@@ -96,7 +97,9 @@ for (const page of landingPages) {
   check((html.match(/<h1>/g) || []).length === 1, `landing_single_headline:${page.route}`)
   check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
   check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
-  check(countOccurrences(html, 'type="radio" name="'+page.productId+'-screens"') === productScreens[page.productId]?.length, `landing_gallery_controls:${page.route}`)
+  const expectedGalleryControls = productScreens[page.productId]?.length > 1 ? productScreens[page.productId].length : 0
+  check(countOccurrences(html, 'type="radio" name="'+page.productId+'-screens"') === expectedGalleryControls, `landing_gallery_controls:${page.route}`)
+  check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
