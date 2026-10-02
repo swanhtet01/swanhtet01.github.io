@@ -35,6 +35,7 @@ import {
 } from '../../core/managed-trial'
 import { ProductPhoto } from '../../core/ProductPhoto'
 import { productImageScopeForWorkspace } from '../../core/product-image-store'
+import { CommerceOrderDesk, type CommerceOrderDeskFilter } from './CommerceOrderDesk'
 import { EcommerceBuyingWorkspace } from './EcommerceBuyingWorkspace'
 import {
   type EcommerceCartLine,
@@ -1828,6 +1829,58 @@ export function EcommerceProduct() {
           ? `${ecommerceCompletedOrderCount} completed`
           : 'No order yet'],
   ] as const
+  const orderDeskRequest = requestInboxNextRequest ?? actionablePendingManagedRequests[0] ?? null
+  const orderDeskRequestMinutes = orderDeskRequest
+    ? Math.max(0, Math.round((orderOpsNow - Date.parse(orderDeskRequest.createdAt)) / 60_000))
+    : 0
+  const orderDeskQuoteMinutes = orderDeskRequest && 'quote' in orderDeskRequest
+    ? minutesUntil(orderDeskRequest.quote.expiresAt, orderOpsNow)
+    : null
+  const orderDeskRequestView = orderDeskRequest ? {
+    customer: orderDeskRequest.customerReference,
+    fulfilment: orderDeskRequest.fulfilment === 'delivery' ? 'Delivery' : 'Pickup',
+    id: orderDeskRequest.id,
+    lineCount: commerceStorefrontRequestLines(orderDeskRequest).length,
+    placedLabel: orderDeskRequestMinutes < 1 ? 'Just now' : `${orderDeskRequestMinutes} min ago`,
+    quoteLabel: orderDeskQuoteMinutes === null
+      ? 'Shop review'
+      : orderDeskQuoteMinutes <= 0
+        ? 'Expired'
+        : `${orderDeskQuoteMinutes} min left`,
+    totalLabel: formatMmk(orderDeskRequest.totalMmk),
+    flags: [
+      ...(requestHasStockRisk(orderDeskRequest) ? ['Stock check'] : []),
+      ...(requestNeedsPaymentReview(orderDeskRequest) ? ['Payment review'] : []),
+      ...(requestIsExpiring(orderDeskRequest) ? ['Quote expiring'] : []),
+      ...(orderDeskRequest.fulfilment === 'delivery' ? ['Delivery review'] : []),
+    ],
+  } : null
+  function openOrderDeskException(filter: CommerceOrderDeskFilter) {
+    if (filter === 'refund') {
+      navigate('/shop/?tab=orders')
+      return
+    }
+    setRequestInboxFilter(filter)
+    const request = actionablePendingManagedRequests.find((candidate) => filter === 'stock'
+      ? requestHasStockRisk(candidate)
+      : filter === 'expiring'
+        ? requestIsExpiring(candidate)
+        : filter === 'payment'
+          ? requestNeedsPaymentReview(candidate)
+          : candidate.fulfilment === 'delivery')
+    if (request) navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(request.id)}`)
+  }
+  function openOrderDeskNext() {
+    if (orderDeskRequest) {
+      navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(orderDeskRequest.id)}`)
+      return
+    }
+    if (ecommerceActiveOrderCount || ecommerceRefundAttentionCount || ecommercePaymentAttentionCount) {
+      navigate('/shop/?tab=orders')
+      return
+    }
+    showWorkspace('preview')
+  }
   function runOrderAutopilot(event: ReactMouseEvent<HTMLButtonElement>) {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -1953,6 +2006,25 @@ export function EcommerceProduct() {
         </div>
         <p className="ecommerce-today-context" role="status">{sourceLabel} · Stock, payment, delivery, and the final order stay in Shop.</p>
       </section>
+
+      <CommerceOrderDesk
+        activeOrderCount={ecommerceActiveOrderCount}
+        completedOrderCount={ecommerceCompletedOrderCount}
+        exceptionCounts={{
+          stock: orderOpsStockRiskCount,
+          expiring: orderOpsExpiringCount,
+          payment: orderOpsPaymentRiskCount + ecommercePaymentAttentionCount,
+          delivery: deliveryReviewCount,
+          refund: ecommerceRefundAttentionCount,
+        }}
+        nextActionLabel={orderDeskRequest ? 'Open next request' : ecommerceActiveOrderCount ? 'Continue fulfilment' : 'Open customer store'}
+        nextRequest={orderDeskRequestView}
+        onOpenException={openOrderDeskException}
+        onOpenNext={openOrderDeskNext}
+        onOpenShop={() => navigate('/shop/?tab=orders')}
+        onOpenStore={() => showWorkspace('preview')}
+        pendingRequestCount={actionablePendingManagedRequests.length}
+      />
 
       <details className="ecommerce-business-controls">
         <summary><span><strong>Extra order tools</strong></span></summary>
