@@ -999,6 +999,7 @@ export function EcommerceProduct() {
       finishStorefrontSetup()
       return
     }
+    showWorkspace('preview')
     addToCart(customerPreviewItems[0].sku)
   }
 
