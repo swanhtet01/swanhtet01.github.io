@@ -53,7 +53,9 @@ check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_
 // Historical contact links below remain valid app/support routes, not public CTAs.
 check(generator.includes('href="https://app.supermega.dev/login">Login</a>'), 'generator_single_login_route')
 check(generator.includes('class="platform-gallery"')
-  && generator.includes('class="platform-image${index ? \' is-supporting\' : \'\'}"')
+  && generator.includes('class="platform-slides"')
+  && generator.includes('class="platform-gallery-controls"')
+  && generator.includes('type="radio" name="${id}-screens"')
   && generator.includes('item.screens.map('), 'generator_product_screenshots')
 check(!generator.includes('function assistedSetupAction('), 'generator_setup_funnel_removed')
 check(!generator.includes('Open Shop Profit Control'), 'generator_profit_control_action_removed')
