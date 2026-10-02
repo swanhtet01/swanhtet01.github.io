@@ -21,6 +21,8 @@ import type { SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const ManagedProductConnections = lazy(() => import('./ManagedProductConnections').then((module) => ({ default: module.ManagedProductConnections })))
+const DesktopShopNavigation = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.DesktopShopNavigation })))
+const WorkspaceAccount = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.WorkspaceAccount })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -467,6 +469,7 @@ export function CoreLayout() {
   const managedProductAllowed = !requestedProduct
     || portalAccess.status === 'local'
     || (portalAccess.status === 'ready' && managedRouteDecision.kind === 'allow')
+  const managedWorkspace = portalAccess.status === 'ready' ? portalAccess : null
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
@@ -522,13 +525,13 @@ export function CoreLayout() {
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
-        {activeNavigation.length ? <nav className="core-nav" aria-label="Application">
+        {routeProduct === 'commerce' && mobileCommerceTab ? <Suspense fallback={null}><DesktopShopNavigation activeTab={mobileCommerceTab} /></Suspense> : activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
-        <div className="sidebar-foot">{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Login</Link> : null}</div>
+        <div className="sidebar-foot">{routeProduct && canSwitchProduct ? <Link className="product-switch-shell-link" to="/?choose=1"><span className="shell-nav-icon" aria-hidden="true" data-icon="products" /><span>All products</span></Link> : null}</div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}</div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>{managedWorkspace ? managedWorkspace.companyName : 'SuperMega workspace'}</span></div><div className="topbar-meta">{!accountEntryRoute ? <Suspense fallback={<Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link>}><WorkspaceAccount companyLoginPath={companyLoginPath} companyName={managedWorkspace?.companyName} companyRole={managedWorkspace?.companyRole} /></Suspense> : null}</div></header>
         {/* Shop's bottom bar is task navigation (all four links share the /shop/
             pathname, so NavLink's pathname-based isActive would mark every tab
             active — the highlight must come from the ?tab= param instead). Every

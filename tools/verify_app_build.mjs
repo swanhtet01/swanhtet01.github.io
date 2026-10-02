@@ -1320,14 +1320,14 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   || !coreShellSource.includes('const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null')
   || !coreShellSource.includes('const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))')
   || !coreShellSource.includes('const accountEntryRoute = loginRoute || sensitiveAccountRoute')
-  // Keep the requested concise Login label in desktop and mobile navigation.
+  // Keep the concise account entry visible in the desktop and mobile topbar.
   || !coreShellSource.includes("to={companyLoginPath}>Login</Link>")
   || !coreShellSource.includes('aria-label="Login"')
   || coreShellSource.includes('to={companyLoginPath}>Company sign in</Link>')
   || coreShellSource.includes('aria-label="Company sign in"')
   || coreShellSource.includes('<div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge')
   || coreShellSource.includes('<header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}{!accountEntryRoute ? <RuntimeBadge')
-  || !coreCssSource.includes('.sidebar-foot .account-shell-link { min-height: 44px;')
+  || !coreCssSource.includes('.core-topbar .account-shell-link { min-height: 2.5rem;')
   || !coreCssSource.includes('.topbar-meta > a { min-width: 44px; min-height: 44px;')
   // The mobile topbar Login link must stay VISIBLE: it inherits the 44px .topbar-meta > a rule, so
   // no CSS may target .core-topbar .mobile-account-link at all (hiding it left mobile users with no
@@ -1377,6 +1377,13 @@ if (!coreShellSource.includes("import { activeCommerceTab, commerceTabs } from '
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav { grid-template-columns: repeat(4,minmax(0,1fr)); }')
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav.has-switch { grid-template-columns: repeat(5,minmax(0,1fr)); }')
   || !coreCssSource.includes('.mobile-nav.mobile-task-nav a:focus-visible { outline-offset: -3px; }')) fail('shop_mobile_task_nav_missing')
+if (!coreShellSource.includes("import('./PremiumWorkspaceChrome')")
+  || !coreShellSource.includes('<DesktopShopNavigation activeTab={mobileCommerceTab} />')
+  || !coreShellSource.includes('data-icon="products"')
+  || !coreShellSource.includes('managedWorkspace.companyName')
+  || !coreCssSource.includes('.shop-product-shell .product-task-tabs { display: none; }')
+  || !coreCssSource.includes('.workspace-identity')
+  || !coreCssSource.includes('.sidebar-foot .product-switch-shell-link')) fail('shop_desktop_task_rail_missing')
 if (!coreShellSource.includes("theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}")
   || coreShellSource.includes("theme === 'dark' ? ' shop-shell'")
   || !coreCssSource.includes(':root {\n  color-scheme: light;')
@@ -21076,9 +21083,14 @@ else {
   // MEASURED 2026-08-24 (P0 app-entry simplification): making bare '/' a clear four-product
   // launcher adds first-action copy to the initial route and measures 300_037 bytes. Raised
   // narrowly to 300_500; no unrelated product behavior was removed to fit the old ceiling.
+  // MEASURED 2026-10-03: clean exact head 45870013 already measures 305_693 bytes with the
+  // current Node 24/Vite toolchain. The premium workspace rail measures 306_395 (+702 raw,
+  // about +180 gzip) while its route-only chrome is deferred in a 0.56 KB gzip chunk. Keep
+  // a narrow 1.1 KB raw margin over that measured result; this is a ratchet reset from a
+  // verified stale baseline, not permission for an unmeasured entry-graph expansion.
   if (initialJavascriptAssets.size < 3) fail(`initial_javascript_graph_implausible:${initialJavascriptAssets.size}`)
   if (initialJavascriptBytes < 260_000) fail(`initial_javascript_budget_implausible:${initialJavascriptBytes}`)
-  if (initialJavascriptBytes > 300_500) fail(`initial_javascript_budget:${initialJavascriptBytes}`)
+  if (initialJavascriptBytes > 307_500) fail(`initial_javascript_budget:${initialJavascriptBytes}`)
   if ([...initialJavascriptAssets].some((asset) => /^(?:core-app|commerce-model|operating-models|shop-planning-models|website-model)-/.test(asset))) {
     fail('product_operations_eagerly_loaded_on_home')
   }
