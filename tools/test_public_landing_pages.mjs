@@ -55,7 +55,7 @@ check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status
 // Page content markers, SEO metadata, and CTA wiring.
 const descriptions = []
 const productScreens = {
-  shop: ['actual-shop-today.png', 'actual-shop-sell.png'],
+  shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
   website: ['actual-sites-editor.png'],
   ecommerce: ['actual-commerce-order-request.png'],
 }

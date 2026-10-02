@@ -238,7 +238,7 @@ async function verifyOnce() {
   // The screenshots are part of the release, not optional decoration. Verify
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   const interfaceImages = {
-    shop: ['actual-shop-today.png', 'actual-shop-sell.png'],
+    shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
     website: ['actual-sites-editor.png'],
     ecommerce: ['actual-commerce-order-request.png'],
   }

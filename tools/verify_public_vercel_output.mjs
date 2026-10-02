@@ -94,6 +94,7 @@ const expectedStaticFiles = new Set([
   'vercel-insights.js',
   'images/actual-shop-today.png',
   'images/actual-shop-sell.png',
+  'images/actual-shop-orders.png',
   'images/actual-sites-editor.png',
   'images/actual-commerce-order-request.png',
   'og-card.png',
