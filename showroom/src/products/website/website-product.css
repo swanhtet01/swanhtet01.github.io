@@ -1490,8 +1490,6 @@
 
 /* Mobile review controls -- verify slice start (P3.3) */
 @media (max-width: 640px) {
-  .website-business-controls > summary b { display: none; }
-  .website-business-controls > summary span { width: 100%; }
   .website-button,
   .website-button.is-compact,
   .website-text-button,
@@ -1831,33 +1829,6 @@
 .website-check-guidance li + li { margin-top: .75rem; }
 .website-check-guidance p { margin: .375rem 0 0; }
 
-.website-business-controls {
-  border: 1px solid var(--website-line);
-  border-radius: 12px;
-  background: var(--website-panel);
-}
-
-.website-business-controls > summary {
-  min-height: 50px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  cursor: pointer;
-  padding: 9px 12px;
-  color: var(--website-ink);
-  list-style: none;
-}
-
-.website-business-controls > summary::-webkit-details-marker { display: none; }
-.website-business-controls > summary::after { content: '+'; flex: 0 0 auto; color: var(--website-green); font-family: var(--website-mono); font-size: 1rem; }
-.website-business-controls[open] > summary { border-bottom: 1px solid var(--website-line); }
-.website-business-controls[open] > summary::after { content: '\2212'; }
-.website-business-controls > summary span { min-width: 0; display: grid; gap: 2px; }
-.website-business-controls > summary strong { overflow: hidden; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
-.website-business-controls > summary small { overflow: hidden; color: var(--website-muted); font-size: 0.5625rem; text-overflow: ellipsis; white-space: nowrap; }
-.website-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--website-muted); font-size: 0.625rem; font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
-.website-business-controls-content { display: grid; gap: 10px; padding: 10px; }
-
 .website-lead-inbox {
   border: 1px solid var(--website-line);
   border-radius: 12px;
@@ -1937,7 +1908,6 @@
   .website-today-priority > .website-button { width: 100%; }
   .website-today-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .website-today-metrics span:last-child { grid-column: 1 / -1; }
-  .website-business-controls:not([open]) > summary small { display: none; }
   .website-lead-inbox > header { display: grid; }
   .website-lead-counts { width: 100%; max-width: none; }
   .website-lead-capture-form,
@@ -3157,6 +3127,7 @@
   }
 
   .website-heading[data-view="content"] p,
+  .website-heading[data-view="inquiries"] p,
   .website-heading[data-view="publish"] p {
     display: block;
     font-size: 0.75rem;
@@ -3449,7 +3420,7 @@
 .website-today-metrics strong { font-size: var(--font-size-display); }
 .website-today-priority p, .website-lead-inbox p { font-size: var(--font-size-base); }
 .website-lead-list article small, .website-lead-capture-form label, .website-lead-review-controls label { font-size: var(--font-size-sm); }
-.website-business-controls > summary small, .website-start-tools > summary small, .website-start-tools > summary b { font-size: var(--font-size-xs); }
+.website-start-tools > summary small, .website-start-tools > summary b { font-size: var(--font-size-xs); }
 
 /* Design phase 1: un-trap the editor scroll on phones — mirrors the
    site-settings opt-out; only the preview iframe genuinely needs a viewport. */
@@ -3881,4 +3852,153 @@
 
 @media (max-width: 32.5rem) {
   .website-editor-section-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Sites workspace navigation and inquiry operations. Pages, inquiries and
+   publishing are peer jobs; the inbox is no longer buried in a disclosure. */
+.website-mode-nav {
+  order: 1;
+  width: max-content;
+  max-width: 100%;
+  min-height: 3.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow-x: auto;
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.75rem;
+  padding: 0.25rem;
+  background: var(--website-panel);
+}
+
+.website-mode-nav > button {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0 0.875rem;
+  background: transparent;
+  color: var(--website-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.website-mode-nav > button:hover:not(:disabled),
+.website-mode-nav > button[aria-current='page'] {
+  background: var(--website-green-soft);
+  color: var(--website-green);
+}
+
+.website-mode-nav > button:focus-visible {
+  outline: 0.125rem solid var(--website-green);
+  outline-offset: 0.125rem;
+}
+
+.website-mode-nav > button:disabled { cursor: not-allowed; opacity: 0.48; }
+.website-mode-nav > button > span {
+  min-width: 1.375rem;
+  min-height: 1.375rem;
+  display: grid;
+  place-items: center;
+  border-radius: 62.4375rem;
+  background: var(--website-green);
+  color: #fff;
+  font-size: 0.6875rem;
+}
+
+.website-inquiry-workspace {
+  order: 2;
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+
+.website-inquiry-workspace-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.48fr);
+  align-items: end;
+  gap: 1.5rem;
+  border-bottom: 0.0625rem solid var(--website-line);
+  padding: 0.25rem 0 1rem;
+}
+
+.website-inquiry-workspace-head > div:first-child,
+.website-inquiry-card-head { min-width: 0; display: grid; gap: 0.375rem; }
+.website-inquiry-workspace h2,
+.website-inquiry-workspace h3 { margin: 0; color: var(--website-ink); letter-spacing: -0.025em; }
+.website-inquiry-workspace h2 { font-size: clamp(1.25rem, 2vw, 1.75rem); }
+.website-inquiry-workspace h3 { font-size: 1rem; }
+.website-inquiry-workspace p { margin: 0; color: var(--website-muted); font-size: 0.8125rem; line-height: 1.5; }
+
+.website-inquiry-workspace-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(17.5rem, 0.62fr) minmax(26rem, 1.38fr);
+  align-items: start;
+  gap: 0.875rem;
+}
+
+.website-inquiry-card {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.875rem;
+  padding: 1rem;
+  background: var(--website-panel-raised);
+  box-shadow: 0 0.5rem 1.5rem rgba(23, 33, 28, 0.035);
+}
+
+.website-inquiry-capture .website-lead-capture-form {
+  grid-template-columns: minmax(0, 1fr);
+  border-top: 0;
+  padding-top: 0;
+}
+
+.website-inquiry-card .website-lead-capture-form input:not([type='checkbox']),
+.website-inquiry-card .website-lead-capture-form textarea,
+.website-inquiry-card .website-lead-review-controls input { min-height: 2.75rem; font-size: 0.875rem; }
+.website-inquiry-card .website-lead-capture-form > .website-button { width: 100%; min-height: 2.75rem; }
+.website-inquiry-queue-head { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.website-inquiry-queue-head > .website-lead-export { align-self: start; }
+.website-inquiry-card .website-lead-review-controls { border: 0; padding: 0; }
+.website-inquiry-card .website-lead-list { max-height: min(36rem, calc(100svh - 23rem)); overflow-y: auto; scrollbar-gutter: stable; padding-right: 0.125rem; }
+.website-inquiry-card .website-lead-list article { padding: 0.875rem; }
+.website-inquiry-card .website-lead-list article > div:last-child > button { min-height: 2.75rem; }
+.website-lead-empty { display: grid; gap: 0.25rem; }
+.website-lead-empty strong { color: var(--website-ink); }
+
+.website-insight-card > button {
+  width: max-content;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--website-green);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+@media (max-width: 56rem) {
+  .website-inquiry-workspace-head,
+  .website-inquiry-workspace-grid { grid-template-columns: minmax(0, 1fr); }
+  .website-inquiry-workspace-head { align-items: start; }
+  .website-inquiry-card .website-lead-list { max-height: none; overflow: visible; padding-right: 0; }
+}
+
+@media (max-width: 32.5rem) {
+  .website-mode-nav { width: 100%; }
+  .website-mode-nav > button { flex: 1 0 auto; min-height: 2.75rem; }
+  .website-inquiry-workspace-head { gap: 1rem; }
+  .website-inquiry-card { padding: 0.875rem; }
+  .website-inquiry-queue-head { grid-template-columns: minmax(0, 1fr); }
+  .website-inquiry-queue-head > .website-lead-export { width: 100%; }
 }

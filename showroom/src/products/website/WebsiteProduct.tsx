@@ -68,7 +68,7 @@ import {
 } from './website-model'
 import './website-product.css'
 
-type WebsiteView = 'content' | 'publish'
+type WebsiteView = 'content' | 'inquiries' | 'publish'
 
 type WebsiteEditSessionState = {
   scope: string
@@ -81,6 +81,10 @@ const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
     title: 'Website',
     copy: 'Shape every page, check what is missing and publish when it is ready.',
+  },
+  inquiries: {
+    title: 'Inquiries',
+    copy: 'Capture requests, assign responsibility and record the next decision.',
   },
   publish: {
     title: 'Prepare website file',
@@ -257,7 +261,11 @@ export function WebsiteProduct() {
   const workingSampleIsCurrent = Boolean(workspace.workingSample
     && workspace.workingSample.contentFingerprint === fingerprint)
   const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
-  const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
+  const view: WebsiteView = requestedView === 'inquiries'
+    ? 'inquiries'
+    : requestedView === 'publish' && canReview
+      ? 'publish'
+      : 'content'
   // Read once for the life of this screen. The setup component is required to stay free of
   // device reads, so the shell does it and hands the answer down as a prop.
   const [shopTradeId] = useState(readLocalShopBusinessTemplateId)
@@ -282,6 +290,8 @@ export function WebsiteProduct() {
             ? 'This page is saved as a draft. Select Edit website to update it and mark it ready.'
             : 'Edit your pages, review inquiries and download your site.',
       }
+    : view === 'inquiries'
+      ? viewCopy.inquiries
     : view === 'publish' && storageMode === 'session-only'
       ? {
           title: 'Your website is ready',
@@ -335,7 +345,7 @@ export function WebsiteProduct() {
   }, [])
 
   useEffect(() => {
-    if (requestedView === null || requestedView === 'publish') return
+    if (requestedView === null || requestedView === 'publish' || requestedView === 'inquiries') return
     const next = new URLSearchParams(searchParams)
     next.delete('view')
     setSearchParams(next, { replace: true })
@@ -416,6 +426,7 @@ export function WebsiteProduct() {
     }
     const next = new URLSearchParams(searchParams)
     if (nextView === 'publish') next.set('view', 'publish')
+    else if (nextView === 'inquiries') next.set('view', 'inquiries')
     else next.delete('view')
     setSearchParams(next)
     setSurface('work')
@@ -1065,13 +1076,7 @@ export function WebsiteProduct() {
       return
     }
     if (leadCounts.new) {
-      const controls = document.querySelector<HTMLDetailsElement>('.website-business-controls')
-      if (controls) controls.open = true
-      requestAnimationFrame(() => {
-        const inbox = document.getElementById('website-lead-inbox')
-        inbox?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        document.getElementById('website-lead-inbox-title')?.focus({ preventScroll: true })
-      })
+      openWorkspaceView('inquiries')
       return
     }
     openWorkspaceView('publish')
@@ -1182,7 +1187,7 @@ export function WebsiteProduct() {
             </div>
           ) : null}
 
-          <header aria-label={view === 'content' ? 'Edit page' : 'Publish website'} className="website-heading" data-view={view}>
+          <header aria-label={view === 'content' ? 'Edit page' : view === 'inquiries' ? 'Manage inquiries' : 'Publish website'} className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
@@ -1191,6 +1196,22 @@ export function WebsiteProduct() {
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
           </header>
+
+          {!starterSetupActive ? <nav aria-label="Sites workspace" className="website-mode-nav">
+            <button aria-current={view === 'content' ? 'page' : undefined} onClick={() => openWorkspaceView('content')} type="button">Pages</button>
+            <button aria-current={view === 'inquiries' ? 'page' : undefined} onClick={() => openWorkspaceView('inquiries')} type="button">
+              Inquiries{leadCounts.new ? <span>{leadCounts.new}</span> : null}
+            </button>
+            <button
+              aria-current={view === 'publish' ? 'page' : undefined}
+              disabled={!canReview}
+              onClick={() => openWorkspaceView('publish')}
+              title={!canReview ? 'Finish and save every page before preparing the website file' : undefined}
+              type="button"
+            >
+              Publish
+            </button>
+          </nav> : null}
 
           {pendingRestoredDraft ? (
             <section aria-labelledby="website-restored-draft-title" className="website-restored-draft-choice">
@@ -1213,7 +1234,7 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <details className="website-status-disclosure" data-editing-routine={editingRoutineStatus} open={!editingRoutineStatus}>
+          {view === 'content' && !starterSetupActive ? <details className="website-status-disclosure" data-editing-routine={editingRoutineStatus} open={!editingRoutineStatus}>
             <summary>Site status · {websiteAgentJob}</summary>
             <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
@@ -1381,39 +1402,48 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
+          {view === 'content' && storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
             ? <WebsiteReviewInbox key={`${managedWorkspaceId}:${managedActorId}`} workspaceId={managedWorkspaceId} actorId={managedActorId} /> : null}
-          {!starterSetupActive ? <details className="website-start-tools website-business-controls" id="website-inquiries">
-            <summary><span><strong>Inquiries</strong><small>Customer requests and follow-up</small></span><b>{leadCounts.new} new</b></summary>
-            <div className="website-business-controls-content">
-              <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
-                <header>
-                  <div><span className="core-eyebrow">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Contact data stays in this browser.'} Nothing is sent to customers, CRM, or Shop from this screen.</p></div>
-                  <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
-                </header>
+          {view === 'inquiries' ? <section aria-labelledby="website-lead-inbox-title" className="website-inquiry-workspace" id="website-inquiries">
+            <header className="website-inquiry-workspace-head">
+              <div>
+                <span className="core-eyebrow">Inquiry inbox</span>
+                <h2 id="website-lead-inbox-title" tabIndex={-1}>{leadCounts.new ? `${leadCounts.new} ${leadCounts.new === 1 ? 'request needs' : 'requests need'} review` : 'Customer requests are up to date'}</h2>
+                <p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Contact data stays in this browser.'} Recording a decision does not message the customer or create a Shop order.</p>
+              </div>
+              <div aria-label="Inquiry status" className="website-lead-counts" role="group"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
+            </header>
 
+            <div className="website-inquiry-workspace-grid">
+              <section aria-labelledby="website-inquiry-capture-title" className="website-inquiry-card website-inquiry-capture">
+                <div className="website-inquiry-card-head"><span className="core-eyebrow">New request</span><h3 id="website-inquiry-capture-title">Add an inquiry</h3><p>Use this when a customer contacts the business by phone, message or in person.</p></div>
                 <form className="website-lead-capture-form" onSubmit={captureInquiry}>
                   <label>Name<input autoComplete="name" disabled={portalViewOnly} maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
                   <label>Phone or email<input autoComplete="email" disabled={portalViewOnly} maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
-                  <label className="website-lead-request">What do they need?<textarea disabled={portalViewOnly} maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
+                  <label className="website-lead-request">Request<textarea disabled={portalViewOnly} maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="What they need, quantity, timing and any question" required rows={4} value={leadDraft.request} /></label>
                   <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} disabled={portalViewOnly} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
-                  <button className="website-button is-primary is-compact" disabled={portalViewOnly || !readyBuyerCtaPages.length} type="submit">{portalViewOnly ? 'View only' : 'Add inquiry'}</button>
+                  <button className="website-button is-primary" disabled={portalViewOnly || !readyBuyerCtaPages.length} type="submit">{portalViewOnly ? 'View only' : 'Add to inbox'}</button>
                   {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action before capturing inquiries.</small> : null}
                 </form>
+              </section>
 
-                {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible person<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Name or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing, or closure reason" value={leadDecisionNote} /></label></div> : null}
+              <section aria-labelledby="website-inquiry-queue-title" className="website-inquiry-card website-inquiry-queue" id="website-lead-inbox">
+                <div className="website-inquiry-card-head website-inquiry-queue-head">
+                  <div><span className="core-eyebrow">Follow-up queue</span><h3 id="website-inquiry-queue-title">Review and assign</h3><p>Record who owns the next step, then qualify or close the request.</p></div>
+                  {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export</a> : null}
+                </div>
+                {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible person<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Name or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing or closure reason" value={leadDecisionNote} /></label></div> : null}
                 <div className="website-lead-list">
                   {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
-                    <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Person: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
-                    {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
-                  </article>) : <p className="website-lead-empty">No inquiries yet.</p>}
+                    <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Responsible: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
+                    {lead.status !== 'closed' ? <div><button className="website-button is-primary is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
+                  </article>) : <div className="website-lead-empty"><strong>No inquiries yet</strong><p>Add a request when a customer gets in touch. Nothing is sent automatically.</p></div>}
                 </div>
-                {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export inquiries</a> : null}
               </section>
             </div>
-          </details> : null}
+          </section> : null}
 
-          <div
+          {view !== 'inquiries' ? <div
             aria-label={view === 'content' ? 'Edit' : 'Publish'}
             className={'website-workspace-grid view-' + view}
             data-surface={surface}
@@ -1499,7 +1529,7 @@ export function WebsiteProduct() {
                           <span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span>
                           <span><strong>{leadCounts.closed}</strong><small>Closed</small></span>
                         </div>
-                        <a href="#website-inquiries">Open inquiry workspace</a>
+                        <button onClick={() => openWorkspaceView('inquiries')} type="button">Open inquiry workspace</button>
                       </section>
                     </aside>
                   </div>
@@ -1544,7 +1574,7 @@ export function WebsiteProduct() {
                 siteName={editorWorkspace.siteName}
               />
             </div>
-          </div>
+          </div> : null}
 
         </div>
       </div>
