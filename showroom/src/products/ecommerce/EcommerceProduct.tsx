@@ -1000,7 +1000,6 @@ export function EcommerceProduct() {
       return
     }
     showWorkspace('preview')
-    addToCart(customerPreviewItems[0].sku)
   }
 
   // The cart and checkout live inside a collapsed <details>. Opening it is what "Review

@@ -614,6 +614,22 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   })()`)
   if (!started) return { ok: false, error: 'Ecommerce customer-order action was not available' }
 
+  const catalogDeadline = Date.now() + 10_000
+  let productSelected = false
+  while (Date.now() < catalogDeadline && !productSelected) {
+    productSelected = await evalInPage(cdp, sessionId, `(() => {
+      const workspace = document.querySelector('#ecommerce-buying-workspace');
+      const notice = workspace?.querySelector('.ecommerce-buying-notice')?.textContent || '';
+      const add = [...document.querySelectorAll('.storefront-request-button')]
+        .find((candidate) => !candidate.disabled && candidate.textContent.trim() === 'Add to cart');
+      if (!workspace || !add || notice.includes('Checking saved checkout recovery')) return false;
+      add.click();
+      return true;
+    })()`)
+    if (!productSelected) await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!productSelected) return { ok: false, error: 'Ecommerce customer store did not become ready' }
+
   const readyDeadline = Date.now() + 10_000
   let formReady = false
   while (Date.now() < readyDeadline && !formReady) {
@@ -655,14 +671,12 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
       const receiptBoundary = receipt ? [...receipt.querySelectorAll('p')]
         .find((candidate) => candidate.textContent.includes('Saved on this device for Shop review.')) : null;
       const box = receiptBoundary?.getBoundingClientRect();
-      const todayTitle = document.querySelector('#ecommerce-today-title')?.textContent.trim() || '';
-      const todaySummary = document.querySelector('.ecommerce-today-priority > p')?.textContent.trim() || '';
       const notice = document.querySelector('.ecommerce-buying-notice')?.textContent.trim() || '';
       const receiptText = receipt?.textContent || '';
       const bodyText = document.body?.innerText || '';
       return {
-        todayTitle,
-        todaySummary,
+        activeWorkspace: document.querySelector('.ecommerce-mode-nav [aria-current="page"]')?.textContent.trim() || '',
+        receiptStatus: receipt?.querySelector('.status-pill')?.textContent.trim() || '',
         notice,
         receiptPresent: Boolean(receipt),
         receiptHeight: receiptBox?.height || 0,
@@ -678,14 +692,13 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
         documentScrollWidth: document.documentElement?.scrollWidth || 0,
       };
     })()`)
-    if (state?.todayTitle === 'Order request saved' && state?.receiptBoundary && state?.boundaryVisible) break
+    if (state?.receiptStatus === 'Request saved on this device' && state?.receiptBoundary && state?.boundaryVisible) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
 
   const checks = {
-    localHeadline: state?.todayTitle === 'Order request saved',
-    localSummary: state?.todaySummary.includes('Saved on this device for Shop review')
-      && state?.todaySummary.includes('No order, charge, stock, delivery, or customer message changed.'),
+    localHeadline: state?.receiptStatus === 'Request saved on this device',
+    customerStoreActive: state?.activeWorkspace === 'Customer store',
     localNotice: state?.notice.includes('Saved on this device for Shop review')
       && state?.notice.includes('No order, stock, message, or charge changed.'),
     localReceipt: state?.receiptBoundary.includes('Saved on this device for Shop review.')
@@ -1129,7 +1142,7 @@ const tests = [
     height: 900,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Order request saved', 'Saved on this device for Shop review.', 'May Thiri'],
+    expectedText: ['Commerce', 'Request saved on this device', 'Saved on this device for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-desktop-1280x900',
@@ -1144,7 +1157,7 @@ const tests = [
     mobile: true,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Order request saved', 'Saved on this device for Shop review.', 'May Thiri'],
+    expectedText: ['Commerce', 'Request saved on this device', 'Saved on this device for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-mobile-390x844',
