@@ -61,6 +61,7 @@ import { paymentQrScopeForWorkspace } from './payment-qr-store'
 import { productImageScopeForWorkspace } from './product-image-store'
 import { SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX, readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyRedeemedPointsForOrder, shopLoyaltyRedemptionAllowed, shopLoyaltyScopeForWorkspace } from './shop-loyalty'
 import { projectShopProfitControl } from './shop-profit-control'
+import { projectShopTodayCompletedSales } from './shop-today-sales'
 import { managedPlantStarterPlan, plantIndustryPack, plantIndustryPackIdFromSearch, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -6672,17 +6673,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
   ), 0)
   const incomingRequestCount = pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
-  const yangonDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' })
-  const todayInYangon = yangonDateFmt.format(new Date(purchaseOrderClock))
-  const todayOrders = commerce.orders.filter((order) => (
-    order.status !== 'cancelled' && yangonDateFmt.format(new Date(order.createdAt)) === todayInYangon
-  ))
-  const todayRevenue = todayOrders.reduce((sum, order) => sum + order.total, 0)
+  const completedSalesToday = projectShopTodayCompletedSales(commerce, purchaseOrderClock)
   const shopTodayMetrics = [
-    { label: 'Open orders', value: String(openOrders.length), tone: actionOrders.length ? 'attention' as const : 'ready' as const },
-    { label: "Today's sales", value: todayOrders.length ? formatMoney(todayRevenue) : '—' },
-    { label: 'Stock alerts', value: String(lowStock.length), tone: lowStock.length ? 'attention' as const : 'ready' as const },
-    { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
+    { label: 'Open orders', value: String(openOrders.length), detail: actionOrders.length ? `${actionOrders.length} need action` : 'Awaiting fulfilment', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
+    { label: "Today's sales", value: formatMoney(completedSalesToday.grossMmk), detail: `${completedSalesToday.count} completed · before returns` },
+    { label: 'Stock alerts', value: String(lowStock.length), detail: lowStock.length ? 'At or below reorder' : 'No reorder alerts', tone: lowStock.length ? 'attention' as const : 'ready' as const },
+    { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), detail: receivablesAging.overdueOrders ? `${receivablesAging.overdueOrders} overdue orders` : 'Customer balances', tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
   ]
   const shopTodayModules = [
     { label: 'Sell & POS', detail: 'Counter, cart, payment choice, tax and receipt evidence', status: `${commerce.items.length} items`, to: '/shop/?tab=counter' },

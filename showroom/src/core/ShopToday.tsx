@@ -17,6 +17,7 @@ import type { ShopProfitControlBoard } from './shop-profit-control'
 export type ShopTodayMetric = {
   label: string
   value: string
+  detail: string
   tone?: 'attention' | 'ready'
 }
 
@@ -277,7 +278,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
         {metrics.map((metric, index) => <article data-index={index} data-tone={metric.tone ?? 'ready'} key={metric.label}>
           <small>{metric.label}</small>
           <strong>{metric.value}</strong>
-          <span>{metric.tone === 'attention' ? 'Needs review' : 'On track'}</span>
+          <span>{metric.detail}</span>
         </article>)}
       </div>
     </section>
