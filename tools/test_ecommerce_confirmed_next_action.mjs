@@ -57,8 +57,9 @@ test('quote recovery ignores expired-only history and starts a fresh cart', () =
     globalThis: { performance: { timeOrigin: 100 } },
     navigate: () => calls.push('navigate'),
     setOrderOpsNow() {},
+    showWorkspace: workspace => calls.push(`workspace:${workspace}`),
   })
-  assert.deepEqual(calls, ['cart:FRESH-SKU'])
+  assert.deepEqual(calls, ['workspace:preview', 'cart:FRESH-SKU'])
 })
 
 test('filtered request inbox excludes expired history from Shop actions', () => {
