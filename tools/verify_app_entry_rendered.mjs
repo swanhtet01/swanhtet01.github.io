@@ -861,6 +861,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       } catch { launcherFailure = 'app_entry_rendered_launcher_products_mismatch' }
     }
     const missingText = testCase.expectedText.filter((needle) => !(finalRendered?.text || '').includes(needle))
+    const unexpectedText = (testCase.absentText ?? []).filter((needle) => (finalRendered?.text || '').includes(needle))
     const renderedViewportMatches = Math.abs((finalRendered?.viewportWidth ?? 0) - testCase.width) <= 1
       && Math.abs((finalRendered?.viewportHeight ?? 0) - testCase.height) <= 1
     const counterViewportMatches = !shopCounter
@@ -921,6 +922,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
       ...(mutatingRequests.length ? [`unexpected browser network writes: ${mutatingRequests.map((entry) => `${entry.method} ${entry.path}`).join(', ')}`] : []),
       ...missingText.map((needle) => `missing text: ${needle}`),
+      ...unexpectedText.map((needle) => `unexpected text: ${needle}`),
       ...errors,
       ...warnings,
     ]
@@ -1038,7 +1040,8 @@ const tests = [
     height: 900,
     expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
     expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
-    expectedText: ['Mini-mart & grocery', 'Products', 'Premium rice 25kg', 'PRIVATE DEVICE'],
+    expectedText: ['Mini-mart & grocery', 'Products', 'Premium rice 25kg'],
+    absentText: ['PRIVATE DEVICE'],
     exerciseShopCounter: true,
     noHorizontalOverflow: true,
     screenshotName: 'shop-counter-mini-mart-desktop-1280x900',
