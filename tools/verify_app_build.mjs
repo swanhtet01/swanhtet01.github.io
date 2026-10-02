@@ -3646,7 +3646,8 @@ if (addToCartStart < 0
   || !prepareQuoteRecoveryAction.includes('requestQuoteIsExpired(recoveryRequest, actionNow)')
   || !prepareQuoteRecoveryAction.includes("navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(recoveryRequest.id)}`)")
   || !prepareQuoteRecoveryAction.includes('finishStorefrontSetup()')
-  || !prepareQuoteRecoveryAction.includes('addToCart(customerPreviewItems[0].sku)')
+  || !prepareQuoteRecoveryAction.includes("showWorkspace('preview')")
+  || prepareQuoteRecoveryAction.includes('addToCart(')
   || ['saveCurrentStorefront', 'saveManagedCommerceCommand', 'saveStorefrontDraft', 'prepareEcommerceShopDraftV2', 'recordCommerceStorefrontRequest', 'fetch('].some((marker) => prepareQuoteRecoveryAction.includes(marker))
   || prepareCustomerFollowUpStart < 0
   || prepareCustomerFollowUpEnd < 0
