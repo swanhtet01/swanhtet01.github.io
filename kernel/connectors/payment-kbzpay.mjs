@@ -14,7 +14,7 @@
 //   KBZPAY_MERCH_CODE   (required)  merchant code issued by KBZPay
 //   KBZPAY_APP_SECRET   (required)  signing secret
 //   KBZPAY_NOTIFY_URL   (optional)  async IPN callback (default: https://console.supermega.dev/api/kbzpay-notify)
-//   KBZPAY_SANDBOX      (optional)  'true' to force UAT endpoint (default: auto-detect from APP_ID prefix or use prod)
+//   KBZPAY_SANDBOX      (required)  'true' for UAT, 'false' for production
 
 import crypto from 'node:crypto'
 import { register } from './registry.mjs'
@@ -25,10 +25,13 @@ const appId      = () => String(process.env.KBZPAY_APP_ID      || '').trim()
 const merchCode  = () => String(process.env.KBZPAY_MERCH_CODE  || '').trim()
 const appSecret  = () => String(process.env.KBZPAY_APP_SECRET  || '').trim()
 const notifyUrl  = () => String(process.env.KBZPAY_NOTIFY_URL  || 'https://console.supermega.dev/api/kbzpay-notify').trim()
-const isSandbox  = () => String(process.env.KBZPAY_SANDBOX     || '').toLowerCase() === 'true'
-const configured = () => !!(appId() && merchCode() && appSecret())
+const mode = () => {
+  const value = String(process.env.KBZPAY_SANDBOX || '').trim().toLowerCase()
+  return value === 'true' ? 'sandbox' : value === 'false' ? 'production' : null
+}
+const configured = () => !!(appId() && merchCode() && appSecret() && mode())
 
-const baseUrl = () => isSandbox()
+const baseUrl = () => mode() === 'sandbox'
   ? 'https://api.kbzpay.com/payment/gateway/uat/'
   : 'https://api.kbzpay.com/payment/gateway/'
 
@@ -88,6 +91,8 @@ export async function createQR(_input = {}) {
   try {
     if (!configured()) return { ok: false, reason: 'kbzpay_not_configured' }
     if (!amount || !orderId) return { ok: false, reason: 'kbzpay_missing_amount_or_orderId' }
+    if (!Number.isSafeInteger(amount) || amount <= 0) return { ok: false, reason: 'kbzpay_invalid_amount' }
+    if (typeof orderId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(orderId)) return { ok: false, reason: 'kbzpay_invalid_orderId' }
 
     const payload = {
       appid:          appId(),
@@ -95,7 +100,7 @@ export async function createQR(_input = {}) {
       merch_order_id: String(orderId),
       trade_type:     'PAYSCORE',   // KBZPay standard merchant QR trade type
       title:          String(title).slice(0, 256),
-      total_amount:   String(Math.round(Number(amount))),
+      total_amount:   String(amount),
       callback_url:   String(callbackUrl || ''),
       notify_url:     notifyUrl(),
       timestamp:      String(Math.floor(Date.now() / 1000)),
@@ -108,9 +113,11 @@ export async function createQR(_input = {}) {
     }
 
     const result = data.result || {}
+    const qrCode = result.qrCode || result.qr_code
+    if (typeof qrCode !== 'string' || !qrCode) return { ok: false, reason: 'kbzpay_missing_qr' }
     return {
       ok:       true,
-      qrCode:   result.qrCode   || result.qr_code   || null,
+      qrCode,
       prepayId: result.prepay_id || null,
       orderId:  String(orderId),
     }
@@ -130,6 +137,7 @@ export async function queryPayment(_input = {}) {
   try {
     if (!configured()) return { ok: false, reason: 'kbzpay_not_configured' }
     if (!orderId) return { ok: false, reason: 'kbzpay_missing_orderId' }
+    if (typeof orderId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(orderId)) return { ok: false, reason: 'kbzpay_invalid_orderId' }
 
     const payload = {
       appid:          appId(),
@@ -190,7 +198,7 @@ export const paymentKbzpay = {
   configured,
   /**
    * health — KBZPay has no ping endpoint so we do a config-only check.
-   * Returns ok:true only when all three required env vars are present.
+   * Returns ok:true only when credentials and an explicit gateway mode are present.
    */
   async health() {
     const c = configured()
@@ -199,11 +207,11 @@ export const paymentKbzpay = {
         !appId()     && 'KBZPAY_APP_ID',
         !merchCode() && 'KBZPAY_MERCH_CODE',
         !appSecret() && 'KBZPAY_APP_SECRET',
+        !mode() && 'KBZPAY_SANDBOX (true or false)',
       ].filter(Boolean).join(', ')
-      return { ok: false, configured: false, detail: `missing env: ${missing}` }
+      return { ok: false, configured: false, detail: `missing or invalid env: ${missing}` }
     }
-    const mode = isSandbox() ? 'sandbox (UAT)' : 'production'
-    return { ok: true, configured: true, detail: `credentials present, ${mode}` }
+    return { ok: true, configured: true, detail: `credentials present, ${mode()}` }
   },
   createQR,
   queryPayment,
