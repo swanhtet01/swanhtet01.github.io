@@ -188,6 +188,7 @@ export function WebsiteProduct() {
   const [recoveryFocusRequest, setRecoveryFocusRequest] = useState(0)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const siteSettingsRef = useRef<HTMLDetailsElement>(null)
+  const previousRequestedViewRef = useRef(requestedView)
   useEffect(() => {
     const disclosure = siteSettingsRef.current
     if (!siteSettingsOpen || !disclosure) return
@@ -398,6 +399,14 @@ export function WebsiteProduct() {
   useEffect(() => {
     if (headingFocusRequest > 0) headingRef.current?.focus()
   }, [headingFocusRequest])
+
+  useEffect(() => {
+    if (previousRequestedViewRef.current === requestedView) return
+    previousRequestedViewRef.current = requestedView
+    setSurface('work')
+    setSiteSettingsOpen(false)
+    setHeadingFocusRequest((current) => current + 1)
+  }, [requestedView])
 
   useEffect(() => {
     if (recoveryFocusRequest > 0) recoveryPrimaryActionRef.current?.focus()
@@ -1194,6 +1203,16 @@ export function WebsiteProduct() {
             </div>
             {view === 'publish' ? (
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
+            ) : !starterSetupActive ? (
+              <button
+                className="website-button is-primary website-heading-publish-action"
+                disabled={!canReview}
+                onClick={() => openWorkspaceView('publish')}
+                title={!canReview ? 'Finish and save every page before preparing the website file' : undefined}
+                type="button"
+              >
+                Prepare file
+              </button>
             ) : null}
           </header>
 

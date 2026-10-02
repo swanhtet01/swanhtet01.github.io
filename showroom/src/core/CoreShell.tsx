@@ -22,6 +22,7 @@ import type { SetupProductId } from './product-setup'
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const ManagedProductConnections = lazy(() => import('./ManagedProductConnections').then((module) => ({ default: module.ManagedProductConnections })))
 const DesktopShopNavigation = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.DesktopShopNavigation })))
+const DesktopSitesNavigation = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.DesktopSitesNavigation })))
 const WorkspaceAccount = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.WorkspaceAccount })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
@@ -443,6 +444,8 @@ export function CoreLayout() {
   // (activeCommerceTab), so the highlight matches the in-page toolbar even
   // during the frame before that page canonicalizes a missing ?tab=.
   const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(new URLSearchParams(location.search).get('tab')) : null
+  const requestedSitesView = routeProduct === 'website' ? new URLSearchParams(location.search).get('view') : null
+  const desktopSitesView = requestedSitesView === 'inquiries' || requestedSitesView === 'publish' ? requestedSitesView : 'pages'
   const routeName = loginRoute
     ? 'Sign in'
     : sensitiveAccountRoute
@@ -521,11 +524,11 @@ export function CoreLayout() {
   if (productionEntry === 'login') return <Navigate replace to={companyLoginPath} />
 
   return (
-    <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
+    <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'website' ? ' sites-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
-        {routeProduct === 'commerce' && mobileCommerceTab ? <Suspense fallback={null}><DesktopShopNavigation activeTab={mobileCommerceTab} /></Suspense> : activeNavigation.length ? <nav className="core-nav" aria-label="Application">
+        {routeProduct === 'commerce' && mobileCommerceTab ? <Suspense fallback={null}><DesktopShopNavigation activeTab={mobileCommerceTab} /></Suspense> : routeProduct === 'website' ? <Suspense fallback={null}><DesktopSitesNavigation activeView={desktopSitesView} /></Suspense> : activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
         <div className="sidebar-foot">{routeProduct && canSwitchProduct ? <Link className="product-switch-shell-link" to="/?choose=1"><span className="shell-nav-icon" aria-hidden="true" data-icon="products" /><span>All products</span></Link> : null}</div>

@@ -3856,6 +3856,16 @@
 
 /* Sites workspace navigation and inquiry operations. Pages, inquiries and
    publishing are peer jobs; the inbox is no longer buried in a disclosure. */
+.shell-nav-icon[data-icon="pages"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Crect x='3.75' y='4.25' width='16.5' height='12.5' rx='1.5'/%3E%3Cpath d='M8 20h8M12 16.75V20'/%3E%3C/svg%3E");
+}
+
+.shell-nav-icon[data-icon="inquiries"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Cpath d='M4 5.25h16v11.5H9l-5 3v-14.5Z'/%3E%3Cpath d='M8 9h8M8 12.5h5'/%3E%3C/svg%3E");
+}
+
+.website-heading-publish-action { flex: 0 0 auto; }
+
 .website-mode-nav {
   order: 1;
   width: max-content;
@@ -3910,6 +3920,14 @@
   background: var(--website-green);
   color: #fff;
   font-size: 0.6875rem;
+}
+
+@media (min-width: 841px) {
+  .sites-product-shell .website-mode-nav { display: none; }
+}
+
+@media (max-width: 840px) {
+  .website-heading-publish-action { display: none; }
 }
 
 .website-inquiry-workspace {
