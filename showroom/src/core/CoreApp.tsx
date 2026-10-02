@@ -1403,7 +1403,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
             hidden all compute the identical name and description, and only the plain
             one leaves a traversable StaticText behind. */}
         <span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi('Add to this sale')}</span>
-        {visibleItems.length ? <div className="shop-item-grid">
+        {visibleItems.length ? <><div aria-hidden="true" className="shop-counter-column-head"><span>Product</span><span>Price</span><span>Stock</span><span>Sale</span></div><div className="shop-item-grid">
           {visibleItems.map((item, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
             const artKind = items.indexOf(item) % 5
@@ -1420,11 +1420,11 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
             const describedBy = [priceId, stockId, quantity ? quantityId : ''].filter(Boolean).join(' ')
             return <button aria-describedby={describedBy} aria-labelledby={labelledBy} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
-              <span className="shop-product-copy"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}<b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
+              <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">Add</span>}
             </button>
           })}
-        </div> : <Empty>{items.length
+        </div></> : <Empty>{items.length
           ? bi('No matching item. Search by name or SKU.')
           : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Add or import products</Link> before the first sale.</>}</Empty>}
       </section>
@@ -1439,7 +1439,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           <Link to="/shop/?tab=orders">Review recorded orders</Link></div> : null}
         {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
-        <header><div><span className="core-eyebrow">{`${activeLabel || bi('Current sale')}${persistLocalDraft ? ' · this device' : ''}`}</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : bi('Ready for the first item')}</h2></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
+        <header><div><span className="core-eyebrow">{`${activeLabel || bi('Current sale')}${persistLocalDraft ? ' · this device' : ''}`}</span><h2>Current sale</h2><p>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} selected` : 'Choose a product to start'}</p></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
         {persistLocalDraft && (parked.length > 0 || unitCount > 0 || recoveryPaused) ? <details className="shop-sale-details shop-parked-tickets" open={ticketsOpen} onToggle={event => setTicketsOpen(event.currentTarget.open)}><summary>Parked tickets ({parked.length}) · this device</summary>
           <p>Saved here only; not sent to kitchen, paid or stock-reserved. Review current prices when resumed.</p>
           <label>Table or ticket name<input maxLength={40} placeholder={activeLabel || 'Table 1'} value={ticketLabel} onChange={event => setTicketLabel(event.target.value)} /></label>
