@@ -264,16 +264,15 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
   )
 
   return <div className="shop-today">
-    <section className="shop-today-mission" aria-label="Shop priority">
-      <div className="shop-today-brief">
-        <span className="core-eyebrow">Today</span>
-        <h2>{nextAction}</h2>
-        <p>{nextDetail}</p>
-        <div className="shop-today-actions">
-          <Link className="core-button primary" to={nextTo}>Open task</Link>
-          {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
+    <section aria-labelledby="shop-today-title" className="shop-today-overview">
+      <header className="shop-today-heading">
+        <div>
+          <span className="core-eyebrow">Shop workspace</span>
+          <h2 id="shop-today-title">Today</h2>
+          <p>See sales, orders and risks from the current Shop record.</p>
         </div>
-      </div>
+        {catalogReady ? <Link className="core-button primary" to="/shop/?tab=counter">New sale</Link> : null}
+      </header>
       <div className="shop-today-metrics" aria-label="Shop summary">
         {metrics.map((metric, index) => <article data-index={index} data-tone={metric.tone ?? 'ready'} key={metric.label}>
           <small>{metric.label}</small>
@@ -283,23 +282,41 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       </div>
     </section>
 
-    <details aria-label="Shop profit control" className="shop-today-workspaces shop-profit-control" data-state={profitControl.state} open={profitControl.criticalPriorityCount > 0}>
-      <summary><span><strong>Priorities</strong><small>What needs attention now</small></span><b>{profitControl.criticalPriorityCount ? `${profitControl.criticalPriorityCount} critical · ${profitControl.openPriorityCount} open` : profitControl.openPriorityCount ? `${profitControl.openPriorityCount} open` : 'Clear'}</b></summary>
-      <div className="shop-today-module-grid">
-        {profitControl.priorities.map((priority) => <Link data-priority-id={priority.id} data-tone={priority.severity === 'critical' || priority.severity === 'attention' ? 'attention' : 'ready'} key={priority.id} to={priority.target}>
-          <span>
-            <strong>{priority.title}</strong>
-            <small>{priority.impact}</small>
-            <small>{priority.ownerRole} · {priority.dueLabel}</small>
-            <small><strong>Next action:</strong> {priority.actionLabel}</small>
-            <small>Closed when: {priority.closureCondition}</small>
-          </span>
-          <b>{formatShopProfitControlMetric(priority.metric)}</b>
-        </Link>)}
-      </div>
-      {profitControl.hiddenPriorityCount ? <p className="panel-note">{formatHiddenShopProfitControlPriorities(profitControl.hiddenPriorityCount)}</p> : null}
-      <p className="panel-note">Read-only projection from the current Shop record. A card clears only when its source metric changes; this panel does not contact anyone, move money or stock, or write a completion claim.</p>
-    </details>
+    <div className="shop-today-command-grid">
+      <details aria-label="Shop profit control" className="shop-today-workspaces shop-profit-control" data-state={profitControl.state} open>
+        <summary><span><strong>Priorities</strong><small>What needs attention now</small></span><b>{profitControl.criticalPriorityCount ? `${profitControl.criticalPriorityCount} critical · ${profitControl.openPriorityCount} open` : profitControl.openPriorityCount ? `${profitControl.openPriorityCount} open` : 'Clear'}</b></summary>
+        {profitControl.priorities.length ? <div className="shop-today-module-grid shop-today-priority-list">
+          {profitControl.priorities.map((priority) => <Link data-priority-id={priority.id} data-tone={priority.severity === 'critical' || priority.severity === 'attention' ? 'attention' : 'ready'} key={priority.id} to={priority.target}>
+            <span>
+              <strong>{priority.title}</strong>
+              <small>{priority.impact}</small>
+              <small>{priority.ownerRole} · {priority.dueLabel}</small>
+              <small><strong>Next action:</strong> {priority.actionLabel}</small>
+              <small>Closed when: {priority.closureCondition}</small>
+            </span>
+            <b>{formatShopProfitControlMetric(priority.metric)}</b>
+          </Link>)}
+        </div> : <p className="shop-today-clear-state"><strong>No urgent work</strong><span>Shop records do not show an open operating priority.</span></p>}
+        {profitControl.hiddenPriorityCount ? <p className="panel-note">{formatHiddenShopProfitControlPriorities(profitControl.hiddenPriorityCount)}</p> : null}
+        <p className="panel-note">Read-only projection from the current Shop record. A card clears only when its source metric changes; this panel does not contact anyone, move money or stock, or write a completion claim.</p>
+      </details>
+
+      <section className="shop-today-mission" aria-label="Shop priority">
+        <div className="shop-today-brief">
+          <span className="core-eyebrow">Next action</span>
+          <h3>{nextAction}</h3>
+          <p>{nextDetail}</p>
+          <div className="shop-today-actions">
+            <Link className="core-button primary" to={nextTo}>Open task</Link>
+            {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
+          </div>
+        </div>
+        <nav aria-label="Shop quick actions" className="shop-today-quick-links">
+          <Link to="/shop/?tab=orders"><span>Orders</span><b>Review fulfilment</b></Link>
+          <Link to="/shop/?tab=inventory"><span>Stock</span><b>Check inventory</b></Link>
+        </nav>
+      </section>
+    </div>
 
     <details className="shop-today-workspaces">
       <summary><span><strong>Profit</strong><small>Costs, margins and batch estimates</small></span><b>{marginControl.costCoverage.state === 'complete' ? 'Costs reviewed' : 'Costs incomplete'}</b></summary>
