@@ -28,9 +28,9 @@ globalThis.fetch=async input=>{
  if(u.pathname.startsWith('/images/')) {
   if(mode==='image-missing') return new Response('missing',{status:404});
   if(mode==='image-html') return new Response('<html>fallback</html>',{headers:{'content-type':'text/html'}});
-  if(mode==='image-corrupt') return new Response('broken',{headers:{'content-type':'image/jpeg'}});
-  const path=mode==='image-stale'?'/images/platform-pages.jpg':u.pathname;
-  return new Response(fs.readFileSync('.vercel/output/static'+path),{headers:{'content-type':'image/jpeg'}});
+  if(mode==='image-corrupt') return new Response('broken',{headers:{'content-type':'image/png'}});
+  const path=mode==='image-stale'?'/images/actual-sites-pages.png':u.pathname;
+  return new Response(fs.readFileSync('.vercel/output/static'+path),{headers:{'content-type':'image/png'}});
  }
  if(u.pathname.endsWith('.png')) return new Response(fs.readFileSync('.vercel/output/static'+u.pathname),{headers:{'content-type':'image/png'}});
  const page=manifest.pages.find(p=>p.route===u.pathname);

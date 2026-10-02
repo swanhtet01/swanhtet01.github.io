@@ -55,9 +55,9 @@ check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status
 // Page content markers, SEO metadata, and CTA wiring.
 const descriptions = []
 const productScreens = {
-  shop: ['platform-shop-dashboard-v2.jpg', 'platform-stock.jpg'],
-  website: ['platform-sites-workspace-v2.jpg', 'platform-pages.jpg'],
-  ecommerce: ['platform-commerce-workflow-v2.jpg', 'platform-catalog.jpg'],
+  shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png', 'actual-shop-stock.png'],
+  website: ['actual-sites-setup.png', 'actual-sites-editor.png', 'actual-sites-pages.png'],
+  ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
 }
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
@@ -95,7 +95,8 @@ for (const page of landingPages) {
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check((html.match(/<h1>/g) || []).length === 1, `landing_single_headline:${page.route}`)
   check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
-  check(countOccurrences(html, '<figure class="platform-image') === 2, `landing_two_product_views:${page.route}`)
+  check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
+  check(countOccurrences(html, 'type="radio" name="'+page.productId+'-screens"') === productScreens[page.productId]?.length, `landing_gallery_controls:${page.route}`)
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
@@ -201,7 +202,8 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
   check((body.match(/<button\b/g) || []).length === 0, `marketing_has_no_controls:${route}`)
   check(interfaceFigureCount > 0, `interface_figures_present:${route}`)
-  check(countOccurrences(body, 'Illustrative interface and records.') === interfaceFigureCount, `interface_disclosure_per_figure:${route}`)
+  check(countOccurrences(body, 'Actual app capture with synthetic example records. Local build.') === interfaceFigureCount, `interface_disclosure_per_figure:${route}`)
+  check(!body.includes('Illustrative interface and records.'), `illustrative_mockups_absent:${route}`)
   for (const forbidden of ['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
     check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
   }
@@ -215,10 +217,15 @@ for (const id of activeIds) {
 check(countOccurrences(home, '<figure class="platform-image') === activeIds.length, 'home_one_view_per_active_product')
 check(countOccurrences(home, 'class="product-card-flow"') === activeIds.length, 'home_compact_product_flows')
 check(home.includes('href="/contact/">Contact SuperMega</a>'), 'home_clear_contact_action')
-for (const filename of ['platform-shop-dashboard-v2.jpg', 'platform-sites-workspace-v2.jpg', 'platform-commerce-workflow-v2.jpg', 'platform-stock.jpg', 'platform-pages.jpg', 'platform-catalog.jpg']) {
+const screenshotHashes = new Set()
+for (const filename of Object.values(productScreens).flat()) {
   const image = readFileSync(resolve(staticDir, 'images', filename))
-  check(image.subarray(0, 3).equals(Buffer.from([255,216,255])), `screenshot_jpeg:${filename}`)
+  check(image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])), `screenshot_png:${filename}`)
+  check(image.readUInt32BE(16) === 1440 && image.readUInt32BE(20) === 900, `screenshot_full_render:${filename}`)
   check(image.length > 10000, `screenshot_not_empty:${filename}`)
+  const hash = image.toString('base64')
+  check(!screenshotHashes.has(hash), `screenshot_unique:${filename}`)
+  screenshotHashes.add(hash)
 }
 const shopTemplates = validateShopBusinessTemplates()
 const shopTemplateIds = shopTemplates.map((template) => template.id)

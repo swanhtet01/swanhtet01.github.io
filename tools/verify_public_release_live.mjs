@@ -238,25 +238,27 @@ async function verifyOnce() {
   // The screenshots are part of the release, not optional decoration. Verify
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   const interfaceImages = {
-    shop: 'platform-shop-dashboard-v2.jpg',
-    website: 'platform-sites-workspace-v2.jpg',
-    ecommerce: 'platform-commerce-workflow-v2.jpg',
+    shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png', 'actual-shop-stock.png'],
+    website: ['actual-sites-setup.png', 'actual-sites-editor.png', 'actual-sites-pages.png'],
+    ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
   }
   for (const product of publicProducts) {
-    const filename = interfaceImages[product.id]
-    assert(filename, 'interface_image_mapping_missing', { product: product.id })
-    const path = `/images/${filename}`
-    for (const route of ['/', `/${product.id}/`]) {
-      const html = pages.get(route)
-      if (html != null) assert(html.includes(`src="${path}"`), 'interface_image_reference_missing', { route, path })
+    const filenames = interfaceImages[product.id]
+    assert(filenames?.length >= 2, 'interface_image_mapping_missing', { product: product.id })
+    for (const [index, filename] of filenames.entries()) {
+      const path = `/images/${filename}`
+      for (const route of index === 0 ? ['/', `/${product.id}/`] : [`/${product.id}/`]) {
+        const html = pages.get(route)
+        if (html != null) assert(html.includes(`src="${path}"`), 'interface_image_reference_missing', { route, path })
+      }
+      const response = await request(path, { accept: 'image/png' })
+      assert(response.status === 200, 'interface_image_http_error', { path, status: response.status })
+      assert((response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() === 'image/png', 'interface_image_content_type_wrong', { path })
+      const bytes = Buffer.from(await response.arrayBuffer())
+      assert(bytes.length > 10000 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])), 'interface_image_invalid', { path })
+      const source = await readFile(new URL(`./public-assets/${filename}`, import.meta.url))
+      assert(createHash('sha256').update(bytes).digest('hex') === createHash('sha256').update(source).digest('hex'), 'interface_image_release_mismatch', { path })
     }
-    const response = await request(path, { accept: 'image/jpeg' })
-    assert(response.status === 200, 'interface_image_http_error', { path, status: response.status })
-    assert((response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() === 'image/jpeg', 'interface_image_content_type_wrong', { path })
-    const bytes = Buffer.from(await response.arrayBuffer())
-    assert(bytes.length > 10000 && bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255])), 'interface_image_invalid', { path })
-    const source = await readFile(new URL(`./public-assets/${filename}`, import.meta.url))
-    assert(createHash('sha256').update(bytes).digest('hex') === createHash('sha256').update(source).digest('hex'), 'interface_image_release_mismatch', { path })
   }
 
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
