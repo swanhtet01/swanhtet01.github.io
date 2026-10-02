@@ -5,7 +5,7 @@ import test from 'node:test'
 
 const source = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
 const context = {
-  importNeeded: false, storefrontSetupRequired: false, ecommerceRefundAttentionCount: 0,
+  sampleCatalogPreview: false, importNeeded: false, storefrontSetupRequired: false, ecommerceRefundAttentionCount: 0,
   ecommercePaymentAttentionCount: 0, pendingManagedRequests: [], customerRequestState: 'confirmed',
   ecommerceTodayCartUnits: 1, ecommerceActiveOrderCount: 1, managedIdentity: null, orderImportReview: null,
   ecommerceAttention: null, ecommerceAttentionRequest: null,
@@ -42,6 +42,58 @@ test('confirmed action requests controlled tracking without preparing another qu
     prepareQuoteRecovery: () => calls.push('unexpected quote'),
   })
   assert.deepEqual(calls, [4])
+})
+
+test('sample storefront routes to replacement and rejects sellable actions', async () => {
+  assert.equal(value('ecommerceTodayHeadline', 'ecommerceTodaySummary', { sampleCatalogPreview: true }), 'Sample storefront is preview-only')
+  assert.equal(value('ecommerceTodayAction', 'ecommerceTodayMetrics', { sampleCatalogPreview: true }), 'Replace sample products')
+
+  const autopilotStart = source.indexOf('  function runOrderAutopilot(event: ReactMouseEvent<HTMLButtonElement>) {')
+  const autopilotBody = source.slice(autopilotStart, source.indexOf('\n  useEffect(() => {', autopilotStart))
+  const routes = []
+  runInNewContext(`${autopilotBody.replace('event: ReactMouseEvent<HTMLButtonElement>', 'event')}; runOrderAutopilot({ timeStamp: 1 })`, {
+    ...context,
+    sampleCatalogPreview: true,
+    orderAutopilotStage: 'Replace sample products',
+    recordBehaviorSignal() {},
+    window: { localStorage: {} },
+    location: { pathname: '/ecommerce/', search: '' },
+    navigate: route => routes.push(route),
+  })
+  assert.deepEqual(routes, ['/shop/?tab=inventory'])
+
+  const saveStart = source.indexOf('  async function saveCurrentStorefront() {')
+  const saveBody = source.slice(saveStart, source.indexOf('\n  function discardStorefrontChanges()', saveStart))
+  const notices = []
+  await runInNewContext(`(async () => { ${saveBody}; await saveCurrentStorefront() })()`, {
+    sampleCatalogPreview: true,
+    setDraftNotice: notice => notices.push(notice),
+  })
+  assert.deepEqual(notices, ['Replace the example products in Shop before saving a live store.'])
+
+  const requestStart = source.indexOf('  async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {')
+  const requestEnd = source.indexOf('\n  function openShopDraft', requestStart)
+  const requestBody = source.slice(requestStart, requestEnd)
+  const refreshedSampleGuard = requestBody.indexOf("classifyStorefrontCatalogSource(view.inbox.state, 'managed') === 'sample'")
+  const managedWrite = requestBody.indexOf('recordCommerceStorefrontRequest(view.inbox.state')
+  assert.ok(refreshedSampleGuard > 0 && managedWrite > refreshedSampleGuard, 'managed sample rejection must precede the Shop write')
+
+  const managedSaveStart = source.indexOf('  async function saveManagedStorefront(identity: ManagedIdentity) {')
+  const managedSaveEnd = source.indexOf('\n  async function saveCurrentStorefront()', managedSaveStart)
+  const managedSaveBody = source.slice(managedSaveStart, managedSaveEnd)
+  const refreshedSaveGuard = managedSaveBody.indexOf("classifyStorefrontCatalogSource(view.inbox.state, 'managed') === 'sample'")
+  const managedSavePreparation = managedSaveBody.indexOf('prepareManagedStorefrontSave(')
+  const managedSaveWrite = managedSaveBody.indexOf('saveManagedCommerceCommand({')
+  assert.ok(refreshedSaveGuard > 0
+    && managedSavePreparation > refreshedSaveGuard
+    && managedSaveWrite > managedSavePreparation,
+  'managed sample rejection must precede save preparation and the managed write')
+
+  const importReviewStart = source.indexOf('  function reviewOrderImportBatch() {')
+  const importReviewEnd = source.indexOf('\n  async function uploadOrderImportCsv', importReviewStart)
+  assert.match(source.slice(importReviewStart, importReviewEnd), /if \(sampleCatalogPreview\)[\s\S]*return/)
+  assert.match(source, /disabled=\{sampleCatalogPreview \|\| !orderImportText\.trim\(\)\}/)
+  assert.match(source, /function downloadOrderImportReviewPacket\(\) \{\s*if \(sampleCatalogPreview \|\| !orderImportReview\) return/)
 })
 
 test('quote recovery ignores expired-only history and opens the customer store', () => {

@@ -193,6 +193,64 @@ test('a workspace with no working sample reports no preferred SKUs', () => {
   assert.deepEqual(commerceWorkingSampleSkus(createSeedCommerce()), [])
 })
 
+test('storefront provenance and buying readiness fail closed for sample data', async () => {
+  const {
+    classifyStorefrontCatalogSource,
+    readStorefrontCatalog,
+    storefrontBuyingReady,
+  } = await import('../showroom/src/products/ecommerce/storefront-model.ts')
+  const storageFor = (state) => ({
+    getItem: (key) => key === COMMERCE_KEY ? JSON.stringify(state) : null,
+  })
+
+  const seed = createSeedCommerce()
+  const seedSnapshot = readStorefrontCatalog(storageFor(seed))
+  assert.equal(seedSnapshot.source, 'sample')
+  assert.equal(seedSnapshot.items.length, seed.items.length)
+  const mutatedSeed = updateCommerceItem(seed, {
+    sku: 'SM-1001',
+    expectedPrice: 18500,
+    nextPrice: 19000,
+    expectedReorderAt: 10,
+    nextReorderAt: 10,
+  }, {
+    actionId: 'ACT-SAMPLE-LINEAGE-PRICE',
+    capturedAt: CAPTURED_AT,
+    actor: 'founder',
+    reason: 'Verify sample lineage survives a catalog mutation.',
+    evidenceReference: 'TEST:SAMPLE-LINEAGE',
+  })
+  assert.ok(mutatedSeed, 'seed price mutation must succeed')
+  assert.equal(readStorefrontCatalog(storageFor(mutatedSeed)).source, 'sample')
+  assert.equal(classifyStorefrontCatalogSource(mutatedSeed, 'managed'), 'sample')
+
+  const workingSample = spaWorkspace()
+  assert.equal(readStorefrontCatalog(storageFor(workingSample)).source, 'sample')
+  assert.equal(classifyStorefrontCatalogSource(workingSample, 'managed'), 'sample')
+
+  const imported = importCommerceCatalog(createEmptyCommerce(), {
+    items: SPA_ITEMS.map((item) => ({ ...item, sku: `OWNER-${item.sku}` })),
+    sourceDigest: `sha256:${'a'.repeat(64)}`,
+    capturedAt: CAPTURED_AT,
+    actor: 'founder',
+  })
+  assert.ok(imported, 'an owner catalog must import')
+  assert.equal(readStorefrontCatalog(storageFor(imported.state)).source, 'shop-local')
+  assert.equal(classifyStorefrontCatalogSource(imported.state, 'managed'), 'managed-shop')
+
+  const ready = (source, savedDraftIsCurrent, previewReady = true) => storefrontBuyingReady({
+    source,
+    previewReady,
+    savedDraftIsCurrent,
+  })
+  assert.equal(ready('sample', true), false)
+  assert.equal(ready('shop-local', false), false)
+  assert.equal(ready('shop-local', true), true)
+  assert.equal(ready('managed-shop', true), true)
+  assert.equal(ready('unavailable', true), false)
+  assert.equal(ready('shop-local', true, false), false)
+})
+
 test("the storefront features the client's own products, not the demo seed goods", async () => {
   const state = spaWorkspace()
   const storage = new Map([[COMMERCE_KEY, JSON.stringify(state)]])

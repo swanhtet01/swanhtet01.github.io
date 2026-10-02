@@ -63,8 +63,11 @@ import {
 } from './managed-storefront'
 import {
   buildStorefrontPreview,
+  classifyStorefrontCatalogSource,
   readStorefrontCatalog,
+  storefrontBuyingReady,
   storefrontPreviewDigest,
+  type StorefrontOperationalSource,
   type StorefrontPreviewItem,
 } from './storefront-model'
 import {
@@ -87,7 +90,7 @@ type EcommerceWorkspaceFocus = 'heading' | 'setup-save' | 'preview-heading'
 type RequestInboxFilter = 'all' | 'stock' | 'expiring' | 'payment' | 'delivery'
 type ReplyChannelTemplate = 'viber' | 'line' | 'wechat' | 'email'
 type EcommerceCatalog = {
-  source: 'shop-local' | 'sample' | 'unavailable' | 'managed-shop'
+  source: StorefrontOperationalSource
   items: CommerceItem[]
   error: string
 }
@@ -110,14 +113,10 @@ type ManagedStorefrontView = {
   }
   availableSku: string
 }
-const DEFAULT_STORE_NAME = 'Mingalar Market'
+const DEFAULT_STORE_NAME = 'Your store'
 
-// The owner named their business during onboarding. Opening their storefront under a sample
-// shop's name is the same "nothing you did was remembered" signal the website starter had.
-//
-// Only used where there is no saved draft -- a saved storeName is always the owner's own and
-// is never overridden. The managed-identity branch keeps the sample default deliberately,
-// because a signed-in company's store name comes from its managed record, not this device.
+// Prefer the business name captured during onboarding. Until a storefront is saved, the
+// neutral fallback must never imply that a fabricated company is already configured.
 function defaultStoreName() {
   return readLocalSetupBusinessName() ?? DEFAULT_STORE_NAME
 }
@@ -291,6 +290,14 @@ function ecommerceWorkspaceView(search: string): EcommerceWorkspaceView {
   return requested === 'setup' || requested === 'preview' ? requested : 'orders'
 }
 
+function managedCatalogSnapshot(state: CommerceState): EcommerceCatalog {
+  return {
+    source: classifyStorefrontCatalogSource(state, 'managed'),
+    items: state.items,
+    error: '',
+  }
+}
+
 function ecommerceWorkspacePath(pathname: string, search: string, view: EcommerceWorkspaceView) {
   const next = new URLSearchParams(search)
   next.set('workspace', '1')
@@ -456,7 +463,7 @@ export function EcommerceProduct() {
         setBuyingCart([])
         setMissingSelectionReviewed(false)
         setManagedInbox(view.inbox)
-        setCatalog({ source: 'managed-shop', items: view.inbox.state.items, error: '' })
+        setCatalog(managedCatalogSnapshot(view.inbox.state))
         setCatalogHydrating(false)
       })
       .catch((error) => {
@@ -587,7 +594,13 @@ export function EcommerceProduct() {
       && digest
       && savedDraft.localPreviewDigest === digest)
   const savedDraftIsCurrent = savedFieldsAreCurrent && savedCatalogIsCurrent
-  const storefrontSetupRequired = Boolean(managedIdentity) && !savedDraftIsCurrent
+  const sampleCatalogPreview = catalog.source === 'sample'
+  const storefrontSetupRequired = !sampleCatalogPreview && !savedDraftIsCurrent
+  const buyingReady = storefrontBuyingReady({
+    source: catalog.source,
+    previewReady: Boolean(previewResult.preview && digest),
+    savedDraftIsCurrent,
+  })
   const hasUnsavedStorefront = !savedDraftIsCurrent
   const hasUnsavedFieldChanges = !savedFieldsAreCurrent
   const managedCatalogRebindRequired = Boolean(managedIdentity
@@ -732,6 +745,11 @@ export function EcommerceProduct() {
   }
 
   function reviewOrderImportBatch() {
+    if (sampleCatalogPreview) {
+      setOrderImportReview(null)
+      setOrderImportNotice('Replace the sample products in Shop before reviewing customer order batches.')
+      return
+    }
     try {
       setOrderImportReview(buildOrderImportReview(orderImportText))
       setOrderImportNotice('Order import batch reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.')
@@ -751,6 +769,11 @@ export function EcommerceProduct() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    if (sampleCatalogPreview) {
+      setOrderImportReview(null)
+      setOrderImportNotice('Replace the sample products in Shop before uploading customer order batches.')
+      return
+    }
     setOrderImportSourceName(file.name)
     setOrderImportReview(null)
     if (file.size > 180_000) {
@@ -784,7 +807,7 @@ export function EcommerceProduct() {
   }
 
   function downloadOrderImportReviewPacket() {
-    if (!orderImportReview) return
+    if (sampleCatalogPreview || !orderImportReview) return
     const packet = buildEcommerceOrderImportReviewPacket({
       generatedAt: new Date().toISOString(),
       product: 'ecommerce',
@@ -836,7 +859,7 @@ export function EcommerceProduct() {
 
   function applyManagedView(view: ManagedStorefrontView, replaceEdits: boolean) {
     setManagedInbox(view.inbox)
-    setCatalog({ source: 'managed-shop', items: view.inbox.state.items, error: '' })
+    setCatalog(managedCatalogSnapshot(view.inbox.state))
     setSavedDraft(view.saved)
     setDraftReadStatus(view.saved ? 'ready' : 'empty')
     setDraftIssue('')
@@ -870,6 +893,9 @@ export function EcommerceProduct() {
       requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
     )
     if (!view) throw new Error('Create the managed Shop catalog before saving its Ecommerce storefront.')
+    if (classifyStorefrontCatalogSource(view.inbox.state, 'managed') === 'sample') {
+      throw new Error('Replace the sample products in Shop before saving a live store.')
+    }
     applyManagedView(view, false)
     const currentSkus = new Set(view.inbox.state.items.map((item) => item.sku))
     if (selectedSkus.some((sku) => !currentSkus.has(sku))) {
@@ -923,7 +949,7 @@ export function EcommerceProduct() {
     const saved = readManagedStorefront(accepted)
     if (!saved) throw new Error('The accepted storefront configuration could not be read.')
     setManagedInbox({ identity, state: accepted, version: receipt.version })
-    setCatalog({ source: 'managed-shop', items: accepted.items, error: '' })
+    setCatalog(managedCatalogSnapshot(accepted))
     setSavedDraft(saved)
     setDraftReadStatus('ready')
     setDraftIssue('')
@@ -936,6 +962,10 @@ export function EcommerceProduct() {
   }
 
   async function saveCurrentStorefront() {
+    if (sampleCatalogPreview) {
+      setDraftNotice('Replace the example products in Shop before saving a live store.')
+      return
+    }
     if (!previewResult.preview
       || !digest
       || Boolean(digestError)
@@ -1021,7 +1051,7 @@ export function EcommerceProduct() {
   }
 
   const addToCart = useCallback((sku: string) => {
-    if (catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)) return
+    if (!buyingReady) return
     if (!buyingCart.some((line) => line.sku === sku)) emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'cart.built', ts: Date.now() })
     setBuyingCart((current) => current.some((line) => line.sku === sku)
       ? current
@@ -1032,7 +1062,7 @@ export function EcommerceProduct() {
       workspace?.scrollIntoView({ block: 'start' })
       workspace?.focus({ preventScroll: true })
     })
-  }, [catalogHydrating, previewResult.preview, digest, managedIdentity, savedDraftIsCurrent, buyingCart])
+  }, [buyingReady, buyingCart])
 
   function prepareQuoteRecovery(event: ReactMouseEvent<HTMLButtonElement>) {
     const actionNow = Math.round(globalThis.performance.timeOrigin + event.timeStamp)
@@ -1180,8 +1210,11 @@ export function EcommerceProduct() {
     if (!writeAllowed) throw new Error('View only — ask a company owner to assign Ecommerce operator access.')
     const view = resolveManagedStorefront(identity, requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'))
     if (!view?.saved) throw new Error('Save the managed storefront before sending a customer request to Shop.')
+    if (classifyStorefrontCatalogSource(view.inbox.state, 'managed') === 'sample') {
+      throw new Error('Replace the sample products in Shop before sending a customer request.')
+    }
     setManagedInbox(view.inbox)
-    setCatalog({ source: 'managed-shop', items: view.inbox.state.items, error: '' })
+    setCatalog(managedCatalogSnapshot(view.inbox.state))
     const exactRequestIsRetained = (state: CommerceState) => {
       const matches = commerceStorefrontRequests(state).filter((candidate) => candidate.id === request.id || candidate.idempotencyKey === request.idempotencyKey)
       return matches.length === 1 && commerceStorefrontRequestEquals(matches[0], request)
@@ -1219,7 +1252,7 @@ export function EcommerceProduct() {
         || confirmedIdentity.workspaceId !== identity.workspaceId
         || confirmedIdentity.userId !== identity.userId) throw new Error('The managed identity changed before the Ecommerce request could be confirmed.')
       setManagedInbox({ identity, state: accepted, version: result.version })
-      setCatalog({ source: 'managed-shop', items: accepted.items, error: '' })
+      setCatalog(managedCatalogSnapshot(accepted))
     } catch (error) {
       try {
         const refreshedBootstrap = await loadManagedBootstrap(identity)
@@ -1230,7 +1263,7 @@ export function EcommerceProduct() {
           && confirmedIdentity.userId === identity.userId
           && exactRequestIsRetained(refreshed.inbox.state)) {
           setManagedInbox(refreshed.inbox)
-          setCatalog({ source: 'managed-shop', items: refreshed.inbox.state.items, error: '' })
+          setCatalog(managedCatalogSnapshot(refreshed.inbox.state))
           return
         }
       } catch { /* Preserve the original managed command failure. */ }
@@ -1242,13 +1275,13 @@ export function EcommerceProduct() {
     navigate('/shop/?tab=orders&source=ecommerce', { state: { ecommerceShopDraft: draft } })
   }
 
-  const sourceLabel = catalog.source === 'shop-local'
-    ? 'Current local Shop catalog'
-    : catalog.source === 'managed-shop'
-      ? 'Company Shop - connected'
-    : catalog.source === 'sample'
-      ? 'Local catalog'
-      : 'Catalog unavailable'
+  const sourceLabel = sampleCatalogPreview
+    ? 'Sample catalog · preview only'
+    : catalog.source === 'shop-local'
+      ? 'Current local Shop catalog'
+      : catalog.source === 'managed-shop'
+        ? 'Company Shop - connected'
+        : 'Catalog unavailable'
   const sourceStorefront = managedIdentity && managedInbox
     ? commerceStorefrontConfiguration(managedInbox.state)
     : null
@@ -1263,7 +1296,6 @@ export function EcommerceProduct() {
       return collectionDifference || left.sku.localeCompare(right.sku)
     })
     : []
-  const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))
   const activeCommerceState = managedIdentity ? managedInbox?.state ?? null : localCommerceState
   const managedOrderTimeline = managedInbox
     ? commerceStorefrontOrderTimeline(managedInbox.state)
@@ -1331,7 +1363,9 @@ export function EcommerceProduct() {
   const controlPaymentsVisible = buyingReady || pendingManagedRequests.length > 0
   const paymentDeliveryStage = importNeeded
     ? 'Import catalog before checkout'
-    : !savedDraftIsCurrent
+    : sampleCatalogPreview
+      ? 'Replace sample products before checkout'
+    : !buyingReady
       ? 'Save store before checkout'
       : actionablePendingManagedRequests.length
         ? 'Review payment and delivery'
@@ -1358,7 +1392,9 @@ export function EcommerceProduct() {
                 ? 'Continue fulfilment'
                 : importNeeded
                   ? 'Import sellable catalog'
-                  : savedDraftIsCurrent
+                  : sampleCatalogPreview
+                    ? 'Replace sample products'
+                  : buyingReady
                     ? 'Ready for customer orders'
                     : 'Save store'
   const orderOpsRows = [
@@ -1371,14 +1407,16 @@ export function EcommerceProduct() {
   ] as const
   const orderImportStage = importNeeded
     ? 'Upload catalog first'
+    : sampleCatalogPreview
+      ? 'Replace sample products before order import'
     : pendingManagedRequests.length
       ? 'Review imported orders'
       : buyingReady
         ? 'Ready for order upload'
         : 'Save store first'
   const orderImportRows = [
-    ['Input', catalog.source === 'managed-shop' ? 'Managed catalog' : catalog.source === 'shop-local' ? 'Local catalog' : 'Local/import'],
-    ['Bulk', importNeeded ? 'Need products' : 'CSV or messages'],
+    ['Input', sampleCatalogPreview ? 'Sample catalog' : catalog.source === 'managed-shop' ? 'Managed catalog' : catalog.source === 'shop-local' ? 'Local catalog' : 'Local/import'],
+    ['Bulk', sampleCatalogPreview ? 'Blocked' : importNeeded ? 'Need products' : 'CSV or messages'],
     ['Mapping', selectedSkus.length ? `${selectedSkus.length} SKUs` : 'No SKUs'],
     ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} review` : 'No pending'],
     ['Template', 'Download CSV'],
@@ -1406,13 +1444,13 @@ export function EcommerceProduct() {
     ['Capture', pendingManagedRequests.length ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'}` : buyingCart.length ? `${buyingCart.length} cart lines` : 'Ready'],
     ['Price', buyingReady ? 'Quote controlled' : 'Save store first'],
     ['ATP', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} risk` : catalog.items.length ? 'Shop stock' : 'Need catalog'],
-    ['Fulfil', pendingManagedRequests.length ? 'Shop queue' : savedDraftIsCurrent ? 'Pickup/delivery ready' : 'Setup first'],
+    ['Fulfil', pendingManagedRequests.length ? 'Shop queue' : buyingReady ? 'Pickup/delivery ready' : 'Setup first'],
     ['Return', 'Shop accountable'],
   ] as const
   const paymentDeliveryRows = [
     ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual QR` : controlPaymentsVisible ? 'Not authorized' : 'Locked'],
-    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : savedDraftIsCurrent ? 'Owner priced' : 'Locked'],
-    ['Pickup', pickupReviewCount ? `${pickupReviewCount} review` : savedDraftIsCurrent ? 'Allowed' : 'Locked'],
+    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : buyingReady ? 'Owner priced' : 'Locked'],
+    ['Pickup', pickupReviewCount ? `${pickupReviewCount} review` : buyingReady ? 'Allowed' : 'Locked'],
     ['Expiry', orderOpsExpiringCount ? `${orderOpsExpiringCount} quote` : buyingReady ? '30 min quote' : 'No quote'],
     ['Control', pendingManagedRequests.length ? 'Shop confirms' : 'No customer send'],
   ] as const
@@ -1454,7 +1492,9 @@ export function EcommerceProduct() {
   const requestInboxNextRequest = requestInboxFilteredRequests[0] ?? null
   const requestInboxStage = importNeeded
     ? 'Import catalog before request review'
-    : !savedDraftIsCurrent
+    : sampleCatalogPreview
+      ? 'Replace sample products before order review'
+    : !buyingReady
       ? 'Save store before order review'
       : requestInboxFilteredRequests.length
         ? 'Open filtered Shop review'
@@ -1488,7 +1528,9 @@ export function EcommerceProduct() {
       : 'No customer request is waiting.'
   const quoteRecoveryStage = importNeeded
     ? 'Import catalog before recovery'
-    : !savedDraftIsCurrent
+    : sampleCatalogPreview
+      ? 'Replace sample products before recovery'
+    : !buyingReady
       ? 'Save store before recovery'
       : orderOpsExpiringCount
         ? 'Prepare quote refresh'
@@ -1521,7 +1563,9 @@ export function EcommerceProduct() {
     ?? null
   const customerFollowUpStage = importNeeded
     ? 'Import catalog before follow-up'
-    : !savedDraftIsCurrent
+    : sampleCatalogPreview
+      ? 'Replace sample products before follow-up'
+    : !buyingReady
       ? 'Save store before follow-up'
       : orderOpsStockRiskCount
         ? 'Draft availability update'
@@ -1551,7 +1595,9 @@ export function EcommerceProduct() {
   ] as const
   const channelReplyStage = importNeeded
     ? 'Import catalog before reply templates'
-    : !savedDraftIsCurrent
+    : sampleCatalogPreview
+      ? 'Replace sample products before reply templates'
+    : !buyingReady
       ? 'Save store before reply templates'
       : customerFollowUpRequest
         ? 'Prepare reviewed channel reply'
@@ -1567,7 +1613,9 @@ export function EcommerceProduct() {
   ] as const
   const fulfillmentHandoffStage = importNeeded
     ? 'Import catalog before fulfillment'
-    : !savedDraftIsCurrent
+    : sampleCatalogPreview
+      ? 'Replace sample products before fulfillment'
+    : !buyingReady
       ? 'Save store before fulfillment'
       : orderImportReview?.status === 'blocked'
         ? 'Repair imported orders'
@@ -1588,7 +1636,7 @@ export function EcommerceProduct() {
     ['Source', orderImportReview ? `${orderImportReview.readyRows}/${orderImportReview.totalRows} import` : pendingManagedRequests.length ? 'Managed queue' : buyingCart.length ? 'Cart quote' : 'No request yet'],
     ['Stock', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} risk` : catalog.items.length ? 'ATP check' : 'Need catalog'],
     ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual` : pendingManagedRequests.length || buyingReady ? 'Not charged' : 'Locked'],
-    ['Fulfilment', deliveryReviewCount ? `${deliveryReviewCount} delivery` : pickupReviewCount ? `${pickupReviewCount} pickup` : savedDraftIsCurrent ? 'Pickup/delivery' : 'Locked'],
+    ['Fulfilment', deliveryReviewCount ? `${deliveryReviewCount} delivery` : pickupReviewCount ? `${pickupReviewCount} pickup` : buyingReady ? 'Pickup/delivery' : 'Locked'],
     ['Reply', customerFollowUpRequest ? 'Draftable' : buyingReady ? 'Template ready' : 'Locked'],
     ['Shop review', pendingManagedRequests.length ? 'Review queue' : orderImportReview?.status === 'ready' ? 'Packet ready' : buyingReady ? 'Quote only' : 'Save store first'],
     ['Safety', 'Review first'],
@@ -1598,7 +1646,9 @@ export function EcommerceProduct() {
   const deliveryZoneHint = deliveryReviewRequest ? deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference) : ''
   const deliveryAreaTemplateStage = importNeeded
     ? 'Import catalog before delivery templates'
-    : !savedDraftIsCurrent
+    : sampleCatalogPreview
+      ? 'Replace sample products before delivery templates'
+    : !buyingReady
       ? 'Save store before delivery templates'
       : deliveryReviewRequest
         ? 'Prepare delivery-area template'
@@ -1607,14 +1657,16 @@ export function EcommerceProduct() {
           : 'Delivery templates locked'
   const deliveryAreaTemplateRows = [
     ['Area', deliveryZoneHint || 'No request yet'],
-    ['Rule', deliveryReviewRequest ? 'Fee review' : savedDraftIsCurrent ? 'Template shell' : 'Locked'],
+    ['Rule', deliveryReviewRequest ? 'Fee review' : buyingReady ? 'Template shell' : 'Locked'],
     ['Rider', deliveryReviewRequest ? 'Review' : 'Not assigned'],
     ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD review' : 'No charge'],
     ['Reuse', deliveryReviewRequest ? 'After review' : 'Needs order'],
   ] as const
   const deliveryFeeStage = importNeeded
     ? 'Import catalog before delivery setup'
-    : !savedDraftIsCurrent
+    : sampleCatalogPreview
+      ? 'Replace sample products before delivery setup'
+    : !buyingReady
       ? 'Save store before delivery setup'
       : deliveryReviewCount
         ? 'Review delivery zone and fee'
@@ -1623,7 +1675,7 @@ export function EcommerceProduct() {
           : 'Delivery setup locked'
   const deliveryFeeRows = [
     ['Zone', deliveryZoneHint || (deliveryReviewCount ? 'Review area' : 'No request yet')],
-    ['Fee', deliveryReviewCount ? 'Shop confirms' : savedDraftIsCurrent ? 'Template only' : 'Locked'],
+    ['Fee', deliveryReviewCount ? 'Shop confirms' : buyingReady ? 'Template only' : 'Locked'],
     ['Rider', deliveryReviewCount ? 'Assign in Shop' : 'Not booked'],
     ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD' : 'Not charged'],
     ['Boundary', 'No booking'],
@@ -1644,6 +1696,8 @@ export function EcommerceProduct() {
     : requestDeliveryVerified ? 'The Shop operator confirms stock, promise, payment, and delivery.' : 'Verify or retry the same request before claiming Company Shop delivery.'
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
+    : sampleCatalogPreview
+      ? 'Replace sample products'
     : !selectedSkus.length
       ? 'Choose sellable products'
       : !previewResult.preview
@@ -1657,13 +1711,15 @@ export function EcommerceProduct() {
               : 'Check ordering controls'
   const orderingReadinessRows = [
     ['Catalog', importNeeded ? 'Needed' : `${catalog.items.length} items`],
-    ['Storefront', previewResult.preview ? savedDraftIsCurrent ? 'Saved' : 'Draft ready' : 'Blocked'],
+    ['Storefront', sampleCatalogPreview ? 'Sample only' : previewResult.preview ? savedDraftIsCurrent ? 'Saved' : 'Draft ready' : 'Blocked'],
     ['Checkout', buyingReady ? 'Quote ready' : 'Locked'],
     ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} Shop review` : 'Clear'],
     ['Safety', managedIdentity ? 'Account review' : 'Device only'],
   ] as const
   const managedStoreActivationStage = importNeeded
     ? 'Import catalog for go-live'
+    : sampleCatalogPreview
+      ? 'Replace sample products before going live'
     : !savedDraftIsCurrent
       ? 'Save store before going live'
       : !buyingReady
@@ -1679,14 +1735,20 @@ export function EcommerceProduct() {
                 : 'Download go-live file'
   const managedStoreActivationRows = [
     ['Catalog', importNeeded ? 'Needed' : `${selectedSkus.length} sellable`],
-    ['Store', savedDraftIsCurrent ? 'Saved check' : 'Save required'],
+    ['Store', sampleCatalogPreview ? 'Sample blocked' : buyingReady ? 'Saved check' : 'Save required'],
     ['Checkout', buyingReady ? 'Quote controlled' : 'Locked'],
     ['Payments', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual QR` : 'Review only'],
-    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : savedDraftIsCurrent ? 'Template ready' : 'Locked'],
+    ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : buyingReady ? 'Template ready' : 'Locked'],
     ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} to review` : 'No queue'],
     ['Go-live', managedIdentity ? 'Account controls' : 'Download file'],
   ] as const
   function downloadManagedStoreActivationPacket() {
+    if (!buyingReady) {
+      setDraftNotice(sampleCatalogPreview
+        ? 'Replace the sample products in Shop before preparing a go-live file.'
+        : 'Save the exact customer view before preparing a go-live file.')
+      return
+    }
     const packet = buildEcommerceManagedStoreActivationPacket({
       generatedAt: new Date().toISOString(),
       product: 'ecommerce',
@@ -1735,8 +1797,10 @@ export function EcommerceProduct() {
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
     ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? requestWaitingQueueLabel : 'No queue'],
   ] as const
-  const aiAgentJob = pendingManagedRequests.length
-    ? 'Review Ecommerce requests in Shop'
+  const aiAgentJob = sampleCatalogPreview
+    ? 'Replace sample products'
+    : pendingManagedRequests.length
+      ? 'Review Ecommerce requests in Shop'
     : customerRequestState === 'waiting_shop_review'
       ? 'View the customer request receipt'
     : ecommerceActiveOrderCount
@@ -1750,8 +1814,10 @@ export function EcommerceProduct() {
           : managedIdentity
             ? 'Open store for ordering'
             : 'Open customer ordering'
-  const aiAgentReason = pendingManagedRequests.length
-    ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
+  const aiAgentReason = sampleCatalogPreview
+    ? 'Example products cannot accept customer requests. Replace them in Shop, then review and save the customer view.'
+    : pendingManagedRequests.length
+      ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
     : customerRequestState === 'waiting_shop_review'
       ? waitingShopReviewReason
     : ecommerceActiveOrderCount
@@ -1765,8 +1831,10 @@ export function EcommerceProduct() {
           : managedIdentity
             ? 'The store is saved and ready for a customer request.'
             : 'The store is ready for customer orders.'
-  const aiOwnerGate = pendingManagedRequests.length
-    ? 'Shop confirms stock, delivery, payment, and customer contact.'
+  const aiOwnerGate = sampleCatalogPreview
+    ? 'Replace the example products in Shop before opening customer ordering.'
+    : pendingManagedRequests.length
+      ? 'Shop confirms stock, delivery, payment, and customer contact.'
     : customerRequestState === 'waiting_shop_review'
       ? waitingShopReviewGate
     : ecommerceActiveOrderCount
@@ -1783,8 +1851,10 @@ export function EcommerceProduct() {
     ['Why', aiAgentReason],
     ['Review', aiOwnerGate],
   ] as const
-  const orderAutopilotStage = importNeeded
-    ? 'Connect products'
+  const orderAutopilotStage = sampleCatalogPreview
+    ? 'Replace sample products'
+    : importNeeded
+      ? 'Connect products'
     : storefrontSetupRequired
       ? 'Save store'
       : orderImportReview?.status === 'ready'
@@ -1801,13 +1871,15 @@ export function EcommerceProduct() {
               ? 'Ready for customer orders'
               : 'Check setup'
   const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
-  const ecommerceTodayState = importNeeded || storefrontSetupRequired
+  const ecommerceTodayState = sampleCatalogPreview || importNeeded || storefrontSetupRequired
     ? 'setup'
     : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || actionablePendingManagedRequests.length || customerRequestState === 'waiting_shop_review'
       ? 'attention'
       : 'ready'
-  const ecommerceTodayHeadline = importNeeded
-    ? 'Connect your products to start selling'
+  const ecommerceTodayHeadline = sampleCatalogPreview
+    ? 'Sample storefront is preview-only'
+    : importNeeded
+      ? 'Connect your products to start selling'
     : storefrontSetupRequired
       ? 'Finish the store customers will see'
       : ecommerceAttention
@@ -1823,8 +1895,10 @@ export function EcommerceProduct() {
                 : managedIdentity
                   ? 'Your store is ready for the next order'
                   : 'Your store is ready'
-  const ecommerceTodaySummary = importNeeded
-    ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
+  const ecommerceTodaySummary = sampleCatalogPreview
+    ? 'Example products cannot accept customer requests. Replace them in Shop, then review and save the customer view.'
+    : importNeeded
+      ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
     : storefrontSetupRequired
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
       : ecommerceAttention
@@ -1840,8 +1914,10 @@ export function EcommerceProduct() {
             : ecommerceTodayCartUnits
               ? 'Review this order request. Nothing is sent until Shop review.'
               : 'Add an item to start an order request. Nothing is sent until Shop review.'
-  const ecommerceTodayAction = importNeeded
-    ? 'Connect products'
+  const ecommerceTodayAction = sampleCatalogPreview
+    ? 'Replace sample products'
+    : importNeeded
+      ? 'Connect products'
     : storefrontSetupRequired
       ? 'Finish store'
       : orderImportReview?.status === 'ready'
@@ -1862,7 +1938,7 @@ export function EcommerceProduct() {
                 ? 'Prepare next order'
                 : 'Open customer ordering'
   const ecommerceTodayMetrics = [
-    ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Ready'],
+    ['1. Store', sampleCatalogPreview ? 'Sample' : savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Ready'],
     ['2. Cart', ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['3. Shop', actionablePendingManagedRequests.length
       ? `${actionablePendingManagedRequests.length} to review`
@@ -1935,6 +2011,10 @@ export function EcommerceProduct() {
       route: location.pathname + location.search,
       detail: `Order autopilot: ${orderAutopilotStage}`,
     })
+    if (sampleCatalogPreview) {
+      navigate('/shop/?tab=inventory')
+      return
+    }
     if (importNeeded) {
       navigate(managedIdentity ? '/settings/?product=ecommerce' : '/shop/?tab=inventory')
       return
@@ -2097,9 +2177,11 @@ export function EcommerceProduct() {
       <section aria-label="Order workspace" className="ecommerce-ai-desk">
         <div>
           <span className="core-eyebrow">Order workspace</span>
-          <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : storefrontSetupRequired ? 'Save store before orders' : managedIdentity ? 'Ready to take reviewed orders' : 'Ready to take order requests'}</h2>
-          <p>{pendingManagedRequests.length
-            ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
+          <h2>{sampleCatalogPreview ? 'Sample storefront is preview-only' : pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : storefrontSetupRequired ? 'Save store before orders' : managedIdentity ? 'Ready to take reviewed orders' : 'Ready to take order requests'}</h2>
+          <p>{sampleCatalogPreview
+            ? 'Example products cannot accept customer requests. Replace them in Shop, then review and save the customer view.'
+            : pendingManagedRequests.length
+              ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
             : importNeeded
               ? 'Upload or connect the Shop catalog once. The customer view, quote, and order review use that source.'
               : storefrontSetupRequired
@@ -2135,14 +2217,14 @@ export function EcommerceProduct() {
               <div aria-label="Order repair checklist" className="ecommerce-order-repair-checklist">
                 <StatusRows rows={orderRepairRows} />
               </div>
-              <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
-              <label className="ecommerce-order-import-field">Order batch CSV<textarea onChange={(event) => {
+              <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" disabled={sampleCatalogPreview} onChange={uploadOrderImportCsv} type="file" /></label>
+              <label className="ecommerce-order-import-field">Order batch CSV<textarea disabled={sampleCatalogPreview} onChange={(event) => {
                 setOrderImportText(event.target.value)
                 setOrderImportReview(null)
                 setOrderImportSourceName('')
               }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
-              <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
-              {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for review' : 'Repair before Shop review'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · review first</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
+              <button className="text-link" disabled={sampleCatalogPreview || !orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
+              {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for review' : 'Repair before Shop review'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · review first</small><button className="text-link" disabled={sampleCatalogPreview} onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
               {orderImportSourceName ? <p className="ecommerce-order-import-source">Local file: {orderImportSourceName}</p> : null}
               {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
             </div>
@@ -2200,7 +2282,7 @@ export function EcommerceProduct() {
           <span className="core-eyebrow">Store launch checklist</span>
           <h2>{managedStoreActivationStage}</h2>
           <p>Download a checklist for launch review. Downloading does not publish your store.</p>
-          <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download go-live file</button>
+          <button className="text-link" disabled={!buyingReady} onClick={downloadManagedStoreActivationPacket} type="button">Download go-live file</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
           <StatusRows rows={managedStoreActivationRows} />
@@ -2376,7 +2458,9 @@ export function EcommerceProduct() {
           <div
             aria-live="polite"
             className="ecommerce-save-bar"
-            data-state={savedDraftIsCurrent
+            data-state={sampleCatalogPreview
+              ? 'blocked'
+              : savedDraftIsCurrent
               ? 'saved'
               : draftStorageBlocked || managedCatalogDigestError
                 ? 'blocked'
@@ -2388,6 +2472,8 @@ export function EcommerceProduct() {
                 ? 'View only'
                 : catalogHydrating
                 ? 'Checking saved store'
+                : sampleCatalogPreview
+                ? 'Sample catalog cannot be saved as a live store'
                 : localFingerprintPending
                 ? 'Checking saved customer view'
                 : draftStorageBlocked
@@ -2407,6 +2493,8 @@ export function EcommerceProduct() {
                 ? 'Ask a company owner to assign Ecommerce operator access.'
                 : catalogHydrating
                 ? 'Editing unlocks after the local or managed Shop scope is confirmed.'
+                : sampleCatalogPreview
+                ? 'Replace the example products in Shop. This preview stays available for onboarding.'
                 : localFingerprintPending
                 ? 'Comparing the saved fingerprint with the current Shop-backed customer view.'
                 : draftIssue || managedCatalogDigestError || (catalogRebindRequired
@@ -2420,7 +2508,17 @@ export function EcommerceProduct() {
                 ? <Link className="text-link" to="/settings/#controls">Open recovery settings</Link>
                 : null}
             </div>
-            {!savedDraftIsCurrent ? <div className="ecommerce-save-actions">
+            {sampleCatalogPreview ? <div className="ecommerce-save-actions">
+              <button
+                className="core-button primary"
+                id="ecommerce-save-storefront"
+                onClick={() => navigate('/shop/?tab=inventory')}
+                ref={storefrontSaveRef}
+                type="button"
+              >
+                Replace sample products
+              </button>
+            </div> : !savedDraftIsCurrent ? <div className="ecommerce-save-actions">
               {hasUnsavedFieldChanges ? <button className="core-button secondary" disabled={portalViewOnly || catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button> : null}
               <button
                 className="core-button primary"
@@ -2455,16 +2553,18 @@ export function EcommerceProduct() {
           {!buyingReady && !catalogHydrating ? (
             <div className="ecommerce-preview-gate">
               <span>
-                <strong>{managedIdentity ? 'Review the store before taking orders' : 'Preparing your store'}</strong>
-                <small>{managedIdentity ? 'Save the store before customer requests are available.' : 'The exact Shop catalog and prices are being checked.'}</small>
+                <strong>{sampleCatalogPreview ? 'Sample storefront is preview-only' : 'Save this storefront before taking customer requests'}</strong>
+                <small>{sampleCatalogPreview
+                  ? 'Example products cannot accept customer requests. Replace them in Shop, then review and save the customer view.'
+                  : 'Review the products, prices, and store details, then save this exact customer view.'}</small>
               </span>
               <button
-                aria-controls="ecommerce-setup-panel"
+                aria-controls={sampleCatalogPreview ? undefined : 'ecommerce-setup-panel'}
                 className="core-button primary"
-                onClick={finishStorefrontSetup}
+                onClick={sampleCatalogPreview ? () => navigate('/shop/?tab=inventory') : finishStorefrontSetup}
                 type="button"
               >
-                Edit store
+                {sampleCatalogPreview ? 'Replace sample products' : 'Edit store'}
               </button>
             </div>
           ) : null}
