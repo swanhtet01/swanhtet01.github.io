@@ -57,7 +57,19 @@
   background: var(--core-panel);
 }
 
-.ecommerce-mode-nav > button {
+.shell-nav-icon[data-icon="commerce-orders"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Cpath d='M7 3.75h10v16.5H7zM9.75 8h4.5M9.75 11.5h4.5M9.75 15h3'/%3E%3C/svg%3E");
+}
+
+.shell-nav-icon[data-icon="commerce-store"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Cpath d='M4 8.25h16l-1.1-4.5H5.1L4 8.25ZM5.25 8.25v11h13.5v-11M9 19.25v-6.5h6v6.5'/%3E%3C/svg%3E");
+}
+
+.shell-nav-icon[data-icon="commerce-setup"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Cpath d='M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3C/svg%3E");
+}
+
+.ecommerce-mode-nav > a {
   min-height: 2.75rem;
   display: inline-flex;
   align-items: center;
@@ -70,13 +82,18 @@
   font: inherit;
   font-size: .8125rem;
   font-weight: var(--font-weight-bold);
+  text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
 }
 
-.ecommerce-mode-nav > button:hover,
-.ecommerce-mode-nav > button[aria-current='page'] { background: color-mix(in srgb, var(--core-panel) 86%, var(--core-accent) 14%); color: var(--core-accent); }
-.ecommerce-mode-nav > button:focus-visible { outline: .125rem solid var(--core-accent); outline-offset: .125rem; }
+.ecommerce-mode-nav > a:hover,
+.ecommerce-mode-nav > a[aria-current='page'] { background: color-mix(in srgb, var(--core-panel) 86%, var(--core-accent) 14%); color: var(--core-accent); }
+.ecommerce-mode-nav > a:focus-visible { outline: .125rem solid var(--core-accent); outline-offset: .125rem; }
+
+@media (min-width: 841px) {
+  .commerce-product-shell .ecommerce-mode-nav { display: none; }
+}
 
 .ecommerce-orders-workspace {
   order: 2;
@@ -1932,7 +1949,7 @@
     backdrop-filter: blur(16px);
   }
 
-  .ecommerce-mode-nav > button { flex: 1 0 auto; }
+  .ecommerce-mode-nav > a { flex: 1 0 auto; }
 
   .ecommerce-setup,
   .ecommerce-preview-panel {

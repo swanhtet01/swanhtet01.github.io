@@ -82,6 +82,8 @@ import './ecommerce-product.css'
 import { decideEcommerceAttention, ecommerceAttentionRequestRank } from './ecommerce-next-action'
 
 type PreviewDevice = 'phone' | 'desktop'
+type EcommerceWorkspaceView = 'orders' | 'setup' | 'preview'
+type EcommerceWorkspaceFocus = 'heading' | 'setup-save' | 'preview-heading'
 type RequestInboxFilter = 'all' | 'stock' | 'expiring' | 'payment' | 'delivery'
 type ReplyChannelTemplate = 'viber' | 'line' | 'wechat' | 'email'
 type EcommerceCatalog = {
@@ -284,6 +286,19 @@ function StatusRows({ rows }: { rows: readonly (readonly string[])[] }) {
 
 const CatalogReviewPreparation = lazy(() => import('./CatalogReviewPreparation').then(module => ({ default: module.CatalogReviewPreparation })))
 
+function ecommerceWorkspaceView(search: string): EcommerceWorkspaceView {
+  const requested = new URLSearchParams(search).get('view')
+  return requested === 'setup' || requested === 'preview' ? requested : 'orders'
+}
+
+function ecommerceWorkspacePath(pathname: string, search: string, view: EcommerceWorkspaceView) {
+  const next = new URLSearchParams(search)
+  next.set('workspace', '1')
+  next.delete('setup')
+  next.set('view', view)
+  return `${pathname}?${next.toString()}`
+}
+
 export function EcommerceProduct() {
   const [orderOpsNow, setOrderOpsNow] = useState(() => Date.now())
   useEffect(() => {
@@ -318,7 +333,7 @@ export function EcommerceProduct() {
     syncDevice()
     return () => viewport.removeEventListener('change', syncDevice)
   }, [])
-  const [workspaceView, setWorkspaceView] = useState<'orders' | 'setup' | 'preview'>('orders')
+  const workspaceView = ecommerceWorkspaceView(location.search)
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
     source: '',
@@ -343,6 +358,42 @@ export function EcommerceProduct() {
   const [channelReplyDraft, setChannelReplyDraft] = useState('')
   const storefrontSaveRef = useRef<HTMLButtonElement>(null)
   const storefrontPreviewHeadingRef = useRef<HTMLHeadingElement>(null)
+  const workspaceHeadingRef = useRef<HTMLHeadingElement>(null)
+  const previousWorkspaceViewRef = useRef(workspaceView)
+  const pendingWorkspaceFocusRef = useRef<EcommerceWorkspaceFocus>('heading')
+
+  const focusWorkspaceDestination = useCallback((focus: EcommerceWorkspaceFocus) => {
+    requestAnimationFrame(() => {
+      if (focus === 'setup-save' && storefrontSaveRef.current && !storefrontSaveRef.current.disabled) {
+        storefrontSaveRef.current.scrollIntoView({ block: 'center' })
+        storefrontSaveRef.current.focus({ preventScroll: true })
+        return
+      }
+      if (focus === 'preview-heading' && storefrontPreviewHeadingRef.current) {
+        storefrontPreviewHeadingRef.current.focus({ preventScroll: true })
+        return
+      }
+      workspaceHeadingRef.current?.focus()
+    })
+  }, [])
+
+  useEffect(() => {
+    if (previousWorkspaceViewRef.current === workspaceView) return
+    previousWorkspaceViewRef.current = workspaceView
+    const focus = pendingWorkspaceFocusRef.current
+    pendingWorkspaceFocusRef.current = 'heading'
+    focusWorkspaceDestination(focus)
+  }, [focusWorkspaceDestination, workspaceView])
+
+  useEffect(() => {
+    if (catalogHydrating || !managedIdentity) return
+    const params = new URLSearchParams(location.search)
+    if (params.get('workspace') === '1' && params.get('setup') !== '1') return
+    params.set('workspace', '1')
+    params.delete('setup')
+    params.set('view', ecommerceWorkspaceView(location.search))
+    navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true })
+  }, [catalogHydrating, location.pathname, location.search, managedIdentity, navigate])
 
   useEffect(() => {
     let current = true
@@ -765,26 +816,22 @@ export function EcommerceProduct() {
     setOrderImportNotice('Order import review file downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or go-live action ran.')
   }
 
-  function showWorkspace(view: 'orders' | 'setup' | 'preview') {
-    setWorkspaceView(view)
-    requestAnimationFrame(() => {
-      document.getElementById('ecommerce-workspace-nav')?.scrollIntoView({ block: 'start' })
-    })
+  function showWorkspace(view: EcommerceWorkspaceView, focus: EcommerceWorkspaceFocus = 'heading') {
+    pendingWorkspaceFocusRef.current = focus
+    if (view === workspaceView) {
+      focusWorkspaceDestination(focus)
+      pendingWorkspaceFocusRef.current = 'heading'
+      return
+    }
+    navigate(ecommerceWorkspacePath(location.pathname, location.search, view))
   }
 
   function finishStorefrontSetup() {
-    showWorkspace('setup')
-    requestAnimationFrame(() => {
-      storefrontSaveRef.current?.scrollIntoView({ block: 'center' })
-      storefrontSaveRef.current?.focus({ preventScroll: true })
-    })
+    showWorkspace('setup', 'setup-save')
   }
 
   function showSavedStorefrontPreview() {
-    showWorkspace('preview')
-    requestAnimationFrame(() => {
-      storefrontPreviewHeadingRef.current?.focus({ preventScroll: true })
-    })
+    showWorkspace('preview', 'preview-heading')
   }
 
   function applyManagedView(view: ManagedStorefrontView, replaceEdits: boolean) {
@@ -1949,6 +1996,16 @@ export function EcommerceProduct() {
     && catalog.source !== 'unavailable' && !draftIssue && !draftBusy
   const assistedCatalogEntry = showAssistedCatalogSetup
     && new URLSearchParams(location.search).get('workspace') !== '1'
+  const workspaceCopy = workspaceView === 'orders'
+    ? {
+        title: 'Orders',
+        copy: managedIdentity
+          ? 'Review customer requests and resolve exceptions. Shop confirms orders, stock, delivery and payment.'
+          : 'Review customer requests on this device. Requests stay on this device until Shop review.',
+      }
+    : workspaceView === 'preview'
+      ? { title: 'Store preview', copy: 'See exactly what customers can browse and add to an order request.' }
+      : { title: 'Store setup', copy: 'Choose the catalog, store details, and product presentation customers will see.' }
 
   if ((showAssistedCatalogSetup && new URLSearchParams(location.search).get('setup') === '1') || (assistedCatalogEntry && new URLSearchParams(location.search).get('workspace') !== '1')) {
     return <BusinessBrief product="ecommerce" />
@@ -1983,16 +2040,16 @@ export function EcommerceProduct() {
       <header className="ecommerce-heading">
         <div>
           <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Online store'}</span>
-          <h1>Commerce</h1>
-          <p>{managedIdentity ? 'Review your catalog and customer requests. Shop confirms orders, stock, delivery and payment.' : 'Browse your catalog and take order requests. Requests stay on this device until Shop review.'}</p>
+          <h1 ref={workspaceHeadingRef} tabIndex={-1}>{workspaceCopy.title}</h1>
+          <p>{workspaceCopy.copy}</p>
         </div>
-        {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Get catalog help</a> : null}
+        {workspaceView === 'setup' && showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Get catalog help</a> : null}
       </header>
 
       {!assistedCatalogEntry ? <nav aria-label="Commerce workspace" className="ecommerce-mode-nav" id="ecommerce-workspace-nav">
-        <button aria-current={workspaceView === 'orders' ? 'page' : undefined} onClick={() => showWorkspace('orders')} type="button">Orders</button>
-        <button aria-current={workspaceView === 'preview' ? 'page' : undefined} onClick={() => showWorkspace('preview')} type="button">Customer store</button>
-        <button aria-current={workspaceView === 'setup' ? 'page' : undefined} onClick={() => showWorkspace('setup')} type="button">Store setup</button>
+        <Link aria-current={workspaceView === 'orders' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'orders')}>Orders</Link>
+        <Link aria-current={workspaceView === 'preview' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'preview')}>Store preview</Link>
+        <Link aria-current={workspaceView === 'setup' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'setup')}>Store setup</Link>
       </nav> : null}
 
       {workspaceView === 'orders' ? <div className="ecommerce-orders-workspace" id="ecommerce-orders-panel">

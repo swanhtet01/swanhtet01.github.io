@@ -23,6 +23,7 @@ const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').the
 const ManagedProductConnections = lazy(() => import('./ManagedProductConnections').then((module) => ({ default: module.ManagedProductConnections })))
 const DesktopShopNavigation = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.DesktopShopNavigation })))
 const DesktopSitesNavigation = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.DesktopSitesNavigation })))
+const DesktopCommerceNavigation = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.DesktopCommerceNavigation })))
 const WorkspaceAccount = lazy(() => import('./PremiumWorkspaceChrome').then((module) => ({ default: module.WorkspaceAccount })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
@@ -446,6 +447,17 @@ export function CoreLayout() {
   const mobileCommerceTab = routeProduct === 'commerce' ? activeCommerceTab(new URLSearchParams(location.search).get('tab')) : null
   const requestedSitesView = routeProduct === 'website' ? new URLSearchParams(location.search).get('view') : null
   const desktopSitesView = requestedSitesView === 'inquiries' || requestedSitesView === 'publish' ? requestedSitesView : 'pages'
+  const commerceSearch = routeProduct === 'ecommerce' ? new URLSearchParams(location.search) : null
+  const requestedCommerceView = commerceSearch?.get('view') ?? null
+  const desktopCommerceView = requestedCommerceView === 'preview' || requestedCommerceView === 'setup' ? requestedCommerceView : 'orders'
+  const commerceWorkspaceEntry = routeProduct === 'ecommerce'
+    && commerceSearch?.get('workspace') === '1'
+    && commerceSearch.get('setup') !== '1'
+  const commerceWorkspaceName = desktopCommerceView === 'preview'
+    ? 'Store preview'
+    : desktopCommerceView === 'setup'
+      ? 'Store setup'
+      : 'Orders'
   const routeName = loginRoute
     ? 'Sign in'
     : sensitiveAccountRoute
@@ -453,7 +465,7 @@ export function CoreLayout() {
       : location.pathname.startsWith('/website/')
       ? 'Sites'
       : location.pathname.startsWith('/ecommerce/')
-      ? 'Commerce'
+      ? (commerceWorkspaceEntry ? `${commerceWorkspaceName} · Commerce` : 'Commerce')
       : location.pathname.startsWith('/vision/')
         ? 'Vision'
       : internalBuilderRoute
@@ -524,11 +536,11 @@ export function CoreLayout() {
   if (productionEntry === 'login') return <Navigate replace to={companyLoginPath} />
 
   return (
-    <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'website' ? ' sites-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
+    <div className={`core-shell theme-light${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'website' ? ' sites-product-shell' : ''}${commerceWorkspaceEntry ? ' commerce-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
-        {routeProduct === 'commerce' && mobileCommerceTab ? <Suspense fallback={null}><DesktopShopNavigation activeTab={mobileCommerceTab} /></Suspense> : routeProduct === 'website' ? <Suspense fallback={null}><DesktopSitesNavigation activeView={desktopSitesView} /></Suspense> : activeNavigation.length ? <nav className="core-nav" aria-label="Application">
+        {routeProduct === 'commerce' && mobileCommerceTab ? <Suspense fallback={null}><DesktopShopNavigation activeTab={mobileCommerceTab} /></Suspense> : routeProduct === 'website' ? <Suspense fallback={null}><DesktopSitesNavigation activeView={desktopSitesView} /></Suspense> : commerceWorkspaceEntry ? <Suspense fallback={null}><DesktopCommerceNavigation activeView={desktopCommerceView} /></Suspense> : activeNavigation.length ? <nav className="core-nav" aria-label="Application">
           {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav> : null}
         <div className="sidebar-foot">{routeProduct && canSwitchProduct ? <Link className="product-switch-shell-link" to="/?choose=1"><span className="shell-nav-icon" aria-hidden="true" data-icon="products" /><span>All products</span></Link> : null}</div>
@@ -550,7 +562,7 @@ export function CoreLayout() {
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' || routeProduct === 'website' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content">
             <ManagedPortalAccessContext.Provider value={portalAccess}>
-              <RouteErrorBoundary resetKey={location.pathname}>
+              <RouteErrorBoundary resetKey={`${location.pathname}${location.search}`}>
                 {requestedProduct && portalAccess.status === 'checking'
                   ? <PortalAccessPanel copy="Verifying this company and its assigned products." title="Opening company portal…" />
                   : requestedProduct && portalAccess.status === 'reauthenticate'
