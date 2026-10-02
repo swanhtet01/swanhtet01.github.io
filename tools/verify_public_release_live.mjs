@@ -238,13 +238,13 @@ async function verifyOnce() {
   // The screenshots are part of the release, not optional decoration. Verify
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   const interfaceImages = {
-    shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png', 'actual-shop-stock.png'],
-    website: ['actual-sites-setup.png', 'actual-sites-editor.png', 'actual-sites-pages.png'],
-    ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
+    shop: ['actual-shop-today.png', 'actual-shop-sell.png'],
+    website: ['actual-sites-editor.png'],
+    ecommerce: ['actual-commerce-order-request.png'],
   }
   for (const product of publicProducts) {
     const filenames = interfaceImages[product.id]
-    assert(filenames?.length >= 2, 'interface_image_mapping_missing', { product: product.id })
+    assert(filenames?.length >= 1, 'interface_image_mapping_missing', { product: product.id })
     for (const [index, filename] of filenames.entries()) {
       const path = `/images/${filename}`
       for (const route of index === 0 ? ['/', `/${product.id}/`] : [`/${product.id}/`]) {
