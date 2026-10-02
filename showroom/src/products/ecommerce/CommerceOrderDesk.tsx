@@ -45,6 +45,7 @@ export function CommerceOrderDesk({
   pendingRequestCount,
 }: CommerceOrderDeskProps) {
   const openExceptionCount = Object.values(exceptionCounts).reduce((total, count) => total + count, 0)
+  const hasOperationalWork = Boolean(nextRequest || activeOrderCount || openExceptionCount)
 
   return (
     <section aria-labelledby="commerce-order-desk-title" className="commerce-order-desk">
@@ -54,10 +55,10 @@ export function CommerceOrderDesk({
           <h2 id="commerce-order-desk-title">Take every order through delivery.</h2>
           <p>Customer requests, Shop review and fulfilment stay in one accountable flow.</p>
         </div>
-        <div className="commerce-order-desk-actions">
+        {hasOperationalWork ? <div className="commerce-order-desk-actions">
           <button className="core-button secondary" onClick={onOpenStore} type="button">View customer store</button>
           <button className="core-button primary" onClick={onOpenNext} type="button">{nextActionLabel}</button>
-        </div>
+        </div> : null}
       </header>
 
       <div aria-label="Commerce order stages" className="commerce-order-stage" role="list">
@@ -92,8 +93,7 @@ export function CommerceOrderDesk({
             <button className="core-button primary" onClick={onOpenNext} type="button">Open request in Shop</button>
           </> : <>
             <h3>No request is waiting.</h3>
-            <p>The customer store is ready to collect the next order request.</p>
-            <button className="core-button primary" onClick={onOpenStore} type="button">Open customer store</button>
+            <p>The customer store is ready. Use the next action above when you want to take an order.</p>
           </>}
         </article>
 

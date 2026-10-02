@@ -318,7 +318,7 @@ export function EcommerceProduct() {
     syncDevice()
     return () => viewport.removeEventListener('change', syncDevice)
   }, [])
-  const [workspaceView, setWorkspaceView] = useState<'setup' | 'preview'>('preview')
+  const [workspaceView, setWorkspaceView] = useState<'orders' | 'setup' | 'preview'>('orders')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
     source: '',
@@ -765,10 +765,10 @@ export function EcommerceProduct() {
     setOrderImportNotice('Order import review file downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or go-live action ran.')
   }
 
-  function showWorkspace(view: 'setup' | 'preview') {
+  function showWorkspace(view: 'orders' | 'setup' | 'preview') {
     setWorkspaceView(view)
     requestAnimationFrame(() => {
-      document.getElementById(`ecommerce-${view}-panel`)?.scrollIntoView({ block: 'start' })
+      document.getElementById('ecommerce-workspace-nav')?.scrollIntoView({ block: 'start' })
     })
   }
 
@@ -1989,6 +1989,13 @@ export function EcommerceProduct() {
         {showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Get catalog help</a> : null}
       </header>
 
+      {!assistedCatalogEntry ? <nav aria-label="Commerce workspace" className="ecommerce-mode-nav" id="ecommerce-workspace-nav">
+        <button aria-current={workspaceView === 'orders' ? 'page' : undefined} onClick={() => showWorkspace('orders')} type="button">Orders</button>
+        <button aria-current={workspaceView === 'preview' ? 'page' : undefined} onClick={() => showWorkspace('preview')} type="button">Customer store</button>
+        <button aria-current={workspaceView === 'setup' ? 'page' : undefined} onClick={() => showWorkspace('setup')} type="button">Store setup</button>
+      </nav> : null}
+
+      {workspaceView === 'orders' ? <div className="ecommerce-orders-workspace" id="ecommerce-orders-panel">
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
           {!assistedCatalogEntry ? <span className="core-eyebrow">Next action</span> : null}
@@ -2245,23 +2252,12 @@ export function EcommerceProduct() {
         </div>
       </details>
 
-      {digestError ? <p className="ecommerce-verification" role="alert">We could not verify your store changes. Keep this page open and try saving again shortly.</p> : null}
         </div>
       </details>
-
-      {!assistedCatalogEntry ? <div className="ecommerce-workspace-switch">
-        <button
-          aria-controls={workspaceView === 'preview' ? 'ecommerce-setup-panel' : 'ecommerce-preview-panel'}
-          aria-label={workspaceView === 'preview' ? 'Edit store' : 'View store'}
-          className="core-button secondary"
-          onClick={() => showWorkspace(workspaceView === 'preview' ? 'setup' : 'preview')}
-          type="button"
-        >
-          {workspaceView === 'preview' ? 'Edit store' : 'View store'}
-        </button>
+      {digestError ? <p className="ecommerce-verification" role="alert">We could not verify your store changes. Keep this page open and try saving again shortly.</p> : null}
       </div> : null}
 
-      <div className="ecommerce-workspace" data-view={workspaceView}>
+      {workspaceView !== 'orders' ? <div className="ecommerce-workspace" data-view={workspaceView}>
         <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
           <div className="panel-head">
             <div><span className="core-eyebrow">1 · Storefront</span><h2 id="ecommerce-setup-title">Choose what customers see</h2></div>
@@ -2502,7 +2498,7 @@ export function EcommerceProduct() {
           ) : null}
 
         </section>
-      </div>
+      </div> : null}
     </div>
   )
 }
