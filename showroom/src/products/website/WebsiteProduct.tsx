@@ -1182,7 +1182,7 @@ export function WebsiteProduct() {
             </div>
           ) : null}
 
-          <header className="website-heading" data-view={view}>
+          <header aria-label={view === 'content' ? 'Edit page' : 'Publish website'} className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
