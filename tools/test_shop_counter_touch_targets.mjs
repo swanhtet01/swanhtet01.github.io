@@ -7,6 +7,7 @@ import './shop_sale_focus.test.mjs'
 test('base counter quantity controls support tablet touch without a phone breakpoint', () => {
   const css = readFileSync(new URL('../showroom/src/core/core-app.css', import.meta.url), 'utf8')
   const app = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+  const i18n = readFileSync(new URL('../showroom/src/core/i18n-actions.ts', import.meta.url), 'utf8')
   const grid = css.match(/\.shop-quantity-stepper \{([^}]+)\}/)?.[1]
   const buttons = css.match(/\.shop-quantity-stepper button \{([^}]+)\}/)?.[1]
   assert.match(grid, /grid-template-columns: 44px 30px 44px;/)
@@ -29,4 +30,11 @@ test('base counter quantity controls support tablet touch without a phone breakp
   assert.doesNotMatch(app, /Parked tickets \(\{parked\.length\}\) · this device/)
   assert.match(css, /@media \(max-width: 1360px\) and \(min-width: 841px\) \{\s*\.shop-counter-grid \{ grid-template-columns: minmax\(0, 1fr\) minmax\(20rem, 23rem\); \}/)
   assert.match(css, /@media \(max-width: 1080px\) and \(min-width: 841px\) \{\s*\.shop-counter-column-head \{ display: none; \}/)
+  assert.match(app, /const CASHIER_COMPLETE_MY = confirmedBurmese\('Complete'\)/)
+  assert.match(app, /const CASHIER_SAVE_MY = confirmedBurmese\('Save'\)/)
+  assert.match(app, /className="cashier-action-label"/)
+  assert.match(css, /\.cashier-action-label > small\[lang="my"\]/)
+  assert.match(css, /\.shop-review-sale \{ min-height: 3\.75rem;/)
+  assert.match(i18n, /export function confirmedBurmese\(en: string\): string \| null/)
+  assert.match(i18n, /return entry\?\.status === 'confirmed' \? entry\.my : null/)
 })

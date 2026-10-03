@@ -24,7 +24,7 @@ import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
-import { bi } from './i18n-actions'
+import { bi, confirmedBurmese } from './i18n-actions'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
   ACTION_KEY,
@@ -297,6 +297,8 @@ const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: 
 const ShopMonthlyStatement = lazy(() => import('./ShopMonthlyStatement').then((module) => ({ default: module.ShopMonthlyStatement })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
 const ReceiptDialog = lazy(() => import('./ReceiptDialog').then((module) => ({ default: module.ReceiptDialog })))
+const CASHIER_COMPLETE_MY = confirmedBurmese('Complete')
+const CASHIER_SAVE_MY = confirmedBurmese('Save')
 
 type PurchaseOrderDraft =
   | { mode: 'create'; requisitionId?: string; sku: string; supplier: string; expectedAt: string; quantity: string; unitCostMmk: string }
@@ -1479,7 +1481,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
           {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Keep as open order</strong><small>Use for pay-later or later handoff. Otherwise this sale completes now.</small></span></label> : null}
         </div>
-        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? 'Review & complete sale' : bi('Review order')}<span aria-hidden="true">→</span></button><small>{effectiveOutcome === 'paid_handoff' ? 'One review records payment, handoff, stock, and the order record.' : 'Creates an open order; payment and handoff stay for Orders.'}</small></footer></> : null}
+        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label"><span>Review &amp; complete sale</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span> : bi('Review order')}<span aria-hidden="true">→</span></button><small>{effectiveOutcome === 'paid_handoff' ? 'One review records payment, handoff, stock, and the order record.' : 'Creates an open order; payment and handoff stay for Orders.'}</small></footer></> : null}
       </aside>
       <aside aria-label="Sale follow-up" className="shop-counter-followup">
         <header>
@@ -7424,7 +7426,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
       </section>
     </details>
-    <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
+    <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? <span className="cashier-action-label"><span>Review and save close</span>{CASHIER_SAVE_MY ? <small lang="my">{CASHIER_SAVE_MY}</small> : null}</span> : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
     <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
     {/* Roadmap §2 item 5 — what was unusual about the day just closed, read from
         the closes already saved. Nothing here is a finding about money owed or
@@ -7863,7 +7865,7 @@ function OrderList({
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
-        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button">Paid &amp; handed over</button> : null}
+        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label"><span>Paid &amp; handed over</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span></button> : null}
         {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
         {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
         {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
