@@ -730,12 +730,14 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
         .find((candidate) => candidate.textContent.includes('Request saved locally for Shop review.')) : null;
       const box = receiptBoundary?.getBoundingClientRect();
       const notice = document.querySelector('.ecommerce-buying-notice')?.textContent.trim() || '';
+      const checkoutFormPresent = Boolean(document.querySelector('#ecommerce-buying-workspace form'));
       const receiptText = receipt?.textContent || '';
       const bodyText = document.body?.innerText || '';
       return {
         activeWorkspace: document.querySelector('.ecommerce-mode-nav [aria-current="page"]')?.textContent.trim() || '',
         receiptStatus: receipt?.querySelector('.status-pill')?.textContent.trim() || '',
         notice,
+        checkoutFormPresent,
         receiptPresent: Boolean(receipt),
         receiptHeight: receiptBox?.height || 0,
         boundaryRows,
@@ -757,8 +759,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   const checks = {
     localHeadline: state?.receiptStatus === 'Request saved locally',
     storeWorkspaceActive: state?.activeWorkspace === 'Store',
-    localNotice: state?.notice.includes('Request saved locally for Shop review')
-      && state?.notice.includes('No order, stock, message, or charge changed.'),
+    checkoutFormRetired: state?.checkoutFormPresent === false && state?.notice === '',
     localReceipt: state?.receiptBoundary.includes('Request saved locally for Shop review.')
       && state?.receiptBoundary.includes('Shop still confirms stock, promise, payment, and delivery.'),
     boundaryVisible: Boolean(state?.boundaryVisible),

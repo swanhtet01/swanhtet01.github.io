@@ -350,6 +350,7 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const restoredCartScope = useRef('')
+  const [restoredCartScopeKey, setRestoredCartScopeKey] = useState('')
   const [cartSessionUnavailable, setCartSessionUnavailable] = useState(false)
   const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
   const [trackingRequest, setTrackingRequest] = useState(0)
@@ -557,6 +558,7 @@ export function EcommerceProduct() {
         restoredCartScope.current = cartScope
         try { setBuyingCart(readSessionCart(window.sessionStorage, cartScope, catalog.items)) }
         catch { setBuyingCart([]); setCartSessionUnavailable(true) }
+        setRestoredCartScopeKey(cartScope)
         return
       }
       try { setCartSessionUnavailable(!saveSessionCart(window.sessionStorage, cartScope, buyingCart)) }
@@ -602,6 +604,7 @@ export function EcommerceProduct() {
     previewReady: Boolean(previewResult.preview && digest),
     savedDraftIsCurrent,
   })
+  const cartSessionReady = Boolean(cartScope && restoredCartScopeKey === cartScope)
   const hasUnsavedStorefront = !savedDraftIsCurrent
   const hasUnsavedFieldChanges = !savedFieldsAreCurrent
   const managedCatalogRebindRequired = Boolean(managedIdentity
@@ -1052,7 +1055,7 @@ export function EcommerceProduct() {
   }
 
   const addToCart = useCallback((sku: string) => {
-    if (!buyingReady) return
+    if (!buyingReady || !cartSessionReady) return
     if (!buyingCart.some((line) => line.sku === sku)) emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'cart.built', ts: Date.now() })
     setBuyingCart((current) => current.some((line) => line.sku === sku)
       ? current
@@ -1063,7 +1066,7 @@ export function EcommerceProduct() {
       workspace?.scrollIntoView({ block: 'start' })
       workspace?.focus({ preventScroll: true })
     })
-  }, [buyingReady, buyingCart])
+  }, [buyingReady, buyingCart, cartSessionReady])
 
   function prepareQuoteRecovery(event: ReactMouseEvent<HTMLButtonElement>) {
     const actionNow = Math.round(globalThis.performance.timeOrigin + event.timeStamp)
@@ -2574,7 +2577,7 @@ export function EcommerceProduct() {
                     const displayName = storefrontDisplayName(item)
                     return (
                     <article
-                      className={available && buyingReady ? 'has-request-action' : undefined}
+                      className={available && buyingReady && cartSessionReady ? 'has-request-action' : undefined}
                       data-featured={item.merchandising?.featured ? 'true' : 'false'}
                       data-requested={buyingCart.some((line) => line.sku === item.sku) ? 'true' : 'false'}
                       key={item.sku}
@@ -2584,7 +2587,7 @@ export function EcommerceProduct() {
                       <strong>{displayName}</strong>
                       <span>{formatMmk(item.unitPriceMmk)}</span>
                       <b>{available ? 'Available' : 'Sold out'}</b>
-                      {available && buyingReady ? (
+                      {available && buyingReady && cartSessionReady ? (
                         <button
                           aria-controls="ecommerce-buying-workspace"
                           aria-label={`${buyingCart.some((line) => line.sku === item.sku) ? 'View' : 'Add'} ${displayName} ${buyingCart.some((line) => line.sku === item.sku) ? 'in cart' : 'to cart'}`}
@@ -2610,7 +2613,7 @@ export function EcommerceProduct() {
             )}
           </div>
 
-          {buyingReady && previewResult.preview && digest && activeCommerceState ? (
+          {buyingReady && cartSessionReady && previewResult.preview && digest && activeCommerceState ? (
             <EcommerceBuyingWorkspace
               key={cartScope}
               cart={buyingCart}
