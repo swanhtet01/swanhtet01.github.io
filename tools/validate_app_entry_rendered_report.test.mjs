@@ -129,8 +129,8 @@ test('Store-to-Shop evidence requires one source-bound pending-payment order aft
     source,
     inbox: { ready: true, status: 'This device', requestVisible: true },
     prepared: { ready: true, sourceBound: true, paymentLocked: true, payment: 'Cash' },
-    gate: { ready: true, summaryBound: true, actor: 'Shop reviewer', reasonPresent: true, sourceEvidenceBound: true },
-    network: { externalRequestCount: 0, failedRequestCount: 0 },
+    gate: { ready: true, summaryBound: true, actor: 'Shop reviewer', reasonPresent: true, sourceEvidenceBound: true, evidenceReference: action.actionEvidenceReference },
+    network: { externalRequestCount: 0, failedRequestCount: 0, httpErrorResponseCount: 0 },
     committed,
     restored,
     viewportWidth: 1280,
@@ -157,6 +157,13 @@ test('Store-to-Shop evidence requires one source-bound pending-payment order aft
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, sourceBound: false } } }, expected), /store_to_shop_failed/)
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, gate: { ...storeToShop.gate, sourceEvidenceBound: false } } }, expected), /store_to_shop_failed/)
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, network: { ...storeToShop.network, externalRequestCount: 1 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, network: { ...storeToShop.network, httpErrorResponseCount: 1 } } }, expected), /store_to_shop_failed/)
+  const tamperedEvidence = `${storeToShop.gate.evidenceReference}:tampered`
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: {
+    ...storeToShop,
+    committed: { ...committed, actionEvidenceReference: tamperedEvidence },
+    restored: { ...restored, actionEvidenceReference: tamperedEvidence },
+  } }, expected), /store_to_shop_failed/)
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, restored: { ...restored, commandId: 'CMD-OTHER' } } }, expected), /store_to_shop_failed/)
 })
 

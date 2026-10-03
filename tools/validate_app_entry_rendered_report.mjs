@@ -366,7 +366,9 @@ export function assertCaseSemantics(testCase, expected) {
       || journey.prepared.paymentLocked !== true || journey.prepared.payment !== 'Cash'
       || !isObject(journey.gate) || journey.gate.ready !== true || journey.gate.summaryBound !== true
       || journey.gate.actor !== 'Shop reviewer' || journey.gate.reasonPresent !== true || journey.gate.sourceEvidenceBound !== true
+      || !exactString(journey.gate.evidenceReference, 'app_entry_rendered_store_to_shop_gate_evidence_invalid').includes(journey.source.requestId)
       || !isObject(journey.network) || journey.network.externalRequestCount !== 0 || journey.network.failedRequestCount !== 0
+      || journey.network.httpErrorResponseCount !== 0
       || !isObject(journey.committed) || !isObject(journey.restored)
       || journey.committed.matchingOrderCount !== 1 || journey.restored.matchingOrderCount !== 1
       || journey.committed.orderStatus !== 'confirmed' || journey.restored.orderStatus !== 'confirmed'
@@ -380,7 +382,8 @@ export function assertCaseSemantics(testCase, expected) {
       || !exactString(journey.committed.commandId, 'app_entry_rendered_store_to_shop_command_invalid')
       || !exactString(journey.committed.actionReason, 'app_entry_rendered_store_to_shop_reason_invalid')
       || journey.committed.actionActor !== 'Shop reviewer'
-      || !exactString(journey.committed.actionEvidenceReference, 'app_entry_rendered_store_to_shop_evidence_invalid').includes(journey.source.requestId)
+      || !exactString(journey.committed.actionEvidenceReference, 'app_entry_rendered_store_to_shop_evidence_invalid')
+      || journey.committed.actionEvidenceReference !== journey.gate.evidenceReference
       || journey.committed.actionSubjectId !== journey.committed.orderId
       || journey.restored.actionId !== journey.committed.actionId
       || journey.restored.commandId !== journey.committed.commandId

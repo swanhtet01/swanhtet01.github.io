@@ -1276,6 +1276,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
       const dialog = document.querySelector('dialog.accountable-action-gate[open]');
       const submit = dialog?.querySelector('button[type="submit"]');
       const inputs = [...(dialog?.querySelectorAll('input') || [])];
+      const lockedEvidence = inputs.find((input) => input.readOnly && input.value.includes(${JSON.stringify(source.requestId)}));
       const text = dialog?.textContent || '';
       const ready = Boolean(dialog && submit && !submit.disabled && submit.textContent.trim() === 'Confirm change');
       return {
@@ -1283,13 +1284,14 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
         summaryBound: text.includes('Review Ecommerce order'),
         actor: inputs[0]?.value || '',
         reasonPresent: Boolean(inputs[1]?.value),
-        sourceEvidenceBound: inputs.some((input) => input.value.includes(${JSON.stringify(source.requestId)})),
+        evidenceReference: lockedEvidence?.value || '',
+        sourceEvidenceBound: Boolean(lockedEvidence),
       };
     })()`)
     if (gate?.ready) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
-  if (!gate?.ready || !gate.summaryBound || !gate.reasonPresent || !gate.sourceEvidenceBound) {
+  if (!gate?.ready || !gate.summaryBound || !gate.reasonPresent || !gate.sourceEvidenceBound || !gate.evidenceReference) {
     return { ok: false, error: 'accountable Shop review did not bind the Ecommerce source', claimBoundary, source, inbox, prepared, gate }
   }
 
@@ -1312,7 +1314,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
       const matchingActions = actions.filter((action) => action.domain === 'commerce'
         && action.kind === 'order_create'
         && action.subjectId === order?.id
-        && action.evidenceReference.includes(${JSON.stringify(source.requestId)}));
+        && action.evidenceReference === ${JSON.stringify(gate.evidenceReference)});
       const accountableAction = matchingActions[0];
       const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
       return {
@@ -1348,7 +1350,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     const matchingActions = actions.filter((action) => action.domain === 'commerce'
       && action.kind === 'order_create'
       && action.subjectId === order?.id
-      && action.evidenceReference.includes(${JSON.stringify(source.requestId)}));
+      && action.evidenceReference === ${JSON.stringify(gate.evidenceReference)});
     const accountableAction = matchingActions[0];
     const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
     const bodyText = document.body?.innerText || '';
@@ -1394,7 +1396,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
       && Boolean(committed?.commandId)
       && Boolean(committed?.actionReason)
       && committed?.actionActor === 'Shop reviewer'
-      && committed?.actionEvidenceReference.includes(source.requestId)
+      && committed?.actionEvidenceReference === gate.evidenceReference
       && committed?.actionSubjectId === committed?.orderId
       && restored?.actionId === committed?.actionId
       && restored?.commandId === committed?.commandId
@@ -1453,6 +1455,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
   const networkRequests = []
   const networkRequestUrls = new Map()
   const failedNetworkRequests = []
+  const httpErrorResponses = []
   const disposers = []
   let accessGuard = null
   try {
@@ -1496,6 +1499,11 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       cdp.on(sessionId, 'Network.loadingFailed', (event) => {
         const url = networkRequestUrls.get(event.requestId)
         if (url && /^https?:/iu.test(url)) failedNetworkRequests.push(url)
+      }),
+      cdp.on(sessionId, 'Network.responseReceived', (event) => {
+        const status = Number(event.response?.status || 0)
+        const url = String(event.response?.url || '')
+        if (status >= 400 && /^https?:/iu.test(url)) httpErrorResponses.push({ status, url })
       }),
     )
 
@@ -1636,11 +1644,11 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     }).length
     const shopDecisionDesk = rawShopDecisionDesk ? {
       ...rawShopDecisionDesk,
-      network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
+      network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length, httpErrorResponseCount: httpErrorResponses.length },
     } : null
     const storeToShop = rawStoreToShop ? {
       ...rawStoreToShop,
-      network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
+      network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length, httpErrorResponseCount: httpErrorResponses.length },
     } : null
     const failures = [
       ...(testCase.inspectBusinessBrief && (!briefControls || Object.values(briefControls).some(value => value !== true)) ? ['Business brief controls are not ready'] : []),
@@ -1679,6 +1687,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       ...(storeToShop && !storeToShop.ok ? [`Store-to-Shop journey failed: ${storeToShop.error || 'unknown check'}`] : []),
       ...(storeToShop && storeToShop.network.externalRequestCount !== 0 ? ['Store-to-Shop journey made an external request'] : []),
       ...(storeToShop && storeToShop.network.failedRequestCount !== 0 ? ['Store-to-Shop journey had a failed request'] : []),
+      ...(storeToShop && storeToShop.network.httpErrorResponseCount !== 0 ? ['Store-to-Shop journey received an HTTP error response'] : []),
       ...(storeToShopViewportMatches ? [] : [`Store-to-Shop viewport changed from ${testCase.width}x${testCase.height} to ${storeToShop?.viewportWidth ?? 'unknown'}x${storeToShop?.viewportHeight ?? 'unknown'}`]),
       ...(sitesWorkspace && !sitesWorkspace.ok ? [`Sites workspace contract failed: ${sitesWorkspace.error || 'unknown check'}`] : []),
       ...(sitesWorkspace && sitesWorkspace.documentScrollWidth > sitesWorkspace.viewportWidth + 1
