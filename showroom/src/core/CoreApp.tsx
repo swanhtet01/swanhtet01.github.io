@@ -15,6 +15,7 @@ import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } fro
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
+import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
 import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
 import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
@@ -1109,13 +1110,6 @@ export function OperationsPage({ product }: { product: ProductId }) {
   // answered at all, the probe settled behind it, and no identity returned. Its lifecycle
   // is enumerated frame by frame in tools/storage_durability.test.mjs.
   const confirmedLocalShop = localShopConfirmed(runtime.status, managedIdentitySettled, managedIdentity)
-  const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
-  const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
-  const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
-  const ecommerceCorrectionNavigationIntent = (location.state as { ecommerceCorrectionIntent?: EcommerceCorrectionIntent } | null)?.ecommerceCorrectionIntent ?? null
-  const ecommerceCancellationNavigationIntent = (location.state as { ecommerceCancellationIntent?: EcommerceCancellationIntent } | null)?.ecommerceCancellationIntent ?? null
-  const ecommerceOrderAmendmentNavigationIntent = (location.state as { ecommerceOrderAmendmentIntent?: EcommerceOrderAmendmentIntent } | null)?.ecommerceOrderAmendmentIntent ?? null
-  const ecommerceOrderRescheduleNavigationIntent = (location.state as { ecommerceOrderRescheduleIntent?: EcommerceOrderRescheduleIntent } | null)?.ecommerceOrderRescheduleIntent ?? null
   const shopCounterSearch = (location.state as { shopCounterSearch?: string } | null)?.shopCounterSearch?.trim().slice(0, 80) ?? ''
   const shopCounterCustomer = (location.state as { shopCounterCustomer?: string } | null)?.shopCounterCustomer?.trim().slice(0, 120) ?? ''
   const shopCounterClientId = (location.state as { shopCounterClientId?: string } | null)?.shopCounterClientId?.trim().slice(0, 80) ?? ''
@@ -1170,7 +1164,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{view === 'commerce' ? bi(tab.label) : tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} confirmedLocalShop={confirmedLocalShop} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage confirmedLocalShop={confirmedLocalShop} key={managedIdentity?.workspaceId ?? (confirmedLocalShop ? 'local' : 'checking')} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1582,14 +1576,7 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
-  ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
-  ecommerceCorrectionNavigationIntent: EcommerceCorrectionIntent | null
-  ecommerceNavigationDraft: EcommerceShopDraft | null
-  ecommerceOrderAmendmentNavigationIntent: EcommerceOrderAmendmentIntent | null
-  ecommerceOrderRescheduleNavigationIntent: EcommerceOrderRescheduleIntent | null
-  ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
-  ecommerceSupportNavigationIntent: EcommerceSupportIntent | null
+function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
   confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
@@ -1602,6 +1589,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 }) {
   const navigate = useNavigate()
   const commerceLocation = useLocation()
+  const requestedEcommerceIntent = useMemo(
+    () => ecommerceShopIntentReference(new URLSearchParams(commerceLocation.search)),
+    [commerceLocation.search],
+  )
   const purchaseOrderClock = useMinuteClock()
   const counterDraftContext = shopCounterDraftContext(confirmedLocalShop, managedIdentity)
   const scheduleScopeKey = counterDraftContext.key
@@ -1741,6 +1732,34 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const orderDraftResetEpochRef = useRef(0)
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
+  const [recoveredEcommerceIntent, setRecoveredEcommerceIntent] = useState<{ scope: string; id: string; intents: EcommerceShopNavigationIntents } | null>(null)
+  useEffect(() => {
+    if (!requestedEcommerceIntent || !confirmedLocalShop && (!managedIdentity || workspaceMode !== 'managed-ready')) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(({ recoverEcommerceShopIntent }) => recoverEcommerceShopIntent(ecommerceBuyingScope, requestedEcommerceIntent, commerce))
+      .then((intents) => { if (current) setRecoveredEcommerceIntent({ scope: ecommerceBuyingScope, id: requestedEcommerceIntent.id, intents }) })
+      .catch((error) => {
+        if (!current) return
+        setRecoveredEcommerceIntent(null)
+        navigate('/shop/?tab=orders', { replace: true, state: null })
+        setNotice(error instanceof Error ? error.message : 'The Ecommerce request could not be recovered. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, confirmedLocalShop, ecommerceBuyingScope, managedIdentity, navigate, requestedEcommerceIntent, workspaceMode])
+  const {
+    orderDraft: ecommerceNavigationDraft = null,
+    returnIntent: ecommerceReturnNavigationIntent = null,
+    supportIntent: ecommerceSupportNavigationIntent = null,
+    correctionIntent: ecommerceCorrectionNavigationIntent = null,
+    cancellationIntent: ecommerceCancellationNavigationIntent = null,
+    amendmentIntent: ecommerceOrderAmendmentNavigationIntent = null,
+    rescheduleIntent: ecommerceOrderRescheduleNavigationIntent = null,
+  } = requestedEcommerceIntent
+    && recoveredEcommerceIntent?.scope === ecommerceBuyingScope
+    && recoveredEcommerceIntent.id === requestedEcommerceIntent.id
+    ? recoveredEcommerceIntent.intents
+    : {} as Partial<EcommerceShopNavigationIntents>
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [managedTemplateDraft, setManagedTemplateDraft] = useState({ reviewed: false, reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
@@ -2645,6 +2664,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setOrderDraftActive(true)
         setResumedOrderDraft(null)
         setOrderDraftConflict(false)
+        consumedEcommerceDraftId.current = navigationDraftId
         setNotice(`${recordDisplayReference(ecommerceNavigationDraft.sourceRequestId)} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
         pendingOrderComposerReveal.current = 'ecommerce-request'
       })
@@ -2698,7 +2718,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           disposition: intent.disposition,
           sourceIntent: intent,
         })
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Confirm the received item and stock condition; no refund has started.`)
         requestAnimationFrame(() => returnEditorRef.current?.querySelector<HTMLElement>('#order-return-quantity')?.focus())
       })
@@ -2722,8 +2741,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         if (!current) return
         const intent = validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)
         consumedEcommerceCancellationIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (!ecommerceCancellationMatchesCurrentShop(commerce, intent)) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCancellationDraft(null)
           setNotice('The cancellation request no longer matches the current Shop order, payment, refund, or reserved stock. Nothing was prepared.')
           return
@@ -2758,7 +2777,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
         if (!current) return
         consumedEcommerceOrderAmendmentIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (!recovered.state || recovered.status !== 'ready') throw new Error(recovered.error || 'Order amendment recovery is unavailable.')
         const storedIntent = recovered.state.amendmentIntents.find((candidate) => candidate.id === intent.id)
         const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
@@ -2808,7 +2826,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
         if (!current) return
         consumedEcommerceOrderRescheduleIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (!recovered.state || recovered.status !== 'ready') throw new Error(recovered.error || 'Order reschedule recovery is unavailable.')
         const storedIntent = recovered.state.rescheduleIntents.find((candidate) => candidate.id === intent.id)
         const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
@@ -2864,8 +2881,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const outcome = order ? projectEcommerceSupportOutcome(intent, order) : null
         const expected = commerceOrderSupportOpenExpectation(commerce, intent.orderId, intent.id)
         consumedEcommerceSupportIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (existing) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setSupportDraft(null)
           setNotice(outcome
             ? `${intent.id} is already ${outcome.state} as ${outcome.caseId}. Ecommerce can recover the accountable Shop outcome.`
@@ -2877,6 +2894,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           || !order.completion
           || order.sourceRecordId !== intent.sourceRequestId
           || !expected) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setNotice('The Ecommerce help request no longer matches a completed Shop order. Nothing was prepared.')
           return
         }
@@ -2911,7 +2929,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
         if (!current) return
         consumedEcommerceCorrectionIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         const storedIntent = recovered.state?.correctionIntents.find((candidate) => candidate.id === intent.id)
         if (recovered.status !== 'ready' || !storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent)) {
           throw new Error('The balance request no longer matches its recovered Ecommerce evidence. Nothing was prepared.')
@@ -2920,6 +2937,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const outcome = order ? lifecycle.projectEcommerceCorrectionOutcome(intent, order) : null
         const existing = order?.corrections?.filter((record) => record.evidenceReference === intent.evidenceReference) ?? []
         if (outcome || existing.length) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCorrectionDraft(null)
           setNotice(outcome
             ? `${intent.id} was already reviewed by ${outcome.reviewedBy}. Ecommerce can recover the correction outcome; no second note was prepared.`
@@ -2935,6 +2953,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           || expectation.sourceCalculationDigest !== intent.sourceCalculationDigest
           || expectation.correctionCount !== intent.sourceCorrectionCount
           || expectation.currentBalanceMmk !== intent.originalBalanceMmk) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCorrectionDraft(null)
           setNotice('The Ecommerce balance request no longer matches the current Shop calculation, payment, refund, or correction history. Nothing was prepared.')
           return

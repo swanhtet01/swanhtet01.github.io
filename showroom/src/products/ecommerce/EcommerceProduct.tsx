@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router'
 import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
 import { readSessionCart, readSessionCartSnapshot, saveSessionCart } from './cart-session'
 import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
+import { ecommerceShopIntentPath } from './ecommerce-shop-intent-route'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
@@ -1272,7 +1273,7 @@ export function EcommerceProduct() {
   }
 
   function openShopDraft(draft: EcommerceShopDraftV2) {
-    navigate('/shop/?tab=orders&source=ecommerce', { state: { ecommerceShopDraft: draft } })
+    navigate(ecommerceShopIntentPath('order', draft.sourceRequestId))
   }
 
   const sourceLabel = sampleCatalogPreview
@@ -2635,12 +2636,12 @@ export function EcommerceProduct() {
               onContinueInShop={() => navigate('/shop/?tab=orders')}
               onDraft={openShopDraft}
               onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(requestId)}`) : undefined}
-              onOpenCancellation={(intent: EcommerceCancellationIntent) => navigate('/shop/?tab=orders', { state: { ecommerceCancellationIntent: intent } })}
-              onOpenCorrection={(intent) => navigate('/shop/?tab=orders', { state: { ecommerceCorrectionIntent: intent } })}
-              onOpenAmendment={(intent: EcommerceOrderAmendmentIntent) => navigate('/shop/?tab=orders', { state: { ecommerceOrderAmendmentIntent: intent } })}
-              onOpenReschedule={(intent: EcommerceOrderRescheduleIntent) => navigate('/shop/?tab=orders', { state: { ecommerceOrderRescheduleIntent: intent } })}
-              onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}
-              onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
+              onOpenCancellation={(intent: EcommerceCancellationIntent) => navigate(ecommerceShopIntentPath('cancellation', intent.id))}
+              onOpenCorrection={(intent) => navigate(ecommerceShopIntentPath('correction', intent.id))}
+              onOpenAmendment={(intent: EcommerceOrderAmendmentIntent) => navigate(ecommerceShopIntentPath('amendment', intent.id))}
+              onOpenReschedule={(intent: EcommerceOrderRescheduleIntent) => navigate(ecommerceShopIntentPath('reschedule', intent.id))}
+              onOpenReturns={(intent: EcommerceReturnIntent) => navigate(ecommerceShopIntentPath('return', intent.id))}
+              onOpenSupport={(intent: EcommerceSupportIntent) => navigate(ecommerceShopIntentPath('support', intent.id))}
               onRecordManagedRequest={managedIdentity && managedCanWrite ? recordManagedBuyingRequest : undefined}
               onRequestStateChange={setCustomerRequestState}
               trackingRequest={trackingRequest}

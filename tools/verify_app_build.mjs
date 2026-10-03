@@ -114,6 +114,22 @@ const rootPackage = JSON.parse(await readFile(resolve(root, 'package.json'), 'ut
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools', 'supermega_scheduler_authority.json'), 'utf8'))
 let schedulerExecutionBudget
 try { schedulerExecutionBudget = validateSchedulerExecutionBudget(schedulerAuthority) } catch { fail('scheduler_execution_budget_invalid') }
+try {
+  const route = await import(pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-intent-route.ts')).href)
+  const prefixes = { order: 'ECR', return: 'ERR', support: 'ESR', correction: 'ECO', cancellation: 'ECN', amendment: 'EAM', reschedule: 'ERS' }
+  for (const kind of route.ecommerceShopIntentKinds) {
+    const id = `${prefixes[kind]}-12345678-1234-4abc-8def-1234567890ab`
+    const refreshed = new URL(route.ecommerceShopIntentPath(kind, id), 'https://app.supermega.dev')
+    const parsed = route.ecommerceShopIntentReference(refreshed.searchParams)
+    if (refreshed.pathname !== '/shop/' || refreshed.searchParams.get('tab') !== 'orders' || parsed?.kind !== kind || parsed.id !== id) {
+      fail(`ecommerce_shop_intent_route_not_refresh_stable:${kind}`)
+    }
+  }
+  const crossKind = new URLSearchParams('tab=orders&source=ecommerce-handoff&handoff=return&handoff_id=ESR-12345678-1234-4abc-8def-1234567890ab')
+  if (route.ecommerceShopIntentReference(crossKind) !== null) fail('ecommerce_shop_intent_route_cross_kind_accepted')
+} catch {
+  fail('ecommerce_shop_intent_route_contract_failed')
+}
 const indexSource = await readFile(resolve(root, 'showroom', 'index.html'), 'utf8')
 const viteConfigSource = await readFile(resolve(root, 'showroom', 'vite.config.ts'), 'utf8')
 const staticRouteSource = await readFile(resolve(root, 'showroom', 'scripts', 'prepare-static-routes.mjs'), 'utf8')
@@ -3633,6 +3649,20 @@ const managedStorefrontSave = storefrontSaveAction.indexOf('await saveManagedSto
 const localStorefrontSave = storefrontSaveAction.indexOf('const saved = await saveStorefrontDraft(')
 const firstSavePreviewAdvance = storefrontSaveAction.indexOf('showSavedStorefrontPreview()')
 const lastSavePreviewAdvance = storefrontSaveAction.lastIndexOf('showSavedStorefrontPreview()')
+const pendingHandoffReviewRanges = [
+  ['setPreparedEcommerceDraft(ecommerceNavigationDraft)', 'setNotice(`${recordDisplayReference(ecommerceNavigationDraft.sourceRequestId)} is ready for Shop review.'],
+  ['setReturnDraft({', 'setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Confirm the received item'],
+  ['setCancellationDraft(intent)', 'setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Keeping the order'],
+  ['setOrderAmendmentReview({ intent, replacementRequest, draft })', 'setNotice(`${intent.id} is ready for a two-step Shop replacement.'],
+  ['setOrderRescheduleReview({ intent, replacementRequest, draft })', 'setNotice(`${intent.id} is ready for two-step Shop rescheduling.'],
+  ['setSupportDraft({', 'setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Assign priority'],
+  ['setCorrectionDraft({', 'setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Recheck the calculated adjustment'],
+]
+const pendingHandoffReviewPreservesRoute = pendingHandoffReviewRanges.every(([startMarker, endMarker]) => {
+  const end = coreSource.indexOf(endMarker)
+  const start = coreSource.lastIndexOf(startMarker, end)
+  return start >= 0 && end > start && !coreSource.slice(start, end).includes("navigate({ pathname: '/shop/'")
+})
 if (addToCartStart < 0
   || addToCartEnd < 0
   || storefrontSaveStart < 0
@@ -3683,10 +3713,25 @@ if (addToCartStart < 0
   || !ecommerceSource.includes('cart={buyingCart}')
   || !ecommerceSource.includes('onCartChange={setBuyingCart}')
   || !ecommerceSource.includes('onDraft={openShopDraft}')
+  || !ecommerceSource.includes("navigate(ecommerceShopIntentPath('order', draft.sourceRequestId))")
   || !ecommerceSource.includes('onOpenManagedRequest={managedIdentity ?')
   || !ecommerceSource.includes('onRecordManagedRequest={managedIdentity && managedCanWrite ? recordManagedBuyingRequest : undefined}')
   || !ecommerceSource.includes('disabled={portalViewOnly || catalogHydrating}')
-  || !ecommerceSource.includes("onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}")
+  || !ecommerceSource.includes("onOpenReturns={(intent: EcommerceReturnIntent) => navigate(ecommerceShopIntentPath('return', intent.id))}")
+  || !ecommerceSource.includes("onOpenSupport={(intent: EcommerceSupportIntent) => navigate(ecommerceShopIntentPath('support', intent.id))}")
+  || !ecommerceSource.includes("onOpenCorrection={(intent) => navigate(ecommerceShopIntentPath('correction', intent.id))}")
+  || !ecommerceSource.includes("onOpenCancellation={(intent: EcommerceCancellationIntent) => navigate(ecommerceShopIntentPath('cancellation', intent.id))}")
+  || !ecommerceSource.includes("onOpenAmendment={(intent: EcommerceOrderAmendmentIntent) => navigate(ecommerceShopIntentPath('amendment', intent.id))}")
+  || !ecommerceSource.includes("onOpenReschedule={(intent: EcommerceOrderRescheduleIntent) => navigate(ecommerceShopIntentPath('reschedule', intent.id))}")
+  || !coreSource.includes('const requestedEcommerceIntent = useMemo(')
+  || !coreSource.includes(".then(({ recoverEcommerceShopIntent }) => recoverEcommerceShopIntent(ecommerceBuyingScope, requestedEcommerceIntent, commerce))")
+  || !coreSource.includes("!confirmedLocalShop && (!managedIdentity || workspaceMode !== 'managed-ready')")
+  || !coreSource.includes('setRecoveredEcommerceIntent({ scope: ecommerceBuyingScope, id: requestedEcommerceIntent.id, intents })')
+  || !coreSource.includes('recoveredEcommerceIntent?.scope === ecommerceBuyingScope')
+  || !coreSource.includes("key={managedIdentity?.workspaceId ?? (confirmedLocalShop ? 'local' : 'checking')}")
+  || !pendingHandoffReviewPreservesRoute
+  || coreSource.includes('ecommerceReturnIntent?: EcommerceReturnIntent')
+  || coreSource.includes('ecommerceShopDraft?: EcommerceShopDraft')
   || storefrontSavePreviewAdvanceCount !== 2
   || managedStorefrontSave < 0
   || localStorefrontSave < 0
@@ -3915,7 +3960,7 @@ if (addToCartStart < 0
   || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_support_outcome(')
   || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_correction_intent(')
   || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_correction_outcome(')
-  || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
+  || !coreSource.includes('cancellationIntent: ecommerceCancellationNavigationIntent')
   || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
   || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
   || !coreSource.includes('acknowledgement.digest === intent.sourceAcknowledgementDigest')
@@ -3925,7 +3970,7 @@ if (addToCartStart < 0
   || !coreSource.includes('saveEcommerceCancellationDecision(')
   || !workspaceRuntimeSource.includes("| 'order_cancellation_review'")
   || !coreSource.includes('no customer message or provider call')
-  || !coreSource.includes('ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent}')
+  || !coreSource.includes('returnIntent: ecommerceReturnNavigationIntent')
   || !coreSource.includes('validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)')
   || !coreSource.includes('validateEcommerceSupportIntent(ecommerceSupportNavigationIntent)')
   || !coreSource.includes('validateEcommerceCorrectionIntent(ecommerceCorrectionNavigationIntent)')
@@ -3989,12 +4034,14 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || ecommerceBuyingUiSource.includes('Continue to Shop review')
   || ecommerceBuyingUiSource.includes('handoffConfirmed')
   || !ecommerceBuyingUiSource.includes('Payment remains unauthorized.')
-  || !ecommerceSource.includes('state: { ecommerceShopDraft: draft }')
+  || !ecommerceSource.includes("navigate(ecommerceShopIntentPath('order', draft.sourceRequestId))")
+  || !ecommerceBuyingLifecycleSource.includes('orderDraft: await prepareEcommerceShopDraftV2({')
   || !coreSource.includes('Ecommerce request')
   || !coreSource.includes('ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftMatchesOperatingContext, ecommerceShopDraftPayment')
   || !coreSource.includes('const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)')
   || !coreSource.includes('setExtraOrderLines(draftLines.slice(1).map')
   || !coreSource.includes('setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))')
+  || !coreSource.includes('consumedEcommerceDraftId.current = navigationDraftId')
   || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7'")
   || !coreSource.includes("setNotice('The Ecommerce request has no valid Shop operating authority. Nothing was prepared.')")
   || !coreSource.includes("setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')")
