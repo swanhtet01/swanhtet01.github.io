@@ -1394,7 +1394,7 @@ export function EcommerceBuyingWorkspace({
             </article>
           ) : receiptCurrent ? (
             <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={focusRequestReceipt} tabIndex={-1}>
-              <span className="status-pill ready">{managedDeliveryConfirmed ? 'Request sent to Shop' : 'Request saved on this device'}</span>
+              <span className="status-pill ready">{managedDeliveryConfirmed ? 'Request sent to Shop' : 'Request saved locally'}</span>
               <strong>Request for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
               <div className="ecommerce-quote-boundaries">
@@ -1404,7 +1404,7 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Payment</small><b>{paymentLabel(latestRequest.quote.payment.adapter)} · not charged</b></span>
               </div>
               <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
-              <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : onRecordManagedRequest ? 'Saved on this device. Company Shop delivery is not verified here.' : 'Saved on this device for Shop review.'} Shop still confirms stock, promise, payment, and delivery.</p>
+              <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : onRecordManagedRequest ? 'Request saved locally. Company Shop delivery has not been verified.' : 'Request saved locally for Shop review.'} Shop still confirms stock, promise, payment, and delivery.</p>
               <button className="core-button secondary" disabled={disabled || recoveryBlocked || !receiptCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
                 {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>

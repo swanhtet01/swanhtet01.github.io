@@ -4643,7 +4643,7 @@ const websiteMobileCss = websiteCssSource.slice(websiteMobileCssStart, websiteMo
 const websitePreviewControlsHiddenUnconditionally = /(?:^|\n)\s*\.website-preview-controls\s*\{\s*display:\s*none/.test(websiteMobileCss)
 if (!websiteMobileCss.includes('.website-preview-controls') || !websiteMobileCss.includes('display: flex') || websitePreviewControlsHiddenUnconditionally) fail('website_mobile_review_controls_hidden')
 if (!websiteCssSource.includes('.website-inline-actions > button,\n  .website-navigation-actions > button {\n    min-width: 44px;')) fail('website_mobile_reorder_touch_target_undersized')
-if (!commerceIntakeSource.includes('Saved on this device.') || !commerceIntakeSource.includes('No payment collected.')) fail('commerce_intake_boundary_missing')
+if (!commerceIntakeSource.includes('Request saved locally for review.') || !commerceIntakeSource.includes('No payment was collected.')) fail('commerce_intake_boundary_missing')
 if (!commerceIntakeSource.includes('aria-label="Website order review"')
   || !commerceIntakeSource.includes("pendingManaged ? 'Confirm the order below to update stock.' : ''")
   || !commerceIntakeSource.includes('<label>Staff ID')
