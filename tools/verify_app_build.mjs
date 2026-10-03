@@ -3888,7 +3888,7 @@ if (addToCartStart < 0
   || ecommerceBuyingUiSource.includes('Review current Shop values before handoff.')
   || !ecommerceBuyingUiSource.includes('<small>Receive order</small>')
   || !ecommerceBuyingUiSource.includes('Reference {latestRequest.id} · quote valid until')
-  || !ecommerceBuyingUiSource.includes('Saved on this device for Shop review.')
+  || !ecommerceBuyingUiSource.includes('Request saved locally for Shop review.')
   || ecommerceBuyingUiSource.includes('browser demo')
   || ecommerceBuyingUiSource.includes('sample order request')
   || ecommerceBuyingUiSource.includes('I checked the items, total, fulfilment, and payment.')
