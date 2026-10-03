@@ -4070,22 +4070,27 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         const proof = commerceActionProof(action)
         const ownedOrder = { ...order, owner: action.actor }
         if (!await review.beforeCommit(order.id)) throw new Error('Counter recovery could not be secured. No new sale was attempted.')
-        // Browser-local counter settlement is one crash-safe workspace write. The same
-        // pure lifecycle transitions used by Orders are composed inside one recovery
-        // intent, with a unique proof id per recorded step. Managed workspaces stay on
-        // the server-supported open-order intent until a compound command exists there.
+        // Counter settlement is one crash-safe workspace write. The same pure lifecycle
+        // transitions used by Orders are composed inside one reviewed intent, with a
+        // unique proof id per recorded step. Managed persistence re-derives the complete
+        // sale from this order intent under the server state lock.
         await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => {
           let state = reserveCommerceOrder(current, ownedOrder, proof)
           if (!state || !completesSale) return state
-          if (managedIdentity) return null
-          state = reconcileCommercePayment(state, order.id, { ...proof, actionId: `${proof.actionId}:payment` })
+          state = reconcileCommercePayment(state, order.id, { ...proof, actionId: `${proof.actionId}-PAYMENT` })
           if (!state) return null
           for (let step = 0; step < 3; step += 1) {
             const live = state.orders.find((candidate) => candidate.id === order.id)
             if (!live || live.status === 'cancelled') return null
             if (live.status === 'completed') break
             const stepStatus = live.status
-            const advanced = advanceCommerceOrder(state, order.id, stepStatus, { ...proof, actionId: `${proof.actionId}:advance-${stepStatus}` }, 'client')
+            const advanced = advanceCommerceOrder(
+              state,
+              order.id,
+              stepStatus,
+              { ...proof, actionId: `${proof.actionId}-ADVANCE-${stepStatus.toUpperCase()}` },
+              managedIdentity ? 'managed-server' : 'client',
+            )
             if (!advanced) return null
             state = advanced
           }
@@ -6901,7 +6906,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>

@@ -43,6 +43,14 @@ from supermega_runtime.ecommerce_buying_lifecycle import (
     build_ecommerce_pim_projection,
 )
 from supermega_runtime.runtime import reduce_trial_state
+from supermega_runtime.shop_inventory_runtime import (
+    EMPTY_SHOP_INVENTORY_DIGEST,
+    SHOP_INVENTORY_IMPORT_CONTRACT,
+    SHOP_INVENTORY_SCHEMA,
+    shop_inventory_catalog_digest,
+    shop_inventory_sku_available_to_promise,
+    shop_inventory_sku_totals,
+)
 from supermega_runtime.trial_store import (
     InMemoryTrialStore,
     TrialHumanApprovalRequired,
@@ -79,6 +87,13 @@ DEFAULT_STOREFRONT_PREVIEW_DIGEST = (
 DEFAULT_STOREFRONT_ACTION_ID = (
     "ACT-STOREFRONT-R1-3d8a204568ebc4399841a2fd7482876dc600c699d9603c1ed0ddefc0215804db"
 )
+
+
+def canonical_digest(value: object) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+    return f"sha256:{sha256(encoded).hexdigest()}"
 
 
 def myanmar_business_date(timestamp: str) -> str:
@@ -914,6 +929,75 @@ def spa_counter_order_intent(**overrides: object) -> dict[str, object]:
     }
     intent.update(overrides)
     return intent
+
+
+def counter_order_intent(**overrides: object) -> dict[str, object]:
+    intent: dict[str, object] = {
+        "orderId": "ORD-COUNTER-1",
+        "customer": "Guest",
+        "channel": "Walk-in",
+        "payment": "KBZPay",
+        "fulfilment": "pickup",
+        "fulfilmentReference": "Counter ORD-COUNTER-1",
+        "promisedAt": PROMISED_AT,
+        "paymentTermsDays": 0,
+        "lines": [{"sku": "SKU-1", "quantity": 2}],
+    }
+    intent.update(overrides)
+    return intent
+
+
+def counter_location_inventory() -> dict[str, object]:
+    package: dict[str, object] = {
+        "contract": SHOP_INVENTORY_IMPORT_CONTRACT,
+        "importId": "IMP-COUNTER-OPENING-001",
+        "sourceDigest": canonical_digest({"rows": 1, "source": "counter-opening"}),
+        "catalogSkuDigest": shop_inventory_catalog_digest(["SKU-1"]),
+        "clients": [{"id": "CLI-WALK-IN-001", "name": "Walk-in customer"}],
+        "vendors": [{"id": "VEN-OPENING-001", "name": "Opening source"}],
+        "locations": [
+            {"id": "LOC-BRANCH", "name": "Branch"},
+            {"id": "LOC-MAIN", "name": "Main store"},
+        ],
+        "stockUnits": [
+            {
+                "id": "LOT-SKU1-OPENING-001",
+                "sku": "SKU-1",
+                "tracking": "lot",
+                "trackingCode": "OPENING-001",
+            }
+        ],
+        "openings": [
+            {
+                "stockUnitId": "LOT-SKU1-OPENING-001",
+                "locationId": "LOC-MAIN",
+                "vendorId": "VEN-OPENING-001",
+                "quantity": 10,
+            }
+        ],
+    }
+    package["packageDigest"] = canonical_digest(package)
+    payload = {
+        "kind": "import",
+        "id": "IMP-COUNTER-OPENING-001",
+        "package": package,
+        "proof": action_evidence(
+            "ACT-COUNTER-OPENING-001",
+            captured_at="2026-07-23T08:00:00.000Z",
+        ),
+    }
+    body = {
+        "sequence": 1,
+        "previousDigest": EMPTY_SHOP_INVENTORY_DIGEST,
+        "payload": payload,
+    }
+    command = {**body, "digest": canonical_digest(body)}
+    return {
+        "schema": SHOP_INVENTORY_SCHEMA,
+        "revision": 1,
+        "headDigest": command["digest"],
+        "commands": [command],
+    }
 
 
 def completed_state(order_id: str = "ORD-1") -> dict[str, object]:
@@ -8544,6 +8628,186 @@ class CommerceRuntimeTests(unittest.TestCase):
             apply_event({}, "commerce.workspace.initialized", invalid)
         with self.assertRaises(TrialValidationError):
             apply_event({}, "commerce.snapshot.saved", catalog_state())
+
+    def test_managed_counter_completion_is_atomic_and_location_consistent(self) -> None:
+        current = catalog_state()
+        current["inventoryFoundation"] = counter_location_inventory()
+        evidence = action_evidence("ACT-COUNTER-COMPLETE")
+        completed = reduce_trial_state(
+            "commerce",
+            "commerce.order.created",
+            current,
+            {
+                "intent": counter_order_intent(completeAtCounter=True),
+                "evidence": evidence,
+            },
+        )
+
+        order = completed["orders"][0]
+        self.assertEqual(order["status"], "completed")
+        self.assertEqual(order["paymentStatus"], "reconciled")
+        self.assertEqual(order["paymentReconciliationActionId"], "ACT-COUNTER-COMPLETE-PAYMENT")
+        self.assertEqual(
+            order["advancementActionIds"],
+            [
+                "ACT-COUNTER-COMPLETE-ADVANCE-CONFIRMED",
+                "ACT-COUNTER-COMPLETE-ADVANCE-PREPARING",
+            ],
+        )
+        self.assertEqual(order["completion"]["actionId"], "ACT-COUNTER-COMPLETE-ADVANCE-READY")
+        self.assertEqual(completed["items"][0]["onHand"], 8)
+        self.assertEqual(completed["movements"][0]["kind"], "reserve")
+        self.assertEqual(completed["inventoryFoundation"]["revision"], 3)
+        self.assertEqual(
+            [command["payload"]["kind"] for command in completed["inventoryFoundation"]["commands"]],
+            ["import", "order_reserve", "order_fulfil"],
+        )
+        self.assertEqual(
+            shop_inventory_sku_totals(completed["inventoryFoundation"], ["SKU-1"]),
+            {"SKU-1": 8},
+        )
+        self.assertEqual(
+            shop_inventory_sku_available_to_promise(
+                completed["inventoryFoundation"], ["SKU-1"]
+            ),
+            {"SKU-1": 8},
+        )
+
+    def test_managed_counter_completion_replays_and_fails_closed(self) -> None:
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-counter", "Accountable operator", "human")
+        agent = TrialPrincipal("workspace-counter", "automation-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        current = catalog_state()
+        current["inventoryFoundation"] = counter_location_inventory()
+        command_id = str(uuid4())
+        payload = {
+            "intent": counter_order_intent(completeAtCounter=True),
+            "evidence": action_evidence("ACT-COUNTER-ATOMIC"),
+        }
+        with patch("supermega_runtime.trial_store._utc_now", return_value=NOW):
+            initialized = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.workspace.initialized",
+                expected_version=0,
+                payload={
+                    "state": current,
+                    "evidence": action_evidence("ACT-COUNTER-INIT"),
+                },
+            )
+            first = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=initialized.version,
+                payload=payload,
+            )
+            replay = store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=initialized.version,
+                payload=payload,
+            )
+
+        self.assertEqual(first.version, initialized.version + 1)
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(replay.state, first.state)
+        self.assertEqual(first.state["items"][0]["onHand"], 8)
+
+        conflicting = deepcopy(payload)
+        conflicting["intent"]["lines"] = [{"sku": "SKU-1", "quantity": 1}]
+        with self.assertRaises(TrialIdempotencyConflict):
+            store.apply_command(
+                operator,
+                command_id=command_id,
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=initialized.version,
+                payload=conflicting,
+            )
+        with self.assertRaises(TrialVersionConflict):
+            store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=initialized.version,
+                payload={
+                    "intent": counter_order_intent(orderId="ORD-COUNTER-STALE", completeAtCounter=True),
+                    "evidence": action_evidence("ACT-COUNTER-STALE"),
+                },
+            )
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=first.version,
+                payload={
+                    "intent": counter_order_intent(orderId="ORD-COUNTER-AGENT", completeAtCounter=True),
+                    "evidence": action_evidence("ACT-COUNTER-AGENT", actor=agent.actor_id),
+                },
+            )
+
+    def test_counter_completion_requires_explicit_safe_intent(self) -> None:
+        current = catalog_state()
+        evidence = action_evidence("ACT-COUNTER-INTENT")
+        completed = reduce_trial_state(
+            "commerce",
+            "commerce.order.created",
+            current,
+            {
+                "intent": counter_order_intent(completeAtCounter=True),
+                "evidence": evidence,
+            },
+        )
+        with self.assertRaises(TrialValidationError):
+            reduce_trial_state(
+                "commerce",
+                "commerce.order.created",
+                current,
+                {"state": completed, "evidence": evidence},
+            )
+        for override in (
+            {"completeAtCounter": "yes"},
+            {"completeAtCounter": True, "channel": "Website"},
+            {"completeAtCounter": True, "fulfilment": "delivery"},
+            {"completeAtCounter": True, "paymentTermsDays": 7},
+            {"completeAtCounter": True, "lines": [{"sku": "SKU-1", "quantity": 11}]},
+        ):
+            with self.subTest(override=override):
+                with self.assertRaises(TrialValidationError):
+                    reduce_trial_state(
+                        "commerce",
+                        "commerce.order.created",
+                        current,
+                        {
+                            "intent": counter_order_intent(**override),
+                            "evidence": evidence,
+                        },
+                    )
+        with self.assertRaises(TrialValidationError):
+            reduce_trial_state(
+                "commerce",
+                "commerce.order.created",
+                spa_counter_state(),
+                {
+                    "intent": spa_counter_order_intent(completeAtCounter=True),
+                    "evidence": action_evidence("ACT-SPA-COUNTER-COMPLETE"),
+                },
+            )
 
     def test_spa_counter_order_uses_retained_client_and_record_only_mmk_tender(self) -> None:
         for tender in ("cash", "bank_transfer", "mobile_wallet"):
