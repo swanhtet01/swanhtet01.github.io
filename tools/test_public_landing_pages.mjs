@@ -56,7 +56,7 @@ check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status
 const descriptions = []
 const productScreens = {
   shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
-  website: ['actual-sites-editor.png'],
+  website: ['actual-sites-editor.png', 'actual-sites-inquiries.png'],
   ecommerce: ['actual-commerce-order-request.png'],
 }
 check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
@@ -105,6 +105,12 @@ for (const page of landingPages) {
     check(html.includes('alt="Current Commerce Store showing a locally saved customer request awaiting Shop confirmation"'), 'landing_commerce_capture_matches_current_store_flow')
     check(html.includes('width="1280" height="900"'), 'landing_commerce_capture_dimensions_exact')
     check(html.includes('Commerce &middot; Store request and Shop review &middot; Actual app capture with synthetic example records. Local build.'), 'landing_commerce_capture_scope_truthful')
+  }
+  if (page.productId === 'website') {
+    check(html.includes('alt="Current Sites editor showing page navigation, focused content editing and live readiness checks"'), 'landing_sites_editor_capture_current')
+    check(html.includes('alt="Current Sites inquiry workspace showing a synthetic customer request, ownership and decision controls"'), 'landing_sites_inquiry_capture_current')
+    check(html.includes('Sites &middot; Page workspace and readiness &middot; Actual app capture with synthetic example records. Local build.'), 'landing_sites_editor_capture_scope_truthful')
+    check(html.includes('Sites &middot; Inquiry review and ownership &middot; Actual app capture with synthetic example records. Local build.'), 'landing_sites_inquiry_capture_scope_truthful')
   }
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)

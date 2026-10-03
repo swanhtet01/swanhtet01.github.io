@@ -96,6 +96,7 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-sell.png',
   'images/actual-shop-orders.png',
   'images/actual-sites-editor.png',
+  'images/actual-sites-inquiries.png',
   'images/actual-commerce-order-request.png',
   'og-card.png',
   ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
