@@ -1178,13 +1178,39 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
   const source = await evalInPage(cdp, sessionId, `(() => {
     const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
     const actions = JSON.parse(localStorage.getItem(${JSON.stringify(ACTION_KEY)}) || '[]');
-    const request = commerce?.storefrontRequests?.[0];
+    const recoveryKeys = Object.keys(localStorage).filter((key) => key.startsWith('supermega.ecommerce.buying_lifecycle.v1.'));
+    const recoveryStates = recoveryKeys.flatMap((key) => {
+      try { return [JSON.parse(localStorage.getItem(key) || 'null')]; } catch { return []; }
+    }).filter(Boolean);
+    const requests = recoveryStates.flatMap((state) => Array.isArray(state?.requests) ? state.requests : []);
+    const request = requests[0];
     const lines = request?.lines || (request?.line ? [request.line] : []);
     const firstLine = lines[0];
     const item = commerce?.items?.find((candidate) => candidate.sku === firstLine?.sku);
+    const paymentAdapter = request?.quote?.payment?.adapter || '';
+    const handoffReference = request?.deliveryAddress
+      ? [request.deliveryAddress.line1, request.deliveryAddress.township, request.deliveryAddress.city, request.deliveryAddress.instructions]
+          .filter(Boolean).join(' · ')
+      : request?.id || '';
     return {
       requestId: request?.id || '',
-      requestCount: commerce?.storefrontRequests?.length || 0,
+      requestCount: requests.length,
+      recoveryKeyCount: recoveryKeys.length,
+      sharedRequestCountBefore: commerce?.storefrontRequests?.length || 0,
+      customer: request?.customerProfile?.name || request?.customerReference || '',
+      customerReference: request?.customerReference || '',
+      fulfilment: request?.fulfilment || '',
+      handoffReference,
+      payment: paymentAdapter === 'cash_on_delivery' ? 'Cash on delivery' : paymentAdapter === 'kbzpay_manual' ? 'KBZPay' : paymentAdapter === 'pay_on_pickup' ? 'Cash' : '',
+      totalMmk: request?.totalMmk ?? null,
+      lines: lines.map((line) => ({
+        sku: line.sku,
+        name: line.name,
+        variant: line.variant ?? null,
+        quantity: line.quantity,
+        unitPriceMmk: line.unitPriceMmk,
+        lineTotalMmk: line.lineTotalMmk ?? line.quantity * line.unitPriceMmk,
+      })),
       sku: firstLine?.sku || '',
       quantity: firstLine?.quantity || 0,
       stockBefore: item?.onHand ?? null,
@@ -1192,65 +1218,78 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
       actionCountBefore: actions.length,
     };
   })()`)
-  if (!source?.requestId || !source?.sku || source.requestCount !== 1 || source.orderCountBefore !== 0 || source.actionCountBefore !== 0) {
-    return { ok: false, error: 'captured request was not the only unconverted Shop source', claimBoundary, source }
+  if (!source?.requestId || !source?.sku || !source.customer || !source.fulfilment || !source.handoffReference || !source.payment
+    || !Array.isArray(source.lines) || !source.lines.length || !Number.isSafeInteger(source.totalMmk)
+    || source.requestCount !== 1 || source.recoveryKeyCount !== 1
+    || source.sharedRequestCountBefore !== 0 || source.orderCountBefore !== 0 || source.actionCountBefore !== 0) {
+    return { ok: false, error: 'captured request was not the only recoverable local Ecommerce source', claimBoundary, source }
   }
 
-  await cdp.send('Page.navigate', { url: `${origin}/shop/?tab=orders` }, sessionId)
-  await waitForRenderedState(cdp, sessionId, '/shop/?tab=orders', ['Shop', 'Orders'], timeoutMs)
-
-  const composerDeadline = Date.now() + 15_000
-  let composerOpened = false
-  while (Date.now() < composerDeadline && !composerOpened) {
-    composerOpened = await evalInPage(cdp, sessionId, `(() => {
-      const button = [...document.querySelectorAll('button')]
-        .find((candidate) => candidate.textContent.trim() === 'New order' && !candidate.disabled && candidate.getClientRects().length);
-      if (!button) return false;
-      button.click();
-      return true;
-    })()`)
-    if (!composerOpened) await new Promise((resolveWait) => setTimeout(resolveWait, 100))
-  }
-  if (!composerOpened) return { ok: false, error: 'Shop order composer was not available', claimBoundary, source }
-
-  const inboxDeadline = Date.now() + 15_000
-  let inbox = null
-  while (Date.now() < inboxDeadline) {
-    inbox = await evalInPage(cdp, sessionId, `(() => {
-      const dialog = document.querySelector('dialog.order-composer-dialog[open]');
-      const online = [...(dialog?.querySelectorAll('.order-entry-methods button') || [])]
-        .find((candidate) => candidate.textContent.trim() === 'Online request');
-      if (online && online.getAttribute('aria-pressed') !== 'true') online.click();
-      const panel = dialog?.querySelector('.website-intake');
-      const review = [...(panel?.querySelectorAll('button') || [])]
-        .find((candidate) => candidate.textContent.trim() === 'Review' && !candidate.disabled);
-      const status = panel?.querySelector('.status-pill')?.textContent.trim() || '';
-      const text = panel?.textContent || '';
-      if (!dialog || !panel || !review || status !== 'This device' || !text.includes(${JSON.stringify(source.requestId)})) {
-        return { ready: false, status, requestVisible: text.includes(${JSON.stringify(source.requestId)}) };
+  const handoffDeadline = Date.now() + 15_000
+  let handoff = null
+  while (Date.now() < handoffDeadline) {
+    handoff = await evalInPage(cdp, sessionId, `(() => {
+      const receipt = document.querySelector('.ecommerce-request-receipt[data-current="true"]');
+      const button = [...(receipt?.querySelectorAll('button') || [])]
+        .find((candidate) => candidate.textContent.trim() === 'Open Shop operator review' && !candidate.disabled);
+      const text = receipt?.textContent || '';
+      if (!receipt || !button || !text.includes(${JSON.stringify(source.requestId)})) {
+        return { ready: false, sourceVisible: text.includes(${JSON.stringify(source.requestId)}) };
       }
-      review.click();
-      return { ready: true, status, requestVisible: true };
+      button.click();
+      return { ready: true, sourceVisible: true };
     })()`)
-    if (inbox?.ready) break
+    if (handoff?.ready) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
-  if (!inbox?.ready) return { ok: false, error: 'same-device Ecommerce inbox did not expose the request', claimBoundary, source, inbox }
+  if (!handoff?.ready) return { ok: false, error: 'local Ecommerce receipt could not open Shop operator review', claimBoundary, source, handoff }
+
+  await waitForRenderedState(cdp, sessionId, expectedPath, ['Shop', 'Add an order'], timeoutMs)
 
   const reviewDeadline = Date.now() + 15_000
   let prepared = null
   while (Date.now() < reviewDeadline) {
     prepared = await evalInPage(cdp, sessionId, `(() => {
       const dialog = document.querySelector('dialog.order-composer-dialog[open]');
+      const form = dialog?.querySelector('#commerce-manual-order-form');
       const sourceReady = dialog?.querySelector('.channel-source-ready');
       const review = [...(dialog?.querySelectorAll('button') || [])]
         .find((candidate) => candidate.textContent.trim() === 'Review order');
       const payment = dialog?.querySelector('.order-ecommerce-payment select');
       const sourceText = sourceReady?.textContent || '';
-      const ready = Boolean(dialog && sourceText.includes(${JSON.stringify(source.requestId)}) && review && !review.disabled);
+      const labels = [...(form?.querySelectorAll('label') || [])];
+      const directLabelText = (label) => [...label.childNodes]
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent || '').join(' ').trim();
+      const labelledControl = (prefix, selector) => labels
+        .find((label) => directLabelText(label).startsWith(prefix))?.querySelector(selector);
+      const itemLabels = labels.filter((label) => directLabelText(label).startsWith('Item'));
+      const quantityLabels = labels.filter((label) => directLabelText(label).startsWith('Quantity'));
+      const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+      const lines = itemLabels.map((label, index) => {
+        const sku = label.querySelector('select')?.value || '';
+        const item = commerce?.items?.find((candidate) => candidate.sku === sku);
+        const quantity = Number(quantityLabels[index]?.querySelector('input')?.value || 0);
+        return {
+          sku,
+          name: item?.name || '',
+          variant: item?.variant ?? null,
+          quantity,
+          unitPriceMmk: item?.price ?? null,
+          lineTotalMmk: Number.isSafeInteger(item?.price) ? item.price * quantity : null,
+        };
+      });
+      const totalText = form?.querySelector('.order-total strong')?.textContent || '';
+      const ready = Boolean(dialog && form && sourceText.includes(${JSON.stringify(source.requestId)}) && review && !review.disabled);
       return {
         ready,
+        route: location.pathname + location.search,
         sourceBound: sourceText.includes(${JSON.stringify(source.requestId)}),
+        customer: labelledControl('Customer', 'input')?.value || '',
+        fulfilment: labelledControl('Fulfilment', 'select')?.value || '',
+        handoffReference: labelledControl('Handoff reference', 'input')?.value || '',
+        lines,
+        totalMmk: Number(totalText.replace(/[^0-9-]/g, '')),
         paymentLocked: Boolean(payment?.disabled),
         payment: payment?.value || '',
       };
@@ -1258,7 +1297,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     if (prepared?.ready) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
-  if (!prepared?.ready) return { ok: false, error: 'Shop could not prepare the exact Ecommerce request', claimBoundary, source, inbox, prepared }
+  if (!prepared?.ready) return { ok: false, error: 'Shop could not prepare the exact Ecommerce request', claimBoundary, source, handoff, prepared }
 
   const queued = await evalInPage(cdp, sessionId, `(() => {
     const review = [...document.querySelectorAll('dialog.order-composer-dialog[open] button')]
@@ -1267,7 +1306,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     review.click();
     return true;
   })()`)
-  if (!queued) return { ok: false, error: 'prepared Ecommerce order could not enter accountable review', claimBoundary, source, inbox, prepared }
+  if (!queued) return { ok: false, error: 'prepared Ecommerce order could not enter accountable review', claimBoundary, source, handoff, prepared }
 
   const gateDeadline = Date.now() + 15_000
   let gate = null
@@ -1292,7 +1331,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
   if (!gate?.ready || !gate.summaryBound || !gate.reasonPresent || !gate.sourceEvidenceBound || !gate.evidenceReference) {
-    return { ok: false, error: 'accountable Shop review did not bind the Ecommerce source', claimBoundary, source, inbox, prepared, gate }
+    return { ok: false, error: 'accountable Shop review did not bind the Ecommerce source', claimBoundary, source, handoff, prepared, gate }
   }
 
   const confirmed = await evalInPage(cdp, sessionId, `(() => {
@@ -1301,7 +1340,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     submit.click();
     return true;
   })()`)
-  if (!confirmed) return { ok: false, error: 'accountable Shop confirmation was not available', claimBoundary, source, inbox, prepared, gate }
+  if (!confirmed) return { ok: false, error: 'accountable Shop confirmation was not available', claimBoundary, source, handoff, prepared, gate }
 
   const committedDeadline = Date.now() + 20_000
   let committed = null
@@ -1315,8 +1354,18 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
         && action.kind === 'order_create'
         && action.subjectId === order?.id
         && action.evidenceReference === ${JSON.stringify(gate.evidenceReference)});
+      const orderCreateActionIds = actions.filter((action) => action.domain === 'commerce' && action.kind === 'order_create')
+        .map((action) => action.id).sort();
       const accountableAction = matchingActions[0];
       const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
+      const sourceRequestCopies = Object.keys(localStorage)
+        .filter((key) => key.startsWith('supermega.ecommerce.buying_lifecycle.v1.'))
+        .flatMap((key) => {
+          try {
+            const state = JSON.parse(localStorage.getItem(key) || 'null');
+            return Array.isArray(state?.requests) ? state.requests : [];
+          } catch { return []; }
+        }).filter((request) => request.id === ${JSON.stringify(source.requestId)}).length;
       return {
         route: location.pathname + location.search,
         matchingOrderCount: matching.length,
@@ -1326,14 +1375,15 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
         orderId: order?.id || '',
         stockAfter: item?.onHand ?? null,
         accountableActionCount: matchingActions.length,
+        orderCreateActionIds,
         actionId: accountableAction?.id || '',
         commandId: accountableAction?.commandId || '',
         actionActor: accountableAction?.actor || '',
         actionReason: accountableAction?.reason || '',
         actionEvidenceReference: accountableAction?.evidenceReference || '',
         actionSubjectId: accountableAction?.subjectId || '',
-        pendingRequestCount: (commerce?.storefrontRequests || []).filter((request) =>
-          !(commerce?.orders || []).some((candidate) => candidate.sourceRecordId === request.id)).length,
+        sourceRequestCopies,
+        sharedInboxRequestCount: commerce?.storefrontRequests?.length || 0,
       };
     })()`)
     if (committed?.matchingOrderCount === 1 && committed?.route === expectedPath) break
@@ -1351,8 +1401,18 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
       && action.kind === 'order_create'
       && action.subjectId === order?.id
       && action.evidenceReference === ${JSON.stringify(gate.evidenceReference)});
+    const orderCreateActionIds = actions.filter((action) => action.domain === 'commerce' && action.kind === 'order_create')
+      .map((action) => action.id).sort();
     const accountableAction = matchingActions[0];
     const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
+    const sourceRequestCopies = Object.keys(localStorage)
+      .filter((key) => key.startsWith('supermega.ecommerce.buying_lifecycle.v1.'))
+      .flatMap((key) => {
+        try {
+          const state = JSON.parse(localStorage.getItem(key) || 'null');
+          return Array.isArray(state?.requests) ? state.requests : [];
+        } catch { return []; }
+      }).filter((request) => request.id === ${JSON.stringify(source.requestId)}).length;
     const bodyText = document.body?.innerText || '';
     return {
       route: location.pathname + location.search,
@@ -1363,14 +1423,15 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
       orderId: order?.id || '',
       stockAfter: item?.onHand ?? null,
       accountableActionCount: matchingActions.length,
+      orderCreateActionIds,
       actionId: accountableAction?.id || '',
       commandId: accountableAction?.commandId || '',
       actionActor: accountableAction?.actor || '',
       actionReason: accountableAction?.reason || '',
       actionEvidenceReference: accountableAction?.evidenceReference || '',
       actionSubjectId: accountableAction?.subjectId || '',
-      requestStillPending: (commerce?.storefrontRequests || []).some((request) => request.id === ${JSON.stringify(source.requestId)})
-        && !matching.length,
+      sourceRequestCopies,
+      sharedInboxRequestCount: commerce?.storefrontRequests?.length || 0,
       customerVisible: bodyText.includes('May Thiri'),
       paymentPendingVisible: bodyText.includes('Payment pending'),
       viewportWidth: window.innerWidth,
@@ -1379,16 +1440,97 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     };
   })()`)
 
+  const replayPath = `/shop/?tab=orders&source=ecommerce-handoff&handoff=order&handoff_id=${encodeURIComponent(source.requestId)}`
+  await cdp.send('Page.navigate', { url: `${origin}${replayPath}` }, sessionId)
+  await waitForRenderedState(cdp, sessionId, replayPath, ['Shop', 'Ecommerce request', source.requestId], timeoutMs)
+  const replayAttempted = await evalInPage(cdp, sessionId, `(() => {
+    const dialog = document.querySelector('dialog.order-composer-dialog[open]');
+    const sourceText = dialog?.querySelector('.channel-source-ready')?.textContent || '';
+    const review = [...(dialog?.querySelectorAll('button') || [])]
+      .find((candidate) => candidate.textContent.trim() === 'Review order' && !candidate.disabled);
+    if (!dialog || !review || !sourceText.includes(${JSON.stringify(source.requestId)})) return false;
+    review.click();
+    return true;
+  })()`)
+  if (!replayAttempted) {
+    return { ok: false, error: 'retained Ecommerce source could not be replay-tested', claimBoundary, source, handoff, prepared, gate, committed, restored }
+  }
+
+  const replayDeadline = Date.now() + 15_000
+  let replay = null
+  while (Date.now() < replayDeadline) {
+    replay = await evalInPage(cdp, sessionId, `(() => {
+      const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+      const actions = JSON.parse(localStorage.getItem(${JSON.stringify(ACTION_KEY)}) || '[]');
+      const matching = commerce?.orders?.filter((order) => order.sourceRecordId === ${JSON.stringify(source.requestId)}) || [];
+      const order = matching[0];
+      const matchingActions = actions.filter((action) => action.domain === 'commerce'
+        && action.kind === 'order_create'
+        && action.subjectId === order?.id
+        && action.evidenceReference === ${JSON.stringify(gate.evidenceReference)});
+      const orderCreateActionIds = actions.filter((action) => action.domain === 'commerce' && action.kind === 'order_create')
+        .map((action) => action.id).sort();
+      const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
+      const sourceRequestCopies = Object.keys(localStorage)
+        .filter((key) => key.startsWith('supermega.ecommerce.buying_lifecycle.v1.'))
+        .flatMap((key) => {
+          try {
+            const state = JSON.parse(localStorage.getItem(key) || 'null');
+            return Array.isArray(state?.requests) ? state.requests : [];
+          } catch { return []; }
+        }).filter((request) => request.id === ${JSON.stringify(source.requestId)}).length;
+      const bodyText = document.body?.innerText || '';
+      return {
+        attempted: true,
+        route: location.pathname + location.search,
+        duplicateBlocked: bodyText.includes(${JSON.stringify(`${source.requestId} is already linked to an order. No duplicate was queued.`)}),
+        gateOpened: Boolean(document.querySelector('dialog.accountable-action-gate[open]')),
+        matchingOrderCount: matching.length,
+        accountableActionCount: matchingActions.length,
+        orderCreateActionIds,
+        orderId: order?.id || '',
+        stockAfter: item?.onHand ?? null,
+        sourceRequestCopies,
+        sharedInboxRequestCount: commerce?.storefrontRequests?.length || 0,
+      };
+    })()`)
+    if (replay?.duplicateBlocked || replay?.gateOpened) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+
+  await cdp.send('Page.navigate', { url: `${origin}${expectedPath}` }, sessionId)
+  await waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs)
+
   const expectedStock = Number(source.stockBefore) - Number(source.quantity)
+  const preparedLinesMatch = JSON.stringify(prepared?.lines) === JSON.stringify(source.lines)
   const checks = {
     localRequestCaptured: source.requestCount === 1,
-    sameDeviceInbox: inbox.status === 'This device' && inbox.requestVisible,
-    exactSourcePrepared: prepared.sourceBound && prepared.paymentLocked && prepared.payment === 'Cash',
+    sameDeviceHandoff: handoff.ready && handoff.sourceVisible,
+    exactSourcePrepared: prepared.route === expectedPath
+      && prepared.sourceBound
+      && prepared.customer === source.customer
+      && prepared.fulfilment === source.fulfilment
+      && prepared.handoffReference === source.handoffReference
+      && preparedLinesMatch
+      && prepared.totalMmk === source.totalMmk
+      && prepared.paymentLocked
+      && prepared.payment === source.payment,
     accountableSourceBound: gate.summaryBound && gate.reasonPresent && gate.sourceEvidenceBound,
     confirmedOnce: committed?.matchingOrderCount === 1 && restored?.matchingOrderCount === 1,
     paymentStillPending: committed?.paymentStatus === 'pending' && restored?.paymentStatus === 'pending',
     stockReservedOnce: committed?.stockAfter === expectedStock && restored?.stockAfter === expectedStock,
-    sourceConsumed: committed?.pendingRequestCount === 0 && restored?.requestStillPending === false,
+    sourceRetained: committed?.sourceRequestCopies === 1 && restored?.sourceRequestCopies === 1
+      && committed?.sharedInboxRequestCount === 0 && restored?.sharedInboxRequestCount === 0,
+    replayBlocked: replay?.attempted === true
+      && replay?.duplicateBlocked === true
+      && replay?.gateOpened === false
+      && replay?.matchingOrderCount === 1
+      && replay?.accountableActionCount === 1
+      && JSON.stringify(replay?.orderCreateActionIds) === JSON.stringify(restored?.orderCreateActionIds)
+      && replay?.orderId === committed?.orderId
+      && replay?.stockAfter === restored?.stockAfter
+      && replay?.sourceRequestCopies === 1
+      && replay?.sharedInboxRequestCount === 0,
     accountableOwner: committed?.owner === 'Shop reviewer' && restored?.owner === 'Shop reviewer',
     accountableActionRecorded: committed?.accountableActionCount === 1
       && restored?.accountableActionCount === 1
@@ -1414,11 +1556,12 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     checks,
     claimBoundary,
     source,
-    inbox,
+    handoff,
     prepared,
     gate,
     committed,
     restored,
+    replay,
     viewportWidth: restored?.viewportWidth || 0,
     viewportHeight: restored?.viewportHeight || 0,
     documentScrollWidth: restored?.documentScrollWidth || 0,

@@ -358,12 +358,32 @@ export function assertCaseSemantics(testCase, expected) {
       || journey.documentScrollWidth > journey.viewportWidth + 1
       || !isObject(journey.claimBoundary) || journey.claimBoundary.ok !== true
       || !isObject(journey.source) || !exactString(journey.source.requestId, 'app_entry_rendered_store_to_shop_source_invalid')
-      || journey.source.requestCount !== 1 || journey.source.orderCountBefore !== 0 || journey.source.actionCountBefore !== 0
+      || journey.source.requestCount !== 1 || journey.source.recoveryKeyCount !== 1 || journey.source.sharedRequestCountBefore !== 0
+      || journey.source.orderCountBefore !== 0 || journey.source.actionCountBefore !== 0
+      || !exactString(journey.source.customer, 'app_entry_rendered_store_to_shop_customer_invalid')
+      || !exactString(journey.source.customerReference, 'app_entry_rendered_store_to_shop_customer_reference_invalid')
+      || !['pickup', 'delivery'].includes(journey.source.fulfilment)
+      || !exactString(journey.source.handoffReference, 'app_entry_rendered_store_to_shop_handoff_reference_invalid')
+      || !exactString(journey.source.payment, 'app_entry_rendered_store_to_shop_payment_invalid')
+      || !Number.isSafeInteger(journey.source.totalMmk) || journey.source.totalMmk < 1
+      || !Array.isArray(journey.source.lines) || !journey.source.lines.length
+      || journey.source.lines.some((line) => !isObject(line)
+        || !exactString(line.sku, 'app_entry_rendered_store_to_shop_line_sku_invalid')
+        || !exactString(line.name, 'app_entry_rendered_store_to_shop_line_name_invalid')
+        || line.variant !== null && typeof line.variant !== 'string'
+        || !Number.isSafeInteger(line.quantity) || line.quantity < 1
+        || !Number.isSafeInteger(line.unitPriceMmk) || line.unitPriceMmk < 1
+        || line.lineTotalMmk !== line.quantity * line.unitPriceMmk)
       || !Number.isInteger(journey.source.quantity) || journey.source.quantity < 1
       || !Number.isInteger(journey.source.stockBefore) || journey.source.stockBefore < journey.source.quantity
-      || !isObject(journey.inbox) || journey.inbox.ready !== true || journey.inbox.status !== 'This device' || journey.inbox.requestVisible !== true
-      || !isObject(journey.prepared) || journey.prepared.ready !== true || journey.prepared.sourceBound !== true
-      || journey.prepared.paymentLocked !== true || journey.prepared.payment !== 'Cash'
+      || !isObject(journey.handoff) || journey.handoff.ready !== true || journey.handoff.sourceVisible !== true
+      || !isObject(journey.prepared) || journey.prepared.ready !== true || journey.prepared.route !== expected.path || journey.prepared.sourceBound !== true
+      || journey.prepared.customer !== journey.source.customer
+      || journey.prepared.fulfilment !== journey.source.fulfilment
+      || journey.prepared.handoffReference !== journey.source.handoffReference
+      || JSON.stringify(journey.prepared.lines) !== JSON.stringify(journey.source.lines)
+      || journey.prepared.totalMmk !== journey.source.totalMmk
+      || journey.prepared.paymentLocked !== true || journey.prepared.payment !== journey.source.payment
       || !isObject(journey.gate) || journey.gate.ready !== true || journey.gate.summaryBound !== true
       || journey.gate.actor !== 'Shop reviewer' || journey.gate.reasonPresent !== true || journey.gate.sourceEvidenceBound !== true
       || !exactString(journey.gate.evidenceReference, 'app_entry_rendered_store_to_shop_gate_evidence_invalid').includes(journey.source.requestId)
@@ -375,9 +395,12 @@ export function assertCaseSemantics(testCase, expected) {
       || journey.committed.paymentStatus !== 'pending' || journey.restored.paymentStatus !== 'pending'
       || journey.committed.stockAfter !== journey.source.stockBefore - journey.source.quantity
       || journey.restored.stockAfter !== journey.committed.stockAfter
-      || journey.committed.pendingRequestCount !== 0 || journey.restored.requestStillPending !== false
+      || journey.committed.sourceRequestCopies !== 1 || journey.restored.sourceRequestCopies !== 1
+      || journey.committed.sharedInboxRequestCount !== 0 || journey.restored.sharedInboxRequestCount !== 0
       || journey.committed.owner !== 'Shop reviewer' || journey.restored.owner !== 'Shop reviewer'
       || journey.committed.accountableActionCount !== 1 || journey.restored.accountableActionCount !== 1
+      || exactArray(journey.committed.orderCreateActionIds, 'app_entry_rendered_store_to_shop_actions_invalid').length !== 1
+      || JSON.stringify(journey.restored.orderCreateActionIds) !== JSON.stringify(journey.committed.orderCreateActionIds)
       || !exactString(journey.committed.actionId, 'app_entry_rendered_store_to_shop_action_invalid')
       || !exactString(journey.committed.commandId, 'app_entry_rendered_store_to_shop_command_invalid')
       || !exactString(journey.committed.actionReason, 'app_entry_rendered_store_to_shop_reason_invalid')
@@ -391,18 +414,26 @@ export function assertCaseSemantics(testCase, expected) {
       || journey.restored.actionReason !== journey.committed.actionReason
       || journey.restored.actionEvidenceReference !== journey.committed.actionEvidenceReference
       || journey.restored.actionSubjectId !== journey.committed.actionSubjectId
+      || !isObject(journey.replay) || journey.replay.attempted !== true
+      || journey.replay.route !== `/shop/?tab=orders&source=ecommerce-handoff&handoff=order&handoff_id=${encodeURIComponent(journey.source.requestId)}`
+      || journey.replay.duplicateBlocked !== true || journey.replay.gateOpened !== false
+      || journey.replay.matchingOrderCount !== 1 || journey.replay.accountableActionCount !== 1
+      || JSON.stringify(journey.replay.orderCreateActionIds) !== JSON.stringify(journey.restored.orderCreateActionIds)
+      || journey.replay.orderId !== journey.committed.orderId || journey.replay.stockAfter !== journey.restored.stockAfter
+      || journey.replay.sourceRequestCopies !== 1 || journey.replay.sharedInboxRequestCount !== 0
       || journey.committed.route !== expected.path || journey.restored.route !== expected.path) {
       fail('app_entry_rendered_store_to_shop_failed')
     }
     assertAllChecksTrue(journey.checks, [
       'localRequestCaptured',
-      'sameDeviceInbox',
+      'sameDeviceHandoff',
       'exactSourcePrepared',
       'accountableSourceBound',
       'confirmedOnce',
       'paymentStillPending',
       'stockReservedOnce',
-      'sourceConsumed',
+      'sourceRetained',
+      'replayBlocked',
       'accountableOwner',
       'accountableActionRecorded',
       'persistedAfterReload',

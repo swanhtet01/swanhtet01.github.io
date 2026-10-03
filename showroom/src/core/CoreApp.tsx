@@ -2119,7 +2119,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))
-  const ecommerceInboxAvailable = Boolean(managedIdentity || confirmedLocalShop)
   const requestedStorefrontRequestIsWaiting = Boolean(
     requestedRequestId
     && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
@@ -3940,7 +3939,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           ? localDateTimeInputValue(new Date(Date.parse(draft.confirmedAt) + draft.pricing.shipping.promiseMinutes * 60_000))
           : defaultOrderPromiseInput())
         setOrderEntryMode('manual')
-        setNotice(`${request.id} loaded from the Shop inbox with ${draft.lines.length} ${draft.lines.length === 1 ? 'item' : 'items'}. Confirm the promise and payment, then use the separate Shop action gate.`)
+        setNotice(`${request.id} loaded from the authenticated inbox with ${draft.lines.length} ${draft.lines.length === 1 ? 'item' : 'items'}. Confirm the promise and payment, then use the separate Shop action gate.`)
         return
       }
       const { recordEcommerceShopDraft } = await import('../products/ecommerce/ecommerce-shop-handoff')
@@ -3961,7 +3960,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setFulfilmentReference(draft.sourceRequestId)
       setPromisedAt(defaultOrderPromiseInput())
       setOrderEntryMode('manual')
-      setNotice(`${request.id} loaded from the Shop inbox. Confirm the promise and payment, then use the separate Shop action gate.`)
+      setNotice(`${request.id} loaded from the authenticated inbox. Confirm the promise and payment, then use the separate Shop action gate.`)
     } catch (error) {
       detachPreparedOrderSources({ channel: false })
       setNotice(error instanceof Error ? error.message : 'The Ecommerce inbox request failed closed.')
@@ -7084,15 +7083,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><Suspense fallback={<p className="form-notice" role="status">Loading message intake…</p>}><ChannelOrderIntake disabled={commerceControlsDisabled} identity={managedIdentity ?? undefined} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></Suspense></div> : null}
       {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
         <section className="website-intake">
-          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${ecommerceInboxAvailable ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : confirmedLocalShop ? 'This device' : 'Not connected'}</span></div>
-          {ecommerceInboxAvailable && pendingStorefrontRequests.length ? visiblePendingStorefrontRequests.map((request) => {
+          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
+          {managedIdentity && pendingStorefrontRequests.length ? visiblePendingStorefrontRequests.map((request) => {
             const lines = commerceStorefrontRequestLines(request)
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             return <div className="website-intake-ready" key={request.id}>
               <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
               <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
             </div>
-          }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : confirmedLocalShop ? 'No Ecommerce request needs Shop review on this device.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
+          }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Commerce</Link>
         </section>
         {confirmedLocalShop && localWebsiteIntakeRead.status === 'error' ? <div className="website-intake-record"><strong>Older Website order could not be checked.</strong><small>Reload before reviewing older Website handoffs. No order was created or changed.</small></div> : null}

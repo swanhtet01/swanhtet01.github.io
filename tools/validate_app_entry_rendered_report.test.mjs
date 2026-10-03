@@ -114,25 +114,37 @@ test('offline restore evidence requires a controlled cached reload with preserve
 
 test('Store-to-Shop evidence requires one source-bound pending-payment order after reload', () => {
   const checks = Object.fromEntries([
-    'localRequestCaptured', 'sameDeviceInbox', 'exactSourcePrepared', 'accountableSourceBound',
-    'confirmedOnce', 'paymentStillPending', 'stockReservedOnce', 'sourceConsumed',
+    'localRequestCaptured', 'sameDeviceHandoff', 'exactSourcePrepared', 'accountableSourceBound',
+    'confirmedOnce', 'paymentStillPending', 'stockReservedOnce', 'sourceRetained', 'replayBlocked',
     'accountableOwner', 'accountableActionRecorded', 'persistedAfterReload', 'operatorViewRestored', 'noHorizontalOverflow',
   ].map((name) => [name, true]))
-  const source = { requestId: 'WEB-REQUEST-001', requestCount: 1, sku: 'SKU-001', quantity: 1, stockBefore: 12, orderCountBefore: 0, actionCountBefore: 0 }
-  const action = { orderId: 'ORD-001', accountableActionCount: 1, actionId: 'ACT-001', commandId: 'CMD-001', actionActor: 'Shop reviewer', actionReason: 'Reviewed current Shop catalog.', actionEvidenceReference: `ECOMMERCE:${source.requestId}:reviewed`, actionSubjectId: 'ORD-001' }
-  const committed = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, pendingRequestCount: 0, ...action }
-  const restored = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, requestStillPending: false, ...action }
+  const source = {
+    requestId: 'WEB-REQUEST-001', requestCount: 1, recoveryKeyCount: 1, sharedRequestCountBefore: 0,
+    customer: 'May Thiri', customerReference: 'May Thiri · 09123456789', fulfilment: 'pickup',
+    handoffReference: 'WEB-REQUEST-001', payment: 'Cash', totalMmk: 1_000,
+    lines: [{ sku: 'SKU-001', name: 'Tea', variant: null, quantity: 1, unitPriceMmk: 1_000, lineTotalMmk: 1_000 }],
+    sku: 'SKU-001', quantity: 1, stockBefore: 12, orderCountBefore: 0, actionCountBefore: 0,
+  }
+  const action = { orderId: 'ORD-001', accountableActionCount: 1, orderCreateActionIds: ['ACT-001'], actionId: 'ACT-001', commandId: 'CMD-001', actionActor: 'Shop reviewer', actionReason: 'Reviewed current Shop catalog.', actionEvidenceReference: `ECOMMERCE:${source.requestId}:reviewed`, actionSubjectId: 'ORD-001' }
+  const committed = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0, ...action }
+  const restored = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0, ...action }
   const storeToShop = {
     ok: true,
     checks,
     claimBoundary: { ok: true },
     source,
-    inbox: { ready: true, status: 'This device', requestVisible: true },
-    prepared: { ready: true, sourceBound: true, paymentLocked: true, payment: 'Cash' },
+    handoff: { ready: true, sourceVisible: true },
+    prepared: {
+      ready: true, route: '/shop/?tab=orders', sourceBound: true, customer: source.customer,
+      fulfilment: source.fulfilment, handoffReference: source.handoffReference,
+      lines: source.lines.map((line) => ({ ...line })), totalMmk: source.totalMmk,
+      paymentLocked: true, payment: source.payment,
+    },
     gate: { ready: true, summaryBound: true, actor: 'Shop reviewer', reasonPresent: true, sourceEvidenceBound: true, evidenceReference: action.actionEvidenceReference },
     network: { externalRequestCount: 0, failedRequestCount: 0, httpErrorResponseCount: 0 },
     committed,
     restored,
+    replay: { attempted: true, route: `/shop/?tab=orders&source=ecommerce-handoff&handoff=order&handoff_id=${source.requestId}`, duplicateBlocked: true, gateOpened: false, matchingOrderCount: 1, accountableActionCount: 1, orderCreateActionIds: ['ACT-001'], orderId: 'ORD-001', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0 },
     viewportWidth: 1280,
     viewportHeight: 900,
     documentScrollWidth: 1280,
@@ -153,11 +165,21 @@ test('Store-to-Shop evidence requires one source-bound pending-payment order aft
   assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, restored: { ...restored, paymentStatus: 'reconciled' } } }, expected), /store_to_shop_failed/)
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, committed: { ...committed, matchingOrderCount: 2 } } }, expected), /store_to_shop_failed/)
-  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, inbox: { ...storeToShop.inbox, status: 'Not connected' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, handoff: { ...storeToShop.handoff, sourceVisible: false } } }, expected), /store_to_shop_failed/)
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, sourceBound: false } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, customer: 'Other customer' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, fulfilment: 'delivery' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, handoffReference: 'OTHER-REFERENCE' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, lines: [{ ...source.lines[0], unitPriceMmk: 900, lineTotalMmk: 900 }] } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, totalMmk: 900 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, payment: 'KBZPay' } } }, expected), /store_to_shop_failed/)
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, gate: { ...storeToShop.gate, sourceEvidenceBound: false } } }, expected), /store_to_shop_failed/)
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, network: { ...storeToShop.network, externalRequestCount: 1 } } }, expected), /store_to_shop_failed/)
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, network: { ...storeToShop.network, httpErrorResponseCount: 1 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, replay: { ...storeToShop.replay, matchingOrderCount: 2 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, replay: { ...storeToShop.replay, accountableActionCount: 2 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, replay: { ...storeToShop.replay, orderCreateActionIds: ['ACT-001', 'ACT-REPLAY'] } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, replay: { ...storeToShop.replay, stockAfter: 10 } } }, expected), /store_to_shop_failed/)
   const tamperedEvidence = `${storeToShop.gate.evidenceReference}:tampered`
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: {
     ...storeToShop,
