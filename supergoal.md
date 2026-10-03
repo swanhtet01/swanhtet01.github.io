@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.52
+Version: 1.2.53
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
-Updated: 2026-10-03
-Status: ACTIVE — PR #639 is the current integration candidate. Shop Today now centers one accountable recommendation, evidence and owner check; Shop Stock at source `aee85337a503004cfbf099b9f3336ddb0ac6bc8f` applies the same pattern to real catalog, count, reorder, purchasing, receiving, location and demand records. The prior exact head `91367140c1ed8c2a1f2aad15206c9847cea0ec6f` passed CI and produced a READY immutable Vercel candidate, but the new Stock source supersedes it and remains local/source evidence until fresh exact-head CI and candidate verification pass. Live domains are unchanged. The latest provider readback still establishes one unconfirmed founder Auth identity and three active memberships; authenticated workspace discovery, save/reload, recovery, isolation and customer/commercial acceptance remain incomplete.
+Updated: 2026-10-04
+Status: ACTIVE — PR #639 is the current integration candidate. Shop Today and Stock use the accountable record → recommendation → reason → owner check → action pattern. Product commit `85a8a09ec1c6c7d513c4ab4626298a5cead6a064` redesigns the real Shop Counter around products, the current sale and a record-derived follow-up rail while preserving catalog, scan, payment, order, receipt and recovery behavior. Local acceptance passes; exact-head CI and a replacement immutable candidate remain pending. The prior exact head `3fad1ea59eb4d11b31a606672323bbaf2bd5a6fd` passed CI and produced a READY immutable Vercel candidate, but it is superseded by the Counter source. Live domains are unchanged. The latest provider readback still establishes one unconfirmed founder Auth identity and three active memberships; authenticated workspace discovery, save/reload, recovery, isolation and customer/commercial acceptance remain incomplete.
 
 ## 1. Controlling objective
 
@@ -28,8 +28,8 @@ Use `docs/product-operating-principles.md` for durable design, architecture, cos
 
 Current owner direction: public marketing is concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The fresh provider readback found one unconfirmed founder Auth identity and **three active memberships**. Historical hosted release checks do not accept later source changes. Auth identity and membership counts alone do not prove authenticated product access or save/reload. Retain one fixed light technical identity and remove public theme controls. Many customers are Burmese speakers: validate language comprehension in contact, onboarding and core operator tasks, then add a deliberate Myanmar-language layer where it helps; do not turn the concise homepage into duplicated prose by assumption.
 
-1. Finish exact-head release evidence for the integrated Shop Today and Stock source: CI, a replacement immutable hosted candidate, then a fresh founder-authenticated Today/Counter/Stock/save/reload/recovery/isolation journey. Preserve honest payment, stock and settlement states.
-2. Shop Stock now uses the accountable action pattern with real inventory and purchasing records. Apply it next to the weakest remaining tasks: Burmese cashier-critical comprehension and native review; offline/reload/restore and accountant-export acceptance; then Sites page/inquiry/publishing and Commerce order/exception/fulfilment. Do not expand breadth before the current task closes cleanly.
+1. Finish exact-head release evidence for the integrated Shop Today, Stock and Counter source: CI, a replacement immutable hosted candidate, then a fresh founder-authenticated Today/Counter/Stock/save/reload/recovery/isolation journey. Preserve honest payment, stock and settlement states.
+2. Counter now presents the real sale as one clear three-part operating flow. Keep managed one-step completion fail-closed until an atomic server command can reserve stock, reconcile payment, advance fulfilment and return the order record in one idempotent owner-reviewed transaction. Next close Burmese cashier-critical comprehension and native review, offline/reload/restore and accountant-export acceptance; then apply the same hierarchy to Sites page/inquiry/publishing and Commerce order/exception/fulfilment.
 3. Reconcile founder access from live provider state before any write. The fresh readback found three active memberships; do not provision replacements, resend the existing invitation or create a duplicate identity. In a fresh founder-authenticated session, verify that workspace discovery maps those memberships to the intended Shop, Sites and Commerce products, then prove Login, save/reload, isolation and recovery with a bounded managed runtime.
 4. For KBZPay, keep manual wallet review distinct from confirmed settlement. Source hardening at `d075fe34e` is local-test evidence only. Automatic collection needs current merchant-issued API terms, UAT callback verification, idempotent ledger reconciliation, amount/order matching and operational ownership before customer use.
 5. Once product acceptance is credible, align the website and real interface images, create one capability-backed Basic offer and price card, and rehearse a Burmese-comprehensible contact/onboarding/support journey using authorized customer facts. Drafted assets are not published prices, outreach or customer acceptance.
@@ -179,7 +179,7 @@ Latest owner direction: improve the whole product with Apple-like restraint and 
 
 Design priorities: stronger typography and hierarchy, deliberate spacing, fewer borders and redundant labels, natural interaction feedback, and one clear next action. Retain essential status, accessibility and recovery information. Use the supplied SOL references as a quality benchmark; no wholesale brand cloning or new settings panels.
 
-PR622 implemented and released the selected Editorial Precision plus Operator Console hierarchy across the shared shell and Shop home: calmer fixed-light structure, clearer Priority/Continue flow, compact operating context and progressive disclosure. Its exact-head desktop and 390px journeys passed, including the corrected full borders on separated mobile metric cards. Next design action: remove remaining local-only Sample data/storage-risk presentation from the customer path, then carry the same interaction grammar into Sites and Commerce while preserving complete task behavior.
+PR622 implemented and released the selected Editorial Precision plus Operator Console hierarchy across the shared shell and Shop home. Shop Stock and Counter now continue that fixed-light hierarchy with real records, one dominant action and explicit follow-up; Counter removes visible sample-only wording while retaining truthful device/account boundaries. Next design action: carry the same interaction grammar into the weakest Sites and Commerce task while preserving complete task behavior, then replace public illustrative images only with screenshots captured from the accepted product.
 
 ## 5. Authority, credentials and resource boundaries
 
@@ -476,12 +476,13 @@ Login and the sign-in message only. The change is pending the existing stacked
 PR release path and must not be described as deployed before exact-head CI,
 eligible review and provider promotion evidence exist.
 
-Next active operating slice: qualify an existing VPS with the read-only
-capacity inspector, workload-isolation inventory and backup/restore evidence.
-Only after that PASS may one scale-to-zero, local-provider engineering job and
-one catalog-mapping R&D evaluation run. No host install, model launch, paid
-provider fallback, external customer action or infrastructure spend is implied
-by this sequence.
+Next active operating slice: complete exact-head CI and immutable-candidate
+evidence for the integrated Counter, then implement the smallest atomic managed
+Counter completion contract without enabling the UI before idempotency, stock,
+payment, fulfilment and receipt tests pass. During an external release wait,
+the read-only VPS capacity and workload-isolation inspection may resume. No
+host install, model launch, paid fallback, customer action or infrastructure
+spend is implied by this sequence.
 
 ### 2026-10-01 — visual platform direction
 
