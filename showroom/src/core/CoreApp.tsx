@@ -6754,12 +6754,30 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     { label: 'Stock alerts', value: String(lowStock.length), detail: lowStock.length ? 'At or below reorder' : 'No reorder alerts', tone: lowStock.length ? 'attention' as const : 'ready' as const },
     { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), detail: receivablesAging.overdueOrders ? `${receivablesAging.overdueOrders} overdue orders` : 'Customer balances', tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
   ]
+  const shopCloseQueue = {
+    actionLabel: paymentReview.length
+      ? 'Review payment exceptions'
+      : closableOrders.length
+        ? 'Count and close'
+        : latestClose
+          ? 'Review recorded close'
+          : 'Review close controls',
+    exceptionCount: paymentReview.length,
+    latestCloseRecorded: Boolean(latestClose),
+    orderCount: closableOrders.length,
+    paymentMethods: [...closeExpectedByPayment.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([paymentMethod, totalMmk]) => ({ paymentMethod, totalMmk })),
+    target: paymentReview.length ? '/shop/?tab=orders#shop-payment-review' : '/shop/?tab=orders#shop-close-controls',
+    tone: paymentReview.length ? 'attention' as const : 'ready' as const,
+    totalMmk: reconciledValue,
+  }
   const shopTodayModules = [
     { label: 'Sell & POS', detail: 'Counter, cart, payment choice, tax and receipt evidence', status: `${commerce.items.length} items`, to: '/shop/?tab=counter' },
     { label: 'Orders & fulfilment', detail: 'Channel intake, allocation, promise, delivery and returns', status: actionOrders.length ? `${actionOrders.length} need action` : `${openOrders.length} open`, to: '/shop/?tab=orders', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Inventory & purchasing', detail: 'Locations, lots, ATP, counts, suppliers and receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Customers & after-sales', detail: 'Credit, receivables, appointments, support and warranty trail', status: afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history' },
-    { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length ? 'attention' as const : 'ready' as const },
+    { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: shopCloseQueue.target, tone: shopCloseQueue.tone },
     { label: 'Online channels', detail: 'Sites and Commerce requests arrive in Shop', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
   ]
   const shopProfitControl = projectShopProfitControl({
@@ -6774,7 +6792,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     refundDueCount: refundExposureOrders.length,
     lowStockCount: lowStock.length,
     closeReadyCount: closableOrders.length,
-    closeReadyMmk: closableOrders.reduce((sum, order) => sum + order.total, 0),
+    closeReadyMmk: reconciledValue,
   })
   const stockAttentionRows = stockRows.filter(({ item }) => item.onHand <= item.reorderAt)
   const stockCatalogRows = stockRows.filter(({ item }) => item.onHand > item.reorderAt)
@@ -6906,7 +6924,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {commerceBoundary}
-    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} /></Suspense>
+    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0} closeQueue={shopCloseQueue} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} /></Suspense>
     {actionGate}
   </div>
 
@@ -7221,7 +7239,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     supportResolutionDraft={supportResolutionDraft}
     supportWorkloadDownload={supportWorkloadDownload}
   />
-  <details className="core-panel today-more order-daily-controls">
+  <details className="core-panel today-more order-daily-controls" id="shop-payment-review" open={Boolean(paymentReview.length)}>
     <summary><span>Pricing and credit policies</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>

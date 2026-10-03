@@ -30,6 +30,20 @@ export type ShopTodayModule = {
   tone?: 'attention' | 'ready'
 }
 
+export type ShopTodayCloseQueue = {
+  actionLabel: string
+  exceptionCount: number
+  latestCloseRecorded: boolean
+  orderCount: number
+  paymentMethods: Array<{
+    paymentMethod: string
+    totalMmk: number
+  }>
+  target: string
+  tone: 'attention' | 'ready'
+  totalMmk: number
+}
+
 type ShopTodayProps = {
   accountingExport?: {
     businessDate: string
@@ -39,6 +53,7 @@ type ShopTodayProps = {
   } | null
   batchProfitControl?: ShopBatchProfitControlView
   catalogReady: boolean
+  closeQueue: ShopTodayCloseQueue
   metrics: ShopTodayMetric[]
   modules: ShopTodayModule[]
   nextAction: string
@@ -233,7 +248,7 @@ export function ShopBatchProfitControlPanel({
   </section>
 }
 
-export function ShopToday({ accountingExport = null, batchProfitControl = projectNoBatchProfitControl(), catalogReady, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, profitControl }: ShopTodayProps) {
+export function ShopToday({ accountingExport = null, batchProfitControl = projectNoBatchProfitControl(), catalogReady, closeQueue, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, profitControl }: ShopTodayProps) {
   const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
   const [activityAsOf] = useState(() => Date.now())
   const salesPulse = useMemo(() => projectShopTodaySalesPulse(commerce, activityAsOf), [activityAsOf, commerce])
@@ -305,7 +320,6 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
   const visiblePriorities = profitControl.priorities.slice(0, 2)
   const remainingPriorityCount = profitControl.hiddenPriorityCount + Math.max(0, profitControl.priorities.length - visiblePriorities.length)
   const financeModule = modules.find((module) => module.label === 'Finance controls')
-  const closePriority = profitControl.priorities.find((priority) => priority.id === 'close_ready')
   const attentionPriority = visiblePriorities.find((priority) => priority.id !== 'close_ready')
   const maximumPulseMmk = Math.max(1, ...salesPulse.points.map((point) => point.grossMmk))
 
@@ -367,9 +381,23 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
           <span><small>Accountant handoff</small><strong>Daily close · {accountingExport.businessDate}</strong><em>{accountingExport.mappingReady ? 'Mapping reviewed' : 'Mapping review needed'}</em></span>
           <span><b>{formatMmk(accountingExport.totalMmk)}</b><small>Balanced journal · no external posting</small></span>
           <button className="core-button" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">Download accountant CSV</button>
-        </article> : <Link aria-label="Daily close task" className="shop-finance-task" data-tone={financeModule.tone ?? 'ready'} to="/shop/?tab=orders#shop-close-controls">
-          <span><small>Cash + wallets</small><strong>Daily close</strong><em>Shop-record expectation</em></span>
-          <span><b>{closePriority ? formatShopProfitControlMetric(closePriority.metric) : financeModule.status}</b><small>{closePriority?.impact ?? financeModule.detail}</small></span>
+        </article> : <Link aria-label="Cash and wallet close queue" className="shop-finance-task" data-tone={closeQueue.tone} to={closeQueue.target}>
+          <span>
+            <small>Cash + wallets</small>
+            <strong>Cash and wallet close</strong>
+            <em>Shop-record expectation</em>
+            <small>{closeQueue.paymentMethods.length
+              ? closeQueue.paymentMethods.map((method) => `${method.paymentMethod} ${formatMmk(method.totalMmk)}`).join(' · ')
+              : closeQueue.latestCloseRecorded ? 'Latest close recorded' : 'No completed, reconciled orders waiting'}</small>
+            <small>Expected from completed, reconciled Shop orders. Wallet and bank settlement is not independently confirmed.</small>
+          </span>
+          <span>
+            <b>{closeQueue.exceptionCount
+              ? `${closeQueue.exceptionCount} payment ${closeQueue.exceptionCount === 1 ? 'exception' : 'exceptions'}`
+              : closeQueue.orderCount ? formatMmk(closeQueue.totalMmk) : closeQueue.latestCloseRecorded ? 'Close recorded' : 'Queue clear'}</b>
+            <small>{closeQueue.orderCount} {closeQueue.orderCount === 1 ? 'order' : 'orders'} ready</small>
+            <small>{closeQueue.actionLabel} <span aria-hidden="true">→</span></small>
+          </span>
         </Link> : null}
 
         <article aria-label="Recommended next" className="shop-next-compact">

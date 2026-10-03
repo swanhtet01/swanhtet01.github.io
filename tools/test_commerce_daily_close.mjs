@@ -209,6 +209,7 @@ check(csv.split('\n').filter((line) => line.trim()).length >= exported.orders.le
 const { readFile } = await import('node:fs/promises')
 const encodedBytes = (text) => new TextEncoder().encode(text).byteLength
 const corePageSource = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+const shopTodaySource = await readFile(new URL('../showroom/src/core/ShopToday.tsx', import.meta.url), 'utf8')
 // Execute the actual UI draft projection: expected sales are not cashier counts.
 const settlementDraftExpression = corePageSource.match(/const effectiveCloseSettlementDraft = ([\s\S]*?)\n  const closeSettlementInput =/)
 check(Boolean(settlementDraftExpression), 'settlement draft projection remains inspectable')
@@ -223,6 +224,22 @@ check(retainedCounts[0] === enteredCount && retainedCounts[1].countedMmk === '',
 check(projectSettlementDraft(new Map([['Cash', 35000]]), [enteredCount])[0] === enteredCount, 'changed expectation must not overwrite a cashier count')
 check(corePageSource.includes('!closePreview || !closeSettlement} onClick={closeDay}'), 'close action remains disabled without a complete settlement')
 check(corePageSource.includes("if (!/^(?:0|[1-9]\\d*)$/.test(line.countedMmk)) return null"), 'empty settlement input remains invalid rather than zero')
+
+// Today must expose the same guarded close as a real queue rather than a generic
+// finance shortcut. It may show Shop-record expectations, but it must never imply
+// that a wallet or bank has independently confirmed settlement.
+check(corePageSource.includes('const shopCloseQueue = {'), 'Shop Today close queue projection is missing')
+check(corePageSource.includes('paymentMethods: [...closeExpectedByPayment.entries()]'), 'Shop Today no longer groups close-ready value by recorded payment method')
+check(corePageSource.includes('totalMmk: reconciledValue'), 'Shop Today close total is no longer the adjusted close expectation')
+check(corePageSource.includes('closeReadyMmk: reconciledValue'), 'profit control close value drifted from the adjusted close expectation')
+check(corePageSource.includes("target: paymentReview.length ? '/shop/?tab=orders#shop-payment-review' : '/shop/?tab=orders#shop-close-controls'"), 'payment exceptions no longer route ahead of the close count')
+check(corePageSource.includes('closeQueue={shopCloseQueue}'), 'Shop Today is not receiving the source close queue')
+check(corePageSource.includes('id="shop-payment-review" open={Boolean(paymentReview.length)}'), 'payment exception review is not directly addressable and visible when needed')
+check(shopTodaySource.includes('aria-label="Cash and wallet close queue"'), 'Shop Today close queue lost its accessible identity')
+check(shopTodaySource.includes('closeQueue.paymentMethods.map'), 'Shop Today no longer renders the recorded payment-method split')
+check(shopTodaySource.includes('Expected from completed, reconciled Shop orders. Wallet and bank settlement is not independently confirmed.'), 'Shop Today close queue overstates settlement evidence')
+check(shopTodaySource.includes("? 'Review payment exceptions'") || corePageSource.includes("? 'Review payment exceptions'"), 'Shop Today does not prioritize payment exceptions')
+check(shopTodaySource.includes("? 'Count and close'") || corePageSource.includes("? 'Count and close'"), 'Shop Today does not give a close-ready next action')
 
 // Exactly what CoreApp.tsx built on the render path before this change, kept here so the cost
 // it carried stays measurable after the code that carried it is gone.
