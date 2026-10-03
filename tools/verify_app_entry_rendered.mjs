@@ -540,28 +540,35 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
   }
 }
 
-async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlledFixture) {
+async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlledFixture) {
   const deadline = Date.now() + 10_000
   let state = null
   while (Date.now() < deadline) {
     state = await evalInPage(cdp, sessionId, `(() => {
-      const panel = document.querySelector('details[aria-label="Shop profit control"]');
-      const summary = panel?.querySelector('summary');
-      const heading = summary?.querySelector('strong');
-      const explanation = summary?.querySelector('small');
-      const status = summary?.querySelector(':scope > b');
-      const priority = panel?.querySelector('.shop-today-module-grid a[data-priority-id]');
-      const priorityTitle = priority?.querySelector('strong');
-      const smalls = [...(priority?.querySelectorAll('small') || [])];
-      const impact = smalls[0]?.textContent?.trim() || '';
-      const ownerDue = smalls[1]?.textContent?.trim() || '';
-      const action = smalls.find((entry) => entry.textContent?.trim().startsWith('Next action:'));
-      const closure = smalls.find((entry) => entry.textContent?.trim().startsWith('Closed when:'));
-      const metric = priority?.querySelector(':scope > b');
-      const boundary = [...(panel?.querySelectorAll('p.panel-note') || [])]
-        .find((entry) => entry.textContent?.trim().startsWith('Read-only projection from the current Shop record.'));
-      const ownerDueParts = ownerDue.split(' · ');
-      const targets = [...(panel?.querySelectorAll('.shop-today-module-grid a[href]') || [])].map((entry) => {
+      const desk = document.querySelector('section[aria-label="Shop decision desk"]');
+      const recommendation = desk?.querySelector('.shop-decision-primary');
+      const action = recommendation?.querySelector('a.shop-decision-action');
+      const guidance = [...(recommendation?.querySelectorAll('.shop-decision-guidance > div') || [])].map((entry) => ({
+        label: entry.querySelector('span')?.textContent?.trim() || '',
+        value: entry.querySelector('p')?.textContent?.trim() || '',
+      }));
+      const rail = desk?.querySelector('aside[aria-label="Shop attention"]');
+      const priorities = [...(rail?.querySelectorAll('a[data-priority-id]') || [])].map((entry) => ({
+        id: entry.getAttribute('data-priority-id') || '',
+        target: entry.getAttribute('href') || '',
+        named: Boolean(entry.textContent?.trim()),
+        hasImpact: Boolean(entry.querySelector(':scope > span > small')?.textContent?.trim()),
+        hasNext: [...entry.querySelectorAll(':scope > small')].some((small) => small.textContent?.trim().startsWith('Next:')),
+        hasClosure: [...entry.querySelectorAll(':scope > small')].some((small) => small.textContent?.trim().startsWith('Done when:')),
+      }));
+      const queue = document.querySelector('nav[aria-label="Shop work queues"]');
+      const queues = [...(queue?.querySelectorAll(':scope > a[href]') || [])].map((entry) => ({
+        name: entry.querySelector('strong')?.textContent?.trim() || '',
+        target: entry.getAttribute('href') || '',
+        status: entry.querySelector(':scope > b')?.textContent?.trim() || '',
+      }));
+      const advanced = document.querySelector('details[aria-label="Advanced Shop controls"]');
+      const targets = [action, ...(rail?.querySelectorAll('a[href]') || []), ...(queue?.querySelectorAll('a[href]') || [])].filter(Boolean).map((entry) => {
         const box = entry.getBoundingClientRect();
         return {
           named: Boolean(entry.textContent?.trim()),
@@ -570,26 +577,21 @@ async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlle
           height: box.height,
         };
       });
+      const visibleForbidden = [...document.querySelectorAll('.shop-today h1,.shop-today h2,.shop-today h3,.shop-today p,.shop-today a,.shop-today button')]
+        .filter((entry) => entry.getClientRects().length && getComputedStyle(entry).visibility !== 'hidden')
+        .map((entry) => entry.textContent?.trim() || '')
+        .filter((text) => /Local Batch review stays off|Open a demo|Start trial|Working sample/i.test(text));
       return {
-        ariaLabel: panel?.getAttribute('aria-label') || '',
-        heading: heading?.textContent?.trim() || '',
-        explanation: explanation?.textContent?.trim() || '',
-        state: panel?.getAttribute('data-state') || '',
-        status: status?.textContent?.trim() || '',
-        priority: priority ? {
-          id: priority.getAttribute('data-priority-id') || '',
-          title: priorityTitle?.textContent?.trim() || '',
-          impact,
-          ownerRole: ownerDueParts[0] || '',
-          dueLabel: ownerDueParts.slice(1).join(' · '),
-          actionLabel: (action?.textContent || '').replace(/^Next action:\s*/, '').trim(),
-          target: priority.getAttribute('href') || '',
-          closureCondition: (closure?.textContent || '').replace(/^Closed when:\s*/, '').trim(),
-          metric: metric?.textContent?.trim() || '',
-          actionLabelVisible: Boolean(action && action.getClientRects().length),
-          accessibleNamePresent: Boolean(priority.textContent?.trim()),
-        } : null,
-        boundary: boundary?.textContent?.trim() || '',
+        ariaLabel: desk?.getAttribute('aria-label') || '',
+        track: desk?.getAttribute('data-track') || '',
+        recommendation: recommendation?.querySelector('h3')?.textContent?.trim() || '',
+        action: action ? { label: action.textContent?.trim() || '', target: action.getAttribute('href') || '' } : null,
+        guidance,
+        priorities,
+        railPresent: Boolean(rail),
+        queues,
+        advanced: advanced ? { present: true, open: advanced.open, label: advanced.querySelector('summary strong')?.textContent?.trim() || '' } : null,
+        visibleForbidden,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
         documentScrollWidth: document.documentElement?.scrollWidth || 0,
@@ -605,16 +607,20 @@ async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlle
         },
       };
     })()`)
-    if (state?.priority && state?.boundary && state?.accessibility?.checked) break
+    if (state?.recommendation && state?.action && state?.queues?.length === 2 && state?.accessibility?.checked) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
   const checks = {
-    panelPresent: state?.ariaLabel === 'Shop profit control',
-    panelOpenAndNonControlled: Boolean(state?.state && state.state !== 'controlled' && state.status !== 'Controlled'),
-    priorityPresent: Boolean(state?.priority),
-    actionVisible: state?.priority?.actionLabelVisible === true,
-    targetPresent: Boolean(state?.priority?.target),
-    boundaryPresent: Boolean(state?.boundary),
+    deskPresent: state?.ariaLabel === 'Shop decision desk',
+    recommendationPresent: Boolean(state?.recommendation),
+    primaryActionPresent: Boolean(state?.action?.label && state?.action?.target),
+    reasonPresent: state?.guidance?.some((entry) => entry.label === 'Why now' && entry.value),
+    ownerCheckPresent: state?.guidance?.some((entry) => entry.label === 'Owner check' && entry.value),
+    attentionRailPresent: state?.railPresent === true,
+    priorityEvidenceComplete: !state?.priorities?.length || state.priorities.every((entry) => entry.id && entry.target && entry.named && entry.hasImpact && entry.hasNext && entry.hasClosure),
+    twoQueuesPresent: state?.queues?.length === 2 && state.queues.every((entry) => entry.name && entry.target && entry.status),
+    advancedClosedByDefault: state?.advanced?.present === true && state?.advanced?.open === false && state?.advanced?.label === 'Advanced controls',
+    retiredCopyAbsent: state?.visibleForbidden?.length === 0,
     accessible: state?.accessibility?.ok === true,
     noHorizontalOverflow: Number(state?.documentScrollWidth || 0) <= Number(state?.viewportWidth || 0) + 1,
   }
@@ -624,6 +630,7 @@ async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlle
       source: sourceControlledFixture ? 'fresh_isolated_browser_context' : 'browser_storage_seeded',
       browserStorageHandEdited: !sourceControlledFixture,
     },
+    checks,
     ...state,
   }
 }
@@ -867,8 +874,8 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
     const briefControls = testCase.inspectBusinessBrief ? await evalInPage(cdp, sessionId, `(${inspectBusinessBrief.toString()})(document)`) : null
-    const rawShopProfitControl = testCase.exerciseShopProfitControl
-      ? await exerciseShopProfitControl(cdp, sessionId, Boolean(testCase.mobile), testCase.sourceControlledFixture === true)
+    const rawShopDecisionDesk = testCase.exerciseShopDecisionDesk
+      ? await exerciseShopDecisionDesk(cdp, sessionId, Boolean(testCase.mobile), testCase.sourceControlledFixture === true)
       : null
     const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
@@ -934,9 +941,9 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const ecommerceViewportMatches = !ecommerceClaimBoundary
       || Math.abs((ecommerceClaimBoundary.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((ecommerceClaimBoundary.viewportHeight ?? 0) - testCase.height) <= 1
-    const profitControlViewportMatches = !rawShopProfitControl
-      || Math.abs((rawShopProfitControl.viewportWidth ?? 0) - testCase.width) <= 1
-        && Math.abs((rawShopProfitControl.viewportHeight ?? 0) - testCase.height) <= 1
+    const decisionDeskViewportMatches = !rawShopDecisionDesk
+      || Math.abs((rawShopDecisionDesk.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((rawShopDecisionDesk.viewportHeight ?? 0) - testCase.height) <= 1
     const mutatingRequests = networkRequests.filter((entry) => !['GET', 'HEAD', 'OPTIONS'].includes(entry.method)).map((entry) => {
       let path = entry.url
       try { path = new URL(entry.url).pathname } catch {}
@@ -950,8 +957,8 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
         return false
       }
     }).length
-    const shopProfitControl = rawShopProfitControl ? {
-      ...rawShopProfitControl,
+    const shopDecisionDesk = rawShopDecisionDesk ? {
+      ...rawShopDecisionDesk,
       network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
     } : null
     const failures = [
@@ -974,14 +981,14 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
         ? [`counter horizontal overflow: ${shopCounter.documentScrollWidth}px document in ${shopCounter.viewportWidth}px viewport`]
         : []),
       ...(counterViewportMatches ? [] : [`counter viewport changed from ${testCase.width}x${testCase.height} to ${shopCounter?.viewportWidth ?? 'unknown'}x${shopCounter?.viewportHeight ?? 'unknown'}`]),
-      ...(shopProfitControl && !shopProfitControl.ok ? ['Shop Profit Control semantic or accessibility contract failed'] : []),
-      ...(shopProfitControl && shopProfitControl.documentScrollWidth > shopProfitControl.viewportWidth + 1
-        ? [`Shop Profit Control horizontal overflow: ${shopProfitControl.documentScrollWidth}px document in ${shopProfitControl.viewportWidth}px viewport`]
+      ...(shopDecisionDesk && !shopDecisionDesk.ok ? [`Shop Decision Desk contract failed: ${Object.entries(shopDecisionDesk.checks || {}).filter(([, passed]) => !passed).map(([name]) => name).join(', ')}`] : []),
+      ...(shopDecisionDesk && shopDecisionDesk.documentScrollWidth > shopDecisionDesk.viewportWidth + 1
+        ? [`Shop Decision Desk horizontal overflow: ${shopDecisionDesk.documentScrollWidth}px document in ${shopDecisionDesk.viewportWidth}px viewport`]
         : []),
-      ...(shopProfitControl && !shopProfitControl.accessibility?.ok ? ['Shop Profit Control accessibility or mobile touch-target contract failed'] : []),
-      ...(shopProfitControl && shopProfitControl.network.externalRequestCount !== 0 ? ['Shop Profit Control made an external request'] : []),
-      ...(shopProfitControl && shopProfitControl.network.failedRequestCount !== 0 ? ['Shop Profit Control had a failed request'] : []),
-      ...(profitControlViewportMatches ? [] : [`Shop Profit Control viewport changed from ${testCase.width}x${testCase.height} to ${shopProfitControl?.viewportWidth ?? 'unknown'}x${shopProfitControl?.viewportHeight ?? 'unknown'}`]),
+      ...(shopDecisionDesk && !shopDecisionDesk.accessibility?.ok ? ['Shop Decision Desk accessibility or mobile touch-target contract failed'] : []),
+      ...(shopDecisionDesk && shopDecisionDesk.network.externalRequestCount !== 0 ? ['Shop Decision Desk made an external request'] : []),
+      ...(shopDecisionDesk && shopDecisionDesk.network.failedRequestCount !== 0 ? ['Shop Decision Desk had a failed request'] : []),
+      ...(decisionDeskViewportMatches ? [] : [`Shop Decision Desk viewport changed from ${testCase.width}x${testCase.height} to ${shopDecisionDesk?.viewportWidth ?? 'unknown'}x${shopDecisionDesk?.viewportHeight ?? 'unknown'}`]),
       ...(ecommerceClaimBoundary && !ecommerceClaimBoundary.ok ? [`Ecommerce claim boundary failed: ${ecommerceClaimBoundary.error || 'unknown check'}`] : []),
       ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
       ...(mutatingRequests.length ? [`unexpected browser network writes: ${mutatingRequests.map((entry) => `${entry.method} ${entry.path}`).join(', ')}`] : []),
@@ -1008,7 +1015,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
           && finalRendered.documentScrollWidth <= finalRendered.viewportWidth + 1),
       },
       layout: shopCounter,
-      profitControl: shopProfitControl,
+      decisionDesk: shopDecisionDesk,
       claimBoundary: ecommerceClaimBoundary,
       briefControls,
       screenshot,
@@ -1128,6 +1135,21 @@ const tests = [
     timeoutMs: 60_000,
     seed: miniMartCounterFixture(),
   },
+  ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(viewport => ({
+    name: `Shop Today keeps one accountable decision at ${viewport.width}px`,
+    route: '/shop/?tab=today',
+    ...viewport,
+    expectedPath: '/shop/?tab=today',
+    // innerText reflects the visual text-transform contract for these operator labels.
+    expectedText: ['Today', 'RECOMMENDED NEXT', 'WHY NOW', 'OWNER CHECK', 'Attention', 'Orders & fulfilment', 'Inventory & purchasing', 'Advanced controls'],
+    absentText: ['Local Batch review stays off', 'Open a demo', 'Start trial'],
+    exerciseShopDecisionDesk: true,
+    isolatedBrowserContext: true,
+    noHorizontalOverflow: true,
+    screenshotName: `shop-today-decision-desk-${viewport.width}`,
+    timeoutMs: 60_000,
+    seed: { lastProduct: 'commerce', productSetups: shopSetup, ...miniMartOwnedCatalogFixture() },
+  })),
   ...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,
     retirementCaseId: spec.id, requireLauncherProducts: true,
     expectedLauncherProducts: [],
@@ -1239,7 +1261,7 @@ async function main() {
     const version = await cdp.send('Browser.getVersion')
     const cases = []
     const selectedTests = shopOnly
-      ? tests.filter((testCase) => testCase.exerciseShopCounter)
+      ? tests.filter((testCase) => testCase.exerciseShopCounter || testCase.exerciseShopDecisionDesk)
       : ecommerceClaimOnly
         ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
         : tests

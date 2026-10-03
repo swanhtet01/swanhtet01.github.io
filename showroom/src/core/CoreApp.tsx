@@ -6780,7 +6780,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {commerceBoundary}
-    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} profitControl={shopProfitControl} /></Suspense>
+    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} /></Suspense>
     {actionGate}
   </div>
 
