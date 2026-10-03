@@ -3498,7 +3498,7 @@
 /* Sites workspace: pages, focused editing and live operational context share one
    working surface. This implements the product UI; the public site can capture
    the same real screens after the release candidate is accepted. */
-.website-status-disclosure { order: 4; }
+.website-status-disclosure { order: 2; }
 .website-start-tools { order: 5; }
 
 .website-status-disclosure[data-editing-routine='false'] {
@@ -3508,12 +3508,12 @@
 }
 
 .website-status-disclosure[data-editing-routine='false'] .website-today {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, .72fr);
   gap: 1.25rem;
   border: 0;
   border-radius: 0.75rem;
   padding: 0.875rem 1rem;
-  background: var(--website-panel);
+  background: radial-gradient(circle at 92% -20%, color-mix(in srgb, var(--website-panel) 72%, var(--website-green) 28%), transparent 40%), var(--website-panel);
   box-shadow: none;
 }
 
@@ -3529,11 +3529,15 @@
 .website-status-disclosure[data-editing-routine='false'] .website-today-priority h2 { margin: 0; font-size: 1rem; letter-spacing: -.02em; }
 .website-status-disclosure[data-editing-routine='false'] .website-today-priority p { max-width: none; font-size: .8125rem; line-height: 1.4; }
 .website-status-disclosure[data-editing-routine='false'] .website-today-priority > .website-button { grid-column: 2; grid-row: 2 / span 2; width: auto; margin: 0; }
-.website-status-disclosure[data-editing-routine='false'] .website-today-signals { display: none; }
+.website-status-disclosure[data-editing-routine='false'] .website-today-signals { display: grid; }
 
 .website-action-bar {
+  order: 3;
   grid-template-columns: minmax(0, 1fr) auto auto;
 }
+
+.website-workspace-grid,
+.website-workspace-grid.view-publish { order: 4; }
 
 .website-action-context {
   min-width: 0;
@@ -3864,8 +3868,6 @@
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Cpath d='M4 5.25h16v11.5H9l-5 3v-14.5Z'/%3E%3Cpath d='M8 9h8M8 12.5h5'/%3E%3C/svg%3E");
 }
 
-.website-heading-publish-action { flex: 0 0 auto; }
-
 .website-mode-nav {
   order: 1;
   width: max-content;
@@ -3924,10 +3926,6 @@
 
 @media (min-width: 841px) {
   .sites-product-shell .website-mode-nav { display: none; }
-}
-
-@media (max-width: 840px) {
-  .website-heading-publish-action { display: none; }
 }
 
 .website-inquiry-workspace {

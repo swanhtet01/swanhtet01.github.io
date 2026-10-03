@@ -79,8 +79,8 @@ const DEFAULT_NOTICE = 'Website ready to edit. Nothing has been published.'
 
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
-    title: 'Website',
-    copy: 'Shape every page, check what is missing and publish when it is ready.',
+    title: 'Pages',
+    copy: 'Build and maintain the pages customers see.',
   },
   inquiries: {
     title: 'Inquiries',
@@ -274,7 +274,7 @@ export function WebsiteProduct() {
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
-        title: 'Website',
+        title: 'Pages',
         copy: 'Edit your pages and download your website.',
       }
     : starterSetupActive
@@ -284,7 +284,7 @@ export function WebsiteProduct() {
       }
     : view === 'content' && surface === 'preview'
     ? {
-        title: hasUnsavedChanges ? 'Unsaved changes' : 'Website',
+        title: hasUnsavedChanges ? 'Unsaved changes' : 'Pages',
         copy: hasUnsavedChanges
           ? 'Your changes are not saved. Return to edit to save or discard them.'
           : selectedPage.stage === 'draft'
@@ -925,7 +925,7 @@ export function WebsiteProduct() {
   const websiteLeads = websiteInboxLeads(leadLedger)
   const leadCounts = websiteLeadCounts(leadLedger)
   const releaseRecordRequired = storageMode === 'managed'
-  const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges
+  const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges && contentChecksPass
   const websiteTodayStep = storageIssue || canRepairLocalStorage
     ? 'recover'
     : pendingRestoredDraft
@@ -981,7 +981,7 @@ export function WebsiteProduct() {
           : localPreviewReady
             ? 'Download an HTML file of your saved site. This does not publish it.'
           : failingContentChecks.length
-            ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
+            ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before the website file is ready.`
             : leadCounts.new
               ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
               : releaseRecordRequired && !approvalIsCurrent
@@ -1027,7 +1027,7 @@ export function WebsiteProduct() {
     ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
     ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
     ['Review', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
-    ['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
+    ['File', hasUnsavedChanges ? 'Blocked by draft' : failingContentChecks.length ? 'Blocked by checks' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
   ] as const
   const websiteTodaySource = storageMode === 'managed'
     ? `Company account · ${managedActorId || 'signed in'}`
@@ -1203,16 +1203,6 @@ export function WebsiteProduct() {
             </div>
             {view === 'publish' ? (
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
-            ) : !starterSetupActive ? (
-              <button
-                className="website-button is-primary website-heading-publish-action"
-                disabled={!canReview}
-                onClick={() => openWorkspaceView('publish')}
-                title={!canReview ? 'Finish and save every page before preparing the website file' : undefined}
-                type="button"
-              >
-                Prepare file
-              </button>
             ) : null}
           </header>
 

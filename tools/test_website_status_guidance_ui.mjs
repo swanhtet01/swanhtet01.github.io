@@ -12,6 +12,7 @@ const ts = require('typescript')
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 const source = readFileSync(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
+const css = readFileSync(new URL('../showroom/src/products/website/website-product.css', import.meta.url), 'utf8')
 const start = source.indexOf('<details className="website-today-checks">')
 const end = source.indexOf('</details>', start)
 assert.ok(start >= 0 && end > start, 'source Site checks panel must exist')
@@ -31,6 +32,26 @@ const render = (overrides = {}) => renderToStaticMarkup(React.createElement(modu
 const failingWorkspace = createInitialWorkspace()
 failingWorkspace.pages[0].stage = 'draft'
 const failures = readinessChecks(failingWorkspace).filter((check) => !check.id.startsWith('evidence-') && !check.passed)
+
+test('local file readiness waits for actual page checks and keeps one visible primary action', () => {
+  const expression = source.match(/const localPreviewReady = ([^\n]+)/)?.[1]
+  assert.ok(expression)
+  const ready = { storageMode: 'browser-local', starterAvailable: false, hasUnsavedChanges: false, contentChecksPass: true }
+  assert.equal(runInNewContext(expression, ready), true)
+  for (const blocked of [
+    { contentChecksPass: false },
+    { hasUnsavedChanges: true },
+    { starterAvailable: true },
+    { storageMode: 'managed' },
+  ]) assert.equal(runInNewContext(expression, { ...ready, ...blocked }), false)
+  assert.match(source, /content:\s*{\s*title: 'Pages'/)
+  assert.doesNotMatch(source, /website-heading-publish-action/)
+  assert.ok(source.includes("failingContentChecks.length ? 'Blocked by checks'"))
+  assert.ok(source.includes('need attention before the website file is ready.'))
+  assert.match(css, /\.website-status-disclosure \{ order: 2; \}/)
+  assert.match(css, /\.website-action-bar \{\s*order: 3;/)
+  assert.match(css, /\.website-workspace-grid\.view-publish \{ order: 4; \}/)
+})
 
 test('saved failures render actual check details in an initially collapsed disclosure', () => {
   assert.ok(failures.length > 0)
