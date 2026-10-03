@@ -15,9 +15,10 @@ export const APP_ENTRY_RENDERED_VALIDATION_CONTRACT = 'supermega.app-entry-rende
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
-const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'ecommerce-claim', 'sites-workspace'])
+const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'shop-accounting-export', 'ecommerce-claim', 'sites-workspace'])
 const MAX_REPORT_BYTES = 10 * 1024 * 1024
 const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024
+const MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024
 const MAX_CASES = 100
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -62,6 +63,16 @@ const FULL_CASE_MATRIX = Object.freeze([
     path: '/shop/?tab=today',
     screenshot: `shop-today-decision-desk-${size.width}.png`,
   })),
+  {
+    name: 'Shop Today downloads a completed accounting handoff',
+    route: '/shop/?tab=today',
+    viewport: '1280x900',
+    width: 1280,
+    height: 900,
+    path: '/shop/?tab=today',
+    screenshot: 'shop-today-accountant-handoff-1280x900.png',
+    semantics: 'shop-accounting-export',
+  },
   ...RETIRED_PRODUCT_CASES.map(spec => ({ name: spec.id, route: spec.route,
     viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
     width: spec.width, height: spec.height, path: spec.expectedPath,
@@ -123,6 +134,7 @@ const FULL_CASE_MATRIX = Object.freeze([
 const CASE_MATRIX_BY_SCOPE = Object.freeze({
   full: FULL_CASE_MATRIX,
   'shop-counter': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-counter'),
+  'shop-accounting-export': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-accounting-export'),
   'ecommerce-claim': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'ecommerce-claim'),
   'sites-workspace': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'sites-pages' || entry.semantics === 'sites-inquiries'),
 })
@@ -317,6 +329,33 @@ export function assertCaseSemantics(testCase, expected) {
     }
   }
 
+  if (expected.semantics === 'shop-accounting-export') {
+    const artifact = testCase.accountingExport
+    if (testCase.browserContextIsolated !== true || !isObject(artifact) || artifact.ok !== true
+      || artifact.schema !== 'supermega.commerce.accounting-handoff.v3'
+      || !/^\d{4}-\d{2}-\d{2}$/u.test(artifact.businessDate)
+      || !Number.isInteger(artifact.bytes) || artifact.bytes < 4 || artifact.bytes > MAX_DOWNLOAD_BYTES
+      || !DIGEST_PATTERN.test(artifact.digest)
+      || !/^downloads\/supermega-shop-accounting-\d{4}-\d{2}-\d{2}-[0-9a-f]{8}\.csv$/u.test(artifact.file)
+      || artifact.filename !== artifact.file.slice('downloads/'.length)
+      || artifact.viewportWidth !== expected.width || artifact.viewportHeight !== expected.height
+      || artifact.documentScrollWidth > artifact.viewportWidth + 1) {
+      fail('app_entry_rendered_shop_accounting_export_failed')
+    }
+    assertAllChecksTrue(artifact.checks, [
+      'controlVisible',
+      'controlNamed',
+      'mappingReviewed',
+      'filenameBounded',
+      'bomPresent',
+      'schemaPresent',
+      'closeIdPresent',
+      'reviewBoundaryPresent',
+      'businessDatePresent',
+      'noHorizontalOverflow',
+    ], 'app_entry_rendered_shop_accounting_export_failed')
+  }
+
   if (expected.semantics === 'sites-pages' || expected.semantics === 'sites-inquiries') {
     const workspace = testCase.sitesWorkspace
     if (testCase.browserContextIsolated !== true || !isObject(workspace) || workspace.ok !== true
@@ -356,6 +395,28 @@ async function assertScreenshot(evidenceDir, descriptor, seenFiles) {
     fail('app_entry_rendered_screenshot_mismatch')
   }
   return { file: screenshot.relative, bytes: payload.byteLength, digest: descriptor.digest }
+}
+
+async function assertAccountingExport(evidenceDir, descriptor, seenFiles) {
+  const artifact = safeRelativePath(evidenceDir, descriptor.file, 'app_entry_rendered_accounting_export_path_invalid')
+  if (extname(artifact.relative).toLowerCase() !== '.csv' || seenFiles.has(artifact.relative)) {
+    fail('app_entry_rendered_accounting_export_path_invalid')
+  }
+  seenFiles.add(artifact.relative)
+  await assertPathChain(evidenceDir, artifact.parts, 'file', 'app_entry_rendered_accounting_export_invalid')
+  const payload = await readFile(artifact.absolute)
+  const text = payload.toString('utf8')
+  if (payload.byteLength < 4 || payload.byteLength > MAX_DOWNLOAD_BYTES
+    || descriptor.bytes !== payload.byteLength
+    || exactDigest(descriptor.digest, 'app_entry_rendered_accounting_export_digest_invalid') !== sha256Digest(payload)
+    || !payload.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))
+    || !text.includes('supermega.commerce.accounting-handoff.v3')
+    || !text.includes('CLOSE-33333333-3333-4333-8333-333333333333')
+    || !text.includes('"review_required","none","false"')
+    || !text.includes(descriptor.businessDate)) {
+    fail('app_entry_rendered_accounting_export_mismatch')
+  }
+  return { file: artifact.relative, bytes: payload.byteLength, digest: descriptor.digest }
 }
 
 export function parseRenderedProofValidationArgs(args = []) {
@@ -452,14 +513,18 @@ export async function validateRenderedProofReport({ reportPath, expectedHead, ex
   const cases = exactArray(report.cases, 'app_entry_rendered_cases_invalid')
   if (!cases.length || cases.length > MAX_CASES || report.checks !== cases.length) fail('app_entry_rendered_cases_invalid')
   const expectedCases = assertRenderedProofCaseMatrix(cases, expectedScope)
-  const seenScreenshots = new Set()
+  const seenEvidenceFiles = new Set()
   const screenshots = []
+  const downloads = []
   for (let index = 0; index < cases.length; index += 1) {
     const testCase = cases[index]
     const expected = expectedCases[index]
     assertCaseSemantics(testCase, expected)
     if (expected.screenshot !== null) {
-      screenshots.push(await assertScreenshot(evidenceDir, testCase.screenshot, seenScreenshots))
+      screenshots.push(await assertScreenshot(evidenceDir, testCase.screenshot, seenEvidenceFiles))
+    }
+    if (expected.semantics === 'shop-accounting-export') {
+      downloads.push(await assertAccountingExport(evidenceDir, testCase.accountingExport, seenEvidenceFiles))
     }
   }
   const runtimeErrorCount = cases.reduce((total, testCase) => total + testCase.runtime.errors.length, 0)
@@ -480,6 +545,7 @@ export async function validateRenderedProofReport({ reportPath, expectedHead, ex
     verifier: { digest: report.verifier.digest, bytes: report.verifier.bytes },
     artifact: { digest: manifest.digest, fileCount: manifest.fileCount, totalBytes: manifest.totalBytes },
     screenshots,
+    downloads,
     validatorDigest: sha256Digest(validatorPayload),
   }
 }

@@ -41,6 +41,42 @@ test('counter capture waits for persisted basket readiness without accepting dis
   }
 })
 
+test('accounting export evidence requires a real isolated CSV download contract', () => {
+  const checks = Object.fromEntries([
+    'controlVisible', 'controlNamed', 'mappingReviewed', 'filenameBounded', 'bomPresent',
+    'schemaPresent', 'closeIdPresent', 'reviewBoundaryPresent', 'businessDatePresent', 'noHorizontalOverflow',
+  ].map((name) => [name, true]))
+  const accountingExport = {
+    ok: true,
+    checks,
+    file: 'downloads/supermega-shop-accounting-2026-07-23-deadbeef.csv',
+    filename: 'supermega-shop-accounting-2026-07-23-deadbeef.csv',
+    bytes: 512,
+    digest: `sha256:${'a'.repeat(64)}`,
+    schema: 'supermega.commerce.accounting-handoff.v3',
+    businessDate: '2026-07-23',
+    viewportWidth: 1280,
+    viewportHeight: 900,
+    documentScrollWidth: 1280,
+  }
+  const expected = { name: 'Shop Today downloads a completed accounting handoff', width: 1280, height: 900, semantics: 'shop-accounting-export' }
+  const entry = {
+    ok: true,
+    failures: [],
+    runtime: { clean: true, errors: [] },
+    bodyLength: 100,
+    path: '/shop/?tab=today',
+    viewport: '1280x900',
+    rendered: { viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280, noHorizontalOverflow: true },
+    network: { mutatingRequestCount: 0, mutatingRequests: [] },
+    browserContextIsolated: true,
+    accountingExport,
+  }
+  assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
+  assert.throws(() => assertCaseSemantics({ ...entry, accountingExport: { ...accountingExport, checks: { ...checks, mappingReviewed: false } } }, expected), /shop_accounting_export_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, accountingExport: { ...accountingExport, file: '../outside.csv' } }, expected), /shop_accounting_export_failed/)
+})
+
 import {
   APP_ENTRY_RENDERED_CONTRACT,
   buildScreenshotEvidence,
@@ -270,6 +306,13 @@ function fullCaseMatrixFixture() {
       path: '/shop/?tab=today',
       screenshot: { file: `shop-today-decision-desk-${size.width}.png` },
     })),
+    {
+      name: 'Shop Today downloads a completed accounting handoff',
+      route: '/shop/?tab=today',
+      viewport: '1280x900',
+      path: '/shop/?tab=today',
+      screenshot: { file: 'shop-today-accountant-handoff-1280x900.png' },
+    },
     ...RETIRED_PRODUCT_CASES.map(spec => ({ name: spec.id, route: spec.route,
       viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
       path: spec.expectedPath, screenshot: { file: `${spec.id}.png` } })),
@@ -358,8 +401,9 @@ test('CLI requires an exact report, commit, and scope', () => {
 
 test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const full = fullCaseMatrixFixture()
-  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 32)
+  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 33)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(4, 6), 'shop-counter').length, 2)
+  assert.equal(assertRenderedProofCaseMatrix(full.filter((entry) => entry.name === 'Shop Today downloads a completed accounting handoff'), 'shop-accounting-export').length, 1)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(-2), 'ecommerce-claim').length, 2)
   const sites = full.filter((entry) => entry.name.startsWith('desktop Sites opens'))
   assert.equal(assertRenderedProofCaseMatrix(sites, 'sites-workspace').length, 2)
@@ -373,6 +417,7 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
     'shop-counter-mini-mart-mobile-390x844.png',
     'shop-today-decision-desk-1280.png',
     'shop-today-decision-desk-390.png',
+    'shop-today-accountant-handoff-1280x900.png',
     ...RETIRED_PRODUCT_CASES.map(spec => `${spec.id}.png`),
     'website-business-setup-desktop-1280x900.png',
     'website-business-setup-mobile-390x844.png',

@@ -2,13 +2,26 @@
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 import { createReadStream, existsSync, statSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
+import { dirname, extname, join, normalize, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { startBrowser } from './browser_startup.mjs'
-import { COMMERCE_KEY, configureCommercePaymentPolicy, createEmptyCommerce, createSeedCommerce, installCommerceWorkingSampleCatalog, validateCommerceState } from '../showroom/src/core/commerce-workspace.ts'
+import {
+  COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
+  COMMERCE_KEY,
+  commerceAccountRoles,
+  commerceCloseExpectation,
+  commerceOrderAdjustedTotal,
+  configureCommerceAccountMapping,
+  configureCommercePaymentPolicy,
+  createEmptyCommerce,
+  createSeedCommerce,
+  installCommerceWorkingSampleCatalog,
+  saveCommerceClose,
+  validateCommerceState,
+} from '../showroom/src/core/commerce-workspace.ts'
 import { shopBusinessTemplate, shopBusinessTemplateCommerceItems } from '../showroom/src/products/shop/business-templates.ts'
 import { buildStorefrontPreview } from '../showroom/src/products/ecommerce/storefront-model.ts'
 import { LOCAL_STOREFRONT_DRAFT_SCOPE, STOREFRONT_DRAFT_SCHEMA, storefrontDraftStorageKey, validateStorefrontDraft } from '../showroom/src/products/ecommerce/storefront-draft.ts'
@@ -43,11 +56,12 @@ const outFile = argValue('--out')
 const screenshotDir = argValue('--screenshot-dir')
 const expectedHead = argValue('--expected-head')
 const shopOnly = args.includes('--shop-only')
+const shopAccountingOnly = args.includes('--shop-accounting-only')
 const ecommerceClaimOnly = args.includes('--ecommerce-claim-only')
 const sitesOnly = args.includes('--sites-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
 const verifierPath = fileURLToPath(import.meta.url)
-const proofScope = shopOnly ? 'shop-counter' : ecommerceClaimOnly ? 'ecommerce-claim' : sitesOnly ? 'sites-workspace' : 'full'
+const proofScope = shopOnly ? 'shop-counter' : shopAccountingOnly ? 'shop-accounting-export' : ecommerceClaimOnly ? 'ecommerce-claim' : sitesOnly ? 'sites-workspace' : 'full'
 
 const mime = {
   '.css': 'text/css; charset=utf-8',
@@ -332,6 +346,50 @@ export function miniMartOwnedCatalogFixture() {
     [COMMERCE_KEY]: JSON.stringify(state),
     [storefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)]: JSON.stringify(draft),
   } }
+}
+
+// Explicit private fixture for the completed-close export journey. It uses the
+// same validated model transitions as the product and is installed only in an
+// isolated browser context; customer navigation never creates this close.
+export function shopCompletedCloseFixture() {
+  const mappingCapturedAt = '2026-07-23T07:59:00.000Z'
+  const closeCapturedAt = '2026-07-23T08:00:00.000Z'
+  const mapped = configureCommerceAccountMapping(createSeedCommerce(), {
+    mappings: commerceAccountRoles.map((accountRole, index) => ({
+      accountRole,
+      externalAccountCode: String(1000 + index * 100),
+    })),
+  }, {
+    actionId: 'ACT-RENDERED-ACCOUNTING-MAPPING-001',
+    capturedAt: mappingCapturedAt,
+    actor: 'Synthetic Shop owner',
+    reason: 'Exercise the completed-close accounting download in isolated rendered acceptance.',
+    evidenceReference: 'RENDERED-ACCOUNTING-MAPPING-001',
+  })
+  if (!mapped) throw new Error('shop_completed_close_mapping_fixture_invalid')
+  const expectation = commerceCloseExpectation(mapped, closeCapturedAt)
+  if (!expectation?.orderIds.length) throw new Error('shop_completed_close_expectation_fixture_invalid')
+  const expectedByPayment = new Map()
+  for (const orderId of expectation.orderIds) {
+    const order = mapped.orders.find((candidate) => candidate.id === orderId)
+    const adjustedTotal = order ? commerceOrderAdjustedTotal(order) : null
+    if (!order || adjustedTotal === null) throw new Error('shop_completed_close_order_fixture_invalid')
+    expectedByPayment.set(order.payment, (expectedByPayment.get(order.payment) ?? 0) + adjustedTotal)
+  }
+  const closed = saveCommerceClose(mapped, 'CLOSE-33333333-3333-4333-8333-333333333333', {
+    actionId: 'ACT-33333333-3333-4333-8333-333333333333',
+    capturedAt: closeCapturedAt,
+    actor: 'Synthetic Shop owner',
+    reason: 'Complete the isolated rendered accounting export acceptance close.',
+    evidenceReference: 'RENDERED-ACCOUNTING-CLOSE-001',
+  }, expectation, [...expectedByPayment.entries()].map(([paymentMethod, countedMmk]) => ({
+    paymentMethod,
+    countedMmk,
+    varianceOwner: '',
+    varianceReason: '',
+  })))
+  if (!closed) throw new Error('shop_completed_close_fixture_invalid')
+  return { retained: { [COMMERCE_KEY]: JSON.stringify(closed) } }
 }
 
 // Explicit private fixture representing a real saved owner workspace and one
@@ -667,6 +725,106 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
   }
 }
 
+async function exerciseShopAccountingExport(cdp, sessionId, browserContextId) {
+  const downloadDir = resolve(screenshotDir, 'downloads')
+  await mkdir(downloadDir, { recursive: true })
+  let started = null
+  let resolveCompleted
+  let rejectCompleted
+  const completed = new Promise((resolveDownload, rejectDownload) => {
+    resolveCompleted = resolveDownload
+    rejectCompleted = rejectDownload
+  })
+  const offStarted = cdp.on('', 'Browser.downloadWillBegin', (event) => {
+    if (!started) started = event
+  })
+  const offProgress = cdp.on('', 'Browser.downloadProgress', (event) => {
+    if (event.state === 'completed') resolveCompleted(event)
+    if (event.state === 'canceled') rejectCompleted(new Error('shop_accounting_export_download_canceled'))
+  })
+  const context = browserContextId ? { browserContextId } : {}
+  try {
+    await cdp.send('Browser.setDownloadBehavior', {
+      behavior: 'allow',
+      downloadPath: downloadDir,
+      eventsEnabled: true,
+      ...context,
+    })
+    const control = await evalInPage(cdp, sessionId, `(() => {
+      const panel = document.querySelector('[aria-label="Accountant handoff ready"]');
+      const button = panel?.querySelector('button[data-shop-accounting-export="accounting-csv-v1"]');
+      if (!panel || !button || button.disabled) return null;
+      button.scrollIntoView({ block: 'center', inline: 'nearest' });
+      const rect = button.getBoundingClientRect();
+      const style = getComputedStyle(button);
+      const visible = rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.left >= 0
+        && rect.bottom <= window.innerHeight + 0.25 && rect.right <= window.innerWidth + 0.25
+        && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+      const label = button.textContent?.trim() || '';
+      button.click();
+      return {
+        visible,
+        label,
+        businessDate: panel.querySelector('strong')?.textContent?.replace(/^Daily close · /, '').trim() || '',
+        mappingReviewed: panel.textContent?.includes('Mapping reviewed') || false,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentScrollWidth: document.documentElement?.scrollWidth || 0,
+      };
+    })()`)
+    if (!control) throw new Error('shop_accounting_export_control_missing')
+    await Promise.race([
+      completed,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('shop_accounting_export_download_timeout')), 15_000)),
+    ])
+    const filename = String(started?.suggestedFilename || '')
+    if (!/^supermega-shop-accounting-\d{4}-\d{2}-\d{2}-[0-9a-f]{8}\.csv$/u.test(filename)) {
+      throw new Error('shop_accounting_export_filename_invalid')
+    }
+    const downloadPath = resolve(downloadDir, filename)
+    if (!downloadPath.startsWith(`${downloadDir}${sep}`)) throw new Error('shop_accounting_export_path_invalid')
+    let payload = null
+    for (let attempt = 0; attempt < 40 && !payload; attempt += 1) {
+      payload = await readFile(downloadPath).catch(() => null)
+      if (!payload) await new Promise((resolveWait) => setTimeout(resolveWait, 50))
+    }
+    if (!payload?.byteLength) throw new Error('shop_accounting_export_file_missing')
+    const text = payload.toString('utf8')
+    const file = relative(screenshotDir, downloadPath).replaceAll('\\', '/')
+    const checks = {
+      controlVisible: control.visible === true,
+      controlNamed: control.label === 'Download accountant CSV',
+      mappingReviewed: control.mappingReviewed === true,
+      filenameBounded: filename.startsWith(`supermega-shop-accounting-${control.businessDate}-`),
+      bomPresent: payload.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])),
+      schemaPresent: text.includes(COMMERCE_ACCOUNTING_HANDOFF_SCHEMA),
+      closeIdPresent: text.includes('CLOSE-33333333-3333-4333-8333-333333333333'),
+      reviewBoundaryPresent: text.includes('"review_required","none","false"'),
+      businessDatePresent: Boolean(control.businessDate && text.includes(control.businessDate)),
+      noHorizontalOverflow: control.documentScrollWidth <= control.viewportWidth + 1,
+    }
+    return {
+      ok: Object.values(checks).every(Boolean),
+      checks,
+      file,
+      filename,
+      bytes: payload.byteLength,
+      digest: `sha256:${createHash('sha256').update(payload).digest('hex')}`,
+      schema: COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
+      businessDate: control.businessDate,
+      viewportWidth: control.viewportWidth,
+      viewportHeight: control.viewportHeight,
+      documentScrollWidth: control.documentScrollWidth,
+    }
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) }
+  } finally {
+    offStarted()
+    offProgress()
+    await cdp.send('Browser.setDownloadBehavior', { behavior: 'default', ...context }).catch(() => {})
+  }
+}
+
 async function exerciseSitesPages(cdp, sessionId) {
   const opened = await evalInPage(cdp, sessionId, `(() => {
     const workbench = document.querySelector('.website-editor-workbench');
@@ -990,6 +1148,9 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const rawShopDecisionDesk = testCase.exerciseShopDecisionDesk
       ? await exerciseShopDecisionDesk(cdp, sessionId, Boolean(testCase.mobile), testCase.sourceControlledFixture === true)
       : null
+    const shopAccountingExport = testCase.exerciseShopAccountingExport
+      ? await exerciseShopAccountingExport(cdp, sessionId, browserContextId)
+      : null
     const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
       : null
@@ -1065,6 +1226,9 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const decisionDeskViewportMatches = !rawShopDecisionDesk
       || Math.abs((rawShopDecisionDesk.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((rawShopDecisionDesk.viewportHeight ?? 0) - testCase.height) <= 1
+    const shopAccountingViewportMatches = !shopAccountingExport
+      || Math.abs((shopAccountingExport.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((shopAccountingExport.viewportHeight ?? 0) - testCase.height) <= 1
     const mutatingRequests = networkRequests.filter((entry) => !['GET', 'HEAD', 'OPTIONS'].includes(entry.method)).map((entry) => {
       let path = entry.url
       try { path = new URL(entry.url).pathname } catch {}
@@ -1110,6 +1274,8 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       ...(shopDecisionDesk && shopDecisionDesk.network.externalRequestCount !== 0 ? ['Shop Decision Desk made an external request'] : []),
       ...(shopDecisionDesk && shopDecisionDesk.network.failedRequestCount !== 0 ? ['Shop Decision Desk had a failed request'] : []),
       ...(decisionDeskViewportMatches ? [] : [`Shop Decision Desk viewport changed from ${testCase.width}x${testCase.height} to ${shopDecisionDesk?.viewportWidth ?? 'unknown'}x${shopDecisionDesk?.viewportHeight ?? 'unknown'}`]),
+      ...(shopAccountingExport && !shopAccountingExport.ok ? [`Shop accounting export failed: ${shopAccountingExport.error || 'unknown check'}`] : []),
+      ...(shopAccountingViewportMatches ? [] : [`Shop accounting viewport changed from ${testCase.width}x${testCase.height} to ${shopAccountingExport?.viewportWidth ?? 'unknown'}x${shopAccountingExport?.viewportHeight ?? 'unknown'}`]),
       ...(ecommerceClaimBoundary && !ecommerceClaimBoundary.ok ? [`Ecommerce claim boundary failed: ${ecommerceClaimBoundary.error || 'unknown check'}`] : []),
       ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
       ...(sitesWorkspace && !sitesWorkspace.ok ? [`Sites workspace contract failed: ${sitesWorkspace.error || 'unknown check'}`] : []),
@@ -1142,6 +1308,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       },
       layout: shopCounter,
       decisionDesk: shopDecisionDesk,
+      accountingExport: shopAccountingExport,
       claimBoundary: ecommerceClaimBoundary,
       sitesWorkspace,
       briefControls,
@@ -1277,6 +1444,21 @@ const tests = [
     timeoutMs: 60_000,
     seed: { lastProduct: 'commerce', productSetups: shopSetup, ...miniMartOwnedCatalogFixture() },
   })),
+  {
+    name: 'Shop Today downloads a completed accounting handoff',
+    route: '/shop/?tab=today',
+    width: 1280,
+    height: 900,
+    expectedPath: '/shop/?tab=today',
+    expectedText: ['Today', 'Download accountant CSV', 'Daily close', 'MAPPING REVIEWED'],
+    absentText: ['Open a demo', 'Start trial'],
+    exerciseShopAccountingExport: true,
+    isolatedBrowserContext: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'shop-today-accountant-handoff-1280x900',
+    timeoutMs: 60_000,
+    seed: { lastProduct: 'commerce', productSetups: shopSetup, ...shopCompletedCloseFixture() },
+  },
   ...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,
     retirementCaseId: spec.id, requireLauncherProducts: true,
     expectedLauncherProducts: [],
@@ -1398,7 +1580,7 @@ const tests = [
 ].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 
 async function main() {
-  if ([shopOnly, ecommerceClaimOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
+  if ([shopOnly, shopAccountingOnly, ecommerceClaimOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
   if (!outFile || !screenshotDir) throw new Error('app_entry_rendered_evidence_paths_required')
   const evidence = buildEvidenceDescriptor({ evidenceDir: screenshotDir, outputPath: outFile })
@@ -1420,11 +1602,13 @@ async function main() {
     const cases = []
     const selectedTests = shopOnly
       ? tests.filter((testCase) => testCase.exerciseShopCounter || testCase.exerciseShopDecisionDesk)
-      : ecommerceClaimOnly
-        ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
-        : sitesOnly
-          ? tests.filter((testCase) => testCase.captureSitesWorkspace)
-        : tests
+      : shopAccountingOnly
+        ? tests.filter((testCase) => testCase.exerciseShopAccountingExport)
+        : ecommerceClaimOnly
+          ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
+          : sitesOnly
+            ? tests.filter((testCase) => testCase.captureSitesWorkspace)
+            : tests
     for (const [index, testCase] of selectedTests.entries()) {
       const startedAt = Date.now()
       console.error(JSON.stringify({ event: 'rendered_case_started', case: index + 1, total: selectedTests.length, name: testCase.name }))
