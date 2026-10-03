@@ -6734,6 +6734,88 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   })
   const stockAttentionRows = stockRows.filter(({ item }) => item.onHand <= item.reorderAt)
   const stockCatalogRows = stockRows.filter(({ item }) => item.onHand > item.reorderAt)
+  const stockUnitsAvailable = commerce.items.reduce((total, item) => total + item.onHand, 0)
+  const stockNextPurchaseRow = purchaseOrderDraftOrder
+    ?? overduePurchaseOrders.find(({ item }) => Boolean(item))
+    ?? partiallyReceivedPurchaseOrders.find(({ item }) => Boolean(item))
+    ?? dueSoonPurchaseOrders.find(({ item }) => Boolean(item))
+    ?? activePurchaseOrders.find(({ item }) => Boolean(item))
+  const stockNextItem = stockCountItem
+    ?? purchaseOrderDraftItem
+    ?? stockNextPurchaseRow?.item
+    ?? lowStock[0]
+    ?? commerce.items[0]
+  const stockNextDemand = stockNextItem
+    ? shopDemandIntelligence.rows.find((row) => row.sku === stockNextItem.sku)
+    : undefined
+  const stockNextPurchaseUrgency = stockNextPurchaseRow
+    ? commercePurchaseOrderArrivalUrgency(stockNextPurchaseRow.purchaseOrder, stockNextPurchaseRow.progress, purchaseOrderClock)
+    : null
+  const stockNextActionKind = !commerce.items.length
+    ? 'catalog'
+    : !commerceCanWrite
+      ? 'restore'
+      : pendingAction
+        ? 'pending'
+        : stockCountDraft
+          ? 'count'
+          : purchaseOrderDraft
+            ? purchaseOrderDraft.mode
+            : stockNextPurchaseRow
+              ? 'receive'
+              : lowStock.length
+                ? 'create'
+                : 'count'
+  const stockNextActionTitle = stockNextActionKind === 'catalog'
+    ? 'Add your first products'
+    : stockNextActionKind === 'restore'
+      ? 'Restore stock access'
+      : stockNextActionKind === 'pending'
+        ? 'Review the pending change'
+        : stockNextActionKind === 'receive'
+          ? purchaseOrderDraft?.mode === 'receive' ? 'Continue the stock receipt' : 'Receive the next purchase order'
+          : stockNextActionKind === 'create'
+            ? purchaseOrderDraft?.mode === 'create' ? 'Continue the purchase order' : 'Reorder the next item'
+            : stockCountDraft
+              ? 'Continue the stock count'
+              : 'Count physical stock'
+  const stockNextReason = stockNextActionKind === 'catalog'
+    ? 'Stock decisions start with the real items, prices and opening quantities your business uses.'
+    : stockNextActionKind === 'restore'
+      ? 'This workspace cannot safely record inventory changes until write access is restored.'
+      : stockNextActionKind === 'pending'
+        ? 'One reviewed change is waiting. Finish it before creating another inventory record.'
+        : stockNextActionKind === 'receive' && stockNextPurchaseRow
+          ? `${stockNextPurchaseRow.progress.remaining.toLocaleString()} units remain from ${stockNextPurchaseRow.purchaseOrder.supplier}.${stockNextPurchaseUrgency === 'late' ? ' The recorded arrival is late.' : stockNextPurchaseUrgency === 'due_soon' ? ' The recorded arrival is due soon.' : stockNextPurchaseRow.progress.status === 'partially_received' ? ' Part of this order has already been received.' : ''}`
+          : stockNextItem && stockNextItem.onHand <= stockNextItem.reorderAt
+            ? stockNextItem.onHand === stockNextItem.reorderAt
+              ? `${stockNextItem.name} is at its reorder level.`
+              : `${stockNextItem.name} is ${(stockNextItem.reorderAt - stockNextItem.onHand).toLocaleString()} units below its reorder level.`
+            : 'No item is below its reorder level. A physical count keeps available stock trustworthy.'
+  const stockNextOwnerCheck = stockNextActionKind === 'receive'
+    ? 'Count accepted and rejected units before confirming the receipt. No supplier payment runs here.'
+    : stockNextActionKind === 'create'
+      ? 'Confirm supplier, quantity, cost and expected arrival. The first review creates an internal requisition.'
+      : stockNextActionKind === 'count'
+        ? commerce.inventoryFoundation
+          ? 'Choose the exact location and lot, then enter the physical count. Reserved units remain protected.'
+          : 'Count saleable units that are not already set aside for open orders.'
+        : stockNextActionKind === 'pending'
+          ? 'Use the current review gate so the inventory trail keeps one accountable decision.'
+          : stockNextActionKind === 'restore'
+            ? 'Open workspace controls and restore the named-user write boundary before recording stock.'
+            : 'Check SKU, price, opening stock and reorder level before the catalog is saved.'
+  const stockNextTrack = stockNextActionKind === 'receive'
+    ? 'Receiving'
+    : stockNextActionKind === 'create'
+      ? 'Purchasing'
+      : stockNextActionKind === 'count'
+        ? 'Inventory control'
+        : stockNextActionKind === 'catalog'
+          ? 'Catalog'
+          : stockNextActionKind === 'restore'
+            ? 'Access'
+            : 'Review'
   const nextOrder = actionOrders[0]
   const nextOrderAction = !nextOrder
     ? 'The queue is clear'
@@ -7315,11 +7397,17 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
   {actionGate}</div>
 
-  if (tab === 'inventory') return <div className="operation-module">
+  if (tab === 'inventory') return <div className="operation-module shop-stock-module">
     {commerceBoundary}
     {!commerce.items.length ? shopCatalogOnboarding : null}
-    <section className="core-panel inventory-panel">
-      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></div></div>
+    <section aria-label="Shop stock workspace" className="core-panel inventory-panel shop-stock-workspace">
+      <header className="shop-stock-heading"><div><span className="core-eyebrow">Shop · Stock</span><h2>Know what to reorder, receive and count.</h2><p>See the stock that needs attention, act once, and keep the purchasing trail together.</p></div><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
+      <dl aria-label="Stock status" className="shop-stock-metrics">
+        <div data-tone={lowStock.length ? 'attention' : 'ready'}><dt>Stock alerts</dt><dd>{lowStock.length.toLocaleString()}</dd><small>{lowStock.length ? 'At or below reorder' : 'Reorder levels clear'}</small></div>
+        <div><dt>Units available</dt><dd>{stockUnitsAvailable.toLocaleString()}</dd><small>Across {commerce.items.length.toLocaleString()} {commerce.items.length === 1 ? 'product' : 'products'}</small></div>
+        <div data-tone={overduePurchaseOrders.length ? 'attention' : 'ready'}><dt>Active purchase orders</dt><dd>{activePurchaseOrders.length.toLocaleString()}</dd><small>{overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : activePurchaseOrders.length ? 'Receiving tracked' : 'No open orders'}</small></div>
+        <div><dt>Stock tracking</dt><dd>{managedInventoryProjection ? `${managedInventoryProjection.locations.length.toLocaleString()} locations` : 'Simple count'}</dd><small>{managedInventoryProjection ? 'Lots and available-to-promise' : 'Enable locations when needed'}</small></div>
+      </dl>
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
@@ -7349,9 +7437,26 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required step="1" type="number" value={stockCountDraft.quantity} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockCountQuantityResult === null || Boolean(commerce.inventoryFoundation && !stockCountBalance)} type="submit">Review count</button></div>
       </form> : null}
-      <div className="data-table stock-attention-table" data-stock-list="attention" role="table" aria-label="Shop stock">
-        <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
-        {stockAttentionRows.length ? stockAttentionRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No stock needs action.</strong><small>Count stock or open other products only when needed.</small></span></div>}
+      <div className="shop-stock-grid">
+        <section aria-labelledby="shop-stock-attention-title" className="shop-stock-attention-card">
+          <header><span><span className="core-eyebrow">Inventory</span><h3 id="shop-stock-attention-title">Stock attention</h3><p>Low stock and active receiving work appear first.</p></span><b>{stockAttentionRows.length} {stockAttentionRows.length === 1 ? 'item' : 'items'}</b></header>
+          <div className="shop-stock-attention-scroll">
+            <div className="data-table stock-attention-table" data-stock-list="attention" role="table" aria-label="Shop stock">
+              <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
+              {stockAttentionRows.length ? stockAttentionRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No stock needs action.</strong><small>Count stock or open other products only when needed.</small></span></div>}
+            </div>
+          </div>
+        </section>
+        <aside aria-labelledby="shop-stock-next-title" className="shop-stock-next-action" data-action={stockNextActionKind}>
+          <header><span><span className="core-eyebrow">Next stock action</span><h3 id="shop-stock-next-title">{stockNextActionTitle}</h3></span><b>{stockNextTrack}</b></header>
+          {stockNextItem ? <div className="shop-stock-next-item"><ShopProductPhotoControl disabled={commerceControlsDisabled} name={stockNextItem.name} scope={productImageScope} sku={stockNextItem.sku} /><span><strong>{stockNextItem.name}</strong><small>{stockNextItem.sku}{stockNextDemand?.projectedDaysOfCover === null || stockNextDemand?.projectedDaysOfCover === undefined ? '' : ` · ${stockNextDemand.projectedDaysOfCover}d projected cover`}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>available</small></span></div> : null}
+          <div className="shop-stock-next-guidance"><div><span>Why now</span><p>{stockNextReason}</p></div><div><span>Owner check</span><p>{stockNextOwnerCheck}</p></div></div>
+          <footer><small>Record → recommendation → owner check → action → closure</small>{stockNextActionKind === 'catalog'
+            ? <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-import">Add products</Link>
+            : stockNextActionKind === 'restore'
+              ? <Link className="core-button primary" to="/settings/#controls">Open workspace controls</Link>
+              : <button className="core-button primary" disabled={commerceControlsDisabled || !stockNextItem} onClick={() => stockNextActionKind === 'count' ? openStockCount() : stockNextItem ? openPurchaseOrder(stockNextItem.sku) : undefined} type="button">{stockNextActionKind === 'pending' ? 'Pending review' : stockNextActionKind === 'receive' ? purchaseOrderDraft?.mode === 'receive' ? 'Continue receipt' : 'Receive stock' : stockNextActionKind === 'create' ? purchaseOrderDraft?.mode === 'create' ? 'Continue purchase order' : 'Create purchase order' : stockCountDraft ? 'Continue count' : 'Count stock'}</button>}</footer>
+        </aside>
       </div>
       <details className="inventory-tools-disclosure stock-catalog-disclosure">
         <summary><span><strong>Other products</strong><small>Healthy stock, pricing, and reorder levels</small></span><b>{stockCatalogRows.length} {stockCatalogRows.length === 1 ? 'item' : 'items'}</b></summary>
