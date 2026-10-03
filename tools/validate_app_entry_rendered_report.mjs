@@ -15,7 +15,7 @@ export const APP_ENTRY_RENDERED_VALIDATION_CONTRACT = 'supermega.app-entry-rende
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
-const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'shop-accounting-export', 'shop-offline-restore', 'ecommerce-claim', 'sites-workspace'])
+const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'shop-accounting-export', 'shop-offline-restore', 'ecommerce-claim', 'store-to-shop', 'sites-workspace'])
 const MAX_REPORT_BYTES = 10 * 1024 * 1024
 const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024
 const MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024
@@ -139,6 +139,16 @@ const FULL_CASE_MATRIX = Object.freeze([
     screenshot: 'ecommerce-local-request-mobile-390x844.png',
     semantics: 'ecommerce-claim',
   },
+  {
+    name: 'Commerce request becomes one accountable Shop order',
+    route: '/ecommerce/?workspace=1',
+    viewport: '1280x900',
+    width: 1280,
+    height: 900,
+    path: '/shop/?tab=orders',
+    screenshot: 'commerce-request-shop-order-desktop-1280x900.png',
+    semantics: 'store-to-shop',
+  },
 ])
 
 const CASE_MATRIX_BY_SCOPE = Object.freeze({
@@ -147,6 +157,7 @@ const CASE_MATRIX_BY_SCOPE = Object.freeze({
   'shop-accounting-export': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-accounting-export'),
   'shop-offline-restore': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-offline-restore'),
   'ecommerce-claim': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'ecommerce-claim'),
+  'store-to-shop': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'store-to-shop'),
   'sites-workspace': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'sites-pages' || entry.semantics === 'sites-inquiries'),
 })
 
@@ -338,6 +349,43 @@ export function assertCaseSemantics(testCase, expected) {
     if (!isObject(testCase.network) || testCase.network.mutatingRequestCount !== 0) {
       fail('app_entry_rendered_ecommerce_network_proof_missing')
     }
+  }
+
+  if (expected.semantics === 'store-to-shop') {
+    const journey = testCase.storeToShop
+    if (testCase.browserContextIsolated !== true || !isObject(journey) || journey.ok !== true
+      || journey.viewportWidth !== expected.width || journey.viewportHeight !== expected.height
+      || journey.documentScrollWidth > journey.viewportWidth + 1
+      || !isObject(journey.claimBoundary) || journey.claimBoundary.ok !== true
+      || !isObject(journey.source) || !exactString(journey.source.requestId, 'app_entry_rendered_store_to_shop_source_invalid')
+      || journey.source.requestCount !== 1 || journey.source.orderCountBefore !== 0
+      || !Number.isInteger(journey.source.quantity) || journey.source.quantity < 1
+      || !Number.isInteger(journey.source.stockBefore) || journey.source.stockBefore < journey.source.quantity
+      || !isObject(journey.committed) || !isObject(journey.restored)
+      || journey.committed.matchingOrderCount !== 1 || journey.restored.matchingOrderCount !== 1
+      || journey.committed.orderStatus !== 'confirmed' || journey.restored.orderStatus !== 'confirmed'
+      || journey.committed.paymentStatus !== 'pending' || journey.restored.paymentStatus !== 'pending'
+      || journey.committed.stockAfter !== journey.source.stockBefore - journey.source.quantity
+      || journey.restored.stockAfter !== journey.committed.stockAfter
+      || journey.committed.pendingRequestCount !== 0 || journey.restored.requestStillPending !== false
+      || journey.committed.owner !== 'Shop reviewer' || journey.restored.owner !== 'Shop reviewer'
+      || journey.committed.route !== expected.path || journey.restored.route !== expected.path) {
+      fail('app_entry_rendered_store_to_shop_failed')
+    }
+    assertAllChecksTrue(journey.checks, [
+      'localRequestCaptured',
+      'sameDeviceInbox',
+      'exactSourcePrepared',
+      'accountableSourceBound',
+      'confirmedOnce',
+      'paymentStillPending',
+      'stockReservedOnce',
+      'sourceConsumed',
+      'accountableOwner',
+      'persistedAfterReload',
+      'operatorViewRestored',
+      'noHorizontalOverflow',
+    ], 'app_entry_rendered_store_to_shop_failed')
   }
 
   if (expected.semantics === 'shop-accounting-export') {

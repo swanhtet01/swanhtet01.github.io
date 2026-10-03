@@ -112,6 +112,34 @@ test('offline restore evidence requires a controlled cached reload with preserve
   assert.throws(() => assertCaseSemantics({ ...entry, offlineRestore: { ...offlineRestore, controllerScript: '/other-sw.js' } }, expected), /shop_offline_restore_failed/)
 })
 
+test('Store-to-Shop evidence requires one source-bound pending-payment order after reload', () => {
+  const checks = Object.fromEntries([
+    'localRequestCaptured', 'sameDeviceInbox', 'exactSourcePrepared', 'accountableSourceBound',
+    'confirmedOnce', 'paymentStillPending', 'stockReservedOnce', 'sourceConsumed',
+    'accountableOwner', 'persistedAfterReload', 'operatorViewRestored', 'noHorizontalOverflow',
+  ].map((name) => [name, true]))
+  const source = { requestId: 'WEB-REQUEST-001', requestCount: 1, sku: 'SKU-001', quantity: 1, stockBefore: 12, orderCountBefore: 0 }
+  const committed = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, pendingRequestCount: 0 }
+  const restored = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, requestStillPending: false }
+  const storeToShop = { ok: true, checks, claimBoundary: { ok: true }, source, committed, restored, viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280 }
+  const expected = { name: 'Commerce request becomes one accountable Shop order', path: '/shop/?tab=orders', width: 1280, height: 900, semantics: 'store-to-shop' }
+  const entry = {
+    ok: true,
+    failures: [],
+    runtime: { clean: true, errors: [] },
+    bodyLength: 100,
+    path: '/shop/?tab=orders',
+    viewport: '1280x900',
+    rendered: { viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280, noHorizontalOverflow: true },
+    network: { mutatingRequestCount: 0, mutatingRequests: [] },
+    browserContextIsolated: true,
+    storeToShop,
+  }
+  assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, restored: { ...restored, paymentStatus: 'reconciled' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, committed: { ...committed, matchingOrderCount: 2 } } }, expected), /store_to_shop_failed/)
+})
+
 import {
   APP_ENTRY_RENDERED_CONTRACT,
   buildScreenshotEvidence,
@@ -421,6 +449,13 @@ function fullCaseMatrixFixture() {
       path: '/ecommerce/',
       screenshot: { file: 'ecommerce-local-request-mobile-390x844.png' },
     },
+    {
+      name: 'Commerce request becomes one accountable Shop order',
+      route: '/ecommerce/?workspace=1',
+      viewport: '1280x900',
+      path: '/shop/?tab=orders',
+      screenshot: { file: 'commerce-request-shop-order-desktop-1280x900.png' },
+    },
   ]
 }
 
@@ -443,14 +478,15 @@ test('CLI requires an exact report, commit, and scope', () => {
 
 test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const full = fullCaseMatrixFixture()
-  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 34)
+  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 35)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(4, 6), 'shop-counter').length, 2)
   assert.equal(assertRenderedProofCaseMatrix(full.filter((entry) => entry.name === 'Shop Today downloads a completed accounting handoff'), 'shop-accounting-export').length, 1)
   assert.equal(assertRenderedProofCaseMatrix(full.filter((entry) => entry.name === 'Shop Today reloads the current business offline'), 'shop-offline-restore').length, 1)
-  assert.equal(assertRenderedProofCaseMatrix(full.slice(-2), 'ecommerce-claim').length, 2)
+  assert.equal(assertRenderedProofCaseMatrix(full.slice(-3, -1), 'ecommerce-claim').length, 2)
+  assert.equal(assertRenderedProofCaseMatrix(full.slice(-1), 'store-to-shop').length, 1)
   const sites = full.filter((entry) => entry.name.startsWith('desktop Sites opens'))
   assert.equal(assertRenderedProofCaseMatrix(sites, 'sites-workspace').length, 2)
-  const obsoleteEntry = structuredClone(full.slice(-2))
+  const obsoleteEntry = structuredClone(full.slice(-3, -1))
   obsoleteEntry[0].route = '/ecommerce/'
   assert.throws(() => assertRenderedProofCaseMatrix(obsoleteEntry, 'ecommerce-claim'), /case_matrix_mismatch/)
   assert.deepEqual(full.filter((entry) => entry.screenshot).map((entry) => entry.screenshot.file), [
@@ -471,6 +507,7 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
     'ecommerce-empty-catalog-390.png',
     'ecommerce-local-request-desktop-1280x900.png',
     'ecommerce-local-request-mobile-390x844.png',
+    'commerce-request-shop-order-desktop-1280x900.png',
   ])
   assert.equal(full.filter((entry) => entry.screenshot === null).length, 4)
 
@@ -489,7 +526,7 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
   extraScreenshot[1].screenshot = { file: 'unexpected.png' }
   assert.throws(() => assertRenderedProofCaseMatrix(extraScreenshot, 'full'), /case_matrix_mismatch/)
 
-  const ecommerce = full.slice(-2)
+  const ecommerce = full.slice(-3, -1)
   const duplicateDesktop = [
     structuredClone(ecommerce[0]),
     {

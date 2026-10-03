@@ -59,6 +59,7 @@ const shopOnly = args.includes('--shop-only')
 const shopAccountingOnly = args.includes('--shop-accounting-only')
 const shopOfflineOnly = args.includes('--shop-offline-only')
 const ecommerceClaimOnly = args.includes('--ecommerce-claim-only')
+const storeToShopOnly = args.includes('--store-to-shop-only')
 const sitesOnly = args.includes('--sites-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
 const verifierPath = fileURLToPath(import.meta.url)
@@ -66,8 +67,9 @@ const proofScope = shopOnly ? 'shop-counter'
   : shopAccountingOnly ? 'shop-accounting-export'
     : shopOfflineOnly ? 'shop-offline-restore'
       : ecommerceClaimOnly ? 'ecommerce-claim'
-        : sitesOnly ? 'sites-workspace'
-          : 'full'
+        : storeToShopOnly ? 'store-to-shop'
+          : sitesOnly ? 'sites-workspace'
+            : 'full'
 
 const mime = {
   '.css': 'text/css; charset=utf-8',
@@ -1168,6 +1170,214 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   }
 }
 
+async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, expectedText, timeoutMs) {
+  const claimBoundary = await exerciseEcommerceClaimBoundary(cdp, sessionId)
+  if (!claimBoundary.ok) return { ok: false, error: `request capture: ${claimBoundary.error || 'unknown check'}`, claimBoundary }
+
+  const source = await evalInPage(cdp, sessionId, `(() => {
+    const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+    const request = commerce?.storefrontRequests?.[0];
+    const lines = request?.lines || (request?.line ? [request.line] : []);
+    const firstLine = lines[0];
+    const item = commerce?.items?.find((candidate) => candidate.sku === firstLine?.sku);
+    return {
+      requestId: request?.id || '',
+      requestCount: commerce?.storefrontRequests?.length || 0,
+      sku: firstLine?.sku || '',
+      quantity: firstLine?.quantity || 0,
+      stockBefore: item?.onHand ?? null,
+      orderCountBefore: commerce?.orders?.length || 0,
+    };
+  })()`)
+  if (!source?.requestId || !source?.sku || source.requestCount !== 1 || source.orderCountBefore !== 0) {
+    return { ok: false, error: 'captured request was not the only unconverted Shop source', claimBoundary, source }
+  }
+
+  await cdp.send('Page.navigate', { url: `${origin}/shop/?tab=orders` }, sessionId)
+  await waitForRenderedState(cdp, sessionId, '/shop/?tab=orders', ['Shop', 'Orders'], timeoutMs)
+
+  const composerDeadline = Date.now() + 15_000
+  let composerOpened = false
+  while (Date.now() < composerDeadline && !composerOpened) {
+    composerOpened = await evalInPage(cdp, sessionId, `(() => {
+      const button = [...document.querySelectorAll('button')]
+        .find((candidate) => candidate.textContent.trim() === 'New order' && !candidate.disabled && candidate.getClientRects().length);
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`)
+    if (!composerOpened) await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!composerOpened) return { ok: false, error: 'Shop order composer was not available', claimBoundary, source }
+
+  const inboxDeadline = Date.now() + 15_000
+  let inbox = null
+  while (Date.now() < inboxDeadline) {
+    inbox = await evalInPage(cdp, sessionId, `(() => {
+      const dialog = document.querySelector('dialog.order-composer-dialog[open]');
+      const online = [...(dialog?.querySelectorAll('.order-entry-methods button') || [])]
+        .find((candidate) => candidate.textContent.trim() === 'Online request');
+      if (online && online.getAttribute('aria-pressed') !== 'true') online.click();
+      const panel = dialog?.querySelector('.website-intake');
+      const review = [...(panel?.querySelectorAll('button') || [])]
+        .find((candidate) => candidate.textContent.trim() === 'Review' && !candidate.disabled);
+      const status = panel?.querySelector('.status-pill')?.textContent.trim() || '';
+      const text = panel?.textContent || '';
+      if (!dialog || !panel || !review || status !== 'This device' || !text.includes(${JSON.stringify(source.requestId)})) {
+        return { ready: false, status, requestVisible: text.includes(${JSON.stringify(source.requestId)}) };
+      }
+      review.click();
+      return { ready: true, status, requestVisible: true };
+    })()`)
+    if (inbox?.ready) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!inbox?.ready) return { ok: false, error: 'same-device Ecommerce inbox did not expose the request', claimBoundary, source, inbox }
+
+  const reviewDeadline = Date.now() + 15_000
+  let prepared = null
+  while (Date.now() < reviewDeadline) {
+    prepared = await evalInPage(cdp, sessionId, `(() => {
+      const dialog = document.querySelector('dialog.order-composer-dialog[open]');
+      const sourceReady = dialog?.querySelector('.channel-source-ready');
+      const review = [...(dialog?.querySelectorAll('button') || [])]
+        .find((candidate) => candidate.textContent.trim() === 'Review order');
+      const payment = dialog?.querySelector('.order-ecommerce-payment select');
+      const sourceText = sourceReady?.textContent || '';
+      const ready = Boolean(dialog && sourceText.includes(${JSON.stringify(source.requestId)}) && review && !review.disabled);
+      return {
+        ready,
+        sourceBound: sourceText.includes(${JSON.stringify(source.requestId)}),
+        paymentLocked: Boolean(payment?.disabled),
+        payment: payment?.value || '',
+      };
+    })()`)
+    if (prepared?.ready) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!prepared?.ready) return { ok: false, error: 'Shop could not prepare the exact Ecommerce request', claimBoundary, source, inbox, prepared }
+
+  const queued = await evalInPage(cdp, sessionId, `(() => {
+    const review = [...document.querySelectorAll('dialog.order-composer-dialog[open] button')]
+      .find((candidate) => candidate.textContent.trim() === 'Review order' && !candidate.disabled);
+    if (!review) return false;
+    review.click();
+    return true;
+  })()`)
+  if (!queued) return { ok: false, error: 'prepared Ecommerce order could not enter accountable review', claimBoundary, source, inbox, prepared }
+
+  const gateDeadline = Date.now() + 15_000
+  let gate = null
+  while (Date.now() < gateDeadline) {
+    gate = await evalInPage(cdp, sessionId, `(() => {
+      const dialog = document.querySelector('dialog.accountable-action-gate[open]');
+      const submit = dialog?.querySelector('button[type="submit"]');
+      const inputs = [...(dialog?.querySelectorAll('input') || [])];
+      const text = dialog?.textContent || '';
+      const ready = Boolean(dialog && submit && !submit.disabled && submit.textContent.trim() === 'Confirm change');
+      return {
+        ready,
+        summaryBound: text.includes('Review Ecommerce order'),
+        actor: inputs[0]?.value || '',
+        reasonPresent: Boolean(inputs[1]?.value),
+        sourceEvidenceBound: inputs.some((input) => input.value === ${JSON.stringify(source.requestId)}),
+      };
+    })()`)
+    if (gate?.ready) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!gate?.ready || !gate.summaryBound || !gate.reasonPresent || !gate.sourceEvidenceBound) {
+    return { ok: false, error: 'accountable Shop review did not bind the Ecommerce source', claimBoundary, source, inbox, prepared, gate }
+  }
+
+  const confirmed = await evalInPage(cdp, sessionId, `(() => {
+    const submit = document.querySelector('dialog.accountable-action-gate[open] button[type="submit"]');
+    if (!submit || submit.disabled || submit.textContent.trim() !== 'Confirm change') return false;
+    submit.click();
+    return true;
+  })()`)
+  if (!confirmed) return { ok: false, error: 'accountable Shop confirmation was not available', claimBoundary, source, inbox, prepared, gate }
+
+  const committedDeadline = Date.now() + 20_000
+  let committed = null
+  while (Date.now() < committedDeadline) {
+    committed = await evalInPage(cdp, sessionId, `(() => {
+      const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+      const matching = commerce?.orders?.filter((order) => order.sourceRecordId === ${JSON.stringify(source.requestId)}) || [];
+      const order = matching[0];
+      const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
+      return {
+        route: location.pathname + location.search,
+        matchingOrderCount: matching.length,
+        orderStatus: order?.status || '',
+        paymentStatus: order?.paymentStatus || '',
+        owner: order?.owner || '',
+        stockAfter: item?.onHand ?? null,
+        pendingRequestCount: (commerce?.storefrontRequests || []).filter((request) =>
+          !(commerce?.orders || []).some((candidate) => candidate.sourceRecordId === request.id)).length,
+      };
+    })()`)
+    if (committed?.matchingOrderCount === 1 && committed?.route === expectedPath) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+
+  await cdp.send('Page.reload', { ignoreCache: true }, sessionId)
+  await waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs)
+  const restored = await evalInPage(cdp, sessionId, `(() => {
+    const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+    const matching = commerce?.orders?.filter((order) => order.sourceRecordId === ${JSON.stringify(source.requestId)}) || [];
+    const order = matching[0];
+    const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
+    const bodyText = document.body?.innerText || '';
+    return {
+      route: location.pathname + location.search,
+      matchingOrderCount: matching.length,
+      orderStatus: order?.status || '',
+      paymentStatus: order?.paymentStatus || '',
+      owner: order?.owner || '',
+      stockAfter: item?.onHand ?? null,
+      requestStillPending: (commerce?.storefrontRequests || []).some((request) => request.id === ${JSON.stringify(source.requestId)})
+        && !matching.length,
+      customerVisible: bodyText.includes('May Thiri'),
+      paymentPendingVisible: bodyText.includes('Payment pending'),
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      documentScrollWidth: document.documentElement?.scrollWidth || 0,
+    };
+  })()`)
+
+  const expectedStock = Number(source.stockBefore) - Number(source.quantity)
+  const checks = {
+    localRequestCaptured: source.requestCount === 1,
+    sameDeviceInbox: inbox.status === 'This device' && inbox.requestVisible,
+    exactSourcePrepared: prepared.sourceBound && prepared.paymentLocked && prepared.payment === 'Cash',
+    accountableSourceBound: gate.summaryBound && gate.reasonPresent && gate.sourceEvidenceBound,
+    confirmedOnce: committed?.matchingOrderCount === 1 && restored?.matchingOrderCount === 1,
+    paymentStillPending: committed?.paymentStatus === 'pending' && restored?.paymentStatus === 'pending',
+    stockReservedOnce: committed?.stockAfter === expectedStock && restored?.stockAfter === expectedStock,
+    sourceConsumed: committed?.pendingRequestCount === 0 && restored?.requestStillPending === false,
+    accountableOwner: committed?.owner === 'Shop reviewer' && restored?.owner === 'Shop reviewer',
+    persistedAfterReload: restored?.orderStatus === 'confirmed' && restored?.route === expectedPath,
+    operatorViewRestored: restored?.customerVisible && restored?.paymentPendingVisible,
+    noHorizontalOverflow: Number(restored?.documentScrollWidth || 0) <= Number(restored?.viewportWidth || 0) + 1,
+  }
+  return {
+    ok: Object.values(checks).every(Boolean),
+    error: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', '),
+    checks,
+    claimBoundary,
+    source,
+    inbox,
+    prepared,
+    gate,
+    committed,
+    restored,
+    viewportWidth: restored?.viewportWidth || 0,
+    viewportHeight: restored?.viewportHeight || 0,
+    documentScrollWidth: restored?.documentScrollWidth || 0,
+  }
+}
+
 export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
   if (scopedAccess && testCase.isolatedBrowserContext !== true) throw new Error('preview_browser_access_requires_isolation')
   if (testCase.pairedAppOrigin && (testCase.isolatedBrowserContext !== true
@@ -1265,7 +1475,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
         requiredText: testCase.pairedPublicExpectedText,
         activate: () => evalInPage(cdp, sessionId, pairedClickScript(origin, testCase.pairedAppOrigin)) })
     }
-    await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.initialExpectedText ?? testCase.expectedText, testCase.timeoutMs)
+    await waitForRenderedState(cdp, sessionId, testCase.initialExpectedPath ?? testCase.expectedPath, testCase.initialExpectedText ?? testCase.expectedText, testCase.timeoutMs)
     const shopCounter = testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
@@ -1281,6 +1491,9 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       : null
     const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
+      : null
+    const storeToShop = testCase.exerciseStoreToShop
+      ? await exerciseStoreToShopJourney(cdp, sessionId, origin, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
       : null
     const sitesWorkspace = testCase.exerciseSitesPages
       ? await exerciseSitesPages(cdp, sessionId)
@@ -1348,6 +1561,9 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const ecommerceViewportMatches = !ecommerceClaimBoundary
       || Math.abs((ecommerceClaimBoundary.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((ecommerceClaimBoundary.viewportHeight ?? 0) - testCase.height) <= 1
+    const storeToShopViewportMatches = !storeToShop
+      || Math.abs((storeToShop.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((storeToShop.viewportHeight ?? 0) - testCase.height) <= 1
     const sitesViewportMatches = !sitesWorkspace
       || Math.abs((sitesWorkspace.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((sitesWorkspace.viewportHeight ?? 0) - testCase.height) <= 1
@@ -1411,6 +1627,8 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       ...(shopOfflineViewportMatches ? [] : [`Shop offline viewport changed from ${testCase.width}x${testCase.height} to ${shopOfflineRestore?.viewportWidth ?? 'unknown'}x${shopOfflineRestore?.viewportHeight ?? 'unknown'}`]),
       ...(ecommerceClaimBoundary && !ecommerceClaimBoundary.ok ? [`Ecommerce claim boundary failed: ${ecommerceClaimBoundary.error || 'unknown check'}`] : []),
       ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
+      ...(storeToShop && !storeToShop.ok ? [`Store-to-Shop journey failed: ${storeToShop.error || 'unknown check'}`] : []),
+      ...(storeToShopViewportMatches ? [] : [`Store-to-Shop viewport changed from ${testCase.width}x${testCase.height} to ${storeToShop?.viewportWidth ?? 'unknown'}x${storeToShop?.viewportHeight ?? 'unknown'}`]),
       ...(sitesWorkspace && !sitesWorkspace.ok ? [`Sites workspace contract failed: ${sitesWorkspace.error || 'unknown check'}`] : []),
       ...(sitesWorkspace && sitesWorkspace.documentScrollWidth > sitesWorkspace.viewportWidth + 1
         ? [`Sites workspace horizontal overflow: ${sitesWorkspace.documentScrollWidth}px document in ${sitesWorkspace.viewportWidth}px viewport`]
@@ -1444,6 +1662,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       accountingExport: shopAccountingExport,
       offlineRestore: shopOfflineRestore,
       claimBoundary: ecommerceClaimBoundary,
+      storeToShop,
       sitesWorkspace,
       briefControls,
       screenshot,
@@ -1726,10 +1945,27 @@ const tests = [
     timeoutMs: 60_000,
     seed: miniMartOwnedCatalogFixture(),
   },
+  {
+    name: 'Commerce request becomes one accountable Shop order',
+    route: '/ecommerce/?workspace=1',
+    width: 1280,
+    height: 900,
+    initialExpectedPath: '/ecommerce/?workspace=1',
+    initialExpectedText: ['Store', 'Open customer ordering'],
+    expectedPath: '/shop/?tab=orders',
+    expectedText: ['Shop', 'Orders', 'May Thiri', 'Payment pending'],
+    absentText: ['Payment captured', 'Payment received'],
+    exerciseStoreToShop: true,
+    isolatedBrowserContext: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'commerce-request-shop-order-desktop-1280x900',
+    timeoutMs: 60_000,
+    seed: { lastProduct: 'commerce', productSetups: shopSetup, ...miniMartOwnedCatalogFixture() },
+  },
 ].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 
 async function main() {
-  if ([shopOnly, shopAccountingOnly, shopOfflineOnly, ecommerceClaimOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
+  if ([shopOnly, shopAccountingOnly, shopOfflineOnly, ecommerceClaimOnly, storeToShopOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
   if (!outFile || !screenshotDir) throw new Error('app_entry_rendered_evidence_paths_required')
   const evidence = buildEvidenceDescriptor({ evidenceDir: screenshotDir, outputPath: outFile })
@@ -1757,9 +1993,11 @@ async function main() {
           ? tests.filter((testCase) => testCase.exerciseShopOfflineRestore)
           : ecommerceClaimOnly
             ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
-            : sitesOnly
-              ? tests.filter((testCase) => testCase.captureSitesWorkspace)
-              : tests
+            : storeToShopOnly
+              ? tests.filter((testCase) => testCase.exerciseStoreToShop)
+              : sitesOnly
+                ? tests.filter((testCase) => testCase.captureSitesWorkspace)
+                : tests
     for (const [index, testCase] of selectedTests.entries()) {
       const startedAt = Date.now()
       console.error(JSON.stringify({ event: 'rendered_case_started', case: index + 1, total: selectedTests.length, name: testCase.name }))
