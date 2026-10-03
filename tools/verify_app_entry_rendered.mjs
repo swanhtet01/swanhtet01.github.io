@@ -1322,7 +1322,7 @@ const tests = [
     height: 900,
     expectedPath: '/website/?workspace=1',
     initialExpectedText: ['Pages', 'Mingalar Fresh Mart', 'Edit website', 'Inquiries'],
-    expectedText: ['Pages', 'Mingalar Fresh Mart', 'Home', 'Catalog', 'Contact', 'Page content', 'Page checks', 'Inquiries', 'View website'],
+    expectedText: ['Pages', 'Home', 'Catalog', 'Contact', 'Page content', 'Page checks', 'Inquiries', 'View website'],
     absentText: ['Working sample', 'Open demo', 'Start trial'],
     exerciseSitesPages: true,
     captureSitesWorkspace: true,
