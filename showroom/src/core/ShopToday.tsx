@@ -13,6 +13,7 @@ import { SHOP_BATCH_PROFIT_CONTROL_CONTRACT, SHOP_BATCH_PROFIT_CONTROL_RND_CONTR
 import { formatShopCostCoverage, formatShopMarginRate, projectShopCostCoverageAndMarginAtRisk } from './shop-cost-coverage-and-margin-at-risk'
 import { formatShopProfitControlMetric } from './shop-profit-control'
 import type { ShopProfitControlBoard } from './shop-profit-control'
+import { projectShopTodaySalesPulse } from './shop-today-sales'
 
 export type ShopTodayMetric = {
   label: string
@@ -67,6 +68,20 @@ const capabilityGroups = [
 ] as const
 
 const formatMmk = (value: number) => `${value.toLocaleString('en-US')} MMK`
+
+const yangonDay = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'Asia/Yangon',
+  weekday: 'short',
+})
+
+function formatSalesComparison(deltaBasisPoints: number | null, previousGrossMmk: number) {
+  if (!previousGrossMmk || deltaBasisPoints === null) return 'No retained sales yesterday'
+  if (deltaBasisPoints === 0) return 'Level with yesterday'
+  const percentage = Math.abs(deltaBasisPoints) / 100
+  return `${deltaBasisPoints > 0 ? 'Up' : 'Down'} ${percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}% vs yesterday`
+}
 
 const batchStateLabels: Record<ShopBatchProfitControlView['state'], string> = {
   no_batch: 'No batch selected',
@@ -214,6 +229,22 @@ export function ShopBatchProfitControlPanel({
 
 export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), catalogReady, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, profitControl }: ShopTodayProps) {
   const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
+  const [activityAsOf] = useState(() => Date.now())
+  const salesPulse = useMemo(() => projectShopTodaySalesPulse(commerce, activityAsOf), [activityAsOf, commerce])
+  const activeOrders = useMemo(() => commerce.orders
+    .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+    .sort((left, right) => {
+      if (left.paymentStatus !== right.paymentStatus) return left.paymentStatus === 'pending' ? -1 : 1
+      const leftTime = Date.parse(left.promisedAt ?? left.createdAt)
+      const rightTime = Date.parse(right.promisedAt ?? right.createdAt)
+      return (Number.isFinite(leftTime) ? leftTime : Number.MAX_SAFE_INTEGER)
+        - (Number.isFinite(rightTime) ? rightTime : Number.MAX_SAFE_INTEGER)
+    })
+    .slice(0, 5), [commerce.orders])
+  const lowStockItems = useMemo(() => commerce.items
+    .filter((item) => item.onHand <= item.reorderAt)
+    .sort((left, right) => (right.reorderAt - right.onHand) - (left.reorderAt - left.onHand) || left.name.localeCompare(right.name))
+    .slice(0, 5), [commerce.items])
   const [batchFirstUse, setBatchFirstUse] = useState<ShopBatchFirstUseModuleState>({ status: 'idle' })
   const [localBatchProjection, setLocalBatchProjection] = useState<ShopBatchFirstUseProjectionResult | null>(null)
   const batchFirstUseAttempt = useRef(0)
@@ -267,7 +298,10 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
   )
   const visiblePriorities = profitControl.priorities.slice(0, 2)
   const remainingPriorityCount = profitControl.hiddenPriorityCount + Math.max(0, profitControl.priorities.length - visiblePriorities.length)
-  const queueModules = modules.filter((module) => module.label === 'Orders & fulfilment' || module.label === 'Inventory & purchasing')
+  const financeModule = modules.find((module) => module.label === 'Finance controls')
+  const closePriority = profitControl.priorities.find((priority) => priority.id === 'close_ready')
+  const attentionPriority = visiblePriorities.find((priority) => priority.id !== 'close_ready')
+  const maximumPulseMmk = Math.max(1, ...salesPulse.points.map((point) => point.grossMmk))
 
   return <div className="shop-today">
     <section aria-labelledby="shop-today-title" className="shop-today-overview">
@@ -275,7 +309,7 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
         <div>
           <span className="core-eyebrow">Shop workspace</span>
           <h2 id="shop-today-title">Today</h2>
-          <p>See sales, orders and risks from the current Shop record.</p>
+          <p>{yangonDay.format(new Date(activityAsOf))} · Sales, queues and owner decisions from the current Shop record.</p>
         </div>
         {catalogReady ? <Link className="core-button primary" to="/shop/?tab=counter">New sale</Link> : null}
       </header>
@@ -288,40 +322,63 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
       </div>
     </section>
 
-    <section aria-label="Shop decision desk" className="shop-decision-desk" data-track={nextTrack.toLowerCase()}>
-      <article className="shop-decision-primary">
-        <header><span className="core-eyebrow">Recommended next</span><b>{nextTrack}</b></header>
-        <h3>{nextAction}</h3>
-        <div className="shop-decision-guidance">
-          <div><span>Why now</span><p>{nextDetail}</p></div>
-          <div><span>Owner check</span><p>{nextOwnerGate}</p></div>
+    <section aria-label="Shop operating view" className="shop-operations-board" data-track={nextTrack.toLowerCase()}>
+      <article aria-label="Order queue" className="shop-operations-card shop-order-queue-card">
+        <header><span><small>Orders</small><strong>Order queue</strong></span><b>{activeOrders.length} open</b></header>
+        <div className="shop-operating-list">
+          {activeOrders.length ? activeOrders.map((order) => <Link key={order.id} to="/shop/?tab=orders#shop-order-queue">
+            <span><strong>{order.customer || 'Walk-in'}</strong><small>{order.item} · {order.id.slice(-8)}</small></span>
+            <span><b>{formatMmk(order.total)}</b><small>{order.status} · payment {order.paymentStatus}</small></span>
+          </Link>) : <p className="shop-operating-empty"><strong>Queue clear</strong><span>No open orders need fulfilment.</span></p>}
         </div>
-        <div className="shop-today-actions">
-          <Link className="core-button primary shop-decision-action" to={nextTo}>{nextActionLabel}</Link>
-          {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
-        </div>
+        <footer><Link to="/shop/?tab=orders#shop-order-queue">Open all orders <span aria-hidden="true">→</span></Link></footer>
       </article>
 
-      <aside aria-label="Shop attention" className="shop-decision-rail" data-state={profitControl.state}>
-        <header><span><strong>Attention</strong><small>Evidence from current records</small></span><b>{profitControl.criticalPriorityCount ? `${profitControl.criticalPriorityCount} critical` : profitControl.openPriorityCount ? `${profitControl.openPriorityCount} open` : 'Clear'}</b></header>
-        {visiblePriorities.length ? <div className="shop-decision-priorities">
-          {visiblePriorities.map((priority) => <Link data-priority-id={priority.id} data-tone={priority.severity === 'critical' || priority.severity === 'attention' ? 'attention' : 'ready'} key={priority.id} to={priority.target}>
-            <span><strong>{priority.title}</strong><small>{priority.impact}</small></span>
-            <b>{formatShopProfitControlMetric(priority.metric)}</b>
-            <small>{priority.ownerRole} · {priority.dueLabel}</small>
-            <small><strong>Next:</strong> {priority.actionLabel}</small>
-            <small><strong>Done when:</strong> {priority.closureCondition}</small>
-          </Link>)}
-        </div> : <p className="shop-today-clear-state"><strong>No urgent work</strong><span>Current Shop records do not show an open priority.</span></p>}
+      <article aria-label="Stock watch" className="shop-operations-card shop-stock-watch-card">
+        <header><span><small>Inventory</small><strong>Stock watch</strong></span><b data-tone={lowStockItems.length ? 'attention' : 'ready'}>{lowStockItems.length} low</b></header>
+        <div className="shop-operating-list">
+          {lowStockItems.length ? lowStockItems.map((item) => <Link key={item.sku} to="/shop/?tab=inventory">
+            <span><strong>{item.name}</strong><small>{item.sku}</small></span>
+            <span><b>{item.onHand} on hand</b><small>{Math.max(0, item.reorderAt - item.onHand)} below reorder</small></span>
+          </Link>) : <p className="shop-operating-empty"><strong>Stock covered</strong><span>No item is at or below its reorder level.</span></p>}
+        </div>
+        <footer><Link to="/shop/?tab=inventory">Review inventory <span aria-hidden="true">→</span></Link></footer>
+      </article>
+
+      <aside className="shop-operations-rail">
+        <article aria-label="Sales pulse" className="shop-sales-pulse">
+          <header><span><small>Sales pulse</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span><b data-direction={salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk)}</b></header>
+          <div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
+            {salesPulse.points.map((point) => <span aria-label={`${point.label}: ${formatMmk(point.grossMmk)}`} key={point.hour}>
+              <i aria-hidden="true" style={{ height: `${Math.max(point.grossMmk ? 12 : 2, Math.round((point.grossMmk / maximumPulseMmk) * 100))}%` }} />
+              <small>{point.hour % 6 === 0 ? point.label : ''}</small>
+            </span>)}
+          </div>
+          <p>{salesPulse.today.count} retained completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} · samples excluded</p>
+        </article>
+
+        {financeModule ? <Link aria-label="Daily close task" className="shop-finance-task" data-tone={financeModule.tone ?? 'ready'} to="/shop/?tab=orders#shop-close-controls">
+          <span><small>Cash + wallets</small><strong>Daily close</strong><em>Shop-record expectation</em></span>
+          <span><b>{closePriority ? formatShopProfitControlMetric(closePriority.metric) : financeModule.status}</b><small>{closePriority?.impact ?? financeModule.detail}</small></span>
+        </Link> : null}
+
+        <article aria-label="Recommended next" className="shop-next-compact">
+          <header><span className="core-eyebrow">Recommended next</span><b>{nextTrack}</b></header>
+          <h3>{nextAction}</h3>
+          <p>{nextDetail}</p>
+          <small><strong>Owner check:</strong> {nextOwnerGate}</small>
+          <div className="shop-today-actions">
+            <Link className="core-button primary shop-decision-action" to={nextTo}>{nextActionLabel}</Link>
+            {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
+          </div>
+        </article>
+
+        {attentionPriority ? <Link className="shop-attention-compact" data-tone={attentionPriority.severity === 'critical' || attentionPriority.severity === 'attention' ? 'attention' : 'ready'} to={attentionPriority.target}>
+          <span><small>Attention</small><strong>{attentionPriority.title}</strong></span><b>{formatShopProfitControlMetric(attentionPriority.metric)}</b>
+        </Link> : null}
         {remainingPriorityCount ? <p className="shop-decision-more">{remainingPriorityCount} more lower-priority {remainingPriorityCount === 1 ? 'signal is' : 'signals are'} available in Advanced controls.</p> : null}
       </aside>
     </section>
-
-    <nav aria-label="Shop work queues" className="shop-today-queues">
-      {queueModules.map((module) => <Link data-tone={module.tone ?? 'ready'} key={module.label} to={module.to}>
-        <span><strong>{module.label}</strong><small>{module.detail}</small></span><b>{module.status}</b>
-      </Link>)}
-    </nav>
 
     <details aria-label="Advanced Shop controls" className="shop-today-workspaces shop-today-advanced">
       <summary><span><strong>Advanced controls</strong><small>Profit, operations and safeguarded evidence</small></span><b>{marginControl.costCoverage.state === 'complete' ? 'Costs reviewed' : 'Review available'}</b></summary>
