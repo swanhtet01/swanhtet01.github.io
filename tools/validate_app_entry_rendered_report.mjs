@@ -15,7 +15,7 @@ export const APP_ENTRY_RENDERED_VALIDATION_CONTRACT = 'supermega.app-entry-rende
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
-const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'shop-accounting-export', 'ecommerce-claim', 'sites-workspace'])
+const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'shop-accounting-export', 'shop-offline-restore', 'ecommerce-claim', 'sites-workspace'])
 const MAX_REPORT_BYTES = 10 * 1024 * 1024
 const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024
 const MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024
@@ -72,6 +72,16 @@ const FULL_CASE_MATRIX = Object.freeze([
     path: '/shop/?tab=today',
     screenshot: 'shop-today-accountant-handoff-1280x900.png',
     semantics: 'shop-accounting-export',
+  },
+  {
+    name: 'Shop Today reloads the current business offline',
+    route: '/shop/?tab=today',
+    viewport: '1280x900',
+    width: 1280,
+    height: 900,
+    path: '/shop/?tab=today',
+    screenshot: 'shop-today-offline-restore-1280x900.png',
+    semantics: 'shop-offline-restore',
   },
   ...RETIRED_PRODUCT_CASES.map(spec => ({ name: spec.id, route: spec.route,
     viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
@@ -135,6 +145,7 @@ const CASE_MATRIX_BY_SCOPE = Object.freeze({
   full: FULL_CASE_MATRIX,
   'shop-counter': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-counter'),
   'shop-accounting-export': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-accounting-export'),
+  'shop-offline-restore': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-offline-restore'),
   'ecommerce-claim': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'ecommerce-claim'),
   'sites-workspace': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'sites-pages' || entry.semantics === 'sites-inquiries'),
 })
@@ -354,6 +365,31 @@ export function assertCaseSemantics(testCase, expected) {
       'businessDatePresent',
       'noHorizontalOverflow',
     ], 'app_entry_rendered_shop_accounting_export_failed')
+  }
+
+  if (expected.semantics === 'shop-offline-restore') {
+    const restore = testCase.offlineRestore
+    if (testCase.browserContextIsolated !== true || !isObject(restore) || restore.ok !== true
+      || restore.controllerScript !== '/sw.js'
+      || !Number.isInteger(restore.cacheCount) || restore.cacheCount < 1
+      || !Number.isInteger(restore.cacheEntryCount) || restore.cacheEntryCount < 1
+      || restore.transportFailureCount !== 1
+      || restore.viewportWidth !== expected.width || restore.viewportHeight !== expected.height
+      || restore.documentScrollWidth > restore.viewportWidth + 1) {
+      fail('app_entry_rendered_shop_offline_restore_failed')
+    }
+    assertAllChecksTrue(restore.checks, [
+      'serviceWorkerSupported',
+      'serviceWorkerReady',
+      'controllerActive',
+      'sealedCachePresent',
+      'offlineModeActive',
+      'routeRestored',
+      'businessRecordRestored',
+      'storageRecordPreserved',
+      'expectedFallbackTransportFailure',
+      'noHorizontalOverflow',
+    ], 'app_entry_rendered_shop_offline_restore_failed')
   }
 
   if (expected.semantics === 'sites-pages' || expected.semantics === 'sites-inquiries') {

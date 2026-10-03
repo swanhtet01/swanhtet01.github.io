@@ -57,11 +57,17 @@ const screenshotDir = argValue('--screenshot-dir')
 const expectedHead = argValue('--expected-head')
 const shopOnly = args.includes('--shop-only')
 const shopAccountingOnly = args.includes('--shop-accounting-only')
+const shopOfflineOnly = args.includes('--shop-offline-only')
 const ecommerceClaimOnly = args.includes('--ecommerce-claim-only')
 const sitesOnly = args.includes('--sites-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
 const verifierPath = fileURLToPath(import.meta.url)
-const proofScope = shopOnly ? 'shop-counter' : shopAccountingOnly ? 'shop-accounting-export' : ecommerceClaimOnly ? 'ecommerce-claim' : sitesOnly ? 'sites-workspace' : 'full'
+const proofScope = shopOnly ? 'shop-counter'
+  : shopAccountingOnly ? 'shop-accounting-export'
+    : shopOfflineOnly ? 'shop-offline-restore'
+      : ecommerceClaimOnly ? 'ecommerce-claim'
+        : sitesOnly ? 'sites-workspace'
+          : 'full'
 
 const mime = {
   '.css': 'text/css; charset=utf-8',
@@ -825,6 +831,120 @@ async function exerciseShopAccountingExport(cdp, sessionId, browserContextId) {
   }
 }
 
+async function exerciseShopOfflineRestore(cdp, sessionId, expectedPath, expectedText, timeoutMs, offlineTransportFailures) {
+  let offline = false
+  try {
+    const before = await evalInPage(cdp, sessionId, `(async () => {
+      const supported = 'serviceWorker' in navigator && 'caches' in window;
+      if (!supported) return { supported: false, storageRecord: null, controllerScript: '', cacheCount: 0, cacheEntryCount: 0 };
+      const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 8000));
+      const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
+      const deadline = Date.now() + 8000;
+      while (!navigator.serviceWorker.controller && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      const cacheNames = (await caches.keys()).filter((name) => name.startsWith('supermega-app-'));
+      let cacheEntryCount = 0;
+      for (const name of cacheNames) cacheEntryCount += (await (await caches.open(name)).keys()).length;
+      return {
+        supported: true,
+        ready: Boolean(registration?.active && registration.active.state === 'activated'),
+        storageRecord: localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}),
+        controllerScript: navigator.serviceWorker.controller?.scriptURL || '',
+        cacheCount: cacheNames.length,
+        cacheEntryCount,
+      };
+    })()`)
+    if (!before?.supported || !before?.ready || !before?.controllerScript || !before?.storageRecord
+      || before.cacheCount < 1 || before.cacheEntryCount < 1) {
+      throw new Error('shop_offline_service_worker_not_ready')
+    }
+
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: true,
+      latency: 0,
+      downloadThroughput: 0,
+      uploadThroughput: 0,
+      connectionType: 'none',
+    }, sessionId)
+    offline = true
+
+    const loaded = new Promise((resolveLoad, rejectLoad) => {
+      let timer
+      const off = cdp.on(sessionId, 'Page.loadEventFired', () => {
+        off()
+        clearTimeout(timer)
+        resolveLoad()
+      })
+      timer = setTimeout(() => {
+        off()
+        rejectLoad(new Error('shop_offline_reload_timeout'))
+      }, 30_000)
+    })
+    await cdp.send('Page.reload', { ignoreCache: true }, sessionId)
+    await loaded
+    await waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs)
+
+    const after = await evalInPage(cdp, sessionId, `(async () => {
+      const body = document.body?.innerText || '';
+      const cacheNames = (await caches.keys()).filter((name) => name.startsWith('supermega-app-'));
+      let cacheEntryCount = 0;
+      for (const name of cacheNames) cacheEntryCount += (await (await caches.open(name)).keys()).length;
+      return {
+        online: navigator.onLine,
+        storageRecord: localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}),
+        controllerScript: navigator.serviceWorker?.controller?.scriptURL || '',
+        cacheCount: cacheNames.length,
+        cacheEntryCount,
+        route: location.pathname + location.search,
+        recordVisible: body.includes('May') && body.includes('Cold drink pack') && body.includes('Daily close'),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentScrollWidth: document.documentElement?.scrollWidth || 0,
+      };
+    })()`)
+    const controllerPath = (() => {
+      try { return new URL(after.controllerScript).pathname } catch { return '' }
+    })()
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+    const checks = {
+      serviceWorkerSupported: before.supported === true,
+      serviceWorkerReady: before.ready === true,
+      controllerActive: controllerPath === '/sw.js',
+      sealedCachePresent: after.cacheCount >= 1 && after.cacheEntryCount >= 1,
+      offlineModeActive: after.online === false,
+      routeRestored: after.route === expectedPath,
+      businessRecordRestored: after.recordVisible === true,
+      storageRecordPreserved: after.storageRecord === before.storageRecord && Boolean(after.storageRecord),
+      expectedFallbackTransportFailure: offlineTransportFailures.length === 1,
+      noHorizontalOverflow: after.documentScrollWidth <= after.viewportWidth + 1,
+    }
+    return {
+      ok: Object.values(checks).every(Boolean),
+      checks,
+      controllerScript: controllerPath,
+      cacheCount: after.cacheCount,
+      cacheEntryCount: after.cacheEntryCount,
+      transportFailureCount: offlineTransportFailures.length,
+      viewportWidth: after.viewportWidth,
+      viewportHeight: after.viewportHeight,
+      documentScrollWidth: after.documentScrollWidth,
+    }
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) }
+  } finally {
+    if (offline) {
+      await cdp.send('Network.emulateNetworkConditions', {
+        offline: false,
+        latency: 0,
+        downloadThroughput: -1,
+        uploadThroughput: -1,
+        connectionType: 'none',
+      }, sessionId).catch(() => {})
+    }
+  }
+}
+
 async function exerciseSitesPages(cdp, sessionId) {
   const opened = await evalInPage(cdp, sessionId, `(() => {
     const workbench = document.querySelector('.website-editor-workbench');
@@ -1074,6 +1194,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
   const errors = []
   const warnings = []
+  const offlineTransportFailures = []
   const networkRequests = []
   const networkRequestUrls = new Map()
   const failedNetworkRequests = []
@@ -1105,7 +1226,11 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       }),
       cdp.on(sessionId, 'Log.entryAdded', (event) => {
         const text = event.entry.text || ''
-        if (event.entry?.level === 'error' && !/favicon/i.test(text)) errors.push(`log: ${text}`.trim())
+        if (event.entry?.level === 'error' && !/favicon/i.test(text)) {
+          if (testCase.exerciseShopOfflineRestore && text === 'Failed to load resource: net::ERR_INTERNET_DISCONNECTED') {
+            offlineTransportFailures.push(text)
+          } else errors.push(`log: ${text}`.trim())
+        }
         if (event.entry?.level === 'warning') warnings.push(`log warning: ${text}`.trim())
       }),
       cdp.on(sessionId, 'Network.requestWillBeSent', (event) => {
@@ -1150,6 +1275,9 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       : null
     const shopAccountingExport = testCase.exerciseShopAccountingExport
       ? await exerciseShopAccountingExport(cdp, sessionId, browserContextId)
+      : null
+    const shopOfflineRestore = testCase.exerciseShopOfflineRestore
+      ? await exerciseShopOfflineRestore(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs, offlineTransportFailures)
       : null
     const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
@@ -1229,6 +1357,9 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const shopAccountingViewportMatches = !shopAccountingExport
       || Math.abs((shopAccountingExport.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((shopAccountingExport.viewportHeight ?? 0) - testCase.height) <= 1
+    const shopOfflineViewportMatches = !shopOfflineRestore
+      || Math.abs((shopOfflineRestore.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((shopOfflineRestore.viewportHeight ?? 0) - testCase.height) <= 1
     const mutatingRequests = networkRequests.filter((entry) => !['GET', 'HEAD', 'OPTIONS'].includes(entry.method)).map((entry) => {
       let path = entry.url
       try { path = new URL(entry.url).pathname } catch {}
@@ -1276,6 +1407,8 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       ...(decisionDeskViewportMatches ? [] : [`Shop Decision Desk viewport changed from ${testCase.width}x${testCase.height} to ${shopDecisionDesk?.viewportWidth ?? 'unknown'}x${shopDecisionDesk?.viewportHeight ?? 'unknown'}`]),
       ...(shopAccountingExport && !shopAccountingExport.ok ? [`Shop accounting export failed: ${shopAccountingExport.error || 'unknown check'}`] : []),
       ...(shopAccountingViewportMatches ? [] : [`Shop accounting viewport changed from ${testCase.width}x${testCase.height} to ${shopAccountingExport?.viewportWidth ?? 'unknown'}x${shopAccountingExport?.viewportHeight ?? 'unknown'}`]),
+      ...(shopOfflineRestore && !shopOfflineRestore.ok ? [`Shop offline restore failed: ${shopOfflineRestore.error || Object.entries(shopOfflineRestore.checks || {}).filter(([, passed]) => !passed).map(([name]) => name).join(', ')}`] : []),
+      ...(shopOfflineViewportMatches ? [] : [`Shop offline viewport changed from ${testCase.width}x${testCase.height} to ${shopOfflineRestore?.viewportWidth ?? 'unknown'}x${shopOfflineRestore?.viewportHeight ?? 'unknown'}`]),
       ...(ecommerceClaimBoundary && !ecommerceClaimBoundary.ok ? [`Ecommerce claim boundary failed: ${ecommerceClaimBoundary.error || 'unknown check'}`] : []),
       ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
       ...(sitesWorkspace && !sitesWorkspace.ok ? [`Sites workspace contract failed: ${sitesWorkspace.error || 'unknown check'}`] : []),
@@ -1309,6 +1442,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       layout: shopCounter,
       decisionDesk: shopDecisionDesk,
       accountingExport: shopAccountingExport,
+      offlineRestore: shopOfflineRestore,
       claimBoundary: ecommerceClaimBoundary,
       sitesWorkspace,
       briefControls,
@@ -1459,6 +1593,21 @@ const tests = [
     timeoutMs: 60_000,
     seed: { lastProduct: 'commerce', productSetups: shopSetup, ...shopCompletedCloseFixture() },
   },
+  {
+    name: 'Shop Today reloads the current business offline',
+    route: '/shop/?tab=today',
+    width: 1280,
+    height: 900,
+    expectedPath: '/shop/?tab=today',
+    expectedText: ['Today', 'Order queue', 'May', 'Stock watch', 'Cold drink pack', 'Daily close'],
+    absentText: ['Open a demo', 'Start trial'],
+    exerciseShopOfflineRestore: true,
+    isolatedBrowserContext: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'shop-today-offline-restore-1280x900',
+    timeoutMs: 60_000,
+    seed: { lastProduct: 'commerce', productSetups: shopSetup, ...shopCompletedCloseFixture() },
+  },
   ...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,
     retirementCaseId: spec.id, requireLauncherProducts: true,
     expectedLauncherProducts: [],
@@ -1580,7 +1729,7 @@ const tests = [
 ].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 
 async function main() {
-  if ([shopOnly, shopAccountingOnly, ecommerceClaimOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
+  if ([shopOnly, shopAccountingOnly, shopOfflineOnly, ecommerceClaimOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
   if (!outFile || !screenshotDir) throw new Error('app_entry_rendered_evidence_paths_required')
   const evidence = buildEvidenceDescriptor({ evidenceDir: screenshotDir, outputPath: outFile })
@@ -1604,11 +1753,13 @@ async function main() {
       ? tests.filter((testCase) => testCase.exerciseShopCounter || testCase.exerciseShopDecisionDesk)
       : shopAccountingOnly
         ? tests.filter((testCase) => testCase.exerciseShopAccountingExport)
-        : ecommerceClaimOnly
-          ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
-          : sitesOnly
-            ? tests.filter((testCase) => testCase.captureSitesWorkspace)
-            : tests
+        : shopOfflineOnly
+          ? tests.filter((testCase) => testCase.exerciseShopOfflineRestore)
+          : ecommerceClaimOnly
+            ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
+            : sitesOnly
+              ? tests.filter((testCase) => testCase.captureSitesWorkspace)
+              : tests
     for (const [index, testCase] of selectedTests.entries()) {
       const startedAt = Date.now()
       console.error(JSON.stringify({ event: 'rendered_case_started', case: index + 1, total: selectedTests.length, name: testCase.name }))
