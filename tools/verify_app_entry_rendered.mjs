@@ -756,7 +756,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
 
   const checks = {
     localHeadline: state?.receiptStatus === 'Request saved locally',
-    storePreviewActive: state?.activeWorkspace === 'Store preview',
+    storeWorkspaceActive: state?.activeWorkspace === 'Store',
     localNotice: state?.notice.includes('Request saved locally for Shop review')
       && state?.notice.includes('No order, stock, message, or charge changed.'),
     localReceipt: state?.receiptBoundary.includes('Request saved locally for Shop review.')
@@ -1215,7 +1215,7 @@ const tests = [
     height: 900,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Store preview', 'Request saved locally for Shop review.', 'May Thiri'],
+    expectedText: ['Store', 'Request saved locally for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-desktop-1280x900',
@@ -1230,7 +1230,7 @@ const tests = [
     mobile: true,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Store preview', 'Request saved locally for Shop review.', 'May Thiri'],
+    expectedText: ['Store', 'Request saved locally for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-mobile-390x844',
