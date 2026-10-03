@@ -139,131 +139,43 @@
   display: none;
 }
 
-.ecommerce-today {
-  display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.15fr);
-  gap: 12px 18px;
-  margin: 0 0 12px;
-  border: 1px solid rgba(37,48,74, .14);
-  border-radius: 14px;
-  padding: 16px;
-  background: linear-gradient(135deg, var(--core-panel) 0%, color-mix(in srgb, var(--core-panel) 92%, var(--core-accent) 8%) 100%);
-  box-shadow: 0 .875rem 2.25rem rgba(23, 27, 38, .055);
-}
-
-.ecommerce-today[data-state="attention"] { border-color: rgba(183, 105, 27, .28); }
-.ecommerce-today[data-state="setup"] { border-color: rgba(54, 106, 184, .25); }
-
-.ecommerce-today-priority > .ecommerce-service-actions {
-  grid-area: action;
-  align-items: stretch;
-  flex-direction: column;
-}
-
-.ecommerce-today-priority {
-  min-width: 0;
-  display: grid;
-  align-content: center;
-  justify-items: start;
-  gap: 7px;
-}
-
-.ecommerce-today-priority h2 {
-  max-width: 560px;
-  margin: 0;
-  color: var(--core-ink);
-  font-size: clamp(1.625rem, 2.6vw, 2.375rem);
-  line-height: 1.04;
-  letter-spacing: -.035em;
-}
-
-.ecommerce-today-priority p {
-  max-width: 590px;
-  margin: 0 0 4px;
-  color: var(--core-muted);
-  font-size: .875rem;
-  line-height: 1.48;
-}
-
-.ecommerce-today-metrics {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-self: stretch;
-  overflow: hidden;
-  border: 1px solid rgba(37,48,74, .12);
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--core-panel) 95%, var(--core-accent) 5%);
-}
-
-.ecommerce-today-metrics span {
-  min-width: 0;
-  min-height: 64px;
-  display: grid;
-  align-content: center;
-  gap: 4px;
-  border-right: 1px solid rgba(37,48,74, .09);
-  padding: 10px 12px;
-}
-
-.ecommerce-today-metrics span:last-child { border-right: 0; }
-
-.ecommerce-today-metrics small {
-  color: var(--core-muted);
-  font-size: .625rem;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-.ecommerce-today-metrics strong {
-  overflow: hidden;
-  color: var(--core-ink);
-  font-size: .875rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ecommerce-today-context {
-  grid-column: 1 / -1;
-  margin: 0;
-  border-top: 1px solid rgba(37,48,74, .1);
-  padding-top: 10px;
-  color: var(--core-muted);
-  font-size: .75rem;
-  font-weight: var(--font-weight-semibold);
-}
-
 .commerce-order-desk {
   display: grid;
   gap: 1rem;
   margin-bottom: 1rem;
-  border: .0625rem solid rgba(37,48,74, .14);
-  border-radius: 1rem;
-  padding: 1rem;
-  background: var(--core-panel);
-  box-shadow: 0 1.125rem 3rem rgba(23, 27, 38, .06);
+  overflow: hidden;
+  border: .0625rem solid rgba(37, 48, 74, .14);
+  border-radius: 1.125rem;
+  padding: 1.125rem;
+  background:
+    radial-gradient(circle at 92% -18%, color-mix(in srgb, var(--core-panel) 70%, var(--core-accent) 30%), transparent 34%),
+    var(--core-panel);
+  box-shadow: 0 1.25rem 3.75rem rgba(23, 27, 38, .07);
 }
+
+.commerce-order-desk[data-state="attention"] { border-color: rgba(183, 105, 27, .3); }
+.commerce-order-desk[data-state="setup"] { border-color: rgba(54, 106, 184, .26); }
 
 .commerce-order-desk-head {
   display: flex;
   align-items: end;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .commerce-order-desk-head > div:first-child {
   min-width: 0;
+  max-width: 46rem;
   display: grid;
-  gap: .375rem;
+  gap: .4375rem;
 }
 
 .commerce-order-desk-head h2 {
   margin: 0;
   color: var(--core-ink);
-  font-size: clamp(1.5rem, 2.4vw, 2.125rem);
-  line-height: 1.04;
-  letter-spacing: -.035em;
+  font-size: clamp(1.75rem, 2.8vw, 2.625rem);
+  line-height: 1.02;
+  letter-spacing: -.045em;
 }
 
 .commerce-order-desk-head p,
@@ -282,55 +194,47 @@
   gap: .5rem;
 }
 
-.commerce-order-stage {
+.commerce-operating-status {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   overflow: hidden;
-  border: .0625rem solid var(--core-line);
-  border-radius: .75rem;
+  border: .0625rem solid color-mix(in srgb, var(--core-line) 82%, var(--core-accent) 18%);
+  border-radius: .875rem;
+  background: color-mix(in srgb, var(--core-panel) 96%, var(--core-accent) 4%);
 }
 
-.commerce-order-stage > div {
+.commerce-operating-status > div {
   min-width: 0;
+  min-height: 4.25rem;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: .125rem .625rem;
+  align-content: center;
+  gap: .25rem;
   border-right: .0625rem solid var(--core-line);
-  padding: .75rem;
+  padding: .75rem .875rem;
 }
 
-.commerce-order-stage > div:last-child { border-right: 0; }
-.commerce-order-stage > div[data-state="active"] { background: color-mix(in srgb, var(--core-panel) 91%, var(--core-accent) 9%); }
-.commerce-order-stage > div[data-state="attention"] { background: rgba(177, 113, 0, .07); }
-
-.commerce-order-stage span {
-  grid-row: 1 / span 2;
-  align-self: start;
-  color: var(--core-accent);
-  font-family: var(--core-mono);
-  font-size: .6875rem;
-  font-weight: var(--font-weight-bold);
-}
-
-.commerce-order-stage strong {
-  overflow: hidden;
-  color: var(--core-ink);
-  font-size: .8125rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.commerce-order-stage small {
+.commerce-operating-status > div:last-child { border-right: 0; }
+.commerce-operating-status small {
   overflow: hidden;
   color: var(--core-muted);
-  font-size: .6875rem;
+  font-size: .625rem;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: .045em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.commerce-operating-status strong {
+  overflow: hidden;
+  color: var(--core-ink);
+  font-size: .9375rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .commerce-order-desk-body {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(18rem, .85fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(17rem, .75fr);
   gap: .75rem;
 }
 
@@ -342,13 +246,13 @@
   gap: .75rem;
   border: .0625rem solid var(--core-line);
   border-radius: .875rem;
-  padding: .875rem;
+  padding: .9375rem;
   background: color-mix(in srgb, var(--core-panel) 97%, var(--core-accent) 3%);
 }
 
 .commerce-next-request[data-empty="true"] {
   align-content: center;
-  min-height: 14rem;
+  min-height: 11.5rem;
 }
 
 .commerce-order-card-head {
@@ -416,13 +320,47 @@
   cursor: pointer;
 }
 
-.commerce-exception-list button:disabled { cursor: default; opacity: .58; }
-.commerce-exception-list button:not(:disabled):hover { border-color: color-mix(in srgb, var(--core-accent) 42%, var(--core-line)); background: color-mix(in srgb, var(--core-panel) 95%, var(--core-accent) 5%); }
+.commerce-exception-list button:hover { border-color: color-mix(in srgb, var(--core-accent) 42%, var(--core-line)); background: color-mix(in srgb, var(--core-panel) 95%, var(--core-accent) 5%); }
 .commerce-exception-list button:focus-visible { outline: .125rem solid var(--core-accent); outline-offset: .125rem; }
 .commerce-exception-list button span { min-width: 0; display: grid; gap: .125rem; }
 .commerce-exception-list button strong { font-size: .8125rem; }
 .commerce-exception-list button small { overflow: hidden; color: var(--core-muted); font-size: .6875rem; text-overflow: ellipsis; white-space: nowrap; }
 .commerce-exception-list button b { min-width: 1.75rem; border-radius: 999rem; padding: .25rem .5rem; background: color-mix(in srgb, var(--core-panel) 84%, var(--core-accent) 16%); color: var(--core-accent); font-family: var(--core-mono); font-size: .6875rem; text-align: center; }
+
+.commerce-exception-clear {
+  min-height: 7rem;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  border: .0625rem solid rgba(24, 133, 86, .15);
+  border-radius: .75rem;
+  padding: .875rem;
+  background: rgba(24, 133, 86, .055);
+}
+
+.commerce-exception-clear > span {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(24, 133, 86, .12);
+  color: #0c6840;
+  font-weight: var(--font-weight-black);
+}
+.commerce-exception-clear p { min-width: 0; display: grid; gap: .1875rem; margin: 0; }
+.commerce-exception-clear strong { color: var(--core-ink); font-size: .8125rem; }
+.commerce-exception-clear small { color: var(--core-muted); font-size: .6875rem; line-height: 1.45; }
+
+.commerce-order-context {
+  margin: 0;
+  border-top: .0625rem solid var(--core-line);
+  padding-top: .75rem;
+  color: var(--core-muted);
+  font-size: .75rem;
+  font-weight: var(--font-weight-semibold);
+}
 
 @media (max-width: 58rem) {
   .commerce-order-desk-head { align-items: stretch; flex-direction: column; }
@@ -433,14 +371,12 @@
 @media (max-width: 35rem) {
   .commerce-order-desk { padding: .75rem; }
   .commerce-order-desk-actions { display: grid; grid-template-columns: 1fr; }
-  .commerce-order-stage { grid-template-columns: 1fr; }
-  .commerce-order-stage > div { border-right: 0; border-bottom: .0625rem solid var(--core-line); }
-  .commerce-order-stage > div:last-child { border-bottom: 0; }
+  .commerce-operating-status > div { min-height: 3.75rem; padding: .625rem; }
+  .commerce-operating-status strong { font-size: .8125rem; }
   .commerce-order-meta { grid-template-columns: 1fr; }
   .commerce-order-meta span { border-right: 0; border-bottom: .0625rem solid var(--core-line); }
   .commerce-order-meta span:last-child { border-bottom: 0; }
 }
-
 .ecommerce-business-controls {
   order: 3;
   margin-top: 12px;
@@ -1794,18 +1730,6 @@
     flex-direction: column;
   }
 
-  .ecommerce-today {
-    grid-template-columns: 1fr;
-    padding: 13px;
-  }
-
-  .ecommerce-today-priority .core-button { width: 100%; }
-
-  .ecommerce-today-metrics span {
-    min-height: 58px;
-    padding: 8px;
-  }
-
   .ecommerce-ai-desk {
     grid-template-columns: 1fr;
   }
@@ -1985,7 +1909,7 @@
 
 /* Myanmar script foundation (design phase 1): heading floors for surfaces that
    render user/customer data; the core body stack already covers the island. */
-.ecommerce-heading h1, .ecommerce-today-priority h2 { line-height: 1.3; letter-spacing: 0; }
+.ecommerce-heading h1, .commerce-order-desk-head h2 { line-height: 1.3; letter-spacing: 0; }
 .ecommerce-product :lang(my), .ecommerce-product [lang="my"] { line-height: 1.65; letter-spacing: 0; }
 
 /* Design phase 1 — checkout + cart legibility (tribunal rank 8), and the art

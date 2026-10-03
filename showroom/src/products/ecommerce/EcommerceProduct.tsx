@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ChangeEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { AssistedDeliveryScope, BusinessBrief } from '../AssistedDeliveryScope'
+import { BusinessBrief } from '../AssistedDeliveryScope'
 import { readSessionCart, readSessionCartSnapshot, saveSessionCart } from './cart-session'
 import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
 import { ecommerceShopIntentPath } from './ecommerce-shop-intent-route'
@@ -2134,27 +2134,9 @@ export function EcommerceProduct() {
       </nav> : null}
 
       {workspaceView === 'orders' ? <div className="ecommerce-orders-workspace" id="ecommerce-orders-panel">
-      <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
-        <div className="ecommerce-today-priority">
-          {!assistedCatalogEntry ? <span className="core-eyebrow">Next action</span> : null}
-          <h2 id="ecommerce-today-title">{assistedCatalogEntry ? 'Explore the catalog' : ecommerceTodayHeadline}</h2>
-          {!assistedCatalogEntry ? <p>{ecommerceTodaySummary}</p> : null}
-          {assistedCatalogEntry ? <>
-            <AssistedDeliveryScope product="ecommerce" />
-            <div className="form-actions ecommerce-service-actions">
-              <button className="core-button secondary" onClick={runOrderAutopilot} type="button">Open customer ordering</button>
-            </div>
-          </> : <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>}
-        </div>
-        <div aria-label="Commerce status" className="ecommerce-today-metrics" role="group">
-          <StatusRows rows={ecommerceTodayMetrics} />
-        </div>
-        <p className="ecommerce-today-context" role="status">{sourceLabel} · Stock, payment, delivery, and the final order stay in Shop.</p>
-      </section>
-
       <CommerceOrderDesk
         activeOrderCount={ecommerceActiveOrderCount}
-        completedOrderCount={ecommerceCompletedOrderCount}
+        contextLabel={`${sourceLabel} · Stock, payment, delivery, and the final order stay in Shop.`}
         exceptionCounts={{
           stock: orderOpsStockRiskCount,
           expiring: orderOpsExpiringCount,
@@ -2162,13 +2144,17 @@ export function EcommerceProduct() {
           delivery: deliveryReviewCount,
           refund: ecommerceRefundAttentionCount,
         }}
-        nextActionLabel={orderDeskRequest ? 'Open next request' : ecommerceActiveOrderCount ? 'Continue fulfilment' : 'Open customer store'}
+        headline={ecommerceTodayHeadline}
         nextRequest={orderDeskRequestView}
         onOpenException={openOrderDeskException}
         onOpenNext={openOrderDeskNext}
-        onOpenShop={() => navigate('/shop/?tab=orders')}
         onOpenStore={() => showWorkspace('preview')}
-        pendingRequestCount={actionablePendingManagedRequests.length}
+        onPrimaryAction={runOrderAutopilot}
+        primaryActionDisabled={catalogHydrating}
+        primaryActionLabel={ecommerceTodayAction}
+        state={ecommerceTodayState}
+        statusRows={ecommerceTodayMetrics}
+        summary={ecommerceTodaySummary}
       />
 
       <details className="ecommerce-business-controls">

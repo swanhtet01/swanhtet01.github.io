@@ -1,3 +1,5 @@
+import type { MouseEventHandler } from 'react'
+
 export type CommerceOrderDeskFilter = 'stock' | 'expiring' | 'payment' | 'delivery' | 'refund'
 
 export type CommerceOrderDeskRequest = {
@@ -13,15 +15,19 @@ export type CommerceOrderDeskRequest = {
 
 type CommerceOrderDeskProps = {
   activeOrderCount: number
-  completedOrderCount: number
+  contextLabel: string
   exceptionCounts: Record<CommerceOrderDeskFilter, number>
-  nextActionLabel: string
+  headline: string
   nextRequest: CommerceOrderDeskRequest | null
   onOpenException: (filter: CommerceOrderDeskFilter) => void
   onOpenNext: () => void
-  onOpenShop: () => void
   onOpenStore: () => void
-  pendingRequestCount: number
+  onPrimaryAction: MouseEventHandler<HTMLButtonElement>
+  primaryActionDisabled: boolean
+  primaryActionLabel: string
+  state: 'attention' | 'ready' | 'setup'
+  statusRows: readonly (readonly string[])[]
+  summary: string
 }
 
 const EXCEPTIONS: ReadonlyArray<{ filter: CommerceOrderDeskFilter; label: string; detail: string }> = [
@@ -34,43 +40,40 @@ const EXCEPTIONS: ReadonlyArray<{ filter: CommerceOrderDeskFilter; label: string
 
 export function CommerceOrderDesk({
   activeOrderCount,
-  completedOrderCount,
+  contextLabel,
   exceptionCounts,
-  nextActionLabel,
+  headline,
   nextRequest,
   onOpenException,
   onOpenNext,
-  onOpenShop,
   onOpenStore,
-  pendingRequestCount,
+  onPrimaryAction,
+  primaryActionDisabled,
+  primaryActionLabel,
+  state,
+  statusRows,
+  summary,
 }: CommerceOrderDeskProps) {
   const openExceptionCount = Object.values(exceptionCounts).reduce((total, count) => total + count, 0)
-  const hasOperationalWork = Boolean(nextRequest || activeOrderCount || openExceptionCount)
+  const activeExceptions = EXCEPTIONS.filter(({ filter }) => exceptionCounts[filter] > 0)
+  const primaryOpensStore = primaryActionLabel === 'Open customer ordering' || primaryActionLabel === 'Prepare next order'
 
   return (
-    <section aria-labelledby="commerce-order-desk-title" className="commerce-order-desk">
+    <section aria-labelledby="commerce-order-desk-title" className="commerce-order-desk" data-state={state}>
       <header className="commerce-order-desk-head">
         <div>
-          <span className="core-eyebrow">Order desk</span>
-          <h2 id="commerce-order-desk-title">Take every order through delivery.</h2>
-          <p>Customer requests, Shop review and fulfilment stay in one accountable flow.</p>
+          <span className="core-eyebrow">Commerce operating desk</span>
+          <h2 id="commerce-order-desk-title">{headline}</h2>
+          <p>{summary}</p>
         </div>
-        {hasOperationalWork ? <div className="commerce-order-desk-actions">
-          <button className="core-button secondary" onClick={onOpenStore} type="button">View customer store</button>
-          <button className="core-button primary" onClick={onOpenNext} type="button">{nextActionLabel}</button>
-        </div> : null}
+        <div className="commerce-order-desk-actions">
+          {!primaryOpensStore ? <button className="core-button secondary" onClick={onOpenStore} type="button">View customer store</button> : null}
+          <button className="core-button primary" disabled={primaryActionDisabled} onClick={onPrimaryAction} type="button">{primaryActionLabel}</button>
+        </div>
       </header>
 
-      <div aria-label="Commerce order stages" className="commerce-order-stage" role="list">
-        <div data-state={pendingRequestCount ? 'active' : 'clear'} role="listitem">
-          <span>01</span><strong>Request</strong><small>{pendingRequestCount ? `${pendingRequestCount} waiting` : 'Ready for customer'}</small>
-        </div>
-        <div data-state={openExceptionCount ? 'attention' : pendingRequestCount ? 'active' : 'clear'} role="listitem">
-          <span>02</span><strong>Review</strong><small>{openExceptionCount ? `${openExceptionCount} checks` : pendingRequestCount ? 'Shop confirmation' : 'Queue clear'}</small>
-        </div>
-        <div data-state={activeOrderCount ? 'active' : completedOrderCount ? 'clear' : 'idle'} role="listitem">
-          <span>03</span><strong>Fulfil</strong><small>{activeOrderCount ? `${activeOrderCount} active` : completedOrderCount ? `${completedOrderCount} completed` : 'No active order'}</small>
-        </div>
+      <div aria-label="Commerce operating status" className="commerce-operating-status" role="list">
+        {statusRows.map(([label, value]) => <div key={label} role="listitem"><small>{label}</small><strong>{value}</strong></div>)}
       </div>
 
       <div className="commerce-order-desk-body">
@@ -91,28 +94,37 @@ export function CommerceOrderDesk({
             </div> : <p className="commerce-order-clear">Ready for Shop review.</p>}
             <details className="commerce-order-reference"><summary>Request reference</summary><small>{nextRequest.id}</small></details>
             <button className="core-button primary" onClick={onOpenNext} type="button">Open request in Shop</button>
+          </> : activeOrderCount ? <>
+            <h3>{activeOrderCount} order{activeOrderCount === 1 ? ' is' : 's are'} in fulfilment.</h3>
+            <p>Continue in Shop to pack, hand off, and keep payment and delivery evidence with the order.</p>
+          </> : openExceptionCount ? <>
+            <h3>Resolve the next exception.</h3>
+            <p>{openExceptionCount} recorded check{openExceptionCount === 1 ? '' : 's'} need an owner decision before the order flow is clear.</p>
           </> : <>
-            <h3>No request is waiting.</h3>
-            <p>The customer store is ready. Use the next action above when you want to take an order.</p>
+            <h3>Ready for the next customer.</h3>
+            <p>The customer store can take an order request. Shop remains in control of stock, payment, and fulfilment.</p>
           </>}
         </article>
 
         <aside aria-label="Commerce exceptions" className="commerce-exception-queue">
           <div className="commerce-order-card-head">
             <div><span className="core-eyebrow">Exceptions</span><h3>{openExceptionCount ? `${openExceptionCount} need attention` : 'Queue clear'}</h3></div>
-            <button className="text-link" onClick={onOpenShop} type="button">Open Shop</button>
           </div>
-          <div className="commerce-exception-list">
-            {EXCEPTIONS.map(({ filter, label, detail }) => {
+          {activeExceptions.length ? <div className="commerce-exception-list">
+            {activeExceptions.map(({ filter, label, detail }) => {
               const count = exceptionCounts[filter]
-              return <button disabled={!count} key={filter} onClick={() => onOpenException(filter)} type="button">
-                <span><strong>{label}</strong><small>{count ? detail : 'No action needed'}</small></span>
+              return <button key={filter} onClick={() => onOpenException(filter)} type="button">
+                <span><strong>{label}</strong><small>{detail}</small></span>
                 <b>{count}</b>
               </button>
             })}
-          </div>
+          </div> : <div className="commerce-exception-clear">
+            <span aria-hidden="true">✓</span>
+            <p><strong>No recorded exceptions</strong><small>Stock, payment, quotes, delivery, and refunds are clear.</small></p>
+          </div>}
         </aside>
       </div>
+      <p className="commerce-order-context" role="status">{contextLabel}</p>
     </section>
   )
 }

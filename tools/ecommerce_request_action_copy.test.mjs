@@ -44,27 +44,43 @@ test('assisted catalog setup stays available in both local views and preserves t
   assert.ok(product.includes('href="/ecommerce/?setup=1"'))
   assert.ok(product.includes("new URLSearchParams(location.search).get('workspace') !== '1'"))
   assert.match(product, /Requests stay on this device until Shop review/)
-  assert.match(product, /: ecommerceTodayHeadline\}/)
+  assert.ok(product.includes('headline={ecommerceTodayHeadline}'))
 })
 
 test('the assisted entry only appears before an explicit workspace route', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
-  const expression = product.match(/const assistedCatalogEntry = ([\s\S]*?)\n\s*if \(/)?.[1]
+  const expression = product.match(/const assistedCatalogEntry = ([\s\S]*?)\n\s*const workspaceCopy/)?.[1]
   assert.ok(expression)
   const ready = { showAssistedCatalogSetup: true, URLSearchParams, location: { search: '' } }
   assert.equal(vm.runInNewContext(expression, ready), true)
   assert.equal(vm.runInNewContext(expression, { ...ready, location: { search: '?workspace=1' } }), false)
   assert.equal(vm.runInNewContext(expression, { ...ready, showAssistedCatalogSetup: false }), false)
-  assert.ok(product.includes('{!assistedCatalogEntry ? <div className="ecommerce-workspace-switch">'))
-  assert.ok(product.includes("aria-label={workspaceView === 'preview' ? 'Edit store' : 'View store'}"))
+  assert.ok(product.includes('{!assistedCatalogEntry ? <nav aria-label="Commerce workspace"'))
+  assert.ok(product.includes("sampleCatalogPreview ? 'Replace sample products' : 'Edit store'"))
   assert.ok(!product.includes('aria-label="Storefront view"'))
-  assert.ok(product.includes('Explore the catalog'))
+  assert.ok(product.includes('return <BusinessBrief product="ecommerce" />'))
+  assert.ok(!product.includes('Explore the catalog'))
   assert.ok(!product.includes('Let SuperMega prepare your catalog'))
   assert.ok(!product.includes('Review your catalog before launch.'))
-  const action = product.slice(product.indexOf('{assistedCatalogEntry ? <>'), product.indexOf('{ecommerceTodayGuided ? ('))
-  assert.doesNotMatch(action, /ecommerce-assisted-intake|What to send/)
-  assert.match(action, /<AssistedDeliveryScope product="ecommerce" \/>/)
-  assert.match(action, /<button className="core-button secondary" onClick=\{runOrderAutopilot\} type="button">Open customer ordering/)
+})
+
+test('orders use one real-record operating desk instead of a duplicate status hero', () => {
+  const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
+  const desk = readFileSync(new URL('../showroom/src/products/ecommerce/CommerceOrderDesk.tsx', import.meta.url), 'utf8')
+  assert.equal(product.match(/<CommerceOrderDesk/g)?.length, 1)
+  assert.doesNotMatch(product, /className="ecommerce-today"/)
+  for (const binding of [
+    'headline={ecommerceTodayHeadline}',
+    'summary={ecommerceTodaySummary}',
+    'primaryActionLabel={ecommerceTodayAction}',
+    'statusRows={ecommerceTodayMetrics}',
+    'onPrimaryAction={runOrderAutopilot}',
+  ]) assert.ok(product.includes(binding), binding)
+  assert.ok(desk.includes('aria-label="Commerce operating status"'))
+  assert.ok(desk.includes('const activeExceptions = EXCEPTIONS.filter'))
+  assert.ok(desk.includes('Ready for the next customer.'))
+  assert.ok(desk.includes('order{activeOrderCount === 1 ? \' is\' : \'s are\'} in fulfilment.'))
+  assert.doesNotMatch(desk, /disabled=\{!count\}|No action needed/)
 })
 const source = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('buying.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
@@ -78,8 +94,8 @@ assert.ok(action, 'actual request submit action exists')
 const label = action.children.find(child => ts.isJsxExpression(child))?.expression.getText(ast)
 const mode = action.openingElement.attributes.properties.find(prop => prop.name?.text === 'data-request-mode').initializer.expression.getText(ast)
 test('local request action promises only a device save, including its busy label', () => {
-  assert.equal(vm.runInNewContext(label, { quoteBusy: false, onRecordManagedRequest: undefined }), 'Save request on this device')
-  assert.equal(vm.runInNewContext(label, { quoteBusy: true, onRecordManagedRequest: undefined }), 'Saving on this device...')
+  assert.equal(vm.runInNewContext(label, { quoteBusy: false, onRecordManagedRequest: undefined }), 'Save request locally')
+  assert.equal(vm.runInNewContext(label, { quoteBusy: true, onRecordManagedRequest: undefined }), 'Saving locally...')
   assert.equal(vm.runInNewContext(mode, { onRecordManagedRequest: undefined }), 'local')
 })
 test('managed request action still names a send without claiming delivery completion', () => {
@@ -91,7 +107,7 @@ test('managed request action still names a send without claiming delivery comple
 test('rendered local proof rejects the old send claim rather than accepting either label', () => {
   const harness = readFileSync(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
   assert.ok(harness.includes('button[data-request-mode="local"]'))
-  assert.ok(harness.includes("submit?.textContent.trim() !== 'Save request on this device'"))
+  assert.ok(harness.includes("submit?.textContent.trim() !== 'Save request locally'"))
 })
 
 test('stale quote guidance does not invent a cart edit or an accepted order', () => {
