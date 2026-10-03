@@ -1051,7 +1051,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     try {
       await onConfirm({ actor: responsibleActor, reason: confirmedReason, evidenceReference: confirmedEvidence })
       // Remember only a name the operator actually supplied, and only after the change
-      // applied. Six actions offer a ROLE placeholder as actorSuggestion — 'Sample cashier',
+      // applied. Six actions offer a ROLE placeholder as actorSuggestion — 'Counter cashier',
       // 'Plant operator', 'Shift supervisor'. Confirming one of those untouched must not
       // turn the placeholder into the default identity for every later action, which would
       // sign the whole device's audit trail with a name nobody ever claimed.
@@ -1073,8 +1073,8 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>{isPaymentReconciliation ? 'Payment evidence reference' : 'Reference'}<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder={isPaymentReconciliation ? 'Internal slip file ID or counter reference' : 'Message ID, receipt, count sheet, or observation'} /></label>{isPaymentReconciliation ? <p className="form-notice">For QR payments, record an internal slip file ID or counter reference only. Do not enter a customer phone number, wallet ID, account number, or payment credentials. This records your review; it does not verify or charge a payment.</p> : null}</>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">{isCounterSettlement
-        ? 'Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.'
-        : 'Browser-local sample only. Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.'}</p> : null}
+        ? 'This device keeps the sale record locally. Confirming records the reviewed payment and handoff, completes the sale, and updates this device’s stock. It does not charge a wallet or card, contact a customer, or write to a company account.'
+        : 'This device keeps the order record locally. Confirming creates an open order and reserves this device’s stock. Payment and fulfilment stay pending in Orders. It does not capture payment, contact a customer, or write to a company account.'}</p> : null}
       <div className="form-actions"><button className="core-button" data-action-gate="cancel" disabled={busy || confirmationLocked} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? bi('Retry same confirmation') : isCounterSettlement ? 'Complete sale' : bi(isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
       {error
         ? <div className="form-notice" data-action-gate="error" data-tone="error" role="alert">
@@ -1200,7 +1200,7 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, localDemoStatus, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, recordedOrderIds, sampleCatalogActive }: {
+function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, lastReceipt, localDemoStatus, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, recordedOrderIds, sampleCatalogActive }: {
   businessTemplate: ShopBusinessTemplate | null
   canCompleteInOneReview: boolean
   disabled: boolean
@@ -1208,10 +1208,12 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   initialCustomer: string
   initialQuery: string
   items: CommerceItem[]
+  lastReceipt: CommerceOrderAcknowledgement | null
   localDemoStatus: 'local' | 'records-at-risk' | null
   lowStockCount: number
   loyaltyPoints: ReadonlyMap<string, number> | null
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
+  onViewLastReceipt: (receipt: CommerceOrderAcknowledgement) => void
   openOrderCount: number
   paymentQrScope: string
   persistLocalDraft: boolean
@@ -1269,6 +1271,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
   const effectiveOutcome = canCompleteInOneReview ? outcome : 'open_order'
+  const cartLowStockLines = lines.filter(({ item, quantity }) => item.onHand - quantity <= item.reorderAt)
 
   // Never silently discard unavailable lines from recovery or from a parked table.
   const catalogChanged = Object.entries(cart).some(([sku, quantity]) => {
@@ -1477,6 +1480,29 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Keep as open order</strong><small>Use for pay-later or later handoff. Otherwise this sale completes now.</small></span></label> : null}
         </div>
         <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? 'Review & complete sale' : bi('Review order')}<span aria-hidden="true">→</span></button><small>{effectiveOutcome === 'paid_handoff' ? 'One review records payment, handoff, stock, and the order record.' : 'Creates an open order; payment and handoff stay for Orders.'}</small></footer></> : null}
+      </aside>
+      <aside aria-label="Sale follow-up" className="shop-counter-followup">
+        <header>
+          <div><span className="core-eyebrow">Sale follow-up</span><h2>What happens next</h2></div>
+          <span className="shop-counter-followup-status" data-ready={unitCount > 0 && payment ? 'true' : 'false'}>{unitCount ? payment ? 'Ready to review' : 'Choose payment' : 'Waiting for items'}</span>
+        </header>
+        <div className="shop-counter-outcomes" aria-label="Sale outcome">
+          <article><small>Payment</small><strong>{unitCount ? payment || 'Choose method' : 'No sale yet'}</strong></article>
+          <article><small>Result</small><strong>{unitCount ? effectiveOutcome === 'paid_handoff' ? 'Complete at counter' : 'Continue in Orders' : 'Add an item first'}</strong></article>
+        </div>
+        <ol className="shop-counter-steps">
+          <li data-complete={unitCount > 0 ? 'true' : 'false'}><span>1</span><div><strong>Build the sale</strong><small>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} · ${formatMoney(total)}` : 'Choose or scan products'}</small></div></li>
+          <li data-complete={unitCount > 0 && Boolean(payment) ? 'true' : 'false'}><span>2</span><div><strong>Confirm payment</strong><small>{unitCount ? payment ? `${payment} selected` : 'Choose a method' : 'Available after items are added'}</small></div></li>
+          <li data-complete="false"><span>3</span><div><strong>Record the result</strong><small>{effectiveOutcome === 'paid_handoff' ? 'Review once to complete the sale and open its record' : 'Review once, then finish payment and handoff in Orders'}</small></div></li>
+        </ol>
+        <section className="shop-counter-stock-note" data-risk={cartLowStockLines.length ? 'true' : 'false'}>
+          <div><span aria-hidden="true">{cartLowStockLines.length ? '!' : '✓'}</span><div><strong>{cartLowStockLines.length ? 'Stock needs attention' : 'Stock check'}</strong><p>{cartLowStockLines.length ? `${cartLowStockLines.length} ${cartLowStockLines.length === 1 ? 'line reaches' : 'lines reach'} the reorder level after this sale.` : unitCount ? 'No cart line reaches its reorder level after review.' : lowStockCount ? `${lowStockCount} ${lowStockCount === 1 ? 'item needs' : 'items need'} attention in Stock.` : 'No item is currently below its reorder level.'}</p></div></div>
+          <Link to="/shop/?tab=inventory">Review stock</Link>
+        </section>
+        <div className="shop-counter-followup-actions">
+          <Link className="core-button" to="/shop/?tab=orders">Open Orders</Link>
+          {lastReceipt ? <button className="core-button" onClick={() => onViewLastReceipt(lastReceipt)} type="button">View last order record</button> : null}
+        </div>
       </aside>
     </div>
     {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
@@ -1969,6 +1995,12 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     ? orderAcknowledgementDownloads.get(counterReceiptOrderId)?.artifact ?? null
     : null
   const activeReceiptAck = receiptAck ?? counterReceiptAck
+  const lastCounterReceipt = useMemo(() => {
+    const order = [...commerce.orders]
+      .filter((candidate) => candidate.channel === 'Walk-in' && candidate.status === 'completed' && candidate.paymentStatus === 'reconciled')
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))[0]
+    return order ? orderAcknowledgementDownloads.get(order.id)?.artifact ?? null : null
+  }, [commerce.orders, orderAcknowledgementDownloads])
   const latestClose = commerce.closes.find((close) => close.operator)
   // Roadmap §2 item 5 — anomaly flags on the close. A pure projection over
   // closes already saved (shop-close-anomaly-flags.ts): nothing is stored, no
@@ -4030,7 +4062,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         ? `Order ${displayReference} completed · ${review.payment} reconciled · Stock ${stockReview}`
         : `Order ${displayReference} confirmed · Reserved stock ${stockReview}`,
       presentation: 'counter',
-      actorSuggestion: managedIdentity ? undefined : 'Sample cashier',
+      actorSuggestion: managedIdentity ? undefined : 'Counter cashier',
       evidenceReferenceSuggestion: `Counter order ${displayReference}`,
       evidenceReferenceLocked: true,
       reasonSuggestion: completesSale ? `${review.payment} received and the customer took the order.` : 'Walk-in counter order reviewed.',
@@ -6869,7 +6901,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
