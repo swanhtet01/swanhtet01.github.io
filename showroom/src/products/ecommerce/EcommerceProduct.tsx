@@ -2085,7 +2085,7 @@ export function EcommerceProduct() {
           : 'Review customer requests on this device. Requests stay on this device until Shop review.',
       }
     : workspaceView === 'preview'
-      ? { title: 'Store preview', copy: 'See exactly what customers can browse and add to an order request.' }
+      ? { title: 'Store', copy: 'Browse the customer storefront and prepare one order for Shop confirmation.' }
       : { title: 'Store setup', copy: 'Choose the catalog, store details, and product presentation customers will see.' }
 
   if ((showAssistedCatalogSetup && new URLSearchParams(location.search).get('setup') === '1') || (assistedCatalogEntry && new URLSearchParams(location.search).get('workspace') !== '1')) {
@@ -2129,7 +2129,7 @@ export function EcommerceProduct() {
 
       {!assistedCatalogEntry ? <nav aria-label="Commerce workspace" className="ecommerce-mode-nav" id="ecommerce-workspace-nav">
         <Link aria-current={workspaceView === 'orders' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'orders')}>Orders</Link>
-        <Link aria-current={workspaceView === 'preview' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'preview')}>Store preview</Link>
+        <Link aria-current={workspaceView === 'preview' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'preview')}>Store</Link>
         <Link aria-current={workspaceView === 'setup' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'setup')}>Store setup</Link>
       </nav> : null}
 

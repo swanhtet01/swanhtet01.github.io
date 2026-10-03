@@ -454,7 +454,7 @@ export function CoreLayout() {
     && commerceSearch?.get('workspace') === '1'
     && commerceSearch.get('setup') !== '1'
   const commerceWorkspaceName = desktopCommerceView === 'preview'
-    ? 'Store preview'
+    ? 'Store'
     : desktopCommerceView === 'setup'
       ? 'Store setup'
       : 'Orders'

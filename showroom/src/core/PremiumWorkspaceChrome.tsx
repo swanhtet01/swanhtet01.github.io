@@ -12,7 +12,7 @@ const sitesWorkspaceItems = [
 
 const commerceWorkspaceItems = [
   { id: 'orders', icon: 'commerce-orders', label: 'Orders', view: 'orders' },
-  { id: 'preview', icon: 'commerce-store', label: 'Store preview', view: 'preview' },
+  { id: 'preview', icon: 'commerce-store', label: 'Store', view: 'preview' },
   { id: 'setup', icon: 'commerce-setup', label: 'Store setup', view: 'setup' },
 ] as const
 
