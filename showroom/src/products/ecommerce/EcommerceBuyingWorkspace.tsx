@@ -272,7 +272,9 @@ export function EcommerceBuyingWorkspace({
       setRecoveryRead({ scope, status: result.status, issue: result.error })
       setBuyingState(recoveredState)
       const sessionCart = recoverSessionCart?.() ?? null
-      onCartChange(sessionCart ?? [])
+      // The parent restores the scoped cart before this workspace becomes actionable. A late
+      // empty recovery must not erase an item the customer added while IndexedDB was opening.
+      if (sessionCart?.length) onCartChange(sessionCart)
       setCustomerName('')
       setCustomerPhone('')
       setAddressLine1('')
