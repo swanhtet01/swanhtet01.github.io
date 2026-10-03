@@ -93,8 +93,8 @@ test('login entry evidence rejects every visible workspace-product card in the d
 function ecommerceCase({ file, screenshot, viewport, width, height }) {
   return {
     name: width === 1280
-      ? 'desktop isolated Ecommerce keeps a submitted sample request browser-local'
-      : 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
+      ? 'desktop Ecommerce keeps a reviewed order request locally'
+      : 'mobile Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     viewport,
     path: '/ecommerce/',
@@ -263,6 +263,13 @@ function fullCaseMatrixFixture() {
       path: '/shop/?tab=counter&template=mini-mart',
       screenshot: { file: 'shop-counter-mini-mart-mobile-390x844.png' },
     },
+    ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
+      name: `Shop Today keeps one accountable decision at ${size.width}px`,
+      route: '/shop/?tab=today',
+      viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
+      path: '/shop/?tab=today',
+      screenshot: { file: `shop-today-decision-desk-${size.width}.png` },
+    })),
     ...RETIRED_PRODUCT_CASES.map(spec => ({ name: spec.id, route: spec.route,
       viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
       path: spec.expectedPath, screenshot: { file: `${spec.id}.png` } })),
@@ -288,6 +295,20 @@ function fullCaseMatrixFixture() {
       screenshot: { file: 'website-business-setup-mobile-390x844.png' },
     },
     {
+      name: 'desktop Sites opens the real saved page editor',
+      route: '/website/?workspace=1',
+      viewport: '1440x900',
+      path: '/website/?workspace=1',
+      screenshot: { file: 'sites-pages-current-desktop-1440x900.png' },
+    },
+    {
+      name: 'desktop Sites opens the real inquiry workspace',
+      route: '/website/?workspace=1&view=inquiries',
+      viewport: '1440x900',
+      path: '/website/?workspace=1&view=inquiries',
+      screenshot: { file: 'sites-inquiries-current-desktop-1440x900.png' },
+    },
+    {
       name: 'retired Commerce demo query returns to account home',
       route: '/?demo=ecommerce',
       viewport: '1280x900',
@@ -302,14 +323,14 @@ function fullCaseMatrixFixture() {
       screenshot: { file: `ecommerce-empty-catalog-${size.width}.png` },
     })),
     {
-      name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
+      name: 'desktop Ecommerce keeps a reviewed order request locally',
       route: '/ecommerce/?workspace=1',
       viewport: '1280x900',
       path: '/ecommerce/',
       screenshot: { file: 'ecommerce-local-request-desktop-1280x900.png' },
     },
     {
-      name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
+      name: 'mobile Ecommerce keeps a reviewed order request locally',
       route: '/ecommerce/?workspace=1',
       viewport: '390x844 mobile',
       path: '/ecommerce/',
@@ -337,9 +358,11 @@ test('CLI requires an exact report, commit, and scope', () => {
 
 test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const full = fullCaseMatrixFixture()
-  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 28)
+  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 32)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(4, 6), 'shop-counter').length, 2)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(-2), 'ecommerce-claim').length, 2)
+  const sites = full.filter((entry) => entry.name.startsWith('desktop Sites opens'))
+  assert.equal(assertRenderedProofCaseMatrix(sites, 'sites-workspace').length, 2)
   const obsoleteEntry = structuredClone(full.slice(-2))
   obsoleteEntry[0].route = '/ecommerce/'
   assert.throws(() => assertRenderedProofCaseMatrix(obsoleteEntry, 'ecommerce-claim'), /case_matrix_mismatch/)
@@ -348,9 +371,13 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
     'app-launcher-mobile-390x844.png',
     'shop-counter-mini-mart-desktop-1280x900.png',
     'shop-counter-mini-mart-mobile-390x844.png',
+    'shop-today-decision-desk-1280.png',
+    'shop-today-decision-desk-390.png',
     ...RETIRED_PRODUCT_CASES.map(spec => `${spec.id}.png`),
     'website-business-setup-desktop-1280x900.png',
     'website-business-setup-mobile-390x844.png',
+    'sites-pages-current-desktop-1440x900.png',
+    'sites-inquiries-current-desktop-1440x900.png',
     'ecommerce-empty-catalog-1280.png',
     'ecommerce-empty-catalog-390.png',
     'ecommerce-local-request-desktop-1280x900.png',

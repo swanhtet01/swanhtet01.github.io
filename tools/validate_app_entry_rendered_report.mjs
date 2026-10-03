@@ -15,7 +15,7 @@ export const APP_ENTRY_RENDERED_VALIDATION_CONTRACT = 'supermega.app-entry-rende
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
-const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'ecommerce-claim'])
+const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'ecommerce-claim', 'sites-workspace'])
 const MAX_REPORT_BYTES = 10 * 1024 * 1024
 const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024
 const MAX_CASES = 100
@@ -53,6 +53,15 @@ const FULL_CASE_MATRIX = Object.freeze([
     screenshot: 'shop-counter-mini-mart-mobile-390x844.png',
     semantics: 'shop-counter',
   },
+  ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
+    name: `Shop Today keeps one accountable decision at ${size.width}px`,
+    route: '/shop/?tab=today',
+    viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
+    width: size.width,
+    height: size.height,
+    path: '/shop/?tab=today',
+    screenshot: `shop-today-decision-desk-${size.width}.png`,
+  })),
   ...RETIRED_PRODUCT_CASES.map(spec => ({ name: spec.id, route: spec.route,
     viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
     width: spec.width, height: spec.height, path: spec.expectedPath,
@@ -60,6 +69,26 @@ const FULL_CASE_MATRIX = Object.freeze([
   { name: 'retired Website demo query returns to account home', route: '/?demo=website', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   { name: 'desktop Website opens real business setup', route: '/website/?workspace=1', viewport: '1280x900', width: 1280, height: 900, path: '/website/?workspace=1', screenshot: 'website-business-setup-desktop-1280x900.png' },
   { name: 'mobile Website opens real business setup', route: '/website/?workspace=1', viewport: '390x844 mobile', width: 390, height: 844, path: '/website/?workspace=1', screenshot: 'website-business-setup-mobile-390x844.png' },
+  {
+    name: 'desktop Sites opens the real saved page editor',
+    route: '/website/?workspace=1',
+    viewport: '1440x900',
+    width: 1440,
+    height: 900,
+    path: '/website/?workspace=1',
+    screenshot: 'sites-pages-current-desktop-1440x900.png',
+    semantics: 'sites-pages',
+  },
+  {
+    name: 'desktop Sites opens the real inquiry workspace',
+    route: '/website/?workspace=1&view=inquiries',
+    viewport: '1440x900',
+    width: 1440,
+    height: 900,
+    path: '/website/?workspace=1&view=inquiries',
+    screenshot: 'sites-inquiries-current-desktop-1440x900.png',
+    semantics: 'sites-inquiries',
+  },
   { name: 'retired Commerce demo query returns to account home', route: '/?demo=ecommerce', viewport: '1280x900', width: 1280, height: 900, path: '/', screenshot: null },
   ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
     name: `empty Ecommerce offers catalog help at ${size.width}px`,
@@ -70,7 +99,7 @@ const FULL_CASE_MATRIX = Object.freeze([
     screenshot: `ecommerce-empty-catalog-${size.width}.png`,
   })),
   {
-    name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
+    name: 'desktop Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     viewport: '1280x900',
     width: 1280,
@@ -80,7 +109,7 @@ const FULL_CASE_MATRIX = Object.freeze([
     semantics: 'ecommerce-claim',
   },
   {
-    name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
+    name: 'mobile Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     viewport: '390x844 mobile',
     width: 390,
@@ -95,6 +124,7 @@ const CASE_MATRIX_BY_SCOPE = Object.freeze({
   full: FULL_CASE_MATRIX,
   'shop-counter': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-counter'),
   'ecommerce-claim': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'ecommerce-claim'),
+  'sites-workspace': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'sites-pages' || entry.semantics === 'sites-inquiries'),
 })
 
 function fail(code) {
@@ -285,6 +315,29 @@ export function assertCaseSemantics(testCase, expected) {
     if (!isObject(testCase.network) || testCase.network.mutatingRequestCount !== 0) {
       fail('app_entry_rendered_ecommerce_network_proof_missing')
     }
+  }
+
+  if (expected.semantics === 'sites-pages' || expected.semantics === 'sites-inquiries') {
+    const workspace = testCase.sitesWorkspace
+    if (testCase.browserContextIsolated !== true || !isObject(workspace) || workspace.ok !== true
+      || workspace.documentScrollWidth > workspace.viewportWidth) {
+      fail('app_entry_rendered_sites_workspace_failed')
+    }
+    assertAllChecksTrue(workspace.checks, expected.semantics === 'sites-pages' ? [
+      'workbenchVisible',
+      'pageRailVisible',
+      'editorVisible',
+      'insightsVisible',
+      'threePagesPresent',
+      'activePagePresent',
+    ] : [
+      'workspaceVisible',
+      'captureFormVisible',
+      'queueVisible',
+      'oneSyntheticLeadPresent',
+      'consentControlVisible',
+      'decisionControlsPresent',
+    ], 'app_entry_rendered_sites_workspace_failed')
   }
 }
 

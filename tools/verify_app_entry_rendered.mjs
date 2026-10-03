@@ -12,6 +12,8 @@ import { COMMERCE_KEY, configureCommercePaymentPolicy, createEmptyCommerce, crea
 import { shopBusinessTemplate, shopBusinessTemplateCommerceItems } from '../showroom/src/products/shop/business-templates.ts'
 import { buildStorefrontPreview } from '../showroom/src/products/ecommerce/storefront-model.ts'
 import { LOCAL_STOREFRONT_DRAFT_SCOPE, STOREFRONT_DRAFT_SCHEMA, storefrontDraftStorageKey, validateStorefrontDraft } from '../showroom/src/products/ecommerce/storefront-draft.ts'
+import { captureWebsiteLead, emptyWebsiteLeadLedger, WEBSITE_LEAD_LEDGER_KEY } from '../showroom/src/products/website/website-leads.ts'
+import { createInitialWorkspace, WEBSITE_STORAGE_KEY } from '../showroom/src/products/website/website-model.ts'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
 import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
@@ -42,9 +44,10 @@ const screenshotDir = argValue('--screenshot-dir')
 const expectedHead = argValue('--expected-head')
 const shopOnly = args.includes('--shop-only')
 const ecommerceClaimOnly = args.includes('--ecommerce-claim-only')
+const sitesOnly = args.includes('--sites-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
 const verifierPath = fileURLToPath(import.meta.url)
-const proofScope = shopOnly ? 'shop-counter' : ecommerceClaimOnly ? 'ecommerce-claim' : 'full'
+const proofScope = shopOnly ? 'shop-counter' : ecommerceClaimOnly ? 'ecommerce-claim' : sitesOnly ? 'sites-workspace' : 'full'
 
 const mime = {
   '.css': 'text/css; charset=utf-8',
@@ -328,6 +331,35 @@ export function miniMartOwnedCatalogFixture() {
   return { retained: {
     [COMMERCE_KEY]: JSON.stringify(state),
     [storefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)]: JSON.stringify(draft),
+  } }
+}
+
+// Explicit private fixture representing a real saved owner workspace and one
+// consented synthetic inquiry. It deliberately has no working-sample marker:
+// the captured Pages and Inquiries screens are the product's normal saved state.
+export function sitesOwnerWorkspaceFixture() {
+  const capturedAt = '2026-09-28T00:00:00.000Z'
+  const initialWorkspace = createInitialWorkspace()
+  const workspace = {
+    ...initialWorkspace,
+    revision: 1,
+    contentRevision: 1,
+    pages: initialWorkspace.pages.map((page) => ({ ...page, updatedAt: capturedAt })),
+  }
+  const leadLedger = captureWebsiteLead(emptyWebsiteLeadLedger(), {
+    siteName: workspace.siteName,
+    sourcePage: '/contact',
+    name: 'Daw Mya',
+    contact: '09 420 555 019',
+    request: 'Needs a weekly grocery delivery quote for a small office, starting next Monday.',
+    consentRecorded: true,
+  }, {
+    id: 'LEAD-RENDERED-SITES-001',
+    now: capturedAt,
+  })
+  return { retained: {
+    [WEBSITE_STORAGE_KEY]: JSON.stringify(workspace),
+    [WEBSITE_LEAD_LEDGER_KEY]: JSON.stringify(leadLedger),
   } }
 }
 
@@ -635,6 +667,85 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
   }
 }
 
+async function exerciseSitesPages(cdp, sessionId) {
+  const opened = await evalInPage(cdp, sessionId, `(() => {
+    if (document.querySelector('.website-editor-workbench')) return true;
+    const button = [...document.querySelectorAll('button')]
+      .find((candidate) => candidate.textContent.trim() === 'Edit website');
+    if (!button || button.disabled) return false;
+    button.click();
+    return true;
+  })()`)
+  if (!opened) return { ok: false, error: 'Sites editor action was not available' }
+
+  const deadline = Date.now() + 10_000
+  let state = null
+  while (Date.now() < deadline) {
+    state = await evalInPage(cdp, sessionId, `(() => {
+      const visible = (element) => Boolean(element && element.getClientRects().length
+        && getComputedStyle(element).visibility !== 'hidden');
+      const pageRail = document.querySelector('.website-page-rail');
+      const editor = document.querySelector('.website-editor-workbench > .website-editor-panel');
+      const insights = document.querySelector('.website-editor-insights');
+      const pageButtons = [...document.querySelectorAll('.website-page-list button')];
+      const activePage = document.querySelector('.website-page-list button[aria-current="page"]');
+      const checks = {
+        workbenchVisible: visible(document.querySelector('.website-editor-workbench')),
+        pageRailVisible: visible(pageRail),
+        editorVisible: visible(editor),
+        insightsVisible: visible(insights),
+        threePagesPresent: pageButtons.length === 3,
+        activePagePresent: visible(activePage),
+      };
+      return {
+        checks,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentScrollWidth: document.documentElement?.scrollWidth || 0,
+      };
+    })()`)
+    if (state && Object.values(state.checks).every(Boolean)) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  const checks = state?.checks ?? {}
+  return {
+    ok: Object.values(checks).length > 0 && Object.values(checks).every(Boolean),
+    error: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', '),
+    ...state,
+  }
+}
+
+async function inspectSitesInquiries(cdp, sessionId) {
+  const state = await evalInPage(cdp, sessionId, `(() => {
+    const visible = (element) => Boolean(element && element.getClientRects().length
+      && getComputedStyle(element).visibility !== 'hidden');
+    const workspace = document.querySelector('.website-inquiry-workspace');
+    const capture = document.querySelector('.website-inquiry-capture');
+    const queue = document.querySelector('.website-inquiry-queue');
+    const leads = [...document.querySelectorAll('.website-lead-list article')];
+    const checks = {
+      workspaceVisible: visible(workspace),
+      captureFormVisible: visible(capture?.querySelector('form')),
+      queueVisible: visible(queue),
+      oneSyntheticLeadPresent: leads.length === 1 && visible(leads[0]),
+      consentControlVisible: visible(capture?.querySelector('input[type="checkbox"]')),
+      decisionControlsPresent: queue?.querySelectorAll('button').length === 2,
+    };
+    return {
+      checks,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      documentScrollWidth: document.documentElement?.scrollWidth || 0,
+    };
+  })()`)
+  const checks = state?.checks ?? {}
+  return {
+    ok: Object.values(checks).length > 0 && Object.values(checks).every(Boolean),
+    error: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', '),
+    ...state,
+  }
+}
+
 export function receiptBoundaryVisible(box, width, height, style) {
   return Boolean(box && box.width > 0 && box.height > 0
     && box.top >= -1 && box.left >= -1 && box.bottom <= height + 1 && box.right <= width + 1
@@ -870,7 +981,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
         requiredText: testCase.pairedPublicExpectedText,
         activate: () => evalInPage(cdp, sessionId, pairedClickScript(origin, testCase.pairedAppOrigin)) })
     }
-    await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
+    await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.initialExpectedText ?? testCase.expectedText, testCase.timeoutMs)
     const shopCounter = testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
@@ -881,6 +992,11 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
       : null
+    const sitesWorkspace = testCase.exerciseSitesPages
+      ? await exerciseSitesPages(cdp, sessionId)
+      : testCase.inspectSitesInquiries
+        ? await inspectSitesInquiries(cdp, sessionId)
+        : null
     const beforeCapture = await readRenderedState(cdp, sessionId, Boolean(testCase.retirementCaseId))
     if (accessGuard) {
       await accessGuard.assertClean()
@@ -942,6 +1058,9 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const ecommerceViewportMatches = !ecommerceClaimBoundary
       || Math.abs((ecommerceClaimBoundary.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((ecommerceClaimBoundary.viewportHeight ?? 0) - testCase.height) <= 1
+    const sitesViewportMatches = !sitesWorkspace
+      || Math.abs((sitesWorkspace.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((sitesWorkspace.viewportHeight ?? 0) - testCase.height) <= 1
     const decisionDeskViewportMatches = !rawShopDecisionDesk
       || Math.abs((rawShopDecisionDesk.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((rawShopDecisionDesk.viewportHeight ?? 0) - testCase.height) <= 1
@@ -992,6 +1111,11 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       ...(decisionDeskViewportMatches ? [] : [`Shop Decision Desk viewport changed from ${testCase.width}x${testCase.height} to ${shopDecisionDesk?.viewportWidth ?? 'unknown'}x${shopDecisionDesk?.viewportHeight ?? 'unknown'}`]),
       ...(ecommerceClaimBoundary && !ecommerceClaimBoundary.ok ? [`Ecommerce claim boundary failed: ${ecommerceClaimBoundary.error || 'unknown check'}`] : []),
       ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
+      ...(sitesWorkspace && !sitesWorkspace.ok ? [`Sites workspace contract failed: ${sitesWorkspace.error || 'unknown check'}`] : []),
+      ...(sitesWorkspace && sitesWorkspace.documentScrollWidth > sitesWorkspace.viewportWidth + 1
+        ? [`Sites workspace horizontal overflow: ${sitesWorkspace.documentScrollWidth}px document in ${sitesWorkspace.viewportWidth}px viewport`]
+        : []),
+      ...(sitesViewportMatches ? [] : [`Sites workspace viewport changed from ${testCase.width}x${testCase.height} to ${sitesWorkspace?.viewportWidth ?? 'unknown'}x${sitesWorkspace?.viewportHeight ?? 'unknown'}`]),
       ...(mutatingRequests.length ? [`unexpected browser network writes: ${mutatingRequests.map((entry) => `${entry.method} ${entry.path}`).join(', ')}`] : []),
       ...missingText.map((needle) => `missing text: ${needle}`),
       ...unexpectedText.map((needle) => `unexpected text: ${needle}`),
@@ -1018,6 +1142,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       layout: shopCounter,
       decisionDesk: shopDecisionDesk,
       claimBoundary: ecommerceClaimBoundary,
+      sitesWorkspace,
       briefControls,
       screenshot,
       network: { mutatingRequestCount: mutatingRequests.length, mutatingRequests },
@@ -1190,6 +1315,37 @@ const tests = [
     seed: {},
   },
   {
+    name: 'desktop Sites opens the real saved page editor',
+    route: '/website/?workspace=1',
+    width: 1440,
+    height: 900,
+    expectedPath: '/website/?workspace=1',
+    initialExpectedText: ['Pages', 'Mingalar Fresh Mart', 'Edit website', 'Inquiries', 'Publish'],
+    expectedText: ['Pages', 'Mingalar Fresh Mart', 'Home', 'Catalog', 'Contact', 'Page content', 'Page checks', 'Inquiries', 'View website'],
+    absentText: ['Working sample', 'Open demo', 'Start trial'],
+    exerciseSitesPages: true,
+    captureSitesWorkspace: true,
+    isolatedBrowserContext: true,
+    screenshotName: 'sites-pages-current-desktop-1440x900',
+    timeoutMs: 60_000,
+    seed: sitesOwnerWorkspaceFixture(),
+  },
+  {
+    name: 'desktop Sites opens the real inquiry workspace',
+    route: '/website/?workspace=1&view=inquiries',
+    width: 1440,
+    height: 900,
+    expectedPath: '/website/?workspace=1&view=inquiries',
+    expectedText: ['Inquiries', 'Inquiry inbox', '1 request needs review', 'Daw Mya', 'Follow-up queue', 'Review and assign'],
+    absentText: ['Working sample', 'Open demo', 'Start trial'],
+    inspectSitesInquiries: true,
+    captureSitesWorkspace: true,
+    isolatedBrowserContext: true,
+    screenshotName: 'sites-inquiries-current-desktop-1440x900',
+    timeoutMs: 60_000,
+    seed: sitesOwnerWorkspaceFixture(),
+  },
+  {
     name: 'retired Commerce demo query returns to account home',
     route: '/?demo=ecommerce',
     width: 1280,
@@ -1241,7 +1397,7 @@ const tests = [
 ].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 
 async function main() {
-  if (shopOnly && ecommerceClaimOnly) throw new Error('app_entry_rendered_scope_conflict')
+  if ([shopOnly, ecommerceClaimOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
   if (!outFile || !screenshotDir) throw new Error('app_entry_rendered_evidence_paths_required')
   const evidence = buildEvidenceDescriptor({ evidenceDir: screenshotDir, outputPath: outFile })
@@ -1265,6 +1421,8 @@ async function main() {
       ? tests.filter((testCase) => testCase.exerciseShopCounter || testCase.exerciseShopDecisionDesk)
       : ecommerceClaimOnly
         ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
+        : sitesOnly
+          ? tests.filter((testCase) => testCase.captureSitesWorkspace)
         : tests
     for (const [index, testCase] of selectedTests.entries()) {
       const startedAt = Date.now()
