@@ -27,4 +27,6 @@ test('base counter quantity controls support tablet touch without a phone breakp
   assert.match(app, /document\.removeEventListener\('keydown', focusCounterSearch\)/)
   assert.match(app, /parked\.length \? `Parked sales \(\$\{parked\.length\}\)` : 'Save sale for later'/)
   assert.doesNotMatch(app, /Parked tickets \(\{parked\.length\}\) · this device/)
+  assert.match(css, /@media \(max-width: 1360px\) and \(min-width: 841px\) \{\s*\.shop-counter-grid \{ grid-template-columns: minmax\(0, 1fr\) minmax\(20rem, 23rem\); \}/)
+  assert.match(css, /@media \(max-width: 1080px\) and \(min-width: 841px\) \{\s*\.shop-counter-column-head \{ display: none; \}/)
 })

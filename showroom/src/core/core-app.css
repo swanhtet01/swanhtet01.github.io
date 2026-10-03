@@ -3213,7 +3213,11 @@ input, select, textarea,
 .shop-counter-followup-actions { display: grid; gap: .5rem; margin-top: auto; }
 .shop-counter-followup-actions .core-button { width: 100%; min-height: 2.75rem; justify-content: center; }
 
-@media (max-width: 1160px) and (min-width: 841px) {
+/* The product rail reduces the workspace by roughly 13rem. Collapse the
+   follow-up rail before the three desktop panels begin competing for width;
+   at 1280px this keeps product, price and stock in distinct table columns
+   instead of visually fusing the first row. */
+@media (max-width: 1360px) and (min-width: 841px) {
   .shop-counter-grid { grid-template-columns: minmax(0, 1fr) minmax(20rem, 23rem); }
   .shop-counter-module > .shop-counter-surface { min-height: 0; flex-basis: auto; overflow: visible; }
   .shop-counter-grid { height: auto; }
@@ -3223,6 +3227,8 @@ input, select, textarea,
   .shop-counter-steps { grid-column: 3; grid-row: 1 / span 2; }
   .shop-counter-stock-note { grid-column: 1 / span 2; }
   .shop-counter-followup-actions { grid-column: 1 / span 2; grid-template-columns: repeat(2,minmax(0,1fr)); margin-top: 0; }
+}
+@media (max-width: 1080px) and (min-width: 841px) {
   .shop-counter-column-head { display: none; }
   .shop-product-copy { grid-template-columns: minmax(0, 1fr) auto; gap: .125rem .5rem; }
   .shop-product-name { grid-row: span 2; }
