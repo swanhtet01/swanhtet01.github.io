@@ -23,7 +23,7 @@ test('receipt boundary must be visibly sized and inside the viewport', () => {
 })
 
 test('rendered harness follows current direct Sites and Ecommerce entry actions', () => {
-  assert.match(renderedVerifierSource, /submit\?\.textContent\.trim\(\) !== 'Save request on this device'/)
+  assert.match(renderedVerifierSource, /submit\?\.textContent\.trim\(\) !== 'Save request locally'/)
   assert.match(renderedVerifierSource, /'Tell us about the business'/)
   assert.match(renderedVerifierSource, /'Create website'/)
   assert.doesNotMatch(renderedVerifierSource, /'Prepare private draft'/)
@@ -399,7 +399,7 @@ test('full visual cases pin visible product truth copy and Plant canonicalizatio
   const sourceBoundText = [
     [websiteStarterSetup, 'Tell us about the business'],
     [websiteStarterSetup, 'Create website'],
-    [ecommerceWorkspace, 'Saved on this device for Shop review.'],
+    [ecommerceWorkspace, 'Request saved locally for Shop review.'],
     [ecommerceWorkspace, 'Shop still confirms stock, promise, payment, and delivery.'],
   ]
   for (const [source, text] of sourceBoundText) {

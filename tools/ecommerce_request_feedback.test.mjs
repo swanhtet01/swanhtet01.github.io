@@ -56,7 +56,7 @@ for (const managed of [false, true]) for (const failure of ['', 'storage', 'beha
     assert.equal(result.delivered, managed ? 1 : 0)
     assert.equal(result.fresh, 'REQUEST')
     assert.equal(result.busy, false)
-    assert.match(result.notice, managed ? /Company Shop inbox and local recovery/ : /saved on this device/i)
+    assert.match(result.notice, managed ? /Company Shop inbox and local recovery/ : /saved locally/i)
   })
 }
 for (const failure of ['save', 'delivery']) {
@@ -97,7 +97,7 @@ for (const managed of [false, true]) {
       latestRequest: { id: 'REQUEST', quote: { pimDigest: 'pim' } },
       quoteCurrent: false, receiptCurrent: true, handoffBusy: false, handoffInFlight: { current: false },
       scope: 'local', sourcePreviewDigest: 'digest', preview: {}, activeBuyingState: {},
-      currentCatalog: [], commerceState: {}, checkoutPaymentPolicies: [],
+      currentCatalog: [], commerceState: {}, configuredPaymentPolicies: [], checkoutPaymentPolicies: [],
       setHandoffBusy() {}, setNotice() {}, emitMetric() {}, formatMmk: String,
       buildEcommercePimProjection: async () => ({ pimDigest: 'pim' }),
       prepareEcommerceShopDraftV2: async () => {
@@ -148,5 +148,5 @@ for (const invalidateAt of ['save', 'delivery']) test(`replaced checkout ignores
   assert.equal(result.cartClears, 0)
   assert.equal(result.fresh, '')
   assert.equal(result.delivered, invalidateAt === 'save' ? 0 : 1)
-  assert.doesNotMatch(result.notice, /Company Shop inbox|saved on this device/)
+  assert.doesNotMatch(result.notice, /Company Shop inbox|saved locally/)
 })

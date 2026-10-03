@@ -688,7 +688,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
       const workspace = document.querySelector('#ecommerce-buying-workspace');
       const form = workspace?.querySelector('form');
       const submit = form?.querySelector('button[data-request-mode="local"]');
-      if (submit?.textContent.trim() !== 'Save request on this device') return false;
+      if (submit?.textContent.trim() !== 'Save request locally') return false;
       return Boolean(workspace?.open && form && submit && !submit.disabled);
     })()`)
     if (!formReady) await new Promise((resolveWait) => setTimeout(resolveWait, 100))
@@ -720,7 +720,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
       const boundaryItems = boundaryGrid ? [...boundaryGrid.children] : [];
       const boundaryRows = new Set(boundaryItems.map((item) => Math.round(item.getBoundingClientRect().top))).size;
       const receiptBoundary = receipt ? [...receipt.querySelectorAll('p')]
-        .find((candidate) => candidate.textContent.includes('Saved on this device for Shop review.')) : null;
+        .find((candidate) => candidate.textContent.includes('Request saved locally for Shop review.')) : null;
       const box = receiptBoundary?.getBoundingClientRect();
       const notice = document.querySelector('.ecommerce-buying-notice')?.textContent.trim() || '';
       const receiptText = receipt?.textContent || '';
@@ -743,16 +743,16 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
         documentScrollWidth: document.documentElement?.scrollWidth || 0,
       };
     })()`)
-    if (state?.receiptStatus === 'Request saved on this device' && state?.receiptBoundary && state?.boundaryVisible) break
+    if (state?.receiptStatus === 'Request saved locally' && state?.receiptBoundary && state?.boundaryVisible) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
 
   const checks = {
-    localHeadline: state?.receiptStatus === 'Request saved on this device',
+    localHeadline: state?.receiptStatus === 'Request saved locally',
     storePreviewActive: state?.activeWorkspace === 'Store preview',
-    localNotice: state?.notice.includes('Saved on this device for Shop review')
+    localNotice: state?.notice.includes('Request saved locally for Shop review')
       && state?.notice.includes('No order, stock, message, or charge changed.'),
-    localReceipt: state?.receiptBoundary.includes('Saved on this device for Shop review.')
+    localReceipt: state?.receiptBoundary.includes('Request saved locally for Shop review.')
       && state?.receiptBoundary.includes('Shop still confirms stock, promise, payment, and delivery.'),
     boundaryVisible: Boolean(state?.boundaryVisible),
     compactMobileReceipt: Number(state?.viewportWidth || 0) > 560
@@ -1187,13 +1187,13 @@ const tests = [
     seed: {},
   })),
   {
-    name: 'desktop Ecommerce keeps a reviewed order request on this device',
+    name: 'desktop Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     width: 1280,
     height: 900,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Store preview', 'Saved on this device for Shop review.', 'May Thiri'],
+    expectedText: ['Store preview', 'Request saved locally for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-desktop-1280x900',
@@ -1201,14 +1201,14 @@ const tests = [
     seed: miniMartOwnedCatalogFixture(),
   },
   {
-    name: 'mobile Ecommerce keeps a reviewed order request on this device',
+    name: 'mobile Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     width: 390,
     height: 844,
     mobile: true,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Store preview', 'Saved on this device for Shop review.', 'May Thiri'],
+    expectedText: ['Store preview', 'Request saved locally for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-mobile-390x844',

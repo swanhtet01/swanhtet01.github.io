@@ -1232,7 +1232,7 @@ export function EcommerceBuyingWorkspace({
       setQuoteClock(quotedAt.getTime())
       setNotice(onRecordManagedRequest
         ? 'This order request is in the Company Shop inbox and local recovery. No order, stock, message, or charge changed.'
-        : 'Saved on this device for Shop review. No order, stock, message, or charge changed.')
+        : 'Request saved locally for Shop review. No order, stock, message, or charge changed.')
     } catch (error) {
       if (stillCurrent()) setNotice(error instanceof Error ? error.message : 'Checkout review failed closed.')
     } finally {
@@ -1370,7 +1370,7 @@ export function EcommerceBuyingWorkspace({
             </label>
             </details>
             {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" data-request-mode={onRecordManagedRequest ? 'managed' : 'local'} disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
-              {quoteBusy ? (onRecordManagedRequest ? 'Sending...' : 'Saving on this device...') : (onRecordManagedRequest ? 'Send order request' : 'Save request on this device')}
+              {quoteBusy ? (onRecordManagedRequest ? 'Sending...' : 'Saving locally...') : (onRecordManagedRequest ? 'Send order request' : 'Save request locally')}
             </button> : null}
             <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
               ? 'Checking saved checkout recovery...'

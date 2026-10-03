@@ -17,13 +17,13 @@ test('a submitted request waits for the rendered receipt before moving focus', (
 
 test('the browser-local truth boundary is the element brought into view', () => {
   assert.match(source, /<p>\{managedDeliveryConfirmed/)
-  assert.match(source, /Saved on this device for Shop review\./)
+  assert.match(source, /Request saved locally for Shop review\./)
   assert.match(source, /Shop still confirms stock, promise, payment, and delivery\./)
   assert.doesNotMatch(source, /requestReceiptRef/)
 })
 
 test('the receipt badge distinguishes browser retention from managed submission', () => {
-  assert.match(source, /\{managedDeliveryConfirmed \? 'Request sent to Shop' : 'Request saved on this device'\}/)
+  assert.match(source, /\{managedDeliveryConfirmed \? 'Request sent to Shop' : 'Request saved locally'\}/)
   assert.doesNotMatch(source, />Request sent<\/span>/)
 })
 
@@ -48,7 +48,7 @@ test('expired and changed requests retain a read-only receipt with honest delive
     assert.match(visible, /has not been deleted/)
     assert.match(visible, /not a confirmed order/)
     assert.match(visible, /cannot confirm the old quote/)
-    assert.match(visible, delivery === 'confirmed' ? /Company Shop received/ : delivery === 'unverified' ? /delivery is not verified/ : /browser retained/)
+    assert.match(visible, delivery === 'confirmed' ? /Company Shop received/ : delivery === 'unverified' ? /delivery has not been verified/ : /browser retained/)
     assert.equal(nodes(tree).some(n => ['button', 'form', 'a', 'input'].includes(n.type) || n.props?.dangerouslySetInnerHTML), false)
   }
   assert.match(source, /!latestRequestOrder \? <SavedRequestReceipt/)
