@@ -53,6 +53,13 @@ test('local file readiness waits for actual page checks and keeps one visible pr
   assert.match(css, /\.website-workspace-grid\.view-publish \{ order: 4; \}/)
 })
 
+test('manual inquiry capture is independent of website publishing readiness', () => {
+  assert.ok(source.includes('Use this when a customer contacts the business by phone, message or in person.'))
+  assert.ok(source.includes('disabled={portalViewOnly} type="submit">{portalViewOnly ? \'View only\' : \'Add to inbox\'}'))
+  assert.doesNotMatch(source, /readyBuyerCtaPages/)
+  assert.doesNotMatch(source, /Add a ready page with a contact action before capturing inquiries/)
+})
+
 test('saved failures render actual check details in an initially collapsed disclosure', () => {
   assert.ok(failures.length > 0)
   const html = render({ failingContentChecks: failures })

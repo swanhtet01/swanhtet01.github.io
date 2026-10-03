@@ -916,9 +916,6 @@ export function WebsiteProduct() {
 
   const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
   const selectedPageIssues = pageIssues(selectedPage)
-  const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
-    && Boolean(page.hero.ctaLabel.trim())
-    && Boolean(page.hero.ctaHref.trim()))
   // Inbox membership follows the ledger this workspace owns, not the name shown on the site.
   // Filtering these two on workspace.siteName meant one rename in Navigation emptied the inbox,
   // the "N new" badge, and the export -- with every captured inquiry still sitting on disk.
@@ -1431,8 +1428,7 @@ export function WebsiteProduct() {
                   <label>Phone or email<input autoComplete="email" disabled={portalViewOnly} maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
                   <label className="website-lead-request">Request<textarea disabled={portalViewOnly} maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="What they need, quantity, timing and any question" required rows={4} value={leadDraft.request} /></label>
                   <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} disabled={portalViewOnly} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
-                  <button className="website-button is-primary" disabled={portalViewOnly || !readyBuyerCtaPages.length} type="submit">{portalViewOnly ? 'View only' : 'Add to inbox'}</button>
-                  {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action before capturing inquiries.</small> : null}
+                  <button className="website-button is-primary" disabled={portalViewOnly} type="submit">{portalViewOnly ? 'View only' : 'Add to inbox'}</button>
                 </form>
               </section>
 
