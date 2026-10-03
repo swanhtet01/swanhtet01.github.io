@@ -31,6 +31,12 @@ export type ShopTodayModule = {
 }
 
 type ShopTodayProps = {
+  accountingExport?: {
+    businessDate: string
+    mappingReady: boolean
+    onDownload: () => void
+    totalMmk: number
+  } | null
   batchProfitControl?: ShopBatchProfitControlView
   catalogReady: boolean
   metrics: ShopTodayMetric[]
@@ -227,7 +233,7 @@ export function ShopBatchProfitControlPanel({
   </section>
 }
 
-export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), catalogReady, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, profitControl }: ShopTodayProps) {
+export function ShopToday({ accountingExport = null, batchProfitControl = projectNoBatchProfitControl(), catalogReady, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, profitControl }: ShopTodayProps) {
   const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
   const [activityAsOf] = useState(() => Date.now())
   const salesPulse = useMemo(() => projectShopTodaySalesPulse(commerce, activityAsOf), [activityAsOf, commerce])
@@ -357,7 +363,11 @@ export function ShopToday({ batchProfitControl = projectNoBatchProfitControl(), 
           <p>{salesPulse.today.count} retained completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} · samples excluded</p>
         </article>
 
-        {financeModule ? <Link aria-label="Daily close task" className="shop-finance-task" data-tone={financeModule.tone ?? 'ready'} to="/shop/?tab=orders#shop-close-controls">
+        {financeModule ? accountingExport ? <article aria-label="Accountant handoff ready" className="shop-finance-task shop-accounting-ready" data-tone="ready">
+          <span><small>Accountant handoff</small><strong>Daily close · {accountingExport.businessDate}</strong><em>{accountingExport.mappingReady ? 'Mapping reviewed' : 'Mapping review needed'}</em></span>
+          <span><b>{formatMmk(accountingExport.totalMmk)}</b><small>Balanced journal · no external posting</small></span>
+          <button className="core-button" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">Download accountant CSV</button>
+        </article> : <Link aria-label="Daily close task" className="shop-finance-task" data-tone={financeModule.tone ?? 'ready'} to="/shop/?tab=orders#shop-close-controls">
           <span><small>Cash + wallets</small><strong>Daily close</strong><em>Shop-record expectation</em></span>
           <span><b>{closePriority ? formatShopProfitControlMetric(closePriority.metric) : financeModule.status}</b><small>{closePriority?.impact ?? financeModule.detail}</small></span>
         </Link> : null}

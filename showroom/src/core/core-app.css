@@ -2328,12 +2328,14 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-finance-task, .shop-attention-compact { min-height: 4.75rem; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: .75rem; padding: .75rem 1rem; color: var(--core-text); text-decoration: none; transition: border-color .16s ease, transform .16s ease; }
 .shop-finance-task:hover, .shop-attention-compact:hover { border-color: color-mix(in srgb,var(--core-accent) 48%,var(--core-line)); transform: translateY(-1px); }
 .shop-finance-task > span, .shop-attention-compact > span { min-width: 0; display: grid; gap: .1875rem; }
-.shop-finance-task > span:last-child { justify-items: end; text-align: right; }
+.shop-finance-task > span:nth-of-type(2) { justify-items: end; text-align: right; }
 .shop-finance-task small, .shop-attention-compact small { color: var(--core-muted); font-size: .5rem; line-height: 1.35; }
 .shop-finance-task strong, .shop-attention-compact strong { font-size: .75rem; }
 .shop-finance-task em { color: var(--core-accent); font-family: var(--core-mono); font-size: .4375rem; font-style: normal; letter-spacing: .05em; text-transform: uppercase; }
 .shop-finance-task b, .shop-attention-compact b { color: var(--core-accent); font-family: var(--core-mono); font-size: .5625rem; white-space: nowrap; }
 .shop-finance-task[data-tone="attention"] b, .shop-attention-compact[data-tone="attention"] b { color: var(--core-warning); }
+.shop-accounting-ready { background: linear-gradient(145deg,color-mix(in srgb,var(--core-panel) 94%,var(--core-accent) 6%),var(--core-panel) 64%); }
+.shop-accounting-ready > .core-button { min-height: 2.5rem; grid-column: 1 / -1; justify-content: center; }
 .shop-decision-desk { min-width: 0; display: grid; grid-template-columns: minmax(0,1.55fr) minmax(19rem,.8fr); align-items: stretch; gap: 1rem; }
 .shop-decision-primary, .shop-decision-rail { min-width: 0; border: 1px solid var(--core-line); border-radius: 1.125rem; background: var(--core-panel); box-shadow: 0 .75rem 2rem rgba(20,22,40,.04); overflow: hidden; }
 .shop-decision-primary { padding: clamp(1.125rem,2vw,1.5rem); background: linear-gradient(145deg,color-mix(in srgb,var(--core-panel) 94%,var(--core-accent) 6%),var(--core-panel) 58%); }

@@ -2066,10 +2066,17 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     if (!artifact) return null
     return {
       filename: `supermega-shop-accounting-${artifact.businessDate}-${artifact.digest.slice(7, 15)}.csv`,
-      href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceAccountingHandoffCsv(artifact)}`)}`,
       artifact,
     }
   }, [commerce, latestClose])
+  const downloadLatestAccountingHandoff = () => {
+    if (!latestAccountingDownload) return
+    downloadBlob(
+      latestAccountingDownload.filename,
+      new Blob([`\uFEFF${commerceAccountingHandoffCsv(latestAccountingDownload.artifact)}`], { type: 'text/csv;charset=utf-8' }),
+    )
+    emitMetric({ product: 'shop', capability: 'shop-accounting-handoff', action: 'accounting.export.downloaded', ts: Date.now() })
+  }
   const supplierPayablesDownload = useMemo(() => {
     const artifact = commerceSupplierPayablesHandoff(commerce)
     if (!artifact) return null
@@ -6899,7 +6906,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {commerceBoundary}
-    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} /></Suspense>
+    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} /></Suspense>
     {actionGate}
   </div>
 
@@ -7427,7 +7434,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       {latestCloseDownload ? <button className="core-button" data-close-export="accounting-csv-v1" onClick={() => downloadBlob(latestCloseDownload.filename, new Blob([closeExportFileText(latestCloseDownload.artifact)], { type: 'text/csv;charset=utf-8' }))} type="button">Download close CSV</button> : null}
       {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
         <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
-        <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href} onClick={() => emitMetric({ product: 'shop', capability: 'shop-accounting-handoff', action: 'accounting.export.downloaded', ts: Date.now() })}>Download accounting CSV</a>
+        <br /><button className="text-link" onClick={downloadLatestAccountingHandoff} type="button">Download accounting CSV</button>
       </div> : null}
     </details> : null}
   </section>
