@@ -23,6 +23,7 @@ import {
   validateCommerceState,
 } from '../showroom/src/core/commerce-workspace.ts'
 import { shopBusinessTemplate, shopBusinessTemplateCommerceItems } from '../showroom/src/products/shop/business-templates.ts'
+import { ACTION_KEY } from '../showroom/src/core/product-setup.ts'
 import { buildStorefrontPreview } from '../showroom/src/products/ecommerce/storefront-model.ts'
 import { LOCAL_STOREFRONT_DRAFT_SCOPE, STOREFRONT_DRAFT_SCHEMA, storefrontDraftStorageKey, validateStorefrontDraft } from '../showroom/src/products/ecommerce/storefront-draft.ts'
 import { captureWebsiteLead, emptyWebsiteLeadLedger, WEBSITE_LEAD_LEDGER_KEY } from '../showroom/src/products/website/website-leads.ts'
@@ -1176,6 +1177,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
 
   const source = await evalInPage(cdp, sessionId, `(() => {
     const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+    const actions = JSON.parse(localStorage.getItem(${JSON.stringify(ACTION_KEY)}) || '[]');
     const request = commerce?.storefrontRequests?.[0];
     const lines = request?.lines || (request?.line ? [request.line] : []);
     const firstLine = lines[0];
@@ -1187,9 +1189,10 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
       quantity: firstLine?.quantity || 0,
       stockBefore: item?.onHand ?? null,
       orderCountBefore: commerce?.orders?.length || 0,
+      actionCountBefore: actions.length,
     };
   })()`)
-  if (!source?.requestId || !source?.sku || source.requestCount !== 1 || source.orderCountBefore !== 0) {
+  if (!source?.requestId || !source?.sku || source.requestCount !== 1 || source.orderCountBefore !== 0 || source.actionCountBefore !== 0) {
     return { ok: false, error: 'captured request was not the only unconverted Shop source', claimBoundary, source }
   }
 
@@ -1280,7 +1283,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
         summaryBound: text.includes('Review Ecommerce order'),
         actor: inputs[0]?.value || '',
         reasonPresent: Boolean(inputs[1]?.value),
-        sourceEvidenceBound: inputs.some((input) => input.value === ${JSON.stringify(source.requestId)}),
+        sourceEvidenceBound: inputs.some((input) => input.value.includes(${JSON.stringify(source.requestId)})),
       };
     })()`)
     if (gate?.ready) break
@@ -1303,8 +1306,14 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
   while (Date.now() < committedDeadline) {
     committed = await evalInPage(cdp, sessionId, `(() => {
       const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+      const actions = JSON.parse(localStorage.getItem(${JSON.stringify(ACTION_KEY)}) || '[]');
       const matching = commerce?.orders?.filter((order) => order.sourceRecordId === ${JSON.stringify(source.requestId)}) || [];
       const order = matching[0];
+      const matchingActions = actions.filter((action) => action.domain === 'commerce'
+        && action.kind === 'order_create'
+        && action.subjectId === order?.id
+        && action.evidenceReference.includes(${JSON.stringify(source.requestId)}));
+      const accountableAction = matchingActions[0];
       const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
       return {
         route: location.pathname + location.search,
@@ -1312,7 +1321,15 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
         orderStatus: order?.status || '',
         paymentStatus: order?.paymentStatus || '',
         owner: order?.owner || '',
+        orderId: order?.id || '',
         stockAfter: item?.onHand ?? null,
+        accountableActionCount: matchingActions.length,
+        actionId: accountableAction?.id || '',
+        commandId: accountableAction?.commandId || '',
+        actionActor: accountableAction?.actor || '',
+        actionReason: accountableAction?.reason || '',
+        actionEvidenceReference: accountableAction?.evidenceReference || '',
+        actionSubjectId: accountableAction?.subjectId || '',
         pendingRequestCount: (commerce?.storefrontRequests || []).filter((request) =>
           !(commerce?.orders || []).some((candidate) => candidate.sourceRecordId === request.id)).length,
       };
@@ -1325,8 +1342,14 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
   await waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs)
   const restored = await evalInPage(cdp, sessionId, `(() => {
     const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+    const actions = JSON.parse(localStorage.getItem(${JSON.stringify(ACTION_KEY)}) || '[]');
     const matching = commerce?.orders?.filter((order) => order.sourceRecordId === ${JSON.stringify(source.requestId)}) || [];
     const order = matching[0];
+    const matchingActions = actions.filter((action) => action.domain === 'commerce'
+      && action.kind === 'order_create'
+      && action.subjectId === order?.id
+      && action.evidenceReference.includes(${JSON.stringify(source.requestId)}));
+    const accountableAction = matchingActions[0];
     const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
     const bodyText = document.body?.innerText || '';
     return {
@@ -1335,7 +1358,15 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
       orderStatus: order?.status || '',
       paymentStatus: order?.paymentStatus || '',
       owner: order?.owner || '',
+      orderId: order?.id || '',
       stockAfter: item?.onHand ?? null,
+      accountableActionCount: matchingActions.length,
+      actionId: accountableAction?.id || '',
+      commandId: accountableAction?.commandId || '',
+      actionActor: accountableAction?.actor || '',
+      actionReason: accountableAction?.reason || '',
+      actionEvidenceReference: accountableAction?.evidenceReference || '',
+      actionSubjectId: accountableAction?.subjectId || '',
       requestStillPending: (commerce?.storefrontRequests || []).some((request) => request.id === ${JSON.stringify(source.requestId)})
         && !matching.length,
       customerVisible: bodyText.includes('May Thiri'),
@@ -1357,6 +1388,20 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     stockReservedOnce: committed?.stockAfter === expectedStock && restored?.stockAfter === expectedStock,
     sourceConsumed: committed?.pendingRequestCount === 0 && restored?.requestStillPending === false,
     accountableOwner: committed?.owner === 'Shop reviewer' && restored?.owner === 'Shop reviewer',
+    accountableActionRecorded: committed?.accountableActionCount === 1
+      && restored?.accountableActionCount === 1
+      && Boolean(committed?.actionId)
+      && Boolean(committed?.commandId)
+      && Boolean(committed?.actionReason)
+      && committed?.actionActor === 'Shop reviewer'
+      && committed?.actionEvidenceReference.includes(source.requestId)
+      && committed?.actionSubjectId === committed?.orderId
+      && restored?.actionId === committed?.actionId
+      && restored?.commandId === committed?.commandId
+      && restored?.actionActor === committed?.actionActor
+      && restored?.actionReason === committed?.actionReason
+      && restored?.actionEvidenceReference === committed?.actionEvidenceReference
+      && restored?.actionSubjectId === committed?.actionSubjectId,
     persistedAfterReload: restored?.orderStatus === 'confirmed' && restored?.route === expectedPath,
     operatorViewRestored: restored?.customerVisible && restored?.paymentPendingVisible,
     noHorizontalOverflow: Number(restored?.documentScrollWidth || 0) <= Number(restored?.viewportWidth || 0) + 1,
@@ -1492,7 +1537,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
       : null
-    const storeToShop = testCase.exerciseStoreToShop
+    const rawStoreToShop = testCase.exerciseStoreToShop
       ? await exerciseStoreToShopJourney(cdp, sessionId, origin, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
       : null
     const sitesWorkspace = testCase.exerciseSitesPages
@@ -1561,9 +1606,9 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const ecommerceViewportMatches = !ecommerceClaimBoundary
       || Math.abs((ecommerceClaimBoundary.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((ecommerceClaimBoundary.viewportHeight ?? 0) - testCase.height) <= 1
-    const storeToShopViewportMatches = !storeToShop
-      || Math.abs((storeToShop.viewportWidth ?? 0) - testCase.width) <= 1
-        && Math.abs((storeToShop.viewportHeight ?? 0) - testCase.height) <= 1
+    const storeToShopViewportMatches = !rawStoreToShop
+      || Math.abs((rawStoreToShop.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((rawStoreToShop.viewportHeight ?? 0) - testCase.height) <= 1
     const sitesViewportMatches = !sitesWorkspace
       || Math.abs((sitesWorkspace.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((sitesWorkspace.viewportHeight ?? 0) - testCase.height) <= 1
@@ -1591,6 +1636,10 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     }).length
     const shopDecisionDesk = rawShopDecisionDesk ? {
       ...rawShopDecisionDesk,
+      network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
+    } : null
+    const storeToShop = rawStoreToShop ? {
+      ...rawStoreToShop,
       network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
     } : null
     const failures = [
@@ -1628,6 +1677,8 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       ...(ecommerceClaimBoundary && !ecommerceClaimBoundary.ok ? [`Ecommerce claim boundary failed: ${ecommerceClaimBoundary.error || 'unknown check'}`] : []),
       ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
       ...(storeToShop && !storeToShop.ok ? [`Store-to-Shop journey failed: ${storeToShop.error || 'unknown check'}`] : []),
+      ...(storeToShop && storeToShop.network.externalRequestCount !== 0 ? ['Store-to-Shop journey made an external request'] : []),
+      ...(storeToShop && storeToShop.network.failedRequestCount !== 0 ? ['Store-to-Shop journey had a failed request'] : []),
       ...(storeToShopViewportMatches ? [] : [`Store-to-Shop viewport changed from ${testCase.width}x${testCase.height} to ${storeToShop?.viewportWidth ?? 'unknown'}x${storeToShop?.viewportHeight ?? 'unknown'}`]),
       ...(sitesWorkspace && !sitesWorkspace.ok ? [`Sites workspace contract failed: ${sitesWorkspace.error || 'unknown check'}`] : []),
       ...(sitesWorkspace && sitesWorkspace.documentScrollWidth > sitesWorkspace.viewportWidth + 1

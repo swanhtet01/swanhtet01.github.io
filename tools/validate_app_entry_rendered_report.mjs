@@ -358,9 +358,15 @@ export function assertCaseSemantics(testCase, expected) {
       || journey.documentScrollWidth > journey.viewportWidth + 1
       || !isObject(journey.claimBoundary) || journey.claimBoundary.ok !== true
       || !isObject(journey.source) || !exactString(journey.source.requestId, 'app_entry_rendered_store_to_shop_source_invalid')
-      || journey.source.requestCount !== 1 || journey.source.orderCountBefore !== 0
+      || journey.source.requestCount !== 1 || journey.source.orderCountBefore !== 0 || journey.source.actionCountBefore !== 0
       || !Number.isInteger(journey.source.quantity) || journey.source.quantity < 1
       || !Number.isInteger(journey.source.stockBefore) || journey.source.stockBefore < journey.source.quantity
+      || !isObject(journey.inbox) || journey.inbox.ready !== true || journey.inbox.status !== 'This device' || journey.inbox.requestVisible !== true
+      || !isObject(journey.prepared) || journey.prepared.ready !== true || journey.prepared.sourceBound !== true
+      || journey.prepared.paymentLocked !== true || journey.prepared.payment !== 'Cash'
+      || !isObject(journey.gate) || journey.gate.ready !== true || journey.gate.summaryBound !== true
+      || journey.gate.actor !== 'Shop reviewer' || journey.gate.reasonPresent !== true || journey.gate.sourceEvidenceBound !== true
+      || !isObject(journey.network) || journey.network.externalRequestCount !== 0 || journey.network.failedRequestCount !== 0
       || !isObject(journey.committed) || !isObject(journey.restored)
       || journey.committed.matchingOrderCount !== 1 || journey.restored.matchingOrderCount !== 1
       || journey.committed.orderStatus !== 'confirmed' || journey.restored.orderStatus !== 'confirmed'
@@ -369,6 +375,19 @@ export function assertCaseSemantics(testCase, expected) {
       || journey.restored.stockAfter !== journey.committed.stockAfter
       || journey.committed.pendingRequestCount !== 0 || journey.restored.requestStillPending !== false
       || journey.committed.owner !== 'Shop reviewer' || journey.restored.owner !== 'Shop reviewer'
+      || journey.committed.accountableActionCount !== 1 || journey.restored.accountableActionCount !== 1
+      || !exactString(journey.committed.actionId, 'app_entry_rendered_store_to_shop_action_invalid')
+      || !exactString(journey.committed.commandId, 'app_entry_rendered_store_to_shop_command_invalid')
+      || !exactString(journey.committed.actionReason, 'app_entry_rendered_store_to_shop_reason_invalid')
+      || journey.committed.actionActor !== 'Shop reviewer'
+      || !exactString(journey.committed.actionEvidenceReference, 'app_entry_rendered_store_to_shop_evidence_invalid').includes(journey.source.requestId)
+      || journey.committed.actionSubjectId !== journey.committed.orderId
+      || journey.restored.actionId !== journey.committed.actionId
+      || journey.restored.commandId !== journey.committed.commandId
+      || journey.restored.actionActor !== journey.committed.actionActor
+      || journey.restored.actionReason !== journey.committed.actionReason
+      || journey.restored.actionEvidenceReference !== journey.committed.actionEvidenceReference
+      || journey.restored.actionSubjectId !== journey.committed.actionSubjectId
       || journey.committed.route !== expected.path || journey.restored.route !== expected.path) {
       fail('app_entry_rendered_store_to_shop_failed')
     }
@@ -382,6 +401,7 @@ export function assertCaseSemantics(testCase, expected) {
       'stockReservedOnce',
       'sourceConsumed',
       'accountableOwner',
+      'accountableActionRecorded',
       'persistedAfterReload',
       'operatorViewRestored',
       'noHorizontalOverflow',

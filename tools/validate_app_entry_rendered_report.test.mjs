@@ -116,12 +116,27 @@ test('Store-to-Shop evidence requires one source-bound pending-payment order aft
   const checks = Object.fromEntries([
     'localRequestCaptured', 'sameDeviceInbox', 'exactSourcePrepared', 'accountableSourceBound',
     'confirmedOnce', 'paymentStillPending', 'stockReservedOnce', 'sourceConsumed',
-    'accountableOwner', 'persistedAfterReload', 'operatorViewRestored', 'noHorizontalOverflow',
+    'accountableOwner', 'accountableActionRecorded', 'persistedAfterReload', 'operatorViewRestored', 'noHorizontalOverflow',
   ].map((name) => [name, true]))
-  const source = { requestId: 'WEB-REQUEST-001', requestCount: 1, sku: 'SKU-001', quantity: 1, stockBefore: 12, orderCountBefore: 0 }
-  const committed = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, pendingRequestCount: 0 }
-  const restored = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, requestStillPending: false }
-  const storeToShop = { ok: true, checks, claimBoundary: { ok: true }, source, committed, restored, viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280 }
+  const source = { requestId: 'WEB-REQUEST-001', requestCount: 1, sku: 'SKU-001', quantity: 1, stockBefore: 12, orderCountBefore: 0, actionCountBefore: 0 }
+  const action = { orderId: 'ORD-001', accountableActionCount: 1, actionId: 'ACT-001', commandId: 'CMD-001', actionActor: 'Shop reviewer', actionReason: 'Reviewed current Shop catalog.', actionEvidenceReference: `ECOMMERCE:${source.requestId}:reviewed`, actionSubjectId: 'ORD-001' }
+  const committed = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, pendingRequestCount: 0, ...action }
+  const restored = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, requestStillPending: false, ...action }
+  const storeToShop = {
+    ok: true,
+    checks,
+    claimBoundary: { ok: true },
+    source,
+    inbox: { ready: true, status: 'This device', requestVisible: true },
+    prepared: { ready: true, sourceBound: true, paymentLocked: true, payment: 'Cash' },
+    gate: { ready: true, summaryBound: true, actor: 'Shop reviewer', reasonPresent: true, sourceEvidenceBound: true },
+    network: { externalRequestCount: 0, failedRequestCount: 0 },
+    committed,
+    restored,
+    viewportWidth: 1280,
+    viewportHeight: 900,
+    documentScrollWidth: 1280,
+  }
   const expected = { name: 'Commerce request becomes one accountable Shop order', path: '/shop/?tab=orders', width: 1280, height: 900, semantics: 'store-to-shop' }
   const entry = {
     ok: true,
@@ -138,6 +153,11 @@ test('Store-to-Shop evidence requires one source-bound pending-payment order aft
   assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, restored: { ...restored, paymentStatus: 'reconciled' } } }, expected), /store_to_shop_failed/)
   assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, committed: { ...committed, matchingOrderCount: 2 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, inbox: { ...storeToShop.inbox, status: 'Not connected' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, sourceBound: false } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, gate: { ...storeToShop.gate, sourceEvidenceBound: false } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, network: { ...storeToShop.network, externalRequestCount: 1 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, restored: { ...restored, commandId: 'CMD-OTHER' } } }, expected), /store_to_shop_failed/)
 })
 
 import {
