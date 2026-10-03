@@ -387,7 +387,7 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
   assert.throws(() => assertRenderedProofCaseMatrix(wrongMobileViewport, 'ecommerce-claim'), /case_matrix_mismatch/)
 })
 
-test('full visual cases pin current product truth copy and Plant canonicalization', async () => {
+test('full visual cases pin visible product truth copy and Plant canonicalization', async () => {
   const rootDir = process.cwd()
   const [renderer, coreApp, websiteStarterSetup, ecommerceProduct, ecommerceWorkspace] = await Promise.all([
     readFile(join(rootDir, 'tools', 'verify_app_entry_rendered.mjs'), 'utf8'),
@@ -399,7 +399,6 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
   const sourceBoundText = [
     [websiteStarterSetup, 'Tell us about the business'],
     [websiteStarterSetup, 'Create website'],
-    [ecommerceProduct, 'Order request saved'],
     [ecommerceWorkspace, 'Saved on this device for Shop review.'],
     [ecommerceWorkspace, 'Shop still confirms stock, promise, payment, and delivery.'],
   ]
@@ -407,6 +406,7 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
     assert.ok(source.includes(text), `missing current product authority: ${text}`)
     assert.ok(renderer.includes(text), `renderer does not require current product truth: ${text}`)
   }
+  assert.ok(ecommerceProduct.includes('Order request saved'), 'Ecommerce Orders no longer exposes its saved-request headline')
   assert.equal((renderer.match(/expectedPath: '\/plant\/\?tab=production'/g) || []).length, 0)
   assert.match(renderer, /validateRetiredProductObservation/)
   const unfinishedRedirect = fullCaseMatrixFixture()

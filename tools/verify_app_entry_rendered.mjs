@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -7,8 +8,10 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { startBrowser } from './browser_startup.mjs'
-import { COMMERCE_KEY, createSeedCommerce, installCommerceWorkingSampleCatalog } from '../showroom/src/core/commerce-workspace.ts'
+import { COMMERCE_KEY, configureCommercePaymentPolicy, createEmptyCommerce, createSeedCommerce, installCommerceWorkingSampleCatalog, validateCommerceState } from '../showroom/src/core/commerce-workspace.ts'
 import { shopBusinessTemplate, shopBusinessTemplateCommerceItems } from '../showroom/src/products/shop/business-templates.ts'
+import { buildStorefrontPreview } from '../showroom/src/products/ecommerce/storefront-model.ts'
+import { LOCAL_STOREFRONT_DRAFT_SCOPE, STOREFRONT_DRAFT_SCHEMA, storefrontDraftStorageKey, validateStorefrontDraft } from '../showroom/src/products/ecommerce/storefront-draft.ts'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
 import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
@@ -278,6 +281,54 @@ export function miniMartCounterFixture() {
   })
   if (!state) throw new Error('mini_mart_counter_fixture_invalid')
   return { retained: { [COMMERCE_KEY]: JSON.stringify(state) } }
+}
+
+// Explicit private fixture representing products entered by an operator. Keep this
+// separate from the working-sample fixture so customer-request acceptance proves
+// the live-catalog path while the product continues to reject preview-only rows.
+export function miniMartOwnedCatalogFixture() {
+  const storeName = 'Mingalar Mini Mart'
+  const summary = 'Everyday essentials prepared for pickup or local delivery.'
+  const catalogState = validateCommerceState({
+    ...createEmptyCommerce(),
+    items: shopBusinessTemplateCommerceItems('mini-mart').map((item) => ({ ...item })),
+  })
+  const state = configureCommercePaymentPolicy(catalogState, {
+    adapter: 'pay_on_pickup',
+    allowedFulfilments: ['pickup'],
+    maximumOrderMmk: 1_000_000,
+    instructions: 'Collect at pickup and reconcile the receipt in Shop.',
+    status: 'active',
+    effectiveFrom: '2026-09-28T00:00:00.000Z',
+    effectiveUntil: null,
+  }, {
+    actionId: 'ACT-RENDERED-MINIMART-PAYMENT-001',
+    capturedAt: '2026-09-28T00:00:00.000Z',
+    actor: 'Mini Mart owner',
+    reason: 'Enable pay on pickup for the rendered Ecommerce acceptance journey.',
+    evidenceReference: 'RENDERED-MINIMART-PAYMENT-001',
+  })
+  if (!state) throw new Error('mini_mart_owned_payment_fixture_invalid')
+  const preview = buildStorefrontPreview(state.items, {
+    storeName,
+    summary,
+    selectedSkus: state.items.slice(0, 4).map((item) => item.sku),
+  })
+  const sourcePreviewDigest = `sha256:${createHash('sha256').update(JSON.stringify(preview)).digest('hex')}`
+  const draft = validateStorefrontDraft({
+    schema: STOREFRONT_DRAFT_SCHEMA,
+    scope: LOCAL_STOREFRONT_DRAFT_SCOPE,
+    revision: 1,
+    savedAt: '2026-09-28T00:00:00.000Z',
+    storeName,
+    summary,
+    selectedSkus: preview.items.map((item) => item.sku),
+    sourcePreviewDigest,
+  }, LOCAL_STOREFRONT_DRAFT_SCOPE)
+  return { retained: {
+    [COMMERCE_KEY]: JSON.stringify(state),
+    [storefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)]: JSON.stringify(draft),
+  } }
 }
 
 export function seedScript(seed) {
@@ -698,7 +749,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
 
   const checks = {
     localHeadline: state?.receiptStatus === 'Request saved on this device',
-    customerStoreActive: state?.activeWorkspace === 'Customer store',
+    storePreviewActive: state?.activeWorkspace === 'Store preview',
     localNotice: state?.notice.includes('Saved on this device for Shop review')
       && state?.notice.includes('No order, stock, message, or charge changed.'),
     localReceipt: state?.receiptBoundary.includes('Saved on this device for Shop review.')
@@ -1142,12 +1193,12 @@ const tests = [
     height: 900,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Saved on this device for Shop review.', 'May Thiri'],
+    expectedText: ['Store preview', 'Saved on this device for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-desktop-1280x900',
     timeoutMs: 60_000,
-    seed: miniMartCounterFixture(),
+    seed: miniMartOwnedCatalogFixture(),
   },
   {
     name: 'mobile Ecommerce keeps a reviewed order request on this device',
@@ -1157,12 +1208,12 @@ const tests = [
     mobile: true,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Saved on this device for Shop review.', 'May Thiri'],
+    expectedText: ['Store preview', 'Saved on this device for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-mobile-390x844',
     timeoutMs: 60_000,
-    seed: miniMartCounterFixture(),
+    seed: miniMartOwnedCatalogFixture(),
   },
 ].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 
