@@ -3,6 +3,7 @@ import { lstat, readFile } from 'node:fs/promises'
 import { dirname, extname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
+import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -377,7 +378,8 @@ export function assertCaseSemantics(testCase, expected) {
       || !Number.isInteger(journey.source.quantity) || journey.source.quantity < 1
       || !Number.isInteger(journey.source.stockBefore) || journey.source.stockBefore < journey.source.quantity
       || !isObject(journey.handoff) || journey.handoff.ready !== true || journey.handoff.sourceVisible !== true
-      || !isObject(journey.prepared) || journey.prepared.ready !== true || journey.prepared.route !== expected.path || journey.prepared.sourceBound !== true
+      || !isObject(journey.prepared) || journey.prepared.ready !== true
+      || !isStoreToShopReviewPath(journey.prepared.route, journey.source.requestId) || journey.prepared.sourceBound !== true
       || journey.prepared.customer !== journey.source.customer
       || journey.prepared.fulfilment !== journey.source.fulfilment
       || journey.prepared.handoffReference !== journey.source.handoffReference
@@ -415,7 +417,7 @@ export function assertCaseSemantics(testCase, expected) {
       || journey.restored.actionEvidenceReference !== journey.committed.actionEvidenceReference
       || journey.restored.actionSubjectId !== journey.committed.actionSubjectId
       || !isObject(journey.replay) || journey.replay.attempted !== true
-      || journey.replay.route !== `/shop/?tab=orders&source=ecommerce-handoff&handoff=order&handoff_id=${encodeURIComponent(journey.source.requestId)}`
+      || journey.replay.route !== storeToShopReviewPath(journey.source.requestId)
       || journey.replay.duplicateBlocked !== true || journey.replay.gateOpened !== false
       || journey.replay.matchingOrderCount !== 1 || journey.replay.accountableActionCount !== 1
       || JSON.stringify(journey.replay.orderCreateActionIds) !== JSON.stringify(journey.restored.orderCreateActionIds)

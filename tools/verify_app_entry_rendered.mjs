@@ -32,6 +32,7 @@ import { assertLauncherProductLinks } from './validate_app_entry_rendered_report
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
 import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
 import { installPreviewBrowserAccess, finishPreviewCase } from './preview_scoped_access.mjs'
+import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -472,6 +473,12 @@ async function readRenderedState(cdp, sessionId, retirement = false) {
 
 function matchesExpectedPath(expectedPath, value) {
   return typeof expectedPath === 'function' ? expectedPath(value) : value === expectedPath
+}
+
+const ACCOUNTABLE_CONFIRM_LABEL = /^Confirm change(?:\s*·\s*.+)?$/u
+
+export function isAccountableConfirmLabel(value) {
+  return ACCOUNTABLE_CONFIRM_LABEL.test(String(value || '').trim())
 }
 
 export function evaluateFinalRenderedLocation({ beforeCapture, afterCapture, expectedOrigin, expectedPath, expectedPathLabel }) {
@@ -1225,6 +1232,9 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     return { ok: false, error: 'captured request was not the only recoverable local Ecommerce source', claimBoundary, source }
   }
 
+  const reviewPath = storeToShopReviewPath(source.requestId)
+  const reviewPathMatches = (value) => isStoreToShopReviewPath(value, source.requestId)
+
   const handoffDeadline = Date.now() + 15_000
   let handoff = null
   while (Date.now() < handoffDeadline) {
@@ -1244,7 +1254,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
   }
   if (!handoff?.ready) return { ok: false, error: 'local Ecommerce receipt could not open Shop operator review', claimBoundary, source, handoff }
 
-  await waitForRenderedState(cdp, sessionId, expectedPath, ['Shop', 'Add an order'], timeoutMs)
+  await waitForRenderedState(cdp, sessionId, reviewPathMatches, ['Shop', 'Add an order'], timeoutMs)
 
   const reviewDeadline = Date.now() + 15_000
   let prepared = null
@@ -1317,7 +1327,8 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
       const inputs = [...(dialog?.querySelectorAll('input') || [])];
       const lockedEvidence = inputs.find((input) => input.readOnly && input.value.includes(${JSON.stringify(source.requestId)}));
       const text = dialog?.textContent || '';
-      const ready = Boolean(dialog && submit && !submit.disabled && submit.textContent.trim() === 'Confirm change');
+      const ready = Boolean(dialog && submit && !submit.disabled
+        && new RegExp(${JSON.stringify(ACCOUNTABLE_CONFIRM_LABEL.source)}, 'u').test(submit.textContent.trim()));
       return {
         ready,
         summaryBound: text.includes('Review Ecommerce order'),
@@ -1336,7 +1347,8 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
 
   const confirmed = await evalInPage(cdp, sessionId, `(() => {
     const submit = document.querySelector('dialog.accountable-action-gate[open] button[type="submit"]');
-    if (!submit || submit.disabled || submit.textContent.trim() !== 'Confirm change') return false;
+    if (!submit || submit.disabled
+      || !new RegExp(${JSON.stringify(ACCOUNTABLE_CONFIRM_LABEL.source)}, 'u').test(submit.textContent.trim())) return false;
     submit.click();
     return true;
   })()`)
@@ -1440,7 +1452,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
     };
   })()`)
 
-  const replayPath = `/shop/?tab=orders&source=ecommerce-handoff&handoff=order&handoff_id=${encodeURIComponent(source.requestId)}`
+  const replayPath = reviewPath
   await cdp.send('Page.navigate', { url: `${origin}${replayPath}` }, sessionId)
   await waitForRenderedState(cdp, sessionId, replayPath, ['Shop', 'Ecommerce request', source.requestId], timeoutMs)
   const replayAttempted = await evalInPage(cdp, sessionId, `(() => {
@@ -1506,7 +1518,7 @@ async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, 
   const checks = {
     localRequestCaptured: source.requestCount === 1,
     sameDeviceHandoff: handoff.ready && handoff.sourceVisible,
-    exactSourcePrepared: prepared.route === expectedPath
+    exactSourcePrepared: reviewPathMatches(prepared.route)
       && prepared.sourceBound
       && prepared.customer === source.customer
       && prepared.fulfilment === source.fulfilment
@@ -1757,9 +1769,15 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const ecommerceViewportMatches = !ecommerceClaimBoundary
       || Math.abs((ecommerceClaimBoundary.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((ecommerceClaimBoundary.viewportHeight ?? 0) - testCase.height) <= 1
-    const storeToShopViewportMatches = !rawStoreToShop
-      || Math.abs((rawStoreToShop.viewportWidth ?? 0) - testCase.width) <= 1
-        && Math.abs((rawStoreToShop.viewportHeight ?? 0) - testCase.height) <= 1
+    const storeToShopViewport = rawStoreToShop ? {
+      viewportWidth: Number.isFinite(rawStoreToShop.viewportWidth) ? rawStoreToShop.viewportWidth : finalRendered?.viewportWidth,
+      viewportHeight: Number.isFinite(rawStoreToShop.viewportHeight) ? rawStoreToShop.viewportHeight : finalRendered?.viewportHeight,
+      documentScrollWidth: Number.isFinite(rawStoreToShop.documentScrollWidth) ? rawStoreToShop.documentScrollWidth : finalRendered?.documentScrollWidth,
+    } : null
+    const storeToShopViewportMatches = !storeToShopViewport
+      || Number.isFinite(storeToShopViewport.viewportWidth) && Number.isFinite(storeToShopViewport.viewportHeight)
+        && Math.abs(storeToShopViewport.viewportWidth - testCase.width) <= 1
+        && Math.abs(storeToShopViewport.viewportHeight - testCase.height) <= 1
     const sitesViewportMatches = !sitesWorkspace
       || Math.abs((sitesWorkspace.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((sitesWorkspace.viewportHeight ?? 0) - testCase.height) <= 1
@@ -1791,6 +1809,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     } : null
     const storeToShop = rawStoreToShop ? {
       ...rawStoreToShop,
+      ...storeToShopViewport,
       network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length, httpErrorResponseCount: httpErrorResponses.length },
     } : null
     const failures = [

@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { counterCaptureReady, receiptBoundaryVisible } from './verify_app_entry_rendered.mjs'
+import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible } from './verify_app_entry_rendered.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
+import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
 const renderedVerifierSource = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
 
@@ -39,6 +40,25 @@ test('counter capture waits for persisted basket readiness without accepting dis
     { ...ready, drawerTransitionSettled: false }, { ...ready, text: '' }]) {
     assert.equal(counterCaptureReady(pending), false)
   }
+})
+
+test('Store-to-Shop accepts only the exact source-bound review route and semantic confirm label', () => {
+  const requestId = 'ECR-REQUEST / 001'
+  const path = storeToShopReviewPath(requestId)
+  assert.equal(isStoreToShopReviewPath(path, requestId), true)
+  assert.equal(isStoreToShopReviewPath('/shop/?handoff=order&handoff_id=ECR-REQUEST+%2F+001&source=ecommerce-handoff&tab=orders', requestId), true)
+  for (const invalid of [
+    '/shop/?tab=orders',
+    '/shop/?tab=orders&source=ecommerce-handoff&handoff=order&handoff_id=OTHER',
+    `${path}&extra=1`,
+    `${path}&tab=orders`,
+    `/other/${path.slice('/shop/'.length)}`,
+  ]) assert.equal(isStoreToShopReviewPath(invalid, requestId), false)
+
+  assert.equal(isAccountableConfirmLabel('Confirm change'), true)
+  assert.equal(isAccountableConfirmLabel('Confirm change · အတည်ပြုမည်'), true)
+  assert.equal(isAccountableConfirmLabel('Confirm'), false)
+  assert.equal(isAccountableConfirmLabel('Confirm change later'), false)
 })
 
 test('accounting export evidence requires a real isolated CSV download contract', () => {
@@ -126,6 +146,7 @@ test('Store-to-Shop evidence requires one source-bound pending-payment order aft
     sku: 'SKU-001', quantity: 1, stockBefore: 12, orderCountBefore: 0, actionCountBefore: 0,
   }
   const action = { orderId: 'ORD-001', accountableActionCount: 1, orderCreateActionIds: ['ACT-001'], actionId: 'ACT-001', commandId: 'CMD-001', actionActor: 'Shop reviewer', actionReason: 'Reviewed current Shop catalog.', actionEvidenceReference: `ECOMMERCE:${source.requestId}:reviewed`, actionSubjectId: 'ORD-001' }
+  const reviewPath = storeToShopReviewPath(source.requestId)
   const committed = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0, ...action }
   const restored = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0, ...action }
   const storeToShop = {
@@ -135,7 +156,7 @@ test('Store-to-Shop evidence requires one source-bound pending-payment order aft
     source,
     handoff: { ready: true, sourceVisible: true },
     prepared: {
-      ready: true, route: '/shop/?tab=orders', sourceBound: true, customer: source.customer,
+      ready: true, route: reviewPath, sourceBound: true, customer: source.customer,
       fulfilment: source.fulfilment, handoffReference: source.handoffReference,
       lines: source.lines.map((line) => ({ ...line })), totalMmk: source.totalMmk,
       paymentLocked: true, payment: source.payment,
@@ -144,7 +165,7 @@ test('Store-to-Shop evidence requires one source-bound pending-payment order aft
     network: { externalRequestCount: 0, failedRequestCount: 0, httpErrorResponseCount: 0 },
     committed,
     restored,
-    replay: { attempted: true, route: `/shop/?tab=orders&source=ecommerce-handoff&handoff=order&handoff_id=${source.requestId}`, duplicateBlocked: true, gateOpened: false, matchingOrderCount: 1, accountableActionCount: 1, orderCreateActionIds: ['ACT-001'], orderId: 'ORD-001', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0 },
+    replay: { attempted: true, route: reviewPath, duplicateBlocked: true, gateOpened: false, matchingOrderCount: 1, accountableActionCount: 1, orderCreateActionIds: ['ACT-001'], orderId: 'ORD-001', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0 },
     viewportWidth: 1280,
     viewportHeight: 900,
     documentScrollWidth: 1280,
