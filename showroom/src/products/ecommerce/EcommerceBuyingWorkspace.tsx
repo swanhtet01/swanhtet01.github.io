@@ -565,18 +565,16 @@ export function EcommerceBuyingWorkspace({
     && latestRequest.sourcePreviewDigest === sourcePreviewDigest)
   const latestRequestConfirmed = Boolean(latestRequestOrder && receiptCurrent)
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
-  const recoveredCheckoutNotice = latestRequest
+  const recoveredCheckoutNotice = latestRequest && !latestRequestOrder
     ? Date.parse(latestRequest.quote.expiresAt) > quoteClock
       ? 'Saved request restored. Awaiting Shop review.'
       : 'Quote expired. Review a new total.'
     : ''
   const checkoutNotice = latestRequestConfirmed && latestRequestOrder
     ? `${latestRequest?.id} is confirmed as ${latestRequestOrder.id}. ${latestRequestEntry?.paymentStatus === 'reconciled' ? 'Payment is reconciled in Shop.' : 'Payment still needs Shop reconciliation.'}`
-    : notice || (latestRequestOrder
-      ? 'This request is already confirmed. Review a new total only to start another order.'
-      : recoveredCheckoutNotice || recoveryIssue || (cart.length
-        ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
-        : 'Add a product to begin.'))
+    : notice || recoveredCheckoutNotice || recoveryIssue || (cart.length
+      ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
+      : 'Add a product to begin.')
 
   function updateCart(sku: string, quantity: number) {
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return
@@ -1289,7 +1287,7 @@ export function EcommerceBuyingWorkspace({
       >
         <summary>
           <span><strong>Cart and checkout</strong><small>Review one total before Shop</small></span>
-          <b>{cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'} · ${formatMmk(cartTotal)}` : latestRequest ? 'Recovered' : 'Empty'}</b>
+          <b>{cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'} · ${formatMmk(cartTotal)}` : latestRequestOrder ? 'Order confirmed' : latestRequest ? 'Request saved' : 'Empty'}</b>
         </summary>
         <div className="ecommerce-buying-body">
           {cart.length ? (
@@ -1317,7 +1315,7 @@ export function EcommerceBuyingWorkspace({
             </div>
           )}
 
-          <form aria-busy={quoteBusy} onSubmit={(event) => void reviewOrder(event)}>
+          {cart.length ? <form aria-busy={quoteBusy} onSubmit={(event) => void reviewOrder(event)}>
             <label>
               <span>Name</span>
               <input autoComplete="name" maxLength={80} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Ma Su" required value={customerName} />
@@ -1375,7 +1373,7 @@ export function EcommerceBuyingWorkspace({
             <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
               ? 'Checking saved checkout recovery...'
               : checkoutNotice}</p>
-          </form>
+          </form> : null}
 
           {latestRequest ? latestRequestOrder && latestRequestConfirmed ? (
             <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true">
@@ -1413,9 +1411,9 @@ export function EcommerceBuyingWorkspace({
             expiresAt={latestRequest.quote.expiresAt} expired={Date.parse(latestRequest.quote.expiresAt) <= quoteClock}
             delivery={managedDeliveryConfirmed ? 'confirmed' : onRecordManagedRequest ? 'unverified' : 'local'} /> : (
             <div className="ecommerce-stale-quote" role="status">
-              <strong>{latestRequestOrder ? 'Start another order' : 'Review a new total'}</strong>
+              <strong>{latestRequestOrder ? 'Order confirmed in Shop' : 'Review a new total'}</strong>
               <small>{latestRequestOrder
-                ? 'Your order is confirmed. Review a new total only when creating another order.'
+                ? 'Choose a product above to start another order. The confirmed order remains in Your orders.'
                 : 'The previous quote remains in Your orders. Review the current items and details before requesting a new total.'}</small>
             </div>
           ) : null}

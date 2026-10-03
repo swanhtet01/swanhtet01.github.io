@@ -121,9 +121,17 @@ test('stale quote guidance does not invent a cart edit or an accepted order', ()
   const strong = stale.children.find(child => ts.isJsxElement(child) && child.openingElement.tagName.getText(ast) === 'strong')
   const title = strong.children.find(child => ts.isJsxExpression(child)).expression.getText(ast)
   assert.equal(vm.runInNewContext(title, { latestRequestOrder: null }), 'Review a new total')
-  assert.equal(vm.runInNewContext(title, { latestRequestOrder: { id: 'fixture-order' } }), 'Start another order')
+  assert.equal(vm.runInNewContext(title, { latestRequestOrder: { id: 'fixture-order' } }), 'Order confirmed in Shop')
   assert.doesNotMatch(stale.getText(ast), /Cart changed|cannot continue with this cart/)
+  assert.match(stale.getText(ast), /Choose a product above to start another order/)
   assert.match(stale.getText(ast), /Review the current items and details before requesting a new total/)
+})
+
+test('confirmed orders collapse the empty checkout form into a clear status', () => {
+  assert.ok(source.includes("latestRequestOrder ? 'Order confirmed' : latestRequest ? 'Request saved' : 'Empty'"))
+  assert.ok(source.includes('{cart.length ? <form aria-busy={quoteBusy}'))
+  assert.ok(source.includes("latestRequest && !latestRequestOrder"))
+  assert.doesNotMatch(source, /latestRequest \? 'Recovered' : 'Empty'/)
 })
 
 test('only recorded orders use the Reorder label; saved quotes invite a fresh review', () => {
@@ -142,13 +150,13 @@ test('only recorded orders use the Reorder label; saved quotes invite a fresh re
 
 test('build gate requires truthful recovered-quote copy and rejects retired claims', () => {
   const verifier = readFileSync(new URL('./verify_app_build.mjs', import.meta.url), 'utf8')
-  const start = verifier.indexOf('  || !ecommerceBuyingUiSource.includes("latestRequestOrder ?')
+  const start = verifier.indexOf('  || !ecommerceBuyingUiSource.includes("latestRequestOrder ? \'Order confirmed in Shop\' : \'Review a new total\'")')
   const end = verifier.indexOf("  || !ecommerceBuyingUiSource.includes('{latestRequest ?", start)
   assert.ok(start >= 0 && end > start, 'exact recovered-quote gate must exist')
   const predicate = 'false ' + verifier.slice(start, end)
   const rejects = (ecommerceBuyingUiSource) => vm.runInNewContext(predicate, { ecommerceBuyingUiSource })
   assert.equal(rejects(source), false)
-  for (const marker of ['Review a new total', 'Review the current items and details', 'Review items again']) {
+  for (const marker of ['Order confirmed in Shop', 'Choose a product above to start another order', 'Review a new total', 'Review the current items and details', 'Review items again']) {
     assert.equal(rejects(source.replaceAll(marker, 'missing-copy')), true, marker)
   }
   for (const retired of ['Cart changed — review a new total', 'cannot continue with this cart']) {
