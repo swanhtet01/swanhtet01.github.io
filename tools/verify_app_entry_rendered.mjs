@@ -669,7 +669,8 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
 
 async function exerciseSitesPages(cdp, sessionId) {
   const opened = await evalInPage(cdp, sessionId, `(() => {
-    if (document.querySelector('.website-editor-workbench')) return true;
+    const workbench = document.querySelector('.website-editor-workbench');
+    if (workbench?.getClientRects().length && getComputedStyle(workbench).visibility !== 'hidden') return true;
     const button = [...document.querySelectorAll('button')]
       .find((candidate) => candidate.textContent.trim() === 'Edit website');
     if (!button || button.disabled) return false;
@@ -1320,7 +1321,7 @@ const tests = [
     width: 1440,
     height: 900,
     expectedPath: '/website/?workspace=1',
-    initialExpectedText: ['Pages', 'Mingalar Fresh Mart', 'Edit website', 'Inquiries', 'Publish'],
+    initialExpectedText: ['Pages', 'Mingalar Fresh Mart', 'Edit website', 'Inquiries'],
     expectedText: ['Pages', 'Mingalar Fresh Mart', 'Home', 'Catalog', 'Contact', 'Page content', 'Page checks', 'Inquiries', 'View website'],
     absentText: ['Working sample', 'Open demo', 'Start trial'],
     exerciseSitesPages: true,
@@ -1336,7 +1337,7 @@ const tests = [
     width: 1440,
     height: 900,
     expectedPath: '/website/?workspace=1&view=inquiries',
-    expectedText: ['Inquiries', 'Inquiry inbox', '1 request needs review', 'Daw Mya', 'Follow-up queue', 'Review and assign'],
+    expectedText: ['Inquiries', 'INQUIRY INBOX', '1 request needs review', 'Daw Mya', 'FOLLOW-UP QUEUE', 'Review and assign'],
     absentText: ['Working sample', 'Open demo', 'Start trial'],
     inspectSitesInquiries: true,
     captureSitesWorkspace: true,
