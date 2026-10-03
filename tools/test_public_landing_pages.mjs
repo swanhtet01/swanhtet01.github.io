@@ -101,6 +101,11 @@ for (const page of landingPages) {
   check(countOccurrences(html, 'type="radio" name="'+page.productId+'-screens"') === expectedGalleryControls, `landing_gallery_controls:${page.route}`)
   check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
+  if (page.productId === 'ecommerce') {
+    check(html.includes('alt="Current Commerce Store showing a locally saved customer request awaiting Shop confirmation"'), 'landing_commerce_capture_matches_current_store_flow')
+    check(html.includes('width="1280" height="900"'), 'landing_commerce_capture_dimensions_exact')
+    check(html.includes('Commerce &middot; Store request and Shop review &middot; Actual app capture with synthetic example records. Local build.'), 'landing_commerce_capture_scope_truthful')
+  }
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
@@ -221,10 +226,12 @@ check(countOccurrences(home, '<figure class="platform-image') === activeIds.leng
 check(countOccurrences(home, 'class="product-card-flow"') === activeIds.length, 'home_compact_product_flows')
 check(home.includes('href="/contact/">Contact SuperMega</a>'), 'home_clear_contact_action')
 const screenshotHashes = new Set()
+const screenshotDimensions = { 'actual-commerce-order-request.png': [1280, 900] }
 for (const filename of Object.values(productScreens).flat()) {
   const image = readFileSync(resolve(staticDir, 'images', filename))
+  const [expectedWidth, expectedHeight] = screenshotDimensions[filename] ?? [1440, 900]
   check(image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])), `screenshot_png:${filename}`)
-  check(image.readUInt32BE(16) === 1440 && image.readUInt32BE(20) === 900, `screenshot_full_render:${filename}`)
+  check(image.readUInt32BE(16) === expectedWidth && image.readUInt32BE(20) === expectedHeight, `screenshot_full_render:${filename}`)
   check(image.length > 10000, `screenshot_not_empty:${filename}`)
   const hash = image.toString('base64')
   check(!screenshotHashes.has(hash), `screenshot_unique:${filename}`)
