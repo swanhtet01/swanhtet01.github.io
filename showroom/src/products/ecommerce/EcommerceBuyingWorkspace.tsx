@@ -50,6 +50,7 @@ import {
   commerceOrderAcknowledgementReader,
   commerceOrderCorrectionExpectation,
   commerceStorefrontOrderTimeline,
+  commerceStorefrontRequestEquals,
   commerceStorefrontRequests,
   type CommerceItem,
   type CommerceCorrectionKind,
@@ -117,6 +118,31 @@ function paymentLabel(value: EcommercePaymentAdapter) {
 function receiveOrderLabel(value: EcommerceFulfilment) {
   if (value === 'delivery') return 'Delivery · fee confirmed in Shop'
   return 'Pickup · no delivery fee'
+}
+
+function EcommerceOrderProgress({ delivered, orderId }: { delivered: boolean; orderId?: string }) {
+  const confirmed = Boolean(orderId)
+  const steps = [
+    { label: 'Request saved', status: 'Complete', state: 'complete' },
+    {
+      label: 'Shop review',
+      status: confirmed ? 'Complete' : delivered ? 'Received · review needed' : 'Open next',
+      state: confirmed ? 'complete' : 'current',
+    },
+    {
+      label: 'Confirmed in Shop',
+      status: orderId ? `Order ${orderId}` : 'Pending',
+      state: confirmed ? 'current' : 'pending',
+    },
+  ] as const
+
+  return <ol className="ecommerce-order-progress" aria-label="Order progress">
+    {steps.map((step, index) => <li aria-current={step.state === 'current' ? 'step' : undefined} data-state={step.state} key={step.label}>
+      <span aria-hidden="true">{index + 1}</span>
+      <strong>{step.label}</strong>
+      <small>{step.status}</small>
+    </li>)}
+  </ol>
 }
 
 function localPromiseInput(value: Date) {
@@ -362,13 +388,17 @@ export function EcommerceBuyingWorkspace({
   }, [freshQuoteId])
 
   const latestRequest = activeBuyingState.requests[0] ?? null
-  const managedDeliveryConfirmed = Boolean(onRecordManagedRequest && managedRequestWasConfirmed(latestRequest, managedConfirmation))
+  const sharedRequests = useMemo(() => commerceStorefrontRequests(commerceState), [commerceState])
+  const managedRequestRetainedByShop = Boolean(sourceStorefront && latestRequest
+    && sharedRequests.some((request) => commerceStorefrontRequestEquals(request, latestRequest)))
+  const managedDeliveryConfirmed = Boolean(sourceStorefront && (
+    managedRequestWasConfirmed(latestRequest, managedConfirmation) || managedRequestRetainedByShop
+  ))
   const combinedOrderTimeline = useMemo(() => {
-    const sharedRequests = commerceStorefrontRequests(commerceState)
     const sharedRequestIds = new Set(sharedRequests.map((request) => request.id))
     const localOnlyRequests = activeBuyingState.requests.filter((request) => !sharedRequestIds.has(request.id))
     return commerceStorefrontOrderTimeline(commerceState, [...sharedRequests, ...localOnlyRequests])
-  }, [activeBuyingState.requests, commerceState])
+  }, [activeBuyingState.requests, commerceState, sharedRequests])
   // One validated workspace for every intent on this screen, not one per intent.
   //
   // The cancellation, amendment and reschedule loops below each ask for an order
@@ -1382,6 +1412,7 @@ export function EcommerceBuyingWorkspace({
               <span className="status-pill ready">Confirmed in Shop</span>
               <strong>Order {latestRequestOrder.id}</strong>
               <b>{formatMmk(latestRequestOrder.total)}</b>
+              <EcommerceOrderProgress delivered orderId={latestRequestOrder.id} />
               <div className="ecommerce-quote-boundaries">
                 <span><small>Customer</small><b>{latestRequestOrder.customer}</b></span>
                 <span><small>Receive order</small><b>{receiveOrderLabel(latestRequest.fulfilment)}</b></span>
@@ -1397,6 +1428,7 @@ export function EcommerceBuyingWorkspace({
               <span className="status-pill ready">{managedDeliveryConfirmed ? 'Request sent to Shop' : 'Request saved locally'}</span>
               <strong>Request for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
+              <EcommerceOrderProgress delivered={managedDeliveryConfirmed} />
               <div className="ecommerce-quote-boundaries">
                 <span><small>Receive order</small><b>{receiveOrderLabel(latestRequest.fulfilment)}</b></span>
                 {latestRequest.deliveryAddress ? <span><small>Deliver to</small><b>{latestRequest.deliveryAddress.township} · {latestRequest.deliveryAddress.city}</b></span> : null}
@@ -1404,14 +1436,14 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Payment</small><b>{paymentLabel(latestRequest.quote.payment.adapter)} · not charged</b></span>
               </div>
               <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
-              <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : onRecordManagedRequest ? 'Request saved locally. Company Shop delivery has not been verified.' : 'Request saved locally for Shop review.'} Shop still confirms stock, promise, payment, and delivery.</p>
+              <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : sourceStorefront ? 'Request saved locally. Company Shop delivery has not been verified.' : 'Request saved locally for Shop review.'} Shop still confirms stock, promise, payment, and delivery.</p>
               <button className="core-button secondary" disabled={disabled || recoveryBlocked || !receiptCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
                 {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>
             </article>
           ) : !latestRequestOrder ? <SavedRequestReceipt reference={latestRequest.id} total={formatMmk(latestRequest.totalMmk)}
             expiresAt={latestRequest.quote.expiresAt} expired={Date.parse(latestRequest.quote.expiresAt) <= quoteClock}
-            delivery={managedDeliveryConfirmed ? 'confirmed' : onRecordManagedRequest ? 'unverified' : 'local'} /> : (
+            delivery={managedDeliveryConfirmed ? 'confirmed' : sourceStorefront ? 'unverified' : 'local'} /> : (
             <div className="ecommerce-stale-quote" role="status">
               <strong>{latestRequestOrder ? 'Order confirmed in Shop' : 'Review a new total'}</strong>
               <small>{latestRequestOrder
