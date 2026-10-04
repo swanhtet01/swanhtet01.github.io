@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.76
+Version: 1.2.77
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-04
-Status: ACTIVE — PR #639 remains the integration candidate at product head `32aa41b4`. Shop now has durable operating-unit and shift records, founder-managed shift activation, exact shift binding through Counter and Website-to-Shop intent, and lost-acknowledgement recovery. The governed local PostgreSQL 17 rehearsal is current for this product head and passes 74 checks across 51 implementation files; managed readiness is refreshed for four products with six blocking gates and hosted activation still false. The aggregate HQ chain now requires the derived technical-estate refresh, after which its preview-rehearsal proposal is known to be stale. The one current CI refresh failed at the network/TLS boundary, so exact-head CI completion is unknown. No immutable replacement, hosted founder acceptance, eligible independent review, merge, deployment or live-domain change has occurred. Provider-authenticated discovery, save/reload, process-restart recovery, isolation and customer/commercial acceptance remain incomplete.
+Status: ACTIVE — PR #639 remains the integration candidate with product implementation at `32aa41b4`. Shop has durable operating-unit and shift records, founder-managed shift activation, exact shift binding through Counter and Website-to-Shop intent, and lost-acknowledgement recovery. The governed local PostgreSQL 17 rehearsal is current for that implementation and passes 74 checks across 51 files; managed readiness covers four products with six blocking gates and hosted activation false. Evidence head `fb46cef8` refreshes the technical estate and fail-closed Supabase preview proposal, then passes all 37 HQ checks with no external write. Exact-head remote CI completion is still unknown. No Supabase preview branch, immutable Vercel candidate, hosted founder acceptance, eligible independent review, merge, deployment or live-domain change has occurred. Provider-authenticated discovery, save/reload, process-restart recovery, isolation and customer/commercial acceptance remain incomplete.
 
 ## 1. Controlling objective
 
@@ -633,3 +633,11 @@ Historical transport errors do not supersede the later verified host correction 
 - **INCOMPLETE — aggregate governance:** the next truthful HQ stop is the derived technical-estate refresh. A temporary local generation proved that derivation can advance, after which the Supabase preview-rehearsal proposal is the next stale record; both belong to the next bounded governance slice.
 - **BOUNDARY:** this is source, local synthetic and governed local database evidence. Exact-head remote CI completion, immutable hosting, authenticated founder acceptance, eligible review, merge, production, payment settlement and customer acceptance remain separate.
 - **NEXT:** refresh the technical estate and preview-rehearsal proposal, then run the remaining HQ chain. Once exact-head CI is green, mint one paired immutable candidate and execute open shift → Counter/Website order → save/reload → process restart → recovery and cross-workspace denial with the founder account. Add an explicit selector before claiming simultaneous multi-unit operation.
+
+### 2026-10-04 — the complete HQ governance chain is current
+
+- **PASS — derived estate:** `supermega.technical-estate.v1` now verifies four customer products, two Vercel projects and all twelve owner-gated action classes against the refreshed managed-readiness evidence.
+- **PASS — fail-closed rehearsal proposal:** `supermega.supabase-preview-rehearsal-proposal.v1` verifies 24 migrations through schema 13 while remaining `prepared-not-executed`. It reports `proofComplete=false`, `supabaseBranchCreated=false` and `productionProjectMutated=false`.
+- **PASS — aggregate governance:** clean evidence head `fb46cef8` passes all 37 HQ steps in 20.574 seconds with `externalWritesPerformed=false`, including owner-gate verification, action/control packet self-tests, Shop pilot readiness, receipt geometry, strategy posture and the HQ contract.
+- **BOUNDARY:** this closes stale local governance evidence only. It does not perform the proposed Supabase rehearsal, create an immutable Preview, prove founder-authenticated hosting, satisfy independent review, merge, deploy or establish customer acceptance.
+- **NEXT:** obtain one current exact-head CI result. If green, mint one paired immutable app/public candidate and run the founder-authenticated shift → Counter/Website → reload → process-restart recovery → cross-workspace-denial journey. Continue the product lane with explicit multi-open-shift selection and the premium incumbent-grade Today, Counter, Orders, Stock and Sites workflows before pricing or sales claims.
