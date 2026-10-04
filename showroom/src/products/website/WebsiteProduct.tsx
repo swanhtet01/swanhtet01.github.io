@@ -1019,12 +1019,53 @@ export function WebsiteProduct() {
         ? 'attention'
         : 'ready'
   const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace
-  const websiteTodayMetrics = [
-    ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
-    ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
-    ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
-    ['Review', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
-    ['File', hasUnsavedChanges ? 'Blocked by draft' : failingContentChecks.length ? 'Blocked by checks' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
+  const readyPageCount = statusWorkspace.pages.filter((page) => page.stage === 'ready').length
+  const readinessSummary = hasUnsavedChanges
+    ? 'Review draft'
+    : failingContentChecks.length
+      ? `${failingContentChecks.length} to fix`
+      : 'Checks clear'
+  const websiteWorkflowSteps = [
+    {
+      id: 'brief',
+      label: 'Business brief',
+      detail: starterAvailable || starterSetupActive ? 'Add details' : 'Complete',
+      state: starterAvailable || starterSetupActive ? 'current' : 'complete',
+    },
+    {
+      id: 'pages',
+      label: 'Pages',
+      detail: `${readyPageCount}/${statusWorkspace.pages.length} ready`,
+      state: starterAvailable || starterSetupActive
+        ? 'waiting'
+        : hasUnsavedChanges || failingContentChecks.length
+          ? 'current'
+          : 'complete',
+    },
+    {
+      id: 'review',
+      label: 'Review',
+      detail: releaseRecordRequired
+        ? approvalIsCurrent ? 'Recorded' : 'Owner approval'
+        : readinessSummary,
+      state: starterAvailable || starterSetupActive || hasUnsavedChanges || failingContentChecks.length
+        ? 'waiting'
+        : releaseRecordRequired && !approvalIsCurrent
+          ? 'current'
+          : 'complete',
+    },
+    {
+      id: 'file',
+      label: 'Website file',
+      detail: releaseRecordRequired
+        ? publishIsCurrent ? 'Ready' : approvalIsCurrent ? 'Create file' : 'After review'
+        : localPreviewReady ? 'Ready to download' : 'After review',
+      state: releaseRecordRequired && publishIsCurrent
+        ? 'complete'
+        : releaseRecordRequired
+          ? approvalIsCurrent && !hasUnsavedChanges && !failingContentChecks.length ? 'current' : 'waiting'
+          : localPreviewReady ? 'current' : 'waiting',
+    },
   ] as const
   const websiteTodaySource = storageMode === 'managed'
     ? `Company account · ${managedActorId || 'signed in'}`
@@ -1034,9 +1075,10 @@ export function WebsiteProduct() {
   const editingRoutineStatus = view === 'content' && surface === 'work'
     && websiteTodayState === 'ready' && !pendingRestoredDraft
     && !storageIssue && !canRepairLocalStorage
-  const websiteTodayContext = workingSampleTemplate
+  const websiteTodayOwner = portalViewOnly ? 'Company owner' : 'Website operator'
+  const websiteTodayContext = `${workingSampleTemplate
     ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'current layout' : 'selected layout'} · ${websiteTodaySource}`
-    : websiteTodaySource
+    : websiteTodaySource} · Next owner: ${websiteTodayOwner}`
   const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
     contract: 'supermega.website.lead-export.v1',
     exportedAt: new Date().toISOString(),
@@ -1251,11 +1293,16 @@ export function WebsiteProduct() {
               <small className="website-today-context">{websiteTodayContext}</small>
             </div>
             <div className="website-today-signals">
-              <div aria-label="Website today status" className="website-today-metrics" role="group">
-                {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-              </div>
+              <ol aria-label="Website workflow" className="website-workflow-rail">
+                {websiteWorkflowSteps.map((step, index) => (
+                  <li aria-current={step.state === 'current' ? 'step' : undefined} data-state={step.state} key={step.id}>
+                    <span aria-hidden="true">{step.state === 'complete' ? '✓' : index + 1}</span>
+                    <div><small>{step.label}</small><strong>{step.detail}</strong></div>
+                  </li>
+                ))}
+              </ol>
               <details className="website-today-checks">
-                <summary>Review site checks · {websiteTodayMetrics[1][1]}</summary>
+                <summary>Review site checks · {readinessSummary}</summary>
                 {hasUnsavedChanges ? (
                   <p className="website-check-guidance">Save or discard your draft before checking the saved website. These checks do not approve or publish it.</p>
                 ) : failingContentChecks.length > 0 ? (

@@ -3531,6 +3531,58 @@
 .website-status-disclosure[data-editing-routine='false'] .website-today-priority > .website-button { grid-column: 2; grid-row: 2 / span 2; width: auto; margin: 0; }
 .website-status-disclosure[data-editing-routine='false'] .website-today-signals { display: grid; }
 
+.website-workflow-rail {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.75rem;
+  padding: 0;
+  background: color-mix(in srgb, var(--website-panel) 84%, var(--website-bg) 16%);
+  list-style: none;
+}
+
+.website-workflow-rail > li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.website-workflow-rail > li + li { border-left: 0.0625rem solid var(--website-line); }
+.website-workflow-rail > li:nth-child(3) { border-left: 0; }
+.website-workflow-rail > li:nth-child(n + 3) { border-top: 0.0625rem solid var(--website-line); }
+.website-workflow-rail > li[data-state='current'] { background: var(--website-green-soft); }
+
+.website-workflow-rail > li > span {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border: 0.0625rem solid var(--website-line-strong);
+  border-radius: 999px;
+  background: var(--website-panel);
+  color: var(--website-muted);
+  font-size: 0.6875rem;
+  font-weight: var(--font-weight-bold);
+}
+
+.website-workflow-rail > li[data-state='complete'] > span,
+.website-workflow-rail > li[data-state='current'] > span {
+  border-color: var(--website-green);
+  background: var(--website-green);
+  color: #fff;
+}
+
+.website-workflow-rail > li > div { min-width: 0; display: grid; gap: 0.125rem; }
+.website-workflow-rail small { color: var(--website-quiet); font-size: 0.625rem; font-weight: var(--font-weight-bold); letter-spacing: 0.04em; text-transform: uppercase; }
+.website-workflow-rail strong { color: var(--website-ink); font-size: 0.75rem; line-height: 1.3; overflow-wrap: anywhere; }
+.website-workflow-rail > li[data-state='waiting'] { opacity: 0.64; }
+
 .website-action-bar {
   order: 3;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -3856,6 +3908,8 @@
 
 @media (max-width: 32.5rem) {
   .website-editor-section-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .website-workflow-rail { grid-template-columns: minmax(0, 1fr); }
+  .website-workflow-rail > li + li { border-top: 0.0625rem solid var(--website-line); border-left: 0; }
 }
 
 /* Sites workspace navigation and inquiry operations. Pages, inquiries and
