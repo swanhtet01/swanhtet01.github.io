@@ -106,6 +106,7 @@ import {
   commerceSupportWorkloadExport,
   commerceOrderItemSummary,
   commerceOrderLocationAllocationPreview,
+  commerceStockConflict,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
   commerceOrderPromiseUrgency,
@@ -2196,6 +2197,14 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))
+  const pendingStorefrontStockConflicts = new Map(pendingStorefrontRequests.flatMap((request) => {
+    const conflict = commerceStockConflict(commerce.items, commerceStorefrontRequestLines(request))
+    return conflict ? [[request.id, conflict] as const] : []
+  }))
+  const pendingWebsiteStockConflictCount = managedIdentity
+    ? websiteIntakes.filter((intake) => intake.status === coreUi.p && commerceStockConflict(commerce.items, [{ sku: intake.sku, quantity: intake.quantity }])).length
+    : Number(Boolean(legacyWebsiteWorkWaiting && localWebsiteIntake?.order && commerceStockConflict(commerce.items, localWebsiteIntake.order.lines)))
+  const pendingStockConflictCount = pendingStorefrontStockConflicts.size + pendingWebsiteStockConflictCount
   const requestedStorefrontRequestIsWaiting = Boolean(
     requestedRequestId
     && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
@@ -6814,33 +6823,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const orderDraftRecoveryVisible = !orderDraftActive
     && !pendingAction
     && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked)
-  const shopOrderControlNext = orderDraftRecoveryBlocked
-    ? 'Repair saved order draft'
-    : pendingStorefrontRequests.length
-      ? 'Review Ecommerce inbox'
-      : actionOrders.length
-        ? 'Finish fulfilment queue'
-        : paymentReview.length
-          ? 'Reconcile payment exceptions'
-          : closableOrders.length
-            ? 'Save daily close'
-            : 'Ready for new orders'
-  const shopOrderControlRows = [
-    ['Online inbox', pendingStorefrontRequests.length ? `${pendingStorefrontRequests.length} waiting` : 'Clear'],
-    ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
-    ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
-    ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
-    ['Write status', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
-  ] as const
-  const shopOrderControlBoundary = 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.'
-  const shopOrderLifecycleRows = [
-    ['Capture', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online` : openOrders.length ? `${openOrders.length} open` : 'Ready'],
-    ['Reserve', managedInventoryProjection ? 'ATP active' : 'Catalog stock'],
-    ['Fulfil', actionOrders.length ? `${actionOrders.length} action` : openOrders.length ? 'In progress' : 'Ready'],
-    ['Collect', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
-    ['Replenish', activePurchaseOrders.length ? `${activePurchaseOrders.length} active PO` : lowStock.length ? `${lowStock.length} reorder` : 'Clear'],
-    ['Return', returnDraft ? 'Drafting' : commerce.orders.some((order) => order.returns?.length) ? 'Recorded' : 'Accountable'],
-  ] as const
   const pendingPaymentOrders = commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
   const refundExposureOrders = commerce.orders.filter((order) => order.refundStatus === 'due')
   const supplierReceiptExposure = overduePurchaseOrders.length + dueSoonPurchaseOrders.length + partiallyReceivedPurchaseOrders.length
@@ -7188,14 +7170,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         <div className="shop-business-controls-content">
           {shopCommandCenter}
           {shopSetupGuide}
-          <section className="shop-order-control" aria-label="Shop order control">
-            <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
-            <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-          </section>
-          <section className="shop-order-control" aria-label="Shop order lifecycle">
-            <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
-            <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-          </section>
           {shopAccountingReadiness}
           {shopAccountingPacket}
           {shopMonthlyStatementPanel}
@@ -7211,6 +7185,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
           incomingOnline={pendingStorefrontRequests.length}
           incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === coreUi.p).length : Number(legacyWebsiteWorkWaiting)}
+          stockConflicts={pendingStockConflictCount}
           onOpenOrder={openOrderComposer}
           overdue={actionOrders.filter((order) => commerceOrderPromiseUrgency(order, purchaseOrderClock) === 'late').length}
           paymentPending={commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending').length}
@@ -7267,10 +7242,11 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
           {managedIdentity && pendingStorefrontRequests.length ? visiblePendingStorefrontRequests.map((request) => {
             const lines = commerceStorefrontRequestLines(request)
+            const stockConflict = pendingStorefrontStockConflicts.get(request.id)
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             return <div className="website-intake-ready" key={request.id}>
-              <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
-              <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
+              <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}{stockConflict ? ` · ${stockConflict.sku}: ${stockConflict.requested} requested, ${stockConflict.available} available` : ' · Stock available'}</small></div>
+              <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">{stockConflict ? 'Review stock' : 'Review'}</button>
             </div>
           }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Commerce</Link>

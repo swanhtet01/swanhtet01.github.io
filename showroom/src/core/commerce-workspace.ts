@@ -2053,6 +2053,31 @@ function reservationLinesForOrder(order: CommerceOrder) {
   return order.itemSku ? [{ sku: order.itemSku, quantity: order.quantity }] : []
 }
 
+export type CommerceStockConflict = {
+  sku: string
+  requested: number
+  available: number
+  reason: 'invalid_request' | 'missing_catalog' | 'insufficient_stock'
+}
+
+export function commerceStockConflict(items: CommerceItem[], lines: Array<{ sku: string; quantity: number }>): CommerceStockConflict | null {
+  const requestedBySku = new Map<string, number>()
+  for (const line of lines) {
+    if (typeof line?.sku !== 'string' || !line.sku.trim() || !Number.isSafeInteger(line.quantity) || line.quantity < 1) {
+      return { sku: typeof line?.sku === 'string' && line.sku.trim() ? line.sku : 'Unknown SKU', requested: Number.isSafeInteger(line?.quantity) ? line.quantity : 0, available: 0, reason: 'invalid_request' }
+    }
+    const requested = (requestedBySku.get(line.sku) ?? 0) + line.quantity
+    if (!Number.isSafeInteger(requested)) return { sku: line.sku, requested: line.quantity, available: 0, reason: 'invalid_request' }
+    requestedBySku.set(line.sku, requested)
+  }
+  for (const [sku, requested] of requestedBySku) {
+    const matches = items.filter((item) => item.sku === sku)
+    if (matches.length !== 1) return { sku, requested, available: 0, reason: 'missing_catalog' }
+    if (matches[0].onHand < requested) return { sku, requested, available: matches[0].onHand, reason: 'insufficient_stock' }
+  }
+  return null
+}
+
 function shopInventoryAvailableBySku(foundation: ShopInventoryState, catalogSkus: string[]) {
   const totals = new Map(catalogSkus.map((sku) => [sku, 0]))
   projectShopInventory(foundation, catalogSkus).balances.forEach((balance) => {
@@ -6476,7 +6501,7 @@ export function convertCommerceWebsiteIntake(
     || item.name !== intake.itemName
     || (item.variant ?? undefined) !== (intake.itemVariant ?? undefined)
     || item.price !== intake.unitPrice
-    || item.onHand < intake.quantity) return null
+    || commerceStockConflict(current.items, [{ sku: intake.sku, quantity: intake.quantity }])) return null
   const nextBalance = safeBalance(item.onHand, -intake.quantity)
   if (nextBalance === null) return null
   const orderId = `ORD-WEB-${intake.id.slice(5)}`
@@ -7490,6 +7515,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   }] : [])
   if (!lines.length
     || (order.lines === undefined && (order.item !== legacyItem?.name || legacyItem.price * order.quantity !== order.total))) return null
+  if (commerceStockConflict(state.items, lines)) return null
   if (actionIdIsUsed(state, proof.actionId)) return null
   const duplicate = state.orders.some((candidate) => candidate.id === order.id || Boolean(order.sourceRecordId && candidate.sourceRecordId === order.sourceRecordId))
   if (duplicate) return null
@@ -7500,8 +7526,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     if (!item
       || item.name !== line.name
       || item.variant !== line.variant
-      || item.price !== line.unitPriceMmk
-      || item.onHand < line.quantity) return null
+      || item.price !== line.unitPriceMmk) return null
     const nextBalance = safeBalance(item.onHand, -line.quantity)
     if (nextBalance === null) return null
     nextBalances.set(item.sku, nextBalance)
