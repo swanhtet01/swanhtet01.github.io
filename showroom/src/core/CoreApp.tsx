@@ -2,7 +2,7 @@ import { spaCounterFields } from './shop-spa-counter-fields'
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
-import { createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
+import { createCounterTicketSession, emptyCounterBasket, type CounterBasket, type CounterTicketStorageScope } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
   shopBusinessTemplateCommerceItems,
@@ -1214,10 +1214,11 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, lastReceipt, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, operatorLabel, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, sampleCatalogActive, stockLocationCount }: {
+function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, draftStorageScope = null, industryPack, initialCustomer, initialQuery, items, lastReceipt, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, operatorLabel, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, sampleCatalogActive, stockLocationCount }: {
   businessTemplate: ShopBusinessTemplate | null
   canCompleteInOneReview: boolean
   disabled: boolean
+  draftStorageScope?: CounterTicketStorageScope | null
   industryPack: ShopIndustryPack | null
   initialCustomer: string
   initialQuery: string
@@ -1239,7 +1240,9 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
 }) {
   const [tickets] = useState(() => {
     if (!persistLocalDraft) return createCounterTicketSession(null, null, initialCustomer)
-    try { return createCounterTicketSession(window.localStorage, navigator.locks ?? null, initialCustomer) }
+    try { return draftStorageScope
+      ? createCounterTicketSession(window.localStorage, navigator.locks ?? null, initialCustomer, draftStorageScope)
+      : createCounterTicketSession(window.localStorage, navigator.locks ?? null, initialCustomer) }
     catch { return createCounterTicketSession({ getItem: () => { throw new Error('unavailable') }, setItem: () => { throw new Error('unavailable') } }, null) }
   })
   const ticketSnapshot = useSyncExternalStore(tickets.subscribe, tickets.getSnapshot)
@@ -6997,7 +7000,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} draftStorageScope={counterDraftContext.storageScope} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>

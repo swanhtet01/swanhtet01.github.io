@@ -1,9 +1,11 @@
-// Local-only unfinished work. No commerce reducer, stock reservation or payment call.
+// Device-local unfinished work. No commerce reducer, stock reservation or payment call.
 export const COUNTER_TICKETS_KEY = 'supermega.shop.counter_draft.v1'
 const RESET_KEY = 'supermega.shop.order_draft_reset.v1'
+const COUNTER_LOCK = 'supermega:shop:order-draft:reset'
 const SCHEMA = 'supermega.shop.counter_tickets.v2'
 const LIMIT_BYTES = 65_536
 export type CounterBasket = { cart: Record<string, number>; customer: string; payment: string; outcome: 'paid_handoff' | 'open_order' }
+export type CounterTicketStorageScope = '' | `:${string}`
 export type ParkedTicket = CounterBasket & { id: string; label: string }
 export type CounterTickets = CounterBasket & { schema: typeof SCHEMA; revision: number; parked: ParkedTicket[]; activeLabel: string; checkoutOrderId: string | null }
 type Storage = { getItem(key: string): string | null; setItem(key: string, value: string): void }
@@ -11,7 +13,7 @@ type Locks = { request<T>(name: string, options: { mode: 'exclusive' }, callback
 export const emptyCounterBasket = (): CounterBasket => ({ cart: {}, customer: '', payment: 'Cash', outcome: 'paid_handoff' })
 
 function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
-function fail(): never { throw new Error('Counter recovery is invalid. Existing data was not replaced.') }
+function fail(): never { throw new Error('Counter recovery is invalid.') }
 function basket(value: unknown): CounterBasket {
   if (!record(value) || !record(value.cart) || Object.keys(value.cart).length > 100
     || typeof value.customer !== 'string' || value.customer.length > 120
@@ -65,49 +67,49 @@ export function transitionCounterTickets(current: CounterTickets, action: Counte
   // Validate every supplied snapshot; callers cannot bypass the parser via a type cast.
   const verified = current.revision === 0 && current.parked.length === 0
     ? { ...basket(current), schema: SCHEMA, revision: 0, parked: [], activeLabel: '', checkoutOrderId: null } : parseCounterTickets(JSON.stringify(current))
-  if (verified.checkoutOrderId && action.kind !== 'resolve_checkout') throw new Error('This basket has a checkout recovery reference. Reconcile the recorded order before continuing.')
-  if (verified.revision >= Number.MAX_SAFE_INTEGER) throw new Error('Counter revision cannot advance safely.')
+  if (verified.checkoutOrderId && action.kind !== 'resolve_checkout') throw new Error('Resolve the recorded checkout before continuing.')
+  if (verified.revision >= Number.MAX_SAFE_INTEGER) throw new Error('Counter revision limit reached.')
   let next: CounterTickets = { ...verified, schema: SCHEMA, revision: verified.revision + 1, parked: [...verified.parked] }
   if (action.kind === 'begin_checkout') {
-    if (!Object.keys(verified.cart).length) throw new Error('An empty basket cannot begin checkout.')
+    if (!Object.keys(verified.cart).length) throw new Error('Add an item before checkout.')
     next.checkoutOrderId = action.orderId
   } else if (action.kind === 'resolve_checkout') {
-    if (!verified.checkoutOrderId || verified.checkoutOrderId !== action.orderId) throw new Error('Checkout recovery reference does not match.')
+    if (!verified.checkoutOrderId || verified.checkoutOrderId !== action.orderId) throw new Error('Checkout reference does not match.')
     next = { ...next, ...emptyCounterBasket(), activeLabel: '', checkoutOrderId: null }
   } else if (action.kind === 'save') next = { ...next, ...basket(action.basket), activeLabel: Object.keys(action.basket.cart).length ? verified.activeLabel : '' }
   else if (action.kind === 'park') {
-    if (!Object.keys(verified.cart).length) throw new Error('Add an item before parking this ticket.')
+    if (!Object.keys(verified.cart).length) throw new Error('Add an item before parking.')
     next = { ...next, ...emptyCounterBasket(), activeLabel: '', parked: [...verified.parked, { ...basket(verified), id: action.id, label: action.label.trim() }] }
   } else if (action.kind === 'resume') {
-    if (Object.keys(verified.cart).length) throw new Error('Park or clear the current basket before resuming another ticket.')
+    if (Object.keys(verified.cart).length) throw new Error('Clear this basket before resuming a ticket.')
     const ticket = verified.parked.find(candidate => candidate.id === action.id)
-    if (!ticket) throw new Error('That ticket changed. Reload the ticket list.')
+    if (!ticket) throw new Error('Ticket changed. Reload.')
     next = { ...next, ...basket(ticket), activeLabel: ticket.label, parked: verified.parked.filter(candidate => candidate.id !== action.id) }
   } else return fail()
   return parseCounterTickets(JSON.stringify(next))
 }
 
-export async function mutateCounterTickets(storage: Storage, locks: Locks, expectedRaw: string | null, expectedReset: string | null, action: CounterTicketAction, stillCurrent = () => true): Promise<{ raw: string; state: CounterTickets }> {
+export async function mutateCounterTickets(storage: Storage, locks: Locks, expectedRaw: string | null, expectedReset: string | null, action: CounterTicketAction, stillCurrent = () => true, scope: CounterTicketStorageScope = ''): Promise<{ raw: string; state: CounterTickets }> {
   if (expectedReset !== null && (!/^(0|[1-9][0-9]*)$/.test(expectedReset) || !Number.isSafeInteger(Number(expectedReset)))) {
-    throw new Error('Counter reset marker is invalid. Review recovery before continuing.')
+    throw new Error('Counter reset is invalid.')
   }
   // Freeze the reviewed transition before waiting for a lock; callers may edit their inputs.
   const next = transitionCounterTickets(parseCounterTickets(expectedRaw), action)
   const raw = JSON.stringify(next)
-  return locks.request('supermega:shop:order-draft:reset', { mode: 'exclusive' }, async () => {
-    if (!stillCurrent()) throw new Error('Counter context changed. Reload recovery before continuing.')
-    if (storage.getItem(RESET_KEY) !== expectedReset || storage.getItem(COUNTER_TICKETS_KEY) !== expectedRaw) {
-      throw new Error('Counter recovery changed or was reset. Review it before trying again.')
+  return locks.request(COUNTER_LOCK + scope, { mode: 'exclusive' }, async () => {
+    if (!stillCurrent()) throw new Error('Counter context changed. Reload.')
+    if (storage.getItem(RESET_KEY + scope) !== expectedReset || storage.getItem(COUNTER_TICKETS_KEY + scope) !== expectedRaw) {
+      throw new Error('Counter recovery changed. Reload.')
     }
     // One key write atomically moves the basket into/out of parked work. Never clear first.
-    storage.setItem(COUNTER_TICKETS_KEY, raw)
-    if (storage.getItem(COUNTER_TICKETS_KEY) !== raw) throw new Error('Counter save could not be confirmed. Reload before continuing.')
+    storage.setItem(COUNTER_TICKETS_KEY + scope, raw)
+    if (storage.getItem(COUNTER_TICKETS_KEY + scope) !== raw) throw new Error('Counter save unconfirmed. Reload.')
     return { raw, state: next }
   })
 }
 
 // Event-driven serial persistence. No mount/autosave effect and no silent recovery reset.
-export function createCounterTicketSession(storage: Storage | null, locks: Locks | null, initialCustomer = '') {
+export function createCounterTicketSession(storage: Storage | null, locks: Locks | null, initialCustomer = '', scope: CounterTicketStorageScope = '') {
   let raw: string | null = null, reset: string | null = null, alive = true, failed = false
   let snapshot = { state: parseCounterTickets(null), pending: 0, error: '', blocked: false }
   let tail: Promise<void> = Promise.resolve()
@@ -115,15 +117,15 @@ export function createCounterTicketSession(storage: Storage | null, locks: Locks
   const publish = () => { for (const listener of listeners) listener() }
   try {
     if (storage) {
-      raw = storage.getItem(COUNTER_TICKETS_KEY)
-      reset = storage.getItem(RESET_KEY)
+      raw = storage.getItem(COUNTER_TICKETS_KEY + scope)
+      reset = storage.getItem(RESET_KEY + scope)
       snapshot.state = parseCounterTickets(raw)
-      if (!locks) throw new Error('This browser cannot safely save Counter tickets. Use a supported secure browser.')
+      if (!locks) throw new Error('This browser cannot save Counter tickets safely.')
     }
     if (!raw) snapshot.state.customer = initialCustomer
   } catch {
     failed = true
-    snapshot = { ...snapshot, blocked: true, error: 'Counter recovery could not be opened safely. Existing storage was not replaced. Reload after checking this browser.' }
+    snapshot = { ...snapshot, blocked: true, error: 'Counter recovery unavailable. Check browser storage, then reload.' }
   }
   return {
     getSnapshot: () => snapshot,
@@ -137,19 +139,19 @@ export function createCounterTicketSession(storage: Storage | null, locks: Locks
         frozen = structuredClone(action)
         next = transitionCounterTickets(snapshot.state, frozen)
       } catch (error) {
-        snapshot = { ...snapshot, error: error instanceof Error ? error.message : 'Review this ticket before continuing.' }
+        snapshot = { ...snapshot, error: error instanceof Error ? error.message : 'Review the ticket.' }
         publish(); return false
       }
       snapshot = { state: next, pending: snapshot.pending + (storage ? 1 : 0), error: '', blocked: false }
       publish()
       if (storage && locks) tail = tail.then(async () => {
         try {
-          if (failed || !alive) throw new Error('Counter session changed.')
-          const result = await mutateCounterTickets(storage, locks, raw, reset, frozen, () => alive && !failed)
+          if (failed || !alive) throw new Error('Session changed.')
+          const result = await mutateCounterTickets(storage, locks, raw, reset, frozen, () => alive && !failed, scope)
           raw = result.raw
         } catch {
           failed = true
-          snapshot = { ...snapshot, blocked: true, error: 'Counter save is unconfirmed or changed in another tab. Do not repeat the sale. Reload to reconcile saved tickets.' }
+          snapshot = { ...snapshot, blocked: true, error: 'Counter save unconfirmed. Reload before another sale.' }
         } finally {
           snapshot = { ...snapshot, pending: snapshot.pending - 1 }
           publish()
@@ -161,11 +163,11 @@ export function createCounterTicketSession(storage: Storage | null, locks: Locks
       if (!alive || failed || snapshot.pending) return false
       if (snapshot.state.checkoutOrderId && snapshot.state.checkoutOrderId !== confirmedCheckoutId) return false
       try {
-        if (storage && (storage.getItem(COUNTER_TICKETS_KEY) !== raw || storage.getItem(RESET_KEY) !== reset)) throw new Error('changed')
+        if (storage && (storage.getItem(COUNTER_TICKETS_KEY + scope) !== raw || storage.getItem(RESET_KEY + scope) !== reset)) throw new Error('changed')
         return true
       } catch {
         failed = true
-        snapshot = { ...snapshot, blocked: true, error: 'Counter recovery changed. Reload before reviewing a sale.' }
+        snapshot = { ...snapshot, blocked: true, error: 'Counter recovery changed. Reload before sale.' }
         publish(); return false
       }
     },
