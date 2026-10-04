@@ -255,15 +255,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:07b9e3470819488abdce6bd33a29f4090408165a534e004899ffc6f8cea3e45b",
-    "private_snapshot_before": "sha256:07b9e3470819488abdce6bd33a29f4090408165a534e004899ffc6f8cea3e45b",
+    "private_snapshot_after": "sha256:aa4dc824f9a578a5df42c40944ddf8d7f7d8fca352028858617596197477c104",
+    "private_snapshot_before": "sha256:aa4dc824f9a578a5df42c40944ddf8d7f7d8fca352028858617596197477c104",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "32aa41b472f64b70706db4495a94fa397ce3c8f0",
+    "head": "d03a22e52e3856e2ba6fd434e52259bc3ca71b82",
     "implementation_digest": "sha256:b7479d1c4f73a74f3b62af17b4af8bc592f5627c9b297b0dace644001086b9ea",
-    "tree": "f1d5f52bdd734a8d25dc67e249f81b3ab123e03a"
+    "tree": "8879e090e26260308e30ec142890369e1ba47515"
   },
   "status": "rehearsed",
   "storage": {
