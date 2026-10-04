@@ -184,6 +184,7 @@ import {
   type CommerceOrderAcknowledgement,
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
+import { openCommerceShiftSession, registerCommerceOperatingUnit } from './commerce-operating-session'
 import { projectShopInventory } from './shop-inventory-foundation'
 import { projectShopArAgingSummary } from './shop-ar-aging-summary'
 import { projectShopApAgingSummary } from './shop-ap-aging-summary'
@@ -1214,7 +1215,24 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, draftStorageScope = null, industryPack, initialCustomer, initialQuery, items, lastReceipt, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, operatorLabel, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, sampleCatalogActive, stockLocationCount }: {
+type ShopOperatingView = {
+  actionLabel?: string
+  disabled?: boolean
+  detail: string
+  onAction: (event: MouseEvent<HTMLButtonElement>) => void
+  operator: string
+  status: string
+  unit: string
+}
+
+function ShopOperatingStrip({ actionLabel, detail, disabled, onAction, operator, status, unit }: ShopOperatingView) {
+  return <section aria-label="Shift" className="summary-strip compact-summary shop-operating-strip">
+    <span className="shop-operating-status"><span><small>Shift</small><strong aria-live="polite">{status}</strong></span>{actionLabel ? <button className="core-button compact" disabled={disabled} onClick={onAction} title={detail} type="button">{actionLabel}</button> : <small>{detail}</small>}</span>
+    <span><small>Operating unit</small><strong>{unit}</strong></span><span><small>Operator</small><strong>{operator}</strong></span>
+  </section>
+}
+
+function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, draftStorageScope = null, industryPack, initialCustomer, initialQuery, items, lastReceipt, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, sampleCatalogActive, stockLocationCount }: {
   businessTemplate: ShopBusinessTemplate | null
   canCompleteInOneReview: boolean
   disabled: boolean
@@ -1230,6 +1248,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, draft
   onViewLastReceipt: (receipt: CommerceOrderAcknowledgement) => void
   openOrderCount: number
   operatorLabel: string
+  operatingContext: ReactNode
   paymentQrScope: string
   persistLocalDraft: boolean
   productImageScope: string
@@ -1392,18 +1411,13 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, draft
           <div>
             <span className="core-eyebrow">{counterContextLabel}</span>
             <h2>Products</h2>
-            <div aria-label="Record safety" className="shop-next-compact shop-record-status-counter">
-              <header><span className="core-eyebrow">Records</span><b>{recordStatus.badge}</b></header>
-              <h3>{recordStatus.label}</h3>
-              <p>{recordStatus.detail}</p>
-              {recordStatus.target && recordStatus.actionLabel ? <div className="shop-today-actions"><Link className="core-button" to={recordStatus.target}>{recordStatus.actionLabel} <span aria-hidden="true">→</span></Link></div> : null}
-            </div>
+            {operatingContext}
             {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Parked sales ({parked.length})</button> : null}
             <nav aria-label="Counter context" className="shop-counter-summary">
               {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} open orders</Link> : null}
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
               <Link to="/shop/?tab=inventory">{stockLocationCount > 0 ? `${stockLocationCount} stock ${stockLocationCount === 1 ? 'location' : 'locations'}` : 'Simple stock'}</Link>
-              <span>{operatorLabel ? `Cashier ${operatorLabel}` : 'Cashier set at review'}</span>
+              <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
             </nav>
           </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
@@ -1944,7 +1958,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const resumedOrderCanRebind = Boolean(currentOrderRecoveryInput
     && currentOrderRecoveryInput.lines.every((line) => line.availableAtSave >= line.quantity))
   const legacyCloseNeedsMigration = commerce.closes.some((close) => !close.orderIds || !close.businessDate)
-  const closePreview = commerceCloseExpectation(commerce, new Date().toISOString())
+  const operatingActivated = commerce.operatingUnits !== undefined && commerce.shiftSessions !== undefined
+  const closedShiftIds = new Set(commerce.closes.flatMap((close) => close.shiftId ? [close.shiftId] : []))
+  const openShiftSessions = (commerce.shiftSessions ?? []).filter((shift) => !closedShiftIds.has(shift.id))
+  const activeShift = openShiftSessions.length === 1 ? openShiftSessions[0] : null
+  const activeOperatingUnit = commerce.operatingUnits?.find((unit) => unit.id === activeShift?.unitId)
+    ?? (commerce.operatingUnits?.length === 1 ? commerce.operatingUnits[0] : null)
+  const closePreview = commerceCloseExpectation(commerce, new Date().toISOString(), activeShift?.id)
   const closePreviewOrderIds = new Set(closePreview?.orderIds ?? [])
   const closableOrders = commerce.orders.filter((order) => closePreviewOrderIds.has(order.id))
   const reconciledValue = closePreview?.total ?? 0
@@ -1982,6 +2002,28 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       return rightShortage - leftShortage || left.index - right.index
     })
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+  const closedOrderIds = new Set(commerce.closes.flatMap((close) => close.orderIds ?? []))
+  const legacyOperatingOrders = operatingActivated ? [] : commerce.orders.filter((order) => order.status !== 'cancelled' && !closedOrderIds.has(order.id))
+  const currentOperator = activeShift?.opening.actor || managedIdentity?.email || readLastOperator() || 'Cashier set at review'
+  const shopOperatingView: ShopOperatingView = {
+    unit: activeOperatingUnit?.name ?? 'Main shop',
+    operator: currentOperator,
+    status: activeShift ? 'Shift open' : openShiftSessions.length > 1 ? 'Choose a shift' : 'No active shift',
+    detail: activeShift
+      ? `Open since ${formatTime(activeShift.opening.capturedAt)}`
+      : openShiftSessions.length > 1
+        ? 'Select one shift.'
+        : legacyOperatingOrders.length
+          ? 'Close current work.'
+          : 'Start before selling.',
+    actionLabel: confirmedLocalShop
+      ? operatingActivated
+        ? activeShift || openShiftSessions.length > 1 ? undefined : 'Open shift'
+        : legacyOperatingOrders.length ? 'Finish current work' : 'Start Shop day'
+      : undefined,
+    disabled: !commerceCanWrite || Boolean(pendingAction),
+    onAction: reviewShopOperatingSession,
+  }
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
   // "Which treatments did I finish today and never ring up?" Derived, never stored, and it
@@ -4051,7 +4093,45 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     setNotice('Item removed from this order draft. Shop data has not changed.')
   }
 
+  function requireOpenShopShift() {
+    if (!confirmedLocalShop || !operatingActivated || activeShift) return true
+    setNotice(openShiftSessions.length > 1
+      ? 'Choose one open shift first.'
+      : 'Open a Shop shift first.')
+    return false
+  }
+
+  function reviewShopOperatingSession(event: MouseEvent<HTMLButtonElement>) {
+    if (!confirmedLocalShop || managedIdentity || !commerceCanWrite || pendingAction) return
+    if (!operatingActivated && legacyOperatingOrders.length) {
+      navigate('/shop/?tab=orders#shop-close-controls')
+      setNotice('Close current work before starting a shift.')
+      return
+    }
+    if (openShiftSessions.length) return
+    const unitId = activeOperatingUnit?.id ?? uid('UNIT')
+    const shiftId = uid('SHIFT')
+    const unitName = activeOperatingUnit?.name ?? 'Main shop'
+    queueAction({
+      kind: 'shift_open',
+      subjectId: shiftId,
+      summary: `Open ${unitName} shift`,
+      before: operatingActivated ? `${unitName} · no shift` : 'No shift',
+      after: `${unitName} · open · records bound`,
+      actorSuggestion: currentOperator === 'Cashier set at review' ? 'Shop owner' : currentOperator,
+      reasonSuggestion: 'Start shift.',
+      evidenceReferenceSuggestion: `Shift ${shiftId}`,
+      evidenceReferenceLocked: true,
+      apply: (action) => mutateCommerce('commerce.shift.opened', action.commandId, commerceActionProof(action), (current) => {
+        const proof = commerceActionProof(action)
+        const registered = operatingActivated ? current : registerCommerceOperatingUnit(current, { id: unitId, name: unitName }, proof)
+        return registered && openCommerceShiftSession(registered, { id: shiftId, unitId }, operatingActivated ? proof : { ...proof, actionId: `${proof.actionId}-SHIFT` })
+      }),
+    }, event.currentTarget)
+  }
+
   function reviewCounterSale(review: ShopCounterReview, returnFocus: HTMLElement) {
+    if (!requireOpenShopShift()) return
     if (!review.lines.length || !review.payment) {
       setNotice('Add at least one item and choose payment before reviewing the sale.')
       return
@@ -4090,6 +4170,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     const promisedAt = new Date(reviewedAt.getTime() + 30 * 60 * 1000).toISOString()
     const order: CommerceOrder = {
       id: orderId,
+      ...(activeShift ? { shiftId: activeShift.id } : {}),
       createdAt: reviewedAt.toISOString(),
       customer: counterFields.customer || 'Guest',
       channel: 'Walk-in',
@@ -4184,6 +4265,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   function recordOrder(event: FormEvent) {
     event.preventDefault()
+    if (!requireOpenShopShift()) return
     if (orderDraftConflict || resumedOrderNeedsReview) {
       setOrderDraftIssue(orderDraftConflict
         ? 'Close this form and resume the latest saved order before review.'
@@ -4362,6 +4444,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     const recoveryResetEpochAtReview = orderDraftResetEpochRef.current
     const order: CommerceOrder = {
       id: uid('ORD'),
+      ...(activeShift ? { shiftId: activeShift.id } : {}),
       createdAt: reviewedAt.toISOString(),
       customer: customer.trim() || 'Guest',
       channel,
@@ -4513,6 +4596,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   function queueWebsiteOrder(record: WebsiteOrderRecord, promisedAtInput: string) {
+    if (!requireOpenShopShift()) return
     if (commerce.orders.some((order) => order.id === record.id || order.sourceRecordId === record.id)) {
       setNotice(`${record.id} is already in the Shop order queue.`)
       return
@@ -4541,6 +4625,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     const orderFulfilment = record.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery'
     const order: CommerceOrder = {
       id: record.id,
+      ...(activeShift ? { shiftId: activeShift.id } : {}),
       createdAt: record.createdAt,
       customer: record.customerReference,
       channel: 'Website',
@@ -4571,6 +4656,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   function queueManagedWebsiteIntake(intakeId: string, input: CommerceWebsiteOrderInput): boolean {
+    if (!requireOpenShopShift()) return false
     const intake = websiteIntakes.find((candidate) => candidate.id === intakeId && candidate.status === 'pending_confirmation')
     const item = intake ? commerce.items.find((candidate) => candidate.sku === intake.sku) : null
     if (!intake || !item || item.onHand < intake.quantity || item.price !== intake.unitPrice) {
@@ -6640,9 +6726,11 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   function closeDay() {
     const queuedAt = new Date().toISOString()
-    const expected = commerceCloseExpectation(commerce, queuedAt)
+    const expected = commerceCloseExpectation(commerce, queuedAt, activeShift?.id)
     if (!expected) {
-      setNotice(legacyCloseNeedsMigration
+      setNotice(confirmedLocalShop && operatingActivated && !activeShift
+        ? 'Open a Shop shift before recording a close.'
+        : legacyCloseNeedsMigration
         ? 'Legacy close history must be migrated before another daily close can be saved.'
         : 'This business date already has a close. Review the latest snapshot instead of closing it again.')
       return
@@ -6663,15 +6751,16 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     // and shown above. When the count does NOT match, say so in the reason rather than
     // hiding it behind a generic line: a short close is exactly the entry someone will
     // read back later.
+    const closeScope = expected.shiftId ? `${activeOperatingUnit?.name ?? 'Shop'} shift` : `day ${expected.businessDate}`
     const closeReason = settlement.status === 'matched'
-      ? `End of day ${expected.businessDate}. Counted cash matches the expected total.`
-      : `End of day ${expected.businessDate}. Settlement needs review — counted ${formatMoney(settlement.totalCountedMmk)} against expected ${formatMoney(expected.total)}.`
+      ? `End of ${closeScope}. Counted payments match the expected total.`
+      : `End of ${closeScope}. Settlement needs review — counted ${formatMoney(settlement.totalCountedMmk)} against expected ${formatMoney(expected.total)}.`
     queueAction({
       kind: 'daily_close',
       subjectId: closeId,
-      summary: `Close ${expected.businessDate}`,
+      summary: `Close ${closeScope}`,
       reasonSuggestion: closeReason,
-      evidenceReferenceSuggestion: `Daily close ${expected.businessDate}`,
+      evidenceReferenceSuggestion: `${expected.shiftId ? 'Shift' : 'Daily'} close ${expected.shiftId ?? expected.businessDate}`,
       before: `${commerce.closes.length} snapshots`,
       after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · expected ${formatMoney(expected.total)} · counted ${formatMoney(settlement.totalCountedMmk)} · settlement ${settlement.status.replace('_', ' ')} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
       apply: (action) => mutateCommerce(
@@ -6993,6 +7082,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {operatingBoundary}
+    {confirmedLocalShop ? <ShopOperatingStrip {...shopOperatingView} /> : null}
     <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0} closeQueue={shopCloseQueue} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} recordStatus={shopRecordStatus} /></Suspense>
     {actionGate}
   </div>
@@ -7000,7 +7090,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} draftStorageScope={counterDraftContext.storageScope} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (confirmedLocalShop && operatingActivated && !activeShift)} draftStorageScope={counterDraftContext.storageScope} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={confirmedLocalShop ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
@@ -7437,7 +7527,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       than the tail of a policy accordion. The anchor id moves with it, keeping
       the /shop/?tab=orders#shop-close-controls deep links working. */}
   <section aria-labelledby="shop-close-heading" className="core-panel shop-close-day" id="shop-close-controls">
-    <div className="section-head"><h2 id="shop-close-heading">Close the day</h2><small>{closableOrders.length ? `${closableOrders.length} ready` : latestClose ? 'Today is closed' : 'Nothing to close yet'}</small></div>
+    <div className="section-head"><h2 id="shop-close-heading">{confirmedLocalShop && operatingActivated ? 'Close shift' : 'Close the day'}</h2><small>{closableOrders.length ? `${closableOrders.length} ready` : activeShift ? 'Shift ready to close' : latestClose ? 'Latest close saved' : 'Nothing to close yet'}</small></div>
     {/* The appointment book does not post to the ledger, so a treatment completed in the book
         and never rung up at the counter is simply absent from this close and from every report
         after it. This is where she finds that out -- at the moment she is closing, not by going

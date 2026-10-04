@@ -126,6 +126,7 @@ export type Approval = {
 export type ActionDomain = 'commerce' | 'production'
 
 export type ActionKind =
+  | 'shift_open'
   | 'order_create'
   | 'order_status'
   | 'order_cancel'
