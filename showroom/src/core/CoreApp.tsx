@@ -1481,7 +1481,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           })}
         </div></> : <Empty>{items.length
           ? bi('No matching item. Search by name or SKU.')
-          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Add or import products</Link> before the first sale.</>}</Empty>}
+          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Bring existing products</Link> or add one item before the first sale.</>}</Empty>}
       </section>
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
@@ -1642,6 +1642,8 @@ function buildCommerceOrderRecoveryInput(
     lines: lines as CommerceOrderDraftInput['lines'],
   }
 }
+
+const SHOP_CATALOG_IMPORT_STEPS = ['Choose CSV', 'Match columns', 'Fix row issues', 'Confirm once', 'Open Counter'] as const
 
 function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
   confirmedLocalShop: boolean
@@ -3515,19 +3517,18 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     ['Memory', 'Saves helpful patterns'],
     ['Safety', 'Review first'],
   ] as const
-  const shopSetupGuideRows = [
-    ['Products', commerce.items.length ? `${commerce.items.length} current SKU` : 'Import catalog'],
-    ['Stock', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + ATP' : 'Simple count first'],
-    ['Orders', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
-    ['Payments', paymentReview.length ? `${paymentReview.length} exception` : 'Review only'],
-    ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
-    ['Boundary', 'Review before writes'],
-  ] as const
   const [catalogImportOpen, setCatalogImportOpen] = useState(false)
+  const catalogIsEmpty = commerce.items.length === 0
+  const catalogImportRequested = commerceLocation.hash === '#shop-catalog-import'
+  const catalogImportVisible = catalogIsEmpty || catalogImportOpen || catalogImportRequested
+  function toggleCatalogImport() {
+    if (catalogImportRequested) navigate('/shop/?tab=inventory', { replace: true })
+    setCatalogImportOpen((open) => catalogImportRequested ? false : !open)
+  }
   const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
-    <div><strong>Add your products</strong><p>Upload a CSV to add products in bulk.</p></div>
-    <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportOpen} className="core-button" disabled={commerceControlsDisabled} onClick={() => setCatalogImportOpen((open) => !open)} type="button">{catalogImportOpen ? 'Close upload' : 'Upload product data'}</button>
-    {catalogImportOpen ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
+    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Bring your existing products into Shop' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Check the mapping and any row issues, confirm once, then open Counter.' : 'Review a CSV before adding products in bulk.'}</p></div>
+    {catalogIsEmpty ? <div aria-label="Import to first sale" className="catalog-onboarding-status">{SHOP_CATALOG_IMPORT_STEPS.map((step, index) => <span key={step}><small>Step {index + 1}</small><strong>{step}</strong></span>)}</div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Bring existing products'}</button>}
+    {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
   </section>
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
@@ -3551,14 +3552,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <button className={coreUi.q} onClick={runShopAutopilot} type="button">Open next step</button>
-  </section>
-  const shopSetupGuide = <section aria-label="Shop setup guide" className="shop-order-control shop-setup-guide">
-    <div>
-      <span className="core-eyebrow">Shop setup guide</span>
-      <strong>Import products once. Then run the daily queue.</strong>
-      <small>Use this only when you are adding real products, receiving stock, checking payment problems, or preparing end-of-day reports. Daily selling stays in the main order screen.</small>
-    </div>
-    <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
@@ -7155,7 +7148,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
           {shopCommandCenter}
-          {shopSetupGuide}
           {shopAccountingReadiness}
           {shopAccountingPacket}
           {shopMonthlyStatementPanel}

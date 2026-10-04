@@ -241,6 +241,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const localActionLabel = product === 'commerce' ? 'items to Shop' : product === 'production' ? 'jobs to Plant' : product === 'website' ? 'pages to Website' : 'display rows to Ecommerce'
   const localUseLabel = product === 'commerce' ? 'catalog in a real sale' : product === 'production' ? 'jobs in production control' : product === 'website' ? 'page drafts in the Website editor' : 'reviewed merchandising in the customer storefront'
   const localOpenPath = product === 'commerce' ? '/shop/?tab=counter' : product === 'production' ? '/plant/?tab=production' : product === 'website' ? '/website/' : '/ecommerce/'
+  const localOpenLabel = product === 'commerce' ? 'Open Shop counter' : `Open ${productName}`
   const visibleRows = state.preview
     ? [
         ...state.preview.rows.filter((row) => row.status !== 'ready' || state.catalogReview[row.rowNumber]?.conflict),
@@ -884,7 +885,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   return (
     <>
     <details className="compact-disclosure catalog-import-disclosure" open={initiallyOpen || undefined}>
-      <summary><span>Bring existing data</span><small>Optional for {productName}</small></summary>
+      <summary><span>Bring existing data</span><small>CSV import for {productName}</small></summary>
       <div className="catalog-import-workspace">
         <div className="catalog-import-intro">
           <div>
@@ -1009,7 +1010,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                 : 'Ready to prepare your import.'}</small>
               {appliedIsCurrent && state.applied ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} / revision {state.applied.receipt.result.version} / idempotent command confirmed</p></details> : validationIsCurrent && state.validation ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} / {state.validation.preflight ? 'company check retained' : 'zero records written'} / {object.activationBoundary}</p></details> : null}
             </div>
-            <div className="form-actions"><button className="core-button" disabled={state.preflighting || state.applying} onClick={clearPreview} type="button">Clear</button>{localAppliedIsCurrent ? <Link className="core-button primary" to={localOpenPath}>Open {productName}</Link> : !localActivationAvailable && !appliedIsCurrent && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add company and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with company' : 'Download prepared file'}</button> : null}</div>
+            <div className="form-actions"><button className="core-button" disabled={state.preflighting || state.applying} onClick={clearPreview} type="button">Clear</button>{localAppliedIsCurrent || appliedIsCurrent ? <Link className="core-button primary" to={localOpenPath}>{localOpenLabel}</Link> : !localActivationAvailable && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add company and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with company' : 'Download prepared file'}</button> : null}</div>
           </div>
         </div> : null}
       </div>
