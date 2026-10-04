@@ -47,7 +47,7 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 "Is this touching my real money or messaging my customers?" — read the gate's own line:
 
-- `Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.`
+- `This device records the sale, payment review, handoff and stock. It does not charge or message anyone, or write to a company account.`
 
 "Where does my data go?" — setup says `Stays on this device. Nothing is sent or published.` Nothing in the demo requires an account.
 
