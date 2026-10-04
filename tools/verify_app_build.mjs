@@ -6442,7 +6442,7 @@ if (!shopCounterContract.includes('<h2>Products</h2>')
   || !shopCounterContract.includes("const effectiveOutcome = canCompleteInOneReview ? outcome : 'open_order'")
   || !shopCounterContract.includes("outcome: effectiveOutcome")
   || !shopCounterContract.includes('Keep as open order')
-  || !shopCounterContract.includes('Review & complete sale')
+  || !shopCounterContract.includes('Review &amp; complete sale')
   || !shopCounterContract.includes('One review records payment, handoff, stock, and the order record.')
   || !shopCounterContract.includes('Creates an open order; payment and handoff stay for Orders.')
   || !shopCounterContract.includes("localDemoStatus === 'records-at-risk'")
@@ -6523,8 +6523,10 @@ if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContra
 // would not fail any other check, and it would not look like a regression: the
 // surface would simply start rendering ~30 drafted strings nobody signed off.
 const paymentQrSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PaymentQr.tsx'), 'utf8')
-const i18nActionsTable = i18nActionsSource.slice(i18nActionsSource.indexOf('const ACTION_TRANSLATIONS'), i18nActionsSource.indexOf('export function bi('))
-if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') return en")
+const i18nActionsTable = i18nActionsSource.slice(i18nActionsSource.indexOf('const ACTION_TRANSLATIONS'), i18nActionsSource.indexOf('export function confirmedBurmese('))
+if (!i18nActionsSource.includes("return entry?.status === 'confirmed' ? entry.my : null")
+  || !i18nActionsSource.includes('const my = confirmedBurmese(en)')
+  || !i18nActionsSource.includes('if (!my) return en')
   // Lockstep pair: bi() emits the class and core-app.css styles it. Split them and the
   // phone bottom bar silently goes back to ellipsising away the Burmese half of a
   // five-across work-mode label -- invisible to every other check in this file.
@@ -6563,7 +6565,10 @@ if (!i18nActionsSource.includes("if (!entry || entry.status !== 'confirmed') ret
   || !shopCounterContract.includes("{bi('Current sale')}")
   || !shopCounterContract.includes('type="button">Clear</button>')
   || !shopCounterContract.includes("{bi('Total')}")
-  || !shopCounterContract.includes("{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? 'Review & complete sale' : bi('Review order')}")) fail('shop_counter_bilingual_wiring_missing')
+  || !coreSource.includes("const CASHIER_COMPLETE_MY = confirmedBurmese('Complete')")
+  || !coreSource.includes("const CASHIER_SAVE_MY = confirmedBurmese('Save')")
+  || !shopCounterContract.includes('<span>Review &amp; complete sale</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}')
+  || !coreCssSource.includes('.cashier-action-label > small[lang="my"]')) fail('shop_counter_bilingual_wiring_missing')
 // The product tile's accessible NAME is assembled by REFERENCE -- aria-labelledby
 // for the identifying nodes, aria-describedby for the numeric ones -- because an
 // aria-label on a button replaces its whole subtree, which is how the tile came to
