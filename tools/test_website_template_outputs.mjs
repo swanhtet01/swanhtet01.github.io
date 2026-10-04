@@ -181,6 +181,17 @@ test('operator starter does not prefill an unrelated business contact', () => {
   assert.match(styles, /\.website-starter-setup \.website-button \{[\s\S]*?font-size: \.875rem;/)
 })
 
+test('business brief opens the real page-review workspace and keeps publish explicit', () => {
+  const source = readFileSync(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
+  const handoff = source.slice(source.indexOf('function startWithBusiness'), source.indexOf('function openStarterSetup'))
+  assert.ok(handoff.includes("openContentSurface('work')"))
+  assert.ok(!handoff.includes("openContentSurface('preview')"))
+  assert.ok(source.includes("? 'Ready' : 'Review'"))
+  assert.ok(source.includes('Mark ready & next'))
+  assert.ok(source.includes("if (nextDraftPage) setSelectedPageId(nextDraftPage.id)"))
+  assert.ok(!readFileSync(new URL('../showroom/src/products/website/ContentWorkspace.tsx', import.meta.url), 'utf8').includes('Mark page ready'))
+})
+
 test('all trade outputs give useful inquiry guidance without asserting business operations', () => {
   const expectations = {
     'mini-mart': 'shopping list', pharmacy: 'qualified pharmacist',

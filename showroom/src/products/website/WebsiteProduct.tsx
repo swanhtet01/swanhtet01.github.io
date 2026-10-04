@@ -743,14 +743,14 @@ export function WebsiteProduct() {
     }
     setSelectedPageId(staged.workspace.selectedPageId)
     setStarterDismissed(true)
-    openContentSurface('preview')
+    openContentSurface('work')
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
       product: 'website',
       route: location.pathname + location.search,
       detail: `Website starter brief generated: ${brief.businessName}`,
     })
-    setNotice('Your three-page site is ready. Review every page, then Save or Discard.')
+    setNotice('Review Home, mark each page ready, then save.')
     return true
   }
 
@@ -916,6 +916,7 @@ export function WebsiteProduct() {
 
   const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
   const selectedPageIssues = pageIssues(selectedPage)
+  const nextDraftPage = editorWorkspace.pages.find((page) => page.id !== selectedPage.id && page.stage === 'draft')
   // Inbox membership follows the ledger this workspace owns, not the name shown on the site.
   // Filtering these two on workspace.siteName meant one rename in Navigation emptied the inbox,
   // the "N new" badge, and the export -- with every captured inquiry still sitting on disk.
@@ -1557,14 +1558,20 @@ export function WebsiteProduct() {
                         <header>
                           <div>
                             <span>Page checks</span>
-                            <strong id="website-page-checks-title">{selectedPageIssues.length ? `${selectedPageIssues.length} to fix` : 'Ready'}</strong>
+                            <strong id="website-page-checks-title">{selectedPageIssues.length ? `${selectedPageIssues.length} to fix` : selectedPage.stage === 'ready' ? 'Ready' : 'Review'}</strong>
                           </div>
-                          <b className={selectedPageIssues.length ? 'has-issues' : 'is-complete'}>{selectedPageIssues.length ? '!' : '✓'}</b>
+                          <b className={selectedPageIssues.length ? 'has-issues' : 'is-complete'}>{selectedPageIssues.length ? '!' : selectedPage.stage === 'ready' ? '✓' : '→'}</b>
                         </header>
                         {selectedPageIssues.length ? (
                           <ul>{selectedPageIssues.slice(0, 4).map((issue) => <li key={issue}>{issue}</li>)}</ul>
                         ) : (
-                          <p>Content, path, action and search details are complete.</p>
+                          <>
+                            <p>{selectedPage.stage === 'ready' ? 'Ready for site checks.' : 'Checks pass. Review, then mark ready.'}</p>
+                            {selectedPage.stage === 'draft' ? <button className="website-button is-primary is-compact" onClick={() => {
+                              updatePage(selectedPage.id, (page) => ({ ...page, stage: 'ready' }))
+                              if (nextDraftPage) setSelectedPageId(nextDraftPage.id)
+                            }} type="button">{nextDraftPage ? 'Mark ready & next' : 'Mark page ready'}</button> : null}
+                          </>
                         )}
                       </section>
 

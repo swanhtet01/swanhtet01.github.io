@@ -339,16 +339,7 @@ export function ContentWorkspace({
           >
             Return to draft
           </button>
-        ) : (
-          <button
-            className="website-button is-primary"
-            disabled={issues.length > 0}
-            onClick={() => onUpdatePage((current) => ({ ...current, stage: 'ready' }))}
-            type="button"
-          >
-            Mark page ready
-          </button>
-        )}
+        ) : null}
       </footer>
     </section>
   )
