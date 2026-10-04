@@ -37,7 +37,10 @@ const corpusPaths = [
   'package.json',
   ...collectSourceFiles('showroom/src', []),
 ]
-const corpus = corpusPaths.map(read).join('\n')
+// JSX escapes ampersands in source, while operators see the decoded label.
+// Ground playbook tokens against that rendered text without weakening any
+// route, field, or contract lookup.
+const corpus = corpusPaths.map((path) => read(path).replaceAll('&amp;', '&')).join('\n')
 const manifest = JSON.parse(read('site-manifest.json'))
 const generator = read('tools/create_public_vercel_output.mjs')
 const productSetup = read('showroom/src/core/product-setup.ts')
