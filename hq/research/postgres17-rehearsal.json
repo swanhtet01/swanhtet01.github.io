@@ -1,11 +1,11 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v3",
-  "recordedAt": "2026-10-04T11:05:25.797Z",
+  "recordedAt": "2026-10-04T11:41:40.066Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "d03a22e52e3856e2ba6fd434e52259bc3ca71b82",
-  "implementationTree": "8879e090e26260308e30ec142890369e1ba47515",
+  "implementationCommit": "d5ac7f2991851157504219c6d4fa3b35b463d3a2",
+  "implementationTree": "2cf4d63103c99122151c98a386c8719bb13c2293",
   "sourceCleanBeforeAndAfter": true,
-  "rawReportDigest": "sha256:6d6be483085cbfa580a62a17dd33bb81e4d572e0b85b4c2bcd2efb219d68c7a6",
+  "rawReportDigest": "sha256:d4376e17a4a7c5db7cb26a16b4d133ba71e3d0876acb12fbcc783fe2939d39f5",
   "implementation": {
     "digest": "sha256:b7479d1c4f73a74f3b62af17b4af8bc592f5627c9b297b0dace644001086b9ea",
     "paths": [
@@ -280,8 +280,8 @@
     "backupNonempty": true,
     "format": "pg_dump_custom",
     "restoredSchemaVersion": 13,
-    "privateSnapshotBefore": "sha256:aa4dc824f9a578a5df42c40944ddf8d7f7d8fca352028858617596197477c104",
-    "privateSnapshotAfter": "sha256:aa4dc824f9a578a5df42c40944ddf8d7f7d8fca352028858617596197477c104"
+    "privateSnapshotBefore": "sha256:11842ffbe96cb4b5153822f075d74cfb330ec4d012cbdf13ad6ee0838e21d3b9",
+    "privateSnapshotAfter": "sha256:11842ffbe96cb4b5153822f075d74cfb330ec4d012cbdf13ad6ee0838e21d3b9"
   },
   "storage": {
     "catalogMode": "local_private_fixture",
@@ -305,5 +305,5 @@
     "Prove real Auth signup, verified email, account recovery, admin MFA and revocation on the hosted target.",
     "Keep production writes disabled until founder approval."
   ],
-  "receiptDigest": "sha256:5314263a8db1a83bdde6da0f7f730cc8be4d1189957ff3a0c5f808189615441b"
+  "receiptDigest": "sha256:561eb144d97fb15296a41efcb373b14a877069ba6f34841331135ca0547ecaff"
 }
