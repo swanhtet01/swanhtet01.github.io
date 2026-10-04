@@ -145,17 +145,18 @@ export const APP_SHELL_REQUIREMENTS = [
   {
     id: 'upstream-local-consequence-boundary', authority: 'upstream', file: 'showroom/src/core/CoreApp.tsx', tokens: [
       'counter-local-boundary',
-      'Browser-local sample only.',
-      'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
-      'It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.',
-      'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
-      'No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.',
+      'This device keeps the sale record locally.',
+      'Confirming records the reviewed payment and handoff, completes the sale, and updates this device’s stock.',
+      'It does not charge a wallet or card, contact a customer, or write to a company account.',
+      'This device keeps the order record locally.',
+      'Confirming creates an open order and reserves this device’s stock. Payment and fulfilment stay pending in Orders.',
+      'It does not capture payment, contact a customer, or write to a company account.',
       "if (tab === 'production') return <div className=\"operation-module production-operation-module\">",
     ],
   },
   {
     id: 'upstream-action-reachability', authority: 'upstream', file: 'showroom/src/core/core-app.css', tokens: [
-      '.shop-counter-module > .shop-counter-surface { min-height: 440px; flex: 0 0 clamp(440px,calc(100svh - 280px),620px); overflow: hidden; }',
+      '.shop-counter-module > .shop-counter-surface { min-height: 520px; flex: 0 0 clamp(520px,calc(100svh - 220px),680px); overflow: hidden; }',
       '.operations-screen:not(.commerce-screen) .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }',
       '.production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; grid-template-columns: minmax(0,1fr); }',
     ],
@@ -304,17 +305,17 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
     id: 'upstream-build-ux-and-context-gates', authority: 'upstream', file: 'tools/verify_app_build.mjs', tokens: [
       'function managedLoginPath(product: string | null)', 'Keep approved context', 'Raw records and browser text stay out.',
       'Order batch review workspace', 'Enterprise order controls',
-      'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
-      'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
+      'Confirming records the reviewed payment and handoff, completes the sale, and updates this device’s stock.',
+      'Confirming creates an open order and reserves this device’s stock. Payment and fulfilment stay pending in Orders.',
     ],
   },
   {
     id: 'upstream-live-usability-gates', authority: 'upstream', file: 'tools/verify_app_release_live.mjs', tokens: [
       'Start guided sample', 'Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.',
-      '.operations-screen:not(.commerce-screen) .workspace-view', 'Browser-local sample only.',
-      'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
-      'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
-      'no real stock is moved',
+      '.operations-screen:not(.commerce-screen) .workspace-view', 'This device keeps the sale record locally.',
+      'Confirming records the reviewed payment and handoff, completes the sale, and updates this device’s stock.',
+      'Confirming creates an open order and reserves this device’s stock. Payment and fulfilment stay pending in Orders.',
+      'It does not capture payment, contact a customer, or write to a company account.',
     ],
   },
   {
@@ -339,7 +340,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-four-product-build-depth', authority: 'candidate', file: 'tools/verify_app_build.mjs', tokens: [
-      'aria-label="Shop decision desk"', 'Services and resources', 'Commerce status', 'Order lifecycle queue',
+      'aria-label="Shop operating view"', 'Services and resources', 'aria-label="Commerce operating status"', 'Order lifecycle queue',
       'Review one quote. Shop confirms the order, stock, delivery, and payment.',
     ],
   },

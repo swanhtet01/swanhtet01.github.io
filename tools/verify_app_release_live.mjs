@@ -38,7 +38,7 @@ export function verifyCurrentReleaseAssets({
     ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Website', 'Ecommerce', 'Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.', 'Welcome back', 'Sign in to your business.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['guided_outcomes', productOnboardingChunk, ['Add your first product', 'Continue to catalog', 'Run a sample production job', 'Create Plant and open the job', 'Prepare your business website', 'Continue to website setup', 'Set up your online store', 'Continue to store setup']],
     ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'Prepare your business content to continue.', 'First useful result:', 'Saves your setup, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
-    ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'One review records payment, handoff, stock, and the order record.', 'Keep as open order', 'Create order', 'Creates an open order; payment and handoff stay for Orders.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'It does not charge a wallet or card', 'No payment is captured']],
+    ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'One review records payment, handoff, stock, and the order record.', 'Keep as open order', 'Create order', 'Creates an open order; payment and handoff stay for Orders.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'This device keeps the sale record locally.', 'It does not charge a wallet or card', 'It does not capture payment']],
     ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose a workflow or import your data.', 'Make ', ' mine', 'Your data', 'Upload your CSV to review and import your data.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
     ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
@@ -593,11 +593,12 @@ if (!operationsChunk.includes('Other products')
   || !assetCorpus.includes('.stock-record-content')
   || !assetCorpus.includes('.data-row.stock-empty-row')) throw new Error('missing_live_shop_stock_worklist_contract')
 for (const required of [
-  'Browser-local sample only.',
-  'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
-  'It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.',
-  'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
-  'No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.',
+  'This device keeps the sale record locally.',
+  'Confirming records the reviewed payment and handoff, completes the sale, and updates this device’s stock.',
+  'It does not charge a wallet or card, contact a customer, or write to a company account.',
+  'This device keeps the order record locally.',
+  'Confirming creates an open order and reserves this device’s stock. Payment and fulfilment stay pending in Orders.',
+  'It does not capture payment, contact a customer, or write to a company account.',
 ]) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_shop_counter_local_boundary:${required}`)
 }
