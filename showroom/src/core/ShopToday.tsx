@@ -113,6 +113,17 @@ function formatSalesComparison(deltaBasisPoints: number | null, previousGrossMmk
   return `${deltaBasisPoints > 0 ? 'Up' : 'Down'} ${percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}% vs yesterday`
 }
 
+function privacySafeQueueCustomer(customer: string) {
+  const normalized = customer.trim()
+  if (!normalized) return 'Walk-in'
+  const withoutContactNumber = normalized
+    .replace(/(?:\+?\d[\d\s().-]{6,}\d)/gu, ' ')
+    .replace(/[·|,/-]+\s*$/u, '')
+    .replace(/\s{2,}/gu, ' ')
+    .trim()
+  return withoutContactNumber || 'Customer'
+}
+
 const batchStateLabels: Record<ShopBatchProfitControlView['state'], string> = {
   no_batch: 'No batch selected',
   collecting_batch_evidence: 'Collecting evidence',
@@ -270,7 +281,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       return (Number.isFinite(leftTime) ? leftTime : Number.MAX_SAFE_INTEGER)
         - (Number.isFinite(rightTime) ? rightTime : Number.MAX_SAFE_INTEGER)
     })
-    .slice(0, 5), [commerce.orders])
+    .slice(0, 3), [commerce.orders])
   const lowStockItems = useMemo(() => commerce.items
     .filter((item) => item.onHand <= item.reorderAt)
     .sort((left, right) => (right.reorderAt - right.onHand) - (left.reorderAt - left.onHand) || left.name.localeCompare(right.name))
@@ -351,12 +362,27 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </div>
     </section>
 
+    <section aria-label="Recommended next" className="shop-next-focus" data-track={nextTrack.toLowerCase()}>
+      <div className="shop-next-focus-copy">
+        <header><span className="core-eyebrow">Recommended next</span><b>{nextTrack}</b></header>
+        <h3>{nextAction}</h3>
+        <div className="shop-next-focus-guidance">
+          <div><span>Why now</span><p>{nextDetail}</p></div>
+          <div><span>Owner check</span><p>{nextOwnerGate}</p></div>
+        </div>
+      </div>
+      <div className="shop-today-actions">
+        <Link className="core-button primary shop-decision-action" to={nextTo}>{nextActionLabel}</Link>
+        {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
+      </div>
+    </section>
+
     <section aria-label="Shop operating view" className="shop-operations-board" data-track={nextTrack.toLowerCase()}>
       <article aria-label="Order queue" className="shop-operations-card shop-order-queue-card">
         <header><span><small>Orders</small><strong>Order queue</strong></span><b>{activeOrders.length} open</b></header>
         <div className="shop-operating-list">
           {activeOrders.length ? activeOrders.map((order) => <Link key={order.id} to="/shop/?tab=orders#shop-order-queue">
-            <span><strong>{order.customer || 'Walk-in'}</strong><small>{order.item} · {order.id.slice(-8)}</small></span>
+            <span><strong>{privacySafeQueueCustomer(order.customer)}</strong><small>{order.item} · {order.id.slice(-8)}</small></span>
             <span><b>{formatMmk(order.total)}</b><small>{order.status} · payment {order.paymentStatus}</small></span>
           </Link>) : <p className="shop-operating-empty"><strong>Queue clear</strong><span>No open orders need fulfilment.</span></p>}
         </div>
@@ -415,17 +441,6 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
             <small>{closeQueue.actionLabel} <span aria-hidden="true">→</span></small>
           </span>
         </Link> : null}
-
-        <article aria-label="Recommended next" className="shop-next-compact">
-          <header><span className="core-eyebrow">Recommended next</span><b>{nextTrack}</b></header>
-          <h3>{nextAction}</h3>
-          <p>{nextDetail}</p>
-          <small><strong>Owner check:</strong> {nextOwnerGate}</small>
-          <div className="shop-today-actions">
-            <Link className="core-button primary shop-decision-action" to={nextTo}>{nextActionLabel}</Link>
-            {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
-          </div>
-        </article>
 
         {attentionPriority ? <Link className="shop-attention-compact" data-priority-id={attentionPriority.id} data-state={profitControl.state} data-tone={attentionPriority.severity === 'critical' || attentionPriority.severity === 'attention' ? 'attention' : 'ready'} to={attentionPriority.target}>
           <span><small>Attention</small><strong>{attentionPriority.title}</strong><small><strong>Next:</strong> {attentionPriority.actionLabel}</small></span><b>{formatShopProfitControlMetric(attentionPriority.metric)}</b>

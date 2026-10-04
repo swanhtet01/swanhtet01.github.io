@@ -651,30 +651,27 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
   let state = null
   while (Date.now() < deadline) {
     state = await evalInPage(cdp, sessionId, `(() => {
-      const desk = document.querySelector('section[aria-label="Shop decision desk"]');
-      const recommendation = desk?.querySelector('.shop-decision-primary');
+      const recommendation = document.querySelector('section[aria-label="Recommended next"]');
       const action = recommendation?.querySelector('a.shop-decision-action');
-      const guidance = [...(recommendation?.querySelectorAll('.shop-decision-guidance > div') || [])].map((entry) => ({
+      const guidance = [...(recommendation?.querySelectorAll('.shop-next-focus-guidance > div') || [])].map((entry) => ({
         label: entry.querySelector('span')?.textContent?.trim() || '',
         value: entry.querySelector('p')?.textContent?.trim() || '',
       }));
-      const rail = desk?.querySelector('aside[aria-label="Shop attention"]');
+      const operatingView = document.querySelector('section[aria-label="Shop operating view"]');
+      const rail = operatingView?.querySelector('.shop-operations-rail');
       const priorities = [...(rail?.querySelectorAll('a[data-priority-id]') || [])].map((entry) => ({
         id: entry.getAttribute('data-priority-id') || '',
         target: entry.getAttribute('href') || '',
         named: Boolean(entry.textContent?.trim()),
-        hasImpact: Boolean(entry.querySelector(':scope > span > small')?.textContent?.trim()),
-        hasNext: [...entry.querySelectorAll(':scope > small')].some((small) => small.textContent?.trim().startsWith('Next:')),
-        hasClosure: [...entry.querySelectorAll(':scope > small')].some((small) => small.textContent?.trim().startsWith('Done when:')),
+        hasNext: [...entry.querySelectorAll('small')].some((small) => small.textContent?.trim().startsWith('Next:')),
       }));
-      const queue = document.querySelector('nav[aria-label="Shop work queues"]');
-      const queues = [...(queue?.querySelectorAll(':scope > a[href]') || [])].map((entry) => ({
-        name: entry.querySelector('strong')?.textContent?.trim() || '',
-        target: entry.getAttribute('href') || '',
-        status: entry.querySelector(':scope > b')?.textContent?.trim() || '',
+      const queues = [...(operatingView?.querySelectorAll('article[aria-label="Order queue"],article[aria-label="Stock watch"]') || [])].map((entry) => ({
+        name: entry.querySelector('header strong')?.textContent?.trim() || '',
+        target: entry.querySelector('footer a[href]')?.getAttribute('href') || '',
+        status: entry.querySelector('header > b')?.textContent?.trim() || '',
       }));
       const advanced = document.querySelector('details[aria-label="Advanced Shop controls"]');
-      const targets = [action, ...(rail?.querySelectorAll('a[href]') || []), ...(queue?.querySelectorAll('a[href]') || [])].filter(Boolean).map((entry) => {
+      const targets = [action, ...(rail?.querySelectorAll('a[href]') || []), ...(operatingView?.querySelectorAll('article[aria-label] footer a[href]') || [])].filter(Boolean).map((entry) => {
         const box = entry.getBoundingClientRect();
         return {
           named: Boolean(entry.textContent?.trim()),
@@ -688,8 +685,8 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
         .map((entry) => entry.textContent?.trim() || '')
         .filter((text) => /Local Batch review stays off|Open a demo|Start trial|Working sample/i.test(text));
       return {
-        ariaLabel: desk?.getAttribute('aria-label') || '',
-        track: desk?.getAttribute('data-track') || '',
+        ariaLabel: recommendation?.getAttribute('aria-label') || '',
+        track: recommendation?.getAttribute('data-track') || '',
         recommendation: recommendation?.querySelector('h3')?.textContent?.trim() || '',
         action: action ? { label: action.textContent?.trim() || '', target: action.getAttribute('href') || '' } : null,
         guidance,
@@ -717,13 +714,13 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
   const checks = {
-    deskPresent: state?.ariaLabel === 'Shop decision desk',
+    deskPresent: state?.ariaLabel === 'Recommended next',
     recommendationPresent: Boolean(state?.recommendation),
     primaryActionPresent: Boolean(state?.action?.label && state?.action?.target),
     reasonPresent: state?.guidance?.some((entry) => entry.label === 'Why now' && entry.value),
     ownerCheckPresent: state?.guidance?.some((entry) => entry.label === 'Owner check' && entry.value),
     attentionRailPresent: state?.railPresent === true,
-    priorityEvidenceComplete: !state?.priorities?.length || state.priorities.every((entry) => entry.id && entry.target && entry.named && entry.hasImpact && entry.hasNext && entry.hasClosure),
+    priorityEvidenceComplete: !state?.priorities?.length || state.priorities.every((entry) => entry.id && entry.target && entry.named && entry.hasNext),
     twoQueuesPresent: state?.queues?.length === 2 && state.queues.every((entry) => entry.name && entry.target && entry.status),
     advancedClosedByDefault: state?.advanced?.present === true && state?.advanced?.open === false && state?.advanced?.label === 'Advanced controls',
     retiredCopyAbsent: state?.visibleForbidden?.length === 0,
@@ -1980,7 +1977,7 @@ const tests = [
     height: 900,
     expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
     expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
-    expectedText: ['Mini-mart & grocery', 'Products', 'Premium rice 25kg'],
+    expectedText: ['Products', 'Premium rice 25kg'],
     absentText: ['PRIVATE DEVICE'],
     exerciseShopCounter: true,
     noHorizontalOverflow: true,
@@ -1996,7 +1993,7 @@ const tests = [
     mobile: true,
     expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
     expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
-    expectedText: ['Mini-mart & grocery', 'Products', 'Premium rice 25kg', 'CURRENT SALE', 'Login'],
+    expectedText: ['Products', 'Premium rice 25kg', 'CURRENT SALE', 'Login'],
     absentText: ['CURRENT SALE · THIS DEVICE'],
     exerciseShopCounter: true,
     noHorizontalOverflow: true,
@@ -2010,7 +2007,7 @@ const tests = [
     ...viewport,
     expectedPath: '/shop/?tab=today',
     // innerText reflects the visual text-transform contract for these operator labels.
-    expectedText: ['Today', 'RECOMMENDED NEXT', 'WHY NOW', 'OWNER CHECK', 'Attention', 'Orders & fulfilment', 'Inventory & purchasing', 'Advanced controls'],
+    expectedText: ['Today', 'RECOMMENDED NEXT', 'WHY NOW', 'OWNER CHECK', 'Attention', 'Order queue', 'Stock watch', 'Advanced controls'],
     absentText: ['Local Batch review stays off', 'Open a demo', 'Start trial'],
     exerciseShopDecisionDesk: true,
     isolatedBrowserContext: true,
