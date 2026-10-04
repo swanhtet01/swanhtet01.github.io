@@ -427,8 +427,8 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
           </div>
         </article>
 
-        {attentionPriority ? <Link className="shop-attention-compact" data-tone={attentionPriority.severity === 'critical' || attentionPriority.severity === 'attention' ? 'attention' : 'ready'} to={attentionPriority.target}>
-          <span><small>Attention</small><strong>{attentionPriority.title}</strong></span><b>{formatShopProfitControlMetric(attentionPriority.metric)}</b>
+        {attentionPriority ? <Link className="shop-attention-compact" data-priority-id={attentionPriority.id} data-state={profitControl.state} data-tone={attentionPriority.severity === 'critical' || attentionPriority.severity === 'attention' ? 'attention' : 'ready'} to={attentionPriority.target}>
+          <span><small>Attention</small><strong>{attentionPriority.title}</strong><small><strong>Next:</strong> {attentionPriority.actionLabel}</small></span><b>{formatShopProfitControlMetric(attentionPriority.metric)}</b>
         </Link> : null}
         {remainingPriorityCount ? <p className="shop-decision-more">{remainingPriorityCount} more lower-priority {remainingPriorityCount === 1 ? 'signal is' : 'signals are'} available in Advanced controls.</p> : null}
       </aside>
