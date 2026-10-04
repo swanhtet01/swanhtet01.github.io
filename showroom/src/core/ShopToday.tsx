@@ -44,6 +44,14 @@ export type ShopTodayCloseQueue = {
   totalMmk: number
 }
 
+export type ShopTodayRecordStatus = {
+  actionLabel: string | null
+  badge: string
+  detail: string
+  label: string
+  target: string | null
+}
+
 type ShopTodayProps = {
   accountingExport?: {
     businessDate: string
@@ -65,6 +73,7 @@ type ShopTodayProps = {
   commerce: CommerceState
   localBatchFirstUseAllowed: boolean
   profitControl: ShopProfitControlBoard
+  recordStatus: ShopTodayRecordStatus
 }
 
 export type ShopBatchProfitControlView = ShopBatchProfitControlProjection | ShopBatchProfitControlNoBatchProjection
@@ -248,7 +257,7 @@ export function ShopBatchProfitControlPanel({
   </section>
 }
 
-export function ShopToday({ accountingExport = null, batchProfitControl = projectNoBatchProfitControl(), catalogReady, closeQueue, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, profitControl }: ShopTodayProps) {
+export function ShopToday({ accountingExport = null, batchProfitControl = projectNoBatchProfitControl(), catalogReady, closeQueue, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, profitControl, recordStatus }: ShopTodayProps) {
   const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
   const [activityAsOf] = useState(() => Date.now())
   const salesPulse = useMemo(() => projectShopTodaySalesPulse(commerce, activityAsOf), [activityAsOf, commerce])
@@ -375,6 +384,13 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
             </span>)}
           </div>
           <p>{salesPulse.today.count} retained completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} · samples excluded</p>
+        </article>
+
+        <article aria-label="Record safety" className="shop-next-compact">
+          <header><span className="core-eyebrow">Records</span><b>{recordStatus.badge}</b></header>
+          <h3>{recordStatus.label}</h3>
+          <p>{recordStatus.detail}</p>
+          {recordStatus.target && recordStatus.actionLabel ? <div className="shop-today-actions"><Link className="core-button" to={recordStatus.target}>{recordStatus.actionLabel} <span aria-hidden="true">→</span></Link></div> : null}
         </article>
 
         {financeModule ? accountingExport ? <article aria-label="Accountant handoff ready" className="shop-finance-task shop-accounting-ready" data-tone="ready">

@@ -1180,6 +1180,18 @@ type ShopCounterReview = {
   onCommitted: (orderId: string) => void
 }
 
+type ShopRecordStatus = {
+  actionLabel: string | null
+  badge: string
+  detail: string
+  label: string
+  target: string | null
+}
+
+function makeShopRecordStatus(label: string, badge: string, detail: string, target: string | null, actionLabel: string | null): ShopRecordStatus {
+  return { actionLabel, badge, detail, label, target }
+}
+
 // Read-only. Commerce never writes this key and must not start: the appointment book owns it,
 // under its own lock. This exists so the close screen can ASK the book a question, which is a
 // different thing from the close screen being able to change it.
@@ -1202,7 +1214,7 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, lastReceipt, localDemoStatus, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, recordedOrderIds, sampleCatalogActive }: {
+function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, lastReceipt, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, sampleCatalogActive }: {
   businessTemplate: ShopBusinessTemplate | null
   canCompleteInOneReview: boolean
   disabled: boolean
@@ -1211,7 +1223,6 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   initialQuery: string
   items: CommerceItem[]
   lastReceipt: CommerceOrderAcknowledgement | null
-  localDemoStatus: 'local' | 'records-at-risk' | null
   lowStockCount: number
   loyaltyPoints: ReadonlyMap<string, number> | null
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
@@ -1220,6 +1231,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   paymentQrScope: string
   persistLocalDraft: boolean
   productImageScope: string
+  recordStatus: ShopRecordStatus
   recordedOrderIds: string[]
   sampleCatalogActive: boolean
 }) {
@@ -1375,13 +1387,17 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           <div>
             <span className="core-eyebrow">{counterContextLabel}</span>
             <h2>Products</h2>
+            <div aria-label="Record safety" className="shop-next-compact shop-record-status-counter">
+              <header><span className="core-eyebrow">Records</span><b>{recordStatus.badge}</b></header>
+              <h3>{recordStatus.label}</h3>
+              <p>{recordStatus.detail}</p>
+              {recordStatus.target && recordStatus.actionLabel ? <div className="shop-today-actions"><Link className="core-button" to={recordStatus.target}>{recordStatus.actionLabel} <span aria-hidden="true">→</span></Link></div> : null}
+            </div>
             {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Parked sales ({parked.length})</button> : null}
-            {openOrderCount > 0 || lowStockCount > 0 || localDemoStatus === 'records-at-risk' ? <nav aria-label="Shop attention" className="shop-counter-summary">
+            {openOrderCount > 0 || lowStockCount > 0 ? <nav aria-label="Shop attention" className="shop-counter-summary">
               {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} open orders</Link> : null}
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
-              {localDemoStatus === 'records-at-risk' ? <Link className="shop-counter-local-link" data-risk="true" to="/settings/#workspace-recovery">Back up records</Link> : null}
             </nav> : null}
-            {persistLocalDraft ? <span className="shop-counter-device-boundary">Saved on this device</span> : null}
           </div>
           <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
@@ -3307,6 +3323,45 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     {storageHeadroomNotice}
     {commerceStuckRecoveryPanel}
   </>
+  const commerceSyncBlocked = commerceSync.status === 'pending'
+    || commerceSync.status === 'conflict'
+    || commerceSync.status === 'unavailable'
+  const localHeadroomNeedsAttention = Boolean(commerceHeadroom && commerceHeadroom.level !== 'clear')
+  const shopRecordStatus = commerceStorageError || commerceSyncBlocked || !commerceCanWrite
+    ? makeShopRecordStatus(
+      'Writes paused',
+      'Paused',
+      commerceStorageError || commerceSync.message || 'Shop could not confirm a safe write path.',
+      confirmedLocalShop ? '/settings/#workspace-recovery' : '/settings/#controls',
+      confirmedLocalShop ? 'Open recovery' : 'Open settings',
+    )
+    : commerceSync.status === 'checking'
+      ? makeShopRecordStatus('Checking', 'Checking', 'Shop is confirming this record before writes begin.', null, null)
+      : managedIdentity
+        ? makeShopRecordStatus(
+          `Company revision ${managedVersion ?? 0} confirmed`,
+          'Company record',
+          'Company records confirmed. Photos, payment QR and drafts stay on this device.',
+          '/settings/#controls',
+          'Workspace settings',
+        )
+        : makeShopRecordStatus(
+          'Saved on this device',
+          storageDurability.state === 'denied' || localHeadroomNeedsAttention ? 'Backup advised' : 'Device record',
+          storageDurability.state === 'denied'
+            ? 'Saved here. This browser may clear Shop records when storage is low.'
+            : localHeadroomNeedsAttention
+              ? 'Saved here. Back up before this device runs out of Shop record space.'
+              : 'This Shop record stays on this device. Back up before changing devices.',
+          '/settings/#workspace-recovery',
+          'Back up records',
+        )
+  const operatingBoundary = <>
+    {commerceStorageError || commerceSyncBlocked || commerceSync.status === 'checking' || !commerceCanWrite ? commerceWriteBanner : null}
+    {storageDurability.quotaExceeded ? storageDurabilityNotice : null}
+    {commerceHeadroom?.level === 'urgent' ? storageHeadroomNotice : null}
+    {commerceStuckRecoveryPanel}
+  </>
   const compactCounterStatus = confirmedLocalShop
     && !managedIdentity
     && commerceCanWrite
@@ -3314,10 +3369,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     && !commerceStorageError
     && !storageDurability.quotaExceeded
     && (!commerceHeadroom || commerceHeadroom.level === 'clear')
-  const counterLocalDemoStatus = compactCounterStatus
-    ? storageDurability.state === 'denied' ? 'records-at-risk' as const : 'local' as const
-    : null
-  const counterBoundary = compactCounterStatus && !notice ? null : commerceBoundary
+  const counterBoundary = compactCounterStatus && !notice ? null : operatingBoundary
   const shopCatalogSetupNotice = confirmedLocalShop && !managedIdentity && requestedShopTemplate && !activeShopBusinessTemplate
     ? <div className="production-mode-banner shop-catalog-setup-notice" role="status">
       <p>Add your products and prices to set up your {requestedShopTemplate.name.en.toLowerCase()} catalog.</p>
@@ -6925,15 +6977,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
-    {commerceBoundary}
-    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0} closeQueue={shopCloseQueue} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} /></Suspense>
+    {operatingBoundary}
+    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0} closeQueue={shopCloseQueue} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} recordStatus={shopRecordStatus} /></Suspense>
     {actionGate}
   </div>
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
