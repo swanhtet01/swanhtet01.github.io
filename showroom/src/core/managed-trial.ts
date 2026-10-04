@@ -3723,6 +3723,12 @@ export async function prepareManagedOrderIntakeDraft(request: {
 function managedCounterOrderIntent(state: Record<string, unknown>, evidence: ManagedCommandEvidence) {
   const orders = Array.isArray(state.orders) ? state.orders : []
   const movements = Array.isArray(state.movements) ? state.movements : []
+  const operatingUnits = state.operatingUnits
+  const shiftSessions = state.shiftSessions
+  const scopedMode = operatingUnits !== undefined || shiftSessions !== undefined
+  if (scopedMode && (!Array.isArray(operatingUnits) || !Array.isArray(shiftSessions))) {
+    throw errorManagedOrderIntentInvalid('The Shop operating-session record is incomplete.')
+  }
   const reservation = movements.find((candidate) => isRecord(candidate)
     && candidate.kind === 'reserve'
     && candidate.actionId === evidence.actionId
@@ -3732,6 +3738,31 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
     : null
   if (!isRecord(order)) {
     throw errorManagedOrderIntentInvalid('The managed Shop order intent could not be isolated from the reviewed action.')
+  }
+  if (!scopedMode && order.shiftId !== undefined) {
+    throw errorManagedOrderIntentInvalid('The managed Shop order cannot name a shift before operating sessions are active.')
+  }
+  if (scopedMode) {
+    const shift = typeof order.shiftId === 'string'
+      ? (shiftSessions as unknown[]).find((candidate) => isRecord(candidate) && candidate.id === order.shiftId)
+      : null
+    const unit = isRecord(shift) && typeof shift.unitId === 'string'
+      ? (operatingUnits as unknown[]).find((candidate) => isRecord(candidate) && candidate.id === shift.unitId)
+      : null
+    const opening = isRecord(shift) && isRecord(shift.opening) ? shift.opening : null
+    const closes = Array.isArray(state.closes) ? state.closes : []
+    const capturedAt = Date.parse(evidence.capturedAt)
+    const openedAt = isRecord(opening) && typeof opening.capturedAt === 'string'
+      ? Date.parse(opening.capturedAt)
+      : Number.NaN
+    if (!shift
+      || !unit
+      || !Number.isFinite(capturedAt)
+      || !Number.isFinite(openedAt)
+      || capturedAt < openedAt
+      || closes.some((candidate) => isRecord(candidate) && candidate.shiftId === order.shiftId)) {
+      throw errorManagedOrderIntentInvalid('The managed Shop order must be bound to one open operating shift.')
+    }
   }
   const completesAtCounter = order.status === 'completed' && order.paymentStatus === 'reconciled'
   const staysOpen = order.status === 'confirmed' && order.paymentStatus === 'pending'
@@ -3786,6 +3817,7 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
   }
   return {
     orderId: order.id,
+    ...(typeof order.shiftId === 'string' ? { shiftId: order.shiftId } : {}),
     customer: order.customer,
     channel: order.channel,
     payment: order.payment,

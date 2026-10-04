@@ -1448,6 +1448,7 @@ export type CommerceWebsiteOrderInput = {
   fulfilmentMethod: 'pickup' | 'local_delivery'
   paymentMethod: 'cash_on_delivery' | 'manual_qr' | 'manual_bank_transfer'
   promisedAt: string
+  shiftId?: string
 }
 
 export type CommercePurchaseOrderInput = {
@@ -6435,6 +6436,17 @@ export function convertCommerceWebsiteIntake(
     || timestampMicros(input.promisedAt) === null
     || (timestampMicros(input.promisedAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)) return null
   const current = validateCommerceState(state)
+  const scopedMode = current.operatingUnits !== undefined && current.shiftSessions !== undefined
+  if (!scopedMode && input.shiftId !== undefined) return null
+  const shiftSession = scopedMode && typeof input.shiftId === 'string'
+    ? current.shiftSessions?.find((session) => session.id === input.shiftId)
+    : null
+  if (scopedMode) {
+    const closedShiftIds = new Set(current.closes.flatMap((close) => close.shiftId ? [close.shiftId] : []))
+    if (!shiftSession
+      || closedShiftIds.has(shiftSession.id)
+      || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(shiftSession.opening.capturedAt) as bigint)) return null
+  }
   const intakes = commerceWebsiteIntakes(current)
   const intake = intakes.find((candidate) => candidate.id === intakeId)
   if (!intake) return null
@@ -6446,6 +6458,7 @@ export function convertCommerceWebsiteIntake(
       && order.fulfilment === (input.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery')
       && order.fulfilmentReference === intake.id
       && order.promisedAt === input.promisedAt
+      && order.shiftId === input.shiftId
       && order.payment === (input.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : input.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer')
       && sameActionProof(intake.conversion, proof)
       && (!current.inventoryFoundation || shopInventoryOrderActionMatches(
@@ -6478,6 +6491,7 @@ export function convertCommerceWebsiteIntake(
   if (!calculation) return null
   const order: CommerceOrder = {
     id: orderId,
+    ...(shiftSession ? { shiftId: shiftSession.id } : {}),
     createdAt: proof.capturedAt,
     customer: input.customer,
     owner: proof.actor,
