@@ -50,7 +50,7 @@
      --core-warn as #ffcc7a. --core-warning is an alias of this token and moves with it. */
   --core-warn: #8e5e00;
   --core-danger: #b42336;
-  --core-radius: 14px;
+  --core-radius: .875rem;
   --core-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   /* Referenced by var() further down but never defined. An undefined custom property
      makes the whole declaration invalid at computed value time, so these silently
@@ -81,17 +81,17 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
   --font-weight-black: 800;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-pill: 999px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --shadow-1: 0 8px 24px rgba(23,27,38, .04);
+  --radius-sm: .375rem;
+  --radius-md: .625rem;
+  --radius-lg: .875rem;
+  --radius-pill: 999rem;
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --shadow-1: 0 .5rem 1.5rem rgba(23,27,38, .04);
   --shadow-2: var(--core-shadow);
   --shadow-3: 0 30px 90px rgba(23,27,38, .24);
   --core-scroll-accent: rgba(91,78,232,.24);
