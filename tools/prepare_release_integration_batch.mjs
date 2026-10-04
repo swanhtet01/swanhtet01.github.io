@@ -145,12 +145,9 @@ export const APP_SHELL_REQUIREMENTS = [
   {
     id: 'upstream-local-consequence-boundary', authority: 'upstream', file: 'showroom/src/core/CoreApp.tsx', tokens: [
       'counter-local-boundary',
-      'This device keeps the sale record locally.',
-      'Confirming records the reviewed payment and handoff, completes the sale, and updates this device’s stock.',
-      'It does not charge a wallet or card, contact a customer, or write to a company account.',
-      'This device keeps the order record locally.',
-      'Confirming creates an open order and reserves this device’s stock. Payment and fulfilment stay pending in Orders.',
-      'It does not capture payment, contact a customer, or write to a company account.',
+      'This device records the sale, payment review, handoff and stock.',
+      'This device creates the order and reserves stock. Payment and fulfilment stay pending.',
+      'It does not charge or message anyone, or write to a company account.',
       "if (tab === 'production') return <div className=\"operation-module production-operation-module\">",
     ],
   },
@@ -305,17 +302,16 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
     id: 'upstream-build-ux-and-context-gates', authority: 'upstream', file: 'tools/verify_app_build.mjs', tokens: [
       'function managedLoginPath(product: string | null)', 'Keep approved context', 'Raw records and browser text stay out.',
       'Order batch review workspace', 'Enterprise order controls',
-      'Confirming records the reviewed payment and handoff, completes the sale, and updates this device’s stock.',
-      'Confirming creates an open order and reserves this device’s stock. Payment and fulfilment stay pending in Orders.',
+      'This device records the sale, payment review, handoff and stock.',
+      'This device creates the order and reserves stock. Payment and fulfilment stay pending.',
     ],
   },
   {
     id: 'upstream-live-usability-gates', authority: 'upstream', file: 'tools/verify_app_release_live.mjs', tokens: [
       'Start guided sample', 'Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.',
-      '.operations-screen:not(.commerce-screen) .workspace-view', 'This device keeps the sale record locally.',
-      'Confirming records the reviewed payment and handoff, completes the sale, and updates this device’s stock.',
-      'Confirming creates an open order and reserves this device’s stock. Payment and fulfilment stay pending in Orders.',
-      'It does not capture payment, contact a customer, or write to a company account.',
+      '.operations-screen:not(.commerce-screen) .workspace-view', 'This device records the sale, payment review, handoff and stock.',
+      'This device creates the order and reserves stock. Payment and fulfilment stay pending.',
+      'It does not charge or message anyone, or write to a company account.',
     ],
   },
   {
