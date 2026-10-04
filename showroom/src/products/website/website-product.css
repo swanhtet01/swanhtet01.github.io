@@ -30,37 +30,6 @@
   color-scheme: light;
 }
 
-.theme-dark .website-product {
-  --website-bg: #05080d;
-  --website-panel: #0d131b;
-  --website-panel-raised: #121b25;
-  --website-ink: #f5f8fb;
-  --website-muted: #a4b0be;
-  /* #718093 measures 4.31:1 against the dark panel, under the 4.5:1 AA floor for body
-     text. The identical value was already lifted to #7a8a9c (4.91:1) for --core-quiet in
-     core-app.css; this file kept the old one, so the same defect survived here. */
-  --website-quiet: #7a8a9c;
-  --website-line: rgba(166, 190, 214, .13);
-  --website-line-strong: rgba(166, 190, 214, .24);
-  --website-green: #56f0c1;
-  --website-green-soft: rgba(86, 240, 193, .11);
-  --website-warn: #ffcc7a;
-  --website-danger: #ff8291;
-  background: radial-gradient(circle at 82% -18%, rgba(42, 120, 133, .2), transparent 31%), var(--website-bg);
-  color-scheme: dark;
-}
-
-.theme-dark .website-product input,
-.theme-dark .website-product select,
-.theme-dark .website-product textarea {
-  border-color: var(--website-line-strong);
-  background: #090f16;
-  color: var(--website-ink);
-}
-.theme-dark .website-panel-actions { background: var(--website-panel); }
-.theme-dark .website-preview-toolbar { background: var(--website-panel); }
-.theme-dark .website-notice { border-color: rgba(86,240,193,.2); background: rgba(12,18,26,.96); }
-
 .website-product *,
 .website-product *::before,
 .website-product *::after {
@@ -148,8 +117,8 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 78px minmax(0, 1fr);
-  padding: 0 18px 18px;
+  grid-template-rows: 90px minmax(0, 1fr);
+  padding: 0 24px 24px;
 }
 
 .website-heading {
@@ -157,7 +126,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 22px;
+  gap: 24px;
+  border-bottom: 1px solid color-mix(in srgb, var(--website-line) 74%, transparent);
 }
 
 .website-heading > div:first-child {
@@ -170,9 +140,9 @@
   gap: 7px;
   color: var(--website-green);
   font-family: var(--website-mono);
-  font-size: 0.5rem;
+  font-size: .625rem;
   font-weight: var(--font-weight-bold);
-  letter-spacing: .09em;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 
@@ -186,10 +156,10 @@
 }
 
 .website-heading h1 {
-  margin: 3px 0 2px;
-  font-size: clamp(1.375rem, 2.4vw, 1.9375rem);
-  line-height: 1;
-  letter-spacing: -.04em;
+  margin: 4px 0 3px;
+  font-size: clamp(1.75rem, 2.8vw, 2.375rem);
+  line-height: 1.02;
+  letter-spacing: -.052em;
 }
 
 .website-heading p {
@@ -197,19 +167,20 @@
   margin: 0;
   overflow: hidden;
   color: var(--website-muted);
-  font-size: 0.5625rem;
-  line-height: 1.4;
+  font-size: .75rem;
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .website-preview-controls {
   flex: 0 0 auto;
-  gap: 3px;
+  gap: 4px;
   border: 1px solid var(--website-line);
-  border-radius: 5px;
-  padding: 3px;
-  background: rgba(255, 255, 255, .018);
+  border-radius: .75rem;
+  padding: 4px;
+  background: var(--website-panel);
+  box-shadow: 0 .375rem 1rem rgba(23, 27, 38, .04);
 }
 
 .website-preview-controls > span {
@@ -247,7 +218,7 @@
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(370px, .82fr) minmax(440px, 1.18fr);
-  gap: 11px;
+  gap: 16px;
 }
 
 .website-workspace-grid.view-publish {
@@ -260,9 +231,9 @@
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--website-line);
-  border-radius: 8px;
+  border-radius: 1rem;
   background: var(--website-panel);
-  box-shadow: 0 10px 28px rgba(25, 54, 42, .055);
+  box-shadow: 0 .875rem 2.5rem rgba(23, 27, 38, .055);
 }
 
 .website-editor-panel {
@@ -271,27 +242,28 @@
 }
 
 .website-panel-head {
-  min-height: 75px;
+  min-height: 84px;
   display: flex;
   flex: 0 0 auto;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
   border-bottom: 1px solid var(--website-line);
-  padding: 14px 15px 12px;
+  padding: 17px 18px 14px;
 }
 
 .website-panel-head h2 {
-  margin: 3px 0 0;
-  font-size: 1rem;
+  margin: 4px 0 0;
+  font-size: 1.25rem;
   line-height: 1.15;
-  letter-spacing: -.025em;
+  letter-spacing: -.035em;
 }
 
 .website-panel-head p {
-  margin: 4px 0 0;
+  margin: 5px 0 0;
   color: var(--website-muted);
-  font-size: 0.5rem;
+  font-size: .6875rem;
+  line-height: 1.4;
 }
 
 .website-status.is-ready {
@@ -620,22 +592,6 @@
 .website-button.is-primary:hover:not(:disabled) {
   border-color: #173bb0;
   background: #173bb0;
-}
-
-/* --website-green is a dark green (#2454e6) in light, where white text reads cleanly, and
-   a bright mint (#56f0c1) in dark, where white text measures 1.44:1 -- the primary action
-   in this product, effectively unreadable. The fill is what carries the brand here, so the
-   text flips to the dark background colour instead (13.4:1) rather than the fill changing.
-   Hover has to move with it: the light-theme hover is a dark green that would be invisible
-   under dark text, so dark mode gets a deeper mint that keeps the same ink (10.7:1). */
-.theme-dark .website-button.is-primary {
-  color: var(--website-bg);
-}
-
-.theme-dark .website-button.is-primary:hover:not(:disabled) {
-  border-color: #3ad9a8;
-  background: #3ad9a8;
-  color: var(--website-bg);
 }
 
 .website-button.is-quiet {
@@ -1437,44 +1393,6 @@
   }
 }
 
-/* ============================================================================
-   Design phase 3 -- P3.3 (2026-08-20): live rules re-homed from the gen-one
-   region per hq/strategy/WEBSITE-CSS-PIN-CATALOGUE.md section 5 (the minimum
-   move list) and section 4 (the websiteMobileCss safe re-anchor). True moves,
-   byte-identical rule bodies: the catalogue's move semantics override
-   DESIGN-PROGRAM's copy-in-place model so the P3.0 hex ratchet stays at 60
-   (a copy would have added #0b6b3a/#101512/#f4f2eb occurrences). Placed at
-   the HEAD of the live region, where the movers keep preceding every
-   live-region rule exactly as they did from the gen-one region -- the later
-   overrides (.preview-hero > .preview-cta font-size 14px, the max-640
-   panel-head/navigation-row/editor-panel restyles, the max-900 frame
-   collapse) all still win. The gen-one region above now holds only
-   catalogued-dead rules plus unpinned base rules awaiting P3.4's per-chunk
-   diff-review. The two "verify slice" comment markers below are load-bearing:
-   tools/verify_app_build.mjs slices websiteMobileCss between them (the old
-   anchors -- gen-one's first `@media (max-width: 640px)` and its only
-   `@media (prefers-reduced-motion` -- moved with this batch, so the slice
-   is re-anchored in the same PR). Preview-frame hexes below are permanently
-   exempt from tokenization (phase-2 item 12 ruling).
-
-   P3.4 (2026-08-20): the catalogued-dead remainder is deleted -- 625 source
-   lines across two family-contiguous chunks (chunk 1: the workspace-chrome
-   families incl. the live-region Task-first-era rules section 6 of the
-   catalogue under-enumerated; chunk 2: the handoff family and the emptied
-   gen-one max-640 block). Family-contiguous, not region-contiguous: the
-   theme surface contract fails a chunk that deletes a family's .theme-dark
-   override while any of its light surfaces survives elsewhere, so each
-   family left whole. Every deleted selector was re-verified at zero TSX/TS
-   consumers immediately before deletion (dynamic is-, view-, theme-
-   construction checked). What remains above this comment (:1-1439) is the
-   gen-one base rules for still-rendered classes -- byte-identical originals
-   whose live-region successors win by cascade order -- plus four mixed
-   selector lists whose dead members ride alongside live ones; retiring
-   those is P3.9-attrition or consolidation work, not dead-rule deletion.
-   The hex ratchet stayed at 60: the dead rules carried rgba()/var() only,
-   so DESIGN-PROGRAM's "52 gen-one hex vanish with P3.4" expectation was
-   wrong -- those literals sit in the surviving base rules. */
-
 .website-disclosure > summary::-webkit-details-marker {
   display: none;
 }
@@ -1572,8 +1490,6 @@
 
 /* Mobile review controls -- verify slice start (P3.3) */
 @media (max-width: 640px) {
-  .website-business-controls > summary b { display: none; }
-  .website-business-controls > summary span { width: 100%; }
   .website-button,
   .website-button.is-compact,
   .website-text-button,
@@ -1845,6 +1761,11 @@
   white-space: normal;
 }
 
+.website-status-disclosure { min-width: 0; }
+.website-status-disclosure > summary { min-height: 2.75rem; padding: .75rem 1rem; cursor: pointer; border: .0625rem solid var(--website-line); border-radius: .75rem; font-weight: 600; }
+.website-status-disclosure > summary:focus-visible { outline: .125rem solid var(--website-green); outline-offset: .125rem; }
+.website-status-disclosure[data-editing-routine='false'] > summary { display: none; }
+.website-status-disclosure[open][data-editing-routine='true'] > summary { margin-bottom: .75rem; }
 .website-today {
   order: 1;
   display: grid;
@@ -1885,55 +1806,11 @@
 .website-today-checks > summary:focus-visible { outline: .125rem solid var(--website-green); outline-offset: .125rem; }
 .website-today-checks[open] > summary { margin-bottom: .5rem; }
 
-.website-today-metrics {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-self: start;
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--website-line);
-  border-radius: 10px;
-  background: var(--website-line);
-}
-
-.website-today-metrics span { min-width: 0; display: grid; gap: 3px; padding: 10px 8px; background: var(--website-panel); }
-.website-today-metrics span:last-child { grid-column: 1 / -1; }
-.website-today-metrics small { color: var(--website-quiet); font-family: var(--website-mono); font-size: 0.5rem; text-transform: uppercase; }
-.website-today-metrics strong { color: var(--website-ink); font-size: 0.6875rem; white-space: normal; overflow-wrap: anywhere; }
-
 .website-check-guidance { margin: .75rem 0 0; color: var(--website-ink); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
 .website-check-guidance h3 { margin: 0 0 .5rem; font-size: inherit; }
 .website-check-guidance ul { margin: 0; padding-inline-start: 1.25rem; }
 .website-check-guidance li + li { margin-top: .75rem; }
 .website-check-guidance p { margin: .375rem 0 0; }
-
-.website-business-controls {
-  border: 1px solid var(--website-line);
-  border-radius: 12px;
-  background: var(--website-panel);
-}
-
-.website-business-controls > summary {
-  min-height: 50px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  cursor: pointer;
-  padding: 9px 12px;
-  color: var(--website-ink);
-  list-style: none;
-}
-
-.website-business-controls > summary::-webkit-details-marker { display: none; }
-.website-business-controls > summary::after { content: '+'; flex: 0 0 auto; color: var(--website-green); font-family: var(--website-mono); font-size: 1rem; }
-.website-business-controls[open] > summary { border-bottom: 1px solid var(--website-line); }
-.website-business-controls[open] > summary::after { content: '\2212'; }
-.website-business-controls > summary span { min-width: 0; display: grid; gap: 2px; }
-.website-business-controls > summary strong { overflow: hidden; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
-.website-business-controls > summary small { overflow: hidden; color: var(--website-muted); font-size: 0.5625rem; text-overflow: ellipsis; white-space: nowrap; }
-.website-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--website-muted); font-size: 0.625rem; font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
-.website-business-controls-content { display: grid; gap: 10px; padding: 10px; }
 
 .website-lead-inbox {
   border: 1px solid var(--website-line);
@@ -2012,9 +1889,6 @@
 @media (max-width: 760px) {
   .website-today { grid-template-columns: 1fr; padding: 13px; }
   .website-today-priority > .website-button { width: 100%; }
-  .website-today-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .website-today-metrics span:last-child { grid-column: 1 / -1; }
-  .website-business-controls:not([open]) > summary small { display: none; }
   .website-lead-inbox > header { display: grid; }
   .website-lead-counts { width: 100%; max-width: none; }
   .website-lead-capture-form,
@@ -2897,22 +2771,6 @@
   color: #fff;
 }
 
-/* A second copy of the white-on-primary pairing, and the reason fixing
-   `.theme-dark .website-button.is-primary` alone was not enough: this selector carries the
-   same specificity but is declared later, so it won and "Edit page" and "Save" stayed at
-   1.44:1 in dark mode while "Review edits" -- which only matches the base rule -- was
-   already fixed. Found by driving the builder into its editing state; the landing screen
-   never renders this action bar. */
-.theme-dark .website-primary-actions > .website-button.is-primary {
-  color: var(--website-bg);
-}
-
-.theme-dark .website-primary-actions > .website-button.is-primary:hover:not(:disabled) {
-  border-color: #3ad9a8;
-  background: #3ad9a8;
-  color: var(--website-bg);
-}
-
 .website-site-settings > summary::-webkit-details-marker {
   display: none;
 }
@@ -3250,6 +3108,7 @@
   }
 
   .website-heading[data-view="content"] p,
+  .website-heading[data-view="inquiries"] p,
   .website-heading[data-view="publish"] p {
     display: block;
     font-size: 0.75rem;
@@ -3513,34 +3372,6 @@
   }
 }
 
-/* Same white-on-mint pairing as the primary buttons: --website-green is a dark green in
-   light where white reads cleanly, and a bright mint in dark where white measures 1.44:1.
-   These two carry it on a hover state and a recovery action, both of which only appear in
-   states the landing screen never renders. */
-.theme-dark .website-notice-action:hover {
-  color: var(--website-bg);
-}
-
-/* THE SAME CASCADE TRAP AS #528 AND #530, third instance, found by tools/check_css_contracts.mjs
-   rule 3 rather than by eye. This rule is 0-2-1 and sits ~440 lines AFTER
-   `.website-recovery-actions > button.is-quiet` (:3031), which is ALSO 0-2-1, so source order
-   handed it the win and the quiet buttons' `color: var(--website-muted)` never rendered in dark.
-   Measured on the composited surface: the quiet button paints --website-panel #0d131b and was
-   getting --website-bg #05080d on it, which is 1.08:1 -- present in the DOM, invisible on screen.
-   As written it is --website-muted #a4b0be at 8.46:1. Those two buttons are "Cancel" and "Remove"
-   in the Website recovery panel, so this was a data-recovery control the owner could not read.
-   Scoped with :not(.is-quiet) rather than re-declaring the colour on a 0-3-1
-   `.theme-dark ... button.is-quiet`: raising specificity repairs the one rule that exists today
-   and leaves the trap armed for the next variant added, which is the reasoning #528 recorded.
-   The declaration is NOT redundant here -- unlike the two earlier instances it does real work and
-   could not simply be deleted. The base rule paints `color: #fff` on --website-green, which is a
-   bright mint in dark where white measures 1.44:1, so the flip is load-bearing for the plain
-   Download button; and `.is-danger` declares no colour of its own, so it takes --website-bg on
-   --website-danger #ff8291 from here too. Both keep it, byte-identical, because both still match. */
-.theme-dark .website-recovery-actions > button:not(.is-quiet) {
-  color: var(--website-bg);
-}
-
 /* 375px audit, deferred P2 sweep: the Website workspace's own controls kept desktop sizing
    on phones. The site-preview chrome (.preview-site-header nav, .preview-cta) is deliberately
    left out: it renders a miniature of the client's website, not product UI, and inherits the
@@ -3566,11 +3397,10 @@
 
 /* Design phase 1 — the owner's daily dashboard surfaces, raised off the
    6-10px micro-type floor (tribunal rank 9). */
-.website-today-metrics small, .website-lead-counts small { font-size: var(--font-size-xs); }
-.website-today-metrics strong { font-size: var(--font-size-display); }
+.website-lead-counts small { font-size: var(--font-size-xs); }
 .website-today-priority p, .website-lead-inbox p { font-size: var(--font-size-base); }
 .website-lead-list article small, .website-lead-capture-form label, .website-lead-review-controls label { font-size: var(--font-size-sm); }
-.website-business-controls > summary small, .website-start-tools > summary small, .website-start-tools > summary b { font-size: var(--font-size-xs); }
+.website-start-tools > summary small, .website-start-tools > summary b { font-size: var(--font-size-xs); }
 
 /* Design phase 1: un-trap the editor scroll on phones — mirrors the
    site-settings opt-out; only the preview iframe genuinely needs a viewport. */
@@ -3644,3 +3474,581 @@
 
 .website-primary-actions > .compact-disclosure { position: relative; }
 .website-primary-actions > .compact-disclosure > .website-preview-controls { position: absolute; right: 0; top: 100%; z-index: 30; min-width: 240px; padding: 8px; border: 1px solid var(--website-line); border-radius: 8px; background: var(--website-panel); }
+
+/* Sites workspace: pages, focused editing and live operational context share one
+   working surface. This implements the product UI; the public site can capture
+   the same real screens after the release candidate is accepted. */
+.website-status-disclosure { order: 2; }
+.website-start-tools { order: 5; }
+
+.website-status-disclosure[data-editing-routine='false'] {
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.75rem;
+  background: var(--website-panel);
+}
+
+.website-status-disclosure[data-editing-routine='false'] .website-today {
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, .72fr);
+  gap: 1.25rem;
+  border: 0;
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: radial-gradient(circle at 92% -20%, color-mix(in srgb, var(--website-panel) 72%, var(--website-green) 28%), transparent 40%), var(--website-panel);
+  box-shadow: none;
+}
+
+.website-status-disclosure[data-editing-routine='false'] .website-today-priority {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.875rem;
+}
+
+.website-status-disclosure[data-editing-routine='false'] .website-today-priority > .core-eyebrow,
+.website-status-disclosure[data-editing-routine='false'] .website-today-context { grid-column: 1 / -1; }
+.website-status-disclosure[data-editing-routine='false'] .website-today-priority h2 { margin: 0; font-size: 1rem; letter-spacing: -.02em; }
+.website-status-disclosure[data-editing-routine='false'] .website-today-priority p { max-width: none; font-size: .8125rem; line-height: 1.4; }
+.website-status-disclosure[data-editing-routine='false'] .website-today-priority > .website-button { grid-column: 2; grid-row: 2 / span 2; width: auto; margin: 0; }
+.website-status-disclosure[data-editing-routine='false'] .website-today-signals { display: grid; }
+
+.website-workflow-rail {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.75rem;
+  padding: 0;
+  background: color-mix(in srgb, var(--website-panel) 84%, var(--website-bg) 16%);
+  list-style: none;
+}
+
+.website-workflow-rail > li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.website-workflow-rail > li + li { border-left: 0.0625rem solid var(--website-line); }
+.website-workflow-rail > li:nth-child(3) { border-left: 0; }
+.website-workflow-rail > li:nth-child(n + 3) { border-top: 0.0625rem solid var(--website-line); }
+.website-workflow-rail > li[data-state='current'] { background: var(--website-green-soft); }
+
+.website-workflow-rail > li > span {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border: 0.0625rem solid var(--website-line-strong);
+  border-radius: 50%;
+  background: var(--website-panel);
+  color: var(--website-muted);
+  font-size: 0.6875rem;
+  font-weight: var(--font-weight-bold);
+}
+
+.website-workflow-rail > li[data-state='complete'] > span,
+.website-workflow-rail > li[data-state='current'] > span {
+  border-color: var(--website-green);
+  background: var(--website-green);
+  color: #fff;
+}
+
+.website-workflow-rail > li > div { min-width: 0; display: grid; gap: 0.125rem; }
+.website-workflow-rail small { color: var(--website-quiet); font-size: 0.625rem; font-weight: var(--font-weight-bold); letter-spacing: 0.04em; text-transform: uppercase; }
+.website-workflow-rail strong { color: var(--website-ink); font-size: 0.75rem; line-height: 1.3; overflow-wrap: anywhere; }
+.website-workflow-rail > li[data-state='waiting'] { opacity: 0.64; }
+
+.website-action-bar {
+  order: 3;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.website-workspace-grid,
+.website-workspace-grid.view-publish { order: 4; }
+
+.website-action-context {
+  min-width: 0;
+  display: grid;
+  gap: 0.125rem;
+}
+
+.website-action-context strong {
+  overflow: hidden;
+  color: var(--website-ink);
+  font-size: .875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.website-action-context span {
+  overflow: hidden;
+  color: var(--website-quiet);
+  font-size: .75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.website-work-surface > .website-editor-workbench {
+  width: 100%;
+}
+
+.website-editor-workbench {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 11.875rem minmax(30rem, 1fr) 15.625rem;
+  align-items: start;
+  gap: 0.75rem;
+}
+
+.website-page-rail,
+.website-editor-insights {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.625rem;
+}
+
+.website-page-rail {
+  position: sticky;
+  top: 0.75rem;
+  overflow: hidden;
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.75rem;
+  background: var(--website-panel);
+}
+
+.website-page-rail-head {
+  min-height: 3.375rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.625rem;
+  border-bottom: 0.0625rem solid var(--website-line);
+  padding: 0.625rem 0.75rem;
+}
+
+.website-page-rail-head span {
+  color: var(--website-ink);
+  font-size: .875rem;
+  font-weight: var(--font-weight-black);
+}
+
+.website-page-rail-head button {
+  width: 2rem;
+  height: 2rem;
+  border: 0.0625rem solid var(--website-line-strong);
+  border-radius: 0.5rem;
+  background: var(--website-panel);
+  color: var(--website-green);
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+.website-page-list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.4375rem;
+  list-style: none;
+}
+
+.website-page-list > li > button {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.125rem 0.5rem;
+  border: 0.0625rem solid transparent;
+  border-radius: 0.5625rem;
+  padding: 0.625rem;
+  background: transparent;
+  color: var(--website-muted);
+  text-align: left;
+}
+
+.website-page-list > li > button:hover,
+.website-page-list > li > button.is-active {
+  border-color: color-mix(in srgb, var(--website-green) 18%, var(--website-line));
+  background: var(--website-green-soft);
+  color: var(--website-ink);
+}
+
+.website-page-list > button:focus-visible,
+.website-page-rail-head button:focus-visible,
+.website-editor-section-picker > button:focus-visible {
+  outline: 0.125rem solid var(--website-green);
+  outline-offset: 0.125rem;
+}
+
+.website-page-list button span {
+  overflow: hidden;
+  font-size: .8125rem;
+  font-weight: var(--font-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.website-page-list button small {
+  grid-column: 1;
+  overflow: hidden;
+  color: var(--website-quiet);
+  font-size: .6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.website-page-list button i {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  border-radius: 62.4375rem;
+  padding: 0.1875rem 0.375rem;
+  background: var(--website-panel-raised);
+  color: var(--website-quiet);
+  font-size: .625rem;
+  font-style: normal;
+  text-transform: capitalize;
+}
+
+.website-page-list button i[data-stage='ready'] {
+  background: var(--website-green-soft);
+  color: var(--website-green);
+}
+
+.website-editor-workbench > .website-editor-panel {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.website-editor-workbench > .website-editor-panel > .website-editor-scroll {
+  overflow: visible;
+}
+
+.website-editor-insights {
+  position: sticky;
+  top: 0.75rem;
+}
+
+.website-insight-card {
+  display: grid;
+  gap: 0.75rem;
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.75rem;
+  padding: 0.875rem;
+  background: var(--website-panel);
+}
+
+.website-insight-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.625rem;
+}
+
+.website-insight-card > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.125rem;
+}
+
+.website-insight-card > header span,
+.website-inquiry-summary small {
+  color: var(--website-quiet);
+  font-size: .6875rem;
+}
+
+.website-insight-card > header strong {
+  color: var(--website-ink);
+  font-size: .9375rem;
+}
+
+.website-insight-card > header b {
+  min-width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 62.4375rem;
+  background: var(--website-green-soft);
+  color: var(--website-green);
+  font-size: .75rem;
+}
+
+.website-insight-card > header b.has-issues {
+  background: color-mix(in srgb, var(--website-warn) 12%, transparent);
+  color: var(--website-warn);
+}
+
+.website-insight-card p,
+.website-insight-card li {
+  margin: 0;
+  color: var(--website-muted);
+  font-size: .75rem;
+  line-height: 1.45;
+}
+
+.website-insight-card ul {
+  display: grid;
+  gap: 0.4375rem;
+  margin: 0;
+  padding-left: 1.0625rem;
+}
+
+.website-insight-card > a {
+  color: var(--website-green);
+  font-size: .75rem;
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
+.website-inquiry-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.0625rem;
+  overflow: hidden;
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.5625rem;
+  background: var(--website-line);
+}
+
+.website-inquiry-summary span {
+  min-width: 0;
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.5rem 0.3125rem;
+  background: var(--website-panel);
+  text-align: center;
+}
+
+.website-inquiry-summary strong { color: var(--website-ink); font-size: .875rem; }
+
+.website-editor-section-picker {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  border: 0;
+  border-radius: 0.625rem;
+  padding: 0.25rem;
+}
+
+.website-editor-section-picker > button {
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 0.4375rem;
+  padding: 0.4375rem 0.625rem;
+  background: transparent;
+  color: var(--website-muted);
+  font-size: .75rem;
+  font-weight: var(--font-weight-bold);
+}
+
+.website-editor-section-picker > button:hover,
+.website-editor-section-picker > button.is-active {
+  background: var(--website-panel);
+  color: var(--website-green);
+  box-shadow: 0 0.0625rem 0.25rem rgba(23, 33, 28, .08);
+}
+
+@media (max-width: 73.75rem) {
+  .website-editor-workbench { grid-template-columns: 11.25rem minmax(0, 1fr); }
+  .website-editor-insights {
+    position: static;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 47.5rem) {
+  .website-action-bar { grid-template-columns: 1fr; }
+  .website-action-context,
+  .website-save-state,
+  .website-primary-actions { grid-column: 1; }
+  .website-action-context { grid-row: 1; }
+  .website-save-state { grid-row: 2; }
+  .website-primary-actions { grid-row: 3; }
+
+  .website-editor-workbench { grid-template-columns: minmax(0, 1fr); }
+  .website-page-rail { position: static; }
+  .website-page-list {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+  .website-page-list > li { min-width: 10rem; scroll-snap-align: start; }
+  .website-editor-insights { grid-column: 1; grid-template-columns: minmax(0, 1fr); }
+
+  .website-status-disclosure[data-editing-routine='false'] .website-today,
+  .website-status-disclosure[data-editing-routine='false'] .website-today-priority { grid-template-columns: minmax(0, 1fr); }
+  .website-status-disclosure[data-editing-routine='false'] .website-today-priority > .website-button { grid-column: 1; grid-row: auto; width: 100%; }
+}
+
+@media (max-width: 32.5rem) {
+  .website-editor-section-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .website-workflow-rail { grid-template-columns: minmax(0, 1fr); }
+  .website-workflow-rail > li + li { border-top: 0.0625rem solid var(--website-line); border-left: 0; }
+}
+
+/* Sites workspace navigation and inquiry operations. Pages, inquiries and
+   publishing are peer jobs; the inbox is no longer buried in a disclosure. */
+.shell-nav-icon[data-icon="pages"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Crect x='3.75' y='4.25' width='16.5' height='12.5' rx='1.5'/%3E%3Cpath d='M8 20h8M12 16.75V20'/%3E%3C/svg%3E");
+}
+
+.shell-nav-icon[data-icon="inquiries"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Cpath d='M4 5.25h16v11.5H9l-5 3v-14.5Z'/%3E%3Cpath d='M8 9h8M8 12.5h5'/%3E%3C/svg%3E");
+}
+
+.website-mode-nav {
+  order: 1;
+  width: max-content;
+  max-width: 100%;
+  min-height: 3.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow-x: auto;
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.75rem;
+  padding: 0.25rem;
+  background: var(--website-panel);
+}
+
+.website-mode-nav > button {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0 0.875rem;
+  background: transparent;
+  color: var(--website-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.website-mode-nav > button:hover:not(:disabled),
+.website-mode-nav > button[aria-current='page'] {
+  background: var(--website-green-soft);
+  color: var(--website-green);
+}
+
+.website-mode-nav > button:focus-visible {
+  outline: 0.125rem solid var(--website-green);
+  outline-offset: 0.125rem;
+}
+
+.website-mode-nav > button:disabled { cursor: not-allowed; opacity: 0.48; }
+.website-mode-nav > button > span {
+  min-width: 1.375rem;
+  min-height: 1.375rem;
+  display: grid;
+  place-items: center;
+  border-radius: 62.4375rem;
+  background: var(--website-green);
+  color: #fff;
+  font-size: 0.6875rem;
+}
+
+@media (min-width: 841px) {
+  .sites-product-shell .website-mode-nav { display: none; }
+}
+
+.website-inquiry-workspace {
+  order: 2;
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+
+.website-inquiry-workspace-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.48fr);
+  align-items: end;
+  gap: 1.5rem;
+  border-bottom: 0.0625rem solid var(--website-line);
+  padding: 0.25rem 0 1rem;
+}
+
+.website-inquiry-workspace-head > div:first-child,
+.website-inquiry-card-head { min-width: 0; display: grid; gap: 0.375rem; }
+.website-inquiry-workspace h2,
+.website-inquiry-workspace h3 { margin: 0; color: var(--website-ink); letter-spacing: -0.025em; }
+.website-inquiry-workspace h2 { font-size: clamp(1.25rem, 2vw, 1.75rem); }
+.website-inquiry-workspace h3 { font-size: 1rem; }
+.website-inquiry-workspace p { margin: 0; color: var(--website-muted); font-size: 0.8125rem; line-height: 1.5; }
+
+.website-inquiry-workspace-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(17.5rem, 0.62fr) minmax(26rem, 1.38fr);
+  align-items: start;
+  gap: 0.875rem;
+}
+
+.website-inquiry-card {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+  border: 0.0625rem solid var(--website-line);
+  border-radius: 0.875rem;
+  padding: 1rem;
+  background: var(--website-panel-raised);
+  box-shadow: 0 0.5rem 1.5rem rgba(23, 33, 28, 0.035);
+}
+
+.website-inquiry-capture .website-lead-capture-form {
+  grid-template-columns: minmax(0, 1fr);
+  border-top: 0;
+  padding-top: 0;
+}
+
+.website-inquiry-card .website-lead-capture-form input:not([type='checkbox']),
+.website-inquiry-card .website-lead-capture-form textarea,
+.website-inquiry-card .website-lead-review-controls input { min-height: 2.75rem; font-size: 0.875rem; }
+.website-inquiry-card .website-lead-capture-form > .website-button { width: 100%; min-height: 2.75rem; }
+.website-inquiry-queue-head { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.website-inquiry-queue-head > .website-lead-export { align-self: start; }
+.website-inquiry-card .website-lead-review-controls { border: 0; padding: 0; }
+.website-inquiry-card .website-lead-list { max-height: min(36rem, calc(100svh - 23rem)); overflow-y: auto; scrollbar-gutter: stable; padding-right: 0.125rem; }
+.website-inquiry-card .website-lead-list article { padding: 0.875rem; }
+.website-inquiry-card .website-lead-list article > div:last-child > button { min-height: 2.75rem; }
+.website-lead-empty { display: grid; gap: 0.25rem; }
+.website-lead-empty strong { color: var(--website-ink); }
+
+.website-insight-card > button {
+  width: max-content;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--website-green);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+@media (max-width: 56rem) {
+  .website-inquiry-workspace-head,
+  .website-inquiry-workspace-grid { grid-template-columns: minmax(0, 1fr); }
+  .website-inquiry-workspace-head { align-items: start; }
+  .website-inquiry-card .website-lead-list { max-height: none; overflow: visible; padding-right: 0; }
+}
+
+@media (max-width: 32.5rem) {
+  .website-mode-nav { width: 100%; }
+  .website-mode-nav > button { flex: 1 0 auto; min-height: 2.75rem; }
+  .website-inquiry-workspace-head { gap: 1rem; }
+  .website-inquiry-card { padding: 0.875rem; }
+  .website-inquiry-queue-head { grid-template-columns: minmax(0, 1fr); }
+  .website-inquiry-queue-head > .website-lead-export { width: 100%; }
+}

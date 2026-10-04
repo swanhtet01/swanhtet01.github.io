@@ -51,6 +51,7 @@ const AUTH_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const AUTH_CODE = /^[A-Za-z0-9._~-]{16,2048}$/
 const AUTH_TOKEN = /^[A-Za-z0-9._~-]{16,16384}$/
 const ALL_ZERO_HEX = /^0+$/
+const MANAGED_BOOTSTRAP_TIMEOUT_MS = 8000
 
 /**
  * Opaque random hex for a W3C trace/span id — never derived from request
@@ -3481,13 +3482,27 @@ export async function saveManagedPlantEquipmentMaintenanceStrategy(request: {
 }
 
 export async function loadManagedBootstrap(expectedIdentity?: ManagedIdentity) {
-  const bootstrap = await authorizedRequest<ManagedBootstrap>(
-    '/api/trial/v1/bootstrap',
-    {},
-    true,
-    expectedIdentity,
-  )
-  return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
+  try {
+    const bootstrap = await authorizedRequest<ManagedBootstrap>(
+      '/api/trial/v1/bootstrap',
+      {
+        cache: 'no-store',
+        redirect: 'error',
+        credentials: 'omit',
+        signal: AbortSignal.timeout(MANAGED_BOOTSTRAP_TIMEOUT_MS),
+      },
+      true,
+      expectedIdentity,
+    )
+    return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new ManagedTrialError('Company account took too long to respond. Try again.', {
+        code: 'managed_bootstrap_timeout',
+      })
+    }
+    throw error
+  }
 }
 
 export async function loadManagedCompanyBrief(
@@ -3717,11 +3732,24 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
   if (!isRecord(order)) {
     throw errorManagedOrderIntentInvalid('The managed Shop order intent could not be isolated from the reviewed action.')
   }
+  const completesAtCounter = order.status === 'completed' && order.paymentStatus === 'reconciled'
+  const staysOpen = order.status === 'confirmed' && order.paymentStatus === 'pending'
+  if (!completesAtCounter && !staysOpen) {
+    throw errorManagedOrderIntentInvalid('The managed Shop order must be either open or fully reviewed at the counter.')
+  }
   const advancedFields = [
     'sourceRecordId', 'evidenceReference', 'promotionDecision', 'shippingDecision',
     'taxDecision', 'paymentDecision', 'returns', 'supportCases', 'corrections',
   ]
   if (advancedFields.some((field) => order[field] !== undefined)) return null
+  const completionFields = [
+    'advancementActionIds', 'completion', 'paymentReconciledAt',
+    'paymentReconciliationActionId', 'paymentReconciledBy',
+    'paymentReconciliationReason', 'paymentEvidenceReference',
+  ]
+  if (staysOpen && completionFields.some((field) => order[field] !== undefined)) {
+    throw errorManagedOrderIntentInvalid('The managed Shop open order contains counter-completion fields.')
+  }
   if (!Array.isArray(order.lines)
     || !order.lines.length
     || order.lines.some((line) => !isRecord(line)
@@ -3752,6 +3780,9 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
     }
     paymentTermsDays = days
   }
+  if (completesAtCounter && (paymentTermsDays !== 0 || order.channel !== 'Walk-in' || order.fulfilment !== 'pickup')) {
+    throw errorManagedOrderIntentInvalid('Managed counter completion requires a Walk-in pickup sale with immediate payment terms.')
+  }
   return {
     orderId: order.id,
     customer: order.customer,
@@ -3761,6 +3792,7 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
     fulfilmentReference: order.fulfilmentReference,
     promisedAt: order.promisedAt,
     paymentTermsDays,
+    ...(completesAtCounter ? { completeAtCounter: true } : {}),
     lines: order.lines.map((line) => ({
       sku: (line as Record<string, unknown>).sku,
       quantity: (line as Record<string, unknown>).quantity,

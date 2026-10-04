@@ -35,10 +35,10 @@ export function verifyCurrentReleaseAssets({
   activationRunbookChunk,
 }) {
   const groups = [
-    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Website', 'Ecommerce', 'Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.', 'Saved on this device.', 'Welcome back', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Website', 'Ecommerce', 'Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.', 'Welcome back', 'Sign in to your business.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['guided_outcomes', productOnboardingChunk, ['Add your first product', 'Continue to catalog', 'Run a sample production job', 'Create Plant and open the job', 'Prepare your business website', 'Continue to website setup', 'Set up your online store', 'Continue to store setup']],
     ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'Prepare your business content to continue.', 'First useful result:', 'Saves your setup, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
-    ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'One review records payment, handoff, stock, and the order record.', 'Keep as open order', 'Create order', 'Creates an open order; payment and handoff stay for Orders.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'It does not charge a wallet or card', 'No payment is captured']],
+    ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'Keep as open order', 'Create order', 'Counter context', 'Simple stock', 'Cashier set at review', 'Jobs', 'Problems', 'Record output', 'Close shift', 'This device records the sale, payment review, handoff and stock.', 'It does not charge or message anyone']],
     ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose a workflow or import your data.', 'Make ', ' mine', 'Your data', 'Upload your CSV to review and import your data.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
     ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
@@ -61,7 +61,7 @@ export function verifyCurrentReleaseAssets({
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
-  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
+  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.', 'Saved on this device.']) {
     checks += 1
     if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
   }
@@ -593,11 +593,9 @@ if (!operationsChunk.includes('Other products')
   || !assetCorpus.includes('.stock-record-content')
   || !assetCorpus.includes('.data-row.stock-empty-row')) throw new Error('missing_live_shop_stock_worklist_contract')
 for (const required of [
-  'Browser-local sample only.',
-  'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
-  'It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.',
-  'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
-  'No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.',
+  'This device records the sale, payment review, handoff and stock.',
+  'This device creates the order and reserves stock. Payment and fulfilment stay pending.',
+  'It does not charge or message anyone, or write to a company account.',
 ]) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_shop_counter_local_boundary:${required}`)
 }

@@ -37,7 +37,10 @@ const corpusPaths = [
   'package.json',
   ...collectSourceFiles('showroom/src', []),
 ]
-const corpus = corpusPaths.map(read).join('\n')
+// JSX escapes ampersands in source, while operators see the decoded label.
+// Ground playbook tokens against that rendered text without weakening any
+// route, field, or contract lookup.
+const corpus = corpusPaths.map((path) => read(path).replaceAll('&amp;', '&')).join('\n')
 const manifest = JSON.parse(read('site-manifest.json'))
 const generator = read('tools/create_public_vercel_output.mjs')
 const productSetup = read('showroom/src/core/product-setup.ts')
@@ -52,7 +55,11 @@ check(manifest.release?.productionDomain === 'https://supermega.dev', 'manifest_
 // The public surface presents products through screenshots and one Login.
 // Historical contact links below remain valid app/support routes, not public CTAs.
 check(generator.includes('href="https://app.supermega.dev/login">Login</a>'), 'generator_single_login_route')
-check(generator.includes('class="platform-image"'), 'generator_product_screenshots')
+check(generator.includes('class="platform-gallery"')
+  && generator.includes('class="platform-slides"')
+  && generator.includes('class="platform-gallery-controls"')
+  && generator.includes('type="radio" name="${id}-screens"')
+  && generator.includes('item.screens.map('), 'generator_product_screenshots')
 check(!generator.includes('function assistedSetupAction('), 'generator_setup_funnel_removed')
 check(!generator.includes('Open Shop Profit Control'), 'generator_profit_control_action_removed')
 check(generator.includes('href="/contact/">Contact</a>'), 'generator_contact_footer')

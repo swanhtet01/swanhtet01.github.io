@@ -153,7 +153,7 @@ export function SignupPage() {
       navigate(selectedProduct === 'commerce' ? selectedProductChoice.workspacePath : selectedProductChoice.setupPath)
     } catch (error) {
       setNoticeTone('error')
-      setNotice(error instanceof Error ? error.message : 'The trial could not be started.')
+      setNotice(error instanceof Error ? error.message : 'The workspace could not be created.')
     } finally {
       setBusy(false)
     }
@@ -163,7 +163,7 @@ export function SignupPage() {
     const url = URL.createObjectURL(new Blob([trialSignupClaimFile(record)], { type: 'application/json' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = `supermega-trial-${record.claimCode}.json`
+    link.download = `supermega-workspace-${record.claimCode}.json`
     document.body.append(link)
     link.click()
     link.remove()
@@ -175,7 +175,7 @@ export function SignupPage() {
       <div>
         <h2>{managedDoor?.label}</h2>
         <p>{managedDoor?.detail}</p>
-        <p>Trial reference: <strong>{record.claimCode}</strong>. Not a password or proof of account access.</p>
+        <p>Workspace reference: <strong>{record.claimCode}</strong>. Not a password or proof of account access.</p>
       </div>
       <div className="managed-login-actions">
         {managedDoor?.action === 'sign-in'
@@ -190,17 +190,17 @@ export function SignupPage() {
     const existingProduct = trialSignupProductChoice(existing.product)
     return (
       <div className={entryClassName}>
-        <PageHeading eyebrow="Your trial" title="Your local trial" copy="Continue on this device." />
-        <section className="managed-login-panel" aria-label="Current trial">
+        <PageHeading eyebrow="Your workspace" title="Continue working" copy="Open the workspace saved on this device." />
+        <section className="managed-login-panel" aria-label="Saved workspace">
           <div>
             <h2>{existing.businessName}</h2>
             {carriedOver
-              ? <p>Existing Shop data: <strong>nothing was overwritten</strong>. Back up before using reset.</p>
-              : <p>Your {existingProduct.label} trial is ready to continue.</p>}
+              ? <p>Existing Shop data was preserved. Review storage and backups in company controls.</p>
+              : <p>Your {existingProduct.label} workspace is ready.</p>}
           </div>
           <div className="managed-login-actions">
             <Link className="core-button primary" to={existingProduct.workspacePath}>Open my {existingProduct.label}</Link>
-            <Link className="core-button" to="/settings/#controls">{carriedOver ? 'Reset this device' : 'Company controls'}</Link>
+            <Link className="core-button" to="/settings/#controls">Company controls</Link>
           </div>
         </section>
         {managedPanel(existing)}
@@ -210,20 +210,20 @@ export function SignupPage() {
 
   return (
     <div className={entryClassName}>
-      <PageHeading eyebrow="Get started" title={`Start with ${selectedProductChoice.label}.`} copy="Accounts or local samples." />
+      <PageHeading eyebrow="Get started" title={`Start with ${selectedProductChoice.label}.`} copy="Sign in, request access, or create a private workspace on this device." />
       <section className="managed-login-panel" aria-label="Company account">
         <div>
-          <h2>Company account</h2>
+          <h2>Sign in</h2>
           <p>{ACCOUNT_REQUEST_DETAIL}</p>
         </div>
         <div className="managed-login-actions">
-          <a className="core-button" href={managedAccountRequestUrl(selectedProductChoice.slug)}>Request company account</a>
-          {managedReady ? <Link className="core-button" to={managedAccountPath('/login', selectedProductChoice.slug)}>Existing account? Sign in</Link> : null}
+          {managedReady ? <Link className="core-button primary" to={managedAccountPath('/login', selectedProductChoice.slug)}>Sign in</Link> : null}
+          <a className="core-button" href={managedAccountRequestUrl(selectedProductChoice.slug)}>Request access</a>
         </div>
       </section>
       <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void startTrial(event)}>
         <div>
-          <h2>Or try a local sample</h2>
+          <h2>Create a workspace on this device</h2>
           <p>{selectedProductChoice.outcome} No company account, team sync, or cloud backup.</p>
         </div>
         {/* Design phase 2 item 11: startTrial's failures are storage/provisioning errors, not a
@@ -255,15 +255,15 @@ export function SignupPage() {
         </details>
         <label className="signup-consent">
           <input checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} type="checkbox" />
-          <span>I accept the SuperMega trial terms. My choice stays on this device.</span>
+          <span>I accept the SuperMega workspace terms. My choice stays on this device.</span>
         </label>
         <details className="signup-consent-terms">
-          <summary>Read the trial terms ({TRIAL_TERMS.length} plain-language points)</summary>
+          <summary>Read the workspace terms ({TRIAL_TERMS.length} plain-language points)</summary>
           <ol>
             {TRIAL_TERMS.map((term) => <li key={term.title}><strong>{term.title}.</strong> {term.body}</li>)}
           </ol>
         </details>
-        <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Preparing your workspace...' : `Try ${selectedProductChoice.label} on this device`}</button>
+        <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Preparing your workspace...' : `Create ${selectedProductChoice.label} workspace`}</button>
         <p className="form-notice" data-tone={noticeTone} id="signup-notice" role="status">{notice}</p>
       </form>
     </div>

@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.34
+Version: 1.2.75
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
-Updated: 2026-09-30
-Status: ACTIVE — the current release and first shared-shell redesign are live; authenticated founder, customer and commercial acceptance remain incomplete
+Updated: 2026-10-04
+Status: ACTIVE — PR #639 remains the integration candidate at product head `b2b41910`. Shop now keeps unfinished managed Counter work in device storage scoped to the exact workspace and signed-in user, while preserving the legacy local-device key, checkout lock, stale-tab detection and recorded-order reconciliation. This closes reload recovery on the same device; it does not claim cross-device server persistence. The canonical local build and aggregate verifier pass under the unchanged artifact cap. Exact-head dependency audits, kernel verification and GitGuardian pass; App CI is still running. No immutable replacement, hosted founder acceptance, eligible independent review, merge, deployment or live-domain change has occurred. The earlier READY Vercel candidate at `5a572ff4` remains superseded. Provider readback still establishes one unconfirmed founder Auth identity and three active memberships; authenticated discovery, save/reload, recovery, isolation and customer/commercial acceptance remain incomplete.
 
 ## 1. Controlling objective
 
@@ -16,23 +16,32 @@ This is the maintained project brief. It does not override higher-priority instr
 
 ### Replacement objective for the active Codex goal
 
-> Execute the SuperMega company and platform goal defined in `C:/Users/thesw/Projects/supermega-platform-worktrees/paired-preview-navigation-20260919/supergoal.md`. Read its current version at meaningful planning and release transitions. Build, verify and maintain Shop, Sites, Commerce, the public site, and the internal commercial and AI operating systems through real customer outcomes. Prioritize incidents and release blockers, then complete the customer lifecycle and revenue operations. Continue useful authorized work autonomously, preserving founder approval for final production releases, live database writes, IAM/access changes, spending and customer contact. Keep evidence, next actions and this brief current. Do not mistake local tests, plans, running services or generated drafts for hosted/customer acceptance. Complete defined milestones only when their acceptance evidence exists; maintain the ongoing company mission through successive measurable milestones.
+> Execute the repository-root `supergoal.md` in the verified active SuperMega checkout. Deliver dependable Shop, Sites, Commerce and public customer journeys, and build the internal machinery that operates them. Close demonstrated release defects; while external acceptance is pending, qualify existing VPS capacity, run one constrained engineering job and one evaluated R&D experiment, then scale only on accepted results and measured cost. Reuse existing systems, preserve customer and trading workloads, and keep evidence and next actions current. Respect founder authority for production, access, spending and customer contact. Local tests, running services and generated drafts do not establish hosted or customer acceptance.
 
-The absolute path identifies this checkout. If the repository moves, verify the new checkout and update the thread reference and this paragraph together. Maintain one canonical file; link to it rather than distributing conflicting copies. The current goal tool can change status but cannot edit an active objective's text; the replacement paragraph is ready for the owner's goal editor. Do not falsely complete the old goal to work around that limitation.
+Maintain this repository file through version control, not conflicting copies in separate worktrees. The current goal tool can change status but cannot edit an active objective's text. This replacement is ready for the goal editor; keep the existing goal active rather than falsely completing it to replace its text.
 
 ## 2. How to apply this document
 
 Use `docs/product-operating-principles.md` for durable design, architecture, cost and R&D decisions. Keep changing status here and receipts in the launch-control record rather than duplicating them across philosophy documents.
 
+Operating roles: Swan Htet remains founder and final owner. The OpenAI dot coordinates the CEO lane across company priorities, commercial preparation and cross-functional follow-through. The active Codex engineering lane operates as CTO for product architecture, implementation, reliability, release evidence and technical risk. These role labels organize work; they do not expand authority, create an independent reviewer or bypass founder and provider controls.
+
 ### Immediate delivery sequence
 
-Current owner direction (29 September): public marketing is English-only, concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The single founder identity and three private workspaces now exist, and the current app/public release has hosted acceptance. Founder confirmation, first sign-in and authenticated save/reload remain incomplete. Do not invent another public portal or move existing customer routes without a compatibility plan. Retain one fixed light technical identity and remove public theme controls. These instructions supersede older sample-led acquisition guidance.
+Current owner direction: public marketing is concise and focused on actual product tasks and interface screenshots. Public app hosts require Login; they must not fall back to local demos, samples, setup launchers or device-reset controls. Preserve existing records and recovery access. The owner designates app.supermega.dev for private founder showcase and R&D, entered through Login with swanhtet@supermega.dev. Keep Shop, Sites and Commerce workspaces separate; isolate experimental work from customer data. The fresh provider readback found one unconfirmed founder Auth identity and **three active memberships**. Historical hosted release checks do not accept later source changes. Auth identity and membership counts alone do not prove authenticated product access or save/reload. Retain one fixed light technical identity and remove public theme controls. Many customers are Burmese speakers: validate language comprehension in contact, onboarding and core operator tasks, then add a deliberate Myanmar-language layer where it helps; do not turn the concise homepage into duplicated prose by assumption.
 
-1. The latest approved paired production release completed on 30 September at `f9cfd10fbc7ec5d53072ff0e7aab9caaa01fb615` (workflow `36631267067`, PR622). Both Vercel projects are READY on that exact commit. Live readback reports managed mode, schema, audit and RLS ready, writes enabled and Supabase token authentication ready; the browser renders the real English-only Login form with no console errors. Production schema13 is verified; never replay the migration.
-2. Complete the private swanhtet@supermega.dev founder journey across the already assigned Shop, Sites and Commerce workspaces: use a current recovery email, set the password, sign in, save/reload each product and verify isolation/recovery. The account remains unconfirmed and has never signed in; do not call the founder showcase accepted yet.
-3. Qualify existing Contabo Windows capacity and workloads, or prepare an exact Linux alternative quote. Keep customer hosting separate; no purchase, reimage or worker installation is implied by a shortlist.
-4. Accept one useful internal worker job and one R&D catalog-mapping experiment, then expand roles based on measured usefulness and cost. The current local catalog-validator build has 589 passing tests and three skips; useful model output and VPS acceptance remain unproven.
-5. Align screenshots, product copy, business card and sales materials to the accepted release. Complete delivery/support and pricing evidence before outreach.
+1. Finish delivery evidence for the current product/public chain and its maintained control-record descendant: push once, let exact-head CI settle once, resolve that exact branch SHA, mint one replacement paired immutable app/public candidate there, then run a fresh founder-authenticated Today/Counter/Stock/Sites/Commerce save/reload/recovery/isolation journey. Preserve honest payment, stock and settlement states.
+2. The real-record operating hierarchy is now applied locally to Counter, Shop Today, Commerce Orders and Sites Pages. Shop Today exposes the existing reviewed accounting handoff after close and creates CSV bytes only when requested. Before close, Today now shows the exact adjusted Shop-record expectation, recorded payment-method split, unclosed order count and payment exceptions; exceptions route to review, otherwise the operator reaches the existing guarded count-and-close flow. It never prefills cashier counts or claims wallet/bank confirmation. Exact clean-head browser evidence proves the visible completed-close action downloads the bounded UTF-8 CSV with its schema, close ID, business date and review/no-posting boundary. It also proves a controlled `/sw.js`, sealed cache, intentional offline reload and restoration of the same Shop record and operator view. Commerce presents a real `Store`, collapses a confirmed empty checkout into a clear order state and waits for scoped cart restoration before customer actions; late empty recovery cannot erase a live selection. The exact local Store-to-Shop journey proves that one retained customer request opens the real Shop review, preserves every material line/payment field, records one accountable order, reserves stock once, survives reload and rejects duplicate replay. Sites can record a consented phone, message or in-person inquiry without first publishing a page contact action; portal read-only access remains locked. Prove these state changes through the hosted authenticated path and failure recovery before calling them hosted or customer accepted. Native Burmese cashier-critical comprehension remains the local Shop acceptance gap.
+3. Reconcile founder access from live provider state before any write. The fresh readback found three active memberships; do not provision replacements, resend the existing invitation or create a duplicate identity. In a fresh founder-authenticated session, verify that workspace discovery maps those memberships to the intended Shop, Sites and Commerce products, then prove Login, save/reload, isolation and recovery with a bounded managed runtime.
+4. For KBZPay, keep manual wallet review distinct from confirmed settlement. Source hardening at `d075fe34e` is local-test evidence only. Automatic collection needs current merchant-issued API terms, UAT callback verification, idempotent ledger reconciliation, amount/order matching and operational ownership before customer use.
+5. Public Commerce and Sites images now come from exact current product evidence. Add further gallery views only from exercised current routes; do not use mockups as product proof. After hosted founder acceptance is credible, create one capability-backed Basic/Free offer, Pro offer and Assisted Launch price card, then rehearse a Burmese-comprehensible contact/onboarding/support journey using authorized customer facts. Drafted assets are not published prices, outreach or customer acceptance.
+6. Continue the existing Contabo/workcell and catalog-mapping R&D lanes serially when they unblock delivery: read-only host capacity first, then one isolated useful worker job and one measured experiment. Preserve trading services, avoid duplicate orchestration stacks, and expand roles only on accepted output and measured cost.
+
+Regional benchmark rule: compare current Autumn and IrraTech product evidence for counter speed, offline operation, omnichannel order capture, inventory and purchasing, reporting, multi-branch control, migration/support and English/Myanmar usability. Treat vendor pages as claims until independently exercised. Match the table-stakes that materially close a customer job; differentiate through SuperMega's accountable loop of record, recommendation, reason, owner check, action and closure rather than copying menus or accumulating modules.
+
+Primary-source benchmark update, 4 October 2026: Autumn POS publicly claims English/Myanmar operation, offline sales, camera barcode scanning, receipts, customer/expense records, product and purchase management, returns, label printing and an Online Sale layer that joins social/web orders to in-store inventory. IRRATECH MYANMAR publicly claims barcode inventory, daily sales/cash summaries, multi-branch and role controls, social/web order tracking, migration/support tiers and restaurant workflows; its public pages do not establish offline selling or actual KBZPay/WavePay tender integration. The current first-party record does not prove that the historical “I-Ratte” name is the same legal entity as IRRATECH MYANMAR. Product implications, in order: visible offline save/sync/recovery; one sale-stock-payment-close loop; accountable Commerce-to-Shop packing and delivery; branch/staff controls; and guided migration plus Burmese setup/support. Claims remain research inputs until exercised.
+
+Current product-language guard (1 October): the reachable internal client builder is a real **client workspace** flow. It may create or load workspace templates and private client packages, but it must not advertise demos, trials, previews, sample-packet loaders or trial resets. The two synthetic Ecommerce packet builders were removed from the reachable Settings UI. Keep versioned `client_demo`, `managed_trial`, `preview` and storage identifiers only where changing them would break persisted data, APIs or compatibility; do not expose those identifiers as product language.
 
 Infrastructure shortlist: existing Contabo if inspection proves fit; Hetzner Linux cloud or DigitalOcean Droplets as alternatives. Compare the same RAM/CPU/storage, region, backups, tax and total monthly ceiling before recommending a purchase. The current Compose baseline reserves8GiB total; this is a resource budget, not a model-performance guarantee. Avoid new frameworks until a concrete missing capability is identified.
 
@@ -80,9 +89,9 @@ The owner-approved Supabase Auth invitation to swanhtet@supermega.dev was sent o
 
 ### Standing routine PR authority
 
-On29September the owner explicitly approved PR597 and future routine PR review/merge without repeated permission questions. When the sole-owner repository cannot supply an independent reviewer, preserve the approval count and last-push rule and use only the proven exact-user `pull_request` bypass actor for the exact merge; remove it in `finally` and verify the original ruleset. Required checks must pass at the exact head and strict base, and all review threads must be resolved. Never fabricate an independent review or broaden the bypass beyond pull-request merging. This does not authorize live database migrations, unrelated IAM changes, spending or customer contact. Reconcile production authority for each materially new deployment or managed change.
+The owner approved routine PR work without repeated permission questions. Review, save and push within that scope. Required checks and eligible review requirements still apply. Earlier bypass instructions are superseded: automatic approval review rejected the ruleset-bypass action; do not retry it, fabricate an independent reviewer or weaken protections. Continue useful independent work while an unchanged external review gate remains. Reconcile exact production authority before each materially new deployment or managed change.
 
-This is a dated snapshot, not a perpetual status assertion. Revalidate volatile facts before action.
+The table below is retained historical evidence from the PR622 release, not the current deployment inventory. Use the latest verified launch-control receipt and fresh provider state for release decisions; do not reuse these hashes as the latest release.
 
 | Area | Last known evidence | Limit or next verification |
 |---|---|---|
@@ -97,7 +106,7 @@ This is a dated snapshot, not a perpetual status assertion. Revalidate volatile 
 | Data/security advisors | Supabase is ACTIVE_HEALTHY on PostgreSQL17.6.1; all15 app_private tables exist with RLS. Current release validates the restricted runtime and separate read-only storage auditor | Review leaked-password protection, legacy factory_payroll SECURITY DEFINER grants,13 app RLS init-plan warnings and the reported Ecommerce FK index before a new managed change |
 | Website/Ecommerce | Setup completion now uses workspace=1, matching the product switcher. Local route tests 22/22, app build and artifact verifier PASS. Website model tests previously passed 15/15; offering component checks now pass 11/11 | Existing browser QA records preserved. Hosted database save/reload and denial passed for Sites and Commerce; valid UI submit/save/reload remains unproven. Remaining sample-led paths need review |
 | Payments | 24 focused Stripe tests and full kernel verification with490 tests passed locally, including exact raw-byte signatures, interrupted/oversized requests, redacted persistence errors and successful retry. Kernel lint has0 errors and61 warnings after the outreach regex repair | No live charge or hosted settlement acceptance established; warnings remain to assess |
-| Local AI | Local build local-build-20260929.2 matches the idle loopback worker; catalog validation/comparison added; 589 tests pass, three skips | Synthetic model extraction failed quality; RAM admission prevents retry. No paid fallback or accepted VPS worker |
+| Local AI | `local-agent-company` PR #4 exact head `40cf0473e5b31a51be260eff09f259a7663215ff` passes 614 current-source tests with three skips, CodeQL, GitGuardian and the complete Windows/Ubuntu Python 3.11–3.13 CI matrix. The sealed transfer has an offline integrity verifier | The retained package receipt records 609 extracted-package tests; target inventory, installation, restoration and one useful VPS job remain `NOT RUN`. Local RAM admission still prevents model retry; no paid fallback is authorized |
 | Corporate | Operating materials, acquisition pack and quote check exist | Last recorded Sheets write failed scope; no fresh cloud synchronization |
 | Commercial | No accepted installation or paid conversion established in this review | Global customer/revenue totals are unknown, not assumed zero |
 | Founder event | Owner confirmed12 October 2026,10:00–16:00 through TBS context | Bangkok timezone assumed; other-session access unknown |
@@ -115,11 +124,11 @@ Do not copy credentials, customer records, raw logs or the whole conversation in
 
 ## 4. Scope and settled product direction
 
-Customer-facing product names are Shop, Sites and Commerce. Sites replaces Website and Commerce replaces Ecommerce in presentation; retain website/ecommerce route IDs, API values and storage keys for compatibility. Shop covers the counter and stock; Sites covers business pages; Commerce covers online catalogs and orders. The public `supermega.dev` site explains these clearly. `app.supermega.dev` is the connected customer workspace. Additional subdomains require a clear audience and purpose; do not multiply portals to imitate organizational scale.
+Customer-facing product names are Shop, Sites and Commerce. Sites replaces Website and Commerce replaces Ecommerce in presentation; retain website/ecommerce route IDs, API values and storage keys for compatibility. Shop covers the counter and stock; Sites covers business pages; Commerce covers online catalogs and orders. The public `supermega.dev` site explains these clearly. `app.supermega.dev` is the Login-protected founder showcase and R&D entry designated by the owner; preserve existing authenticated product routes and workspace isolation. It is not a public demo launcher. Additional subdomains require a clear audience and purpose; do not multiply portals to imitate organizational scale.
 
 Plant is excluded from new customer acquisition and setup. Preserve retained records and recovery paths. SOL is a separate build: its public experience may inform requested research, but its code, infrastructure and customer data are outside this implementation scope.
 
-The owner replaced the green identity on 28 September with a fixed light technical palette and no theme toggle. The public site currently uses cobalt `#2454e6`, graphite `#171b26` and cool white `#f7f8fc`; the released shared app shell now uses indigo `#5b4ee8`, graphite `#151521` and cool white `#f6f7fb`. This is an active inconsistency, not a finished brand system. Reconcile the public site, all three products, business card and marketing assets around the released white/graphite/indigo direction before capturing final screenshots. Existing cobalt assets under `outputs/supermega-business-card/cobalt` remain historical working assets until replaced. Do not recolor screenshot pixels or imply that archived jade/cobalt assets are current. Use plain, confident language, short labels such as Login, clear hierarchy and fewer visible decisions. Remove generic AI hype, repeated approval prose and unsupported enterprise claims.
+The owner replaced the green identity on 28 September with a fixed light technical palette and no theme toggle. The current public-site manifest and shared app shell use indigo `#5b4ee8`, graphite `#151521` and cool white `#f6f7fb`; the public generator carries the same direction. Capture and verify current screenshots before treating the visual migration as hosted acceptance. Existing cobalt assets under `outputs/supermega-business-card/cobalt` remain historical working assets until replaced. Do not recolor screenshot pixels or imply that archived jade/cobalt assets are current. Use plain, confident language, short labels such as Login, clear hierarchy and fewer visible decisions. Remove generic AI hype, repeated approval prose and unsupported enterprise claims.
 
 No trial/demo/sample detours as the primary customer experience. Private synthetic fixtures and isolated staging remain necessary engineering tools. Content review before publication is legitimate; do not confuse it with a fake product demonstration. Never remove provenance labels from existing synthetic records merely to satisfy copy cleanup.
 
@@ -129,7 +138,7 @@ Serve a broad small-business audience with appropriate Myanmar language/payment/
 
 Owner direction, 28 September 2026: use visual exploration, interface images and deliberate design before substantial UI implementation. Make every product coherent, premium, simple to understand and effective in daily work. This applies to the public site, connected workspace, Shop, Sites, Commerce and internal operating tools. It is a maintained practice, not a one-off cosmetic redesign.
 
-The three owner-supplied SOL concepts (dashboard, boutique counter and appointment calendar) establish a craft reference: focused navigation, strong hierarchy, useful imagery, calm spacing and task-oriented panels. Transfer those qualities into SuperMega's white/graphite/cobalt identity. Do not copy SOL branding, customer identities, decorative slogans or permanent panels that do not help the task. SOL implementation remains separate.
+The three owner-supplied SOL concepts (dashboard, boutique counter and appointment calendar) establish a craft reference: focused navigation, strong hierarchy, useful imagery, calm spacing and task-oriented panels. Transfer those qualities into SuperMega's white/graphite/indigo identity. Do not copy SOL branding, customer identities, decorative slogans or permanent panels that do not help the task. SOL implementation remains separate.
 
 #### Required cycle for substantial UI work
 
@@ -168,11 +177,13 @@ These absolute paths are local working references. Preserve the selected source 
 
 On 30 September a second three-direction board compared Editorial Precision, Operator Console and Spatial Workspace for the connected Shop experience at `C:/Users/thesw/.codex/generated_images/01a0d249-2b5d-7d83-a769-79336eeb777c/exec-8dc10d33-d6f2-4147-b7f2-c18f05038255.png`. The delegated selection is a hybrid of Editorial Precision and Operator Console: calm white structure, one strong work canvas, compact priorities and contextual detail. It rejects the Spatial Workspace hero treatment because imagery competes with daily work. Incumbent research supports searchable checkout, unified inventory/orders/customer context, staff controls and embedded next actions; capability lists alone do not establish parity.
 
+On 1 October, the selected product reference sharpened the direction further: a white operating canvas, an unmistakable daily decision, compact status cards, practical tables and one contextual follow-up rail. SuperMega adopts the underlying interaction model—not its branding or illustrative business data. The implementation rule is: show the current decision and outcome first; group metrics by operational meaning; make the next useful action obvious; disclose advanced controls progressively; preserve real data, recovery and permission boundaries. Public product images may illustrate the workspaces, but the products themselves must satisfy the same hierarchy with actual state.
+
 Latest owner direction: improve the whole product with Apple-like restraint and polish, not cosmetic choices. Remove the skin dropdown and dark-mode controls. Converge on one consistent light white/graphite/indigo interface across the apps and public website. This supersedes the earlier selectable-skins proposal and the temporary public-site cobalt declaration. Keep reusable design tokens internally; do not expose appearance controls without a new user request. Ignore previously saved appearance preferences when rendering the app. Preserve business records.
 
 Design priorities: stronger typography and hierarchy, deliberate spacing, fewer borders and redundant labels, natural interaction feedback, and one clear next action. Retain essential status, accessibility and recovery information. Use the supplied SOL references as a quality benchmark; no wholesale brand cloning or new settings panels.
 
-PR622 implemented and released the selected Editorial Precision plus Operator Console hierarchy across the shared shell and Shop home: calmer fixed-light structure, clearer Priority/Continue flow, compact operating context and progressive disclosure. Its exact-head desktop and 390px journeys passed, including the corrected full borders on separated mobile metric cards. Next design action: remove remaining local-only Sample data/storage-risk presentation from the customer path, then carry the same interaction grammar into Sites and Commerce while preserving complete task behavior.
+PR622 implemented and released the selected Editorial Precision plus Operator Console hierarchy across the shared shell and Shop home. Current PR #639 source extends that fixed-light hierarchy through Stock, Counter and the redesigned Today operating desk. The local branch now also gives Commerce one real order/fulfilment decision surface and a clearer customer Store state, Sites one readiness-led Pages surface and Shop direct pre-close and post-close finance actions, replacing duplicated panels, preview language, empty post-confirmation forms and buried actions. This closes part of the AutumnPOS/IrraTech table-stakes gap while keeping external payment confirmation and external accounting posting explicit and unclaimed. The real Commerce catalog-to-Shop journey and Shop close queue now pass local acceptance. Next design action: validate native Burmese cashier comprehension and the hosted founder journey, then replace or add public images only from accepted exact product routes.
 
 ## 5. Authority, credentials and resource boundaries
 
@@ -205,8 +216,8 @@ Order: active security/data/money incident; release-blocking correctness; comple
 1. Complete fresh real-business setup acceptance: no invented data, real item entry/import, reload, preserved existing records and understandable storage boundaries. The founder Login route is hosted and clean; authenticated founder save/reload/recovery remains NOT RUN.
 2. Reconcile the public site, Shop, Sites, Commerce and current brand assets around the released white/graphite/indigo token direction; treat the current cobalt/indigo split as unfinished.
 3. Remove remaining local-only Sample data and storage-risk controls from the ordinary customer path without hiding genuine recovery or status evidence.
-4. Redesign Sites as a guided outcome flow: collect the minimum business facts, generate a coherent first site, make exact edits easy and keep publishing state/recovery explicit. Verify desktop and 390px behavior.
-5. Redesign Commerce around catalog readiness, orders, fulfillment and one clear next action. Preserve the corrected empty-catalog route into Shop Stock and verify real save/reload and order state.
+4. Prove the redesigned Sites Pages/inquiry and Commerce Orders/Store surfaces through exact-head CI, an immutable candidate and founder-authenticated save/reload/recovery/isolation. Then finish the remaining Sites publish and real Commerce catalog-to-Shop gaps using the same one-decision hierarchy.
+5. Close Shop cashier-critical Myanmar comprehension. Completed-close accountant export and Service Worker offline reload/restore now pass exact clean-head local browser acceptance; hosted and customer use remain unclaimed. Keep KBZPay as reviewed manual evidence until merchant API terms, UAT callback and idempotent amount/order reconciliation are proven.
 6. Deliver one consented real-business installation with an agreed task and acceptance criteria. Collect actual facts instead of inventing a cafe or shop.
 7. Convert accepted capability into a simple Basic/Pro or scoped-service offer with capability-backed pricing, delivery/support terms and current marketing assets before outreach.
 8. Automate the first repeated internal job with measured value, bounded authority, reliable failure handling and explicit operating cost.
@@ -256,6 +267,14 @@ Define each workflow's input schema, identity, state machine, idempotency, retry
 
 Reuse established Auth, PostgreSQL and hosting. Evaluate new frameworks against license, maintenance, operating cost, portability and integration burden. Avoid duplicate CRMs, identities and overlapping queues. Link business, operational job and result records with stable IDs rather than copying private data everywhere.
 
+### Template and customization contract
+
+Build capability primitives once, then assemble them through versioned template manifests: industry vocabulary, catalog/service shapes, fulfillment rules, content blocks, visual tokens, permissions and automation policies. A template may extend only declared slots; it cannot inject executable code, weaken tenant boundaries, or bypass validation. Customer facts and brand assets remain tenant data, never copied into a shared template.
+
+The shipped templates are maintained reference packs, not a ceiling. A custom solution begins with a schema-validated manifest and explicit capability choices, carries a stable version and migration path, and falls back safely when an optional product-specific presentation is absent. Product surfaces must consume the same manifest identifiers or a deliberate generic fallback; adding a vertical must not require a parallel Shop, Sites and Commerce application.
+
+Measure template quality through completed operator tasks, customer clarity, setup time, error/recovery rate, performance and support load. Promote a custom implementation into a reusable pack only after repeated evidence. "Infinite customization" means an extensible governed system, not unbounded per-customer forks.
+
 ## 11. Data safety and financial correctness
 
 Separate production, acceptance and local environments. Use least privilege in API and database layers. PostgreSQL RLS checks include allowed/denied access, cross-tenant attempts, role changes and stale identity. Never assume a client-side filter is a security boundary.
@@ -284,7 +303,7 @@ Use structured logs, correlation IDs and appropriate traces/error reporting. Ope
 
 Incident loop: detect → classify → contain within authority → preserve evidence → repair → verify → communicate where authorized → prevent recurrence. Automated analysis must not invent incidents or execute destructive remediation. Notify meaningful changes rather than repeated unchanged status.
 
-### Current coordinated work queue — 28 September
+### Current coordinated work queue — 30 September
 
 Use this compact queue, not a separate fleet or duplicate project board. This is an assignment sequence, not a claim that multiple agents are running.
 
@@ -297,14 +316,7 @@ Use this compact queue, not a separate fleet or duplicate project board. This is
 | Reliability operator | Deterministic checks with primary triage | An actionable signal tied to a version and affected task | Reproducible failure, severity, next action; no repeated unchanged alerts |
 | R&D engineer | Bounded review now; workcell experiment after capacity passes | Catalog-mapping experiment below | Baseline comparison, integrity checks, measured correction time, adopt/reject |
 
-**Actual staffing snapshot, 28 September:** primary operator plus one bounded
-strategy reviewer (review completed); no persistent specialist Codex workers.
-The local workcell reports15 registered roles,0 active jobs,0 running missions,
-0 resident role processes and0 loaded models. Coordinator identity matches.
-Available RAM1.38GiB is below the2.5GiB inference threshold despite the generic
-capacity endpoint reporting ready. These are measured runtime facts, not a
-claim that15 employees are working. Queue status `complete` alone does not
-establish quality acceptance. Preserve the four known quality failures.
+**Staffing and capacity, 30 September:** one active primary operator; no accepted persistent VPS development or R&D team. Registered roles are configurations, not working employees. The latest local coding admission measured 1,301,999,616 available bytes against 2,684,354,560 required and refused model launch. Installed tools and a generic ready flag do not override admission or quality checks. The read-only Windows capacity probe is prepared at `C:/Users/thesw/OneDrive - BDA/outputs/inspect-supermega-windows-capacity.ps1`; its local test is not Contabo evidence. Preserve known failed-quality outputs for diagnosis; do not present them as accepted work.
 
 One coordinator assigns and accepts work. Roles share a serial executor until
 measured capacity and workload isolation support scaling. Delegated reviews
@@ -315,9 +327,30 @@ verify workload isolation and capacity before deploying company agents there.
 
 The corporate task last reported a Sheets write-scope rejection; this is historical evidence, not a fresh authentication test. Do not restart its paused automation or resend unchanged requests. SOL retains separate ownership. Keep at most one bounded worker; review its result and return to zero workers before another assignment.
 
+### System ownership and reuse
+
+- **Product runtime:** existing Vercel/Supabase applications and isolated workspaces. A worker package is not a replacement for this hosting.
+- **Private engineering/R&D worker:** maintained `local-agent-company` source. PR #4 exact head `40cf0473e5b31a51be260eff09f259a7663215ff` passes CodeQL, GitGuardian, all six Windows/Ubuntu Python matrix legs and the required aggregate gate; current source passes 614 tests with three skips. Transfer `outputs/workcell-vps-67ecc89` independently verifies both archives, reconciles 125 source entries to 114 deployable files and retains its original 609-test extracted-package receipt. Target inventory, installation, restoration and a useful accepted VPS job remain `NOT RUN`.
+- **Corporate browser/voice service:** the separate `supermega-agent-company` Render service belongs to the `Automate SuperMega corporate ops` task. Its latest recorded report says browser-agent activation and a restricted Vapi key remain pending. Reconcile that task before changing the service; it is not evidence of an operating private dev team. No paid voice/model fallback is implied.
+- **Coordination:** one primary operator integrates evidence. Preserve paused automations and owner-controlled sessions. Do not create a second queue, service or framework merely because access to the existing one is temporarily unavailable.
+
+### Open-source adoption queue — updated owner objective
+
+The goal attachment adds a reuse shortlist; it does not require every tool to be installed. Evaluate one missing capability at a time against the existing system, maintenance burden, license, isolation and total operating cost. A repository description is not deployment or security acceptance.
+
+| Candidate | Concrete evaluation | Current decision |
+|---|---|---|
+| [Coolify](https://github.com/coollabsio/coolify) | Private application deployment management on an authenticated, qualified host | Evaluate after host access; do not replace functioning Vercel hosting merely to change tools |
+| [n8n](https://github.com/n8n-io/n8n) | One internal workflow needing connectors beyond the existing queue | Candidate only; upstream describes fair-code licensing, so inspect applicable license before embedding/reselling |
+| [PostHog](https://github.com/PostHog/posthog) | Product funnel and failure measurement tied to actual customer tasks | First inventory existing telemetry; define minimal events and privacy rules before adding SDK or session recording |
+| Ollama and Supabase | Reuse existing inference and product-data systems | Existing systems; no duplicate deployment implied, model and hosted acceptance remain separate |
+| Documenso, Cal.com, Penpot, NocoDB, Excalidraw, Immich, Plausible, AppFlowy, Listmonk, Dub | Retained owner-supplied candidates for signatures, scheduling, design, records, diagrams, media, analytics, knowledge, email and links | Not yet evaluated; choose only for a demonstrated gap, avoid parallel analytics/CRM/knowledge stores |
+
+Initial primary-source review covered Coolify, n8n and PostHog on30September. Next adoption deliverable is a bounded comparison against an observed workflow, with a data boundary, deployment requirements, acceptance test and removal path. Do not install a service to manufacture a department or claim a free unattended workforce.
+
 ### Founder product access and cloud capacity
 
-Provide one private founder login with assigned Shop, Sites and Commerce workspaces. Reconcile existing identity and memberships before provisioning; do not create duplicate accounts or expose shared passwords. Custom products appear only after deployment and access are verified. Owner confirmed swanhtet@supermega.dev for the founder account and company email. The approved founder invitation was sent on29September; last verified state was invited but unconfirmed. Reconcile the existing identity before any further provisioning; do not resend or create a duplicate based on the obsolete28September lookup. Keep personal email separate. devteam@supermega.dev is unverified. Complete hosted sign-in, product entry, save/reload and recovery before handing over an account as ready. Use owner-supplied content or honestly labelled illustrative content, never invented customer activity.
+Provide one private founder login with assigned Shop, Sites and Commerce workspaces. Reconcile existing identity and memberships before provisioning; do not create duplicate accounts or expose shared passwords. Custom products appear only after deployment and access are verified. Owner confirmed swanhtet@supermega.dev for the founder account and company email. The approved founder invitation was sent on29September; the fresh provider readback found one unconfirmed Auth identity and three active memberships. Verify the existing access through an authenticated founder session before any further provisioning; do not resend or create a duplicate based on obsolete lookups. Keep personal email separate. devteam@supermega.dev is unverified. Complete hosted sign-in, product entry, save/reload and recovery before handing over an account as ready. Use owner-supplied content or honestly labelled illustrative content, never invented customer activity.
 
 The owner accepts paid cloud capacity when local RAM limits useful work. Prefer existing Vercel, Supabase, Google Workspace and coding subscriptions; verify actual plans and remaining capacity before claiming they are paid for. Connected access alone does not establish billing entitlement. New spend requires a specific service, workload, monthly ceiling and owner confirmation. Automated local routing stays local-only until an exact cloud job is authorized; no silent paid fallback. Move a measured workload to cloud before adding another framework or fleet. Track cost per accepted result and a stop limit. Owner reports an existing Resend account; contact notification and acknowledgement code already uses Resend, but sender-domain verification, SMTP configuration, plan and delivery still require provider evidence. Private custom-product and R&D access must remain separate from publicly available products.
 
@@ -389,13 +422,13 @@ preserving every supplied price, currency, quantity and SKU?
    unflagged ambiguity. Adopt only with zero such failures and measured reduction
    in correction time versus baseline. Otherwise keep deterministic import.
 
-Status: deterministic baseline PASS on ten synthetic cases in
+Status: deterministic baseline PASS on eleven synthetic cases (including a two-row batch) in
 `tools/catalog_mapping_corpus.json`, exercised by `tools/test_catalog_mapping_baseline.mjs`.
 The existing importer is MMK-only; currency detection/conversion is not proven.
 Explicit currency columns now reject non-MMK or blank declarations. This does
 not implement conversion or all possible currency-labelled headers. The mapping-suggestion contract now binds proposals to the source digest, preserves
 deterministic mappings, rejects ambiguous choices and returns review-only previews.
-Recognized foreign-currency price headers are rejected. Next: compare real model
+Recognized foreign-currency codes and Unicode currency symbols in price headers are rejected. Evaluation requires the expected rejection reason, exact batch count and per-row expected values; malformed proposals cannot earn a passing negative-case score. Next: compare real model
 output against this contract on a capacity-qualified runtime. AI usefulness and operator time savings remain NOT RUN. R&D produces
 an adopt/reject result and a product change, not another strategy document.
 
@@ -405,7 +438,7 @@ an adopt/reject result and a product change, not another strategy document.
 |---|---|---|
 | M1 Coherent entry | No primary demo detours; consistent routes/copy; useful real-data setup | INCOMPLETE |
 | M2 Reliable hosted core | Verified login, tenant isolation, persistence, recovery and core task | UNPROVEN |
-| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | PASS for `f9cfd10f...` in hosted production via workflow `36631267067` |
+| M3 Authorized live release | Exact approved candidate promoted; real-domain checks pass | Historical release PASS; current PR638–641 stack pending. Use fresh exact-head CI, eligible review and provider receipts |
 | M4 Accepted installation | Consented business completes agreed task with reconciled records | UNPROVEN |
 | M5 Repeatable delivery | Offer, support, costs, payment evidence and reusable process | INCOMPLETE |
 | M6 Useful automation | Bounded jobs produce accepted results with recovery/measured value | PARTIAL local foundation |
@@ -414,6 +447,48 @@ an adopt/reject result and a product change, not another strategy document.
 Evidence labels: PASS, FAIL, BLOCKED, NOT RUN, UNKNOWN. Include environment and scope: local/source, CI, immutable preview, hosted production, customer or commercial. Never promote a narrow PASS into a broad completion claim.
 
 Milestone reviews identify requirement, revision/deployment, acceptance procedure, result, evidence location, reviewer where applicable and unresolved limits. A finite delivery milestone can complete; the company mission continues through subsequent measurable goals. Do not redefine success around whichever subset currently passes.
+
+### 2026-10-04 — Shop Today makes the cash-and-wallet close actionable
+
+- **PASS — truthful queue:** product commit `ebb82605f2ededfa43e53509c8fcff1dfe44cc02` replaces the generic finance shortcut with a Cash and wallet close queue. It reads the same close expectation used by the guarded close, shows adjusted MMK totals and sorted recorded payment-method amounts, counts ready orders and prioritizes payment exceptions.
+- **PASS — correct routing and evidence language:** exceptions route to the directly addressable, automatically open `#shop-payment-review` section; a clear queue routes to `#shop-close-controls`. The card states that values come from completed, reconciled Shop orders and that wallet/bank settlement is not independently confirmed. Existing cashier counts remain blank until entered and stale-state, variance-owner and reviewed-close safeguards are unchanged.
+- **PASS — consistency repair:** Shop profit control now uses `reconciledValue`, the exact adjusted close expectation, instead of raw order totals. This prevents the Today decision layer from disagreeing with the eventual close after returns or corrections.
+- **PASS — local verification:** the close suite passes 68 checks, anomaly flags 63 and workspace archive 42. Scoped component ESLint and application TypeScript pass. Exact clean source head `766f2e05f250f045f55625a5d30a06dfec215f7b` builds 293 modules and seals 37 offline files / 2,072,439 bytes. At the 629 px acceptance viewport, responsive commit `766f2e05` makes the queue span the rail; clicking it reaches the expanded payment-review section and the browser console is empty.
+- **PASS — aggregate verifier reconciled:** `2aea9958` updates the Shop guidance binding for the new `closeQueue` prop. `4904d070` updates the Ecommerce action binding for the existing `cartSessionReady` recovery guard. The full application build verifier now passes 108 Ecommerce buying checks, 347 Commerce checks and 352 production checks; neither product safeguard was weakened.
+- **BOUNDARY:** source, exact local build and scoped local rendered evidence only. No immutable Preview, hosted founder session, production/provider write, merge, payment, customer contact or customer acceptance occurred.
+- **NEXT:** the verifier chain is committed locally. Deliver and inspect exact-head CI once only after GitHub resolution returns; if required checks pass, bind one paired immutable candidate to that SHA and run founder-authenticated Shop/Sites/Commerce discovery, save/reload, recovery, isolation and Store-to-Shop acceptance. Native Burmese cashier-critical comprehension remains the next product-acceptance gap.
+
+### 2026-10-04 — Shop Counter keeps its table hierarchy at laptop width
+
+- **FAIL → FIXED — squeezed three-rail layout:** at 1280×720 the product name and price visibly fused because the workspace retained three columns after the product rail consumed part of the viewport. Commit `0a104fee` moves the follow-up rail below the catalog and current sale at 1360 px and below; only narrower tablet widths switch the catalog to its condensed row.
+- **PASS — measured local render:** at 1280×720 the live local build resolves to 620.8 px + 368 px operating columns, has zero horizontal overflow, zero overlap among the first product row's name/price/stock/action bounds and no console warning/error. The product table, selected basket, payment choice, order outcome and stock follow-up remain the existing real controls.
+- **PASS — contracts:** 17 Counter touch/focus/feedback checks and all 22 fixed-light/AA surface checks pass; the production build still transforms 293 modules and seals 37 offline files.
+- **BOUNDARY:** this is local source/build/render evidence. No hosted candidate, merge, provider write, deployment, customer session or customer acceptance occurred.
+- **NEXT:** retain the safe confirmed-verb cues below and obtain native review only for the still-pending contextual phrases before enabling them. Deliver the committed branch and inspect exact-head CI only after GitHub resolution returns, then bind the paired immutable candidate and run hosted founder acceptance.
+
+### 2026-10-04 — consequential cashier actions expose guarded Burmese cues
+
+- **PASS — bounded implementation:** commit `fa5ab867` adds a read-only `confirmedBurmese()` accessor and shows the already-confirmed verbs `ပြီးဆုံးမည်` (complete) and `သိမ်းမည်` (save) beneath the English Counter completion, Orders paid-and-handed-over and daily-close save actions.
+- **PASS — fail-closed language boundary:** the accessor returns Burmese only when the translation table status is exactly `confirmed`. Contextual drafts such as Payment, Review order, and the four work-mode labels remain English until a native speaker accepts their exact phrasing; no draft translation was promoted in this slice.
+- **PASS — local checks:** 17 Counter feedback/focus/touch checks, 22 fixed-light/AA checks, scoped ESLint, TypeScript, the 293-module build and rendered Counter/Orders inspection pass. Verifier commit `35763a75` updates the exact source bindings for the JSX entity and confirmed-only accessor; the aggregate verifier again passes 108 Ecommerce buying, 347 Commerce and 352 production checks. The 1280 px views have no horizontal overflow or console warning/error.
+- **BOUNDARY:** implemented local guidance is not native-user comprehension or customer acceptance. No sale, payment, order, close, provider, hosted or production write was triggered during inspection.
+- **NEXT:** native-review the pending cashier nouns/actions with exact screen context, then enable only accepted entries one by one. Continue product work on accountable Commerce-to-Shop status and Sites brief-to-review flow while GitHub DNS is unavailable.
+
+### 2026-10-04 — Sites shows one brief-to-file operating path
+
+- **PASS — product workflow:** commit `1c563dd869a59e7c7889ec1b9e0944ce9d40b5f3` replaces five disconnected status metrics with one state-derived Business brief → Pages → Review → Website file path. The current stage is visually distinct, completed stages are explicit and the status names the next owner. The rail adds no competing action or new persistence model.
+- **PASS — focused evidence:** 7/7 Sites status tests and 55 managed-brief acceptance checks pass, alongside scoped ESLint, application TypeScript and a 293-module production build. The rebuilt workspace was inspected at desktop and 390×844: all labels remain readable, the current step is clear and the browser emitted no warning or error.
+- **FAIL — remote CI drift:** PR #639 remote head `41302fc6` passes security, dependency, kernel and owner-gate checks, but SuperMega App CI stops in `Verify coordinated release and RLS guards`. Local reproduction identifies stale exact tokens in `prepare_release_integration_batch.mjs`; the historical integration manifest still names removed sample-language, layout and desk labels. This is a deterministic source-manifest repair, not a product regression or reason to weaken the guard.
+- **BOUNDARY:** this slice is local source, test, build and visual evidence. It did not create an immutable Preview, change Supabase/IAM, deploy, merge, contact a customer or establish hosted/customer acceptance.
+- **NEXT:** re-baseline the integration manifest only to current guarded source semantics, prove the drift test and full coordinated guard step, then push the resulting clean head once. Inspect exact-head CI once; only a passing SHA may produce the paired immutable app/public candidate and founder-authenticated cross-product acceptance.
+
+### 2026-10-04 — failed CI guard is repaired against current semantics
+
+- **FAIL → FIXED — exact token drift:** `50a75554` replaces retired sample-language, old Counter sizing and removed desk labels in the ordered integration manifest and live artifact verifier with the current device-local sale/order consequences, 520 px Counter contract, Shop operating view and Commerce operating status. `28918211` aligns the deploy-workflow meta-verifier to the same current safety contract.
+- **PASS — no guard deletion:** the repaired chain still checks every required token at committed HEAD, separates upstream/candidate authority, rejects detached CSS decoys and keeps merge/push/deploy/provider authority false. The live artifact self-test retains 131 checks across 14 groups.
+- **PASS — complete failed-step replay:** integration-batch 15/15, runner annotations 2/2, database URL/RLS self-test, 23-migration compatibility with 136 checks, coordinated-release self-test, deploy workflow with 161 checks and the public deployment guard all pass serially. The public guard still permits releases only from `main` through the owned workflow.
+- **BOUNDARY:** this is clean local source and CI-step evidence. GitHub has not evaluated the repaired head; no immutable candidate, hosted founder session, merge, deployment, provider write or customer acceptance is implied.
+- **NEXT:** bind one canonical build to the maintained final commit, push the clean chain once and inspect exact-head CI once. Only a green exact SHA may advance to paired immutable candidates and founder-authenticated Shop/Sites/Commerce acceptance.
 
 ## 18. Updating this file
 
@@ -431,6 +506,52 @@ Label future ambitions as future and proposals as proposals. Never present them 
 - Full exact-candidate CI, rendered journeys and separate hosted/customer acceptance are required.
 - One primary writer; at most one explicitly requested bounded reviewer. Local models remain memory-gated and scale-to-zero.
 - Keep product delivery, commercial operations and evaluated AI machinery in scope; do not substitute document or agent counts for outcomes.
+
+### 2026-10-01 — managed app entry and next operating slice
+
+The unauthenticated app root is a deliberately small Login entry. It must not
+read or display browser-saved workspace names, product setup state, samples,
+trials, reset actions or device-specific notices. Product cards appear only
+after managed authentication and only for assigned products. Direct product
+routes continue to enforce their existing access decisions; this entry cleanup
+does not grant access or migrate stored data.
+
+Source revision `d5374ff1c` implements this boundary. Local production build,
+lint and browser inspection passed: the root contains the SuperMega home link,
+Login and the sign-in message only. The change is pending the existing stacked
+PR release path and must not be described as deployed before exact-head CI,
+eligible review and provider promotion evidence exist.
+
+Next active operating slice: complete exact-head CI and immutable-candidate
+evidence for the integrated Counter, then implement the smallest atomic managed
+Counter completion contract without enabling the UI before idempotency, stock,
+payment, fulfilment and receipt tests pass. During an external release wait,
+the read-only VPS capacity and workload-isolation inspection may resume. No
+host install, model launch, paid fallback, customer action or infrastructure
+spend is implied by this sequence.
+
+### 2026-10-01 — visual platform direction
+
+The public and in-app visual baseline is a calm white canvas, graphite hierarchy and indigo action system: dense enough to make the next business decision visible, restrained enough to keep one primary task clear. Product screens should use practical dashboard patterns—measured signals, working queues, purposeful tables and concise follow-up—instead of decorative cards, empty space or generic AI copy. The public page explains the connected work loop in one compact, non-interactive rail before showing real implemented product surfaces. It must keep one Login entry, no promotional trial/demo/preview path and no fictional customer claim.
+
+This direction is a reusable standard, not a skin picker. Each product keeps its own workflow and may use domain cues only where they improve recognition. Validate redesigned surfaces in rendered desktop and phone states, including empty, error and recovery paths, before treating visual work as accepted.
+
+### 2026-10-01 — local workcell admission
+
+The local workcell has now passed its current read-only admission check: one
+serial slot, zero loaded models, 5,090,103,296 bytes available memory and no
+queued or running mission. `local-code.cmd --check` also admits the active
+SuperMega source tree using local-only `llama3.2:1b`. This supersedes the prior
+low-memory observation for local-code admission only; it is not VPS capacity,
+model-output quality or deployment evidence.
+
+Seven retained historical quality failures still require review before retry.
+They include source-limit violations, interrupted model shutdown and stale or
+unbound evidence manifests. Keep them preserved as negative evidence. Do not
+retry them automatically, convert them into agent outputs or dispatch a new
+model job until one concrete task, protected paths, expected validation and
+receipt criteria are chosen. The worker remains scale-to-zero and external
+writes remain disabled.
 
 Chronological receipts belong in `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md`. Section 3 is the single current-state table. Prior database evidence includes 18 signup-budget tests, 74 rehearsal checks and 37 HQ checks; revalidate source binding when relevant code changes.
 
@@ -455,3 +576,51 @@ The authorized production upgrade, two schema flags and paired deployment are co
 - Reusable transport check: `tools/probe_postgres_transport.py --database-url-env NAME`; uses an existing environment variable, sends only SSLRequest, verifies system trust, never authenticates or runs SQL. Sixteen focused diagnostics checks passed.
 
 Historical transport errors do not supersede the later verified host correction and acceptance runtime connection. Keep local, CI, staging, hosted and customer evidence distinct. Do not repeat failed credentials or treat recorded connectivity as live application acceptance.
+
+### 2026-10-04 — Commerce cart recovery is deterministic
+
+- **FAIL → FIXED — customer selection race:** the exact rendered journey exposed two competing recovery owners. A fast Add-to-cart action could run while the checkout's asynchronous recovery was still opening, then a late empty result erased the live selection. Commit `dcdc42e6` withholds customer cart actions until the scoped session cart is restored; product head `83d2631f` prevents a late empty checkout recovery from overwriting a live cart while retaining non-empty and saved-request recovery.
+- **PASS — local implementation checks:** the 13 focused Commerce request/copy checks, scoped ESLint, TypeScript and the production build pass. Vite transformed 293 modules and sealed 37 offline files.
+- **PASS — clean exact rendered acceptance:** signed Edge 154 evidence at clean product head `83d2631f` passes the local saved-request journey at 1280×900 and 390×844. Both receipts retain the local-only Shop-review boundary and browser persistence, retire the completed checkout form, avoid horizontal overflow, emit no runtime warning/error and make no mutating request. Evidence: `.tmp/ecommerce-store-proof-83d2631f/report.json` plus its exact desktop/mobile captures.
+- **BOUNDARY:** this is synthetic local product and browser evidence. It is not exact-head CI for the later documentation commit, an immutable Vercel candidate, founder-authenticated persistence/isolation, independent GitHub approval, production deployment or customer acceptance.
+- **NEXT:** replace stale public Commerce captures only with current exact product screenshots, then do the same for current Sites screens. After that bounded truth-in-marketing slice, run final exact-head CI once, create a paired immutable candidate only from a passing SHA, and execute the founder-authenticated cross-product acceptance path.
+
+### 2026-10-04 — the public Commerce image now shows the real current Store
+
+- **PASS — truthful asset replacement:** commit `25b90914` replaces the old Commerce order-desk image with the clean exact `83d2631f` Store receipt capture. The public caption describes a locally saved customer request awaiting Shop confirmation and retains the synthetic/local disclosure.
+- **PASS — intrinsic layout and build contracts:** the generator now emits each screenshot's real width and height instead of assuming 1440×900. The rebuilt site passes 355 landing-page checks and the full 26-file public output verifier.
+- **BOUNDARY:** the capture proves only the local synthetic flow shown. It is not a hosted or customer result, and the public site is not deployed from this branch yet.
+- **NEXT:** produce exact current Sites Pages and Inquiries captures, replace the remaining stale Sites asset, then add additional Commerce gallery views only when each is tied to an exercised current route. Run final branch-head CI and paired immutable candidate acceptance after the truthful capture set is complete.
+
+### 2026-10-04 — Sites public proof now matches the current product
+
+- **PASS — exact current Sites evidence:** source-controlled rendered acceptance at clean product head `9a3bd921` exercises the visible Pages editor and validates the real Pages workbench, page rail, insights and active page. A second case validates the real Inquiries capture and ownership queue with one consented synthetic private lead. Signed Edge 154 evidence passes at 1440×900 with zero mutating requests, runtime warnings/errors or horizontal overflow.
+- **PASS — truthful public integration:** public head `65e2cc98` replaces the stale Sites asset and adds the current Inquiries workspace. Captions identify actual app captures with synthetic example records from a local build. The rebuilt public output passes 364 landing-page checks and the 27-file release-output verifier; desktop carousel interaction and the 390×844 layout were visually reviewed.
+- **BOUNDARY:** this is source, local synthetic and generated-output evidence. It is not exact-head CI for the final branch head, an immutable hosted candidate, founder-authenticated managed persistence/isolation, production deployment or customer acceptance. Live domains were not changed.
+- **NEXT:** push the current chain once, let exact-head CI settle, then bind one paired immutable app/public candidate to the exact passing SHA. Run founder-authenticated product discovery, save/reload, recovery, isolation and Store-to-Shop confirmation there. Then close Service Worker offline restore, the completed-close accountant download and native Burmese cashier review. After technical acceptance, prepare the capability-backed Basic/Free, Pro and Assisted Launch commercial package.
+
+### 2026-10-04 — one local Commerce request becomes one accountable Shop order
+
+- **PASS — real connected workflow:** product commit `340efbf1` connects the retained local Commerce request to the existing Shop order composer. The request remains in the customer buying lifecycle until an operator opens Shop review; it is not copied into the managed shared inbox or relabelled as a managed record.
+- **PASS — exact source and action binding:** clean exact head `ee424673416ea0519e4be76063f3b306631cd7d7` preserves customer, fulfilment, request reference, payment, SKU, name, variant, quantity, unit price, line total and order total. The accountable gate freezes the Commerce evidence reference, records one Shop reviewer action and keeps payment pending.
+- **PASS — local durability and replay:** signed Edge 154 acceptance confirms one order, one stock reservation, reload persistence and a blocked second review from the retained source. The complete `commerce/order_create` action-ID set remains unchanged on replay. The case has zero external/failed/HTTP-error requests, zero mutating network requests, zero runtime warning/error and no horizontal overflow. Disk validation passes against the exact clean source, 89-file artifact, verifier and screenshot digests. Evidence: `.tmp/store-to-shop-proof-ee424673-62115b43/report.json`.
+- **PASS — focused quality:** rendered-report semantics pass 17/17, including tampered/missing/extra route and action failures; the repository tool-syntax contract passes all 957 scripts. The exact release build transforms 293 modules and seals 37 offline files.
+- **BOUNDARY:** this is isolated local synthetic evidence. It is not exact-branch-head CI after this documentation update, an immutable Vercel candidate, founder-authenticated managed persistence/isolation, production, customer acceptance or payment-provider settlement. Live domains were not changed.
+- **NEXT:** promote Shop's existing close logic into a truthful Today cash-and-wallet close queue. Show only recorded Shop expectations, unclosed order count, adjusted MMK total, payment-method split and exceptions; never imply bank/wallet confirmation or prefill cashier counts. Then verify exact-head CI, deliver the branch once, create a paired immutable candidate and repeat Store-to-Shop plus founder save/reload/isolation in the hosted authenticated path. Native Burmese cashier-critical comprehension remains required before commercial pilot claims.
+
+### 2026-10-04 — Commerce handoff status survives reload
+
+- **FAIL → FIXED — lost receipt proof:** the exact managed request could remain in validated Commerce state while the component's session-only confirmation string reset after reload. Product commit `faffe709` now accepts only an exact full-request match in the managed Commerce record as durable delivery proof. An ID-only match, changed request or local recovery record cannot claim Company Shop receipt.
+- **PASS — one accountable sequence:** the current receipt presents `Request saved → Shop review → Confirmed in Shop` as one compact status rail. The middle step reads `Received · review needed` only with managed receipt proof; the final step still requires a real Shop order and shows its order ID.
+- **PASS — focused quality:** 17 handoff/recovery checks, scoped ESLint and application TypeScript pass. The tests cover reload without session confirmation, mismatched request rejection, local-mode rejection and the retained session receipt path.
+- **BOUNDARY:** this is source and focused local evidence. Exact-head production build, full aggregate verifier, isolated rendered acceptance, remote CI, immutable Preview, hosted founder acceptance, production and customer acceptance remain separate gates.
+- **NEXT:** complete the exact-head build and isolated rendered Store-to-Shop acceptance, then deliver the clean chain once GitHub resolution is available. After that, close the Sites brief-to-review handoff and native Burmese cashier comprehension gaps without adding another parallel operating surface.
+
+### 2026-10-04 — managed Counter recovery is scoped to the signed-in account
+
+- **PASS — bounded product behavior:** commit `b2b41910e7c77074b5e985b42cf9ea9d2b53177f` gives an authenticated Counter a device-local recovery suffix derived from the exact workspace and user identity. Reloading that same account restores its unfinished basket and checkout reference; switching workspace or user selects a different key and lock. Local mode keeps its existing unscoped compatibility key.
+- **PASS — fail-closed continuity:** the existing serial write queue, exclusive checkout lock, stale-tab/reset checks, recorded-order recovery and no-duplicate-sale checkpoint remain authoritative. Empty or invalid managed identities stay memory-only. Concise recovery errors still require reload before another sale when confirmation is uncertain.
+- **PASS — local evidence:** 3 policy checks, 16 parked-ticket and checkout-recovery checks, and the 18-check order-to-close contract pass. The production build transforms 293 modules. The aggregate verifier passes 108 Ecommerce buying, 347 Commerce and 352 production checks at 3,249,832 bytes under the unchanged 3,250,000-byte cap; compressed Shop-route transfer is 472,188 bytes.
+- **IN PROGRESS — delivery:** the commit is pushed to PR #639. Exact-head dependency audits, kernel verification and GitGuardian pass; App CI run `37174850738` remains in progress. The eligible independent-review requirement remains unchanged.
+- **BOUNDARY:** this is source, local tests, local build and branch-delivery evidence. It is not an immutable Preview, hosted founder acceptance, cross-device persistence, production, payment settlement, customer acceptance or commercial readiness.
+- **NEXT:** let exact-head CI settle once. If green, bind one paired immutable app/public candidate to that exact SHA and run founder-authenticated product discovery plus Today/Counter/Stock/Sites/Commerce save, reload, recovery and isolation. The next source gap is a durable operating-unit and shift-session model with accountable open/close ownership; do not show decorative branch or shift controls before that state exists.

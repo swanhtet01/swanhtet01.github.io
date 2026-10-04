@@ -13,7 +13,8 @@ const end = source.indexOf('\n  const visible = managedIdentity ?', start)
 assert.ok(start > 0 && end > start)
 const mutation = transformSync('async function mutate(eventType, commandId, evidence, transition) {\n' + source.slice(start, end), { loader: 'ts' }).code
 const effectStart = source.lastIndexOf('  useEffect(() => {', source.indexOf('    loadManagedBootstrap(managedIdentity)', source.indexOf('export type CommerceStuckRecovery')))
-const effectEnd = source.indexOf('  }, [managedIdentity])', effectStart) + '  }, [managedIdentity])'.length
+const effectEndToken = '  }, [managedIdentity, managedLoadAttempt])'
+const effectEnd = source.indexOf(effectEndToken, effectStart) + effectEndToken.length
 assert.ok(effectStart > 0 && effectEnd > effectStart)
 const effect = transformSync(source.slice(effectStart, effectEnd), { loader: 'ts' }).code
 
@@ -25,7 +26,7 @@ test('managed lost acknowledgement pauses writes; remount reads saved order with
   let loaded
   const loadedPromise = new Promise(resolve => { loaded = resolve })
   const context = {
-    Error, managedIdentity: identity, identityRef: { current: identity }, snapshotRef,
+    Error, managedIdentity: identity, managedLoadAttempt: 0, identityRef: { current: identity }, snapshotRef,
     sameManagedIdentity: (a, b) => a.workspaceId === b.workspaceId && a.userId === b.userId,
     validateCommerceState: state => state, // This test covers runtime orchestration, not schema validation.
     ManagedTrialError: class extends Error {},
@@ -39,6 +40,7 @@ test('managed lost acknowledgement pauses writes; remount reads saved order with
     managedBootstrapHasCapability: () => true,
     managedCommerceView: (record, workspaceId, writeReady) => ({ ...record, workspaceId, writeReady, mode: 'managed-ready', error: '' }),
     createEmptyCommerce: () => ({ orders: [] }),
+    reportManagedPersistenceFailure: () => {},
     useEffect: callback => callback(),
   }
   const mutate = runInNewContext(mutation + '\nmutate', context)
@@ -77,7 +79,7 @@ test('rendered recovery controls distinguish uncertain writes from setup and acc
       commerceCanWrite: false, commerceStorageError: 'Synthetic failure',
       managedIdentity: { workspaceId: 'synthetic', userId: 'synthetic' },
       workspaceMode: 'managed-ready', commerceSync: { status: 'ready', message: '' },
-      managedVersion: 2, notice: '', window: { location: { reload: () => { reloads++ } } },
+      localEvictionWarningReplacesWriteBanner: false, managedVersion: 2, notice: '', window: { location: { reload: () => { reloads++ } } },
       ...overrides,
     })
     const html = renderToStaticMarkup(element)

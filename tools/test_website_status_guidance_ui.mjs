@@ -12,11 +12,12 @@ const ts = require('typescript')
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 const source = readFileSync(new URL('../showroom/src/products/website/WebsiteProduct.tsx', import.meta.url), 'utf8')
+const css = readFileSync(new URL('../showroom/src/products/website/website-product.css', import.meta.url), 'utf8')
 const start = source.indexOf('<details className="website-today-checks">')
 const end = source.indexOf('</details>', start)
 assert.ok(start >= 0 && end > start, 'source Site checks panel must exist')
 const panel = source.slice(start, end + '</details>'.length)
-const compiled = ts.transpileModule(`export function Panel({ websiteTodayMetrics, hasUnsavedChanges, failingContentChecks, showAssistedWebsitePreview }) { return (${panel}) }`, {
+const compiled = ts.transpileModule(`export function Panel({ readinessSummary, hasUnsavedChanges, failingContentChecks, showAssistedWebsitePreview }) { return (${panel}) }`, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
 }).outputText
 const module = { exports: {} }
@@ -25,12 +26,69 @@ runInNewContext(compiled, { exports: module.exports, require: (name) => {
   return require(name)
 } })
 const render = (overrides = {}) => renderToStaticMarkup(React.createElement(module.exports.Panel, {
-  websiteTodayMetrics: [['Pages', '2/3 ready'], ['Readiness', '2 to fix']],
+  readinessSummary: '2 to fix',
   hasUnsavedChanges: false, failingContentChecks: [], showAssistedWebsitePreview: false, ...overrides,
 }))
+const workflowStart = source.indexOf('<ol aria-label="Website workflow"')
+const workflowEnd = source.indexOf('</ol>', workflowStart)
+assert.ok(workflowStart >= 0 && workflowEnd > workflowStart, 'source Website workflow must exist')
+const workflow = source.slice(workflowStart, workflowEnd + '</ol>'.length)
+const compiledWorkflow = ts.transpileModule(`export function Workflow({ websiteWorkflowSteps }) { return (${workflow}) }`, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
+}).outputText
+const workflowModule = { exports: {} }
+runInNewContext(compiledWorkflow, { exports: workflowModule.exports, require: (name) => {
+  assert.equal(name, 'react/jsx-runtime', 'workflow must not acquire transport or other dependencies')
+  return require(name)
+} })
+const renderWorkflow = (websiteWorkflowSteps) => renderToStaticMarkup(React.createElement(workflowModule.exports.Workflow, { websiteWorkflowSteps }))
 const failingWorkspace = createInitialWorkspace()
 failingWorkspace.pages[0].stage = 'draft'
 const failures = readinessChecks(failingWorkspace).filter((check) => !check.id.startsWith('evidence-') && !check.passed)
+
+test('local file readiness waits for actual page checks and keeps one visible primary action', () => {
+  const expression = source.match(/const localPreviewReady = ([^\n]+)/)?.[1]
+  assert.ok(expression)
+  const ready = { storageMode: 'browser-local', starterAvailable: false, hasUnsavedChanges: false, contentChecksPass: true }
+  assert.equal(runInNewContext(expression, ready), true)
+  for (const blocked of [
+    { contentChecksPass: false },
+    { hasUnsavedChanges: true },
+    { starterAvailable: true },
+    { storageMode: 'managed' },
+  ]) assert.equal(runInNewContext(expression, { ...ready, ...blocked }), false)
+  assert.match(source, /content:\s*{\s*title: 'Pages'/)
+  assert.doesNotMatch(source, /website-heading-publish-action/)
+  assert.ok(source.includes("localPreviewReady ? 'Ready to download' : 'After review'"))
+  assert.ok(source.includes('need attention before the website file is ready.'))
+  assert.match(css, /\.website-status-disclosure \{ order: 2; \}/)
+  assert.match(css, /\.website-action-bar \{\s*order: 3;/)
+  assert.match(css, /\.website-workspace-grid\.view-publish \{ order: 4; \}/)
+})
+
+test('manual inquiry capture is independent of website publishing readiness', () => {
+  assert.ok(source.includes('Use this when a customer contacts the business by phone, message or in person.'))
+  assert.ok(source.includes('disabled={portalViewOnly} type="submit">{portalViewOnly ? \'View only\' : \'Add to inbox\'}'))
+  assert.doesNotMatch(source, /readyBuyerCtaPages/)
+  assert.doesNotMatch(source, /Add a ready page with a contact action before capturing inquiries/)
+})
+
+test('brief-to-file workflow exposes one current owned step without adding actions', () => {
+  const html = renderWorkflow([
+    { id: 'brief', label: 'Business brief', detail: 'Complete', state: 'complete' },
+    { id: 'pages', label: 'Pages', detail: '2/3 ready', state: 'current' },
+    { id: 'review', label: 'Review', detail: 'After pages', state: 'waiting' },
+    { id: 'file', label: 'Website file', detail: 'After review', state: 'waiting' },
+  ])
+  assert.match(html, /<ol aria-label="Website workflow" class="website-workflow-rail">/)
+  assert.equal((html.match(/aria-current="step"/g) ?? []).length, 1)
+  assert.match(html, /data-state="complete"/)
+  assert.match(html, /data-state="current"/)
+  assert.match(html, /data-state="waiting"/)
+  assert.doesNotMatch(html, /<button|<a\b|<input|<form/)
+  assert.ok(source.includes('Next owner: ${websiteTodayOwner}'))
+  assert.match(css, /\.website-workflow-rail \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+})
 
 test('saved failures render actual check details in an initially collapsed disclosure', () => {
   assert.ok(failures.length > 0)

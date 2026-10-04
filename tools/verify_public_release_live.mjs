@@ -127,7 +127,7 @@ async function verifyOnce() {
   const pendingRoutes = new Set()
   const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map(pageResults)
-  assert(pages.get('/')?.includes('Your business.<br>Working together.'), 'homepage_headline_wrong')
+  assert(pages.get('/')?.includes('Run the business.<br>Without the busywork.'), 'homepage_headline_wrong')
   assert(pages.get('/')?.includes('href="https://app.supermega.dev/login">Login</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
@@ -238,25 +238,27 @@ async function verifyOnce() {
   // The screenshots are part of the release, not optional decoration. Verify
   // their actual response bytes; a 200 HTML fallback must never pass as an image.
   const interfaceImages = {
-    shop: 'platform-stock.jpg',
-    website: 'platform-pages.jpg',
-    ecommerce: 'platform-catalog.jpg',
+    shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
+    website: ['actual-sites-editor.png'],
+    ecommerce: ['actual-commerce-order-request.png'],
   }
   for (const product of publicProducts) {
-    const filename = interfaceImages[product.id]
-    assert(filename, 'interface_image_mapping_missing', { product: product.id })
-    const path = `/images/${filename}`
-    for (const route of ['/', `/${product.id}/`]) {
-      const html = pages.get(route)
-      if (html != null) assert(html.includes(`src="${path}"`), 'interface_image_reference_missing', { route, path })
+    const filenames = interfaceImages[product.id]
+    assert(filenames?.length >= 1, 'interface_image_mapping_missing', { product: product.id })
+    for (const [index, filename] of filenames.entries()) {
+      const path = `/images/${filename}`
+      for (const route of index === 0 ? ['/', `/${product.id}/`] : [`/${product.id}/`]) {
+        const html = pages.get(route)
+        if (html != null) assert(html.includes(`src="${path}"`), 'interface_image_reference_missing', { route, path })
+      }
+      const response = await request(path, { accept: 'image/png' })
+      assert(response.status === 200, 'interface_image_http_error', { path, status: response.status })
+      assert((response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() === 'image/png', 'interface_image_content_type_wrong', { path })
+      const bytes = Buffer.from(await response.arrayBuffer())
+      assert(bytes.length > 10000 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])), 'interface_image_invalid', { path })
+      const source = await readFile(new URL(`./public-assets/${filename}`, import.meta.url))
+      assert(createHash('sha256').update(bytes).digest('hex') === createHash('sha256').update(source).digest('hex'), 'interface_image_release_mismatch', { path })
     }
-    const response = await request(path, { accept: 'image/jpeg' })
-    assert(response.status === 200, 'interface_image_http_error', { path, status: response.status })
-    assert((response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() === 'image/jpeg', 'interface_image_content_type_wrong', { path })
-    const bytes = Buffer.from(await response.arrayBuffer())
-    assert(bytes.length > 10000 && bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255])), 'interface_image_invalid', { path })
-    const source = await readFile(new URL(`./public-assets/${filename}`, import.meta.url))
-    assert(createHash('sha256').update(bytes).digest('hex') === createHash('sha256').update(source).digest('hex'), 'interface_image_release_mismatch', { path })
   }
 
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
@@ -302,7 +304,7 @@ async function verifyOnce() {
   const www = await fetch('https://www.supermega.dev/', { redirect: 'follow', cache: 'no-store', headers: { 'user-agent': 'SuperMegaVerifiedRelease/2.0' }, signal: AbortSignal.timeout(timeoutMs) })
   assert(www.status === 200, 'www_http_error', { status: www.status })
   const wwwHtml = await www.text()
-  assert(wwwHtml.includes('Your business.<br>Working together.'), 'www_release_drift')
+  assert(wwwHtml.includes('Run the business.<br>Without the busywork.'), 'www_release_drift')
 
   return {
     pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),

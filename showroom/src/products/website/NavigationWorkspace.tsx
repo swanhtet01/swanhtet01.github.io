@@ -39,7 +39,7 @@ export function NavigationWorkspace({
               value={workspace.siteName}
             />
           </label>
-          <p className="website-field-help">Used in the preview header and the approved snapshot.</p>
+          <p className="website-field-help">Used in your website header and the approved website file.</p>
         </fieldset>
 
         <section className="website-navigation-editor" aria-labelledby="primary-navigation-title">
@@ -102,11 +102,11 @@ export function NavigationWorkspace({
                     ↓
                   </button>
                   <button
-                    aria-label={'Preview ' + page.internalName}
+                    aria-label={'Open ' + page.internalName}
                     onClick={() => onSelectPage(page.id)}
                     type="button"
                   >
-                    Preview
+                    Open
                   </button>
                 </div>
               </article>

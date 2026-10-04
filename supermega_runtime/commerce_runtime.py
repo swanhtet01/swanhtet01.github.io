@@ -5473,6 +5473,15 @@ def _validate_event_evidence(
         "commerce.order.cancelled": "order_release",
         "commerce.website_intake.converted": "order_reserve",
     }.get(event_type)
+    location_order_evidence: Mapping[str, Any] = evidence
+    if (
+        event_type == "commerce.order.created"
+        and next_state["orders"]
+        and next_state["orders"][0].get("status") == "completed"
+    ):
+        location_order_kind = "order_fulfil"
+        completion = next_state["orders"][0].get("completion")
+        location_order_evidence = completion if isinstance(completion, Mapping) else {}
     if event_type == "commerce.order.advanced":
         _, advanced_order = _one_changed(
             current["orders"], next_state["orders"], "orders"
@@ -5494,7 +5503,7 @@ def _validate_event_evidence(
             not isinstance(payload, Mapping)
             or payload.get("kind") != location_order_kind
             or not isinstance(location_proof, Mapping)
-            or not _proof_matches_evidence(location_proof, evidence)
+            or not _proof_matches_evidence(location_proof, location_order_evidence)
         ):
             raise TrialValidationError(
                 "command evidence must match the order location proof."
@@ -6355,6 +6364,59 @@ def _validate_spa_counter_order_identity_and_tender(
         )
 
 
+def _fulfil_counter_location_inventory(
+    value: object,
+    *,
+    order_id: str,
+    proof: Mapping[str, Any],
+    catalog_skus: Sequence[str],
+) -> dict[str, Any]:
+    """Append the deterministic fulfilment paired with a server-built reservation."""
+
+    current = validate_shop_inventory_state(value, catalog_skus)
+    reserve_commands = [
+        command["payload"]
+        for command in current["commands"]
+        if command["payload"].get("kind") == "order_reserve"
+        and command["payload"].get("orderId") == order_id
+    ]
+    if len(reserve_commands) != 1:
+        raise TrialValidationError(
+            "counter completion requires one location reservation for its order."
+        )
+    allocations = reserve_commands[0].get("allocations")
+    if not isinstance(allocations, list) or not allocations:
+        raise TrialValidationError(
+            "counter completion location reservations are missing."
+        )
+    reservation_ids = sorted(str(row["reservationId"]) for row in allocations)
+    command_id = _order_inventory_command_id("ORF", order_id)
+    body = {
+        "sequence": current["revision"] + 1,
+        "previousDigest": current["headDigest"],
+        "payload": {
+            "kind": "order_fulfil",
+            "id": command_id,
+            "orderId": order_id,
+            "reservationIds": reservation_ids,
+            "proof": dict(proof),
+        },
+    }
+    envelope = {**body, "digest": _order_inventory_digest(body)}
+    try:
+        return validate_shop_inventory_state(
+            {
+                "schema": current["schema"],
+                "revision": body["sequence"],
+                "headDigest": envelope["digest"],
+                "commands": [*current["commands"], envelope],
+            },
+            catalog_skus,
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+
+
 def create_commerce_order_from_intent(
     current_value: Mapping[str, Any],
     intent_value: Mapping[str, Any],
@@ -6380,8 +6442,12 @@ def create_commerce_order_from_intent(
                 "lines",
             }
         ),
+        optional=frozenset({"completeAtCounter"}),
     )
     evidence = _action_proof(evidence_value, "evidence")
+    complete_at_counter = intent.get("completeAtCounter", False)
+    if not isinstance(complete_at_counter, bool):
+        raise TrialValidationError("order intent.completeAtCounter must be a boolean.")
     order_id = _text(intent["orderId"], "order intent.orderId", maximum=160)
     customer = _text(intent["customer"], "order intent.customer", maximum=180)
     channel = _text(intent["channel"], "order intent.channel", maximum=180)
@@ -6406,6 +6472,20 @@ def create_commerce_order_from_intent(
     )
     if payment_terms_days not in _CUSTOMER_CREDIT_TERMS:
         raise TrialValidationError("order intent.paymentTermsDays is unsupported.")
+    if complete_at_counter:
+        service_schedule = _service_schedule(current)
+        if service_schedule is not None and service_schedule["industryPackId"] == "spa":
+            raise TrialValidationError(
+                "Spa counter tender records require separate payment reconciliation."
+            )
+        if channel != "Walk-in" or fulfilment != "pickup" or payment_terms_days != 0:
+            raise TrialValidationError(
+                "counter completion requires a Walk-in pickup order with immediate payment terms."
+            )
+        if len(evidence["actionId"]) > 142:
+            raise TrialValidationError(
+                "counter completion actionId is too long for deterministic lifecycle proofs."
+            )
     _validate_spa_counter_order_identity_and_tender(
         current,
         customer=customer,
@@ -6568,6 +6648,46 @@ def create_commerce_order_from_intent(
                 customer_reference=customer,
                 lines=[{"sku": line["sku"], "quantity": line["quantity"]} for line in lines],
                 proof=evidence,
+                catalog_skus=[item["sku"] for item in current["items"]],
+            )
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(str(exc)) from exc
+    next_state = validate_commerce_state(next_state)
+    if not complete_at_counter:
+        return next_state
+
+    payment_proof = {
+        **evidence,
+        "actionId": f"{evidence['actionId']}-PAYMENT",
+    }
+    preparing_action_id = f"{evidence['actionId']}-ADVANCE-CONFIRMED"
+    ready_action_id = f"{evidence['actionId']}-ADVANCE-PREPARING"
+    completion_proof = {
+        **evidence,
+        "actionId": f"{evidence['actionId']}-ADVANCE-READY",
+    }
+    completed_order = {
+        **order,
+        "paymentStatus": "reconciled",
+        "paymentReconciledAt": payment_proof["capturedAt"],
+        "paymentReconciliationActionId": payment_proof["actionId"],
+        "paymentReconciledBy": payment_proof["actor"],
+        "paymentReconciliationReason": payment_proof["reason"],
+        "paymentEvidenceReference": payment_proof["evidenceReference"],
+        "status": "completed",
+        "advancementActionIds": [preparing_action_id, ready_action_id],
+        "completion": completion_proof,
+    }
+    next_state = {
+        **next_state,
+        "orders": [completed_order, *next_state["orders"][1:]],
+    }
+    if foundation is not None:
+        try:
+            next_state["inventoryFoundation"] = _fulfil_counter_location_inventory(
+                next_state["inventoryFoundation"],
+                order_id=order_id,
+                proof=completion_proof,
                 catalog_skus=[item["sku"] for item in current["items"]],
             )
         except ShopInventoryValidationError as exc:
@@ -8665,8 +8785,172 @@ def _validate_new_order_and_reservation(
     )
 
 
+def _validate_completed_counter_sale(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if (
+        len(next_state["orders"]) != len(current["orders"]) + 1
+        or next_state["orders"][1:] != current["orders"]
+    ):
+        raise TrialValidationError(
+            "counter completion must prepend exactly one completed order."
+        )
+    order = next_state["orders"][0]
+    if (
+        order.get("status") != "completed"
+        or order.get("paymentStatus") != "reconciled"
+        or order.get("refundStatus") != "none"
+        or order.get("channel") != "Walk-in"
+        or order.get("fulfilment") != "pickup"
+        or "paymentDueAt" in order
+        or "creditDecision" in order
+    ):
+        raise TrialValidationError(
+            "counter completion requires one paid Walk-in pickup order without credit or refund exceptions."
+        )
+    added_count = len(next_state["movements"]) - len(current["movements"])
+    added_movements = next_state["movements"][:added_count]
+    if added_count < 1 or next_state["movements"][added_count:] != current["movements"]:
+        raise TrialValidationError(
+            "counter completion requires attributable stock reservations."
+        )
+    first_movement = added_movements[0]
+    root_proof = {
+        "actionId": first_movement.get("actionId"),
+        "capturedAt": first_movement.get("createdAt"),
+        "actor": first_movement.get("actor"),
+        "reason": first_movement.get("reason"),
+        "evidenceReference": first_movement.get("evidenceReference"),
+    }
+    root_proof = _action_proof(root_proof, "counter completion root proof")
+    if any(
+        movement.get("actionId") != root_proof["actionId"]
+        or movement.get("createdAt") != root_proof["capturedAt"]
+        or movement.get("actor") != root_proof["actor"]
+        or movement.get("reason") != root_proof["reason"]
+        or movement.get("evidenceReference") != root_proof["evidenceReference"]
+        for movement in added_movements
+    ):
+        raise TrialValidationError(
+            "counter completion reservations must share one reviewed root proof."
+        )
+    expected_payment_proof = {
+        **root_proof,
+        "actionId": f"{root_proof['actionId']}-PAYMENT",
+    }
+    expected_completion_proof = {
+        **root_proof,
+        "actionId": f"{root_proof['actionId']}-ADVANCE-READY",
+    }
+    expected_advancements = [
+        f"{root_proof['actionId']}-ADVANCE-CONFIRMED",
+        f"{root_proof['actionId']}-ADVANCE-PREPARING",
+    ]
+    retained_payment_proof = {
+        "actionId": order.get("paymentReconciliationActionId"),
+        "capturedAt": order.get("paymentReconciledAt"),
+        "actor": order.get("paymentReconciledBy"),
+        "reason": order.get("paymentReconciliationReason"),
+        "evidenceReference": order.get("paymentEvidenceReference"),
+    }
+    if (
+        retained_payment_proof != expected_payment_proof
+        or order.get("advancementActionIds") != expected_advancements
+        or order.get("completion") != expected_completion_proof
+    ):
+        raise TrialValidationError(
+            "counter completion lifecycle proofs must be deterministic from the reviewed action."
+        )
+
+    open_order = dict(order)
+    for field in _RECONCILIATION_FIELDS | {"advancementActionIds", "completion"}:
+        open_order.pop(field, None)
+    open_order["paymentStatus"] = "pending"
+    open_order["status"] = "confirmed"
+    open_state = {
+        **dict(next_state),
+        "orders": [open_order, *current["orders"]],
+    }
+    current_foundation = _inventory_foundation(current)
+    final_foundation = _inventory_foundation(next_state)
+    if current_foundation is not None:
+        if final_foundation is None:
+            raise TrialValidationError(
+                "counter completion cannot remove location inventory."
+            )
+        commands = final_foundation["commands"]
+        if len(commands) != len(current_foundation["commands"]) + 2:
+            raise TrialValidationError(
+                "counter completion must append one location reservation and one fulfilment."
+            )
+        fulfilment_command = commands[-1]
+        reserved_commands = commands[:-1]
+        reserve_proof = reserved_commands[-1]["payload"].get("proof")
+        if reserve_proof != root_proof:
+            raise TrialValidationError(
+                "counter completion location reservation must match the reviewed root proof."
+            )
+        open_state["inventoryFoundation"] = {
+            **final_foundation,
+            "revision": final_foundation["revision"] - 1,
+            "headDigest": fulfilment_command["previousDigest"],
+            "commands": reserved_commands,
+        }
+    elif final_foundation is not None:
+        raise TrialValidationError(
+            "counter completion cannot create location inventory implicitly."
+        )
+    _validate_new_order_and_reservation(
+        current,
+        open_state,
+        event_type="commerce.order.created",
+    )
+
+    paid_order = {
+        **open_order,
+        "paymentStatus": "reconciled",
+        "paymentReconciledAt": expected_payment_proof["capturedAt"],
+        "paymentReconciliationActionId": expected_payment_proof["actionId"],
+        "paymentReconciledBy": expected_payment_proof["actor"],
+        "paymentReconciliationReason": expected_payment_proof["reason"],
+        "paymentEvidenceReference": expected_payment_proof["evidenceReference"],
+    }
+    paid_state = {**open_state, "orders": [paid_order, *current["orders"]]}
+    _validate_reconciled(open_state, paid_state)
+
+    preparing_order = {
+        **paid_order,
+        "status": "preparing",
+        "advancementActionIds": [expected_advancements[0]],
+    }
+    preparing_state = {
+        **paid_state,
+        "orders": [preparing_order, *current["orders"]],
+    }
+    _validate_advanced(paid_state, preparing_state)
+    ready_order = {
+        **preparing_order,
+        "status": "ready",
+        "advancementActionIds": expected_advancements,
+    }
+    ready_state = {
+        **preparing_state,
+        "orders": [ready_order, *current["orders"]],
+    }
+    _validate_advanced(preparing_state, ready_state)
+    _validate_advanced(ready_state, next_state)
+
+
 def _validate_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
-    _validate_new_order_and_reservation(current, next_state, event_type="commerce.order.created")
+    if next_state["orders"] and next_state["orders"][0].get("status") == "completed":
+        _validate_completed_counter_sale(current, next_state)
+    else:
+        _validate_new_order_and_reservation(
+            current,
+            next_state,
+            event_type="commerce.order.created",
+        )
     _require_website_intakes_unchanged(current, next_state)
 
 
@@ -11518,9 +11802,11 @@ def reduce_commerce_state(
 
     if event_type not in COMMERCE_EVENTS:
         raise TrialValidationError("event_type must be a supported Commerce lifecycle event.")
+    completed_counter_intent = False
     if event_type == "commerce.storefront.merchandising.imported":
         return _apply_storefront_merchandising_import(current, payload)
     if event_type == "commerce.order.created" and isinstance(payload.get("intent"), Mapping):
+        completed_counter_intent = payload["intent"].get("completeAtCounter") is True
         payload = {
             "state": create_commerce_order_from_intent(
                 current,
@@ -11574,6 +11860,12 @@ def reduce_commerce_state(
         return next_state
 
     current_state = validate_commerce_state(current)
+    if event_type == "commerce.order.created" and next_state["orders"]:
+        completed_counter_state = next_state["orders"][0].get("status") == "completed"
+        if completed_counter_state != completed_counter_intent:
+            raise TrialValidationError(
+                "completed counter sales require the explicit server-derived order intent."
+            )
     if event_type != "commerce.item.updated":
         _require_catalog_changes_unchanged(current_state, next_state)
     if event_type not in {"commerce.item.created", "commerce.item.updated"}:

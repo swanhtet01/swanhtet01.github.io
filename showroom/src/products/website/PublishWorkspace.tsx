@@ -42,7 +42,7 @@ type PublishWorkspaceProps = {
 
 type PublishStep = 'checks' | 'evidence' | 'approval' | 'snapshot'
 
-const GO_LIVE_CONTACT_URL = 'https://supermega.dev/contact/?product=website&source=go-live&utm_source=app&utm_medium=guided_trial'
+const GO_LIVE_CONTACT_URL = 'https://supermega.dev/contact/?product=website&source=go-live&utm_source=app&utm_medium=product_workspace'
 
 const publishSteps: Array<{ id: PublishStep; label: string }> = [
   { id: 'checks', label: 'Checks' },
@@ -54,8 +54,8 @@ const publishSteps: Array<{ id: PublishStep; label: string }> = [
 function localEvidenceSuggestion(kind: EvidenceKind, workspace: WebsiteWorkspace) {
   const revision = workspace.contentRevision
   if (kind === 'responsive') return {
-    finding: `Desktop, tablet, and mobile previews reviewed for ${workspace.siteName}.`,
-    reference: `Website responsive preview r${revision}`,
+    finding: `Desktop, tablet, and mobile layouts reviewed for ${workspace.siteName}.`,
+    reference: `Website responsive review r${revision}`,
   }
   if (kind === 'links') return {
     finding: `Navigation and call-to-action destinations reviewed for ${workspace.siteName}.`,
@@ -93,7 +93,7 @@ export function PublishWorkspace({
   const [evidenceReference, setEvidenceReference] = useState(managedActorId ? '' : firstEvidenceSuggestion.reference)
   const [evidenceVerifier, setEvidenceVerifier] = useState(managedActorId ? '' : 'Website owner')
   const [reviewer, setReviewer] = useState(managedActorId ? '' : 'Website owner')
-  const [approvalNote, setApprovalNote] = useState(managedActorId ? '' : `Content, responsive preview, and destinations reviewed for ${workspace.siteName}.`)
+  const [approvalNote, setApprovalNote] = useState(managedActorId ? '' : `Content, responsive layouts, and destinations reviewed for ${workspace.siteName}.`)
   const [confirmedApprovalKey, setConfirmedApprovalKey] = useState('')
   const approvalKey = JSON.stringify([fingerprint, workspace.contentRevision, managedActorId || reviewer.trim(), approvalNote.trim(), workspace.evidence.map((entry) => entry.id)])
   const approvalConfirmed = confirmedApprovalKey === approvalKey

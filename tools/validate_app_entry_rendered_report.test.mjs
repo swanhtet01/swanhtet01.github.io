@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { counterCaptureReady, receiptBoundaryVisible } from './verify_app_entry_rendered.mjs'
+import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible } from './verify_app_entry_rendered.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
+import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
 const renderedVerifierSource = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
 
@@ -23,7 +24,7 @@ test('receipt boundary must be visibly sized and inside the viewport', () => {
 })
 
 test('rendered harness follows current direct Sites and Ecommerce entry actions', () => {
-  assert.match(renderedVerifierSource, /submit\?\.textContent\.trim\(\) !== 'Save request on this device'/)
+  assert.match(renderedVerifierSource, /submit\?\.textContent\.trim\(\) !== 'Save request locally'/)
   assert.match(renderedVerifierSource, /'Tell us about the business'/)
   assert.match(renderedVerifierSource, /'Create website'/)
   assert.doesNotMatch(renderedVerifierSource, /'Prepare private draft'/)
@@ -39,6 +40,174 @@ test('counter capture waits for persisted basket readiness without accepting dis
     { ...ready, drawerTransitionSettled: false }, { ...ready, text: '' }]) {
     assert.equal(counterCaptureReady(pending), false)
   }
+})
+
+test('Store-to-Shop accepts only the exact source-bound review route and semantic confirm label', () => {
+  const requestId = 'ECR-REQUEST / 001'
+  const path = storeToShopReviewPath(requestId)
+  assert.equal(isStoreToShopReviewPath(path, requestId), true)
+  assert.equal(isStoreToShopReviewPath('/shop/?handoff=order&handoff_id=ECR-REQUEST+%2F+001&source=ecommerce-handoff&tab=orders', requestId), true)
+  for (const invalid of [
+    '/shop/?tab=orders',
+    '/shop/?tab=orders&source=ecommerce-handoff&handoff=order&handoff_id=OTHER',
+    `${path}&extra=1`,
+    `${path}&tab=orders`,
+    `/other/${path.slice('/shop/'.length)}`,
+  ]) assert.equal(isStoreToShopReviewPath(invalid, requestId), false)
+
+  assert.equal(isAccountableConfirmLabel('Confirm change'), true)
+  assert.equal(isAccountableConfirmLabel('Confirm change · အတည်ပြုမည်'), true)
+  assert.equal(isAccountableConfirmLabel('Confirm'), false)
+  assert.equal(isAccountableConfirmLabel('Confirm change later'), false)
+})
+
+test('accounting export evidence requires a real isolated CSV download contract', () => {
+  const checks = Object.fromEntries([
+    'controlVisible', 'controlNamed', 'mappingReviewed', 'filenameBounded', 'bomPresent',
+    'schemaPresent', 'closeIdPresent', 'reviewBoundaryPresent', 'businessDatePresent', 'noHorizontalOverflow',
+  ].map((name) => [name, true]))
+  const accountingExport = {
+    ok: true,
+    checks,
+    file: 'downloads/supermega-shop-accounting-2026-07-23-deadbeef.csv',
+    filename: 'supermega-shop-accounting-2026-07-23-deadbeef.csv',
+    bytes: 512,
+    digest: `sha256:${'a'.repeat(64)}`,
+    schema: 'supermega.commerce.accounting-handoff.v3',
+    businessDate: '2026-07-23',
+    viewportWidth: 1280,
+    viewportHeight: 900,
+    documentScrollWidth: 1280,
+  }
+  const expected = { name: 'Shop Today downloads a completed accounting handoff', width: 1280, height: 900, semantics: 'shop-accounting-export' }
+  const entry = {
+    ok: true,
+    failures: [],
+    runtime: { clean: true, errors: [] },
+    bodyLength: 100,
+    path: '/shop/?tab=today',
+    viewport: '1280x900',
+    rendered: { viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280, noHorizontalOverflow: true },
+    network: { mutatingRequestCount: 0, mutatingRequests: [] },
+    browserContextIsolated: true,
+    accountingExport,
+  }
+  assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
+  assert.throws(() => assertCaseSemantics({ ...entry, accountingExport: { ...accountingExport, checks: { ...checks, mappingReviewed: false } } }, expected), /shop_accounting_export_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, accountingExport: { ...accountingExport, file: '../outside.csv' } }, expected), /shop_accounting_export_failed/)
+})
+
+test('offline restore evidence requires a controlled cached reload with preserved business records', () => {
+  const checks = Object.fromEntries([
+    'serviceWorkerSupported', 'serviceWorkerReady', 'controllerActive', 'sealedCachePresent',
+    'offlineModeActive', 'routeRestored', 'businessRecordRestored', 'storageRecordPreserved',
+    'expectedFallbackTransportFailure', 'noHorizontalOverflow',
+  ].map((name) => [name, true]))
+  const offlineRestore = {
+    ok: true,
+    checks,
+    controllerScript: '/sw.js',
+    cacheCount: 1,
+    cacheEntryCount: 37,
+    transportFailureCount: 1,
+    viewportWidth: 1280,
+    viewportHeight: 900,
+    documentScrollWidth: 1280,
+  }
+  const expected = { name: 'Shop Today reloads the current business offline', width: 1280, height: 900, semantics: 'shop-offline-restore' }
+  const entry = {
+    ok: true,
+    failures: [],
+    runtime: { clean: true, errors: [] },
+    bodyLength: 100,
+    path: '/shop/?tab=today',
+    viewport: '1280x900',
+    rendered: { viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280, noHorizontalOverflow: true },
+    network: { mutatingRequestCount: 0, mutatingRequests: [] },
+    browserContextIsolated: true,
+    offlineRestore,
+  }
+  assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
+  assert.throws(() => assertCaseSemantics({ ...entry, offlineRestore: { ...offlineRestore, checks: { ...checks, storageRecordPreserved: false } } }, expected), /shop_offline_restore_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, offlineRestore: { ...offlineRestore, controllerScript: '/other-sw.js' } }, expected), /shop_offline_restore_failed/)
+})
+
+test('Store-to-Shop evidence requires one source-bound pending-payment order after reload', () => {
+  const checks = Object.fromEntries([
+    'localRequestCaptured', 'sameDeviceHandoff', 'exactSourcePrepared', 'accountableSourceBound',
+    'confirmedOnce', 'paymentStillPending', 'stockReservedOnce', 'sourceRetained', 'replayBlocked',
+    'accountableOwner', 'accountableActionRecorded', 'persistedAfterReload', 'operatorViewRestored', 'noHorizontalOverflow',
+  ].map((name) => [name, true]))
+  const source = {
+    requestId: 'WEB-REQUEST-001', requestCount: 1, recoveryKeyCount: 1, sharedRequestCountBefore: 0,
+    customer: 'May Thiri', customerReference: 'May Thiri · 09123456789', fulfilment: 'pickup',
+    handoffReference: 'WEB-REQUEST-001', payment: 'Cash', totalMmk: 1_000,
+    lines: [{ sku: 'SKU-001', name: 'Tea', variant: null, quantity: 1, unitPriceMmk: 1_000, lineTotalMmk: 1_000 }],
+    sku: 'SKU-001', quantity: 1, stockBefore: 12, orderCountBefore: 0, actionCountBefore: 0,
+  }
+  const action = { orderId: 'ORD-001', accountableActionCount: 1, orderCreateActionIds: ['ACT-001'], actionId: 'ACT-001', commandId: 'CMD-001', actionActor: 'Shop reviewer', actionReason: 'Reviewed current Shop catalog.', actionEvidenceReference: `ECOMMERCE:${source.requestId}:reviewed`, actionSubjectId: 'ORD-001' }
+  const reviewPath = storeToShopReviewPath(source.requestId)
+  const committed = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0, ...action }
+  const restored = { route: '/shop/?tab=orders', matchingOrderCount: 1, orderStatus: 'confirmed', paymentStatus: 'pending', owner: 'Shop reviewer', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0, ...action }
+  const storeToShop = {
+    ok: true,
+    checks,
+    claimBoundary: { ok: true },
+    source,
+    handoff: { ready: true, sourceVisible: true },
+    prepared: {
+      ready: true, route: reviewPath, sourceBound: true, customer: source.customer,
+      fulfilment: source.fulfilment, handoffReference: source.handoffReference,
+      lines: source.lines.map((line) => ({ ...line })), totalMmk: source.totalMmk,
+      paymentLocked: true, payment: source.payment,
+    },
+    gate: { ready: true, summaryBound: true, actor: 'Shop reviewer', reasonPresent: true, sourceEvidenceBound: true, evidenceReference: action.actionEvidenceReference },
+    network: { externalRequestCount: 0, failedRequestCount: 0, httpErrorResponseCount: 0 },
+    committed,
+    restored,
+    replay: { attempted: true, route: reviewPath, duplicateBlocked: true, gateOpened: false, matchingOrderCount: 1, accountableActionCount: 1, orderCreateActionIds: ['ACT-001'], orderId: 'ORD-001', stockAfter: 11, sourceRequestCopies: 1, sharedInboxRequestCount: 0 },
+    viewportWidth: 1280,
+    viewportHeight: 900,
+    documentScrollWidth: 1280,
+  }
+  const expected = { name: 'Commerce request becomes one accountable Shop order', path: '/shop/?tab=orders', width: 1280, height: 900, semantics: 'store-to-shop' }
+  const entry = {
+    ok: true,
+    failures: [],
+    runtime: { clean: true, errors: [] },
+    bodyLength: 100,
+    path: '/shop/?tab=orders',
+    viewport: '1280x900',
+    rendered: { viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280, noHorizontalOverflow: true },
+    network: { mutatingRequestCount: 0, mutatingRequests: [] },
+    browserContextIsolated: true,
+    storeToShop,
+  }
+  assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, restored: { ...restored, paymentStatus: 'reconciled' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, committed: { ...committed, matchingOrderCount: 2 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, handoff: { ...storeToShop.handoff, sourceVisible: false } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, sourceBound: false } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, customer: 'Other customer' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, fulfilment: 'delivery' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, handoffReference: 'OTHER-REFERENCE' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, lines: [{ ...source.lines[0], unitPriceMmk: 900, lineTotalMmk: 900 }] } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, totalMmk: 900 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, prepared: { ...storeToShop.prepared, payment: 'KBZPay' } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, gate: { ...storeToShop.gate, sourceEvidenceBound: false } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, network: { ...storeToShop.network, externalRequestCount: 1 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, network: { ...storeToShop.network, httpErrorResponseCount: 1 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, replay: { ...storeToShop.replay, matchingOrderCount: 2 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, replay: { ...storeToShop.replay, accountableActionCount: 2 } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, replay: { ...storeToShop.replay, orderCreateActionIds: ['ACT-001', 'ACT-REPLAY'] } } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, replay: { ...storeToShop.replay, stockAfter: 10 } } }, expected), /store_to_shop_failed/)
+  const tamperedEvidence = `${storeToShop.gate.evidenceReference}:tampered`
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: {
+    ...storeToShop,
+    committed: { ...committed, actionEvidenceReference: tamperedEvidence },
+    restored: { ...restored, actionEvidenceReference: tamperedEvidence },
+  } }, expected), /store_to_shop_failed/)
+  assert.throws(() => assertCaseSemantics({ ...entry, storeToShop: { ...storeToShop, restored: { ...restored, commandId: 'CMD-OTHER' } } }, expected), /store_to_shop_failed/)
 })
 
 import {
@@ -68,15 +237,14 @@ function runGit(directory, args) {
   return String(result.stdout || '').trim()
 }
 
-test('launcher evidence binds exact visible product order and routes in the disk consumer', () => {
+test('login entry evidence rejects every visible workspace-product card in the disk consumer', () => {
   const links = [{ name: 'Shop', href: '/shop/' }, { name: 'Ecommerce', href: '/ecommerce/' }, { name: 'Website', href: '/website/' }]
   assert.doesNotThrow(() => assertLauncherProductLinks(links))
   const invalid = [undefined, [], links.slice(0, 2), [...links, { name: 'Plant', href: '/plant/' }],
     [links[1], links[0], links[2]], [links[0], links[0], links[2]],
     [links[0], { name: 'Ecommerce', href: '/login' }, links[2]]]
-  for (const name of ['desktop root shows launcher despite remembered product', 'desktop choose query shows launcher', 'mobile root shows launcher']) {
-    const savedShop = name === 'desktop root shows launcher despite remembered product'
-    const visibleLinks = savedShop ? [links[0]] : []
+  for (const name of ['desktop root presents login despite remembered product', 'desktop choose query presents login', 'mobile root presents login']) {
+    const visibleLinks = []
     const width = name.startsWith('mobile') ? 390 : 1280
     const height = width === 390 ? 844 : 900
     const expected = { name, width, height }
@@ -85,7 +253,7 @@ test('launcher evidence binds exact visible product order and routes in the disk
       rendered: { viewportWidth: width, viewportHeight: height, documentScrollWidth: width, noHorizontalOverflow: true, launcherLinks: visibleLinks } }
     assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
     for (const wrong of [undefined, links, ...invalid.filter(value => value?.length),
-      ...(savedShop ? [[], [{ name: 'Shop', href: '/login' }]] : [[links[0]]])]) {
+      [[links[0]], [{ name: 'Shop', href: '/login' }]]]) {
       assert.throws(() => assertCaseSemantics({ ...entry, rendered: { ...entry.rendered, launcherLinks: wrong } }, expected), /launcher_products_mismatch/)
     }
   }
@@ -94,8 +262,8 @@ test('launcher evidence binds exact visible product order and routes in the disk
 function ecommerceCase({ file, screenshot, viewport, width, height }) {
   return {
     name: width === 1280
-      ? 'desktop isolated Ecommerce keeps a submitted sample request browser-local'
-      : 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
+      ? 'desktop Ecommerce keeps a reviewed order request locally'
+      : 'mobile Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     viewport,
     path: '/ecommerce/',
@@ -223,21 +391,21 @@ async function createFixture(context) {
 function fullCaseMatrixFixture() {
   return [
     {
-      name: 'desktop root shows launcher despite remembered product',
+      name: 'desktop root presents login despite remembered product',
       route: '/',
       viewport: '1280x900',
       path: '/',
       screenshot: { file: 'app-launcher-desktop-1280x900.png' },
     },
     {
-      name: 'desktop choose query shows launcher',
+      name: 'desktop choose query presents login',
       route: '/?choose=1',
       viewport: '1280x900',
       path: '/?choose=1',
       screenshot: null,
     },
     {
-      name: 'mobile root shows launcher',
+      name: 'mobile root presents login',
       route: '/',
       viewport: '390x844 mobile',
       path: '/',
@@ -264,6 +432,27 @@ function fullCaseMatrixFixture() {
       path: '/shop/?tab=counter&template=mini-mart',
       screenshot: { file: 'shop-counter-mini-mart-mobile-390x844.png' },
     },
+    ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
+      name: `Shop Today keeps one accountable decision at ${size.width}px`,
+      route: '/shop/?tab=today',
+      viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
+      path: '/shop/?tab=today',
+      screenshot: { file: `shop-today-decision-desk-${size.width}.png` },
+    })),
+    {
+      name: 'Shop Today downloads a completed accounting handoff',
+      route: '/shop/?tab=today',
+      viewport: '1280x900',
+      path: '/shop/?tab=today',
+      screenshot: { file: 'shop-today-accountant-handoff-1280x900.png' },
+    },
+    {
+      name: 'Shop Today reloads the current business offline',
+      route: '/shop/?tab=today',
+      viewport: '1280x900',
+      path: '/shop/?tab=today',
+      screenshot: { file: 'shop-today-offline-restore-1280x900.png' },
+    },
     ...RETIRED_PRODUCT_CASES.map(spec => ({ name: spec.id, route: spec.route,
       viewport: `${spec.width}x${spec.height}${spec.mobile ? ' mobile' : ''}`,
       path: spec.expectedPath, screenshot: { file: `${spec.id}.png` } })),
@@ -289,6 +478,20 @@ function fullCaseMatrixFixture() {
       screenshot: { file: 'website-business-setup-mobile-390x844.png' },
     },
     {
+      name: 'desktop Sites opens the real saved page editor',
+      route: '/website/?workspace=1',
+      viewport: '1440x900',
+      path: '/website/?workspace=1',
+      screenshot: { file: 'sites-pages-current-desktop-1440x900.png' },
+    },
+    {
+      name: 'desktop Sites opens the real inquiry workspace',
+      route: '/website/?workspace=1&view=inquiries',
+      viewport: '1440x900',
+      path: '/website/?workspace=1&view=inquiries',
+      screenshot: { file: 'sites-inquiries-current-desktop-1440x900.png' },
+    },
+    {
       name: 'retired Commerce demo query returns to account home',
       route: '/?demo=ecommerce',
       viewport: '1280x900',
@@ -296,25 +499,32 @@ function fullCaseMatrixFixture() {
       screenshot: null,
     },
     ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(size => ({
-      name: `empty Ecommerce offers real catalog setup at ${size.width}px`,
+      name: `empty Ecommerce offers catalog help at ${size.width}px`,
       route: '/ecommerce/?workspace=1',
       viewport: `${size.width}x${size.height}${size.mobile ? ' mobile' : ''}`,
       path: '/ecommerce/?workspace=1',
       screenshot: { file: `ecommerce-empty-catalog-${size.width}.png` },
     })),
     {
-      name: 'desktop isolated Ecommerce keeps a submitted sample request browser-local',
+      name: 'desktop Ecommerce keeps a reviewed order request locally',
       route: '/ecommerce/?workspace=1',
       viewport: '1280x900',
       path: '/ecommerce/',
       screenshot: { file: 'ecommerce-local-request-desktop-1280x900.png' },
     },
     {
-      name: 'mobile isolated Ecommerce keeps a submitted sample request browser-local',
+      name: 'mobile Ecommerce keeps a reviewed order request locally',
       route: '/ecommerce/?workspace=1',
       viewport: '390x844 mobile',
       path: '/ecommerce/',
       screenshot: { file: 'ecommerce-local-request-mobile-390x844.png' },
+    },
+    {
+      name: 'Commerce request becomes one accountable Shop order',
+      route: '/ecommerce/?workspace=1',
+      viewport: '1280x900',
+      path: '/shop/?tab=orders',
+      screenshot: { file: 'commerce-request-shop-order-desktop-1280x900.png' },
     },
   ]
 }
@@ -338,10 +548,15 @@ test('CLI requires an exact report, commit, and scope', () => {
 
 test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const full = fullCaseMatrixFixture()
-  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 28)
+  assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 35)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(4, 6), 'shop-counter').length, 2)
-  assert.equal(assertRenderedProofCaseMatrix(full.slice(-2), 'ecommerce-claim').length, 2)
-  const obsoleteEntry = structuredClone(full.slice(-2))
+  assert.equal(assertRenderedProofCaseMatrix(full.filter((entry) => entry.name === 'Shop Today downloads a completed accounting handoff'), 'shop-accounting-export').length, 1)
+  assert.equal(assertRenderedProofCaseMatrix(full.filter((entry) => entry.name === 'Shop Today reloads the current business offline'), 'shop-offline-restore').length, 1)
+  assert.equal(assertRenderedProofCaseMatrix(full.slice(-3, -1), 'ecommerce-claim').length, 2)
+  assert.equal(assertRenderedProofCaseMatrix(full.slice(-1), 'store-to-shop').length, 1)
+  const sites = full.filter((entry) => entry.name.startsWith('desktop Sites opens'))
+  assert.equal(assertRenderedProofCaseMatrix(sites, 'sites-workspace').length, 2)
+  const obsoleteEntry = structuredClone(full.slice(-3, -1))
   obsoleteEntry[0].route = '/ecommerce/'
   assert.throws(() => assertRenderedProofCaseMatrix(obsoleteEntry, 'ecommerce-claim'), /case_matrix_mismatch/)
   assert.deepEqual(full.filter((entry) => entry.screenshot).map((entry) => entry.screenshot.file), [
@@ -349,13 +564,20 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
     'app-launcher-mobile-390x844.png',
     'shop-counter-mini-mart-desktop-1280x900.png',
     'shop-counter-mini-mart-mobile-390x844.png',
+    'shop-today-decision-desk-1280.png',
+    'shop-today-decision-desk-390.png',
+    'shop-today-accountant-handoff-1280x900.png',
+    'shop-today-offline-restore-1280x900.png',
     ...RETIRED_PRODUCT_CASES.map(spec => `${spec.id}.png`),
     'website-business-setup-desktop-1280x900.png',
     'website-business-setup-mobile-390x844.png',
+    'sites-pages-current-desktop-1440x900.png',
+    'sites-inquiries-current-desktop-1440x900.png',
     'ecommerce-empty-catalog-1280.png',
     'ecommerce-empty-catalog-390.png',
     'ecommerce-local-request-desktop-1280x900.png',
     'ecommerce-local-request-mobile-390x844.png',
+    'commerce-request-shop-order-desktop-1280x900.png',
   ])
   assert.equal(full.filter((entry) => entry.screenshot === null).length, 4)
 
@@ -374,7 +596,7 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
   extraScreenshot[1].screenshot = { file: 'unexpected.png' }
   assert.throws(() => assertRenderedProofCaseMatrix(extraScreenshot, 'full'), /case_matrix_mismatch/)
 
-  const ecommerce = full.slice(-2)
+  const ecommerce = full.slice(-3, -1)
   const duplicateDesktop = [
     structuredClone(ecommerce[0]),
     {
@@ -388,7 +610,7 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
   assert.throws(() => assertRenderedProofCaseMatrix(wrongMobileViewport, 'ecommerce-claim'), /case_matrix_mismatch/)
 })
 
-test('full visual cases pin current product truth copy and Plant canonicalization', async () => {
+test('full visual cases pin visible product truth copy and Plant canonicalization', async () => {
   const rootDir = process.cwd()
   const [renderer, coreApp, websiteStarterSetup, ecommerceProduct, ecommerceWorkspace] = await Promise.all([
     readFile(join(rootDir, 'tools', 'verify_app_entry_rendered.mjs'), 'utf8'),
@@ -400,14 +622,14 @@ test('full visual cases pin current product truth copy and Plant canonicalizatio
   const sourceBoundText = [
     [websiteStarterSetup, 'Tell us about the business'],
     [websiteStarterSetup, 'Create website'],
-    [ecommerceProduct, 'Order request saved'],
-    [ecommerceWorkspace, 'Saved on this device for Shop review.'],
+    [ecommerceWorkspace, 'Request saved locally for Shop review.'],
     [ecommerceWorkspace, 'Shop still confirms stock, promise, payment, and delivery.'],
   ]
   for (const [source, text] of sourceBoundText) {
     assert.ok(source.includes(text), `missing current product authority: ${text}`)
     assert.ok(renderer.includes(text), `renderer does not require current product truth: ${text}`)
   }
+  assert.ok(ecommerceProduct.includes('Order request saved'), 'Ecommerce Orders no longer exposes its saved-request headline')
   assert.equal((renderer.match(/expectedPath: '\/plant\/\?tab=production'/g) || []).length, 0)
   assert.match(renderer, /validateRetiredProductObservation/)
   const unfinishedRedirect = fullCaseMatrixFixture()

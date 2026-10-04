@@ -37,7 +37,7 @@ Shop trade links may include a reviewed `template` query parameter, such as ?pro
 7. Leave `Keep as open order` off for the routine walk-in path, then tap `Review & complete sale`. The accountable gate opens (`Review counter sale`) and asks for the `Cashier` name. Read the boundary line under the form aloud — it is the privacy pitch (quoted in section 4).
 8. Tap `Complete sale`. One reviewed browser-local write creates the order record, reconciles the selected payment as operator evidence, records handoff, and updates sample stock. It does not charge a wallet or card; show the resulting receipt/order acknowledgement as the completed sample outcome.
 9. To demonstrate pay-later or later handoff, start a second sample basket, enable `Keep as open order`, tap `Review order`, and then `Create order`; the app opens `Orders` (`/shop/?tab=orders`) automatically. If payment and handoff happen together, use the immediate `Paid & handed over` action. If payment is recorded separately, open `More`, choose `Record payment only`, then use `Start preparing`, `Mark ready`, and `Complete`. Never say the QR captured money.
-10. Finish on `Today`: show `Open next step`, `New sale`, `Open orders`, `Today's sales`, `Stock alerts`, `Outstanding`, `More Shop tools`, and `Shop safeguards`. For an owner-focused client, open `/shop/?tab=orders#shop-close-controls`, show the settlement count, and use `Review and save close` or `Save daily close` only after the day's numbers have been checked.
+10. Finish on `Today`: show `Recommended next`, `Why now`, `Owner check`, `Attention`, `Orders & fulfilment`, `Inventory & purchasing`, and the closed `Advanced controls`. Explain that the first action comes from the current records and that the owner check remains explicit. For an owner-focused client, open `/shop/?tab=orders#shop-close-controls`, show the settlement count, and use `Review and save close` or `Save daily close` only after the day's numbers have been checked.
 
 Android phone smoke pass, before using this with a real owner: first load the sample while online, then turn off connectivity and repeat steps 1, 2, 4, 7, 8, 9, and 10. Record whether the camera prompt appears, whether the bottom bar remains usable with one thumb, whether the QR dialog opens or shows the no-saved-QR fallback, whether the completed-sale receipt survives reload, and whether the open-order/close path remains usable. This is still rehearsal evidence only; it is not hosted pilot proof.
 
@@ -47,7 +47,7 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 "Is this touching my real money or messaging my customers?" — read the gate's own line:
 
-- `Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.`
+- `This device records the sale, payment review, handoff and stock. It does not charge or message anyone, or write to a company account.`
 
 "Where does my data go?" — setup says `Stays on this device. Nothing is sent or published.` Nothing in the demo requires an account.
 
@@ -57,7 +57,7 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 ## 5. The close
 
-- Historical support route: `Request assisted setup` used `/contact/?product=shop`, pre-selecting Shop in `What do you need?`. The form asks `What would you like us to prepare?` and submits with `Send message` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
+- Historical support route: `Request assisted setup` used `/contact/?product=shop`, pre-selecting Shop in `Interested in`. The form asks `What would you like to improve?` and submits with `Send message` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
 - Internal rehearsal setup only (`https://app.supermega.dev/settings/?product=shop`). Do not require this before a customer can ask SuperMega to prepare Shop; never overwrite saved work for a demo.
 - From inside the app: the setup page's "Ask SuperMega to set up Shop" link carries the workflow template, for example `https://supermega.dev/contact/?product=shop&template=social-commerce&utm_source=app&utm_medium=guided_trial`.
 - Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Multi-product setup and managed activation require separate scope and acceptance; submitting a brief does not activate a workspace.

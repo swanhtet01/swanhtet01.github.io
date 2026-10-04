@@ -172,10 +172,10 @@ export const capabilities: readonly Capability[] = [
   },
   {
     id: 'device-reset',
-    label: 'Reset this device',
+    label: 'Workspace portability',
     tier: 'free',
-    outcome: 'Erase everything on this device, with a restore point taken first.',
-    reason: 'Leaving is always free.',
+    outcome: 'Back up, restore, or move your workspace without losing control of your records.',
+    reason: 'Your records remain portable and recoverable without a paid plan.',
   },
 
   // --- premium: work that needs our compute -------------------------------------------
