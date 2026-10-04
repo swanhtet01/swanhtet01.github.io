@@ -816,6 +816,42 @@ test('storefront accessors, location allocation preview, releasable reservation,
   assert.ok(baseOrder)
   assert.deepEqual(commerceOrderLocationAllocationPreview(seed, baseOrder), [])
 
+  // A Counter review must be able to explain the real stock source across locations.
+  const contextSku = 'CTX-SKU'
+  const contextItemProof = { actionId: 'ACT-CTX-ITEM', capturedAt: CAPTURED_AT, actor: 'Inventory manager', reason: 'Register context test item.', evidenceReference: 'CTX-ITEM-REF' }
+  const contextCatalog = registerCommerceItem(createEmptyCommerce(), { sku: contextSku, name: 'Context item', onHand: 5, reorderAt: 1, price: 1000 }, contextItemProof)
+  assert.ok(contextCatalog)
+  const contextPackage = buildShopInventoryImportPackage({
+    importId: 'IMP-CTX-001',
+    sourceDigest: `sha256:${'c'.repeat(64)}`,
+    clients: [{ id: 'CLI-CTX-001', name: 'Context customer' }],
+    vendors: [{ id: 'VEN-CTX-001', name: 'Context vendor' }],
+    locations: [{ id: 'LOC-FRONT', name: 'Front counter' }, { id: 'LOC-WAREHOUSE', name: 'Warehouse' }],
+    stockUnits: [
+      { id: 'LOT-CTX-FRONT', sku: contextSku, tracking: 'lot', trackingCode: 'CTX-FRONT' },
+      { id: 'LOT-CTX-WAREHOUSE', sku: contextSku, tracking: 'lot', trackingCode: 'CTX-WAREHOUSE' },
+    ],
+    openings: [
+      { stockUnitId: 'LOT-CTX-FRONT', locationId: 'LOC-FRONT', vendorId: 'VEN-CTX-001', quantity: 2 },
+      { stockUnitId: 'LOT-CTX-WAREHOUSE', locationId: 'LOC-WAREHOUSE', vendorId: 'VEN-CTX-001', quantity: 3 },
+    ],
+    catalogSkus: [contextSku],
+  })
+  const emptyContextInventory = createEmptyShopInventoryState()
+  const contextImport = applyShopInventoryImport(emptyContextInventory, contextPackage, { actionId: 'ACT-CTX-IMPORT', capturedAt: CAPTURED_AT, actor: 'Inventory manager', reason: 'Import context test stock.', evidenceReference: 'CTX-IMPORT-REF' }, [contextSku], emptyContextInventory.headDigest)
+  assert.ok(contextImport && !contextImport.replayed)
+  const contextState = { ...contextCatalog, inventoryFoundation: contextImport.state }
+  const contextOrder = {
+    id: 'ORD-CTX-001', createdAt: CAPTURED_AT, customer: 'Counter customer', channel: 'Walk-in', item: 'Context item', itemSku: contextSku,
+    quantity: 4, payment: 'Cash', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'pickup', fulfilmentReference: 'Counter ORD-CTX-001',
+    promisedAt: '2026-08-08T02:30:00.000Z', lines: [{ sku: contextSku, name: 'Context item', quantity: 4, unitPriceMmk: 1000 }], total: 4000, status: 'confirmed',
+  }
+  const contextAllocations = commerceOrderLocationAllocationPreview(contextState, contextOrder)
+  assert.deepEqual(contextAllocations.map(({ locationId, quantity }) => ({ locationId, quantity })), [
+    { locationId: 'LOC-FRONT', quantity: 1 },
+    { locationId: 'LOC-WAREHOUSE', quantity: 3 },
+  ])
+
   // Unknown orderId → no releasable reservation.
   assert.equal(commerceOrderHasReleasableReservation(seed, 'ORD-UNKNOWN'), false)
   // Completed order → no releasable reservation.
