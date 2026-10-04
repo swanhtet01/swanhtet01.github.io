@@ -1251,18 +1251,16 @@ function ShopOperatingStrip({ actionLabel, choice, detail, disabled, onAction, o
   </section>
 }
 
-function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lastReceipt, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, stockLocationCount }: {
+function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, stockLocationCount }: {
   canCompleteInOneReview: boolean
   disabled: boolean
   draftStorageScope?: CounterTicketStorageScope | null
   initialCustomer: string
   initialQuery: string
   items: CommerceItem[]
-  lastReceipt: CommerceOrderAcknowledgement | null
   lowStockCount: number
   loyaltyPoints: ReadonlyMap<string, number> | null
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
-  onViewLastReceipt: (receipt: CommerceOrderAcknowledgement) => void
   openOrderCount: number
   operatorLabel: string
   operatingContext: ReactNode
@@ -1508,8 +1506,9 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           }}>Resume {ticket.label} · {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0)} {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0) === 1 ? 'item' : 'items'}</button>)}
           {ticketSnapshot.pending ? <p role="status">Saving on this device…</p> : null}
         </details> : null}
-        <div className="shop-cart-lines">
-          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}<small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><span aria-hidden="true">01</span><strong>{bi('Ready for the next sale')}</strong><small>{bi('Search, scan or choose a product.')}</small></div>}
+        {lines.length ? <div aria-hidden="true" className="shop-cart-column-head"><span>Item</span><span>Price</span><span>Quantity</span><span>Total</span></div> : null}
+        <div aria-label="Current sale items" className="shop-cart-lines">
+          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div className="shop-cart-item"><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}</div><span className="shop-cart-unit-price">{formatMoney(item.price)}</span><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b className="shop-cart-line-total">{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><span aria-hidden="true">01</span><strong>{bi('Ready for the next sale')}</strong><small>{bi('Search, scan or choose a product.')}</small></div>}
         </div>
         {unitCount ? <><div className="shop-sale-details">
           <label>{bi('Customer')} <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
@@ -1528,17 +1527,14 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
           {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Keep as open order</strong><small>Use for pay-later or later handoff. Otherwise this sale completes now.</small></span></label> : null}
         </div>
+        <div className="shop-counter-outcomes" aria-label="Sale review summary"><article><small>Payment method</small><strong>{payment}</strong></article><article><small>After review</small><strong>{effectiveOutcome === 'paid_handoff' ? 'Complete at counter' : 'Continue in Orders'}</strong></article></div>
         <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label"><span>Review &amp; complete sale</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
       </aside>
       <aside aria-label="Sale follow-up" className="shop-counter-followup">
         <header>
-          <div><span className="core-eyebrow">Sale follow-up</span><h2>What happens next</h2></div>
+          <h2>Sale follow-up</h2>
           <span className="shop-counter-followup-status" data-ready={unitCount > 0 && payment ? 'true' : 'false'}>{unitCount ? payment ? 'Ready to review' : 'Choose payment' : 'Waiting for items'}</span>
         </header>
-        <div className="shop-counter-outcomes" aria-label="Sale outcome">
-          <article><small>Payment</small><strong>{unitCount ? payment || 'Choose method' : 'No sale yet'}</strong></article>
-          <article><small>Result</small><strong>{unitCount ? effectiveOutcome === 'paid_handoff' ? 'Complete at counter' : 'Continue in Orders' : 'Add an item first'}</strong></article>
-        </div>
         <ol className="shop-counter-steps">
           <li data-complete={unitCount > 0 ? 'true' : 'false'}><span>1</span><div><strong>Build the sale</strong><small>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} · ${formatMoney(total)}` : 'Choose or scan products'}</small></div></li>
           <li data-complete={unitCount > 0 && Boolean(payment) ? 'true' : 'false'}><span>2</span><div><strong>Confirm payment</strong><small>{unitCount ? payment ? `${payment} selected` : 'Choose a method' : 'Available after items are added'}</small></div></li>
@@ -1548,10 +1544,6 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           <div><span aria-hidden="true">{cartLowStockLines.length ? '!' : '✓'}</span><div><strong>{cartLowStockLines.length ? 'Stock needs attention' : 'Stock check'}</strong><p>{cartLowStockLines.length ? `${cartLowStockLines.length} ${cartLowStockLines.length === 1 ? 'line reaches' : 'lines reach'} the reorder level after this sale.` : unitCount ? 'No cart line reaches its reorder level after review.' : lowStockCount ? `${lowStockCount} ${lowStockCount === 1 ? 'item needs' : 'items need'} attention in Stock.` : 'No item is currently below its reorder level.'}</p></div></div>
           <Link to="/shop/?tab=inventory">Review stock</Link>
         </section>
-        <div className="shop-counter-followup-actions">
-          <Link className="core-button" to="/shop/?tab=orders">Open Orders</Link>
-          {lastReceipt ? <button className="core-button" onClick={() => onViewLastReceipt(lastReceipt)} type="button">View last order record</button> : null}
-        </div>
       </aside>
     </div>
     {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
@@ -2073,12 +2065,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     ? orderAcknowledgementDownloads.get(counterReceiptOrderId)?.artifact ?? null
     : null
   const activeReceiptAck = receiptAck ?? counterReceiptAck
-  const lastCounterReceipt = useMemo(() => {
-    const order = [...commerce.orders]
-      .filter((candidate) => candidate.channel === 'Walk-in' && candidate.status === 'completed' && candidate.paymentStatus === 'reconciled')
-      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))[0]
-    return order ? orderAcknowledgementDownloads.get(order.id)?.artifact ?? null : null
-  }, [commerce.orders, orderAcknowledgementDownloads])
   const latestClose = commerce.closes.find((close) => close.operator)
   // Roadmap §2 item 5 — anomaly flags on the close. A pure projection over
   // closes already saved (shop-close-anomaly-flags.ts): nothing is stored, no
@@ -7076,7 +7062,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>

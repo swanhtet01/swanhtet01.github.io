@@ -1705,13 +1705,17 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-current-sale > header h2 { margin: 4px 0 0; }
 .shop-cart-actions { display: flex; align-items: center; gap: 8px; }
 .shop-cart-close { display: none; }
-.shop-cart-lines { min-height: 84px; flex: 1; overflow-y: auto; padding: 8px 1px; scrollbar-color: rgba(86,240,193,.25) transparent; }
-.shop-cart-lines article { min-height: 67px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 5px 12px; border-bottom: 1px solid var(--core-line); padding: 8px 0; }
-.shop-cart-lines article > div:first-child { min-width: 0; display: grid; gap: 3px; }
-.shop-cart-lines article > div:first-child strong { overflow: hidden; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
+.shop-cart-column-head, .shop-cart-lines article { display: grid; grid-template-columns: minmax(0,1fr) 5.5rem 7.5rem 5.75rem; align-items: center; gap: .5rem; }
+.shop-cart-column-head { border-bottom: 1px solid var(--core-line); padding: .625rem 0; color: var(--core-muted); font-size: .6875rem; font-weight: 650; }
+.shop-cart-column-head span:not(:first-child) { text-align: right; }
+.shop-cart-lines { min-height: 84px; flex: 1; overflow-y: auto; padding: 0 1px; scrollbar-color: rgba(86,240,193,.25) transparent; }
+.shop-cart-lines article { min-height: 67px; border-bottom: 1px solid var(--core-line); padding: 8px 0; }
+.shop-cart-item { min-width: 0; display: grid; gap: 3px; }
+.shop-cart-item strong { overflow: hidden; font-size: .8125rem; text-overflow: ellipsis; white-space: nowrap; }
 .shop-cart-lines article small { color: var(--core-quiet); font-size: 0.5625rem; }
-.shop-cart-lines article > b { grid-column: 2; color: var(--core-muted); font-family: var(--core-mono); font-size: 0.625rem; text-align: right; }
-.shop-quantity-stepper { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: 44px 30px 44px; align-items: center; border: 1px solid var(--core-line-strong); border-radius: 9px; background: var(--core-panel-raised); }
+.shop-cart-unit-price, .shop-cart-line-total { color: var(--core-muted); font-size: .75rem; font-variant-numeric: tabular-nums; text-align: right; }
+.shop-cart-line-total { color: var(--core-ink); font-weight: 700; }
+.shop-quantity-stepper { display: grid; grid-template-columns: 44px 30px 44px; align-items: center; border: 1px solid var(--core-line-strong); border-radius: 9px; background: var(--core-panel-raised); }
 .shop-quantity-stepper button { width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--core-green); cursor: pointer; }
 .shop-quantity-stepper button:disabled { color: var(--core-quiet); cursor: not-allowed; }
 .shop-quantity-stepper strong { text-align: center; font-family: var(--core-mono); font-size: 0.625rem; }
@@ -3122,7 +3126,7 @@ input, select, textarea,
 /* Shop counter: the catalog is an operator's fast, scannable list, not a wall
    of decorative tiles. The same real product, basket and checkout controls stay
    in place; only their information hierarchy changes. */
-.shop-counter-grid { grid-template-columns: minmax(24rem, 1.4fr) minmax(19rem, .9fr) minmax(15rem, .68fr); gap: 1rem; }
+.shop-counter-grid { grid-template-columns: minmax(29rem, 1fr) minmax(31rem, 1.12fr) minmax(17rem, .68fr); gap: 1rem; }
 .shop-catalog-panel, .shop-current-sale, .shop-counter-followup { box-shadow: 0 .875rem 2.25rem rgba(20, 22, 40, .045); }
 .shop-catalog-panel { padding: 1.25rem; }
 .shop-catalog-head { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; align-items: start; gap: .875rem; padding-bottom: .875rem; }
@@ -3131,16 +3135,16 @@ input, select, textarea,
 .shop-item-search { width: 100%; }
 .shop-item-search-row { width: 100%; }
 .shop-item-search input { width: 100%; min-height: 3rem; }
-.shop-counter-column-head { display: grid; grid-template-columns: minmax(0, 1fr) 6.5rem 6.25rem 3.75rem; gap: .75rem; border-block: 1px solid var(--core-line); padding: .6875rem .875rem .6875rem 4.75rem; color: var(--core-muted); font-size: .6875rem; font-weight: 650; }
+.shop-counter-column-head { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 5rem 3.25rem; gap: .75rem; border-block: 1px solid var(--core-line); padding: .6875rem .875rem .6875rem 4.75rem; color: var(--core-muted); font-size: .6875rem; font-weight: 650; }
 .shop-counter-column-head span:not(:first-child) { text-align: right; }
 .shop-item-grid { display: block; padding: 0; }
-.shop-product-tile { width: 100%; min-height: 4.75rem; display: grid; grid-template-columns: 3.25rem minmax(0, 1fr) 3.75rem; align-items: center; gap: .75rem; border: 0; border-bottom: 1px solid var(--core-line); border-radius: 0; padding: .5rem .875rem; background: transparent; }
+.shop-product-tile { width: 100%; min-height: 4.75rem; display: grid; grid-template-columns: 3.25rem minmax(0, 1fr) 3.25rem; align-items: center; gap: .75rem; border: 0; border-bottom: 1px solid var(--core-line); border-radius: 0; padding: .5rem .875rem; background: transparent; }
 .shop-product-tile:hover { border-color: var(--core-line); background: var(--core-surface-soft); transform: none; }
 .shop-product-tile:focus-visible { position: relative; z-index: 1; }
 .shop-product-art { width: 3.25rem; height: 3.25rem; border-radius: .625rem; }
-.shop-product-copy { display: grid; grid-template-columns: minmax(0, 1fr) 6.5rem 6.25rem; align-items: center; gap: .75rem; }
+.shop-product-copy { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 5rem; align-items: center; gap: .75rem; }
 .shop-product-name { min-width: 0; display: grid; gap: .125rem; }
-.shop-product-copy strong { font-size: .8125rem; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
+.shop-product-copy strong { display: -webkit-box; overflow: hidden; font-size: .8125rem; line-height: 1.35; white-space: normal; overflow-wrap: normal; word-break: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .shop-product-copy b { margin: 0; font-family: inherit; font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: right; }
 .shop-product-copy > small { font-size: .75rem; text-align: right; }
 .shop-product-add, .shop-product-quantity { position: static; width: 3.25rem; min-width: 3.25rem; height: 2.75rem; border: 1px solid var(--core-line-strong); border-radius: .625rem; background: var(--core-surface-soft); color: var(--core-accent); font-family: inherit; font-size: .75rem; backdrop-filter: none; }
@@ -3148,15 +3152,13 @@ input, select, textarea,
 .shop-current-sale { overflow-y: auto; padding: 1.25rem; scrollbar-gutter: stable; }
 .shop-current-sale > header { min-height: 5rem; padding-bottom: .875rem; }
 .shop-current-sale > header p { margin: .25rem 0 0; color: var(--core-muted); font-size: .75rem; }
-.shop-cart-lines { flex: 0 1 auto; max-height: 12rem; }
-.shop-cart-lines article > div:first-child strong { font-size: .8125rem; }
+.shop-cart-lines { max-height: none; }
 .shop-current-sale > footer { position: sticky; bottom: -1.25rem; z-index: 2; gap: .625rem; margin-inline: -1.25rem; padding: .875rem 1.25rem 1.25rem; background: color-mix(in srgb,var(--core-panel) 96%,transparent); box-shadow: 0 -.75rem 1.5rem color-mix(in srgb,var(--core-panel) 88%,transparent); backdrop-filter: blur(.75rem); }
 .shop-current-sale > footer > div strong { font-family: inherit; font-size: 1.375rem; font-variant-numeric: tabular-nums; }
 .shop-review-sale { background: var(--core-accent); color: var(--core-on-accent); }
 .shop-counter-followup { display: flex; flex-direction: column; gap: 1rem; overflow-y: auto; padding: 1.25rem; scrollbar-gutter: stable; }
 .shop-counter-followup > header { display: grid; gap: .625rem; border-bottom: 1px solid var(--core-line); padding-bottom: .875rem; }
-.shop-counter-followup > header h2 { max-width: 13ch; margin: .25rem 0 0; font-size: 1.375rem; letter-spacing: -.045em; line-height: 1.05; }
-.shop-counter-followup > header .core-eyebrow { color: var(--core-accent); }
+.shop-counter-followup > header h2 { margin: 0; font-size: 1.375rem; letter-spacing: -.045em; line-height: 1.05; }
 .shop-counter-followup-status { width: fit-content; display: inline-flex; align-items: center; min-height: 1.75rem; border-radius: 999px; padding: .25rem .625rem; background: var(--core-surface-soft); color: var(--core-muted); font-size: .6875rem; font-weight: 650; }
 .shop-counter-followup-status[data-ready="true"] { background: color-mix(in srgb,var(--core-accent) 10%,var(--core-panel)); color: var(--core-accent); }
 .shop-counter-outcomes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .5rem; }
@@ -3180,25 +3182,23 @@ input, select, textarea,
 .shop-counter-stock-note p { margin: .2rem 0 0; color: var(--core-muted); font-size: .6875rem; line-height: 1.45; }
 .shop-counter-stock-note > a { width: fit-content; color: var(--core-accent); font-size: .75rem; font-weight: 700; text-decoration: none; }
 .shop-counter-stock-note > a:hover, .shop-counter-stock-note > a:focus-visible { text-decoration: underline; text-underline-offset: .2rem; }
-.shop-counter-followup-actions { display: grid; gap: .5rem; margin-top: auto; }
-.shop-counter-followup-actions .core-button { width: 100%; min-height: 2.75rem; justify-content: center; }
 
 /* The product rail reduces the workspace by roughly 13rem. Collapse the
-   follow-up rail before the three desktop panels begin competing for width;
-   at 1280px this keeps product, price and stock in distinct table columns
-   instead of visually fusing the first row. */
-@media (max-width: 1360px) and (min-width: 841px) {
-  .shop-counter-grid { grid-template-columns: minmax(0, 1fr) minmax(20rem, 23rem); }
+   follow-up rail on ordinary laptop and desktop widths so product names and
+   the active transaction remain readable. The three-column command surface
+   returns only when the viewport can carry all three without compression. */
+@media (max-width: 1700px) and (min-width: 841px) {
+  .shop-counter-grid { grid-template-columns: minmax(24rem, .94fr) minmax(29rem, 1.06fr); }
   .shop-counter-module > .shop-counter-surface { min-height: 0; flex-basis: auto; overflow: visible; }
   .shop-counter-grid { height: auto; }
-  .shop-counter-followup { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(12rem,.7fr) minmax(16rem,1fr) minmax(17rem,1.1fr); align-items: start; overflow: visible; }
+  .shop-counter-followup { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(12rem,.8fr) minmax(18rem,1.2fr); align-items: start; overflow: visible; }
   .shop-counter-followup > header { border: 0; padding: 0; }
-  .shop-counter-outcomes { grid-column: 2; }
-  .shop-counter-steps { grid-column: 3; grid-row: 1 / span 2; }
-  .shop-counter-stock-note { grid-column: 1 / span 2; }
-  .shop-counter-followup-actions { grid-column: 1 / span 2; grid-template-columns: repeat(2,minmax(0,1fr)); margin-top: 0; }
+  .shop-counter-steps { grid-column: 2; grid-row: 1 / span 2; }
+  .shop-counter-stock-note { grid-column: 1; margin-top: 0; }
 }
 @media (max-width: 1080px) and (min-width: 841px) {
+  .shop-counter-grid { grid-template-columns: minmax(0,1fr); }
+  .shop-current-sale, .shop-counter-followup { grid-column: 1; }
   .shop-counter-column-head { display: none; }
   .shop-product-copy { grid-template-columns: minmax(0, 1fr) auto; gap: .125rem .5rem; }
   .shop-product-name { grid-row: span 2; }
@@ -3217,9 +3217,14 @@ input, select, textarea,
   .shop-product-copy > small { grid-column: 2; text-align: right; }
   .shop-product-add, .shop-product-quantity { width: 3rem; min-width: 3rem; min-height: 2.75rem; }
   .shop-current-sale { padding: 1rem; }
+  .shop-cart-column-head { display: none; }
+  .shop-cart-lines article { grid-template-columns: minmax(0,1fr) auto; gap: .25rem .75rem; }
+  .shop-cart-item { grid-column: 1; grid-row: 1; }
+  .shop-cart-unit-price { grid-column: 1; grid-row: 2; text-align: left; }
+  .shop-quantity-stepper { grid-column: 2; grid-row: 1; }
+  .shop-cart-line-total { grid-column: 2; grid-row: 2; }
   .shop-counter-followup { margin-top: .75rem; padding: 1rem; }
   .shop-counter-followup > header h2 { max-width: none; }
-  .shop-counter-followup-actions { margin-top: 0; }
 }
 
 /* Orders uses the same calm queue + insight composition as the accepted product
