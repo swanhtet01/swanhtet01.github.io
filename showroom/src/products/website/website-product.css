@@ -1806,23 +1806,6 @@
 .website-today-checks > summary:focus-visible { outline: .125rem solid var(--website-green); outline-offset: .125rem; }
 .website-today-checks[open] > summary { margin-bottom: .5rem; }
 
-.website-today-metrics {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-self: start;
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--website-line);
-  border-radius: 10px;
-  background: var(--website-line);
-}
-
-.website-today-metrics span { min-width: 0; display: grid; gap: 3px; padding: 10px 8px; background: var(--website-panel); }
-.website-today-metrics span:last-child { grid-column: 1 / -1; }
-.website-today-metrics small { color: var(--website-quiet); font-family: var(--website-mono); font-size: 0.5rem; text-transform: uppercase; }
-.website-today-metrics strong { color: var(--website-ink); font-size: 0.6875rem; white-space: normal; overflow-wrap: anywhere; }
-
 .website-check-guidance { margin: .75rem 0 0; color: var(--website-ink); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
 .website-check-guidance h3 { margin: 0 0 .5rem; font-size: inherit; }
 .website-check-guidance ul { margin: 0; padding-inline-start: 1.25rem; }
@@ -1906,8 +1889,6 @@
 @media (max-width: 760px) {
   .website-today { grid-template-columns: 1fr; padding: 13px; }
   .website-today-priority > .website-button { width: 100%; }
-  .website-today-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .website-today-metrics span:last-child { grid-column: 1 / -1; }
   .website-lead-inbox > header { display: grid; }
   .website-lead-counts { width: 100%; max-width: none; }
   .website-lead-capture-form,
@@ -3416,8 +3397,7 @@
 
 /* Design phase 1 — the owner's daily dashboard surfaces, raised off the
    6-10px micro-type floor (tribunal rank 9). */
-.website-today-metrics small, .website-lead-counts small { font-size: var(--font-size-xs); }
-.website-today-metrics strong { font-size: var(--font-size-display); }
+.website-lead-counts small { font-size: var(--font-size-xs); }
 .website-today-priority p, .website-lead-inbox p { font-size: var(--font-size-base); }
 .website-lead-list article small, .website-lead-capture-form label, .website-lead-review-controls label { font-size: var(--font-size-sm); }
 .website-start-tools > summary small, .website-start-tools > summary b { font-size: var(--font-size-xs); }
@@ -3564,7 +3544,7 @@
   display: grid;
   place-items: center;
   border: 0.0625rem solid var(--website-line-strong);
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--website-panel);
   color: var(--website-muted);
   font-size: 0.6875rem;

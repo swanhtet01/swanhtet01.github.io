@@ -77,15 +77,17 @@ test('the Sites action remains available without a preview-only entry gate', () 
   assert.match(websiteProductSource, /\{showWebsiteEditorAction \? <button[\s\S]*?\{websiteSurfaceActionLabel\}\s*<\/button> : null\}/)
 })
 
-test('Website keeps the next action and readiness visible while detailed checks collapse', () => {
+test('Website keeps the next action and workflow readiness visible while detailed checks collapse', () => {
   assert.match(websiteProductSource, /<span className="core-eyebrow">Next action<\/span>/)
-  assert.match(websiteProductSource, /<div className="website-today-signals">[\s\S]*?<details className="website-today-checks">\s*<summary>Review site checks · \{websiteTodayMetrics\[1\]\[1\]\}<\/summary>/)
+  assert.match(websiteProductSource, /<div className="website-today-signals">[\s\S]*?<ol aria-label="Website workflow" className="website-workflow-rail">[\s\S]*?<details className="website-today-checks">\s*<summary>Review site checks · \{readinessSummary\}<\/summary>/)
   const checks = websiteProductSource.slice(websiteProductSource.indexOf('<div className="website-today-signals">'), websiteProductSource.indexOf('</section> : null}', websiteProductSource.indexOf('<div className="website-today-signals">')))
-  assert.match(checks, /aria-label="Website today status"/)
-  assert.match(checks, /websiteTodayMetrics\.map/)
+  assert.match(checks, /aria-label="Website workflow"/)
+  assert.match(checks, /websiteWorkflowSteps\.map/)
   assert.match(checks, /<\/details>/)
   assert.match(websiteProductSource, /<small className="website-today-context">\{websiteTodayContext\}<\/small>/)
   assert.doesNotMatch(websiteProductSource, /compactWebsiteStatus|websiteReviewNote|website-today-source/)
+  assert.match(websiteProductCss, /\.website-workflow-rail \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/)
+  assert.match(websiteProductCss, /\.website-workflow-rail strong \{[^}]*overflow-wrap: anywhere;/)
   assert.match(websiteProductCss, /\.website-today-checks > summary \{\s*min-height: 2\.75rem;/)
   assert.match(websiteProductCss, /\.website-today-checks > summary:focus-visible \{ outline: \.125rem solid var\(--website-green\);/)
 })
@@ -140,23 +142,21 @@ test('narrow phones give the saved Website primary action a full row without cha
   assert.match(websiteProductSource, /surface === 'work' \? \(/)
 })
 
-test('all Website status values wrap in container-fitting cells and keep the mobile layout', () => {
+test('all Website workflow values wrap in container-fitting cells and keep the mobile layout', () => {
   assert.match(
     websiteProductSource,
-    /\['File', hasUnsavedChanges \? 'Blocked by draft' : releaseRecordRequired \? publishIsCurrent \? 'Ready' : 'Needed' : 'Ready to download'\]/,
-    'the guarded status must remain the current source-owned FILE truth',
+    /id: 'file',[\s\S]*?label: 'Website file',[\s\S]*?detail: releaseRecordRequired\s*\? publishIsCurrent \? 'Ready' : approvalIsCurrent \? 'Create file' : 'After review'\s*: localPreviewReady \? 'Ready to download' : 'After review'/,
+    'the guarded workflow must keep the current source-owned Website file truth',
   )
 
-  assert.match(websiteProductCss, /\.website-today-metrics \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/, 'status signals must use a stable two-column command surface')
-  assert.match(websiteProductCss, /\.website-today-metrics span:last-child \{ grid-column: 1 \/ -1; \}/, 'the fifth signal must span the final row')
-  const valueRules = [...websiteProductCss.matchAll(/\.website-today-metrics[^{}]*strong\s*\{([^}]*)\}/g)].map((match) => match[1]).join('\n')
-  assert.match(valueRules, /white-space: normal;/, 'every status can wrap, not only FILE')
+  assert.match(websiteProductCss, /\.website-workflow-rail \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/, 'workflow signals must use a stable two-column command surface')
+  const valueRules = [...websiteProductCss.matchAll(/\.website-workflow-rail[^{}]*strong\s*\{([^}]*)\}/g)].map((match) => match[1]).join('\n')
   assert.match(valueRules, /overflow-wrap: anywhere;/, 'long status tokens cannot force overflow')
   assert.doesNotMatch(valueRules, /text-overflow:\s*ellipsis|white-space:\s*nowrap|overflow:\s*hidden/, 'later value rules must not restore truncation')
   assert.match(
     websiteProductCss,
-    /@media \(max-width: 760px\) \{[\s\S]*?\.website-today-metrics \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}\n  \.website-today-metrics span:last-child \{ grid-column: 1 \/ -1; \}/,
-    'mobile keeps its two-column grid with the FILE metric spanning the full row',
+    /@media \(max-width: 32\.5rem\) \{[\s\S]*?\.website-workflow-rail \{ grid-template-columns: minmax\(0, 1fr\); \}[\s\S]*?\.website-workflow-rail > li \+ li \{ border-top: 0\.0625rem solid var\(--website-line\); border-left: 0; \}/,
+    'small phones stack the workflow without restoring horizontal dividers',
   )
 })
 
