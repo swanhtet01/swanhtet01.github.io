@@ -62,7 +62,7 @@ const REQUIRED_SOURCE_MARKERS = [
   },
   {
     path: 'showroom/src/core/CoreApp.tsx',
-    markers: ['Paid &amp; handed over', 'Browser-local sample only', 'Search or scan SKU'],
+    markers: ['Paid &amp; handed over', 'Mark packed for delivery', 'Record delivered', 'Search or scan SKU'],
   },
   {
     path: 'tools/write_app_release_metadata.mjs',
@@ -93,14 +93,14 @@ const PRIVATE_EVIDENCE_FIELDS = [
 ]
 
 const SMOKE_STEPS = [
-  ['first_load_online', 'Open https://app.supermega.dev/settings/?product=shop online and create or load the Shop sample.'],
+  ['first_load_online', 'Open https://app.supermega.dev/login online, sign in to the founder Shop workspace, then open Shop.'],
   ['bottom_nav', 'On the phone, use Today, Sell, Orders, and Stock from the bottom task bar with one thumb.'],
   ['camera_or_fallback', 'Try camera barcode scan if Android Chrome exposes it; otherwise prove the keyboard-wedge/search fallback.'],
   ['product_photo', 'Attach only a non-private test image to a catalog row, then confirm the Sell tile renders the photo or the documented fallback.'],
-  ['counter_sale', 'Create a sample sale from the Sell tab through the reviewed counter gate.'],
+  ['counter_sale', 'Create a test sale from the Sell tab through the reviewed counter gate.'],
   ['payment_qr', 'Open the amount-due QR affordance when a non-sensitive test QR exists, or record the no-saved-QR fallback.'],
   ['loyalty_chip', 'Use a named sample customer if demonstrating loyalty; record only whether the points chip appears and remains review-only.'],
-  ['orders_handoff', 'Move the order through Start preparing, Mark ready, and Paid & handed over; never claim money was captured.'],
+  ['orders_handoff', 'Move a channel order through prepare, ready, payment review and delivery or pickup. Verify Paid & handed over appears only for walk-in pickup; never claim money was captured.'],
   ['offline_reload_retry', 'Drop connectivity after the first load, reload, and repeat the sale/order path enough to prove the offline cache.'],
   ['daily_close', 'Open the close controls and record whether Review and save close or Save daily close remains usable after review.'],
 ]

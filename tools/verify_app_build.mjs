@@ -5311,6 +5311,14 @@ if (!coreSource.includes('function ownerFacingActionError(detail: string)')
 // now. Offering "Reconcile payment" as its primary action promises what the transition refuses.
 if (!coreSource.includes("const reconcileIsPrimary = !settleSaleIsPrimary && needsPayment && order.status === 'ready'")
   || !commerceSource.includes('(timestampMicros(proof.capturedAt) as bigint) > (timestampMicros(order.completion.capturedAt) as bigint)) return null')) fail('completed_order_offers_a_payment_action_that_always_refuses')
+if (!coreSource.includes("const settleSaleIsPrimary = needsPayment && active && order.channel === 'Walk-in' && order.fulfilment === 'pickup'")
+  || !coreSource.includes("if (order.channel !== 'Walk-in' || order.fulfilment !== 'pickup')")
+  || !coreSource.includes('function shopOrderPrimaryActionLabel(order: CommerceOrder)')
+  || !coreSource.includes("return order.fulfilment === 'delivery' ? 'Mark packed for delivery' : order.fulfilment === 'pickup' ? 'Ready for pickup' : 'Mark ready'")
+  || !coreSource.includes("return order.fulfilment === 'delivery' ? 'Record delivered' : order.fulfilment === 'pickup' ? 'Record picked up' : 'Complete handoff'")
+  || !coreSource.includes("const nextOrderAction = nextOrder ? shopOrderPrimaryActionLabel(nextOrder) : 'The queue is clear'")
+  || !coreSource.includes('const primaryActionLabel = shopOrderPrimaryActionLabel(order)')
+  || !coreSource.includes('needsPayment && !reconcileIsPrimary ? <button className="text-link"')) fail('channel_order_fulfilment_steps_can_be_skipped')
 // The sample counter sales a trade template installs are money already taken. Staged 'pending'
 // they became permanently unclearable -- completed orders cannot be cancelled either -- and their
 // takings never reached a daily close.

@@ -956,6 +956,16 @@ function fulfilmentLabel(value: string | undefined) {
   return value ?? ''
 }
 
+function shopOrderPrimaryActionLabel(order: CommerceOrder) {
+  if (order.refundStatus === 'due') return 'Record settled refund'
+  if (order.paymentStatus === 'pending' && order.channel === 'Walk-in' && order.fulfilment === 'pickup') return 'Paid & handed over'
+  if (order.status === 'ready' && order.paymentStatus === 'pending') return 'Record payment'
+  if (order.status === 'confirmed') return 'Start preparing'
+  if (order.status === 'preparing') return order.fulfilment === 'delivery' ? 'Mark packed for delivery' : order.fulfilment === 'pickup' ? 'Ready for pickup' : 'Mark ready'
+  if (order.status === 'ready') return order.fulfilment === 'delivery' ? 'Record delivered' : order.fulfilment === 'pickup' ? 'Record picked up' : 'Complete handoff'
+  return 'Review order'
+}
+
 function commerceOrderReturnLines(order: CommerceOrder) {
   return order.lines?.map((line) => ({
     sku: line.sku,
@@ -4744,6 +4754,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   function settleSale(orderId: string) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
+    if (order.channel !== 'Walk-in' || order.fulfilment !== 'pickup') return setNotice('Follow fulfilment steps.')
     if (order.paymentStatus !== 'pending') {
       setNotice(`${order.id} payment is already reconciled. Advance fulfilment instead.`)
       return
@@ -7040,17 +7051,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
             ? 'Access'
             : 'Review'
   const nextOrder = actionOrders[0]
-  const nextOrderAction = !nextOrder
-    ? 'The queue is clear'
-    : nextOrder.refundStatus === 'due'
-      ? 'Record the settled refund'
-      : nextOrder.paymentStatus === 'pending'
-        ? 'Review payment and handover'
-        : nextOrder.status === 'confirmed'
-          ? 'Start preparing the order'
-          : nextOrder.status === 'preparing'
-            ? 'Mark the order ready'
-            : 'Complete the handover'
+  const nextOrderAction = nextOrder ? shopOrderPrimaryActionLabel(nextOrder) : 'The queue is clear'
   const nextOrderDetail = nextOrder
     ? `${nextOrder.customer} · ${commerceOrderDisplayReference(nextOrder.id)} · ${formatMoney(nextOrder.total)}`
     : 'No payment, fulfilment or refund action is waiting.'
@@ -7101,7 +7102,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2><p className="order-queue-subtitle">See what needs attention, finish the handoff and keep one accountable record.</p></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       <dl className="order-queue-summary" aria-label="Order status"><div><dt>Need action</dt><dd>{actionOrders.length}</dd></div><div><dt>In fulfilment</dt><dd>{openOrders.length}</dd></div><div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div></dl>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
@@ -7975,14 +7976,12 @@ function OrderList({
 }) {
   const promiseNow = useMinuteClock()
   if (!orders.length) return <Empty>No orders need action.</Empty>
-  const nextAction: Record<'confirmed' | 'preparing' | 'ready', string> = { confirmed: 'Start preparing', preparing: 'Mark ready', ready: 'Complete' }
   return <div className="order-list">{orders.map((order) => {
     const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
     const needsPayment = order.paymentStatus === 'pending'
-    // The everyday outcome — paid and handed over — is the one-review primary for
-    // any active unpaid order; payment-only reconciliation (pay-later customers)
-    // stays reachable under More. Both remain the same recorded transitions.
-    const settleSaleIsPrimary = needsPayment && active
+    // The one-review shortcut belongs only to a walk-in pickup where the customer is
+    // physically at the counter. Channel orders keep their packing/delivery evidence.
+    const settleSaleIsPrimary = needsPayment && active && order.channel === 'Walk-in' && order.fulfilment === 'pickup'
     // 'completed' is deliberately absent. The record keeps payment at or before handover, so a
     // completed order cannot accept a payment proof stamped now -- offering it as the primary
     // action promises the owner something the transition will always refuse. advanceCommerceOrder
@@ -7996,7 +7995,8 @@ function OrderList({
     const promiseUrgency = active ? commerceOrderPromiseUrgency(order, promiseNow) : 'scheduled'
     const acknowledgement = acknowledgementDownloads.get(order.id)
     const canCancelOrder = active && canCancel(order.id)
-    const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || settleSaleIsPrimary
+    const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || (needsPayment && !reconcileIsPrimary)
+    const primaryActionLabel = shopOrderPrimaryActionLabel(order)
     const targetId = commerceOrderTargetId(order.id)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
@@ -8025,14 +8025,14 @@ function OrderList({
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
-        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label"><span>Paid &amp; handed over</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span></button> : null}
-        {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
-        {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
-        {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
+        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label"><span>{primaryActionLabel}</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span></button> : null}
+        {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">{primaryActionLabel}</button> : null}
+        {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">{primaryActionLabel}</button> : null}
+        {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{primaryActionLabel}</button> : null}
         {hasSecondaryActions ? <details className="order-row-more">
           <summary aria-label={`More options for ${order.id}`}>More</summary>
           <div>
-            {settleSaleIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Record payment only</button> : null}
+            {needsPayment && !reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Record payment only</button> : null}
             {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
             <OrderReceiptActions acknowledgement={acknowledgement} onViewReceipt={onViewReceipt} />
             {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel order</button> : null}
