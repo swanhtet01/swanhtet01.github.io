@@ -389,6 +389,7 @@ const expectedHumanCommerceEvents = [
   'commerce.refund.settled',
   'commerce.service_schedule.initialized',
   'commerce.service_schedule.saved',
+  'commerce.shift.opened',
   'commerce.shipping_policy.saved',
   'commerce.stock.counted',
   'commerce.stock.received',

@@ -87,6 +87,8 @@ DEFAULT_STOREFRONT_PREVIEW_DIGEST = (
 DEFAULT_STOREFRONT_ACTION_ID = (
     "ACT-STOREFRONT-R1-3d8a204568ebc4399841a2fd7482876dc600c699d9603c1ed0ddefc0215804db"
 )
+OPERATING_UNIT_ID = "UNIT-00000000-0000-4000-8000-000000000101"
+SHIFT_SESSION_ID = "SHIFT-00000000-0000-4000-8000-000000000102"
 
 
 def canonical_digest(value: object) -> str:
@@ -1187,6 +1189,18 @@ def settled_refund_state(
 
 
 def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, str]:
+    if event_type == "commerce.shift.opened":
+        opening = next_state["shiftSessions"][-1]["opening"]  # type: ignore[index]
+        units = next_state.get("operatingUnits", [])
+        if (
+            isinstance(units, list)
+            and units
+            and isinstance(units[-1], dict)
+            and isinstance(units[-1].get("registration"), dict)
+            and opening["actionId"] == f"{units[-1]['registration']['actionId']}-SHIFT"
+        ):
+            return dict(units[-1]["registration"])
+        return dict(opening)
     if event_type == "commerce.item.updated":
         return dict(next_state["catalogChanges"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.purchase_order.created":
@@ -1463,6 +1477,306 @@ def apply_event(
 
 
 class CommerceRuntimeTests(unittest.TestCase):
+    def test_managed_shop_shift_is_authoritative_persistent_and_workspace_scoped(self) -> None:
+        def opened_state(
+            current: dict[str, object],
+            *,
+            unit_id: str,
+            shift_id: str,
+            action_id: str,
+            unit_name: str,
+            actor: str = "Fabricated client actor",
+            captured_at: str = "2099-01-01T00:00:00.000Z",
+        ) -> tuple[dict[str, object], dict[str, str]]:
+            registration = action_evidence(
+                action_id,
+                actor=actor,
+                captured_at=captured_at,
+            )
+            state = deepcopy(current)
+            state["operatingUnits"] = [
+                {
+                    "id": unit_id,
+                    "name": unit_name,
+                    "registration": registration,
+                }
+            ]
+            state["shiftSessions"] = [
+                {
+                    "id": shift_id,
+                    "unitId": unit_id,
+                    "opening": {
+                        **registration,
+                        "actionId": f"{action_id}-SHIFT",
+                    },
+                }
+            ]
+            return state, registration
+
+        candidate, evidence = opened_state(
+            catalog_state(),
+            unit_id=OPERATING_UNIT_ID,
+            shift_id=SHIFT_SESSION_ID,
+            action_id="ACT-SHIFT-OPEN",
+            unit_name="Main shop",
+            actor="Accountable operator",
+            captured_at=NOW,
+        )
+        accepted = apply_event(
+            catalog_state(),
+            "commerce.shift.opened",
+            candidate,
+            evidence,
+        )
+        self.assertEqual(
+            validate_commerce_state(json.loads(json.dumps(accepted))),
+            accepted,
+        )
+
+        injected_intake = deepcopy(candidate)
+        injected_intake["websiteIntakes"] = [website_intake()]
+        with self.assertRaisesRegex(TrialValidationError, "websiteIntakes"):
+            apply_event(
+                catalog_state(),
+                "commerce.shift.opened",
+                injected_intake,
+                evidence,
+            )
+
+        branch_evidence = action_evidence(
+            "ACT-SHIFT-BRANCH",
+            captured_at=CONVERTED_AT,
+        )
+        second_unit_id = "UNIT-00000000-0000-4000-8000-000000000103"
+        second_shift_id = "SHIFT-00000000-0000-4000-8000-000000000104"
+        branch_state = deepcopy(accepted)
+        branch_state["operatingUnits"].append(  # type: ignore[union-attr]
+            {
+                "id": second_unit_id,
+                "name": "North shop",
+                "registration": branch_evidence,
+            }
+        )
+        branch_state["shiftSessions"].append(  # type: ignore[union-attr]
+            {
+                "id": second_shift_id,
+                "unitId": second_unit_id,
+                "opening": {
+                    **branch_evidence,
+                    "actionId": f"{branch_evidence['actionId']}-SHIFT",
+                },
+            }
+        )
+        branch_accepted = apply_event(
+            accepted,
+            "commerce.shift.opened",
+            branch_state,
+            branch_evidence,
+        )
+        self.assertEqual(len(branch_accepted["operatingUnits"]), 2)
+        self.assertEqual(len(branch_accepted["shiftSessions"]), 2)
+
+        intent = {
+            "orderId": "ORD-SHIFT-1",
+            "shiftId": SHIFT_SESSION_ID,
+            "customer": "Walk-in customer",
+            "channel": "Walk-in",
+            "payment": "Cash",
+            "fulfilment": "pickup",
+            "fulfilmentReference": "Front counter",
+            "promisedAt": PROMISED_AT,
+            "paymentTermsDays": 0,
+            "lines": [{"sku": "SKU-1", "quantity": 1}],
+        }
+        order_state = create_commerce_order_from_intent(
+            accepted,
+            intent,
+            action_evidence("ACT-SHIFT-ORDER", captured_at=CONVERTED_AT),
+        )
+        self.assertEqual(order_state["orders"][0]["shiftId"], SHIFT_SESSION_ID)
+        missing_shift = dict(intent)
+        missing_shift.pop("shiftId")
+        with self.assertRaisesRegex(TrialValidationError, "open Shop shift"):
+            create_commerce_order_from_intent(
+                accepted,
+                missing_shift,
+                action_evidence("ACT-SHIFT-MISSING", captured_at=CONVERTED_AT),
+            )
+
+        foreign_unit = deepcopy(candidate)
+        foreign_unit["shiftSessions"][0]["unitId"] = (  # type: ignore[index]
+            "UNIT-00000000-0000-4000-8000-000000000199"
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                catalog_state(),
+                "commerce.shift.opened",
+                foreign_unit,
+                evidence,
+            )
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        principals = (
+            TrialPrincipal("workspace-shift-a", "operator-a", "human"),
+            TrialPrincipal("workspace-shift-b", "operator-b", "human"),
+        )
+        saved_states = []
+        for index, principal in enumerate(principals, start=1):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+            with patch("supermega_runtime.trial_store._utc_now", return_value=NOW):
+                initialized = store.apply_command(
+                    principal,
+                    command_id=str(uuid4()),
+                    surface="commerce",
+                    event_type="commerce.workspace.initialized",
+                    expected_version=0,
+                    payload={
+                        "state": catalog_state(),
+                        "evidence": action_evidence(f"ACT-SHIFT-INIT-{index}"),
+                    },
+                )
+            unit_id = f"UNIT-00000000-0000-4000-8000-00000000010{index}"
+            shift_id = f"SHIFT-00000000-0000-4000-8000-00000000010{index}"
+            next_state, forged_evidence = opened_state(
+                initialized.state,
+                unit_id=unit_id,
+                shift_id=shift_id,
+                action_id=f"ACT-SHIFT-MANAGED-{index}",
+                unit_name=f"Shop {index}",
+            )
+            payload = {"state": next_state, "evidence": forged_evidence}
+            command_id = str(uuid4())
+            with patch("supermega_runtime.trial_store._utc_now", return_value=NOW):
+                saved = store.apply_command(
+                    principal,
+                    command_id=command_id,
+                    surface="commerce",
+                    event_type="commerce.shift.opened",
+                    expected_version=initialized.version,
+                    payload=payload,
+                )
+                replay = store.apply_command(
+                    principal,
+                    command_id=command_id,
+                    surface="commerce",
+                    event_type="commerce.shift.opened",
+                    expected_version=initialized.version,
+                    payload=payload,
+                )
+            self.assertTrue(replay.idempotent_replay)
+            self.assertEqual(saved.state, replay.state)
+            self.assertEqual(saved.state["operatingUnits"][0]["registration"]["actor"], principal.actor_id)
+            self.assertEqual(saved.state["shiftSessions"][0]["opening"]["actor"], principal.actor_id)
+            self.assertEqual(saved.state["shiftSessions"][0]["opening"]["capturedAt"], NOW)
+            saved_states.append(saved.state)
+
+        self.assertNotEqual(
+            saved_states[0]["operatingUnits"][0]["id"],
+            saved_states[1]["operatingUnits"][0]["id"],
+        )
+        self.assertEqual(
+            store.get_state(principals[0], "commerce").state,
+            saved_states[0],
+        )
+        self.assertEqual(
+            store.get_state(principals[1], "commerce").state,
+            saved_states[1],
+        )
+
+        first_snapshot = store.get_state(principals[0], "commerce")
+        first_shift_id = first_snapshot.state["shiftSessions"][0]["id"]
+        counter_intent = {
+            "orderId": "ORD-SHIFT-MIDNIGHT",
+            "shiftId": first_shift_id,
+            "customer": "Walk-in customer",
+            "channel": "Walk-in",
+            "payment": "Cash",
+            "fulfilment": "pickup",
+            "fulfilmentReference": "Front counter",
+            "promisedAt": "2026-07-23T17:30:00.000Z",
+            "paymentTermsDays": 0,
+            "lines": [{"sku": "SKU-1", "quantity": 1}],
+            "completeAtCounter": True,
+        }
+        order_at = "2026-07-23T16:00:00.000Z"
+        with patch("supermega_runtime.trial_store._utc_now", return_value=order_at):
+            completed = store.apply_command(
+                principals[0],
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.order.created",
+                expected_version=first_snapshot.version,
+                payload={
+                    "intent": counter_intent,
+                    "evidence": action_evidence(
+                        "ACT-SHIFT-MIDNIGHT-ORDER",
+                        captured_at="2099-01-01T00:00:00.000Z",
+                        actor="Fabricated counter actor",
+                    ),
+                },
+            )
+        close_candidate = close_record(
+            completed.state,
+            CLOSE_ACTION_ID,
+            close_id=CLOSE_ID,
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        close_candidate["shiftId"] = first_shift_id
+        close_candidate["businessDate"] = myanmar_business_date(NOW)
+        closing_state = deepcopy(completed.state)
+        closing_state["closes"] = [close_candidate]
+        close_at = "2026-07-23T18:30:00.000Z"
+        with patch("supermega_runtime.trial_store._utc_now", return_value=close_at):
+            closed = store.apply_command(
+                principals[0],
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.close.saved",
+                expected_version=completed.version,
+                payload={
+                    "state": closing_state,
+                    "evidence": action_evidence(
+                        CLOSE_ACTION_ID,
+                        captured_at="2099-01-01T00:00:00.000Z",
+                    ),
+                },
+            )
+        self.assertEqual(closed.state["closes"][0]["createdAt"], close_at)
+        self.assertEqual(closed.state["closes"][0]["businessDate"], "2026-07-23")
+        self.assertEqual(myanmar_business_date(close_at), "2026-07-24")
+
+        reopen_evidence = action_evidence(
+            "ACT-SHIFT-REOPEN",
+            captured_at="2099-01-01T00:00:00.000Z",
+            actor="Fabricated reopening actor",
+        )
+        reopen_state = deepcopy(closed.state)
+        reopen_state["shiftSessions"].append(  # type: ignore[union-attr]
+            {
+                "id": "SHIFT-00000000-0000-4000-8000-000000000105",
+                "unitId": closed.state["operatingUnits"][0]["id"],
+                "opening": reopen_evidence,
+            }
+        )
+        reopen_at = "2026-07-23T19:00:00.000Z"
+        with patch("supermega_runtime.trial_store._utc_now", return_value=reopen_at):
+            reopened = store.apply_command(
+                principals[0],
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.shift.opened",
+                expected_version=closed.version,
+                payload={"state": reopen_state, "evidence": reopen_evidence},
+            )
+        self.assertEqual(reopened.state["operatingUnits"], closed.state["operatingUnits"])
+        self.assertEqual(reopened.state["shiftSessions"][-1]["opening"]["actor"], principals[0].actor_id)
+        self.assertEqual(reopened.state["shiftSessions"][-1]["opening"]["capturedAt"], reopen_at)
+
     def test_shop_demand_intelligence_nets_returns_and_preserves_authority(self) -> None:
         first = completed_state("ORD-DEMAND-1")
         second = completed_state("ORD-DEMAND-2")
@@ -3257,6 +3571,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             frozenset(
                 {
                     "commerce.workspace.initialized",
+                    "commerce.shift.opened",
                     "commerce.item.created",
                     "commerce.item.updated",
                     "commerce.order.created",

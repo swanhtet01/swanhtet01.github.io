@@ -154,6 +154,7 @@ _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
 HUMAN_COMMAND_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
+        "commerce.shift.opened",
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.order.created",
@@ -1277,6 +1278,56 @@ def _authoritative_command_payload(
             **dict(evidence),
             "actor": principal.actor_id,
             "capturedAt": captured_at,
+        }
+        return authoritative
+    if event_type == "commerce.shift.opened":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        operating_units = (
+            state.get("operatingUnits") if isinstance(state, Mapping) else None
+        )
+        shift_sessions = (
+            state.get("shiftSessions") if isinstance(state, Mapping) else None
+        )
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(operating_units, list)
+            or not isinstance(shift_sessions, list)
+        ):
+            return authoritative
+        action_id = evidence.get("actionId")
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_units = deepcopy(operating_units)
+        authoritative_shifts = deepcopy(shift_sessions)
+        for unit_index, unit in enumerate(authoritative_units):
+            registration = unit.get("registration") if isinstance(unit, Mapping) else None
+            if isinstance(registration, Mapping) and registration.get("actionId") == action_id:
+                authoritative_unit = dict(unit)
+                authoritative_unit["registration"] = deepcopy(authoritative_evidence)
+                authoritative_units[unit_index] = authoritative_unit
+        expected_shift_action_ids = {action_id, f"{action_id}-SHIFT"}
+        for shift_index, shift in enumerate(authoritative_shifts):
+            opening = shift.get("opening") if isinstance(shift, Mapping) else None
+            if (
+                isinstance(opening, Mapping)
+                and opening.get("actionId") in expected_shift_action_ids
+            ):
+                authoritative_shift = dict(shift)
+                authoritative_shift["opening"] = {
+                    **authoritative_evidence,
+                    "actionId": opening.get("actionId"),
+                }
+                authoritative_shifts[shift_index] = authoritative_shift
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = {
+            **dict(state),
+            "operatingUnits": authoritative_units,
+            "shiftSessions": authoritative_shifts,
         }
         return authoritative
     if event_type in {
@@ -2770,7 +2821,26 @@ def _authoritative_command_payload(
         authoritative_close = dict(closes[0])
         authoritative_close["operator"] = principal.actor_id
         authoritative_close["createdAt"] = captured_at
-        authoritative_close["businessDate"] = _myanmar_business_date(captured_at)
+        business_date_source = captured_at
+        shift_id = authoritative_close.get("shiftId")
+        shift_sessions = state.get("shiftSessions")
+        if isinstance(shift_id, str) and isinstance(shift_sessions, list):
+            shift = next(
+                (
+                    candidate
+                    for candidate in shift_sessions
+                    if isinstance(candidate, Mapping)
+                    and candidate.get("id") == shift_id
+                ),
+                None,
+            )
+            opening = shift.get("opening") if isinstance(shift, Mapping) else None
+            opened_at = opening.get("capturedAt") if isinstance(opening, Mapping) else None
+            if isinstance(opened_at, str):
+                business_date_source = opened_at
+        authoritative_close["businessDate"] = _myanmar_business_date(
+            business_date_source
+        )
         authoritative_closes = [authoritative_close, *deepcopy(closes[1:])]
         authoritative_state = dict(state)
         authoritative_state["closes"] = authoritative_closes

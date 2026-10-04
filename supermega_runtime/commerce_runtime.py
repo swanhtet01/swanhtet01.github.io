@@ -49,6 +49,7 @@ COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = "supermega.commerce.order-acknowledgemen
 COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
+        "commerce.shift.opened",
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
@@ -101,6 +102,7 @@ COMMERCE_EVENTS = frozenset(
 COMMERCE_HUMAN_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
+        "commerce.shift.opened",
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
@@ -198,6 +200,12 @@ _SHA256_DIGEST_PATTERN = re.compile(r"sha256:[a-f0-9]{64}")
 _COMMAND_ID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 )
+_OPERATING_UNIT_ID_PATTERN = re.compile(
+    r"UNIT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SHIFT_SESSION_ID_PATTERN = re.compile(
+    r"SHIFT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
 _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
 _MAX_PURCHASE_BUDGET_ENVELOPES = 200
@@ -214,6 +222,8 @@ _MAX_CUSTOMER_CREDIT_POLICIES = 500
 _MAX_PROMOTION_POLICIES = 200
 _MAX_SHIPPING_POLICIES = 200
 _MAX_PAYMENT_POLICIES = 200
+_MAX_OPERATING_UNITS = 100
+_MAX_SHIFT_SESSIONS = 2_000
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_SUPPORT_CASES_PER_ORDER = 100
@@ -403,6 +413,7 @@ _ORDER_REQUIRED_FIELDS = frozenset(
 )
 _ORDER_OPTIONAL_FIELDS = frozenset(
     {
+        "shiftId",
         "itemSku",
         "paymentReconciledAt",
         "paymentReconciliationActionId",
@@ -725,7 +736,9 @@ _PRODUCTION_RETURN_EXCLUSIVE_FIELDS = frozenset(
         "productionReturnLocationId",
     }
 )
-_CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"settlement"}
+_CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"shiftId", "settlement"}
+_OPERATING_UNIT_FIELDS = frozenset({"id", "name", "registration"})
+_SHIFT_SESSION_FIELDS = frozenset({"id", "unitId", "opening"})
 _CLOSE_SETTLEMENT_FIELDS = frozenset(
     {"schema", "status", "totalExpectedMmk", "totalCountedMmk", "totalVarianceMmk", "lines"}
 )
@@ -1621,6 +1634,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "promotionPolicies",
                 "shippingPolicies",
                 "paymentPolicies",
+                "operatingUnits",
+                "shiftSessions",
                 "inventoryFoundation",
                 "serviceSchedule",
             }
@@ -1686,6 +1701,90 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("paymentPolicies", []),
         "commerce state.paymentPolicies",
     )
+    has_operating_units = "operatingUnits" in state
+    has_shift_sessions = "shiftSessions" in state
+    if has_operating_units != has_shift_sessions:
+        raise TrialValidationError(
+            "commerce state must retain operatingUnits and shiftSessions together."
+        )
+    operating_units = _list(
+        state.get("operatingUnits", []),
+        "commerce state.operatingUnits",
+    )
+    shift_sessions = _list(
+        state.get("shiftSessions", []),
+        "commerce state.shiftSessions",
+    )
+    if (
+        (has_operating_units and not operating_units)
+        or len(operating_units) > _MAX_OPERATING_UNITS
+        or len(shift_sessions) > _MAX_SHIFT_SESSIONS
+    ):
+        raise TrialValidationError("commerce operating records are invalid.")
+
+    operating_unit_by_id: dict[str, dict[str, Any]] = {}
+    operating_unit_names: set[str] = set()
+    operating_unit_action_ids: list[str] = []
+    shift_session_by_id: dict[str, dict[str, Any]] = {}
+    shift_session_action_ids: list[str] = []
+    latest_unit_registration: datetime | None = None
+    latest_shift_opening: datetime | None = None
+    for index, candidate in enumerate(operating_units):
+        field = f"commerce state.operatingUnits[{index}]"
+        unit = _object(candidate, field)
+        _exact_fields(unit, field, required=_OPERATING_UNIT_FIELDS)
+        unit_id = _text(unit["id"], f"{field}.id", maximum=80)
+        name = _text(unit["name"], f"{field}.name", maximum=120)
+        registration = _action_proof(unit["registration"], f"{field}.registration")
+        registered_at = datetime.fromisoformat(
+            registration["capturedAt"].replace("Z", "+00:00")
+        )
+        if (
+            _OPERATING_UNIT_ID_PATTERN.fullmatch(unit_id) is None
+            or not name
+            or unit_id in operating_unit_by_id
+            or name.casefold() in operating_unit_names
+            or (
+                latest_unit_registration is not None
+                and registered_at < latest_unit_registration
+            )
+        ):
+            raise TrialValidationError("commerce operating records are invalid.")
+        for key, maximum in (("actor", 120), ("reason", 180), ("evidenceReference", 180)):
+            _text(registration[key], f"{field}.registration.{key}", maximum=maximum)
+        operating_unit_by_id[unit_id] = unit
+        operating_unit_names.add(name.casefold())
+        operating_unit_action_ids.append(registration["actionId"])
+        latest_unit_registration = registered_at
+
+    for index, candidate in enumerate(shift_sessions):
+        field = f"commerce state.shiftSessions[{index}]"
+        session = _object(candidate, field)
+        _exact_fields(session, field, required=_SHIFT_SESSION_FIELDS)
+        shift_id = _text(session["id"], f"{field}.id", maximum=80)
+        unit_id = _text(session["unitId"], f"{field}.unitId", maximum=80)
+        opening = _action_proof(session["opening"], f"{field}.opening")
+        opened_at = datetime.fromisoformat(opening["capturedAt"].replace("Z", "+00:00"))
+        unit = operating_unit_by_id.get(unit_id)
+        if (
+            _SHIFT_SESSION_ID_PATTERN.fullmatch(shift_id) is None
+            or unit is None
+            or shift_id in shift_session_by_id
+            or (
+                latest_shift_opening is not None
+                and opened_at < latest_shift_opening
+            )
+            or opened_at
+            < datetime.fromisoformat(
+                str(unit["registration"]["capturedAt"]).replace("Z", "+00:00")
+            )
+        ):
+            raise TrialValidationError("commerce operating records are invalid.")
+        for key, maximum in (("actor", 120), ("reason", 180), ("evidenceReference", 180)):
+            _text(opening[key], f"{field}.opening.{key}", maximum=maximum)
+        shift_session_by_id[shift_id] = session
+        shift_session_action_ids.append(opening["actionId"])
+        latest_shift_opening = opened_at
     if "serviceSchedule" in state:
         _validate_service_schedule(state["serviceSchedule"])
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
@@ -2855,6 +2954,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             _text(order[field], f"orders[{index}].{field}")
         if "owner" in order:
             _text(order["owner"], f"orders[{index}].owner", maximum=120)
+        if "shiftId" in order:
+            shift_id = _text(order["shiftId"], f"orders[{index}].shiftId", maximum=80)
+            if (
+                _SHIFT_SESSION_ID_PATTERN.fullmatch(shift_id) is None
+                or shift_id not in shift_session_by_id
+                or "owner" not in order
+            ):
+                raise TrialValidationError("commerce operating records are invalid.")
         item_sku = order.get("itemSku")
         if item_sku is not None:
             item_sku = _text(item_sku, f"orders[{index}].itemSku", maximum=80)
@@ -4418,9 +4525,24 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"its expected balance for {sku}."
                 )
             balance = prior_balance
+    operating_activation_at = min(
+        (
+            datetime.fromisoformat(
+                str(unit["registration"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            for unit in operating_unit_by_id.values()
+        ),
+        default=None,
+    )
     for order_id, count in reserve_by_order.items():
         order = order_by_id.get(order_id)
         reservation = reserve_movement_by_order.get(order_id)
+        shift = shift_session_by_id.get(str(order.get("shiftId"))) if order else None
+        reservation_at = (
+            datetime.fromisoformat(str(reservation["createdAt"]).replace("Z", "+00:00"))
+            if reservation
+            else None
+        )
         if (
             not order
             or count != len(_reservation_lines(order))
@@ -4429,10 +4551,29 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "owner" in order
                 and (not reservation or reservation["actor"] != order["owner"])
             )
+            or (
+                operating_activation_at is not None
+                and "shiftId" not in order
+                and reservation_at is not None
+                and reservation_at >= operating_activation_at
+            )
+            or (
+                "shiftId" in order
+                and (
+                    shift is None
+                    or reservation_at is None
+                    or reservation_at
+                    < datetime.fromisoformat(
+                        str(shift["opening"]["capturedAt"]).replace("Z", "+00:00")
+                    )
+                )
+            )
         ):
             raise TrialValidationError(
                 f"{order_id} does not have one owner-bound reservation action covering every order line."
             )
+    if any("shiftId" in order and order["id"] not in reserve_by_order for order in orders):
+        raise TrialValidationError("commerce operating records are invalid.")
     for order_id, count in release_by_order.items():
         order = order_by_id.get(order_id)
         expected = len(_reservation_lines(order)) if order else 0
@@ -4520,7 +4661,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
 
     close_ids: list[str] = []
     close_action_ids: list[str] = []
-    close_business_dates: list[str] = []
+    close_scope_keys: list[str] = []
     closed_order_ids: list[str] = []
     for index, candidate in enumerate(closes):
         close = _object(candidate, f"closes[{index}]")
@@ -4569,12 +4710,23 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     )
                 )
             ]
+            shift_id = (
+                _text(close["shiftId"], f"closes[{index}].shiftId", maximum=80)
+                if "shiftId" in close
+                else None
+            )
+            shift_session = shift_session_by_id.get(shift_id or "")
+            expected_business_date = (
+                _myanmar_business_date(str(shift_session["opening"]["capturedAt"]))
+                if shift_session is not None
+                else _myanmar_business_date(str(close["createdAt"]))
+            )
             if (
                 not _BUSINESS_DATE_PATTERN.fullmatch(business_date)
-                or business_date != _myanmar_business_date(str(close["createdAt"]))
+                or business_date != expected_business_date
             ):
                 raise TrialValidationError(
-                    f"closes[{index}].businessDate must match its close timestamp."
+                    f"closes[{index}].businessDate must match its operating date."
                 )
             _unique(order_ids_for_close, f"closes[{index}] order ID")
             _unique(payment_exception_order_ids, f"closes[{index}] payment exception order ID")
@@ -4592,6 +4744,23 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if any(sku not in item_by_sku for sku in stock_exception_skus):
                 raise TrialValidationError(f"closes[{index}] references an unknown stock exception SKU.")
             member_orders = [order_by_id[order_id] for order_id in order_ids_for_close]
+            close_at = datetime.fromisoformat(str(close["createdAt"]).replace("Z", "+00:00"))
+            if shift_id is not None and (
+                _SHIFT_SESSION_ID_PATTERN.fullmatch(shift_id) is None
+                or shift_session is None
+                or close_at
+                < datetime.fromisoformat(
+                    str(shift_session["opening"]["capturedAt"]).replace("Z", "+00:00")
+                )
+                or any(order.get("shiftId") != shift_id for order in member_orders)
+                or any(
+                    order_by_id[order_id].get("shiftId") != shift_id
+                    for order_id in payment_exception_order_ids
+                )
+            ):
+                raise TrialValidationError("commerce operating records are invalid.")
+            if shift_id is None and any("shiftId" in order for order in member_orders):
+                raise TrialValidationError("commerce operating records are invalid.")
             member_adjusted_totals = [_order_adjusted_total(order) for order in member_orders]
             if (
                 any(
@@ -4616,7 +4785,9 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"closes[{index}].actionId must be a full action UUID."
                 )
             close_action_ids.append(close_action_id)
-            close_business_dates.append(business_date)
+            close_scope_keys.append(
+                f"shift:{shift_id}" if shift_id is not None else f"legacy:{business_date}"
+            )
             closed_order_ids.extend(order_ids_for_close)
             _text(close["operator"], f"closes[{index}].operator")
             _text(close["reason"], f"closes[{index}].reason")
@@ -4673,8 +4844,57 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 ):
                     raise TrialValidationError(f"closes[{index}].settlement totals are invalid.")
     _unique(close_ids, "Daily close ID")
-    _unique(close_business_dates, "Daily close business date")
+    _unique(close_scope_keys, "Daily close scope")
     _unique(closed_order_ids, "Closed order ID")
+
+    close_by_shift = {
+        close["shiftId"]: close
+        for close in closes
+        if isinstance(close, Mapping) and isinstance(close.get("shiftId"), str)
+    }
+    for shift_id, shift in shift_session_by_id.items():
+        close = close_by_shift.get(shift_id)
+        if close is None:
+            continue
+        shift_orders = [
+            order for order in orders
+            if isinstance(order, Mapping) and order.get("shiftId") == shift_id
+        ]
+        eligible_order_ids = sorted(
+            str(order["id"])
+            for order in shift_orders
+            if order["status"] == "completed" and order["paymentStatus"] == "reconciled"
+        )
+        close_at = datetime.fromisoformat(str(close["createdAt"]).replace("Z", "+00:00"))
+        if (
+            any(
+                order["status"] != "cancelled"
+                and (order["status"] != "completed" or order["paymentStatus"] != "reconciled")
+                for order in shift_orders
+            )
+            or close.get("orderIds", []) != eligible_order_ids
+            or any(_commerce_order_close_basis(order) > close_at for order in shift_orders)
+            or any(
+                movement.get("orderId") in {order["id"] for order in shift_orders}
+                and movement.get("kind") in {"reserve", "release"}
+                and datetime.fromisoformat(str(movement["createdAt"]).replace("Z", "+00:00")) > close_at
+                for movement in movements
+                if isinstance(movement, Mapping)
+            )
+        ):
+            raise TrialValidationError("commerce operating records are invalid.")
+    for unit_id in operating_unit_by_id:
+        sessions = [session for session in shift_sessions if session["unitId"] == unit_id]
+        for current_session, next_session in zip(sessions, sessions[1:]):
+            current_close = close_by_shift.get(current_session["id"])
+            if (
+                current_close is None
+                or datetime.fromisoformat(str(current_close["createdAt"]).replace("Z", "+00:00"))
+                > datetime.fromisoformat(
+                    str(next_session["opening"]["capturedAt"]).replace("Z", "+00:00")
+                )
+            ):
+                raise TrialValidationError("commerce operating records are invalid.")
 
     intake_ids: list[str] = []
     intake_sources: list[str] = []
@@ -4890,6 +5110,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *promotion_policy_action_ids,
             *shipping_policy_action_ids,
             *payment_policy_action_ids,
+            *operating_unit_action_ids,
+            *shift_session_action_ids,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -5060,7 +5282,27 @@ def _validate_event_evidence(
         raise TrialValidationError(
             "command evidence actor must be the new order owner."
         )
-    if event_type == "commerce.item.updated":
+    if event_type == "commerce.shift.opened":
+        registered_unit = len(next_state["operatingUnits"]) == len(
+            current.get("operatingUnits", [])
+        ) + 1
+        opening = next_state["shiftSessions"][-1]
+        expected_opening = {
+            **evidence,
+            **({"actionId": f"{evidence['actionId']}-SHIFT"} if registered_unit else {}),
+        }
+        if opening.get("opening") != expected_opening:
+            raise TrialValidationError(
+                "command evidence must match the opened shift proof."
+            )
+        if (
+            registered_unit
+            and next_state["operatingUnits"][-1].get("registration") != evidence
+        ):
+            raise TrialValidationError(
+                "command evidence must match the operating unit registration proof."
+            )
+    elif event_type == "commerce.item.updated":
         changes = _catalog_changes(next_state)
         proof = changes[0]["proof"] if changes else {}
         if not isinstance(proof, Mapping) or not _proof_matches_evidence(
@@ -6442,9 +6684,32 @@ def create_commerce_order_from_intent(
                 "lines",
             }
         ),
-        optional=frozenset({"completeAtCounter"}),
+        optional=frozenset({"completeAtCounter"}) | frozenset({"shiftId"}),
     )
     evidence = _action_proof(evidence_value, "evidence")
+    scoped_mode = "operatingUnits" in current and "shiftSessions" in current
+    shift_id = intent.get("shiftId")
+    if scoped_mode:
+        if not isinstance(shift_id, str):
+            raise TrialValidationError("order intent requires one open Shop shift.")
+        shift_id = _text(shift_id, "order intent.shiftId", maximum=80)
+        shift = next(
+            (session for session in current["shiftSessions"] if session["id"] == shift_id),
+            None,
+        )
+        closed_shift_ids = {
+            close["shiftId"] for close in current["closes"] if "shiftId" in close
+        }
+        if (
+            _SHIFT_SESSION_ID_PATTERN.fullmatch(shift_id) is None
+            or shift is None
+            or shift_id in closed_shift_ids
+            or datetime.fromisoformat(evidence["capturedAt"].replace("Z", "+00:00"))
+            < datetime.fromisoformat(str(shift["opening"]["capturedAt"]).replace("Z", "+00:00"))
+        ):
+            raise TrialValidationError("order intent requires one open Shop shift.")
+    elif shift_id is not None:
+        raise TrialValidationError("legacy order intent cannot name a Shop shift.")
     complete_at_counter = intent.get("completeAtCounter", False)
     if not isinstance(complete_at_counter, bool):
         raise TrialValidationError("order intent.completeAtCounter must be a boolean.")
@@ -6590,6 +6855,7 @@ def create_commerce_order_from_intent(
         }
     order = {
         "id": order_id,
+        **({"shiftId": shift_id} if shift_id is not None else {}),
         "createdAt": created_at,
         "customer": customer,
         "owner": evidence["actor"],
@@ -7952,6 +8218,15 @@ def _require_website_intakes_unchanged(current: Mapping[str, Any], next_state: M
         raise TrialValidationError("event cannot change: websiteIntakes.")
 
 
+def _require_operating_records_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    for field in ("operatingUnits", "shiftSessions"):
+        if (field in current) != (field in next_state) or current.get(field) != next_state.get(field):
+            raise TrialValidationError(f"event cannot change: {field}.")
+
+
 def _require_storefront_requests_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     if _storefront_requests(current) != _storefront_requests(next_state):
         raise TrialValidationError("event cannot change: storefrontRequests.")
@@ -8952,6 +9227,39 @@ def _validate_created(current: Mapping[str, Any], next_state: Mapping[str, Any])
             event_type="commerce.order.created",
         )
     _require_website_intakes_unchanged(current, next_state)
+
+
+def _validate_shift_opened(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    current_units = current.get("operatingUnits", [])
+    current_shifts = current.get("shiftSessions", [])
+    next_units = next_state.get("operatingUnits", [])
+    next_shifts = next_state.get("shiftSessions", [])
+    if not all(isinstance(value, list) for value in (current_units, current_shifts, next_units, next_shifts)):
+        raise TrialValidationError("commerce.shift.opened requires valid operating records.")
+    if len(next_shifts) != len(current_shifts) + 1 or next_shifts[:-1] != current_shifts:
+        raise TrialValidationError("commerce.shift.opened must append exactly one shift session.")
+    if current_units:
+        adds_unit = (
+            len(next_units) == len(current_units) + 1
+            and next_units[:-1] == current_units
+            and next_shifts[-1].get("unitId") == next_units[-1].get("id")
+        )
+        if next_units != current_units and not adds_unit:
+            raise TrialValidationError(
+                "commerce.shift.opened may only append the shift's new operating unit."
+            )
+    elif (
+        "operatingUnits" in current
+        or "shiftSessions" in current
+        or len(next_units) != 1
+        or len(next_shifts) != 1
+        or next_shifts[0].get("unitId") != next_units[0].get("id")
+    ):
+        raise TrialValidationError(
+            "the first commerce.shift.opened command must register one operating unit and one shift."
+        )
 
 
 def _validate_item_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -10634,6 +10942,7 @@ def _commerce_order_close_basis(order: Mapping[str, Any]) -> datetime:
 def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "orders", "movements")
     _require_website_intakes_unchanged(current, next_state)
+    _require_operating_records_unchanged(current, next_state)
     if len(next_state["closes"]) != len(current["closes"]) + 1 or next_state["closes"][1:] != current["closes"]:
         raise TrialValidationError("commerce.close.saved must prepend exactly one close snapshot.")
     if any(
@@ -10648,17 +10957,48 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
         for prior_close in current["closes"]
         for order_id in prior_close.get("orderIds", [])
     }
+    close = next_state["closes"][0]
+    shift_id = close.get("shiftId")
+    scoped_mode = "operatingUnits" in current and "shiftSessions" in current
+    shift = next(
+        (
+            session
+            for session in current.get("shiftSessions", [])
+            if session["id"] == shift_id
+        ),
+        None,
+    )
+    if shift_id is not None and (
+        not scoped_mode
+        or not isinstance(shift_id, str)
+        or shift is None
+        or any(prior.get("shiftId") == shift_id for prior in current["closes"])
+    ):
+        raise TrialValidationError("daily close requires one open Shop shift.")
+    scoped_orders = [
+        order
+        for order in current["orders"]
+        if order.get("shiftId") == shift_id
+        and (shift_id is not None or "shiftId" not in order)
+    ]
+    if shift is not None and any(
+        order["status"] != "cancelled"
+        and (order["status"] != "completed" or order["paymentStatus"] != "reconciled")
+        for order in scoped_orders
+    ):
+        raise TrialValidationError("close every open order in this shift before closing it.")
     eligible = sorted(
         [
             order
-            for order in current["orders"]
+            for order in scoped_orders
             if order["status"] == "completed"
             and order["paymentStatus"] == "reconciled"
             and order["id"] not in previously_closed_order_ids
         ],
         key=lambda order: order["id"],
     )
-    close = next_state["closes"][0]
+    if scoped_mode and shift is None and not eligible:
+        raise TrialValidationError("legacy daily close has no unshifted completed orders.")
     if not _CLOSE_SNAPSHOT_FIELDS.issubset(close):
         raise TrialValidationError("new daily closes require exception and operator evidence.")
     if close["orderIds"] != [order["id"] for order in eligible]:
@@ -10673,14 +11013,22 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
         or close["total"] != sum(total or 0 for total in adjusted_totals)
     ):
         raise TrialValidationError("daily close totals must match completed, reconciled orders.")
-    if close["businessDate"] != _myanmar_business_date(close["createdAt"]) or any(
-        prior_close.get("businessDate") == close["businessDate"]
+    expected_business_date = _myanmar_business_date(
+        shift["opening"]["capturedAt"] if shift is not None else close["createdAt"]
+    )
+    duplicate_scope = any(
+        prior_close.get("shiftId") == shift_id
+        and (
+            shift_id is not None
+            or prior_close.get("businessDate") == close["businessDate"]
+        )
         for prior_close in current["closes"]
-    ):
-        raise TrialValidationError("daily close requires one unique business date.")
+    )
+    if close["businessDate"] != expected_business_date or duplicate_scope:
+        raise TrialValidationError("daily close requires one unique operating scope.")
     expected_payment_exceptions = sorted(
         order["id"]
-        for order in current["orders"]
+        for order in scoped_orders
         if order["refundStatus"] == "due"
         or (order["status"] != "cancelled" and order["paymentStatus"] == "pending")
     )
@@ -11744,6 +12092,7 @@ def _validate_service_schedule_initialized(
 
 
 _TRANSITION_VALIDATORS = {
+    "commerce.shift.opened": _validate_shift_opened,
     "commerce.item.created": _validate_item_created,
     "commerce.item.updated": _validate_item_updated,
     "commerce.order.created": _validate_created,
@@ -11855,6 +12204,8 @@ def reduce_commerce_state(
             or _promotion_policies(next_state)
             or _shipping_policies(next_state)
             or _payment_policies(next_state)
+            or next_state.get("operatingUnits")
+            or next_state.get("shiftSessions")
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
@@ -11868,6 +12219,8 @@ def reduce_commerce_state(
             )
     if event_type != "commerce.item.updated":
         _require_catalog_changes_unchanged(current_state, next_state)
+    if event_type != "commerce.shift.opened":
+        _require_operating_records_unchanged(current_state, next_state)
     if event_type not in {"commerce.item.created", "commerce.item.updated"}:
         _require_catalog_baselines_unchanged(current_state, next_state)
     if event_type != "commerce.storefront_request.received":
