@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.72
+Version: 1.2.73
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-04
-Status: ACTIVE — PR #639 remains the integration candidate. Remote head `41302fc6` contains the locally accepted Shop close, Counter, Commerce-to-Shop and truthful public-capture chain. Security, dependency, kernel and owner-gate checks pass; SuperMega App CI fails at the integration-batch drift guard because its historical exact tokens no longer match the redesigned product source. Local product head `1c563dd8` now turns Sites from a disconnected status panel into one explicit Business brief → Pages → Review → Website file workflow with a named next owner. Focused tests, managed-brief acceptance, TypeScript, scoped lint, the 293-module production build and desktop/mobile rendered inspection pass. No immutable replacement, hosted founder acceptance, merge, deployment or live-domain change has occurred. The earlier READY Vercel candidate at `5a572ff4` remains superseded. Provider readback still establishes one unconfirmed founder Auth identity and three active memberships; authenticated discovery, save/reload, recovery, isolation and customer/commercial acceptance remain incomplete.
+Status: ACTIVE — PR #639 remains the integration candidate. Remote head `41302fc6` contains the locally accepted Shop close, Counter, Commerce-to-Shop and truthful public-capture chain; its SuperMega App CI failed before dependency install because historical integration manifests pinned retired interface strings. Local heads `50a75554` and `28918211` rebind the manifest, live verifier and deploy meta-verifier to the current guarded device-local consequences, Counter geometry and Shop/Commerce operating surfaces without removing a requirement. The exact seven-command CI guard step now passes locally. Product head `1c563dd8` adds the explicit Sites Business brief → Pages → Review → Website file workflow and named next owner; focused checks and desktop/mobile render inspection pass. No immutable replacement, hosted founder acceptance, merge, deployment or live-domain change has occurred. The earlier READY Vercel candidate at `5a572ff4` remains superseded. Provider readback still establishes one unconfirmed founder Auth identity and three active memberships; authenticated discovery, save/reload, recovery, isolation and customer/commercial acceptance remain incomplete.
 
 ## 1. Controlling objective
 
@@ -481,6 +481,14 @@ Milestone reviews identify requirement, revision/deployment, acceptance procedur
 - **FAIL — remote CI drift:** PR #639 remote head `41302fc6` passes security, dependency, kernel and owner-gate checks, but SuperMega App CI stops in `Verify coordinated release and RLS guards`. Local reproduction identifies stale exact tokens in `prepare_release_integration_batch.mjs`; the historical integration manifest still names removed sample-language, layout and desk labels. This is a deterministic source-manifest repair, not a product regression or reason to weaken the guard.
 - **BOUNDARY:** this slice is local source, test, build and visual evidence. It did not create an immutable Preview, change Supabase/IAM, deploy, merge, contact a customer or establish hosted/customer acceptance.
 - **NEXT:** re-baseline the integration manifest only to current guarded source semantics, prove the drift test and full coordinated guard step, then push the resulting clean head once. Inspect exact-head CI once; only a passing SHA may produce the paired immutable app/public candidate and founder-authenticated cross-product acceptance.
+
+### 2026-10-04 — failed CI guard is repaired against current semantics
+
+- **FAIL → FIXED — exact token drift:** `50a75554` replaces retired sample-language, old Counter sizing and removed desk labels in the ordered integration manifest and live artifact verifier with the current device-local sale/order consequences, 520 px Counter contract, Shop operating view and Commerce operating status. `28918211` aligns the deploy-workflow meta-verifier to the same current safety contract.
+- **PASS — no guard deletion:** the repaired chain still checks every required token at committed HEAD, separates upstream/candidate authority, rejects detached CSS decoys and keeps merge/push/deploy/provider authority false. The live artifact self-test retains 131 checks across 14 groups.
+- **PASS — complete failed-step replay:** integration-batch 15/15, runner annotations 2/2, database URL/RLS self-test, 23-migration compatibility with 136 checks, coordinated-release self-test, deploy workflow with 161 checks and the public deployment guard all pass serially. The public guard still permits releases only from `main` through the owned workflow.
+- **BOUNDARY:** this is clean local source and CI-step evidence. GitHub has not evaluated the repaired head; no immutable candidate, hosted founder session, merge, deployment, provider write or customer acceptance is implied.
+- **NEXT:** bind one canonical build to the maintained final commit, push the clean chain once and inspect exact-head CI once. Only a green exact SHA may advance to paired immutable candidates and founder-authenticated Shop/Sites/Commerce acceptance.
 
 ## 18. Updating this file
 
