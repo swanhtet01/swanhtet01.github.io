@@ -7,7 +7,6 @@ import {
   shopBusinessTemplate,
   shopBusinessTemplateCommerceItems,
   shopBusinessTemplateFromQuery,
-  shopBusinessTemplates,
   type ShopBusinessTemplate,
 } from '../products/shop/business-templates'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
@@ -279,7 +278,6 @@ import {
   readShopServiceSchedule,
   shopIndustryPack,
   shopScheduleVocabulary,
-  type ShopIndustryPack,
   type ShopServiceSchedule as ShopServiceScheduleState,
 } from './shop-service-scheduling'
 import { projectShopAppointmentTillReconciliation } from './shop-appointment-till-reconciliation'
@@ -1226,6 +1224,7 @@ function ShopProductArtwork({ kind }: { kind: number }) {
 
 type ShopOperatingView = {
   actionLabel?: string
+  choice?: ReactNode
   disabled?: boolean
   detail: string
   onAction: (event: MouseEvent<HTMLButtonElement>) => void
@@ -1234,19 +1233,17 @@ type ShopOperatingView = {
   unit: string
 }
 
-function ShopOperatingStrip({ actionLabel, detail, disabled, onAction, operator, status, unit }: ShopOperatingView) {
+function ShopOperatingStrip({ actionLabel, choice, detail, disabled, onAction, operator, status, unit }: ShopOperatingView) {
   return <section aria-label="Shift" className="summary-strip compact-summary shop-operating-strip">
-    <span className="shop-operating-status"><span><small>Shift</small><strong aria-live="polite">{status}</strong></span>{actionLabel ? <button className="core-button compact" disabled={disabled} onClick={onAction} title={detail} type="button">{actionLabel}</button> : <small>{detail}</small>}</span>
+    <span className="shop-operating-status"><span><small>Shift</small><strong aria-live="polite">{status}</strong></span>{choice ?? (actionLabel ? <button className="core-button compact" disabled={disabled} onClick={onAction} title={detail} type="button">{actionLabel}</button> : <small>{detail}</small>)}</span>
     <span><small>Operating unit</small><strong>{unit}</strong></span><span><small>Operator</small><strong>{operator}</strong></span>
   </section>
 }
 
-function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, draftStorageScope = null, industryPack, initialCustomer, initialQuery, items, lastReceipt, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, sampleCatalogActive, stockLocationCount }: {
-  businessTemplate: ShopBusinessTemplate | null
+function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lastReceipt, lowStockCount, loyaltyPoints, onReview, onViewLastReceipt, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, stockLocationCount }: {
   canCompleteInOneReview: boolean
   disabled: boolean
   draftStorageScope?: CounterTicketStorageScope | null
-  industryPack: ShopIndustryPack | null
   initialCustomer: string
   initialQuery: string
   items: CommerceItem[]
@@ -1263,7 +1260,6 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, draft
   productImageScope: string
   recordStatus: ShopRecordStatus
   recordedOrderIds: string[]
-  sampleCatalogActive: boolean
   stockLocationCount: number
 }) {
   const [tickets] = useState(() => {
@@ -1407,18 +1403,12 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, draft
     }, event.currentTarget)
   }
 
-  const counterContextLabel = businessTemplate && sampleCatalogActive
-    ? `${businessTemplate.name.en} · Counter`
-    : industryPack && sampleCatalogActive
-    ? `${industryPack.name} · Counter`
-    : 'Counter'
-
   return <section aria-label="Sales counter" className="shop-counter-surface">
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
           <div>
-            <span className="core-eyebrow">{counterContextLabel}</span>
+            <span className="core-eyebrow">Counter</span>
             <h2>Products</h2>
             {operatingContext}
             {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Parked sales ({parked.length})</button> : null}
@@ -1708,10 +1698,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   // comparing only the pack id reported a successful template install as "preserved".
   const installedShopSampleId = commerceWorkingSampleCatalogId(commerce)
   const activeShopBusinessTemplate = requestedShopTemplate?.id === installedShopSampleId ? requestedShopTemplate : null
-  const shopSampleCatalogActive = Boolean(activeShopBusinessTemplate || (shopPack && installedShopSampleId && (
-    installedShopSampleId === shopPack.id
-    || shopBusinessTemplates.some((template) => template.id === installedShopSampleId && template.industryPackId === shopPack.id)
-  )))
   // A URL is navigation, not permission to populate or replace a business catalog.
   // Retain existing records; actual products are entered or imported in Stock.
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
@@ -1746,6 +1732,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }, [confirmedLocalShop, managedIdentity])
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
+  const [selectedShopShift, setSelectedShopShift] = useState('')
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
   const [quantity, setQuantity] = useState(1)
   const [extraOrderLines, setExtraOrderLines] = useState<Array<{ sku: string; quantity: number }>>([])
@@ -1970,9 +1957,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const operatingActivated = commerce.operatingUnits !== undefined && commerce.shiftSessions !== undefined
   const closedShiftIds = new Set(commerce.closes.flatMap((close) => close.shiftId ? [close.shiftId] : []))
   const openShiftSessions = (commerce.shiftSessions ?? []).filter((shift) => !closedShiftIds.has(shift.id))
-  const activeShift = openShiftSessions.length === 1 ? openShiftSessions[0] : null
+  const activeShift = openShiftSessions.length === 1 ? openShiftSessions[0] : openShiftSessions.find((shift) => selectedShopShift === `${counterDraftContext.key}:${shift.id}`) ?? null
   const activeOperatingUnit = commerce.operatingUnits?.find((unit) => unit.id === activeShift?.unitId)
     ?? (commerce.operatingUnits?.length === 1 ? commerce.operatingUnits[0] : null)
+  const shopShiftChoice = openShiftSessions.length > 1 ? <div aria-label="Choose the shift for new records" className="shop-payment-options shop-shift-choices" role="group">{openShiftSessions.map((shift) => <button aria-pressed={shift.id === activeShift?.id} className="shop-shift-choice" disabled={!commerceCanWrite || Boolean(pendingAction)} key={shift.id} onClick={() => setSelectedShopShift(`${counterDraftContext.key}:${shift.id}`)} type="button">{commerce.operatingUnits?.find((unit) => unit.id === shift.unitId)?.name ?? 'Operating unit'}</button>)}</div> : null
   const shopOperatingEligible = confirmedLocalShop || Boolean(managedIdentity)
   const shopShiftRequired = Boolean(managedIdentity) || (confirmedLocalShop && operatingActivated)
   const closePreview = commerceCloseExpectation(commerce, new Date().toISOString(), activeShift?.id)
@@ -2017,8 +2005,9 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const legacyOperatingOrders = operatingActivated ? [] : commerce.orders.filter((order) => order.status !== 'cancelled' && !closedOrderIds.has(order.id))
   const currentOperator = activeShift?.opening.actor || managedIdentity?.email || readLastOperator() || 'Cashier set at review'
   const shopOperatingView: ShopOperatingView = {
-    unit: activeOperatingUnit?.name ?? 'Main shop',
+    unit: activeOperatingUnit?.name ?? (openShiftSessions.length > 1 ? 'Choose below' : 'Main shop'),
     operator: currentOperator,
+    choice: shopShiftChoice,
     status: activeShift ? 'Shift open' : openShiftSessions.length > 1 ? 'Choose a shift' : 'No active shift',
     detail: activeShift
       ? `Open since ${formatTime(activeShift.opening.capturedAt)}`
@@ -7104,7 +7093,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lastReceipt={lastCounterReceipt} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} onViewLastReceipt={setReceiptAck} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
