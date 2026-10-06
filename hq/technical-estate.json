@@ -7,7 +7,7 @@
     "readinessContract": "supermega.managed-pilot-readiness.v5",
     "securityAuditAsOf": "2026-08-20T17:02:04.312+06:30"
   },
-  "sourceDigest": "sha256:09c1e5005322c8ed4797c520338c6e7697746ebeb116aa30bd1716255aa28ae2",
+  "sourceDigest": "sha256:74fa1a64660096745ef6c71d82fdff2c5923e699fa59155d7a622b2747c27d11",
   "canonicalSource": {
     "repository": "swanhtet01/swanhtet01.github.io",
     "activeBranch": "main",
@@ -38,7 +38,7 @@
           "app.supermega.dev",
           "megaos.vercel.app"
         ],
-        "buildScript": "npm run app:release:write && npm --prefix showroom run build",
+        "buildScript": "node --test tools/test_production_entry.mjs && npm run app:release:write && npm --prefix showroom run build",
         "verifyScript": "node tools/run_app_verify.mjs --serial",
         "output": "showroom/dist",
         "productionPromotion": "owner-approved coordinated workflow only"
@@ -242,7 +242,7 @@
     },
     {
       "path": "package.json",
-      "digest": "sha256:4f984ebd983e2e54b00c282c2a140bf7966efd7bd3f241421892f783552df32a"
+      "digest": "sha256:00eb783a1b2a9ba2f3a234f462d5ba6dcd51d25428f0ec2a3bff58590ab86a66"
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
