@@ -9,6 +9,7 @@ import { validateShopBusinessTemplates } from '../showroom/src/products/shop/bus
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
 const root = process.cwd()
+const manifestSource = readFileSync(resolve(root, 'site-manifest.json'), 'utf8')
 const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
 if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
 const outputDir = isolatedOutputId
@@ -36,6 +37,14 @@ function countOccurrences(source, token) {
 
 const landingPages = manifest.pages.filter((page) => page.productId)
 check(landingPages.map((page) => page.route).join(',') === '/shop/,/plant/,/website/,/ecommerce/', 'landing_route_set')
+for (const route of ['/website/', '/ecommerce/']) {
+  const start = manifestSource.indexOf(`"route": "${route}"`)
+  const end = manifestSource.indexOf('\n    }', start)
+  const entry = start < 0 || end < 0 ? '' : manifestSource.slice(start, end)
+  const description = manifest.pages.find((page) => page.route === route)?.description || ''
+  check(countOccurrences(entry, '"description":') === 1, `manifest_description_unique:${route}`)
+  check(!/\b(preview|trial|demo)\b/i.test(description), `manifest_description_no_preview_funnel:${route}`)
+}
 check(countOccurrences(publicGeneratorSource, skipLinkTouchTargetCss) === 1, 'landing_skip_link_touch_target_source_contract')
 check(publicGeneratorSource.includes('--blue: #5b4ee8;') && publicGeneratorSource.includes('background:#f1f0fb;border:1px solid #dedbf4;'), 'landing_indigo_visual_system_source_contract')
 check(!publicGeneratorSource.includes('#edf4f0') && !publicGeneratorSource.includes('#dce8e1'), 'landing_legacy_green_frames_removed')

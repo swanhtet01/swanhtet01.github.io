@@ -1017,19 +1017,17 @@
       "route": "/website/",
       "file": "website/index.html",
       "title": "Sites | Your business online | SuperMega",
-      "description": "Manage business pages, content and inquiries in one place with SuperMega Sites.",
       "productId": "website",
       "liveGate": "post-release",
-      "description": "A clear website for your services, photos and contact details. Review a prepared preview before agreeing to launch."
+      "description": "Publish business pages and services, keep details current, and handle customer inquiries in one workspace."
     },
     {
       "route": "/ecommerce/",
       "file": "ecommerce/index.html",
       "title": "Commerce | Your product catalog | SuperMega",
-      "description": "Present products and prices, collect customer order requests and manage follow-through with SuperMega Commerce.",
       "productId": "ecommerce",
       "liveGate": "post-release",
-      "description": "Help customers browse your products and prepare a request. Your team confirms availability, orders and payment."
+      "description": "Manage products, customer order requests, availability, payment review, and fulfilment in one clear workflow."
     },
     {
       "route": "/contact/",
