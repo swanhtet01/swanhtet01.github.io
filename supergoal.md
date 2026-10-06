@@ -780,6 +780,12 @@ Historical transport errors do not supersede the later verified host correction 
 - **NEXT EXECUTABLE ACTION:** design and implement the narrow server-authorized membership lifecycle and role enforcement boundary before any staff UI. Prove tenant isolation, owner/admin delegation limits, revocation/session behavior, and auditability in local tests; do not create managed identities or grant access as part of source work. Then continue real authenticated product capture and hosting evidence when the owner-controlled session is available.
 - **EVIDENCE:** source/migration read only. No provider write, invitation, credential use, deployment, customer contact, or hosted acceptance occurred.
 
+### 2026-10-07 — add first Meta webhook security primitive
+
+- **RESEARCH:** Meta's official Messenger API collection states a Facebook Page and `pages_messaging` access are prerequisites for Send API usage; Meta's sample server requires a publicly reachable HTTPS callback. These provider claims and requirements do not establish our app access or approval ([Meta collection](https://www.postman.com/meta/messenger-platform-api/documentation/iyp204x/messenger-platform-api), [Meta sample](https://github.com/fbsamples/messenger-platform-samples/blob/main/node/README.md)).
+- **CHANGE:** added a constant-time `X-Hub-Signature-256` verifier over exact raw bytes, plus negative/known-vector tests. It is an isolated primitive only: no public route, app secret, channel mapping, persistence, deduplication, or automated order creation is wired. Product must remain explicit that social ingestion is not live.
+- **NEXT:** build the challenge-verification and webhook-admission layer with strict raw-body size limits; then define secure page-to-tenant mapping, event idempotency, minimal retention, draft-only order suggestion and explicit human order confirmation. Exercise synthetic signed events locally before any provider/app review or owner-authorized connection.
+
 ### 2026-10-06 — scan-to-select for stock counts
 
 - **CHANGE:** Shop stock count now accepts an exact SKU from a camera scan or keyboard-wedge scanner, resolves it to the catalog item, and advances to quantity entry. In multi-location/lot workspaces, it auto-selects only a unique balance; otherwise the operator must choose the location and lot. Unknown codes stay recoverable through manual item selection. Stock is unchanged until the existing review and confirmation action.
