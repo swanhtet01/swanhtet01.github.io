@@ -9,11 +9,16 @@ import { validateShopBusinessTemplates } from '../showroom/src/products/shop/bus
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
 const root = process.cwd()
-const staticDir = resolve(root, '.vercel', 'output', 'static')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`)
+  : resolve(root, '.vercel', 'output')
+const staticDir = resolve(outputDir, 'static')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 const activeIds = activeProductContracts(manifest).map(product => product.id)
 const discoverablePages = manifest.pages.filter(page => !page.productId || activeIds.includes(page.productId))
-const config = JSON.parse(readFileSync(resolve(root, '.vercel', 'output', 'config.json'), 'utf8'))
+const config = JSON.parse(readFileSync(resolve(outputDir, 'config.json'), 'utf8'))
 const readStatic = (path) => readFileSync(resolve(staticDir, path), 'utf8')
 const publicObservabilitySource = readStatic('vercel-insights.js')
 const publicGeneratorSource = readFileSync(resolve(root, 'tools/create_public_vercel_output.mjs'), 'utf8')
@@ -102,17 +107,17 @@ for (const page of landingPages) {
   check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
   if (page.productId === 'ecommerce') {
-    check(html.includes('alt="Current Commerce catalog showing available products, local pricing and customer ordering"'), 'landing_commerce_catalog_capture_current')
-    check(html.includes('Commerce &middot; Store catalog and availability &middot; Actual app capture with synthetic example records. Local build.'), 'landing_commerce_catalog_capture_scope_truthful')
-    check(html.includes('alt="Current Commerce Store showing a locally saved customer request awaiting Shop confirmation"'), 'landing_commerce_capture_matches_current_store_flow')
+    check(html.includes('alt="Commerce catalog showing available products, local pricing and customer ordering"'), 'landing_commerce_catalog_capture_description')
+    check(html.includes('Commerce &middot; Store catalog and availability &middot; App capture · synthetic example records · captured 2 Oct 2026'), 'landing_commerce_catalog_capture_scope_truthful')
+    check(html.includes('alt="Commerce Store showing a locally saved customer request awaiting Shop confirmation"'), 'landing_commerce_capture_matches_store_flow')
     check(html.includes('width="1280" height="900"'), 'landing_commerce_capture_dimensions_exact')
-    check(html.includes('Commerce &middot; Customer request and Shop review &middot; Actual app capture with synthetic example records. Local build.'), 'landing_commerce_request_capture_scope_truthful')
+    check(html.includes('Commerce &middot; Customer request and Shop review &middot; App capture · synthetic example records · captured 2 Oct 2026'), 'landing_commerce_request_capture_scope_truthful')
   }
   if (page.productId === 'website') {
-    check(html.includes('alt="Current Sites editor showing page navigation, focused content editing and live readiness checks"'), 'landing_sites_editor_capture_current')
-    check(html.includes('alt="Current Sites inquiry workspace showing a synthetic customer request, ownership and decision controls"'), 'landing_sites_inquiry_capture_current')
-    check(html.includes('Sites &middot; Page workspace and readiness &middot; Actual app capture with synthetic example records. Local build.'), 'landing_sites_editor_capture_scope_truthful')
-    check(html.includes('Sites &middot; Inquiry review and ownership &middot; Actual app capture with synthetic example records. Local build.'), 'landing_sites_inquiry_capture_scope_truthful')
+    check(html.includes('alt="Sites editor showing page navigation, focused content editing and readiness checks"'), 'landing_sites_editor_capture_description')
+    check(html.includes('alt="Sites inquiry workspace showing a synthetic customer request, ownership and decision controls"'), 'landing_sites_inquiry_capture_description')
+    check(html.includes('Sites &middot; Page workspace and readiness &middot; App capture · synthetic example records · captured 2 Oct 2026'), 'landing_sites_editor_capture_scope_truthful')
+    check(html.includes('Sites &middot; Inquiry review and ownership &middot; App capture · synthetic example records · captured 2 Oct 2026'), 'landing_sites_inquiry_capture_scope_truthful')
   }
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
@@ -218,7 +223,8 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
   check((body.match(/<button\b/g) || []).length === 0, `marketing_has_no_controls:${route}`)
   check(interfaceFigureCount > 0, `interface_figures_present:${route}`)
-  check(countOccurrences(body, 'Actual app capture with synthetic example records. Local build.') === interfaceFigureCount, `interface_disclosure_per_figure:${route}`)
+  check(countOccurrences(body, 'App capture · synthetic example records · captured 2 Oct 2026') === interfaceFigureCount, `interface_disclosure_per_figure:${route}`)
+  check(!body.includes('Current Shop') && !body.includes('Current Sites') && !body.includes('Current Commerce'), `capture_not_claimed_current:${route}`)
   check(!body.includes('Illustrative interface and records.'), `illustrative_mockups_absent:${route}`)
   for (const forbidden of ['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
     check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)

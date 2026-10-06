@@ -4,9 +4,14 @@ import { join, relative, resolve } from 'node:path'
 import { activeProductContracts } from '../showroom/src/core/product-visibility.ts'
 
 const root = process.cwd()
-const staticDir = resolve(root, '.vercel', 'output', 'static')
-const functionsDir = resolve(root, '.vercel', 'output', 'functions', 'api')
-const configPath = resolve(root, '.vercel', 'output', 'config.json')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`)
+  : resolve(root, '.vercel', 'output')
+const staticDir = resolve(outputDir, 'static')
+const functionsDir = resolve(outputDir, 'functions', 'api')
+const configPath = resolve(outputDir, 'config.json')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 
 function fail(code, detail = {}) {
