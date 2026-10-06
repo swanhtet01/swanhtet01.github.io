@@ -505,6 +505,18 @@ export function summarizeRenderedFailures(cases) {
   })
 }
 
+export function summarizeRenderedCase(testCase, entry) {
+  const summary = summarizeRenderedFailures([entry])[0]
+  const failures = Array.isArray(entry?.failures) ? entry.failures : []
+  return {
+    ...summary,
+    bodyPresent: Number(entry?.bodyLength || 0) > 0,
+    expectedPathMatched: matchesExpectedPath(testCase?.expectedPath, String(entry?.path || '')),
+    missingExpectedTextCount: failures.filter((failure) => String(failure).startsWith('missing text:')).length,
+    unexpectedTextCount: failures.filter((failure) => String(failure).startsWith('unexpected text:')).length,
+  }
+}
+
 export function evaluateFinalRenderedLocation({ beforeCapture, afterCapture, expectedOrigin, expectedPath, expectedPathLabel }) {
   const before = beforeCapture || {}
   const after = afterCapture || {}
@@ -2228,6 +2240,7 @@ async function main() {
     cdp = await Cdp.connect(started.wsUrl)
     const version = await cdp.send('Browser.getVersion')
     const cases = []
+    const safeCaseSummaries = []
     const selectedTests = shopOnly
       ? tests.filter((testCase) => testCase.exerciseShopCounter || testCase.exerciseShopDecisionDesk)
       : shopAccountingOnly
@@ -2246,10 +2259,12 @@ async function main() {
       console.error(JSON.stringify({ event: 'rendered_case_started', case: index + 1, total: selectedTests.length, name: testCase.name }))
       const result = await verifyCase(cdp, origin, testCase)
       cases.push(result)
+      const safeSummary = summarizeRenderedCase(testCase, result)
+      safeCaseSummaries.push(safeSummary)
       console.error(JSON.stringify({ event: 'rendered_case_finished', case: index + 1, durationMs: Date.now() - startedAt,
         failures: result.failures.length,
         ...(process.env.GITHUB_ACTIONS === 'true' && result.failures.length
-          ? { failureKinds: summarizeRenderedFailures([result])[0]?.failureKinds || [] }
+          ? { diagnostics: safeSummary }
           : {}),
       }))
       if (process.env.GITHUB_ACTIONS === 'true' && result.failures.length) {
@@ -2294,8 +2309,8 @@ async function main() {
         contract: report.contract,
         scope: report.scope,
         sourceSha: report.sourceSha,
-        failedCaseCount: summarizeRenderedFailures(cases).length,
-        failures: summarizeRenderedFailures(cases),
+        failedCaseCount: safeCaseSummaries.filter((entry) => entry.failedCheckCount > 0).length,
+        failures: safeCaseSummaries.filter((entry) => entry.failedCheckCount > 0),
       }))
       process.exitCode = 1
     }

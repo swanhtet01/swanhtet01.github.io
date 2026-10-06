@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.95
+Version: 1.2.96
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 is at `231b67da` and includes the privacy-safe rendered diagnostics plus launch evidence updates; no deployment. Local playbook validation passes (533 checks) and the complete exact-source Windows Edge rendered suite passes (35/35). Exact-head Linux Chrome App CI passed contracts, disposable PostgreSQL budgets, RLS guards, lint and build, but failed rendered checks for the first 10 of 35 cases and was canceled at 15 minutes. Safe categories show content+route failures on Login/retired-entry cases and content+route+interaction/layout failures on Shop cases; body presence and exact match dimensions are not yet recorded. Security Audit and Kernel Console passed; the owner-gated release job was skipped. Independent review remains outstanding. Hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware, and customer acceptance remain open.
+Status: ACTIVE — PR #639 is at `231b67da`; a second diagnostic refinement is local and not yet pushed; no deployment. The complete exact-source Windows Edge rendered suite passes (35/35), while exact-head Linux Chrome CI reached 10 of 35 cases, reported safe content/route/interaction/layout failures, and was canceled at 15 minutes. The verifier now has tested fixed diagnostics for body presence, expected-path match, and missing/unexpected-content counts without printing page data; exact Linux results for these fields await a new CI run. Security Audit and Kernel Console passed on `231b67da`; the owner-gated release job was skipped. Independent review remains outstanding. Hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware, and customer acceptance remain open.
 
 ## 1. Controlling objective
 
@@ -731,4 +731,4 @@ Historical transport errors do not supersede the later verified host correction 
 - **SOURCE:** PR #639 exact head `231b67dac8613cddbf82f6d4001eafeea2f6715b`; worktree clean. No production change.
 - **CI:** App run `37450697918` passed source/API/database/RLS checks, lint, and canonical build, then reached rendered tests. It failed cases 1–10 and was canceled at GitHub's 15-minute maximum. Safe categories: cases 1–4 `content, route`; cases 5–6 `content, interaction, layout, route, viewport`; cases 7–8 `content, interaction, layout, route`; case 9 `content, render, route, viewport`; case 10 `content, interaction, route`. Security Audit `37450701232` and Kernel Console `37450701254` passed; Kernel release was skipped by its owner gate. PR remains OPEN/BLOCKED with review unset.
 - **CROSS-BROWSER:** exact-source Windows Edge 154 full suite passed 35/35. This points to a Linux Chrome/runtime or environment discrepancy, but current safe categories do not establish whether pages are blank, route-changed, or missing expected content.
-- **NEXT:** add fixed safe diagnostics for `bodyPresent`, `expectedPathMatched`, and missing-content count (booleans/counts only), then run one bounded Linux Chrome slice that completes before timeout. Preserve product assertions; do not increase the runner limit blindly or expose raw report content.
+- **NEXT:** commit/push the new diagnostic fields and inspect the exact-head Linux Chrome result. Use body/path/content-match booleans and counts to target the first actual cause; preserve product assertions and the privacy boundary. No merge/deploy.

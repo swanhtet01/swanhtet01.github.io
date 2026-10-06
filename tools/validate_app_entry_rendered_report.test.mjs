@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible, summarizeRenderedFailures } from './verify_app_entry_rendered.mjs'
+import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible, summarizeRenderedCase, summarizeRenderedFailures } from './verify_app_entry_rendered.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
 import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
@@ -34,6 +34,25 @@ test('rendered CI diagnostics expose only fixed failure kinds, never page or run
     { name: 'mobile layout', failedCheckCount: 1, failureKinds: ['layout'] },
   ])
   assert.doesNotMatch(JSON.stringify(summary), /Swan Htet|secret-token-value|412px/u)
+})
+
+test('rendered CI route diagnostics expose only match booleans and text-miss counts', () => {
+  const summary = summarizeRenderedCase({ expectedPath: '/login', expectedText: ['Sign in'] }, {
+    name: 'synthetic login',
+    path: '/unexpected/?token=secret',
+    bodyLength: 18,
+    failures: ['expected final path /login, got /unexpected/?token=secret', 'missing text: private email@example.com'],
+  })
+  assert.deepEqual(summary, {
+    name: 'synthetic login',
+    failedCheckCount: 2,
+    failureKinds: ['content', 'route'],
+    bodyPresent: true,
+    expectedPathMatched: false,
+    missingExpectedTextCount: 1,
+    unexpectedTextCount: 0,
+  })
+  assert.doesNotMatch(JSON.stringify(summary), /token=secret|private|email@example/u)
 })
 
 test('rendered harness follows current direct Sites and Ecommerce entry actions', () => {
