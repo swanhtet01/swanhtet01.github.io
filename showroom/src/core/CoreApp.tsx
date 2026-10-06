@@ -1849,7 +1849,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [stockCountBatchDrafts, setStockCountBatchDrafts] = useState<StockCountDraft[]>([])
-  const [stocktakeRecoveryReady, setStocktakeRecoveryReady] = useState(false)
+  const [stocktakeRecoveryReadyScope, setStocktakeRecoveryReadyScope] = useState<string | null>(null)
+  const stocktakeScopeReady = stocktakeRecoveryReadyScope === scheduleScopeKey
   const [stockCountBarcode, setStockCountBarcode] = useState('')
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
@@ -6078,7 +6079,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   function openStockCount() {
-    if (!stocktakeRecoveryReady) {
+    if (!stocktakeScopeReady) {
       setNotice('Restoring stocktake…')
       return
     }
@@ -7707,15 +7708,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     {commerceBoundary}
     {!commerce.items.length ? shopCatalogOnboarding : null}
     <section aria-label="Shop stock workspace" className="core-panel inventory-panel shop-stock-workspace">
-      <Suspense fallback={null}><ShopStocktakeDraftRecovery active={Boolean(stockCountDraft)} current={stockCountDraft} key={scheduleScopeKey} lines={stockCountBatchDrafts} onReady={setStocktakeRecoveryReady} scopeKey={scheduleScopeKey} setCurrent={setStockCountDraft} setLines={setStockCountBatchDrafts} /></Suspense>
-      <header className="shop-stock-heading"><div><span className="core-eyebrow">Shop · Stock</span><h2>Know what to reorder, receive and count.</h2><p>See the stock that needs attention, act once, and keep the purchasing trail together.</p></div><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
+      <Suspense fallback={null}><ShopStocktakeDraftRecovery active={Boolean(stockCountDraft)} current={stockCountDraft} key={scheduleScopeKey} lines={stockCountBatchDrafts} onReady={setStocktakeRecoveryReadyScope} scopeKey={scheduleScopeKey} setCurrent={setStockCountDraft} setLines={setStockCountBatchDrafts} /></Suspense>
+      <header className="shop-stock-heading"><div><h2>Count. Receive. Reorder.</h2></div><button aria-expanded={Boolean(stockCountDraft && stocktakeScopeReady)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
       <dl aria-label="Stock status" className="shop-stock-metrics">
         <div data-tone={lowStock.length ? 'attention' : 'ready'}><dt>Stock alerts</dt><dd>{lowStock.length.toLocaleString()}</dd><small>{lowStock.length ? 'At or below reorder' : 'Reorder levels clear'}</small></div>
         <div><dt>Units available</dt><dd>{stockUnitsAvailable.toLocaleString()}</dd><small>Across {commerce.items.length.toLocaleString()} {commerce.items.length === 1 ? 'product' : 'products'}</small></div>
         <div data-tone={overduePurchaseOrders.length ? 'attention' : 'ready'}><dt>Active purchase orders</dt><dd>{activePurchaseOrders.length.toLocaleString()}</dd><small>{overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : activePurchaseOrders.length ? 'Receiving tracked' : 'No open orders'}</small></div>
         <div><dt>Stock tracking</dt><dd>{managedInventoryProjection ? `${managedInventoryProjection.locations.length.toLocaleString()} locations` : 'Simple count'}</dd><small>{managedInventoryProjection ? 'Lots and available-to-promise' : 'Enable locations when needed'}</small></div>
       </dl>
-      {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
+      {stockCountDraft && stocktakeScopeReady && <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
           <h3 id="stock-count-title">Review a stocktake</h3>
@@ -7763,7 +7764,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           : commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select></label>
         <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required={!stockCountBatchDrafts.length} step="1" type="number" value={stockCountDraft.quantity} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel stocktake</button><button className="core-button primary" disabled={commerceControlsDisabled || ((!stockCountBatchDrafts.length || Boolean(stockCountDraft.quantity.trim())) && stockCountQuantityResult === null) || Boolean(commerce.inventoryFoundation && stockCountDraft.quantity.trim() && !stockCountBalance)} type="submit">Review stocktake ({stockCountBatchDrafts.length + (stockCountDraft.quantity.trim() ? 1 : 0)})</button></div>
-      </form> : null}
+      </form>}
       <div className="shop-stock-grid">
         <section aria-labelledby="shop-stock-attention-title" className="shop-stock-attention-card">
           <header><span><span className="core-eyebrow">Inventory</span><h3 id="shop-stock-attention-title">Stock attention</h3><p>Low stock and active receiving work appear first.</p></span><b>{stockAttentionRows.length} {stockAttentionRows.length === 1 ? 'item' : 'items'}</b></header>

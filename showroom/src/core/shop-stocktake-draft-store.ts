@@ -9,6 +9,10 @@ export type ShopStocktakeRecovery = { status: 'idle' | 'unavailable' }
 
 const version = 1
 
+export function shopStocktakeSessionStorage(): ShopStocktakeStorage | null {
+  try { return sessionStorage } catch { return null }
+}
+
 export function shopStocktakeDraftKey(scopeKey: string) {
   return `supermega.shop.stocktake.draft.v1:${scopeKey}`
 }

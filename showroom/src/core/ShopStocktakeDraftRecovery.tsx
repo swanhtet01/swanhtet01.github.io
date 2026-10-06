@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { StockCountDraft } from './CoreApp'
-import { clearShopStocktakeDraft, persistShopStocktakeDraft, readShopStocktakeDraft, shopStocktakeDraftKey, shopStocktakeDraftRecovery, type ShopStocktakeStorage } from './shop-stocktake-draft-store'
-type Status = 'saved' | 'saving' | 'unavailable' | 'idle'
+import { clearShopStocktakeDraft, persistShopStocktakeDraft, readShopStocktakeDraft, shopStocktakeDraftKey, shopStocktakeSessionStorage } from './shop-stocktake-draft-store'
+type Status = 'unavailable' | 'idle'
 
 export function ShopStocktakeDraftRecovery({ scopeKey, current, lines, active, setCurrent, setLines, onReady }: {
   scopeKey: string
@@ -10,57 +10,39 @@ export function ShopStocktakeDraftRecovery({ scopeKey, current, lines, active, s
   active: boolean
   setCurrent: (draft: StockCountDraft | null) => void
   setLines: (drafts: StockCountDraft[]) => void
-  onReady: (ready: boolean) => void
+  onReady: (scopeKey: string) => void
 }) {
   const [hydrated, setHydrated] = useState(false)
-  const invalidStoredDraft = useRef(false)
   const [status, setStatus] = useState<Status>('idle')
   const storageKey = shopStocktakeDraftKey(scopeKey)
 
   useEffect(() => {
-    setHydrated(false)
-    invalidStoredDraft.current = false
-    if (scopeKey === 'checking') {
-      setCurrent(null)
-      setLines([])
-      setStatus('idle')
+    let cancelled = false
+    const recovery = readShopStocktakeDraft(scopeKey === 'checking' ? null : shopStocktakeSessionStorage(), storageKey)
+    queueMicrotask(() => {
+      if (cancelled) return
+      const snapshot = recovery.status === 'valid' ? recovery.snapshot : null
+      setCurrent(snapshot?.current ?? null)
+      setLines(snapshot?.lines ?? [])
       setHydrated(true)
-      onReady(true)
-      return
-    }
-    let storage: ShopStocktakeStorage | null = null
-    try { storage = sessionStorage } catch { /* Recovery remains unavailable. */ }
-    const recovery = shopStocktakeDraftRecovery(readShopStocktakeDraft(storage, storageKey))
-    setCurrent(recovery.status === 'saved' ? recovery.snapshot.current : null)
-    setLines(recovery.status === 'saved' ? recovery.snapshot.lines : [])
-    invalidStoredDraft.current = recovery.status === 'unavailable'
-    setStatus(recovery.status)
-    setHydrated(true)
-    onReady(true)
+      if (scopeKey !== 'checking') onReady(scopeKey)
+    })
+    return () => { cancelled = true }
   }, [scopeKey, storageKey, setCurrent, setLines, onReady])
 
   useEffect(() => {
-    if (!hydrated) return
-    if (scopeKey === 'checking') return
+    if (!hydrated || scopeKey === 'checking') return
     const hasDraft = Boolean(current?.quantity.trim() || lines.length)
-    if (!hasDraft && invalidStoredDraft.current) return
     if (!hasDraft) {
-      let storage: ShopStocktakeStorage | null = null
-      try { storage = sessionStorage } catch { /* Storage is unavailable. */ }
-      setStatus(clearShopStocktakeDraft(storage, storageKey) ? 'idle' : 'unavailable')
+      const nextStatus = clearShopStocktakeDraft(shopStocktakeSessionStorage(), storageKey) ? 'idle' : 'unavailable'
+      queueMicrotask(() => setStatus(nextStatus))
       return
     }
-    setStatus('saving')
-    let storage: ShopStocktakeStorage | null = null
-    try { storage = sessionStorage } catch { /* Storage is unavailable. */ }
-    const saved = persistShopStocktakeDraft(storage, storageKey, { current, lines })
-    setStatus(saved ? 'saved' : 'unavailable')
-    if (saved) invalidStoredDraft.current = false
+    const saved = persistShopStocktakeDraft(shopStocktakeSessionStorage(), storageKey, { current, lines })
+    const nextStatus = saved ? 'idle' : 'unavailable'
+    queueMicrotask(() => setStatus(nextStatus))
   }, [hydrated, scopeKey, storageKey, current, lines])
 
   if (!active || status === 'idle') return null
-  const copy = status === 'saved' ? 'Draft saved in this tab. Stock changes after review.'
-    : status === 'saving' ? 'Saving this count draft…'
-      : 'Draft recovery is unavailable. Keep this page open until review.'
-  return <p aria-live="polite" className="form-notice" data-stocktake-draft={status}>{copy}</p>
+  return <p aria-live="polite" className="form-notice">Draft unavailable. Keep this tab open until review.</p>
 }
