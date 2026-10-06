@@ -481,6 +481,30 @@ export function isAccountableConfirmLabel(value) {
   return ACCOUNTABLE_CONFIRM_LABEL.test(String(value || '').trim())
 }
 
+const RENDERED_FAILURE_KINDS = Object.freeze(['content', 'interaction', 'layout', 'network', 'render', 'route', 'runtime', 'viewport'])
+
+export function summarizeRenderedFailures(cases) {
+  return cases.filter((entry) => Array.isArray(entry?.failures) && entry.failures.length > 0).map((entry) => {
+    const kinds = new Set()
+    for (const raw of entry.failures) {
+      const failure = String(raw || '').toLowerCase()
+      if (/missing text|unexpected text/u.test(failure)) kinds.add('content')
+      else if (/path|origin|hash|location/u.test(failure)) kinds.add('route')
+      else if (/horizontal overflow|above fold|accessibility|touch-target/u.test(failure)) kinds.add('layout')
+      else if (/viewport/u.test(failure)) kinds.add('viewport')
+      else if (/network|external request|http error|browser writes/u.test(failure)) kinds.add('network')
+      else if (/console|exception|warning|runtime|log:/u.test(failure)) kinds.add('runtime')
+      else if (/not actionable|download|restore|contract failed|journey failed|review action|could not/u.test(failure)) kinds.add('interaction')
+      else kinds.add('render')
+    }
+    return {
+      name: String(entry.name || 'unnamed rendered case'),
+      failedCheckCount: entry.failures.length,
+      failureKinds: [...kinds].filter((kind) => RENDERED_FAILURE_KINDS.includes(kind)).sort(),
+    }
+  })
+}
+
 export function evaluateFinalRenderedLocation({ beforeCapture, afterCapture, expectedOrigin, expectedPath, expectedPathLabel }) {
   const before = beforeCapture || {}
   const after = afterCapture || {}
@@ -2222,7 +2246,12 @@ async function main() {
       console.error(JSON.stringify({ event: 'rendered_case_started', case: index + 1, total: selectedTests.length, name: testCase.name }))
       const result = await verifyCase(cdp, origin, testCase)
       cases.push(result)
-      console.error(JSON.stringify({ event: 'rendered_case_finished', case: index + 1, durationMs: Date.now() - startedAt, failures: result.failures.length }))
+      console.error(JSON.stringify({ event: 'rendered_case_finished', case: index + 1, durationMs: Date.now() - startedAt,
+        failures: result.failures.length,
+        ...(process.env.GITHUB_ACTIONS === 'true' && result.failures.length
+          ? { failureKinds: summarizeRenderedFailures([result])[0]?.failureKinds || [] }
+          : {}),
+      }))
       if (process.env.GITHUB_ACTIONS === 'true' && result.failures.length) {
         // Only the source-defined case name and count belong in public annotations.
         // Page content, URLs, console messages and raw failure details stay out.
@@ -2259,6 +2288,17 @@ async function main() {
     const serialized = JSON.stringify(report, null, 2)
     await writeFile(outFile, `${serialized}\n`, { flag: 'wx' })
     if (report.ok) console.log(serialized)
+    else if (process.env.GITHUB_ACTIONS === 'true') {
+      console.error(JSON.stringify({
+        ok: false,
+        contract: report.contract,
+        scope: report.scope,
+        sourceSha: report.sourceSha,
+        failedCaseCount: summarizeRenderedFailures(cases).length,
+        failures: summarizeRenderedFailures(cases),
+      }))
+      process.exitCode = 1
+    }
     else {
       console.error(serialized)
       process.exitCode = 1

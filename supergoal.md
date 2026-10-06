@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.93
+Version: 1.2.94
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 is at `58f37433` with the simplified contact page, Shop source-picker removal, managed Login gate, and corrected Shop/Plant contact playbooks; no deployment. Local playbook validation passes (533 checks) and the complete exact-source Windows Edge rendered suite passes (35/35). Exact-head GitHub App CI built and linted successfully, but its Linux Chrome rendered suite reported failures in the first nine journeys and the job was canceled at 15 minutes; Security Audit and Kernel Console passed, with the release job correctly skipped by its owner gate. The browser discrepancy remains unresolved and independent review is outstanding. Hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware, and customer acceptance remain open.
+Status: ACTIVE — PR #639 remains at `58f37433`; two local evidence commits and a new privacy-safe CI diagnostic are not yet pushed. Local playbook validation passes (533 checks) and the complete exact-source Windows Edge rendered suite passes (35/35). Exact-head GitHub App CI built and linted successfully, but its Linux Chrome rendered suite failed the first nine journeys and the job was canceled at 15 minutes. The verifier now emits only fixed failure categories per failed case so a rerun can expose the cross-browser discrepancy without logging page content, URLs or runtime messages. Security Audit and Kernel Console passed on `58f37433`, with the release job correctly skipped by its owner gate. Independent review remains outstanding. Hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware, and customer acceptance remain open.
 
 ## 1. Controlling objective
 
@@ -719,3 +719,9 @@ Historical transport errors do not supersede the later verified host correction 
 - **CI:** App CI `37446403509` passed API contracts, disposable PostgreSQL budgets, RLS guards, lint and canonical app build; rendered journey checks 1–9 reported failures and the job was canceled at the 15-minute maximum. Dependency Security Audit `37446412990` and Kernel Console `37446412932` passed; the Kernel Console release job was skipped by its owner gate. PR review is still unset and merge state BLOCKED.
 - **LOCAL REPRODUCTION:** the full exact-source rendered suite ran on Windows Edge 154 and passed 35/35 across Login, Shop, Website, Sites, Ecommerce and Commerce; zero runtime errors/warnings, browser writes, external requests, or horizontal overflow were reported. This does not explain the Linux Chrome CI discrepancy or turn local checks into hosted acceptance.
 - **NEXT:** isolate and fix the Linux Chrome rendered-journey discrepancy without weakening assertions, then rerun exact-head App CI. Keep PR review and production release gated; no merge or deploy.
+
+### 2026-10-06 — safe rendered-failure diagnostics
+
+- **CHANGE:** the browser verifier now emits fixed failure-kind categories and source-defined case names as each case finishes on GitHub Actions. The final failing-run summary also omits page text, URLs, console messages, and raw assertions; the detailed report remains only in the runner's temporary file.
+- **LOCAL CHECKS:** `node --test tools/validate_app_entry_rendered_report.test.mjs` PASS (18/18); `node --check` PASS for the verifier and test. Full showroom ESLint was attempted serially but exhausted the local Node heap near 2 GB; no app files or active servers were changed by that failure.
+- **NEXT:** commit/push the bounded diagnostic change, then inspect only the safe Linux failure categories from the next exact-head run. Preserve every rendered assertion and keep the independent-review, merge and production gates intact.

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible } from './verify_app_entry_rendered.mjs'
+import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible, summarizeRenderedFailures } from './verify_app_entry_rendered.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
 import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
@@ -21,6 +21,19 @@ test('receipt boundary must be visibly sized and inside the viewport', () => {
     assert.equal(receiptBoundaryVisible(box, 390, 844, { ...style, ...altered }), false)
   }
   assert.equal(receiptBoundaryVisible(null, 390, 844, style), false)
+})
+
+test('rendered CI diagnostics expose only fixed failure kinds, never page or runtime text', () => {
+  const summary = summarizeRenderedFailures([
+    { name: 'desktop synthetic route', failures: ['missing text: Swan Htet private account', 'console: secret-token-value'] },
+    { name: 'passing route', failures: [] },
+    { name: 'mobile layout', failures: ['horizontal overflow: 412px document in 390px viewport'] },
+  ])
+  assert.deepEqual(summary, [
+    { name: 'desktop synthetic route', failedCheckCount: 2, failureKinds: ['content', 'runtime'] },
+    { name: 'mobile layout', failedCheckCount: 1, failureKinds: ['layout'] },
+  ])
+  assert.doesNotMatch(JSON.stringify(summary), /Swan Htet|secret-token-value|412px/u)
 })
 
 test('rendered harness follows current direct Sites and Ecommerce entry actions', () => {
