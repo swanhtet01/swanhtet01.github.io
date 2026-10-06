@@ -4,7 +4,7 @@ Version: 1.3.2
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 is at `497250c5`, OPEN/BLOCKED with independent review unset. Exact-head App CI `37460752727` PASS: API contracts, disposable PostgreSQL budgets, RLS guards, lint, canonical build, and all 35 unauthenticated access-gate cases. Dependency Security Audit and Kernel contract checks PASS; Kernel release job was skipped by its owner gate. No merge or deployment. These checks verify login protection and do not test signed-in product workflows. The old local Edge 35/35 claim is not accepted as signed-in product evidence. Hosted founder auth/persistence/isolation, signed-in Shop/Sites/Commerce UX, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
+Status: ACTIVE — PR #639 is at 377b5c9, OPEN/BLOCKED with independent review unset. Exact-head App CI 37466215303 failed canonical build on the missing useEffect dependencies at CoreApp.tsx:3105; the dependency fix is prepared for the next exact-head run. Public-site build, screenshot, live-image, and 37 HQ checks pass at the previous candidate. Security Audit and Kernel checks pass. No merge/deployment. Hosted sign-in, persistence, isolation, customer acceptance and release remain open.
 
 ## 1. Controlling objective
 
@@ -424,7 +424,7 @@ preserving every supplied price, currency, quantity and SKU?
    unflagged ambiguity. Adopt only with zero such failures and measured reduction
    in correction time versus baseline. Otherwise keep deterministic import.
 
-Status: deterministic baseline PASS on eleven synthetic cases (including a two-row batch) in
+Status: ACTIVE — PR #639 is at 377b5c9, OPEN/BLOCKED with independent review unset. Exact-head App CI 37466215303 failed canonical build on the missing useEffect dependencies at CoreApp.tsx:3105; the dependency fix is prepared for the next exact-head run. Public-site build, screenshot, live-image, and 37 HQ checks pass at the previous candidate. Security Audit and Kernel checks pass. No merge/deployment. Hosted sign-in, persistence, isolation, customer acceptance and release remain open.
 `tools/catalog_mapping_corpus.json`, exercised by `tools/test_catalog_mapping_baseline.mjs`.
 The existing importer is MMK-only; currency detection/conversion is not proven.
 Explicit currency columns now reject non-MMK or blank declarations. This does
@@ -740,3 +740,9 @@ Historical transport errors do not supersede the later verified host correction 
 - **VALIDATION:** `git diff --check` PASS. Full showroom ESLint and single-file ESLint both exhausted the local Node heap (~2 GB); no lint result. A TypeScript transpile parse of `CoreApp.tsx` PASS. No build/browser/managed acceptance run on this local delta.
 - **BENCHMARK (vendor-published, not independently tested):** [Autumn](https://autumnoms.com/) claims automatic order capture across social, messaging, web and POS channels plus barcode packing and unified stock; [IRRATECH](https://irratechmyanmar.com/en) lists barcode-ready SKUs and multi-branch inventory; [Square](https://squareup.com/us/en/point-of-sale/retail) documents stock history, vendor purchase orders, receiving and barcode labels. Our changed inbox only clarifies the existing authenticated Ecommerce feed; it does not match/prove those connectors or hardware flows.
 - **NEXT:** obtain exact-head CI for the UX delta. Then inspect signed-in Shop workflows against these minimum baselines and close the largest verified usability gap; do not imply hands-on competitor access or hosted acceptance.
+### 2026-10-06 — Shop inbox effect dependency fix
+
+- **CI:** exact head `377b5c9adda6a8f0aee9428462d502aeab17041d`; App CI `37466215303` failed `verify_app_build` because the automatic Ecommerce handoff effect omitted `openOrderComposer` and `reviewStorefrontRequest` dependencies.
+- **CHANGE:** the effect now declares both handlers, retaining its consumed-source guard against duplicate preparation. This fixes the lint/build failure without bypassing the review-before-Shop-save step.
+- **LOCAL:** `git diff --check` and TSX parse PASS. Full ESLint on the workstation previously exhausted its 2 GB Node heap; remote CI lint passed before the build gate. No hosted, customer, or production action.
+- **NEXT:** commit and push the handler dependency fix, then inspect exact-head App CI; keep independent review and production release gates intact.

@@ -3102,7 +3102,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       void reviewStorefrontRequest(requestedRequestId)
       pendingOrderComposerReveal.current = 'ecommerce-request'
     }
-  }, [managedIdentity, navigate, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, tab, workspaceMode])
+  }, [managedIdentity, navigate, openOrderComposer, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, reviewStorefrontRequest, tab, workspaceMode])
 
   // The composer only mounts on the orders tab, so reveal a queued Ecommerce handoff on whichever commit
   // first has that dialog rather than on a single animation frame: requestAnimationFrame never runs while
