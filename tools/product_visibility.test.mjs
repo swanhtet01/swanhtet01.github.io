@@ -115,7 +115,8 @@ test('generated public home and contact offer only active products', async () =>
   assert.equal((home.match(/class="product-card-flow"/g)??[]).length, 3)
   assert.match(home, /Contact SuperMega/)
   assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
-  assert.deepEqual([...contact.matchAll(/<option value="([^"]+)">/g)].map(m=>m[1]), ['guide','shop','ecommerce','website'])
+  assert.match(contact, /<input type="hidden" name="product" value="guide" \/>/)
+  assert.doesNotMatch(contact, /<select[^>]*name="product"/)
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')

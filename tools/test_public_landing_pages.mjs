@@ -57,7 +57,7 @@ const descriptions = []
 const productScreens = {
   shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
   website: ['actual-sites-editor.png', 'actual-sites-inquiries.png'],
-  ecommerce: ['actual-commerce-order-request.png'],
+  ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
 }
 check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {
@@ -102,9 +102,11 @@ for (const page of landingPages) {
   check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
   if (page.productId === 'ecommerce') {
+    check(html.includes('alt="Current Commerce catalog showing available products, local pricing and customer ordering"'), 'landing_commerce_catalog_capture_current')
+    check(html.includes('Commerce &middot; Store catalog and availability &middot; Actual app capture with synthetic example records. Local build.'), 'landing_commerce_catalog_capture_scope_truthful')
     check(html.includes('alt="Current Commerce Store showing a locally saved customer request awaiting Shop confirmation"'), 'landing_commerce_capture_matches_current_store_flow')
     check(html.includes('width="1280" height="900"'), 'landing_commerce_capture_dimensions_exact')
-    check(html.includes('Commerce &middot; Store request and Shop review &middot; Actual app capture with synthetic example records. Local build.'), 'landing_commerce_capture_scope_truthful')
+    check(html.includes('Commerce &middot; Customer request and Shop review &middot; Actual app capture with synthetic example records. Local build.'), 'landing_commerce_request_capture_scope_truthful')
   }
   if (page.productId === 'website') {
     check(html.includes('alt="Current Sites editor showing page navigation, focused content editing and live readiness checks"'), 'landing_sites_editor_capture_current')

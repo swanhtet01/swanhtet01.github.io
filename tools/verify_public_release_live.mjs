@@ -159,7 +159,7 @@ async function verifyOnce() {
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('href="/privacy/"'), 'privacy_navigation_missing')
   const contactPage = pages.get('/contact/') || ''
-  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Attached request details', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_behavior"', 'name="proof_sources"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Attached summary removed. Review the updated request before sending.', 'Request received:', 'source.value=location.href', '>Send message</button>']) {
+  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'name="product" value="guide"', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_behavior"', 'name="proof_sources"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Attached summary removed. Review the updated request before sending.', 'Request received:', 'source.value=location.href', '>Send message</button>']) {
     assert(contactPage.includes(token), 'contact_trial_proof_contract_missing', { token })
   }
   for (const token of ['Request managed company intelligence.', "submit.textContent='Request managed pilot'", 'managedIntelligenceRequest']) {
@@ -240,7 +240,7 @@ async function verifyOnce() {
   const interfaceImages = {
     shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
     website: ['actual-sites-editor.png'],
-    ecommerce: ['actual-commerce-order-request.png'],
+    ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
   }
   for (const product of publicProducts) {
     const filenames = interfaceImages[product.id]

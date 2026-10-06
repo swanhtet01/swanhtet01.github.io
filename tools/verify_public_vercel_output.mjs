@@ -97,6 +97,7 @@ const expectedStaticFiles = new Set([
   'images/actual-shop-orders.png',
   'images/actual-sites-editor.png',
   'images/actual-sites-inquiries.png',
+  'images/actual-commerce-catalog.png',
   'images/actual-commerce-order-request.png',
   'og-card.png',
   ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
@@ -110,6 +111,10 @@ for (const path of actualStaticFiles) {
 }
 for (const path of expectedStaticFiles) {
   if (!actualStaticFiles.includes(path)) fail('expected_public_artifact_missing', { path })
+}
+const ecommercePage = readStatic('ecommerce/index.html')
+for (const path of ['/images/actual-commerce-catalog.png', '/images/actual-commerce-order-request.png']) {
+  if (!ecommercePage.includes(`src="${path}"`)) fail('commerce_showcase_capture_missing', { path })
 }
 
 const sharedRequired = [
