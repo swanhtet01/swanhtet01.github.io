@@ -102,7 +102,7 @@ jobs:
           SUPERMEGA_RELEASE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: npm run app:build:checked
 
-      - name: Verify desktop and 390px product journeys
+      - name: Verify unauthenticated product access gates
         env:
           CHROMIUM_BIN: /usr/bin/google-chrome
           SUPERMEGA_RENDERED_EVIDENCE_DIR: ${{ runner.temp }}/supermega-app-entry-rendered-${{ github.run_id }}-${{ github.run_attempt }}

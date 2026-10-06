@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible, stableRenderedPathMismatch, summarizeRenderedCase, summarizeRenderedFailures } from './verify_app_entry_rendered.mjs'
+import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible, stableRenderedPathMismatch, summarizeRenderedCase, summarizeRenderedFailures, unauthenticatedEntryContract } from './verify_app_entry_rendered.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
 import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
@@ -50,6 +50,19 @@ test('renderer stops waiting only after a non-empty wrong route stays stable', (
   assert.equal(stableRenderedPathMismatch({ expectedPath: '/', path: '/login', previousPath: '/shop/', bodyLength: 20, consecutiveMismatchCount: 5 }), false)
   assert.equal(stableRenderedPathMismatch({ expectedPath: '/', path: '/login', previousPath: '/login', bodyLength: 0, consecutiveMismatchCount: 5 }), false)
   assert.equal(stableRenderedPathMismatch({ expectedPath: '/', path: '/', previousPath: '/', bodyLength: 20, consecutiveMismatchCount: 5 }), false)
+})
+
+test('unauthenticated product routes expect sign-in and reject protected fixture copy', () => {
+  const shop = unauthenticatedEntryContract({ route: '/shop/?template=mini-mart', width: 1280, height: 900,
+    expectedText: ['Products', 'Premium rice 25kg'], absentText: ['PRIVATE DEVICE'], exerciseShopCounter: true,
+    screenshotName: 'shop-counter' }, 5)
+  assert.equal(shop.expectedPath, '/login?product=shop')
+  assert.deepEqual(shop.expectedText, ['Login', 'Login is currently unavailable.'])
+  assert.deepEqual(shop.absentText, ['PRIVATE DEVICE', 'Premium rice 25kg'])
+  assert.equal('exerciseShopCounter' in shop, false)
+  assert.equal('screenshotName' in shop, false)
+  const home = unauthenticatedEntryContract({ route: '/?choose=1', width: 390, height: 844 })
+  assert.equal(home.expectedPath, '/login')
 })
 
 test('rendered CI route diagnostics expose only match booleans and text-miss counts', () => {

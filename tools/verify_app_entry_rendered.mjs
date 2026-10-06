@@ -2260,6 +2260,32 @@ const tests = [
   },
 ].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 
+const ENTRY_COPY = new Set(['Login', 'Products', 'Orders', 'Shop', 'Commerce', 'Website', 'Sites', 'Today', 'Home'])
+export function unauthenticatedEntryContract(testCase, index = 1) {
+  const pathname = new URL(String(testCase?.route || '/'), 'https://supermega.invalid').pathname
+  const segment = pathname.split('/').filter(Boolean)[0] || ''
+  const product = ({ shop: 'shop', plant: 'plant', website: 'website', ecommerce: 'ecommerce' })[segment]
+  const expectedPath = product ? `/login?product=${product}` : '/login'
+  const protectedCopy = (Array.isArray(testCase?.expectedText) ? testCase.expectedText : [])
+    .filter((value) => typeof value === 'string' && value.trim().length > 3 && !ENTRY_COPY.has(value.trim()))
+  return {
+    name: `unauthenticated app entry ${index} requires login`,
+    route: testCase.route,
+    width: testCase.width,
+    height: testCase.height,
+    mobile: testCase.mobile,
+    timeoutMs: testCase.timeoutMs,
+    noHorizontalOverflow: true,
+    expectedPath,
+    expectedPathLabel: product ? `/login?product=${product}` : '/login',
+    initialExpectedPath: expectedPath,
+    expectedText: ['Login', 'Login is currently unavailable.'],
+    initialExpectedText: ['Login', 'Login is currently unavailable.'],
+    absentText: [...new Set([...(testCase.absentText || []), ...protectedCopy])],
+    seed: testCase.seed,
+  }
+}
+
 async function main() {
   if ([shopOnly, shopAccountingOnly, shopOfflineOnly, ecommerceClaimOnly, storeToShopOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
@@ -2282,7 +2308,7 @@ async function main() {
     const version = await cdp.send('Browser.getVersion')
     const cases = []
     const safeCaseSummaries = []
-    const selectedTests = shopOnly
+    const selectedJourneyDefinitions = shopOnly
       ? tests.filter((testCase) => testCase.exerciseShopCounter || testCase.exerciseShopDecisionDesk)
       : shopAccountingOnly
         ? tests.filter((testCase) => testCase.exerciseShopAccountingExport)
@@ -2295,6 +2321,7 @@ async function main() {
               : sitesOnly
                 ? tests.filter((testCase) => testCase.captureSitesWorkspace)
                 : tests
+    const selectedTests = selectedJourneyDefinitions.map((testCase, index) => unauthenticatedEntryContract(testCase, index + 1))
     for (const [index, testCase] of selectedTests.entries()) {
       const startedAt = Date.now()
       console.error(JSON.stringify({ event: 'rendered_case_started', case: index + 1, total: selectedTests.length, name: testCase.name }))

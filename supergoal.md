@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.97
+Version: 1.2.99
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 is at `5288891f`; latest App CI run `37453267502` passed contracts, database/RLS checks, lint and canonical build, then hit the 15-minute limit after nine rendered journeys. Safe diagnostics show a rendered body but expected-route mismatch on each completed case; no raw page text or URLs were emitted. The local Windows Edge suite previously passed 35/35, which does not establish hosted or customer acceptance. Local verifier work now reports only an allowlisted route class, stops waiting after a stable wrong route, and skips interactions that depend on an initial page that did not match. Focused tests pass 21/21. No merge/deploy; independent review, hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware, and customer acceptance remain open.
+Status: ACTIVE — PR #639 remains OPEN/BLOCKED with review unset at `c51376ea`; no merge or deployment. Exact-head App CI `37456384119` passed API contracts, disposable database/RLS checks, lint and build, then completed its rendered stage in 8m20 and failed all 35 unauthenticated feature expectations because the app correctly redirected them to Login. The route policy was intentionally tightened in `0d891e2f` to require managed access even on local hosts. The earlier claimed local Edge 35/35 matrix is not accepted as valid product UI evidence: it contradicts this same-source policy and is not reproducible yet. Local code now reframes rendered coverage as auth-gate checks, prevents protected fixture copy exposure, and labels that evidence accurately. Focused tests pass 22/22. Hosted founder auth/persistence/isolation, signed-in product UX, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
 
 ## 1. Controlling objective
 
