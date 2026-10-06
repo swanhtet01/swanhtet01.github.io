@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { runInNewContext } from 'node:vm'
 import { readdir, readFile as readRawFile, stat } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
@@ -15,6 +16,15 @@ const readFile = async (...args) => {
 }
 
 const root = resolve(import.meta.dirname, '..')
+const stocktakeDraftTests = spawnSync(process.execPath, ['--test', resolve(root, 'tools', 'test_shop_stocktake_draft_store.mjs')], {
+  cwd: root,
+  encoding: 'utf8',
+})
+if (stocktakeDraftTests.status !== 0) {
+  process.stderr.write(stocktakeDraftTests.stdout || '')
+  process.stderr.write(stocktakeDraftTests.stderr || '')
+  throw new Error('shop_stocktake_draft_store_runtime_tests_failed')
+}
 const dist = resolve(process.env.SUPERMEGA_BUILD_OUTPUT || resolve(root, 'showroom', 'dist'))
 const failures = []
 let orderCompletionRuntimeChecks = 0
@@ -110,6 +120,7 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, pre
 ])
 const manifest = JSON.parse(manifestText)
 const stocktakeRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopStocktakeDraftRecovery.tsx'), 'utf8')
+const stocktakeDraftStoreSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-stocktake-draft-store.ts'), 'utf8')
 const appPackage = JSON.parse(appPackageText)
 const rootPackage = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools', 'supermega_scheduler_authority.json'), 'utf8'))
@@ -7094,11 +7105,14 @@ const openPurchaseOrderContract = commercePageContract.slice(commercePageContrac
 const openStockCountContract = commercePageContract.slice(commercePageContract.indexOf('function openStockCount'), commercePageContract.indexOf('function cancelStockCount'))
 if (!coreSource.includes("lazy(() => import('./ShopStocktakeDraftRecovery')")
   || !commerceInventoryContract.includes('<ShopStocktakeDraftRecovery')
-  || !stocktakeRecoverySource.includes('draft.v1:${scopeKey}')
-  || !stocktakeRecoverySource.includes('sessionStorage.setItem(storageKey, JSON.stringify(snapshot))')
-  || !stocktakeRecoverySource.includes('value.version !== 1')
-  || !stocktakeRecoverySource.includes('value.lines.length > 200')
-  || !stocktakeRecoverySource.includes("setStatus(matches ? 'saved' : 'unavailable')")) fail('commerce_stocktake_recovery_not_lazy_or_scoped')
+  || !stocktakeRecoverySource.includes('readShopStocktakeDraft(storage, storageKey)')
+  || !stocktakeRecoverySource.includes('persistShopStocktakeDraft(storage, storageKey, { current, lines })')
+  || !stocktakeDraftStoreSource.includes('draft.v1:${scopeKey}')
+  || !stocktakeDraftStoreSource.includes('storage.setItem(key, JSON.stringify({ version, ...snapshot }))')
+  || !stocktakeDraftStoreSource.includes('value.version !== version')
+  || !stocktakeDraftStoreSource.includes('value.lines.length > 200')
+  || !stocktakeDraftStoreSource.includes('const drafts = current ? [current, ...lines] : lines')
+  || !stocktakeDraftStoreSource.includes('new Set(keys).size !== keys.length')) fail('commerce_stocktake_recovery_not_lazy_or_scoped')
 if (!commercePageContract.includes('const stockRows = commerce.items')
   || !commercePageContract.includes('leftNeedsAttention !== rightNeedsAttention')
   || !commercePageContract.includes('return rightShortage - leftShortage || left.index - right.index')
