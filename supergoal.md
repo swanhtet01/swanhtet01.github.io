@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.92
+Version: 1.2.93
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 now contains current source `40b647e3` with the simplified contact page, Shop source-picker removal and managed Login gate; no deployment. Exact-head App CI exposed stale Shop/Plant internal contact instructions; the two playbooks now match the generic form and their 533-check verifier passes locally. Fresh CI is required for the correction, and independent review remains outstanding. Hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
+Status: ACTIVE — PR #639 is at `58f37433` with the simplified contact page, Shop source-picker removal, managed Login gate, and corrected Shop/Plant contact playbooks; no deployment. Local playbook validation passes (533 checks) and exact-source Windows rendered Shop checks pass (4/4). Exact-head GitHub App CI built and linted successfully, but its Linux browser suite failed the first nine journeys and the job was canceled at 15 minutes; Security Audit and Kernel Console passed, with the release job correctly skipped by its owner gate. Independent review remains outstanding. Hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware, and customer acceptance remain open.
 
 ## 1. Controlling objective
 
@@ -711,4 +711,11 @@ Historical transport errors do not supersede the later verified host correction 
 - **PR:** fast-forwarded the branch to `40b647e3c23df06dcdc4e4b1eeb36bbb61a50933`; PR #639 matches that head. No merge or deploy.
 - **CI:** App CI run `37444798427` failed at `demo:playbooks:verify`; lint passed, while canonical build and desktop/mobile journeys were skipped. The failure was an obsolete Shop/Plant instruction referencing the removed contact product chooser.
 - **FIX:** updated those two internal playbooks to the real generic contact journey: product context is not preselected, `How can we help?` captures the request, and `Send message` submits it. `node tools/test_demo_playbooks.mjs` now PASS (533 checks). Public build/output verification and contact receipt suite also pass at the same source family.
-- **NEXT:** push the playbook correction as a fast-forward to PR #639 and inspect the fresh exact-head CI, security and Kernel Console results. Only after green CI and eligible independent review can this candidate move to a preview/hosted acceptance; no review bypass, merge or production deployment.
+- **NEXT:** the playbook correction is pushed. Diagnose and fix the Linux Chrome rendered-journey discrepancy without weakening assertions, then rerun exact-head App CI. Only after green CI and eligible independent review can this candidate move to preview/hosted acceptance; no review bypass, merge or production deployment.
+
+### 2026-10-06 — exact-head rendered CI and local Shop reproduction
+
+- **SOURCE:** PR #639 now matches `58f374334af4949cb2c735a8f8271e00e6203146`; the worktree is clean after the documentation commit. No production change.
+- **CI:** App CI `37446403509` passed API contracts, disposable PostgreSQL budgets, RLS guards, lint and canonical app build; rendered journey checks 1–9 reported failures and the job was canceled at the 15-minute maximum. Dependency Security Audit `37446412990` and Kernel Console `37446412932` passed; the Kernel Console release job was skipped by its owner gate. PR review is still unset and merge state BLOCKED.
+- **LOCAL REPRODUCTION:** exact-source rendered Shop subset ran on Windows Edge 154: desktop and mobile mini-mart counter plus Today decision desk passed 4/4, with no browser runtime warnings, external requests, or horizontal overflow. This does not explain the Linux Chrome CI discrepancy or turn local checks into hosted acceptance.
+- **NEXT:** isolate and fix the Linux Chrome rendered-journey discrepancy without weakening assertions, then rerun exact-head App CI. Keep PR review and production release gated; no merge or deploy.
