@@ -2,6 +2,7 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { applyStockCountScan } from '../showroom/src/core/shop-stock-count-scan.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const componentPath = resolve(root, 'showroom', 'src', 'core', 'BarcodeScanButton.tsx')
@@ -17,6 +18,7 @@ const labels = readFileSync(labelsPath, 'utf8')
 const css = readFileSync(cssPath, 'utf8')
 const vercel = JSON.parse(readFileSync(vercelPath, 'utf8'))
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'))
+const stockCountScanSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'shop-stock-count-scan.ts'), 'utf8')
 
 let checks = 0
 
@@ -98,6 +100,23 @@ const addCameraScan = functionBody(coreApp, 'addCameraScan')
 const selectScannedJob = functionBody(coreApp, 'selectScannedJob')
 const applyScannedMaterialRef = functionBody(coreApp, 'applyScannedMaterialRef')
 const selectStockCountBarcode = functionBody(coreApp, 'selectStockCountBarcode')
+const firstStockScan = applyStockCountScan(null, { sku: 'RICE-01' })
+check(firstStockScan.status === 'selected' && firstStockScan.draft?.quantity === '1', 'stock_count_scan_must_start_uncommitted_count_at_one')
+const repeatStockScan = applyStockCountScan(firstStockScan.draft, { sku: 'RICE-01' })
+check(repeatStockScan.status === 'incremented' && repeatStockScan.draft?.quantity === '2', 'repeated_stock_scan_must_increment_only_the_draft')
+const manualStockScan = applyStockCountScan({ sku: 'RICE-01', stockUnitId: '', locationId: '', quantity: '12' }, { sku: 'RICE-01' })
+check(manualStockScan.status === 'incremented' && manualStockScan.draft?.quantity === '13', 'scanner_must_increment_valid_manual_count')
+const protectedStockScan = applyStockCountScan({ sku: 'RICE-01', stockUnitId: 'LOT-1', locationId: 'STORE-1', quantity: '4' }, { sku: 'SOAP-02' })
+check(protectedStockScan.status === 'finish-current' && protectedStockScan.draft?.quantity === '4', 'different_product_scan_must_preserve_current_count')
+const emptySwitchScan = applyStockCountScan({ sku: 'RICE-01', stockUnitId: '', locationId: '', quantity: '' }, { sku: 'SOAP-02' })
+check(emptySwitchScan.status === 'selected' && emptySwitchScan.draft?.sku === 'SOAP-02' && emptySwitchScan.draft.quantity === '1', 'empty_count_must_allow_a_new_scanned_product')
+const serialStockScan = applyStockCountScan(firstStockScan.draft, { sku: 'RICE-01', serial: true })
+check(serialStockScan.status === 'serial-limit', 'serial_item_duplicate_scan_must_fail_closed')
+const invalidStockScan = applyStockCountScan({ sku: 'RICE-01', stockUnitId: '', locationId: '', quantity: '3x' }, { sku: 'RICE-01' })
+check(invalidStockScan.status === 'invalid-current' && invalidStockScan.draft?.quantity === '3x', 'invalid_count_must_be_preserved')
+const overflowStockScan = applyStockCountScan({ sku: 'RICE-01', stockUnitId: '', locationId: '', quantity: String(Number.MAX_SAFE_INTEGER) }, { sku: 'RICE-01' })
+check(overflowStockScan.status === 'count-overflow', 'unsafe_count_overflow_must_fail_closed')
+check(!/fetch\(|XMLHttpRequest|mutateCommerce|countCommerceStock|queueAction\(/.test(stockCountScanSource), 'stock_count_scan_helper_must_not_write_or_call_network')
 check(coreApp.includes('label="Scan a product barcode for this stock count" onDetected={selectStockCountBarcode}'), 'stock_count_scanner_call_site_missing')
 check(selectStockCountBarcode.includes('candidate.sku.toLowerCase() === code.toLowerCase()')
   && selectStockCountBarcode.includes('balances.length === 1')
