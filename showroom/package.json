@@ -15,14 +15,12 @@
   },
   "dependencies": {
     "@supabase/auth-js": "2.110.8",
-    "jsbarcode": "3.12.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router": "8.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/jsbarcode": "3.11.4",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

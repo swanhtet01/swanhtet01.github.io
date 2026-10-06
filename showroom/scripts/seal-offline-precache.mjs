@@ -58,7 +58,6 @@ const OFFLINE_ENTRY_KEYS = ['index.html']
 const OFFLINE_CHUNK_NAMES = [
   'core-app',
   'shop-batch-profit-control-first-use',
-  'JsBarcode',
 ]
 
 // Surfaces that are NOT worth the install-time bytes: either they need a network to do anything,

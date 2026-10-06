@@ -6,13 +6,17 @@ import { resolve } from 'node:path'
 const root = resolve(import.meta.dirname, '..')
 const componentPath = resolve(root, 'showroom', 'src', 'core', 'BarcodeScanButton.tsx')
 const coreAppPath = resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx')
+const labelsPath = resolve(root, 'showroom', 'src', 'core', 'ShopBarcodeLabels.tsx')
 const cssPath = resolve(root, 'showroom', 'src', 'core', 'core-app.css')
 const vercelPath = resolve(root, 'vercel.json')
+const packagePath = resolve(root, 'showroom', 'package.json')
 
 const component = readFileSync(componentPath, 'utf8')
 const coreApp = readFileSync(coreAppPath, 'utf8')
+const labels = readFileSync(labelsPath, 'utf8')
 const css = readFileSync(cssPath, 'utf8')
 const vercel = JSON.parse(readFileSync(vercelPath, 'utf8'))
+const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'))
 
 let checks = 0
 
@@ -117,4 +121,34 @@ check(css.includes('.barcode-scan-button { flex: 0 0 auto; min-width: 44px; min-
 check(css.includes('.barcode-scan-video { width: 100%; aspect-ratio: 4 / 3;'), 'barcode_scan_video_stage_missing')
 check(css.includes('.plant-job-scan-miss { overflow-wrap: anywhere; }'), 'plant_scan_miss_wrap_missing')
 
-console.log(`barcode scan boundary: ${checks} checks passed (5 source sites; shared managed form before optional template setup; no scan-triggered domain writes; keyboard fallback retained)`)
+const code128TableSource = labels.match(/const CODE128_BARS = (\[[\s\S]*?\n\])/)
+if (!code128TableSource) throw new Error('code128_symbol_table_missing')
+const code128Bars = new Function(`return ${code128TableSource[1]}`)()
+const code128Path = new Function('CODE128_BARS', 'value', functionBody(labels, 'code128BPath'))
+const printableSku = new Function('value', functionBody(labels, 'isPrintableCode128'))
+const barcodeCopies = new Function('MAX_LABELS_PER_PRINT', `return function (acceptedQuantity, requestedCopies) { ${functionBody(labels, 'cappedBarcodeCopies')} }`)(50)
+check(code128Bars.length === 107 && code128Bars.every((pattern, index) => pattern.length === (index === 106 ? 13 : 11)), 'code128_symbol_table_shape_invalid')
+check(printableSku('SKU-014') && printableSku('rice 25kg'), 'valid_ascii_skus_must_use_code128b')
+check(!printableSku('') && !printableSku(' leading') && !printableSku('trailing ') && !printableSku('tea\nbox') && !printableSku('茶'), 'invalid_code128b_skus_must_be_rejected')
+const encodedHello = code128Path(code128Bars, 'HELLO')
+const helloModules = Array(encodedHello.modules).fill('0')
+for (const match of encodedHello.path.matchAll(/M(\d+) 0h(\d+)v40h-\d+z/g)) {
+  const start = Number(match[1])
+  const width = Number(match[2])
+  for (let index = start; index < start + width; index += 1) helloModules[index] = '1'
+}
+check(helloModules.join('') === '110100100001100010100010001101000100011011101000110111010001110110110001010001100011101011', 'code128b_known_hello_vector_mismatch')
+const fullAscii = code128Path(code128Bars, Array.from({ length: 95 }, (_, index) => String.fromCharCode(index + 32)).join(''))
+check(fullAscii.modules === 1080 && fullAscii.path.length > 0, 'printable_ascii_code128b_encoding_failed')
+check(barcodeCopies(1, 1) === 1 && barcodeCopies(14, 8) === 8, 'label_copies_must_match_request_within_receipt')
+check(barcodeCopies(14, 20) === 14 && barcodeCopies(500, 500) === 50, 'label_copies_must_not_exceed_receipt_or_batch_cap')
+check(barcodeCopies(0, 1) === 0 && barcodeCopies(1.5, 1) === 0, 'invalid_receipt_quantity_must_not_create_labels')
+check(labels.includes('50 × 30 mm') && labels.includes('window.print()'), 'local_browser_print_dimensions_missing')
+check(coreApp.includes("movement.kind === 'receipt'") && coreApp.includes('movement.quantityDelta > 0'), 'labels_must_require_positive_accepted_receipt')
+check(!labels.includes('dangerouslySetInnerHTML') && !labels.includes('jsbarcode'), 'barcode_svg_must_be_rendered_as_safe_native_markup_without_extra_runtime')
+for (const forbidden of ['navigator.usb', 'navigator.serial', 'fetch(', 'mutateCommerce']) {
+  check(!labels.includes(forbidden), `label_print_must_not_use_direct_device_or_domain_write:${forbidden}`)
+}
+check(!packageJson.dependencies?.jsbarcode && !packageJson.devDependencies?.['@types/jsbarcode'], 'unused_multiformat_encoder_dependency_must_not_ship')
+
+console.log(`barcode scan and receipt-label boundary: ${checks} checks passed (CODE128B known vector, printable ASCII and accepted-quantity caps; no scan-triggered writes; keyboard fallback retained)`)
