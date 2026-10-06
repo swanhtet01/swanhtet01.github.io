@@ -21,6 +21,7 @@ import { recordBehaviorSignal } from './behavior-trail'
 import { downloadBlob } from './download-file'
 import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
+const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
 import { bi, confirmedBurmese } from './i18n-actions'
@@ -7717,12 +7718,18 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           const returnSummary = purchaseOrder.supplierReturns?.length
             ? purchaseOrder.supplierReturns.map((claim) => `${claim.internalReturnReference}: ${commerceSupplierReturnClaimStatus(claim).replaceAll('_', ' ')}`).join(' · ')
             : null
+          const acceptedReceipts = commerce.movements.filter((movement) => movement.kind === 'receipt'
+            && movement.purchaseOrderId === purchaseOrder.id
+            && movement.quantityDelta > 0)
           return <article key={purchaseOrder.id}>
             <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small><small>{purchaseOrder.unitCostMmk === undefined ? 'Legacy PO · commercial terms not retained' : `${formatMoney(purchaseOrder.unitCostMmk)} each · ${formatMoney(purchaseOrder.unitCostMmk * purchaseOrder.quantityOrdered)}`}</small>{returnSummary ? <small>Returns · {returnSummary}</small> : null}<small data-arrival-risk={arrivalUrgency}>{purchaseOrder.expectedAt
               ? `Expected ${formatIssueDue(purchaseOrder.expectedAt)}${arrivalUrgency === 'late' ? ' · Late' : arrivalUrgency === 'due_soon' ? ' · Due soon' : ''}`
               : 'Arrival not recorded · legacy order'}</small></div>
             <span><strong>{progress.received} accepted{progress.rejected ? ` · ${progress.rejected} rejected` : ''}/{purchaseOrder.quantityOrdered}</strong><small>{invoiceMatch ? `Invoice · ${invoiceMatch.status.replaceAll('_', ' ')}` : progress.status.replaceAll('_', ' ')}</small></span>
             {nextControl}
+            {acceptedReceipts.length ? <div aria-label={`Accepted receipts for ${purchaseOrder.id}`} className="purchase-order-label-actions">
+              {acceptedReceipts.map((receipt) => <Suspense fallback={null} key={receipt.id}><ShopBarcodeLabels receipt={{ id: receipt.id, purchaseOrderId: purchaseOrder.id, sku: receipt.sku, itemName: item?.name ?? receipt.sku, acceptedQuantity: receipt.quantityDelta }} /></Suspense>)}
+            </div> : null}
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
