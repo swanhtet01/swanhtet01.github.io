@@ -238,15 +238,14 @@ const sharedStyle = `
   .principle-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .principle-card { min-height: 235px; padding: 24px; }
   .principle-card p { color: var(--muted); }
-  .contact-layout { display: grid; grid-template-columns: minmax(0,.78fr) minmax(430px,1.22fr); gap: 76px; align-items: start; padding-bottom: 110px; }
+  .contact-layout { display: block; padding-bottom: 110px; }
   .contact-copy { padding-top: 24px; }
   .contact-copy p { color: var(--muted); font-size: 18px; }
   .contact-page .page-hero { padding: 36px 0 24px; }
   .contact-page .page-hero .lede { font-size: 18px; }
-  .contact-page { max-width: 680px; }
-  .contact-page .contact-layout { display: flex; flex-direction: column; gap: 20px; }
+  .contact-page { max-width: 760px; }
+  .contact-page .contact-layout { display: block; }
   .contact-page .contact-form { width:100%; padding: 30px; gap: 22px; border-color: #e1dfed; border-radius: 22px; box-shadow: 0 24px 70px rgba(28,26,48,.07); }
-  .contact-page .contact-copy { width:100%; }
   .contact-page .field-grid { gap: 22px 16px; }
   .contact-page .field-grid label { gap: 9px; color: var(--ink); font-size: 13px; font-weight: 650; }
   .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { min-height: 52px; border-color: #dedce9; border-radius: 12px; background: #fff; font-size: 15px; }
@@ -257,9 +256,6 @@ const sharedStyle = `
   .contact-page .contact-form h3 { display: none; }
   .contact-page .page-hero h1 { font-size: clamp(32px, 5vw, 48px); }
   .contact-page .form-note { font-size: 12px; line-height: 1.5; }
-  .contact-page .contact-copy { padding-top: 0; }
-  .contact-page .contact-copy h2 { font-size: 24px; }
-  .contact-page .contact-copy p { font-size: 16px; }
   .trial-proof-summary { margin-top: 34px; padding: 24px 0; border-block: 1px solid var(--line); }
   .trial-proof-summary[hidden] { display: none; }
   .trial-proof-summary h3 { margin-top: 8px; }
@@ -676,7 +672,7 @@ const contactScript = `<script>(function(){
    if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateBriefHint();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
-    var productName=product&&product.selectedOptions.length?product.selectedOptions[0].textContent:'managed AI';
+    var productName=product&&({guide:'contact',shop:'Shop',website:'Sites',ecommerce:'Commerce'})[product.value]||'contact';
     if(heading)heading.textContent='Finish your '+productName+' request.';
     if(lede)lede.textContent='Add your contact details, review your brief, and send.';
     if(copyHeading)copyHeading.textContent=proof?'Your request summary is attached.':'Your brief is ready to review.';
@@ -717,7 +713,7 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what you need.</h1><p class="lede" data-contact-lede>Tell us about your business. We’ll take it from there.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label class="wide">Interested in<select name="product"><option value="guide">Help me choose</option>${publicProducts.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')}</select></label><input type="hidden" name="template" maxlength="120" /><label class="wide">What would you like to improve?<textarea name="goal" required maxlength="4000" placeholder="Tell us what your business does and what you need help with."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-note">We’ll reply by email.</p><p class="form-status" data-form-status aria-live="polite"></p></form><div class="contact-copy"><h2 data-contact-copy-heading>What to include</h2><p data-contact-copy>Include your products or services, location and contact details.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Attached request details</span><h3>Request summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></div></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what your business needs.</h1><p class="lede" data-contact-lede>A useful tool, a custom workflow, or a question. We’ll reply with a clear next step.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">How can we help?<textarea name="goal" required maxlength="4000" placeholder="Tell us what your business does and what you would like to improve."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-note">We’ll reply by email.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({

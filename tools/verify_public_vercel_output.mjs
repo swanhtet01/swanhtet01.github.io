@@ -342,16 +342,27 @@ for (const [route, html] of [['/', home], ['/shop/', shopPage]]) {
 }
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Tell us what you need.', 'What to include', 'scope, price and timing', 'Include your products or services, location and contact details.', '<input type="hidden" name="template" maxlength="120"', '>Send message</button>', '>Shop<', '>Sites<', '>Commerce<', 'We’ll reply by email.', 'Email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Attached request details', 'Request summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', `${JSON.stringify(['guide', ...publicProducts.map(product => product.id)])}.includes(requestedProduct||'')`, "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Add your contact details, review your brief, and send.', 'An aggregate summary is attached. Raw business records and account details are not included.', 'Your brief will be sent with your contact details.', 'Request summary attached for review. Nothing has been sent.', 'Attached summary removed. Review the updated request before sending.', 'Your brief is ready. Nothing has been sent.', 'Request received:', 'Keep this for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'We could not confirm receipt. Your details are still here.', 'receipt_unconfirmed', 'Promise.race', 'controller.abort()', 'clearTimeout(deadline)']) {
+const contactMain = contact.match(/<main\b[\s\S]*?<\/main>/)?.[0] || ''
+for (const token of [
+  'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
+  'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
+  'name="idempotency_key"', 'name="proof_contract"', 'name="proof_digest"', 'class="contact-honeypot"',
+  'x-idempotency-key', 'Tell us what your business needs.', 'How can we help?', 'Company (optional)',
+  'Tell us what your business does and what you would like to improve.', '>Send message</button>',
+  'We’ll reply by email.', "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",
+]) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
-for (const token of ['Template, if known', '>Send workflow</button>', "body.request_id||'confirmed'"]) {
-  if (contact.includes(token)) fail('retired_contact_contract_present', { token })
+for (const token of [
+  '<select name="product"', 'Choose a service', 'What would you like us to prepare?', 'What to include',
+  'Attached request details', 'Readiness', 'Sources', 'Behavior', 'Decisions', 'Reply email',
+]) {
+  if (contactMain.includes(token)) fail('retired_contact_ui_present', { token })
 }
-if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
 for (const token of ['Request managed company intelligence.', "submit.textContent='Request managed pilot'", 'managedIntelligenceRequest']) {
   if (contact.includes(token)) fail('retired_managed_pilot_pitch_present', { token })
 }
+if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
 if (!contact.includes('source.value=location.href')) fail('contact_source_attribution_missing')
 
 if (/<(?:input|textarea)\b(?=[^>]*\bname="(?:name|email|company|template|goal)")(?=[^>]*\bvalue=)[^>]*>/i.test(contact)

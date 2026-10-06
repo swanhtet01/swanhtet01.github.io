@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.88
+Version: 1.2.89
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 source head is `1e127c7b`. The app-entry guard now requires managed access on loopback and `.localhost` as well as hosted application domains; login and recovery remain reachable. Focused route/review tests pass 9/9, app TypeScript passes, and the tree was clean at that source commit. Exact-head App CI run `37434892183` is still in progress; security audit and Kernel Console checks pass, with no review decision, merge, deployment or live-domain change. Production `app.supermega.dev/api/health` previously returned managed mode ready with database, role, schema, audit and writes ready, and anonymous Shop navigation redirected to the official Login form; this is not founder-authenticated acceptance. The separate `supermega-public` Vercel preview is a CLI-created `target:null` deployment whose health returns `isolated_demo`; its preview runtime lacks the database/schema/write configuration and its associated Supabase acceptance branch reports `MIGRATIONS_FAILED`. This explains the preview's generic “Login is currently unavailable” state and does not indicate a production database failure. The local loopback screenshot/reload error is still not reproduced in its original browser/server context; port 4173 is currently not listening. Founder-authenticated workspace discovery, save/reload, process-restart recovery, cross-workspace isolation, public visual alignment, native Burmese comprehension, physical scanner/printer tests, hands-on competitor trials and customer acceptance remain open. No production deployment, merge or live-domain change is claimed.
+Status: ACTIVE — local public contact-form simplification is implemented and generated-site/behavior checks pass in the current committed local source; it is not deployed. PR #639 remains OPEN/BLOCKED at 1e127c7b, review decision unset; CI run 37434892183 is CANCELLED. Production acceptance, founder-authenticated app persistence/isolation, final visual review, device hardware tests, Burmese usability and customer acceptance remain open. No merge, push or deployment is claimed.
 
 ## 1. Controlling objective
 
@@ -680,3 +680,11 @@ Historical transport errors do not supersede the later verified host correction 
 - **PASS — exact governed evidence:** evidence commit `321532c5` binds the 74-check PostgreSQL 17 rehearsal and four-product managed-readiness ledger to the clean Sites objective head. Derived evidence `3799893b` verifies four products, two Vercel projects, twelve owner-gated action classes and the 24-migration Supabase rehearsal proposal while leaving it prepared and unexecuted. The clean 37-step HQ run passes in 18.656 seconds with `externalWritesPerformed=false`.
 - **BOUNDARY:** this is source, local build and local test evidence. The final exact branch SHA has no current rendered screenshot proof, remote CI result, immutable candidate, founder-authenticated managed persistence/isolation, independent review, merge, deployment, native Burmese comprehension or customer acceptance.
 - **NEXT:** deliver the clean chain once and inspect exact-head CI once. If green, bind one paired immutable app/public candidate and run founder-authenticated discovery, save/reload, recovery and isolation across Shop, Sites and Commerce. Continue independent source work with cashier-critical Myanmar comprehension and guided real-business import/migration; do not add another parallel setup surface.
+
+
+### 2026-10-06 — contact entry made simpler
+
+- **IMPLEMENTED:** public contact is one focused form; the product chooser and secondary readiness/summary sidebar are removed from the rendered page. Name, email and a free-text request remain; company is optional. Product-specific links retain a hidden product context, and submit confirmation/retry behavior is preserved.
+- **LOCAL EVIDENCE:** public build and output verifier PASS; contact receipt suite PASS (22/22); mocked contact-function checks PASS, including Myanmar text handoff, retry and duplicate-submit cases; git diff --check PASS. These are local/static and mocked checks, not a hosted send or browser/customer acceptance.
+- **RELEASE:** local source only. PR #639 remains open and blocked by independent review; exact-head CI run 37434892183 is cancelled. No push, merge or deployment. The live website therefore remains unchanged.
+- **NEXT:** confirm public-site source lineage and the required release gates, then render desktop/mobile widths on a disposable preview. Separately address the Shop screenshot gap through distinct, real app-route captures and authenticated review; keep illustrative marketing images labeled until they match the running product.
