@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.89
+Version: 1.2.90
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — local public contact-form simplification is implemented and generated-site/behavior checks pass in the current committed local source; it is not deployed. PR #639 remains OPEN/BLOCKED at 1e127c7b, review decision unset; CI run 37434892183 is CANCELLED. Production acceptance, founder-authenticated app persistence/isolation, final visual review, device hardware tests, Burmese usability and customer acceptance remain open. No merge, push or deployment is claimed.
+Status: ACTIVE — the contact form is simplified in local source commit 1f7f5561 and its generated-site/behavior checks pass; not deployed. Gallery audit found the “actual app capture” assets are genuine but stale: Shop/Sites captures date to c622ad89 while their UI source changed substantially afterward; the Commerce capture changed at 25b90914 on Oct 4 and core/Commerce source changed substantially afterward. PR #639 remains OPEN/BLOCKED at 1e127c7b, review decision unset; CI 37434892183 is CANCELLED. Current-source captures, final visual alignment, founder-authenticated persistence/isolation, Burmese usability, device tests and customer acceptance remain open. No merge, push or deployment is claimed.
 
 ## 1. Controlling objective
 
@@ -688,3 +688,10 @@ Historical transport errors do not supersede the later verified host correction 
 - **LOCAL EVIDENCE:** public build and output verifier PASS; contact receipt suite PASS (22/22); mocked contact-function checks PASS, including Myanmar text handoff, retry and duplicate-submit cases; git diff --check PASS. These are local/static and mocked checks, not a hosted send or browser/customer acceptance.
 - **RELEASE:** local source only. PR #639 remains open and blocked by independent review; exact-head CI run 37434892183 is cancelled. No push, merge or deployment. The live website therefore remains unchanged.
 - **NEXT:** confirm public-site source lineage and the required release gates, then render desktop/mobile widths on a disposable preview. Separately address the Shop screenshot gap through distinct, real app-route captures and authenticated review; keep illustrative marketing images labeled until they match the running product.
+
+
+### 2026-10-06 — public gallery freshness audit
+
+- **FINDING:** the files named actual-shop-*, actual-sites-* and actual-commerce-* are genuine captures of the shipped app, not AI-generated compositions; they use synthetic example records and are labeled as local-build captures. Their source is stale: Shop/Sites assets were refreshed at c622ad89, after which the relevant app files changed materially (CoreApp.tsx 930 lines and core-app.css 523 lines in the diff; Sites/Ecommerce paths 1,135 insertions and 484 deletions). The Commerce request image was updated at 25b90914, but core/Commerce source has since changed by 1,189 insertions and 613 deletions. Current marketing art therefore cannot substantiate the current product state.
+- **RELEASE:** PR #639 remains OPEN/BLOCKED at 1e127c7b with no review decision; CI run 37434892183 is CANCELLED. This checkout is clean at 1f7f5561. No production changes.
+- **NEXT:** capture Shop Today, counter, orders and inventory; Sites editor and inquiry queue; and Commerce storefront and request review from the current source build. Bind each asset to the exact app source commit and distinct route, then compare capture-to-app visuals at desktop/mobile before refreshing the public gallery. Keep customer data out; use clearly identified synthetic records.
