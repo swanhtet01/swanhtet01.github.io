@@ -16,8 +16,9 @@ Gate context: portfolio.json researchGates `order-intake-agent` = evaluate,
 evaluationStatus design-complete; sharedCapabilities `ai-assistance` =
 gated-r-and-d, firstWorkflow "Order Intake".
 
-Historical freshness note, 2026-08-27: cloud-provider eval lanes were suspended for the
-current owner-named wave. The active eval path is local Ollama only:
+Freshness note, 2026-08-27: cloud-provider eval lanes are suspended for the
+current owner-named wave (historical policy marker; this document is not a
+live customer workflow). The active eval path is local Ollama only:
 `llama3.2:1b`, `OLLAMA_KEEP_ALIVE=0s`, no cloud fallback, no provider key, and
 no hosted model route. If the local model cannot meet the quality gate, the
 feature remains blocked; do not route to a paid provider without a separate
