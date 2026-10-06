@@ -10,11 +10,11 @@ export type AcceptedStockReceiptLabel = {
 
 const MAX_LABELS_PER_PRINT = 50
 
-export function isPrintableCode128(value: string) {
+function isPrintableCode128(value: string) {
   return value.length > 0 && value.length <= 80 && value.trim() === value && /^[\x20-\x7e]+$/.test(value)
 }
 
-export function cappedBarcodeCopies(acceptedQuantity: number, requestedCopies: number) {
+function cappedBarcodeCopies(acceptedQuantity: number, requestedCopies: number) {
   if (!Number.isSafeInteger(acceptedQuantity) || acceptedQuantity < 1) return 0
   const safeRequested = Number.isSafeInteger(requestedCopies) ? requestedCopies : 1
   return Math.max(1, Math.min(acceptedQuantity, MAX_LABELS_PER_PRINT, safeRequested))
