@@ -48,6 +48,19 @@ test('missing, saved, restored and cleared drafts have explicit outcomes', () =>
   assert.deepEqual(store.readShopStocktakeDraft(storage, key), { status: 'missing' })
 })
 
+test('a new scope starts empty unless its own saved draft validates', () => {
+  const storage = new MemoryStorage()
+  const oldScope = store.shopStocktakeDraftKey('workspace-a:user-a')
+  const newScope = store.shopStocktakeDraftKey('workspace-b:user-b')
+  store.persistShopStocktakeDraft(storage, oldScope, snapshot)
+  const read = store.readShopStocktakeDraft(storage, newScope)
+  assert.deepEqual(store.shopStocktakeDraftRecovery(read), { status: 'idle' })
+  storage.setItem(newScope, '{invalid}')
+  assert.deepEqual(store.shopStocktakeDraftRecovery(store.readShopStocktakeDraft(storage, newScope)), { status: 'unavailable' })
+  store.persistShopStocktakeDraft(storage, newScope, { current: null, lines: [] })
+  assert.deepEqual(store.shopStocktakeDraftRecovery(store.readShopStocktakeDraft(storage, newScope)), { status: 'saved', snapshot: { current: null, lines: [] } })
+})
+
 test('malformed, unknown-version, duplicate and oversized drafts are rejected', () => {
   const storage = new MemoryStorage()
   const key = store.shopStocktakeDraftKey('local')

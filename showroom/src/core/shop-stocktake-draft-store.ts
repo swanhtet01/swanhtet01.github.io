@@ -4,6 +4,8 @@ export type ShopStocktakeSnapshot = { current: StockCountDraft | null; lines: St
 export type ShopStocktakeStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 export type ShopStocktakeRead = { status: 'missing' | 'invalid' | 'unavailable' }
   | { status: 'valid'; snapshot: ShopStocktakeSnapshot }
+export type ShopStocktakeRecovery = { status: 'idle' | 'unavailable' }
+  | { status: 'saved'; snapshot: ShopStocktakeSnapshot }
 
 const version = 1
 
@@ -48,6 +50,11 @@ export function readShopStocktakeDraft(storage: ShopStocktakeStorage | null, key
     const snapshot = parseSnapshot(raw)
     return snapshot ? { status: 'valid', snapshot } : { status: 'invalid' }
   } catch { return { status: 'unavailable' } }
+}
+
+export function shopStocktakeDraftRecovery(read: ShopStocktakeRead): ShopStocktakeRecovery {
+  if (read.status === 'valid') return { status: 'saved', snapshot: read.snapshot }
+  return { status: read.status === 'missing' ? 'idle' : 'unavailable' }
 }
 
 export function persistShopStocktakeDraft(storage: ShopStocktakeStorage | null, key: string, snapshot: ShopStocktakeSnapshot): boolean {

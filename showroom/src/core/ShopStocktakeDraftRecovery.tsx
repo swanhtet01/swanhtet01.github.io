@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { StockCountDraft } from './CoreApp'
-import { clearShopStocktakeDraft, persistShopStocktakeDraft, readShopStocktakeDraft, shopStocktakeDraftKey, type ShopStocktakeStorage } from './shop-stocktake-draft-store'
+import { clearShopStocktakeDraft, persistShopStocktakeDraft, readShopStocktakeDraft, shopStocktakeDraftKey, shopStocktakeDraftRecovery, type ShopStocktakeStorage } from './shop-stocktake-draft-store'
 type Status = 'saved' | 'saving' | 'unavailable' | 'idle'
 
 export function ShopStocktakeDraftRecovery({ scopeKey, current, lines, active, setCurrent, setLines, onReady }: {
@@ -28,17 +28,11 @@ export function ShopStocktakeDraftRecovery({ scopeKey, current, lines, active, s
     }
     let storage: ShopStocktakeStorage | null = null
     try { storage = sessionStorage } catch { /* Recovery remains unavailable. */ }
-    const read = readShopStocktakeDraft(storage, storageKey)
-    if (read.status === 'invalid' || read.status === 'unavailable') {
-      invalidStoredDraft.current = true
-      setStatus('unavailable')
-    } else {
-      if (read.status === 'valid') {
-        setCurrent(read.snapshot.current)
-        setLines(read.snapshot.lines)
-      }
-      setStatus(read.status === 'valid' ? 'saved' : 'idle')
-    }
+    const recovery = shopStocktakeDraftRecovery(readShopStocktakeDraft(storage, storageKey))
+    setCurrent(recovery.status === 'saved' ? recovery.snapshot.current : null)
+    setLines(recovery.status === 'saved' ? recovery.snapshot.lines : [])
+    invalidStoredDraft.current = recovery.status === 'unavailable'
+    setStatus(recovery.status)
     setHydrated(true)
     onReady(true)
   }, [storageKey, setCurrent, setLines, onReady])
