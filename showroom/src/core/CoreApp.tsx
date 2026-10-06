@@ -21,6 +21,7 @@ import { recordBehaviorSignal } from './behavior-trail'
 import { downloadBlob } from './download-file'
 import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
+import { applyStockCountScan } from './shop-stock-count-scan'
 const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
@@ -6141,6 +6142,34 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     } : current)
   }
 
+  function applyScannedStockCount(item: CommerceItem, balance?: { stockUnitId: string; locationId: string; tracking?: string }) {
+    const result = applyStockCountScan(stockCountDraft, {
+      sku: item.sku,
+      stockUnitId: balance?.stockUnitId,
+      locationId: balance?.locationId,
+      serial: balance?.tracking === 'serial',
+    })
+    if (result.status === 'finish-current') {
+      setNotice(`Finish the ${stockCountDraft?.sku ?? 'current item'} count before scanning another item. Your count is preserved.`)
+      return
+    }
+    if (result.status === 'invalid-current') {
+      setNotice('Correct the current count before scanning another unit. Your count is preserved.')
+      return
+    }
+    if (result.status === 'serial-limit') {
+      setNotice('This item is tracked by serial number. Count its unique units manually; the draft is unchanged.')
+      return
+    }
+    if (result.status === 'count-overflow') {
+      setNotice('The scanned count reached its safe limit. Review this item before continuing.')
+      return
+    }
+    setStockCountDraft(result.draft)
+    setNotice(`${result.draft?.quantity} ${result.draft?.quantity === '1' ? 'unit' : 'units'} scanned for ${item.name}. Keep scanning or review the count.`)
+    requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLInputElement>('#stock-count-quantity')?.focus())
+  }
+
   function selectStockCountBarcode(rawValue: string) {
     const code = rawValue.trim()
     if (!code) return
@@ -6149,26 +6178,38 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setNotice('No Shop product matches that barcode. Check the code or choose the product below.')
       return
     }
+    setStockCountBarcode('')
+    if (stockCountDraft?.quantity.trim() && stockCountDraft.sku !== item.sku) {
+      setNotice(`Finish the ${stockCountDraft.sku} count before scanning another item. Your count is preserved.`)
+      return
+    }
     const balances = commerce.inventoryFoundation
       ? managedInventoryProjection?.balances.filter((balance) => balance.sku === item.sku) ?? []
       : []
-    const balance = balances.length === 1 ? balances[0] : undefined
-    setStockCountDraft((current) => current ? {
-      sku: item.sku,
-      stockUnitId: balance?.stockUnitId ?? '',
-      locationId: balance?.locationId ?? '',
-      quantity: '',
-    } : current)
-    setStockCountBarcode('')
+    const balance = balances.length === 1
+      ? balances[0]
+      : balances.find((candidate) => candidate.stockUnitId === stockCountDraft?.stockUnitId
+        && candidate.locationId === stockCountDraft?.locationId)
     if (commerce.inventoryFoundation && balances.length !== 1) {
+      if (balance) {
+        applyScannedStockCount(item, balance)
+        return
+      }
       setNotice(balances.length
         ? `${item.name} found. Choose the location and lot to count.`
         : `${item.name} found, but no countable location and lot is available.`)
-      requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>('#stock-count-sku')?.focus())
+      if (!stockCountDraft?.quantity.trim()) {
+        setStockCountDraft((current) => current ? {
+          sku: item.sku,
+          stockUnitId: '',
+          locationId: '',
+          quantity: '',
+        } : current)
+        requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>('#stock-count-sku')?.focus())
+      }
       return
     }
-    setNotice(`${item.name} found. Enter the physical count; nothing changes until you review and confirm.`)
-    requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLInputElement>('#stock-count-quantity')?.focus())
+    applyScannedStockCount(item, balance)
   }
 
   function reviewStockCount(event: FormEvent) {

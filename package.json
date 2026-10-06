@@ -56,7 +56,7 @@
     "commerce:receivables:verify": "node tools/test_commerce_customer_receivables.mjs",
     "shop:inventory:verify": "node tools/test_shop_inventory_foundation.mjs",
     "shop:inventory:setup:verify": "node tools/test_shop_inventory_setup_reachable.mjs",
-    "barcode:scan:boundary:verify": "node tools/test_barcode_scan_boundary.mjs",
+    "barcode:scan:boundary:verify": "node --experimental-strip-types --test tools/shop_stock_count_scan.test.mjs && node tools/test_barcode_scan_boundary.mjs",
     "storefront:reconcile:verify": "node tools/test_storefront_reconciliation.mjs",
     "shop:scheduling:verify": "node tools/test_shop_service_scheduling.mjs",
     "shop:scheduling:durability:verify": "node tools/test_shop_service_schedule_durability.mjs && node tools/test_shop_spa_membership.mjs",
