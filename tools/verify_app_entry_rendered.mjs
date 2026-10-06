@@ -475,6 +475,13 @@ function matchesExpectedPath(expectedPath, value) {
   return typeof expectedPath === 'function' ? expectedPath(value) : value === expectedPath
 }
 
+export function stableRenderedPathMismatch({ expectedPath, path, bodyLength, previousPath, consecutiveMismatchCount }) {
+  return Number(bodyLength) > 0
+    && String(path || '') === String(previousPath || '')
+    && Number(consecutiveMismatchCount) >= 5
+    && !matchesExpectedPath(expectedPath, String(path || ''))
+}
+
 const ACCOUNTABLE_CONFIRM_LABEL = /^Confirm change(?:\s*·\s*.+)?$/u
 
 export function isAccountableConfirmLabel(value) {
@@ -512,6 +519,7 @@ export function summarizeRenderedCase(testCase, entry) {
     ...summary,
     bodyPresent: Number(entry?.bodyLength || 0) > 0,
     expectedPathMatched: matchesExpectedPath(testCase?.expectedPath, String(entry?.path || '')),
+    actualRouteClass: safeRouteClass(entry?.path),
     missingExpectedTextCount: failures.filter((failure) => String(failure).startsWith('missing text:')).length,
     unexpectedTextCount: failures.filter((failure) => String(failure).startsWith('unexpected text:')).length,
   }
@@ -545,14 +553,40 @@ export function evaluateFinalRenderedLocation({ beforeCapture, afterCapture, exp
 async function waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs
   let latest = null
+  let previousMismatchedPath = ''
+  let stablePathMismatchCount = 0
   while (Date.now() < deadline) {
     latest = await readRenderedState(cdp, sessionId)
     const text = latest.text || ''
     const matchesPath = matchesExpectedPath(expectedPath, latest.path)
     if (matchesPath && latest.bodyLength > 0 && expectedText.every((needle) => text.includes(needle))) return latest
+    if (latest.bodyLength > 0 && !matchesPath) {
+      stablePathMismatchCount = latest.path === previousMismatchedPath ? stablePathMismatchCount + 1 : 1
+      previousMismatchedPath = latest.path
+      // A stable redirect is an actionable route failure. Stop waiting through
+      // the full feature timeout; verifyCase will report it and skip dependent
+      // interactions that cannot be meaningful on the wrong page.
+      if (stableRenderedPathMismatch({ expectedPath, path: latest.path, bodyLength: latest.bodyLength,
+        previousPath: previousMismatchedPath, consecutiveMismatchCount: stablePathMismatchCount })) return latest
+    } else {
+      previousMismatchedPath = ''
+      stablePathMismatchCount = 0
+    }
     await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   }
   return latest
+}
+
+function safeRouteClass(value) {
+  let pathname = ''
+  try { pathname = new URL(String(value || ''), 'https://supermega.invalid').pathname } catch {}
+  if (pathname === '/') return 'home'
+  if (/^\/login\/?$/u.test(pathname)) return 'login'
+  if (/^\/shop(?:\/|$)/u.test(pathname)) return 'shop'
+  if (/^\/website(?:\/|$)/u.test(pathname)) return 'website'
+  if (/^\/ecommerce(?:\/|$)/u.test(pathname)) return 'ecommerce'
+  if (/^\/account\/(?:recovery|setup)(?:\/|$)/u.test(pathname)) return 'account'
+  return 'other'
 }
 
 export function counterCaptureReady(state) {
@@ -1716,29 +1750,36 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
         requiredText: testCase.pairedPublicExpectedText,
         activate: () => evalInPage(cdp, sessionId, pairedClickScript(origin, testCase.pairedAppOrigin)) })
     }
-    await waitForRenderedState(cdp, sessionId, testCase.initialExpectedPath ?? testCase.expectedPath, testCase.initialExpectedText ?? testCase.expectedText, testCase.timeoutMs)
-    const shopCounter = testCase.exerciseShopCounter
+    const initialExpectedPath = testCase.initialExpectedPath ?? testCase.expectedPath
+    const initialExpectedText = testCase.initialExpectedText ?? testCase.expectedText
+    const initialState = await waitForRenderedState(cdp, sessionId, initialExpectedPath, initialExpectedText, testCase.timeoutMs)
+    const initialStateMatches = Boolean(initialState?.bodyLength > 0
+      && matchesExpectedPath(initialExpectedPath, String(initialState.path || ''))
+      && initialExpectedText.every((needle) => String(initialState.text || '').includes(needle)))
+    const shopCounter = initialStateMatches && testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
-    const briefControls = testCase.inspectBusinessBrief ? await evalInPage(cdp, sessionId, `(${inspectBusinessBrief.toString()})(document)`) : null
-    const rawShopDecisionDesk = testCase.exerciseShopDecisionDesk
+    const briefControls = initialStateMatches && testCase.inspectBusinessBrief
+      ? await evalInPage(cdp, sessionId, `(${inspectBusinessBrief.toString()})(document)`)
+      : null
+    const rawShopDecisionDesk = initialStateMatches && testCase.exerciseShopDecisionDesk
       ? await exerciseShopDecisionDesk(cdp, sessionId, Boolean(testCase.mobile), testCase.sourceControlledFixture === true)
       : null
-    const shopAccountingExport = testCase.exerciseShopAccountingExport
+    const shopAccountingExport = initialStateMatches && testCase.exerciseShopAccountingExport
       ? await exerciseShopAccountingExport(cdp, sessionId, browserContextId)
       : null
-    const shopOfflineRestore = testCase.exerciseShopOfflineRestore
+    const shopOfflineRestore = initialStateMatches && testCase.exerciseShopOfflineRestore
       ? await exerciseShopOfflineRestore(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs, offlineTransportFailures)
       : null
-    const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
+    const ecommerceClaimBoundary = initialStateMatches && testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
       : null
-    const rawStoreToShop = testCase.exerciseStoreToShop
+    const rawStoreToShop = initialStateMatches && testCase.exerciseStoreToShop
       ? await exerciseStoreToShopJourney(cdp, sessionId, origin, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
       : null
-    const sitesWorkspace = testCase.exerciseSitesPages
+    const sitesWorkspace = initialStateMatches && testCase.exerciseSitesPages
       ? await exerciseSitesPages(cdp, sessionId)
-      : testCase.inspectSitesInquiries
+      : initialStateMatches && testCase.inspectSitesInquiries
         ? await inspectSitesInquiries(cdp, sessionId)
         : null
     const beforeCapture = await readRenderedState(cdp, sessionId, Boolean(testCase.retirementCaseId))

@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.96
+Version: 1.2.97
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 is at `231b67da`; a second diagnostic refinement is local and not yet pushed; no deployment. The complete exact-source Windows Edge rendered suite passes (35/35), while exact-head Linux Chrome CI reached 10 of 35 cases, reported safe content/route/interaction/layout failures, and was canceled at 15 minutes. The verifier now has tested fixed diagnostics for body presence, expected-path match, and missing/unexpected-content counts without printing page data; exact Linux results for these fields await a new CI run. Security Audit and Kernel Console passed on `231b67da`; the owner-gated release job was skipped. Independent review remains outstanding. Hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware, and customer acceptance remain open.
+Status: ACTIVE — PR #639 is at `5288891f`; latest App CI run `37453267502` passed contracts, database/RLS checks, lint and canonical build, then hit the 15-minute limit after nine rendered journeys. Safe diagnostics show a rendered body but expected-route mismatch on each completed case; no raw page text or URLs were emitted. The local Windows Edge suite previously passed 35/35, which does not establish hosted or customer acceptance. Local verifier work now reports only an allowlisted route class, stops waiting after a stable wrong route, and skips interactions that depend on an initial page that did not match. Focused tests pass 21/21. No merge/deploy; independent review, hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware, and customer acceptance remain open.
 
 ## 1. Controlling objective
 

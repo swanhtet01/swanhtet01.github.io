@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible, summarizeRenderedCase, summarizeRenderedFailures } from './verify_app_entry_rendered.mjs'
+import { counterCaptureReady, isAccountableConfirmLabel, receiptBoundaryVisible, stableRenderedPathMismatch, summarizeRenderedCase, summarizeRenderedFailures } from './verify_app_entry_rendered.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY } from './retired_product_preview_policy.mjs'
 import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
@@ -36,6 +36,22 @@ test('rendered CI diagnostics expose only fixed failure kinds, never page or run
   assert.doesNotMatch(JSON.stringify(summary), /Swan Htet|secret-token-value|412px/u)
 })
 
+test('rendered route diagnostics classify safe route groups without exposing paths or query values', () => {
+  const summary = summarizeRenderedCase({ expectedPath: '/shop/?tab=counter', expectedText: ['Products'] }, {
+    path: '/login?token=secret-value', bodyLength: 24, failures: ['path mismatch', 'missing text: Products'],
+  })
+  assert.equal(summary.expectedPathMatched, false)
+  assert.equal(summary.actualRouteClass, 'login')
+  assert.doesNotMatch(JSON.stringify(summary), /secret-value|token=/u)
+})
+
+test('renderer stops waiting only after a non-empty wrong route stays stable', () => {
+  assert.equal(stableRenderedPathMismatch({ expectedPath: '/', path: '/login', previousPath: '/login', bodyLength: 20, consecutiveMismatchCount: 5 }), true)
+  assert.equal(stableRenderedPathMismatch({ expectedPath: '/', path: '/login', previousPath: '/shop/', bodyLength: 20, consecutiveMismatchCount: 5 }), false)
+  assert.equal(stableRenderedPathMismatch({ expectedPath: '/', path: '/login', previousPath: '/login', bodyLength: 0, consecutiveMismatchCount: 5 }), false)
+  assert.equal(stableRenderedPathMismatch({ expectedPath: '/', path: '/', previousPath: '/', bodyLength: 20, consecutiveMismatchCount: 5 }), false)
+})
+
 test('rendered CI route diagnostics expose only match booleans and text-miss counts', () => {
   const summary = summarizeRenderedCase({ expectedPath: '/login', expectedText: ['Sign in'] }, {
     name: 'synthetic login',
@@ -49,6 +65,7 @@ test('rendered CI route diagnostics expose only match booleans and text-miss cou
     failureKinds: ['content', 'route'],
     bodyPresent: true,
     expectedPathMatched: false,
+    actualRouteClass: 'other',
     missingExpectedTextCount: 1,
     unexpectedTextCount: 0,
   })
