@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { readFileSync } from 'node:fs'
+import { stripTypeScriptTypes } from 'node:module'
 import { resolve } from 'node:path'
-import { applyStockCountScan } from '../showroom/src/core/shop-stock-count-scan.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const componentPath = resolve(root, 'showroom', 'src', 'core', 'BarcodeScanButton.tsx')
@@ -19,6 +19,9 @@ const css = readFileSync(cssPath, 'utf8')
 const vercel = JSON.parse(readFileSync(vercelPath, 'utf8'))
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'))
 const stockCountScanSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'shop-stock-count-scan.ts'), 'utf8')
+const strippedStockCountScan = stripTypeScriptTypes(stockCountScanSource, { mode: 'strip' })
+const stockCountScanModule = await import(`data:text/javascript;base64,${Buffer.from(strippedStockCountScan).toString('base64')}`)
+const { applyStockCountScan } = stockCountScanModule
 
 let checks = 0
 
