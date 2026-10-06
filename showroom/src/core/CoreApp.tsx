@@ -289,7 +289,6 @@ import { lockedCapabilityNotice } from './capability-tiers'
 const ProductDataImport = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductDataImport })))
 const WebsiteCommerceIntake = lazy(() => import('../products/WebsiteCommerceIntake').then((module) => ({ default: module.WebsiteCommerceIntake })))
 
-const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
 const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module) => ({ default: module.ShopOperatingFlow })))
 const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
@@ -1750,7 +1749,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [paymentTermsDays, setPaymentTermsDays] = useState<0 | 7 | 30>(0)
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
-  const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
   const [orderDraftRead, setOrderDraftRead] = useState<CommerceOrderDraftReadResult>({ status: 'empty', draft: null, error: '' })
   const [orderDraftActive, setOrderDraftActive] = useState(false)
   const [resumedOrderDraft, setResumedOrderDraft] = useState<CommerceOrderDraft | null>(null)
@@ -2567,7 +2565,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         setPromisedAt('')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(null)
-        setOrderEntryMode('manual')
       })
     }
     void import('./commerce-order-draft')
@@ -2628,7 +2625,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   useEffect(() => {
     if (!orderDraftActive
       || !orderDraftInitialized
-      || orderEntryMode !== 'manual'
       || preparedChannelDraft
       || preparedEcommerceDraft
       || pendingAction
@@ -2717,7 +2713,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     orderDraftInitialized,
     orderDraftRead.status,
     orderDraftScope,
-    orderEntryMode,
     pendingAction,
     preparedChannelDraft,
     preparedEcommerceDraft,
@@ -2773,7 +2768,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           ? `${navigationAddress.line1} · ${navigationAddress.township} · ${navigationAddress.city}${navigationAddress.instructions ? ` · ${navigationAddress.instructions}` : ''}`
           : ecommerceNavigationDraft.sourceRequestId)
         setPromisedAt(defaultOrderPromiseInput())
-        setOrderEntryMode('manual')
         setOrderDraftActive(true)
         setResumedOrderDraft(null)
         setOrderDraftConflict(false)
@@ -3103,16 +3097,11 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       || workspaceMode !== coreUi.m) return
     consumedEcommerceInboxSource.current = sourceKey
     setFocusedEcommerceRequestId(requestedStorefrontRequestIsWaiting ? requestedRequestId : null)
-    setOrderEntryMode('online')
-    setOrderDraftActive(true)
-    setResumedOrderDraft(null)
-    setOrderDraftConflict(false)
-    setNotice(requestedStorefrontRequestIsWaiting
-      ? `${requestedRequestId} is ready for Shop review. Choose Review to prepare the order.`
-      : pendingStorefrontRequests.length
-        ? `${pendingStorefrontRequests.length} Ecommerce ${pendingStorefrontRequests.length === 1 ? 'request is' : 'requests are'} waiting for Shop review.`
-        : 'The Ecommerce inbox is open. No request currently needs Shop review.')
-    pendingOrderComposerReveal.current = requestedStorefrontRequestIsWaiting ? 'ecommerce-inbox-request' : 'ecommerce-inbox'
+    if (requestedStorefrontRequestIsWaiting && requestedRequestId) {
+      openOrderComposer()
+      void reviewStorefrontRequest(requestedRequestId)
+      pendingOrderComposerReveal.current = 'ecommerce-request'
+    }
   }, [managedIdentity, navigate, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, tab, workspaceMode])
 
   // The composer only mounts on the orders tab, so reveal a queued Ecommerce handoff on whichever commit
@@ -3130,9 +3119,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     pendingOrderComposerReveal.current = ''
     if (!dialog.open) dialog.showModal()
     if (reveal === 'ecommerce-request') orderPaymentRef.current?.focus({ preventScroll: true })
-    else if (reveal === 'ecommerce-inbox-request') ecommerceInboxTargetRef.current?.focus()
     else orderComposerHeadingRef.current?.focus()
-    if (reveal !== 'ecommerce-request') navigate('/shop/?tab=orders', { replace: true })
   })
 
   async function initializeManagedCatalog(event: FormEvent) {
@@ -3583,7 +3570,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     setPaymentTermsDays(0)
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
-    setOrderEntryMode('manual')
   }
 
   function detachPreparedOrderSources(options: { channel?: boolean; ecommerce?: boolean } = {}) {
@@ -3601,7 +3587,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     return removed
   }
 
-  function openOrderComposer(mode: 'manual' | 'online' = 'manual') {
+  function openOrderComposer() {
     if (!commerceCanWrite) {
       setNotice('Shop changes are paused. Open Settings before adding an order.')
       return
@@ -3619,7 +3605,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
     setOrderDraftIssue('')
-    setOrderEntryMode(mode)
     showOrderComposer()
   }
 
@@ -3669,7 +3654,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
-    setOrderEntryMode('manual')
     setResumedOrderDraft(draft)
     setOrderDraftActive(true)
     setOrderDraftConflict(false)
@@ -3973,30 +3957,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     if (pendingAction.presentation === 'counter' && !counterSettlement) navigate(`/shop/?tab=orders#${commerceOrderTargetId(pendingAction.subjectId)}`)
   }
 
-  function useChannelDraft(draft: ChannelOrderDraft) {
-    if (!commerceCanWrite) {
-      setNotice('Shop changes are paused because this workspace cannot confirm writes.')
-      return
-    }
-    if (pendingAction || !channelOrderDraftIsReady(draft)) {
-      setNotice('Finish the current accountable action before using another channel draft.')
-      return
-    }
-    setCustomer(draft.customer)
-    setChannel(draft.channel)
-    setSku(draft.sku)
-    setQuantity(draft.quantity)
-    setExtraOrderLines([])
-    setPayment(draft.payment)
-    setFulfilment('')
-    setFulfilmentReference(draft.sourceRecordId)
-    setPromisedAt(defaultOrderPromiseInput())
-    setPreparedChannelDraft(draft)
-    setPreparedEcommerceDraft(null)
-    setOrderEntryMode('manual')
-    setNotice(`${draft.sourceRecordId} mapped locally. Review the structured order before any stock changes.`)
-  }
-
   async function reviewStorefrontRequest(requestId: string) {
     if (!commerceCanWrite || pendingAction) {
       setNotice('Finish the current Shop action before reviewing an Ecommerce request.')
@@ -4039,7 +3999,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         setPromisedAt(draft.pricing.shipping.promiseMinutes
           ? localDateTimeInputValue(new Date(Date.parse(draft.confirmedAt) + draft.pricing.shipping.promiseMinutes * 60_000))
           : defaultOrderPromiseInput())
-        setOrderEntryMode('manual')
         setNotice(`${request.id} loaded from the authenticated inbox with ${draft.lines.length} ${draft.lines.length === 1 ? 'item' : 'items'}. Confirm the promise and payment, then use the separate Shop action gate.`)
         return
       }
@@ -4060,7 +4019,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setFulfilment(draft.fulfilment)
       setFulfilmentReference(draft.sourceRequestId)
       setPromisedAt(defaultOrderPromiseInput())
-      setOrderEntryMode('manual')
       setNotice(`${request.id} loaded from the authenticated inbox. Confirm the promise and payment, then use the separate Shop action gate.`)
     } catch (error) {
       detachPreparedOrderSources({ channel: false })
@@ -5526,7 +5484,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       ? `${draft.deliveryAddress.line1} · ${draft.deliveryAddress.township} · ${draft.deliveryAddress.city}${draft.deliveryAddress.instructions ? ` · ${draft.deliveryAddress.instructions}` : ''}`
       : draft.sourceRequestId)
     setPromisedAt(promisedAt ? localDateTimeInputValue(new Date(promisedAt)) : defaultOrderPromiseInput())
-    setOrderEntryMode('manual')
     setOrderDraftActive(true)
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
@@ -7122,6 +7079,23 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
+      {managedIdentity && pendingStorefrontRequests.length ? <section aria-label="Incoming Ecommerce orders" className="incoming-order-inbox">
+        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Incoming</span><h3>Orders waiting for review</h3></div><strong>{pendingStorefrontRequests.length}</strong></div>
+        <div className="incoming-order-list">
+          {visiblePendingStorefrontRequests.map((request) => {
+            const lines = commerceStorefrontRequestLines(request)
+            const stockConflict = pendingStorefrontStockConflicts.get(request.id)
+            const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
+            return <article key={request.id}><div><strong>{request.customerReference} · {itemSummary}</strong><small>Commerce · {formatMoney(request.totalMmk)} · {request.fulfilment}{stockConflict ? ` · ${stockConflict.sku} needs stock review` : ''}</small></div><button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => { openOrderComposer(); void reviewStorefrontRequest(request.id) }} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review order</button></article>
+          })}
+        </div>
+      </section> : null}
+      {legacyWebsiteWorkWaiting ? <section aria-label="Incoming Website orders" className="incoming-order-inbox">
+        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Incoming</span><h3>Website requests waiting for review</h3></div><strong>{managedIdentity ? websiteIntakes.filter((intake) => intake.status === coreUi.p).length : 1}</strong></div>
+        <Suspense fallback={<p className="form-notice" role="status">Opening Website request…</p>}>
+          <WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === coreUi.p)?.id ?? 'local'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} />
+        </Suspense>
+      </section> : null}
       <div className="order-workspace-grid">
         <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
           <div className="order-queue-section-head"><div><span className="core-eyebrow">Live queue</span><h3 id="shop-order-list-heading">Orders to finish</h3></div><small>{actionOrders.length ? `${actionOrders.length} active` : 'All caught up'}</small></div>
@@ -7190,8 +7164,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setResumedOrderDraft(null)
       setOrderDraftConflict(false)
     }} ref={orderComposerRef}>
-      <div className="order-composer-head"><div><span className="core-eyebrow">New order</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>Add an order</h2><p>Choose the fastest source. Nothing changes until the separate confirmation step.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close new order" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
-      {orderDraftActive && orderEntryMode === 'manual' && !preparedChannelDraft && !preparedEcommerceDraft && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
+      <div className="order-composer-head"><div><span className="core-eyebrow">New order</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>Add an order</h2><p>Add order details. Review the order before saving.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close new order" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
+      {orderDraftActive && !preparedChannelDraft && !preparedEcommerceDraft && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftConflict
             ? 'Saved draft changed in another tab'
@@ -7208,31 +7182,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         </div>
         {resumedOrderNeedsReview ? <button className="core-button compact" disabled={!resumedOrderCanRebind || orderDraftSaving || orderDraftConflict} onClick={() => void acceptCurrentOrderDraftCatalog()} type="button">Use current Shop values</button> : null}
       </div> : null}
-      {!preparedEcommerceDraft && !preparedChannelDraft ? <div aria-label="Order source" className="order-entry-methods" role="group">
-        <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter order</button>
-        <button aria-pressed={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} type="button">From message</button>
-        <button aria-pressed={orderEntryMode === 'online'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('online')} type="button">Online request</button>
-      </div> : null}
       {orderNotice ? <p className="form-notice order-entry-notice" aria-live="polite">{orderNotice}</p> : null}
-      {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><Suspense fallback={<p className="form-notice" role="status">Loading message intake…</p>}><ChannelOrderIntake disabled={commerceControlsDisabled} identity={managedIdentity ?? undefined} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></Suspense></div> : null}
-      {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
-        <section className="website-intake">
-          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
-          {managedIdentity && pendingStorefrontRequests.length ? visiblePendingStorefrontRequests.map((request) => {
-            const lines = commerceStorefrontRequestLines(request)
-            const stockConflict = pendingStorefrontStockConflicts.get(request.id)
-            const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
-            return <div className="website-intake-ready" key={request.id}>
-              <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}{stockConflict ? ` · ${stockConflict.sku}: ${stockConflict.requested} requested, ${stockConflict.available} available` : ' · Stock available'}</small></div>
-              <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">{stockConflict ? 'Review stock' : 'Review'}</button>
-            </div>
-          }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
-          <Link className="text-link" to="/ecommerce/">Open Commerce</Link>
-        </section>
-        {confirmedLocalShop && localWebsiteIntakeRead.status === 'error' ? <div className="website-intake-record"><strong>Older Website order could not be checked.</strong><small>Reload before reviewing older Website handoffs. No order was created or changed.</small></div> : null}
-        {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><Suspense fallback={<div className="website-intake-record"><strong>Opening older Website order…</strong><small>No order is created until you review and confirm it.</small></div>}><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === coreUi.p)?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></Suspense></details> : null}
-      </div> : null}
-      {orderEntryMode === 'manual' ? <>
+      <>
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
           <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === coreUi.e ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small></div>
@@ -7294,7 +7245,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment policy</span><select aria-readonly="true" disabled form="commerce-manual-order-form" ref={orderPaymentRef} value={payment}><option>{payment}</option></select></label> : null}
           <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
         </div>
-      </> : null}
+      </>
     </dialog>
   <ClosedOrderHistory
     canCorrect={canCorrectOrder}
