@@ -1,5 +1,5 @@
 import { spaCounterFields } from './shop-spa-counter-fields'
-import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket, type CounterTicketStorageScope } from './shop-parked-tickets'
@@ -3088,6 +3088,11 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     return () => { current = false }
   }, [commerce, ecommerceBuyingScope, ecommerceCorrectionNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
 
+  const openRequestedEcommerceOrder = useEffectEvent((requestId: string) => {
+    openOrderComposer()
+    void reviewStorefrontRequest(requestId)
+  })
+
   useEffect(() => {
     const sourceKey = requestedRequestId || 'ecommerce-inbox'
     if (requestedSource !== 'ecommerce-inbox'
@@ -3098,11 +3103,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     consumedEcommerceInboxSource.current = sourceKey
     setFocusedEcommerceRequestId(requestedStorefrontRequestIsWaiting ? requestedRequestId : null)
     if (requestedStorefrontRequestIsWaiting && requestedRequestId) {
-      openOrderComposer()
-      void reviewStorefrontRequest(requestedRequestId)
+      openRequestedEcommerceOrder(requestedRequestId)
       pendingOrderComposerReveal.current = 'ecommerce-request'
     }
-  }, [managedIdentity, navigate, openOrderComposer, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, reviewStorefrontRequest, tab, workspaceMode])
+  }, [managedIdentity, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, tab, workspaceMode])
 
   // The composer only mounts on the orders tab, so reveal a queued Ecommerce handoff on whichever commit
   // first has that dialog rather than on a single animation frame: requestAnimationFrame never runs while

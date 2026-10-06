@@ -742,7 +742,7 @@ Historical transport errors do not supersede the later verified host correction 
 - **NEXT:** obtain exact-head CI for the UX delta. Then inspect signed-in Shop workflows against these minimum baselines and close the largest verified usability gap; do not imply hands-on competitor access or hosted acceptance.
 ### 2026-10-06 — Shop inbox effect dependency fix
 
-- **CI:** exact head `377b5c9adda6a8f0aee9428462d502aeab17041d`; App CI `37466215303` failed `verify_app_build` because the automatic Ecommerce handoff effect omitted `openOrderComposer` and `reviewStorefrontRequest` dependencies.
-- **CHANGE:** the effect now declares both handlers, retaining its consumed-source guard against duplicate preparation. This fixes the lint/build failure without bypassing the review-before-Shop-save step.
-- **LOCAL:** `git diff --check` and TSX parse PASS. Full ESLint on the workstation previously exhausted its 2 GB Node heap; remote CI lint passed before the build gate. No hosted, customer, or production action.
-- **NEXT:** commit and push the handler dependency fix, then inspect exact-head App CI; keep independent review and production release gates intact.
+- **CI:** exact head `2ea17e910ed027d2315e147c3d3645ba8aeabbf9`; App CI `37467351568` failed lint because adding render-created handlers directly to the effect dependencies caused the effect to depend on changing functions. Security and Kernel checks passed; Kernel release remained skipped by its owner gate.
+- **CHANGE:** the inbox effect now invokes the current composer/review handlers through React `useEffectEvent`, while retaining true trigger dependencies and its consumed-source guard. This prevents handler identity changes from replaying the order handoff and preserves the review-before-Shop-save step.
+- **LOCAL:** `npm run app:typecheck` and `git diff --check` PASS. Local ESLint is not a reliable gate on this workstation because it exhausted the available Node heap previously. No hosted, customer, or production action.
+- **NEXT:** commit and push this focused correction, then inspect the exact-head canonical App CI, security and Kernel checks. Keep independent review and production release gates intact; no merge or deployment until they pass.
