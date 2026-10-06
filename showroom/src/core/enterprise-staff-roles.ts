@@ -1,7 +1,7 @@
-// Implementation of the staff-roles enterprise capability.
-// See hq/research/enterprise-capabilities-design-2026-08.md Tier 2.
-// Gated behind capability 'staff-roles' (enterprise tier, requires managedIdentity).
-// Prerequisites: verified-statements proven in production.
+// Local role taxonomy and policy helpers for a possible staff-roles capability.
+// This module does not create memberships, invite/revoke users, persist role
+// assignments, or enforce these roles at API/database write boundaries. Do not
+// treat these helpers as authorization. See hq/research/enterprise-capabilities-design-2026-08.md.
 
 export const STAFF_ROLE_ASSIGNMENT_SCHEMA = 'supermega.staff-role-assignment.v1' as const
 export const REQUIRED_AUTHORITY_SCHEMA = 'supermega.required-authority.v1' as const
