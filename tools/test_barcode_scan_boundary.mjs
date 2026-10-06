@@ -74,8 +74,8 @@ for (const forbidden of ['fetch(', 'XMLHttpRequest', 'sendBeacon', 'localStorage
 
 check(coreApp.includes("import { BarcodeScanButton } from './BarcodeScanButton'"), 'core_app_barcode_import_missing')
 // Managed setup always renders the same catalogForm; optional template setup follows it.
-// Five source sites still cover the six original screen placements.
-check(count(coreApp, '<BarcodeScanButton') === 5, 'barcode_call_site_count_changed')
+// Six source sites cover the catalog, sale, stock count, and Plant workflows.
+check(count(coreApp, '<BarcodeScanButton') === 6, 'barcode_call_site_count_changed')
 const catalogFormStart = coreApp.indexOf('const catalogForm = <form')
 const catalogFormEnd = coreApp.indexOf('</form>', catalogFormStart)
 check(catalogFormStart >= 0 && catalogFormEnd > catalogFormStart, 'barcode_shared_catalog_form_missing')
@@ -97,6 +97,14 @@ const addSearchMatch = functionBody(coreApp, 'addSearchMatch')
 const addCameraScan = functionBody(coreApp, 'addCameraScan')
 const selectScannedJob = functionBody(coreApp, 'selectScannedJob')
 const applyScannedMaterialRef = functionBody(coreApp, 'applyScannedMaterialRef')
+const selectStockCountBarcode = functionBody(coreApp, 'selectStockCountBarcode')
+check(coreApp.includes('label="Scan a product barcode for this stock count" onDetected={selectStockCountBarcode}'), 'stock_count_scanner_call_site_missing')
+check(selectStockCountBarcode.includes('candidate.sku.toLowerCase() === code.toLowerCase()')
+  && selectStockCountBarcode.includes('const balance = balances.length === 1 ? balances[0] : undefined')
+  && selectStockCountBarcode.includes('Choose the location and lot to count.'), 'stock_count_scan_must_resolve_exact_sku_and_preserve_ambiguous_location_review')
+for (const forbidden of ['queueAction(', 'mutateCommerce(', 'countCommerceStock(']) {
+  check(!selectStockCountBarcode.includes(forbidden), `stock_count_scan_must_not_write_inventory:${forbidden}`)
+}
 const recordOutput = functionBody(coreApp, 'recordOutput')
 const closeSelectedJobShort = functionBody(coreApp, 'closeSelectedJobShort')
 const handleOutputDialogKeyDown = functionBody(coreApp, 'handleOutputDialogKeyDown')
