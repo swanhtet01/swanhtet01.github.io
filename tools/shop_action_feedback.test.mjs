@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 
 const source = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
 const start = source.indexOf('  async function confirmAction(details: ActionDetails)')
-const end = source.indexOf('\n  function useChannelDraft', start)
+const end = source.indexOf('\n  async function reviewStorefrontRequest', start)
 assert.ok(start >= 0 && end > start)
 const handler = source.slice(start, end).replace('details: ActionDetails', 'details')
 
