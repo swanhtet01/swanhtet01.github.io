@@ -73,6 +73,19 @@ const productScreens = {
   website: ['actual-sites-editor.png', 'actual-sites-inquiries.png'],
   ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
 }
+const interfaceCaptureDates = {
+  'actual-shop-today.png': '2 Oct 2026',
+  'actual-shop-sell.png': '2 Oct 2026',
+  'actual-shop-orders.png': '2 Oct 2026',
+  'actual-shop-stock.png': '2 Oct 2026',
+  'actual-sites-editor.png': '4 Oct 2026',
+  'actual-sites-inquiries.png': '4 Oct 2026',
+  'actual-sites-pages.png': '2 Oct 2026',
+  'actual-sites-setup.png': '2 Oct 2026',
+  'actual-commerce-catalog.png': '2 Oct 2026',
+  'actual-commerce-order-request.png': '4 Oct 2026',
+}
+const interfaceDisclosure = (image) => `App capture · synthetic example records · captured ${interfaceCaptureDates[image]}`
 check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
@@ -117,16 +130,16 @@ for (const page of landingPages) {
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
   if (page.productId === 'ecommerce') {
     check(html.includes('alt="Commerce catalog showing available products, local pricing and customer ordering"'), 'landing_commerce_catalog_capture_description')
-    check(html.includes('Commerce &middot; Store catalog and availability &middot; App capture · synthetic example records · captured 2 Oct 2026'), 'landing_commerce_catalog_capture_scope_truthful')
+    check(html.includes(`Commerce &middot; Store catalog and availability &middot; ${interfaceDisclosure('actual-commerce-catalog.png')}`), 'landing_commerce_catalog_capture_scope_truthful')
     check(html.includes('alt="Commerce Store showing a locally saved customer request awaiting Shop confirmation"'), 'landing_commerce_capture_matches_store_flow')
     check(html.includes('width="1280" height="900"'), 'landing_commerce_capture_dimensions_exact')
-    check(html.includes('Commerce &middot; Customer request and Shop review &middot; App capture · synthetic example records · captured 2 Oct 2026'), 'landing_commerce_request_capture_scope_truthful')
+    check(html.includes(`Commerce &middot; Customer request and Shop review &middot; ${interfaceDisclosure('actual-commerce-order-request.png')}`), 'landing_commerce_request_capture_scope_truthful')
   }
   if (page.productId === 'website') {
     check(html.includes('alt="Sites editor showing page navigation, focused content editing and readiness checks"'), 'landing_sites_editor_capture_description')
     check(html.includes('alt="Sites inquiry workspace showing a synthetic customer request, ownership and decision controls"'), 'landing_sites_inquiry_capture_description')
-    check(html.includes('Sites &middot; Page workspace and readiness &middot; App capture · synthetic example records · captured 2 Oct 2026'), 'landing_sites_editor_capture_scope_truthful')
-    check(html.includes('Sites &middot; Inquiry review and ownership &middot; App capture · synthetic example records · captured 2 Oct 2026'), 'landing_sites_inquiry_capture_scope_truthful')
+    check(html.includes(`Sites &middot; Page workspace and readiness &middot; ${interfaceDisclosure('actual-sites-editor.png')}`), 'landing_sites_editor_capture_scope_truthful')
+    check(html.includes(`Sites &middot; Inquiry review and ownership &middot; ${interfaceDisclosure('actual-sites-inquiries.png')}`), 'landing_sites_inquiry_capture_scope_truthful')
   }
   check(countOccurrences(html, 'href="https://app.supermega.dev/login"') === 1, `landing_single_login:${page.route}`)
   check(!html.includes('Request assisted setup') && !html.includes('id="first-loop"'), `landing_no_setup_funnel:${page.route}`)
@@ -232,7 +245,8 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
   check((body.match(/<button\b/g) || []).length === 0, `marketing_has_no_controls:${route}`)
   check(interfaceFigureCount > 0, `interface_figures_present:${route}`)
-  check(countOccurrences(body, 'App capture · synthetic example records · captured 2 Oct 2026') === interfaceFigureCount, `interface_disclosure_per_figure:${route}`)
+  const expectedCaptureScreens = route === '/' ? Object.values(productScreens).map((screens) => screens[0]) : productScreens[route.slice(1, -1)] || []
+  for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
   check(!body.includes('Current Shop') && !body.includes('Current Sites') && !body.includes('Current Commerce'), `capture_not_claimed_current:${route}`)
   check(!body.includes('Illustrative interface and records.'), `illustrative_mockups_absent:${route}`)
   for (const forbidden of ['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {

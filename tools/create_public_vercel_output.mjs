@@ -597,12 +597,28 @@ const productOutcomes = {
   ['Handle the next exception', 'See which request needs attention first. Review payment issues, expiring quotes and refunds from the same workflow.'],
  ],
 }
-const interfaceDisclosure = 'App capture · synthetic example records · captured 2 Oct 2026'
+const interfaceCaptureDates = {
+ 'actual-shop-today.png': '2 Oct 2026',
+ 'actual-shop-sell.png': '2 Oct 2026',
+ 'actual-shop-orders.png': '2 Oct 2026',
+ 'actual-shop-stock.png': '2 Oct 2026',
+ 'actual-sites-editor.png': '4 Oct 2026',
+ 'actual-sites-inquiries.png': '4 Oct 2026',
+ 'actual-sites-pages.png': '2 Oct 2026',
+ 'actual-sites-setup.png': '2 Oct 2026',
+ 'actual-commerce-catalog.png': '2 Oct 2026',
+ 'actual-commerce-order-request.png': '4 Oct 2026',
+}
+function interfaceDisclosure(image) {
+ const capturedAt=interfaceCaptureDates[image]
+ assert(typeof capturedAt === 'string', `interface_capture_date_missing:${image}`)
+ return `App capture · synthetic example records · captured ${capturedAt}`
+}
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
  assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
- const gallery=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure}</figcaption></figure>`).join('')
+ const gallery=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
  const galleryControls=item.screens.map(([, ,caption],index)=>`<label for="${id}-screen-${index+1}">${escapeHtml(caption)}</label>`).join('')
  const galleryHtml=item.screens.length === 1
   ? `<div class="platform-gallery" data-single aria-label="${label} interface view"><div class="platform-slides">${gallery}</div></div>`
@@ -614,7 +630,7 @@ function productCard(id) {
  const route=manifest.pages.find(page=>page.productId===id)?.route
  assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
  const [image,alt,caption,width=1440,height=900]=item.screens[0]
- return `<article class="product-card-compact" id="${id}"><figure class="platform-image"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="lazy" /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure}</figcaption></figure><div class="product-card-copy"><span class="eyebrow">${label}</span><h2>${item.title}</h2><p>${item.body}</p><ul class="product-card-flow" aria-label="${label} includes">${item.proof.map(([,value])=>`<li>${escapeHtml(value)}</li>`).join('')}</ul><a class="story-link" href="${escapeHtml(route)}">Explore ${label}<span aria-hidden="true">&rarr;</span></a></div></article>`
+ return `<article class="product-card-compact" id="${id}"><figure class="platform-image"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="lazy" /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure><div class="product-card-copy"><span class="eyebrow">${label}</span><h2>${item.title}</h2><p>${item.body}</p><ul class="product-card-flow" aria-label="${label} includes">${item.proof.map(([,value])=>`<li>${escapeHtml(value)}</li>`).join('')}</ul><a class="story-link" href="${escapeHtml(route)}">Explore ${label}<span aria-hidden="true">&rarr;</span></a></div></article>`
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
