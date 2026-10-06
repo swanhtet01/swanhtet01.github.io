@@ -387,7 +387,7 @@ requireContract('pinned Vercel CLI', workflow.includes('vercel@56.1.0'))
 requireContract('app build contract',
   config.buildCommand === 'npm run app:build'
   && generator.includes("buildCommand: 'npm run app:build'")
-  && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
+  && packageJson.scripts?.['app:build'] === 'node --test tools/test_production_entry.mjs && npm run app:release:write && npm --prefix showroom run build'
   && packageJson.scripts?.['app:build:checked'] === 'npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && ciWorkflow.includes('run: npm run app:build:checked'))
 const canonicalVerifySteps = packageJson.scripts?.['app:verify:steps']?.split(' && ') ?? []
