@@ -1843,6 +1843,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [supplierReturnDraft, setSupplierReturnDraft] = useState<SupplierReturnDraft | null>(null)
   const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
+  const [stockCountBarcode, setStockCountBarcode] = useState('')
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
   const [orderAmendmentReview, setOrderAmendmentReview] = useState<{ intent: EcommerceOrderAmendmentIntent; replacementRequest: EcommerceOrderRequestV2; draft: EcommerceShopDraftV2 } | null>(null)
@@ -6096,6 +6097,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       locationId: suggestedBalance?.locationId ?? '',
       quantity: '',
     }
+    setStockCountBarcode('')
     setStockCountDraft(suggestedDraft)
     setNotice(commerce.inventoryFoundation
       ? suggestedBalance
@@ -6109,11 +6111,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   function cancelStockCount() {
     setStockCountDraft(null)
+    setStockCountBarcode('')
     setNotice('Stock count closed. Shop data was not modified.')
     requestAnimationFrame(() => stockCountTriggerRef.current?.focus())
   }
 
   function selectStockCountTarget(value: string) {
+    setStockCountBarcode('')
     if (!commerce.inventoryFoundation) {
       setStockCountDraft((current) => current ? {
         sku: value,
@@ -6135,6 +6139,36 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       locationId: balance?.locationId ?? '',
       quantity: '',
     } : current)
+  }
+
+  function selectStockCountBarcode(rawValue: string) {
+    const code = rawValue.trim()
+    if (!code) return
+    const item = commerce.items.find((candidate) => candidate.sku.toLowerCase() === code.toLowerCase())
+    if (!item) {
+      setNotice('No Shop product matches that barcode. Check the code or choose the product below.')
+      return
+    }
+    const balances = commerce.inventoryFoundation
+      ? managedInventoryProjection?.balances.filter((balance) => balance.sku === item.sku) ?? []
+      : []
+    const balance = balances.length === 1 ? balances[0] : undefined
+    setStockCountDraft((current) => current ? {
+      sku: item.sku,
+      stockUnitId: balance?.stockUnitId ?? '',
+      locationId: balance?.locationId ?? '',
+      quantity: '',
+    } : current)
+    setStockCountBarcode('')
+    if (commerce.inventoryFoundation && balances.length !== 1) {
+      setNotice(balances.length
+        ? `${item.name} found. Choose the location and lot to count.`
+        : `${item.name} found, but no countable location and lot is available.`)
+      requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>('#stock-count-sku')?.focus())
+      return
+    }
+    setNotice(`${item.name} found. Enter the physical count; nothing changes until you review and confirm.`)
+    requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLInputElement>('#stock-count-quantity')?.focus())
   }
 
   function reviewStockCount(event: FormEvent) {
@@ -7568,6 +7602,11 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
                 ? `${stockCountItem.onHand.toLocaleString()} recorded · enter counted units`
                 : `${stockCountItem.onHand.toLocaleString()} recorded → ${stockCountQuantityResult.toLocaleString()} counted · ${stockCountQuantityResult === stockCountItem.onHand ? 'no variance' : `${stockCountQuantityResult > stockCountItem.onHand ? '+' : ''}${(stockCountQuantityResult - stockCountItem.onHand).toLocaleString()} variance`}`}</strong>
         </div>
+        <div className="sku-scan-row"><label>Scan item code · press Enter<input autoComplete="off" disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setStockCountBarcode(event.target.value)} onKeyDown={(event) => {
+          if (event.key !== 'Enter') return
+          event.preventDefault()
+          selectStockCountBarcode(stockCountBarcode)
+        }} placeholder="Scan barcode or type SKU" value={stockCountBarcode} /></label><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product barcode for this stock count" onDetected={selectStockCountBarcode} /></div>
         <label>{commerce.inventoryFoundation ? 'Location and lot' : 'Item'}<select aria-describedby="stock-count-help" disabled={commerceControlsDisabled || Boolean(commerce.inventoryFoundation && !managedInventoryProjection)} id="stock-count-sku" onChange={(event) => selectStockCountTarget(event.target.value)} required value={commerce.inventoryFoundation ? stockCountTargetValue : stockCountDraft.sku}><option value="">{commerce.inventoryFoundation ? 'Choose location and lot' : 'Choose an item'}</option>{commerce.inventoryFoundation
           ? managedInventoryProjection?.balances.map((balance) => {
               const item = commerce.items.find((candidate) => candidate.sku === balance.sku)
