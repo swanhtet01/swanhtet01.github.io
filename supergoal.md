@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.3.0
+Version: 1.3.1
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 remains OPEN/BLOCKED with independent review unset at `bd6b530f`; no merge or deployment. Exact-head run `37458591209` stopped before install/build because the coordinated-release verifier still expected the old CI step name; its other earlier guards passed. The rendered matrix was corrected to assert unauthenticated routes land on login and do not expose seeded product copy, matching the access policy added in `0d891e2f`. Focused renderer tests pass 22/22, and the standalone release-workflow verifier now passes 161 checks after its expected step name was updated locally. The previous claimed local Edge 35/35 matrix is not valid signed-in product evidence. Hosted founder auth/persistence/isolation, authenticated Shop/Sites/Commerce UX, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
+Status: ACTIVE — PR #639 remains OPEN/BLOCKED with independent review unset at `c20a173b`; no merge or deployment. API contracts, database/RLS guards, lint, canonical build and release workflow verification passed at this head. The rendered matrix now validates login gates, but exact-head run `37459181744` found four legacy Settings intent path mismatches and one false protected-copy match on generic “Contact”; local test mapping is corrected and focused renderer tests pass 22/22. These checks verify unauthenticated access boundaries only. The previous claimed local Edge 35/35 matrix is not valid signed-in product evidence. Hosted founder auth/persistence/isolation, authenticated Shop/Sites/Commerce UX, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
 
 ## 1. Controlling objective
 

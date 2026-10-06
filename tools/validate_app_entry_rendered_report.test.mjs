@@ -63,6 +63,10 @@ test('unauthenticated product routes expect sign-in and reject protected fixture
   assert.equal('screenshotName' in shop, false)
   const home = unauthenticatedEntryContract({ route: '/?choose=1', width: 390, height: 844 })
   assert.equal(home.expectedPath, '/login')
+  const settings = unauthenticatedEntryContract({ route: '/settings/?product=production', width: 1280, height: 900,
+    expectedText: ['Pages', 'Home', 'Catalog', 'Contact', 'Page checks', 'View website'], absentText: ['Open demo', 'Start trial'] })
+  assert.equal(settings.expectedPath, '/login?product=plant')
+  assert.deepEqual(settings.absentText, ['Open demo', 'Start trial'])
 })
 
 test('rendered CI route diagnostics expose only match booleans and text-miss counts', () => {

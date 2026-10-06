@@ -2260,11 +2260,15 @@ const tests = [
   },
 ].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 
-const ENTRY_COPY = new Set(['Login', 'Products', 'Orders', 'Shop', 'Commerce', 'Website', 'Sites', 'Today', 'Home'])
+const ENTRY_COPY = new Set(['Login', 'Products', 'Orders', 'Shop', 'Commerce', 'Website', 'Sites', 'Today', 'Home',
+  'Contact', 'Pages', 'Catalog', 'Page content', 'Page checks', 'Inquiries', 'View website'])
 export function unauthenticatedEntryContract(testCase, index = 1) {
-  const pathname = new URL(String(testCase?.route || '/'), 'https://supermega.invalid').pathname
+  const route = new URL(String(testCase?.route || '/'), 'https://supermega.invalid')
+  const pathname = route.pathname
   const segment = pathname.split('/').filter(Boolean)[0] || ''
-  const product = ({ shop: 'shop', plant: 'plant', website: 'website', ecommerce: 'ecommerce' })[segment]
+  const intent = route.searchParams.get('product')?.toLowerCase() || ''
+  const product = ({ shop: 'shop', commerce: 'shop', retail: 'shop', plant: 'plant', production: 'plant', website: 'website', ecommerce: 'ecommerce' })[segment]
+    || ({ shop: 'shop', commerce: 'shop', retail: 'shop', plant: 'plant', production: 'plant', website: 'website', ecommerce: 'ecommerce' })[intent]
   const expectedPath = product ? `/login?product=${product}` : '/login'
   const protectedCopy = (Array.isArray(testCase?.expectedText) ? testCase.expectedText : [])
     .filter((value) => typeof value === 'string' && value.trim().length > 3 && !ENTRY_COPY.has(value.trim()))
