@@ -3176,8 +3176,9 @@ input, select, textarea,
    returns only when the viewport can carry all three without compression. */
 @media (max-width: 1700px) and (min-width: 841px) {
   .shop-counter-grid { grid-template-columns: minmax(24rem, .94fr) minmax(29rem, 1.06fr); }
-  .shop-counter-module > .shop-counter-surface { min-height: 0; flex-basis: auto; overflow: visible; }
-  .shop-counter-grid { height: auto; }
+  .shop-counter-module > .shop-counter-surface { height: clamp(520px,calc(100svh - 220px),680px); min-height: 520px; flex: 0 0 auto; overflow: visible; }
+  .shop-counter-grid { height: 100%; grid-template-rows: minmax(0,1fr) auto; }
+  .shop-catalog-panel, .shop-current-sale { min-height: 0; overflow-y: auto; }
   .shop-counter-followup { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(12rem,.8fr) minmax(18rem,1.2fr); align-items: start; overflow: visible; }
   .shop-counter-followup > header { border: 0; padding: 0; }
   .shop-counter-steps { grid-column: 2; grid-row: 1 / span 2; }

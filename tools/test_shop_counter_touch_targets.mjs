@@ -28,7 +28,10 @@ test('base counter quantity controls support tablet touch without a phone breakp
   assert.match(app, /document\.removeEventListener\('keydown', focusCounterSearch\)/)
   assert.match(app, /parked\.length \? `Parked sales \(\$\{parked\.length\}\)` : 'Save sale for later'/)
   assert.doesNotMatch(app, /Parked tickets \(\{parked\.length\}\) · this device/)
-  assert.match(css, /@media \(max-width: 1700px\) and \(min-width: 841px\) \{\s*\.shop-counter-grid \{ grid-template-columns: minmax\(24rem, \.94fr\) minmax\(29rem, 1\.06fr\); \}/)
+  const desktopCounterRule = css.match(/@media \(max-width: 1700px\) and \(min-width: 841px\) \{([\s\S]*?)\n\}/)?.[1]
+  assert.match(desktopCounterRule, /\.shop-counter-module > \.shop-counter-surface \{ height: clamp\(520px,calc\(100svh - 220px\),680px\); min-height: 520px; flex: 0 0 auto;/)
+  assert.match(desktopCounterRule, /\.shop-counter-grid \{ height: 100%; grid-template-rows: minmax\(0,1fr\) auto; \}/)
+  assert.match(desktopCounterRule, /\.shop-catalog-panel, \.shop-current-sale \{ min-height: 0; overflow-y: auto; \}/)
   const tabletRule = css.match(/@media \(max-width: 1080px\) and \(min-width: 841px\) \{([\s\S]*?)\n\}/)?.[1]
   assert.match(tabletRule, /\.shop-counter-column-head \{ display: none; \}/)
   assert.match(app, /const CASHIER_COMPLETE_MY = confirmedBurmese\('Complete'\)/)
