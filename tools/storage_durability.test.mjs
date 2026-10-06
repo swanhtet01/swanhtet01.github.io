@@ -412,7 +412,7 @@ const requireFromShowroom = createRequire(pathToFileURL('showroom/package.json')
 const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuild')).href)
 const gateBundle = await build({
   stdin: {
-    contents: `export { localShopConfirmed, managedIdentitySettled } from './workspace-runtime.ts'`,
+    contents: `export { localShopConfirmed, managedIdentitySettled, operationsEntryDecision } from './workspace-runtime.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/headroom-gate-entry.ts',
     loader: 'ts',
@@ -423,7 +423,7 @@ const gateBundle = await build({
   write: false,
   logLevel: 'error',
 })
-const { localShopConfirmed, managedIdentitySettled } =
+const { localShopConfirmed, managedIdentitySettled, operationsEntryDecision } =
   await import(`data:text/javascript;base64,${Buffer.from(gateBundle.outputFiles[0].contents).toString('base64')}`)
 
 // One render of the real hook: `enabled` is runtime.status === 'enterprise', the identity
@@ -453,6 +453,15 @@ test('a local shop does confirm local mode, once both answers are in', async () 
   // An enterprise runtime with nobody signed in is also a local shop, once the probe says so.
   assert.equal(frame('enterprise', false, null), false, 'still waiting on the probe')
   assert.equal(frame('enterprise', true, null), true, 'signed out on an enterprise runtime is a local shop')
+})
+
+test('Shop and Plant routes wait for auth and never expose a signed-out local workspace', () => {
+  const account = { workspaceId: 'ws-fictional-lantern-shop' }
+  assert.equal(operationsEntryDecision('checking', false, null), 'checking')
+  assert.equal(operationsEntryDecision('enterprise', false, account), 'checking')
+  assert.equal(operationsEntryDecision('enterprise', true, account), 'workspace')
+  assert.equal(operationsEntryDecision('enterprise', true, null), 'login')
+  assert.equal(operationsEntryDecision('local', true, null), 'login')
 })
 
 // ---------------------------------------------------------------------------

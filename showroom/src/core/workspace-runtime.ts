@@ -1191,6 +1191,13 @@ export function localShopConfirmed(runtimeStatus: string, settled: boolean, mana
   return runtimeStatus !== 'checking' && settled && !managedIdentity
 }
 
+// Product routes must not expose the browser-local workspace as an unauthenticated
+// fallback. Keep the account probe's unresolved frame separate from a confirmed sign-out.
+export function operationsEntryDecision(runtimeStatus: string, settled: boolean, managedIdentity: unknown): 'checking' | 'login' | 'workspace' {
+  if (runtimeStatus === 'checking' || (runtimeStatus === 'enterprise' && !settled)) return 'checking'
+  return managedIdentity ? 'workspace' : 'login'
+}
+
 // Third tuple element is `settled`: whether the identity question has actually been
 // ANSWERED, as opposed to merely not answered yet. A null identity on its own is
 // ambiguous -- it means "signed out" only once `settled` is true, and "nobody has asked"

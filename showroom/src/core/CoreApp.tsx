@@ -9,7 +9,7 @@ import {
   shopBusinessTemplateFromQuery,
   type ShopBusinessTemplate,
 } from '../products/shop/business-templates'
-import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
@@ -44,6 +44,7 @@ import {
   productionActionProof,
   useCommerceWorkspace,
   localShopConfirmed,
+  operationsEntryDecision,
   useManagedIdentity,
   useProductionWorkspace,
   useSetupWorkspace,
@@ -54,6 +55,7 @@ import {
   type PendingAccountableAction,
 } from './workspace-runtime'
 import { getStorageDurability, measureCommerceHeadroom, subscribeStorageDurability } from './storage-durability'
+import { managedAccountPath } from './account-routes'
 import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
@@ -1159,6 +1161,10 @@ export function OperationsPage({ product }: { product: ProductId }) {
     if (view === 'commerce' && requestedShopTemplateId) params.set('template', requestedShopTemplateId)
     navigate(`${productCanonicalPath(view)}?${params}`, { replace: true })
   }
+
+  const entryDecision = operationsEntryDecision(runtime.status, managedIdentitySettled, managedIdentity)
+  if (entryDecision === 'checking') return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Checking company access…</p></div>
+  if (entryDecision === 'login') return <Navigate replace to={managedAccountPath('/login', view, location.search)} />
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const requestedShopTemplateState = shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))
