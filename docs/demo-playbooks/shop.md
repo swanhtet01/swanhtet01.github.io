@@ -57,7 +57,7 @@ For a recorded founder rehearsal, run the local `shop:android-smoke:packet` scri
 
 ## 5. The close
 
-- Historical support route: `Request assisted setup` used `/contact/?product=shop`, pre-selecting Shop in `Interested in`. The form asks `What would you like to improve?` and submits with `Send message` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
+- Historical support route: `Request assisted setup` used `/contact/?product=shop`, but the current form is generic and does not pre-select Shop. Describe the requested help in `How can we help?` and use `Send message` only with authorization to send the brief. The confirmation starts with `Request received: ` and an ID to keep. Agree the catalog, counter workflow and training scope before preparing the customer's workspace.
 - Internal rehearsal setup only (`https://app.supermega.dev/settings/?product=shop`). Do not require this before a customer can ask SuperMega to prepare Shop; never overwrite saved work for a demo.
 - From inside the app: the setup page's "Ask SuperMega to set up Shop" link carries the workflow template, for example `https://supermega.dev/contact/?product=shop&template=social-commerce&utm_source=app&utm_medium=guided_trial`.
-- Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Request setup` only after authorization. Multi-product setup and managed activation require separate scope and acceptance; submitting a brief does not activate a workspace.
+- Help choosing services: `/contact/?product=guide&source=assisted-setup` — submit with `Send message` only after authorization. Multi-product setup and managed activation require separate scope and acceptance; submitting a brief does not activate a workspace.

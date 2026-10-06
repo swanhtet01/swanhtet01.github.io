@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.91
+Version: 1.2.92
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — the Shop message/request chooser is absent from current source; the unauthenticated app-entry Login gate passes focused tests and was rendered from current source at localhost:4173. Login is unavailable in the isolated local environment because no managed auth provider is configured. PR #639 remains OPEN/BLOCKED at 1e127c7b, review decision unset; CI 37434892183 is CANCELLED. Current-source full-shell captures, final visual alignment, founder-authenticated persistence/isolation, Burmese usability, device tests and customer acceptance remain open. No merge, push or deployment is claimed.
+Status: ACTIVE — PR #639 now contains current source `40b647e3` with the simplified contact page, Shop source-picker removal and managed Login gate; no deployment. Exact-head App CI exposed stale Shop/Plant internal contact instructions; the two playbooks now match the generic form and their 533-check verifier passes locally. Fresh CI is required for the correction, and independent review remains outstanding. Hosted founder auth/persistence/isolation, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
 
 ## 1. Controlling objective
 
@@ -705,3 +705,10 @@ Historical transport errors do not supersede the later verified host correction 
 - **RELEASE:** fresh GitHub read shows PR #639 OPEN, head `1e127c7b17ece2dcfb9f16e1b77cbe6ea2e6192e`, merge state BLOCKED, review decision unset. Current local HEAD is not represented by that PR head. No push, merge, deployment or hosted change.
 - **COMPETITIVE EVIDENCE:** current official vendor pages document Autumn’s automatic social/order capture and barcode packing ([Autumn](https://autumnos.com/)), IRRATECH’s barcode-ready SKUs and multi-branch inventory ([IRRATECH](https://irratechmyanmar.com/en)), Square purchase-order scanning and receiving ([Square](https://squareup.com/help/us/en/article/8258-create-purchase-orders-with-square-for-retail)), and Shopify’s offline hardware versus cloud-sync boundary ([Shopify](https://help.shopify.com/en/manual/sell-in-person/shopify-pos/selling-offline/offline-features)). Vendor claims only; no hands-on incumbent trial was performed.
 - **NEXT:** reconcile the current source delta into the protected release candidate; obtain eligible independent review and green exact-head CI, then verify the live domain renders the simplified composer and Login gate. In parallel, capture the full app shell for each public gallery route from the exact candidate; keep screenshots synthetic and explicitly illustrative. Hands-on competitor tests, social connectors, hardware, load, Myanmar comprehension, hosted persistence and customer acceptance remain unverified.
+
+### 2026-10-06 — exact-head CI caught stale contact instructions
+
+- **PR:** fast-forwarded the branch to `40b647e3c23df06dcdc4e4b1eeb36bbb61a50933`; PR #639 matches that head. No merge or deploy.
+- **CI:** App CI run `37444798427` failed at `demo:playbooks:verify`; lint passed, while canonical build and desktop/mobile journeys were skipped. The failure was an obsolete Shop/Plant instruction referencing the removed contact product chooser.
+- **FIX:** updated those two internal playbooks to the real generic contact journey: product context is not preselected, `How can we help?` captures the request, and `Send message` submits it. `node tools/test_demo_playbooks.mjs` now PASS (533 checks). Public build/output verification and contact receipt suite also pass at the same source family.
+- **NEXT:** push the playbook correction as a fast-forward to PR #639 and inspect the fresh exact-head CI, security and Kernel Console results. Only after green CI and eligible independent review can this candidate move to a preview/hosted acceptance; no review bypass, merge or production deployment.
