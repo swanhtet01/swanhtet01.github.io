@@ -6079,7 +6079,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   function openStockCount() {
     if (!stocktakeRecoveryReady) {
-      setNotice('Restoring this tab’s saved stocktake. Try again in a moment.')
+      setNotice('Restoring stocktake…')
       return
     }
     if (stockCountDraft || stockCountBatchDrafts.length) {
@@ -6198,7 +6198,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     }
     const targetKey = `${target.sku}\u0000${target.stockUnitId ?? ''}\u0000${target.locationId ?? ''}`
     const currentMatches = stockCountDraft && stockCountDraftKey(stockCountDraft) === targetKey
-    let entries = [...stockCountBatchDrafts]
+    const entries = [...stockCountBatchDrafts]
     if (!currentMatches && stockCountDraft?.quantity.trim()) {
       if (!/^[0-9]+$/.test(stockCountDraft.quantity.trim())) {
         setNotice('Correct the current count before scanning another item. Your count is preserved.')

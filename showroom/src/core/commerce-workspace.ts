@@ -8619,7 +8619,7 @@ export function countCommerceStockBatch(
   }
   if (actionIdIsUsed(current, proof.actionId)) return null
 
-  let nextItems = current.items.map((item) => ({ ...item }))
+  const nextItems = current.items.map((item) => ({ ...item }))
   let inventoryFoundation = current.inventoryFoundation
   const newMovements = [] as CommerceStockMovement[]
   for (const [index, line] of lines.entries()) {
