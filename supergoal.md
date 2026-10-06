@@ -3,8 +3,8 @@
 Version: 1.3.2
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
-Updated: 2026-10-06
-Status: ACTIVE — PR #639 is at 377b5c9, OPEN/BLOCKED with independent review unset. Exact-head App CI 37466215303 failed canonical build on the missing useEffect dependencies at CoreApp.tsx:3105; the dependency fix is prepared for the next exact-head run. Public-site build, screenshot, live-image, and 37 HQ checks pass at the previous candidate. Security Audit and Kernel checks pass. No merge/deployment. Hosted sign-in, persistence, isolation, customer acceptance and release remain open.
+Updated: 2026-10-07
+Status: ACTIVE — PR #639 is at 3da547e0, OPEN/BLOCKED with independent review unset. Exact-head App CI 37533414989, Security Audit 37533423343, and Kernel Console 37533423383 pass; release was skipped by its owner gate. No merge, preview promotion, or deployment. The paste-first Shop message panel is retired; current source implements automatic intake of structured Website/Ecommerce requests, but hosted/managed acceptance remains unverified. Hosted sign-in, persistence, isolation, customer acceptance, true current-product captures, hardware acceptance, and connected social-channel ingestion remain open.
 
 ## 1. Controlling objective
 
