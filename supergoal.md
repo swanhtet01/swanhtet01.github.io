@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.2.99
+Version: 1.3.0
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 remains OPEN/BLOCKED with review unset at `c51376ea`; no merge or deployment. Exact-head App CI `37456384119` passed API contracts, disposable database/RLS checks, lint and build, then completed its rendered stage in 8m20 and failed all 35 unauthenticated feature expectations because the app correctly redirected them to Login. The route policy was intentionally tightened in `0d891e2f` to require managed access even on local hosts. The earlier claimed local Edge 35/35 matrix is not accepted as valid product UI evidence: it contradicts this same-source policy and is not reproducible yet. Local code now reframes rendered coverage as auth-gate checks, prevents protected fixture copy exposure, and labels that evidence accurately. Focused tests pass 22/22. Hosted founder auth/persistence/isolation, signed-in product UX, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
+Status: ACTIVE — PR #639 remains OPEN/BLOCKED with independent review unset at `bd6b530f`; no merge or deployment. Exact-head run `37458591209` stopped before install/build because the coordinated-release verifier still expected the old CI step name; its other earlier guards passed. The rendered matrix was corrected to assert unauthenticated routes land on login and do not expose seeded product copy, matching the access policy added in `0d891e2f`. Focused renderer tests pass 22/22, and the standalone release-workflow verifier now passes 161 checks after its expected step name was updated locally. The previous claimed local Edge 35/35 matrix is not valid signed-in product evidence. Hosted founder auth/persistence/isolation, authenticated Shop/Sites/Commerce UX, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
 
 ## 1. Controlling objective
 

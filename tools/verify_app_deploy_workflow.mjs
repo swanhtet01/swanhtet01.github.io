@@ -396,21 +396,22 @@ requireContract('checked build produces a fresh artifact exactly once before ver
   && canonicalVerifySteps[0] === 'npm run app:build'
   && canonicalVerifySteps.filter((step) => step === 'npm run app:build').length === 1
   && canonicalVerifySteps.indexOf('node tools/verify_app_build.mjs') > 0)
-requireContract('CI verifies exact-source desktop and 390px journeys for three active products and retired Plant safety',
+requireContract('CI verifies exact-source unauthenticated access gates across app entry routes',
   ciWorkflow.includes('timeout-minutes: 15')
   && ciWorkflow.includes("SUPERMEGA_CI_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
   && ciWorkflow.includes("ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
   && ciWorkflow.includes('Verify exact source checkout')
   && ciWorkflow.includes('test "$(git rev-parse HEAD)" = "$SUPERMEGA_CI_SOURCE_SHA"')
   && ciWorkflow.includes("SUPERMEGA_RELEASE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
-  && ciWorkflow.includes('Verify desktop and 390px product journeys')
+  && ciWorkflow.includes('Verify unauthenticated product access gates')
+  && renderedJourneyVerifier.includes('unauthenticatedEntryContract')
   && ciWorkflow.includes('SUPERMEGA_RENDERED_EVIDENCE_DIR: ${{ runner.temp }}/supermega-app-entry-rendered-${{ github.run_id }}-${{ github.run_attempt }}')
   && ciWorkflow.includes('node tools/verify_app_entry_rendered.mjs')
   && ciWorkflow.includes('--out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json"')
   && ciWorkflow.includes('--screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR"')
   && ciWorkflow.includes('--expected-head "$SUPERMEGA_CI_SOURCE_SHA"')
   && !ciWorkflow.includes('--expected-head "$GITHUB_SHA"')
-  && ciWorkflow.indexOf('Build and verify canonical app') < ciWorkflow.indexOf('Verify desktop and 390px product journeys')
+  && ciWorkflow.indexOf('Build and verify canonical app') < ciWorkflow.indexOf('Verify unauthenticated product access gates')
   && ['shop', 'website', 'ecommerce'].every((product) => renderedJourneyVerifier.includes(`route: '/${product}/`))
   && renderedJourneyVerifier.includes('...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,')
   && renderedJourneyVerifier.includes('retirementCaseId: spec.id, requireLauncherProducts: true,')
