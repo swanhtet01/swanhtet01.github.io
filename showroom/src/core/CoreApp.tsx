@@ -7080,13 +7080,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         </div>
       </section> : null}
       {managedIdentity && pendingStorefrontRequests.length ? <section aria-label="Incoming Ecommerce orders" className="incoming-order-inbox">
-        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Incoming</span><h3>Orders waiting for review</h3></div><strong>{pendingStorefrontRequests.length}</strong></div>
+        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Ecommerce</span><h3>New online orders</h3><p>Orders arrive here automatically. Check stock, delivery and payment before adding one to Shop.</p></div><strong aria-label={`${pendingStorefrontRequests.length} orders waiting`}>{pendingStorefrontRequests.length}</strong></div>
         <div className="incoming-order-list">
           {visiblePendingStorefrontRequests.map((request) => {
             const lines = commerceStorefrontRequestLines(request)
             const stockConflict = pendingStorefrontStockConflicts.get(request.id)
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
-            return <article key={request.id}><div><strong>{request.customerReference} · {itemSummary}</strong><small>Commerce · {formatMoney(request.totalMmk)} · {request.fulfilment}{stockConflict ? ` · ${stockConflict.sku} needs stock review` : ''}</small></div><button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => { openOrderComposer(); void reviewStorefrontRequest(request.id) }} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review order</button></article>
+            return <article key={request.id}><div><strong>{request.customerReference} · {itemSummary}</strong><small>{formatMoney(request.totalMmk)} · {request.fulfilment}{stockConflict ? ` · ${stockConflict.sku} needs stock review` : ''}</small></div><button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => { openOrderComposer(); void reviewStorefrontRequest(request.id) }} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">Check order</button></article>
           })}
         </div>
       </section> : null}

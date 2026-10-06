@@ -1,10 +1,10 @@
 # SuperMega Supergoal
 
-Version: 1.3.1
+Version: 1.3.2
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-06
-Status: ACTIVE — PR #639 remains OPEN/BLOCKED with independent review unset at `c20a173b`; no merge or deployment. API contracts, database/RLS guards, lint, canonical build and release workflow verification passed at this head. The rendered matrix now validates login gates, but exact-head run `37459181744` found four legacy Settings intent path mismatches and one false protected-copy match on generic “Contact”; local test mapping is corrected and focused renderer tests pass 22/22. These checks verify unauthenticated access boundaries only. The previous claimed local Edge 35/35 matrix is not valid signed-in product evidence. Hosted founder auth/persistence/isolation, authenticated Shop/Sites/Commerce UX, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
+Status: ACTIVE — PR #639 is at `497250c5`, OPEN/BLOCKED with independent review unset. Exact-head App CI `37460752727` PASS: API contracts, disposable PostgreSQL budgets, RLS guards, lint, canonical build, and all 35 unauthenticated access-gate cases. Dependency Security Audit and Kernel contract checks PASS; Kernel release job was skipped by its owner gate. No merge or deployment. These checks verify login protection and do not test signed-in product workflows. The old local Edge 35/35 claim is not accepted as signed-in product evidence. Hosted founder auth/persistence/isolation, signed-in Shop/Sites/Commerce UX, current full-shell captures, Burmese usability, hardware and customer acceptance remain open.
 
 ## 1. Controlling objective
 
@@ -732,3 +732,11 @@ Historical transport errors do not supersede the later verified host correction 
 - **CI:** App run `37450697918` passed source/API/database/RLS checks, lint, and canonical build, then reached rendered tests. It failed cases 1–10 and was canceled at GitHub's 15-minute maximum. Safe categories: cases 1–4 `content, route`; cases 5–6 `content, interaction, layout, route, viewport`; cases 7–8 `content, interaction, layout, route`; case 9 `content, render, route, viewport`; case 10 `content, interaction, route`. Security Audit `37450701232` and Kernel Console `37450701254` passed; Kernel release was skipped by its owner gate. PR remains OPEN/BLOCKED with review unset.
 - **CROSS-BROWSER:** exact-source Windows Edge 154 full suite passed 35/35. This points to a Linux Chrome/runtime or environment discrepancy, but current safe categories do not establish whether pages are blank, route-changed, or missing expected content.
 - **NEXT:** commit/push the new diagnostic fields and inspect the exact-head Linux Chrome result. Use body/path/content-match booleans and counts to target the first actual cause; preserve product assertions and the privacy boundary. No merge/deploy.
+
+### 2026-10-06 — Shop online-order inbox clarity
+
+- **SOURCE:** current local changes are against PR #639 source commit `497250c5902fa128ea4b4d8308750acb18f36c05`; no commit, push, merge or deployment.
+- **CHANGE:** Shop's signed-in Ecommerce inbox now says online orders arrive automatically, describes the stock/delivery/payment check before adding to Shop, and labels the action `Check order`. Removed redundant per-row `Commerce` source text. This improves wording and hierarchy only; it does not add Messenger/Viber ingestion or auto-create Shop orders.
+- **VALIDATION:** `git diff --check` PASS. Full showroom ESLint and single-file ESLint both exhausted the local Node heap (~2 GB); no lint result. A TypeScript transpile parse of `CoreApp.tsx` PASS. No build/browser/managed acceptance run on this local delta.
+- **BENCHMARK (vendor-published, not independently tested):** [Autumn](https://autumnoms.com/) claims automatic order capture across social, messaging, web and POS channels plus barcode packing and unified stock; [IRRATECH](https://irratechmyanmar.com/en) lists barcode-ready SKUs and multi-branch inventory; [Square](https://squareup.com/us/en/point-of-sale/retail) documents stock history, vendor purchase orders, receiving and barcode labels. Our changed inbox only clarifies the existing authenticated Ecommerce feed; it does not match/prove those connectors or hardware flows.
+- **NEXT:** obtain exact-head CI for the UX delta. Then inspect signed-in Shop workflows against these minimum baselines and close the largest verified usability gap; do not imply hands-on competitor access or hosted acceptance.
