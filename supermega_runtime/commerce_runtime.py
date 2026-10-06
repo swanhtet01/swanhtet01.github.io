@@ -4476,6 +4476,31 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if len(action_movements) < 2:
             continue
         first = action_movements[0]
+        if all(movement["kind"] == "count" for movement in action_movements):
+            reviewed_order = list(reversed(action_movements))
+            expected_batch_ids = [
+                _movement_id(action_id, f"COUNT-BATCH-{index + 1}")
+                for index in range(len(reviewed_order))
+            ]
+            if (
+                [movement["id"] for movement in reviewed_order] != expected_batch_ids
+                or any(
+                    any(
+                        movement.get(field) != first.get(field)
+                        for field in (
+                            "createdAt",
+                            "actor",
+                            "reason",
+                            "evidenceReference",
+                        )
+                    )
+                    for movement in action_movements
+                )
+            ):
+                raise TrialValidationError(
+                    f"Stock movement action {action_id} is not one exact reviewed count batch."
+                )
+            continue
         if (
             first["kind"] not in {"reserve", "release"}
             or not first.get("orderId")
@@ -5696,7 +5721,17 @@ def _validate_event_evidence(
             else {}
         )
         proof = (
-            latest_payload.get("proof", {})
+            {
+                "actionId": next_state["movements"][0].get("actionId"),
+                "capturedAt": next_state["movements"][0].get("createdAt"),
+                "actor": next_state["movements"][0].get("actor"),
+                "reason": next_state["movements"][0].get("reason"),
+                "evidenceReference": next_state["movements"][0].get("evidenceReference"),
+            }
+            if event_type == "commerce.stock.counted"
+            and next_state.get("movements")
+            and isinstance(next_state["movements"][0], Mapping)
+            else latest_payload.get("proof", {})
             if isinstance(latest_payload, Mapping)
             else {}
         )
@@ -9930,108 +9965,159 @@ def _validate_counted(
     _require_storefront_requests_unchanged(current, next_state)
     _require_storefront_configuration_unchanged(current, next_state)
     _require_purchase_orders_unchanged(current, next_state)
+    movement_count = len(next_state["movements"]) - len(current["movements"])
     if (
-        len(next_state["movements"]) != len(current["movements"]) + 1
-        or next_state["movements"][1:] != current["movements"]
+        movement_count < 1
+        or movement_count > 200
+        or next_state["movements"][movement_count:] != current["movements"]
     ):
         raise TrialValidationError(
-            "commerce.stock.counted must prepend exactly one count movement."
+            "commerce.stock.counted must prepend one reviewed group of count movements."
         )
-    movement = next_state["movements"][0]
-    if (
-        movement.get("kind") != "count"
-        or "orderId" in movement
-        or "purchaseOrderId" in movement
-        or movement.get("id") != _movement_id(str(movement.get("actionId")))
-    ):
-        raise TrialValidationError(
-            "stock count requires one attributable count movement."
-        )
-    matching_indexes = [
-        index
-        for index, item in enumerate(current["items"])
-        if item["sku"] == movement["sku"]
+    newest_movements = next_state["movements"][:movement_count]
+    ordered_movements = list(reversed(newest_movements))
+    first_movement = ordered_movements[0]
+    action_id = str(first_movement.get("actionId"))
+    batch_movement_ids = [
+        _movement_id(action_id, f"COUNT-BATCH-{index + 1}")
+        for index in range(movement_count)
     ]
-    if len(matching_indexes) != 1 or len(next_state["items"]) != len(
-        current["items"]
-    ):
-        raise TrialValidationError("stock count must reference one existing item.")
-    item_index = matching_indexes[0]
-    before_item = current["items"][item_index]
-    before_foundation = _inventory_foundation(current)
-    after_foundation = _inventory_foundation(next_state)
-    counted_quantity = movement["countedQuantity"]
-    if before_foundation is not None:
-        if after_foundation is None:
-            raise TrialValidationError(
-                "location-managed stock count cannot remove its inventory record."
-            )
-        before_commands = before_foundation["commands"]
-        after_commands = after_foundation["commands"]
-        if (
-            len(after_commands) != len(before_commands) + 1
-            or after_commands[:-1] != before_commands
-        ):
-            raise TrialValidationError(
-                "location-managed stock count must append exactly one location count."
-            )
-        location_count = after_commands[-1]["payload"]
-        if location_count.get("kind") != "count":
-            raise TrialValidationError(
-                "location-managed stock count requires one count command."
-            )
-        catalog_skus = sorted(item["sku"] for item in current["items"])
-        matching_balances = [
-            balance
-            for balance in shop_inventory_balances(
-                before_foundation, catalog_skus
-            )
-            if balance["stockUnitId"] == location_count["stockUnitId"]
-            and balance["locationId"] == location_count["locationId"]
-        ]
-        if len(matching_balances) != 1:
-            raise TrialValidationError(
-                "location count must reference one existing stock-unit balance."
-            )
-        balance = matching_balances[0]
-        if (
-            balance["sku"] != movement["sku"]
-            or location_count["expectedQuantity"] != balance["onHand"]
-            or location_count["countedQuantity"] < balance["reserved"]
-        ):
-            raise TrialValidationError(
-                "location count must match its SKU, physical balance, and reservations."
-            )
-        counted_quantity = (
-            before_item["onHand"]
-            + location_count["countedQuantity"]
-            - balance["onHand"]
-        )
-    elif after_foundation is not None:
-        raise TrialValidationError(
-            "commerce.stock.counted cannot initialize location inventory."
-        )
-    expected_after = {
-        **before_item,
-        "onHand": counted_quantity,
+    is_batch = [movement.get("id") for movement in ordered_movements] == batch_movement_ids
+    is_legacy_single = movement_count == 1 and first_movement.get("id") == _movement_id(action_id)
+    if not (is_batch or is_legacy_single):
+        raise TrialValidationError("stocktake movement IDs must match the reviewed batch order.")
+    if len(next_state["items"]) != len(current["items"]):
+        raise TrialValidationError("stocktake cannot add or remove catalog items.")
+    item_by_sku = {item["sku"]: item for item in current["items"]}
+    expected_quantities = {
+        item["sku"]: item["onHand"] for item in current["items"]
     }
-    if (
-        movement["expectedQuantity"] != before_item["onHand"]
-        or movement["quantityDelta"]
-        != counted_quantity - before_item["onHand"]
-        or movement["countedQuantity"] != counted_quantity
-        or next_state["items"][item_index] != expected_after
-        or any(
-            before != after
-            for index, (before, after) in enumerate(
-                zip(current["items"], next_state["items"], strict=True)
+    changed_skus: set[str] = set()
+    seen_targets: set[tuple[str, str] | str] = set()
+    for index, movement in enumerate(ordered_movements):
+        if (
+            movement.get("kind") != "count"
+            or movement.get("actionId") != action_id
+            or "orderId" in movement
+            or "purchaseOrderId" in movement
+            or any(
+                movement.get(field) != first_movement.get(field)
+                for field in ("createdAt", "actor", "reason", "evidenceReference")
             )
-            if index != item_index
-        )
-    ):
+        ):
+            raise TrialValidationError("stocktake lines must share one reviewed action proof.")
+        sku = movement.get("sku")
+        before_item = item_by_sku.get(sku)
+        if before_item is None:
+            raise TrialValidationError("stock count must reference one existing item.")
+        before_quantity = expected_quantities[sku]
+        if movement.get("expectedQuantity") != before_quantity:
+            raise TrialValidationError("stocktake lines must reconcile in their reviewed order.")
+        before_foundation = _inventory_foundation(current)
+        after_foundation = _inventory_foundation(next_state)
+        if before_foundation is None:
+            if after_foundation is not None or sku in changed_skus:
+                raise TrialValidationError(
+                    "a simple stocktake cannot add locations or count one SKU twice."
+                )
+            counted_quantity = movement.get("countedQuantity")
+            if not isinstance(counted_quantity, int) or isinstance(counted_quantity, bool) or counted_quantity < 0:
+                raise TrialValidationError("stocktake counts must be nonnegative whole units.")
+            target: tuple[str, str] | str = sku
+            variance = counted_quantity - before_quantity
+        else:
+            if after_foundation is None:
+                raise TrialValidationError(
+                    "location-managed stock count cannot remove its inventory record."
+                )
+            before_commands = before_foundation["commands"]
+            after_commands = after_foundation["commands"]
+            if (
+                len(after_commands) != len(before_commands) + movement_count
+                or after_commands[:-movement_count] != before_commands
+            ):
+                raise TrialValidationError(
+                    "location-managed stocktake must append one location count per reviewed line."
+                )
+            location_count = after_commands[len(before_commands) + index]["payload"]
+            if location_count.get("kind") != "count":
+                raise TrialValidationError("location-managed stocktake lines must be count commands.")
+            location_proof = location_count.get("proof")
+            expected_location_action = "ACT-" + sha256(
+                json.dumps(
+                    [action_id, "shop-stock-count-line", index + 1],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()[:40].upper()
+            if (
+                not isinstance(location_proof, Mapping)
+                or location_proof.get("actionId")
+                != (action_id if is_legacy_single else expected_location_action)
+                or any(
+                    location_proof.get(proof_field) != first_movement.get(movement_field)
+                    for proof_field, movement_field in (
+                        ("capturedAt", "createdAt"),
+                        ("actor", "actor"),
+                        ("reason", "reason"),
+                        ("evidenceReference", "evidenceReference"),
+                    )
+                )
+            ):
+                raise TrialValidationError(
+                    "location count proof must be derived from its reviewed stocktake line."
+                )
+            catalog_skus = sorted(item["sku"] for item in current["items"])
+            target = (str(location_count.get("stockUnitId")), str(location_count.get("locationId")))
+            matching_balances = [
+                balance
+                for balance in shop_inventory_balances(before_foundation, catalog_skus)
+                if (balance["stockUnitId"], balance["locationId"]) == target
+            ]
+            if len(matching_balances) != 1:
+                raise TrialValidationError(
+                    "location count must reference one existing stock-unit balance."
+                )
+            balance = matching_balances[0]
+            counted_physical = location_count.get("countedQuantity")
+            if (
+                balance["sku"] != sku
+                or location_count.get("expectedQuantity") != balance["onHand"]
+                or not isinstance(counted_physical, int)
+                or isinstance(counted_physical, bool)
+                or counted_physical < balance["reserved"]
+            ):
+                raise TrialValidationError(
+                    "location count must match its SKU, physical balance, and reservations."
+                )
+            variance = counted_physical - balance["onHand"]
+            counted_quantity = before_quantity + variance
+        if target in seen_targets:
+            raise TrialValidationError("stocktake cannot count one product location twice.")
+        seen_targets.add(target)
+        if (
+            movement.get("quantityDelta") != counted_quantity - before_quantity
+            or movement.get("countedQuantity") != counted_quantity
+        ):
+            raise TrialValidationError("stock movement must match the exact reviewed count.")
+        expected_quantities[sku] = counted_quantity
+        changed_skus.add(sku)
+
+    expected_items = [
+        {**item, "onHand": expected_quantities[item["sku"]]}
+        for item in current["items"]
+    ]
+    if next_state["items"] != expected_items:
         raise TrialValidationError(
-            "stock count may only set one matching item to its exact counted quantity."
+            "stocktake may only update catalog quantities to their exact reviewed totals."
         )
+    changed_fields = {"items", "movements", "inventoryFoundation"}
+    if set(current) != set(next_state) or any(
+        current[key] != next_state[key]
+        for key in current
+        if key not in changed_fields
+    ):
+        raise TrialValidationError("stocktake cannot modify unrelated Commerce records.")
 
 
 def _validate_production_inventory_transition(

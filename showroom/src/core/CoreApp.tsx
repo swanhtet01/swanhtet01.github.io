@@ -75,7 +75,7 @@ import {
   authorizeCommerceSupplierReturn,
   cancelCommercePurchaseOrder,
   cancelCommerceOrder,
-  countCommerceStock,
+  countCommerceStockBatch,
   commerceAccountingHandoff,
   commerceAccountingHandoffCsv,
   commerceDailyCloseCsv,
@@ -371,6 +371,9 @@ type StockCountDraft = {
   stockUnitId: string
   locationId: string
   quantity: string
+  expectedOnHand: number
+  expectedPhysicalQuantity: number
+  expectedHeadDigest: string | null
 }
 
 type TaxConfigurationDraft = {
@@ -1844,6 +1847,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [supplierReturnDraft, setSupplierReturnDraft] = useState<SupplierReturnDraft | null>(null)
   const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
+  const [stockCountBatchDrafts, setStockCountBatchDrafts] = useState<StockCountDraft[]>([])
+  const [stockCountSessionHeadDigest, setStockCountSessionHeadDigest] = useState<string | null>(null)
   const [stockCountBarcode, setStockCountBarcode] = useState('')
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
@@ -2458,12 +2463,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     ? Number(stockCountQuantityText)
     : Number.NaN
   const stockCountQuantityResult = stockCountItem
+    && stockCountDraft !== null
     && Number.isSafeInteger(stockCountQuantity)
     && stockCountQuantity >= 0
     && (!commerce.inventoryFoundation || Boolean(stockCountBalance))
     && (!stockCountBalance || stockCountQuantity >= stockCountBalance.reserved)
     && (!stockCountBalance || stockCountBalance.tracking !== 'serial' || stockCountQuantity <= 1)
-    && Number.isSafeInteger(stockCountItem.onHand + stockCountQuantity - (stockCountBalance?.onHand ?? stockCountItem.onHand))
+    && Number.isSafeInteger(stockCountDraft.expectedOnHand + stockCountQuantity - stockCountDraft.expectedPhysicalQuantity)
     ? stockCountQuantity
     : null
   const stockCountTargetValue = stockCountBalance
@@ -6071,10 +6077,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   function openStockCount() {
-    if (stockCountDraft) {
+    if (stockCountDraft || stockCountBatchDrafts.length) {
       const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
-      setNotice('Continue the available-stock count below. Your draft was preserved.')
+      setNotice(`Continue the stocktake. ${stockCountBatchDrafts.length} ${stockCountBatchDrafts.length === 1 ? 'item is' : 'items are'} ready for one review.`)
       return
     }
     if (purchaseOrderDraft) {
@@ -6092,11 +6098,19 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       ? managedInventoryProjection?.balances.find((balance) => balance.sku === suggestedItem?.sku)
         ?? managedInventoryProjection?.balances[0]
       : undefined
+    const suggestedSku = suggestedBalance?.sku ?? suggestedItem?.sku ?? ''
+    const suggestedCatalogItem = commerce.items.find((item) => item.sku === suggestedSku)
+    const sessionHeadDigest = managedInventoryProjection?.headDigest ?? null
+    setStockCountSessionHeadDigest(sessionHeadDigest)
+    setStockCountBatchDrafts([])
     const suggestedDraft: StockCountDraft = {
-      sku: suggestedBalance?.sku ?? suggestedItem?.sku ?? '',
+      sku: suggestedSku,
       stockUnitId: suggestedBalance?.stockUnitId ?? '',
       locationId: suggestedBalance?.locationId ?? '',
       quantity: '',
+      expectedOnHand: suggestedCatalogItem?.onHand ?? 0,
+      expectedPhysicalQuantity: suggestedBalance?.onHand ?? suggestedCatalogItem?.onHand ?? 0,
+      expectedHeadDigest: sessionHeadDigest,
     }
     setStockCountBarcode('')
     setStockCountDraft(suggestedDraft)
@@ -6112,6 +6126,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   function cancelStockCount() {
     setStockCountDraft(null)
+    setStockCountBatchDrafts([])
+    setStockCountSessionHeadDigest(null)
     setStockCountBarcode('')
     setNotice('Stock count closed. Shop data was not modified.')
     requestAnimationFrame(() => stockCountTriggerRef.current?.focus())
@@ -6120,12 +6136,17 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   function selectStockCountTarget(value: string) {
     setStockCountBarcode('')
     if (!commerce.inventoryFoundation) {
-      setStockCountDraft((current) => current ? {
+      const item = commerce.items.find((candidate) => candidate.sku === value)
+      if (!item) return
+      selectStockCountDraft({
         sku: value,
         stockUnitId: '',
         locationId: '',
         quantity: '',
-      } : current)
+        expectedOnHand: item.onHand,
+        expectedPhysicalQuantity: item.onHand,
+        expectedHeadDigest: stockCountSessionHeadDigest,
+      })
       return
     }
     const separator = value.indexOf('|')
@@ -6134,25 +6155,59 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     const balance = managedInventoryProjection?.balances.find((candidate) => (
       candidate.stockUnitId === stockUnitId && candidate.locationId === locationId
     ))
-    setStockCountDraft((current) => current ? {
+    const item = commerce.items.find((candidate) => candidate.sku === balance?.sku)
+    if (!balance || !item) return
+    selectStockCountDraft({
       sku: balance?.sku ?? '',
       stockUnitId: balance?.stockUnitId ?? '',
       locationId: balance?.locationId ?? '',
       quantity: '',
-    } : current)
+      expectedOnHand: item.onHand,
+      expectedPhysicalQuantity: balance.onHand,
+      expectedHeadDigest: stockCountSessionHeadDigest,
+    })
   }
 
-  function applyScannedStockCount(item: CommerceItem, balance?: { stockUnitId: string; locationId: string; tracking?: string }) {
-    const result = applyStockCountScan(stockCountDraft, {
+  function stockCountDraftKey(draft: StockCountDraft) {
+    return `${draft.sku}\u0000${draft.stockUnitId}\u0000${draft.locationId}`
+  }
+
+  function selectStockCountDraft(nextDraft: StockCountDraft) {
+    const nextKey = stockCountDraftKey(nextDraft)
+    const entries = [...stockCountBatchDrafts]
+    if (stockCountDraft && stockCountDraftKey(stockCountDraft) !== nextKey && stockCountDraft.quantity.trim()) {
+      const existing = entries.findIndex((entry) => stockCountDraftKey(entry) === stockCountDraftKey(stockCountDraft))
+      if (existing >= 0) entries[existing] = stockCountDraft
+      else entries.push(stockCountDraft)
+    }
+    const selected = entries.findIndex((entry) => stockCountDraftKey(entry) === nextKey)
+    const restoredDraft = selected >= 0 ? entries.splice(selected, 1)[0] : nextDraft
+    setStockCountBatchDrafts(entries)
+    setStockCountDraft(restoredDraft)
+  }
+
+  function applyScannedStockCount(item: CommerceItem, balance?: { stockUnitId: string; locationId: string; tracking?: string; onHand: number }) {
+    const target = {
       sku: item.sku,
       stockUnitId: balance?.stockUnitId,
       locationId: balance?.locationId,
       serial: balance?.tracking === 'serial',
-    })
-    if (result.status === 'finish-current') {
-      setNotice(`Finish the ${stockCountDraft?.sku ?? 'current item'} count before scanning another item. Your count is preserved.`)
-      return
     }
+    const targetKey = `${target.sku}\u0000${target.stockUnitId ?? ''}\u0000${target.locationId ?? ''}`
+    const currentMatches = stockCountDraft && stockCountDraftKey(stockCountDraft) === targetKey
+    let entries = [...stockCountBatchDrafts]
+    if (!currentMatches && stockCountDraft?.quantity.trim()) {
+      if (!/^[0-9]+$/.test(stockCountDraft.quantity.trim())) {
+        setNotice('Correct the current count before scanning another item. Your count is preserved.')
+        return
+      }
+      const currentIndex = entries.findIndex((entry) => stockCountDraftKey(entry) === stockCountDraftKey(stockCountDraft))
+      if (currentIndex >= 0) entries[currentIndex] = stockCountDraft
+      else entries.push(stockCountDraft)
+    }
+    const priorTargetIndex = entries.findIndex((entry) => stockCountDraftKey(entry) === targetKey)
+    const priorTarget = currentMatches ? stockCountDraft : priorTargetIndex >= 0 ? entries[priorTargetIndex] : null
+    const result = applyStockCountScan(priorTarget, target)
     if (result.status === 'invalid-current') {
       setNotice('Correct the current count before scanning another unit. Your count is preserved.')
       return
@@ -6165,7 +6220,16 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setNotice('The scanned count reached its safe limit. Review this item before continuing.')
       return
     }
-    setStockCountDraft(result.draft)
+    if (!result.draft) return
+    if (priorTargetIndex >= 0) entries.splice(priorTargetIndex, 1)
+    const nextDraft: StockCountDraft = {
+      ...result.draft,
+      expectedOnHand: priorTarget?.expectedOnHand ?? item.onHand,
+      expectedPhysicalQuantity: priorTarget?.expectedPhysicalQuantity ?? balance?.onHand ?? item.onHand,
+      expectedHeadDigest: priorTarget?.expectedHeadDigest ?? stockCountSessionHeadDigest,
+    }
+    setStockCountBatchDrafts(entries)
+    setStockCountDraft(nextDraft)
     setNotice(`${result.draft?.quantity} ${result.draft?.quantity === '1' ? 'unit' : 'units'} scanned for ${item.name}. Keep scanning or review the count.`)
     requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLInputElement>('#stock-count-quantity')?.focus())
   }
@@ -6179,10 +6243,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       return
     }
     setStockCountBarcode('')
-    if (stockCountDraft?.quantity.trim() && stockCountDraft.sku !== item.sku) {
-      setNotice(`Finish the ${stockCountDraft.sku} count before scanning another item. Your count is preserved.`)
-      return
-    }
     const balances = commerce.inventoryFoundation
       ? managedInventoryProjection?.balances.filter((balance) => balance.sku === item.sku) ?? []
       : []
@@ -6199,12 +6259,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         ? `${item.name} found. Choose the location and lot to count.`
         : `${item.name} found, but no countable location and lot is available.`)
       if (!stockCountDraft?.quantity.trim()) {
-        setStockCountDraft((current) => current ? {
+        selectStockCountDraft({
           sku: item.sku,
           stockUnitId: '',
           locationId: '',
           quantity: '',
-        } : current)
+          expectedOnHand: item.onHand,
+          expectedPhysicalQuantity: item.onHand,
+          expectedHeadDigest: stockCountSessionHeadDigest,
+        })
         requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>('#stock-count-sku')?.focus())
       }
       return
@@ -6214,82 +6277,108 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   function reviewStockCount(event: FormEvent) {
     event.preventDefault()
-    if (!stockCountDraft || !stockCountItem || stockCountQuantityResult === null || (commerce.inventoryFoundation && !stockCountBalance)) {
+    const drafts = [...stockCountBatchDrafts, ...(stockCountDraft?.quantity.trim() ? [stockCountDraft] : [])]
+    if (!drafts.length) {
       setNotice(commerce.inventoryFoundation
-        ? 'Choose one location and lot, then enter a physical count that includes its reserved units.'
-        : 'Choose one item and enter a non-negative whole-unit available count.')
+        ? 'Count at least one location and lot before reviewing the stocktake.'
+        : 'Count at least one product before reviewing the stocktake.')
       return
     }
-    const item = stockCountItem
-    const countedPhysicalQuantity = stockCountQuantityResult
-    const expectedAvailable = item.onHand
-    const expectedPhysicalQuantity = stockCountBalance?.onHand ?? expectedAvailable
-    const countedAvailable = expectedAvailable + countedPhysicalQuantity - expectedPhysicalQuantity
-    const variance = countedPhysicalQuantity - expectedPhysicalQuantity
-    const varianceLabel = variance === 0
-      ? 'no variance'
-      : `${variance > 0 ? '+' : ''}${variance.toLocaleString()} variance`
-    const countLocation = stockCountBalance
-      ? managedInventoryProjection?.locations.find((location) => location.id === stockCountBalance.locationId)
-      : undefined
-    const targetLabel = stockCountBalance
-      ? `${countLocation?.name ?? stockCountBalance.locationId} / ${stockCountBalance.trackingCode}`
-      : item.sku
-    const locationCount = commerce.inventoryFoundation && stockCountBalance
-      ? {
+    const lines: Parameters<typeof countCommerceStockBatch>[1] = []
+    const displayRows: Array<{ item: CommerceItem; target: string; before: string; after: string }> = []
+    const seenTargets = new Set<string>()
+    for (const draft of drafts) {
+      const key = stockCountDraftKey(draft)
+      if (seenTargets.has(key)) {
+        setNotice('This stocktake contains the same item and location twice. Remove the duplicate before review.')
+        return
+      }
+      seenTargets.add(key)
+      const item = commerce.items.find((candidate) => candidate.sku === draft.sku)
+      const balance = commerce.inventoryFoundation
+        ? managedInventoryProjection?.balances.find((candidate) => candidate.stockUnitId === draft.stockUnitId && candidate.locationId === draft.locationId)
+        : undefined
+      const quantityText = draft.quantity.trim()
+      const quantity = /^[0-9]+$/.test(quantityText) ? Number(quantityText) : Number.NaN
+      const validQuantity = Number.isSafeInteger(quantity) && quantity >= 0
+        && (!balance || quantity >= balance.reserved)
+        && (!balance || balance.tracking !== 'serial' || quantity <= 1)
+      if (!item || !validQuantity || (commerce.inventoryFoundation && !balance)) {
+        setNotice(commerce.inventoryFoundation
+          ? `Enter a valid physical count for ${draft.sku}, including reserved units, and choose its location and lot.`
+          : `Enter a valid whole-unit count for ${draft.sku}.`)
+        return
+      }
+      if (item.onHand !== draft.expectedOnHand
+        || (commerce.inventoryFoundation && (managedInventoryProjection?.headDigest !== draft.expectedHeadDigest
+          || balance?.onHand !== draft.expectedPhysicalQuantity))) {
+        setNotice(`Stock changed while counting ${draft.sku}. The batch was kept; update its physical count before review.`)
+        return
+      }
+      const targetLocation = balance
+        ? managedInventoryProjection?.locations.find((location) => location.id === balance.locationId)
+        : undefined
+      const target = balance ? `${targetLocation?.name ?? balance.locationId} / ${balance.trackingCode}` : draft.sku
+      const countedTotal = balance
+        ? draft.expectedOnHand + quantity - draft.expectedPhysicalQuantity
+        : quantity
+      if (!Number.isSafeInteger(countedTotal) || countedTotal < 0) {
+        setNotice(`The total available count for ${draft.sku} is outside the safe range.`)
+        return
+      }
+      lines.push({
+        sku: draft.sku,
+        expectedOnHand: draft.expectedOnHand,
+        countedQuantity: quantity,
+        ...(balance ? { locationCount: {
           countId: uid('CNT'),
-          stockUnitId: stockCountBalance.stockUnitId,
-          locationId: stockCountBalance.locationId,
-          expectedQuantity: expectedPhysicalQuantity,
-          countedQuantity: countedPhysicalQuantity,
-          expectedHeadDigest: commerce.inventoryFoundation.headDigest,
-        }
-      : undefined
-    // A stock count with no variance is bookkeeping and needs no explanation. A count that
-    // disagrees with the record is the opposite — that is the entry someone audits later —
-    // so state the variance and leave the operator to say what caused it.
-    const countHasVariance = countedPhysicalQuantity !== expectedPhysicalQuantity
+          stockUnitId: balance.stockUnitId,
+          locationId: balance.locationId,
+          expectedQuantity: draft.expectedPhysicalQuantity,
+          countedQuantity: quantity,
+          expectedHeadDigest: draft.expectedHeadDigest ?? '',
+        } } : {}),
+      })
+      const variance = quantity - draft.expectedPhysicalQuantity
+      displayRows.push({
+        item,
+        target,
+        before: balance
+          ? `${target} / ${draft.expectedPhysicalQuantity.toLocaleString()} physical / ${balance.reserved.toLocaleString()} reserved`
+          : `${draft.sku} / ${draft.expectedOnHand.toLocaleString()} recorded available`,
+        after: balance
+          ? `${quantity.toLocaleString()} physical / ${variance === 0 ? 'no variance' : `${variance > 0 ? '+' : ''}${variance.toLocaleString()} variance`}`
+          : `${quantity.toLocaleString()} counted available / ${quantity === draft.expectedOnHand ? 'no variance' : `${quantity > draft.expectedOnHand ? '+' : ''}${(quantity - draft.expectedOnHand).toLocaleString()} variance`}`,
+      })
+    }
+    const hasVariance = lines.some((line) => line.countedQuantity !== (line.locationCount?.expectedQuantity ?? line.expectedOnHand))
+    const batchSummary = displayRows.map((row) => `${row.item.sku} ${row.before} → ${row.after}`).join('; ')
     queueAction({
       kind: 'inventory_count',
-      subjectId: item.sku,
-      ...(countHasVariance ? {} : { reasonSuggestion: `Routine stock count of ${item.name}; counted quantity matches the record.` }),
-      evidenceReferenceSuggestion: `Stock count ${item.sku}`,
-      summary: stockCountBalance ? `Count ${item.name} at ${targetLabel}` : `Count available stock for ${item.name}`,
-      before: stockCountBalance
-        ? `${targetLabel} / ${expectedPhysicalQuantity.toLocaleString()} physical / ${stockCountBalance.reserved.toLocaleString()} reserved / ${expectedAvailable.toLocaleString()} total available`
-        : `${item.sku} / ${expectedAvailable.toLocaleString()} recorded available`,
-      after: stockCountBalance
-        ? `${countedPhysicalQuantity.toLocaleString()} physical / ${varianceLabel} / ${countedAvailable.toLocaleString()} total available / count evidence only`
-        : `${countedAvailable.toLocaleString()} counted available / ${varianceLabel} / count evidence only`,
+      subjectId: `COUNT-BATCH-${lines.length}`,
+      ...(!hasVariance ? { reasonSuggestion: `Routine stocktake of ${lines.length} entries; counted quantities match the recorded stock.` } : {}),
+      evidenceReferenceSuggestion: `Shop stocktake batch · ${lines.length} entries`,
+      summary: `Review stocktake · ${lines.length} ${lines.length === 1 ? 'entry' : 'entries'}`,
+      before: displayRows.map((row) => row.before).join(' | '),
+      after: `${batchSummary} · one reviewed stocktake; no partial writes`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         let staleCount = false
         try {
           await mutateCommerce('commerce.stock.counted', action.commandId, proof, (current) => {
-            const replay = current.movements.find((movement) => movement.actionId === proof.actionId)
-            if (replay) return countCommerceStock(current, item.sku, countedAvailable, proof, locationCount)
-            const currentItems = current.items.filter((candidate) => candidate.sku === item.sku)
-            if (currentItems.length !== 1
-              || currentItems[0].onHand !== expectedAvailable
-              || (locationCount && current.inventoryFoundation?.headDigest !== locationCount.expectedHeadDigest)) {
-              staleCount = true
-              return null
-            }
-            return countCommerceStock(current, item.sku, countedAvailable, proof, locationCount)
+            const next = countCommerceStockBatch(current, lines, proof)
+            if (!next) staleCount = true
+            return next
           })
-          setStockCountDraft((current) => current?.sku === item.sku
-            && current.stockUnitId === (locationCount?.stockUnitId ?? '')
-            && current.locationId === (locationCount?.locationId ?? '') ? null : current)
+          setStockCountDraft(null)
+          setStockCountBatchDrafts([])
+          setStockCountSessionHeadDigest(null)
         } catch (error) {
           if (staleCount || error instanceof ShopReviewRequiredError) {
-            setStockCountDraft({
-              sku: item.sku,
-              stockUnitId: locationCount?.stockUnitId ?? '',
-              locationId: locationCount?.locationId ?? '',
-              quantity: '',
-            })
-            requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLInputElement>('#stock-count-quantity')?.focus())
-            throw new ShopReviewRequiredError(`Stock changed while you were reviewing. Nothing was applied. Recount ${targetLabel} against the latest stock record.`)
+            setStockCountDraft(null)
+            setStockCountBatchDrafts([])
+            setStockCountSessionHeadDigest(null)
+            throw new ShopReviewRequiredError('Stock changed while this stocktake was being reviewed. Nothing was applied. Reopen the count and recount against the latest stock record.')
           }
           throw error
         }
@@ -7627,10 +7716,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
-          <h3 id="stock-count-title">{commerce.inventoryFoundation ? 'Count one location' : 'Count available units'}</h3>
+          <h3 id="stock-count-title">Review a stocktake</h3>
           <small id="stock-count-help">{commerce.inventoryFoundation
-            ? 'Count every physical unit in the selected lot, including reserved units. This records count evidence only.'
-            : 'Exclude units already set aside for open orders. This records count evidence only.'}</small>
+            ? 'Scan each item and lot, then enter its physical count including reserved units. Nothing changes until you review the full stocktake.'
+            : 'Scan each item and enter its sellable count. Repeat scans add one unit; nothing changes until you review the full stocktake.'}</small>
           <strong aria-live="polite" id="stock-count-preview">{commerce.inventoryFoundation
             ? !stockCountBalance || !stockCountItem
               ? 'Choose one location and lot'
@@ -7648,15 +7737,30 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           event.preventDefault()
           selectStockCountBarcode(stockCountBarcode)
         }} placeholder="Scan barcode or type SKU" value={stockCountBarcode} /></label><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product barcode for this stock count" onDetected={selectStockCountBarcode} /></div>
-        <label>{commerce.inventoryFoundation ? 'Location and lot' : 'Item'}<select aria-describedby="stock-count-help" disabled={commerceControlsDisabled || Boolean(commerce.inventoryFoundation && !managedInventoryProjection)} id="stock-count-sku" onChange={(event) => selectStockCountTarget(event.target.value)} required value={commerce.inventoryFoundation ? stockCountTargetValue : stockCountDraft.sku}><option value="">{commerce.inventoryFoundation ? 'Choose location and lot' : 'Choose an item'}</option>{commerce.inventoryFoundation
+        {(stockCountBatchDrafts.length || stockCountDraft.quantity.trim()) ? <section aria-label="Counts ready for review" className="shop-stock-attention-card">
+          <header><span><span className="core-eyebrow">Stocktake</span><h3>Counts ready for review</h3></span><b>{stockCountBatchDrafts.length + (stockCountDraft.quantity.trim() ? 1 : 0)}</b></header>
+          <div className="data-table" role="list" aria-label="Stocktake counts">
+            {[...stockCountBatchDrafts, ...(stockCountDraft.quantity.trim() ? [stockCountDraft] : [])].map((draft) => {
+              const item = commerce.items.find((candidate) => candidate.sku === draft.sku)
+              const key = stockCountDraftKey(draft)
+              const isCurrent = key === stockCountDraftKey(stockCountDraft)
+              const targetBalance = commerce.inventoryFoundation
+                ? managedInventoryProjection?.balances.find((candidate) => candidate.stockUnitId === draft.stockUnitId && candidate.locationId === draft.locationId)
+                : undefined
+              const locationName = targetBalance && managedInventoryProjection?.locations.find((location) => location.id === targetBalance.locationId)?.name
+              return <div className="data-row" key={key} role="listitem"><span><strong>{item?.name ?? draft.sku}</strong><small>{commerce.inventoryFoundation ? `${locationName ?? targetBalance?.locationId ?? 'Location'} · ${targetBalance?.trackingCode ?? 'Lot'}` : draft.sku}</small></span><strong>{Number(draft.quantity).toLocaleString()} counted</strong>{isCurrent ? <small>Current count</small> : <button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setStockCountBatchDrafts((entries) => entries.filter((entry) => stockCountDraftKey(entry) !== key))} type="button">Remove</button>}</div>
+            })}
+          </div>
+        </section> : null}
+        <label>{commerce.inventoryFoundation ? 'Location and lot' : 'Item'}<select aria-describedby="stock-count-help" disabled={commerceControlsDisabled || Boolean(commerce.inventoryFoundation && !managedInventoryProjection)} id="stock-count-sku" onChange={(event) => selectStockCountTarget(event.target.value)} required={!stockCountBatchDrafts.length} value={commerce.inventoryFoundation ? stockCountTargetValue : stockCountDraft.sku}><option value="">{commerce.inventoryFoundation ? 'Choose location and lot' : 'Choose an item'}</option>{commerce.inventoryFoundation
           ? managedInventoryProjection?.balances.map((balance) => {
               const item = commerce.items.find((candidate) => candidate.sku === balance.sku)
               const location = managedInventoryProjection.locations.find((candidate) => candidate.id === balance.locationId)
               return <option key={`${balance.stockUnitId}|${balance.locationId}`} value={`${balance.stockUnitId}|${balance.locationId}`}>{item?.name ?? balance.sku} · {location?.name ?? balance.locationId} · {balance.trackingCode} · {balance.onHand.toLocaleString()} physical{balance.reserved ? ` · ${balance.reserved.toLocaleString()} reserved` : ''}</option>
             })
           : commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select></label>
-        <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required step="1" type="number" value={stockCountDraft.quantity} /></label>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockCountQuantityResult === null || Boolean(commerce.inventoryFoundation && !stockCountBalance)} type="submit">Review count</button></div>
+        <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required={!stockCountBatchDrafts.length} step="1" type="number" value={stockCountDraft.quantity} /></label>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel stocktake</button><button className="core-button primary" disabled={commerceControlsDisabled || ((!stockCountBatchDrafts.length || Boolean(stockCountDraft.quantity.trim())) && stockCountQuantityResult === null) || Boolean(commerce.inventoryFoundation && stockCountDraft.quantity.trim() && !stockCountBalance)} type="submit">Review stocktake ({stockCountBatchDrafts.length + (stockCountDraft.quantity.trim() ? 1 : 0)})</button></div>
       </form> : null}
       <div className="shop-stock-grid">
         <section aria-labelledby="shop-stock-attention-title" className="shop-stock-attention-card">

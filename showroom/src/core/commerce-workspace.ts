@@ -4137,6 +4137,17 @@ export function validateCommerceState(value: unknown): CommerceState {
   for (const [actionId, actionMovements] of movementsByAction) {
     if (actionMovements.length < 2) continue
     const first = actionMovements[0]
+    if (first.kind === 'count') {
+      if (actionMovements.some((movement) => movement.kind !== 'count'
+        || movement.createdAt !== first.createdAt
+        || movement.actor !== first.actor
+        || movement.reason !== first.reason
+        || movement.evidenceReference !== first.evidenceReference)
+        || new Set(actionMovements.map((movement) => movement.id)).size !== actionMovements.length) {
+        rejectInvalid(`Stock count batch ${actionId} is not one exact reviewed count group.`)
+      }
+      continue
+    }
     if ((first.kind !== 'reserve' && first.kind !== 'release')
       || !first.orderId
       || new Set(actionMovements.map((movement) => movement.sku)).size !== actionMovements.length
@@ -8519,6 +8530,135 @@ export function countCommerceStock(
   }
   if (inventoryFoundation) nextState.inventoryFoundation = inventoryFoundation
   return validateCommerceState(nextState)
+}
+
+export type CommerceStockCountBatchLine = {
+  sku: string
+  expectedOnHand: number
+  countedQuantity: number
+  locationCount?: {
+    countId: string
+    stockUnitId: string
+    locationId: string
+    expectedQuantity: number
+    countedQuantity: number
+    expectedHeadDigest: string
+  }
+}
+
+/** Apply a reviewed multi-item stocktake atomically with one accountable action proof. */
+export function countCommerceStockBatch(
+  state: CommerceState,
+  lines: CommerceStockCountBatchLine[],
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof) || !Array.isArray(lines) || lines.length < 1 || lines.length > 200) return null
+  const current = validateCommerceState(state)
+  const catalogSkus = current.items.map((item) => item.sku).sort()
+  const initialItemBySku = new Map(current.items.map((item) => [item.sku, item]))
+  const targetKeys = new Set<string>()
+  const expectedOnHandBySku = new Map<string, number>()
+  const initialHeadDigest = current.inventoryFoundation?.headDigest
+  const existingBatchMovements = current.movements.filter((movement) => movement.actionId === proof.actionId)
+
+  for (const [index, line] of lines.entries()) {
+    if (!line || typeof line.sku !== 'string' || !Number.isSafeInteger(line.expectedOnHand) || line.expectedOnHand < 0
+      || !Number.isSafeInteger(line.countedQuantity) || line.countedQuantity < 0) return null
+    const item = initialItemBySku.get(line.sku)
+    if (!item || (!existingBatchMovements.length && item.onHand !== line.expectedOnHand)) return null
+    const priorExpected = expectedOnHandBySku.get(line.sku)
+    if (priorExpected !== undefined && priorExpected !== line.expectedOnHand) return null
+    expectedOnHandBySku.set(line.sku, line.expectedOnHand)
+    if (current.inventoryFoundation) {
+      const location = line.locationCount
+      if (!location || (!existingBatchMovements.length && location.expectedHeadDigest !== initialHeadDigest)
+        || !Number.isSafeInteger(location.expectedQuantity) || location.expectedQuantity < 0
+        || !Number.isSafeInteger(location.countedQuantity) || location.countedQuantity < 0
+        || location.countedQuantity !== line.countedQuantity) return null
+      const key = `${location.stockUnitId}\u0000${location.locationId}`
+      if (targetKeys.has(key)) return null
+      targetKeys.add(key)
+    } else {
+      if (line.locationCount || targetKeys.has(line.sku)) return null
+      targetKeys.add(line.sku)
+    }
+    if (!existingBatchMovements.length && index === 0 && current.inventoryFoundation
+      && initialHeadDigest !== line.locationCount?.expectedHeadDigest) return null
+  }
+
+  const movementSuffix = (index: number) => `COUNT-BATCH-${index + 1}`
+  const expectedMovementId = (index: number) => `MOV2:${encodeURIComponent(proof.actionId)}:${movementSuffix(index)}`
+  const locationProof = (index: number): CommerceActionProof => ({
+    ...proof,
+    actionId: `ACT-${sha256Hex(JSON.stringify([proof.actionId, 'shop-stock-count-line', index + 1])).slice(0, 40).toUpperCase()}`,
+  })
+  if (existingBatchMovements.length) {
+    if (existingBatchMovements.length !== lines.length) return null
+    const expectedBalances = new Map(expectedOnHandBySku)
+    for (const [index, line] of lines.entries()) {
+      const movement = existingBatchMovements.find((candidate) => candidate.id === expectedMovementId(index))
+      if (!movement || movement.kind !== 'count' || movement.sku !== line.sku || !sameProof(movement, proof)) return null
+      const before = expectedBalances.get(line.sku)
+      const delta = current.inventoryFoundation
+        ? line.locationCount!.countedQuantity - line.locationCount!.expectedQuantity
+        : line.countedQuantity - line.expectedOnHand
+      if (before === undefined || movement.expectedQuantity !== before || movement.quantityDelta !== delta
+        || movement.countedQuantity !== before + delta) return null
+      expectedBalances.set(line.sku, before + delta)
+      if (current.inventoryFoundation) {
+        try {
+          const replay = countShopInventory(current.inventoryFoundation, {
+            ...line.locationCount!, proof: locationProof(index), catalogSkus,
+            expectedHeadDigest: current.inventoryFoundation.headDigest,
+          })
+          if (!replay.replayed) return null
+        } catch { return null }
+      }
+    }
+    return current
+  }
+  if (actionIdIsUsed(current, proof.actionId)) return null
+
+  let nextItems = current.items.map((item) => ({ ...item }))
+  let inventoryFoundation = current.inventoryFoundation
+  const newMovements = [] as CommerceStockMovement[]
+  for (const [index, line] of lines.entries()) {
+    const item = nextItems.find((candidate) => candidate.sku === line.sku)
+    if (!item) return null
+    const expectedTotal = item.onHand
+    if (inventoryFoundation) {
+      try {
+        const locationResult = countShopInventory(inventoryFoundation, {
+          ...line.locationCount!, proof: locationProof(index), catalogSkus,
+          expectedHeadDigest: inventoryFoundation.headDigest,
+        })
+        if (locationResult.replayed) return null
+        inventoryFoundation = locationResult.state as ShopInventoryState
+        const projection = projectShopInventory(inventoryFoundation, catalogSkus)
+        const nextTotal = projection.balances
+          .filter((balance) => balance.sku === line.sku)
+          .reduce((sum, balance) => sum + balance.onHand, 0)
+        if (!Number.isSafeInteger(nextTotal)) return null
+        item.onHand = nextTotal
+      } catch { return null }
+    } else {
+      item.onHand = line.countedQuantity
+    }
+    const quantityDelta = item.onHand - expectedTotal
+    if (!Number.isSafeInteger(quantityDelta)) return null
+    newMovements.push(movementFor(proof, {
+      kind: 'count', sku: line.sku, quantityDelta, expectedQuantity: expectedTotal, countedQuantity: item.onHand,
+    }, movementSuffix(index)))
+  }
+
+  if (inventoryFoundation && !shopInventoryMatchesItems(inventoryFoundation, nextItems)) return null
+  const nextState: CommerceState = {
+    ...current,
+    items: nextItems,
+    movements: [...newMovements.reverse(), ...current.movements],
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
+  }
+  try { return validateCommerceState(nextState) } catch { return null }
 }
 
 export function commerceOrderHasReleasableReservation(state: CommerceState, orderId: string) {
