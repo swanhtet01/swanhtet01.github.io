@@ -1,14 +1,7 @@
-const localApplicationHosts = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '::1'])
-
-function isLocalApplicationHost(hostname: string) {
-  const normalized = hostname.trim().toLowerCase()
-  return localApplicationHosts.has(normalized) || normalized.endsWith('.localhost')
-}
-
-// Every hosted application entry requires managed access. Only an explicitly local
-// engineering host may open the browser-only workspace, so preview aliases and new
-// custom domains cannot silently become public demo workspaces.
+// Every application entry requires managed access, including local addresses.
+// Account routes remain reachable so an unauthenticated user can sign in or recover.
 export function productionEntryDecision(hostname: string, accountRoute: boolean, access: string): 'continue' | 'checking' | 'login' {
-  if (isLocalApplicationHost(hostname) || accountRoute || access === 'ready') return 'continue'
+  if (accountRoute || access === 'ready') return 'continue'
+  if (!hostname.trim()) return 'login'
   return access === 'checking' ? 'checking' : 'login'
 }

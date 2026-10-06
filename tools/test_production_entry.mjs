@@ -18,8 +18,10 @@ test('login and recovery remain reachable without a redirect loop', () => {
   }
 })
 
-test('local engineering hosts remain usable', () => {
+test('local addresses require managed access like every other application host', () => {
   for (const host of ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '::1', 'shop.localhost']) {
-    assert.equal(productionEntryDecision(host, false, 'local'), 'continue')
+    assert.equal(productionEntryDecision(host, false, 'local'), 'login')
+    assert.equal(productionEntryDecision(host, false, 'ready'), 'continue')
   }
+  assert.equal(productionEntryDecision('', false, 'local'), 'login')
 })
