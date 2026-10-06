@@ -21,6 +21,8 @@ export function ShopStocktakeDraftRecovery({ scopeKey, current, lines, active, s
     setHydrated(false)
     invalidStoredDraft.current = false
     if (scopeKey === 'checking') {
+      setCurrent(null)
+      setLines([])
       setStatus('idle')
       setHydrated(true)
       onReady(true)
@@ -35,7 +37,7 @@ export function ShopStocktakeDraftRecovery({ scopeKey, current, lines, active, s
     setStatus(recovery.status)
     setHydrated(true)
     onReady(true)
-  }, [storageKey, setCurrent, setLines, onReady])
+  }, [scopeKey, storageKey, setCurrent, setLines, onReady])
 
   useEffect(() => {
     if (!hydrated) return
