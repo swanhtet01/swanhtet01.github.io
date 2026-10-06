@@ -3701,25 +3701,6 @@ export async function saveManagedServiceSchedule(request: {
   return { version: result.version, schedule: nextSchedule }
 }
 
-export async function prepareManagedOrderIntakeDraft(request: {
-  identity: ManagedIdentity
-  message: string
-  sourceLabel: string
-}) {
-  return authorizedRequest<unknown>(
-    '/api/trial/v1/commerce/order-intake/drafts',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        source_label: request.sourceLabel,
-        message: request.message,
-      }),
-    },
-    true,
-    request.identity,
-  )
-}
-
 function managedCounterOrderIntent(state: Record<string, unknown>, evidence: ManagedCommandEvidence) {
   const orders = Array.isArray(state.orders) ? state.orders : []
   const movements = Array.isArray(state.movements) ? state.movements : []

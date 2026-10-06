@@ -76,15 +76,10 @@ const companyBriefRuntime = await read('supermega_runtime/company_brief.py')
 const clientProvisioning = await read('supermega_runtime/client_provisioning.py')
 const siteManifest = await read('site-manifest.json')
 const shopInventoryRuntime = await read('supermega_runtime/shop_inventory_runtime.py')
-const orderIntakeProvider = await read('supermega_runtime/order_intake_provider.py')
 const clientImportRuntime = await read('supermega_runtime/client_import_runtime.py')
 const clientOnboardingUi = await read('showroom/src/core/ClientDataOnboarding.tsx')
 const clientOnboardingModel = await read('showroom/src/core/client-onboarding.ts')
 const plantIndustryPacks = await read('showroom/src/core/plant-industry-packs.ts')
-const orderIntakeRoute = trialRuntime.slice(
-  trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")'),
-  trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
-)
 const serviceScheduleRoute = trialRuntime.slice(
   trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
   trialRuntime.indexOf('@router.post("/imports/validate")'),
@@ -452,24 +447,12 @@ requireContract('identity signing secret has a fail-closed entropy floor', /_MIN
 requireContract('Supabase identity accepts only a confirmed named-user token', /\/auth\/v1\/user/.test(supabaseAuth) && /_is_publishable_key/.test(supabaseAuth) && /is_anonymous"\) is not False/.test(supabaseAuth) && /actor_kind="human"/.test(runtime))
 requireContract('Supabase token verification disables proxy and redirect forwarding', /ProxyHandler\(\{\}\)/.test(supabaseAuth) && /_NoRedirectHandler/.test(supabaseAuth) && /opener\.open/.test(supabaseAuth))
 requireContract('identity is rejected from request bodies', /_CLIENT_IDENTITY_FIELDS/.test(trialRuntime) && /client_identity_forbidden/.test(trialRuntime))
-requireContract('trial router is mounted with bounded order intake', /create_trial_router\([\s\S]*store=store,[\s\S]*resolve_principal=resolve_trial_principal,[\s\S]*order_intake_provider=order_intake_provider,[\s\S]*\)/.test(runtime))
-requireContract('AI order intake is authenticated, human-only, read-scoped, and non-mutating',
-  /_resolve_principal\(request, resolve_principal\)/.test(orderIntakeRoute)
-  && /has_surface_read_capability\(readiness\.capabilities, "commerce"\)/.test(orderIntakeRoute)
-  && /principal\.actor_kind != "human"/.test(orderIntakeRoute)
-  && /_bounded_json_body\(/.test(orderIntakeRoute)
-  && /store\.get_state\(principal, "commerce"\)/.test(orderIntakeRoute)
-  && !/store\.(?:apply_command|create_approval|decide_approval)/.test(orderIntakeRoute))
-requireContract('AI order intake provider cannot use tools, store responses, redirect credentials, or bypass hosted budget',
-  /"store": False/.test(orderIntakeProvider)
-  && /"strict": True/.test(orderIntakeProvider)
-  && /"type": "json_schema"/.test(orderIntakeProvider)
-  && /"safety_identifier"/.test(orderIntakeProvider)
-  && !/"tools"\s*:/.test(orderIntakeProvider)
-  && /build_opener\(ProxyHandler\(\{\}\), _NoRedirectHandler\(\)\)/.test(orderIntakeProvider)
-  && /PostgresOrderIntakeBudget\(database_url, cap\)/.test(orderIntakeProvider)
-  && /else UnavailableOrderIntakeBudget\(\)/.test(orderIntakeProvider)
-  && /order_intake_provider_quota_exhausted/.test(orderIntakeProvider))
+requireContract('manual pasted-message AI order drafting is absent from production runtime',
+  !trialRuntime.includes('/commerce/order-intake/drafts')
+  && !runtime.includes('order_intake_provider_from_environment')
+  && !runtime.includes('order_intake_configured')
+  && !managedTrialClient.includes('prepareManagedOrderIntakeDraft')
+  && !managedTrialClient.includes('/api/trial/v1/commerce/order-intake/drafts'))
 requireContract('managed Shop appointments are tenant-scoped, human-only, identity-bound, and optimistic',
   /_resolve_principal\(request, resolve_principal\)/.test(serviceScheduleRoute)
   && /has_surface_read_capability\(readiness\.capabilities, "commerce"\)/.test(serviceScheduleRoute)
@@ -739,11 +722,11 @@ requireContract('managed import apply requires a tenant human capability and rev
 requireContract('managed AI context is owner-consented, summary-only, tenant-bound, and revision-bound',
   /@router\.post\("\/managed-context\/validate"\)/.test(trialRuntime)
   && /@router\.post\("\/managed-context\/retain"\)/.test(trialRuntime)
-  && /principal\.actor_kind != "human"/.test(trialRuntime.slice(trialRuntime.indexOf('@router.post("/managed-context/validate")'), trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")')))
+  && /principal\.actor_kind != "human"/.test(trialRuntime.slice(trialRuntime.indexOf('@router.post("/managed-context/validate")'), trialRuntime.indexOf('@router.get("/commerce/service-schedule")')))
   && /"company\.write" not in readiness\.capabilities/.test(trialRuntime)
   && /_require_write_ready\(readiness, "company\.write"\)/.test(trialRuntime)
-  && /"company\.control\.approve" not in readiness\.capabilities/.test(trialRuntime.slice(trialRuntime.indexOf('@router.post("/managed-context/retain")'), trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")')))
-  && /required_capability="company\.control\.approve"/.test(trialRuntime.slice(trialRuntime.indexOf('@router.post("/managed-context/retain")'), trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")')))
+  && /"company\.control\.approve" not in readiness\.capabilities/.test(trialRuntime.slice(trialRuntime.indexOf('@router.post("/managed-context/retain")'), trialRuntime.indexOf('@router.get("/commerce/service-schedule")')))
+  && /required_capability="company\.control\.approve"/.test(trialRuntime.slice(trialRuntime.indexOf('@router.post("/managed-context/retain")'), trialRuntime.indexOf('@router.get("/commerce/service-schedule")')))
   && /managed_context_validation_digest/.test(trialRuntime)
   && /body\.validation_digest != expected_validation_digest/.test(trialRuntime)
   && /MANAGED_CONTEXT_PROFILE_CONTRACT = "supermega\.managed_context_profile\.v2"/.test(managedContextRuntime)
