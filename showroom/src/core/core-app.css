@@ -3131,7 +3131,7 @@ input, select, textarea,
 .shop-product-art { width: 3.25rem; height: 3.25rem; border-radius: .625rem; }
 .shop-product-copy { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 5rem; align-items: center; gap: .75rem; }
 .shop-product-name { min-width: 0; display: grid; gap: .125rem; }
-.shop-product-copy strong { display: -webkit-box; overflow: hidden; font-size: .8125rem; line-height: 1.35; white-space: normal; overflow-wrap: normal; word-break: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.shop-product-copy strong { display: block; min-width: 0; font-size: .8125rem; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; word-break: normal; }
 .shop-product-copy b { margin: 0; font-family: inherit; font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: right; }
 .shop-product-copy > small { font-size: .75rem; text-align: right; }
 .shop-product-add, .shop-product-quantity { position: static; width: 3.25rem; min-width: 3.25rem; height: 2.75rem; border: 1px solid var(--core-line-strong); border-radius: .625rem; background: var(--core-surface-soft); color: var(--core-accent); font-family: inherit; font-size: .75rem; backdrop-filter: none; }
