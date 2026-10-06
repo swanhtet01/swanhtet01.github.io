@@ -22,6 +22,7 @@ import { downloadBlob } from './download-file'
 import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
 import { applyStockCountScan } from './shop-stock-count-scan'
+const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
 const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
@@ -366,7 +367,7 @@ type SupplierCreditDraft = {
   amountMmk: string
 }
 
-type StockCountDraft = {
+export type StockCountDraft = {
   sku: string
   stockUnitId: string
   locationId: string
@@ -1195,7 +1196,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{view === 'commerce' ? bi(tab.label) : tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage confirmedLocalShop={confirmedLocalShop} key={managedIdentity?.workspaceId ?? (confirmedLocalShop ? 'local' : 'checking')} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1848,7 +1849,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [stockCountBatchDrafts, setStockCountBatchDrafts] = useState<StockCountDraft[]>([])
-  const [stockCountSessionHeadDigest, setStockCountSessionHeadDigest] = useState<string | null>(null)
+  const [stocktakeRecoveryReady, setStocktakeRecoveryReady] = useState(false)
   const [stockCountBarcode, setStockCountBarcode] = useState('')
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
@@ -6077,6 +6078,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   function openStockCount() {
+    if (!stocktakeRecoveryReady) {
+      setNotice('Restoring this tab’s saved stocktake. Try again in a moment.')
+      return
+    }
     if (stockCountDraft || stockCountBatchDrafts.length) {
       const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
@@ -6101,7 +6106,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     const suggestedSku = suggestedBalance?.sku ?? suggestedItem?.sku ?? ''
     const suggestedCatalogItem = commerce.items.find((item) => item.sku === suggestedSku)
     const sessionHeadDigest = managedInventoryProjection?.headDigest ?? null
-    setStockCountSessionHeadDigest(sessionHeadDigest)
     setStockCountBatchDrafts([])
     const suggestedDraft: StockCountDraft = {
       sku: suggestedSku,
@@ -6127,7 +6131,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   function cancelStockCount() {
     setStockCountDraft(null)
     setStockCountBatchDrafts([])
-    setStockCountSessionHeadDigest(null)
     setStockCountBarcode('')
     setNotice('Stock count closed. Shop data was not modified.')
     requestAnimationFrame(() => stockCountTriggerRef.current?.focus())
@@ -6145,7 +6148,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         quantity: '',
         expectedOnHand: item.onHand,
         expectedPhysicalQuantity: item.onHand,
-        expectedHeadDigest: stockCountSessionHeadDigest,
+        expectedHeadDigest: stockCountDraft?.expectedHeadDigest ?? null,
       })
       return
     }
@@ -6164,7 +6167,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       quantity: '',
       expectedOnHand: item.onHand,
       expectedPhysicalQuantity: balance.onHand,
-      expectedHeadDigest: stockCountSessionHeadDigest,
+      expectedHeadDigest: stockCountDraft?.expectedHeadDigest ?? null,
     })
   }
 
@@ -6226,7 +6229,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       ...result.draft,
       expectedOnHand: priorTarget?.expectedOnHand ?? item.onHand,
       expectedPhysicalQuantity: priorTarget?.expectedPhysicalQuantity ?? balance?.onHand ?? item.onHand,
-      expectedHeadDigest: priorTarget?.expectedHeadDigest ?? stockCountSessionHeadDigest,
+      expectedHeadDigest: priorTarget?.expectedHeadDigest ?? stockCountDraft?.expectedHeadDigest ?? null,
     }
     setStockCountBatchDrafts(entries)
     setStockCountDraft(nextDraft)
@@ -6266,7 +6269,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           quantity: '',
           expectedOnHand: item.onHand,
           expectedPhysicalQuantity: item.onHand,
-          expectedHeadDigest: stockCountSessionHeadDigest,
+          expectedHeadDigest: stockCountDraft?.expectedHeadDigest ?? null,
         })
         requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>('#stock-count-sku')?.focus())
       }
@@ -6372,12 +6375,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           })
           setStockCountDraft(null)
           setStockCountBatchDrafts([])
-          setStockCountSessionHeadDigest(null)
         } catch (error) {
           if (staleCount || error instanceof ShopReviewRequiredError) {
             setStockCountDraft(null)
             setStockCountBatchDrafts([])
-            setStockCountSessionHeadDigest(null)
             throw new ShopReviewRequiredError('Stock changed while this stocktake was being reviewed. Nothing was applied. Reopen the count and recount against the latest stock record.')
           }
           throw error
@@ -7706,6 +7707,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     {commerceBoundary}
     {!commerce.items.length ? shopCatalogOnboarding : null}
     <section aria-label="Shop stock workspace" className="core-panel inventory-panel shop-stock-workspace">
+      <Suspense fallback={null}><ShopStocktakeDraftRecovery active={Boolean(stockCountDraft)} current={stockCountDraft} key={scheduleScopeKey} lines={stockCountBatchDrafts} onReady={setStocktakeRecoveryReady} scopeKey={scheduleScopeKey} setCurrent={setStockCountDraft} setLines={setStockCountBatchDrafts} /></Suspense>
       <header className="shop-stock-heading"><div><span className="core-eyebrow">Shop · Stock</span><h2>Know what to reorder, receive and count.</h2><p>See the stock that needs attention, act once, and keep the purchasing trail together.</p></div><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
       <dl aria-label="Stock status" className="shop-stock-metrics">
         <div data-tone={lowStock.length ? 'attention' : 'ready'}><dt>Stock alerts</dt><dd>{lowStock.length.toLocaleString()}</dd><small>{lowStock.length ? 'At or below reorder' : 'Reorder levels clear'}</small></div>
