@@ -4,7 +4,7 @@ Version: 1.3.2
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-07
-Status: ACTIVE — PR #639 is at 3da547e0, OPEN/BLOCKED with independent review unset. Exact-head App CI 37533414989, Security Audit 37533423343, and Kernel Console 37533423383 pass; release was skipped by its owner gate. No merge, preview promotion, or deployment. The paste-first Shop message panel is retired; current source implements automatic intake of structured Website/Ecommerce requests, but hosted/managed acceptance remains unverified. Hosted sign-in, persistence, isolation, customer acceptance, true current-product captures, hardware acceptance, and connected social-channel ingestion remain open.
+Status: ACTIVE — PR #639 is at `73b1c2fb`, OPEN/BLOCKED with independent review unset. Exact-head App CI `37537487057`, Security Audit `37537492737`, and Kernel Console `37537492711` pass; release was skipped by its owner gate. No merge, preview promotion, or deployment. The paste-first Shop message panel is retired; structured Website/Ecommerce requests arrive automatically, but hosted/managed acceptance remains unverified. Hosted sign-in, persistence, isolation, customer acceptance, true current-product captures, hardware acceptance, and connected social-channel ingestion remain open. Local, uncommitted challenge-verification work is not part of this PR head.
 
 ## 1. Controlling objective
 
@@ -783,8 +783,8 @@ Historical transport errors do not supersede the later verified host correction 
 ### 2026-10-07 — add first Meta webhook security primitive
 
 - **RESEARCH:** Meta's official Messenger API collection states a Facebook Page and `pages_messaging` access are prerequisites for Send API usage; Meta's sample server requires a publicly reachable HTTPS callback. These provider claims and requirements do not establish our app access or approval ([Meta collection](https://www.postman.com/meta/messenger-platform-api/documentation/iyp204x/messenger-platform-api), [Meta sample](https://github.com/fbsamples/messenger-platform-samples/blob/main/node/README.md)).
-- **CHANGE:** added a constant-time `X-Hub-Signature-256` verifier over exact raw bytes, plus negative/known-vector tests. It is an isolated primitive only: no public route, app secret, channel mapping, persistence, deduplication, or automated order creation is wired. Product must remain explicit that social ingestion is not live.
-- **NEXT:** build the challenge-verification and webhook-admission layer with strict raw-body size limits; then define secure page-to-tenant mapping, event idempotency, minimal retention, draft-only order suggestion and explicit human order confirmation. Exercise synthetic signed events locally before any provider/app review or owner-authorized connection.
+- **CHANGE:** the source now has constant-time `X-Hub-Signature-256` verification over exact raw bytes and a constant-time, bounded `subscribe` challenge verifier. Focused tests cover known vectors, modified bodies, malformed signatures, non-raw input, wrong/missing tokens, bad mode and unsafe challenge strings. Both are isolated primitives: no public route, app secret, channel mapping, persistence, deduplication, or automated order creation is wired. Product must remain explicit that social ingestion is not live.
+- **NEXT:** wire bounded HTTPS GET/POST admission without parsing before signature verification; then define secure page-to-tenant mapping, event idempotency, minimal retention, draft-only order suggestion and explicit human order confirmation. Exercise synthetic signed events locally before any provider/app review or owner-authorized connection.
 
 ### 2026-10-06 — scan-to-select for stock counts
 

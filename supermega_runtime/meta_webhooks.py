@@ -6,6 +6,31 @@ import hashlib
 import hmac
 
 
+def verify_meta_webhook_challenge(
+    mode: str | None,
+    supplied_token: str | None,
+    challenge: str | None,
+    configured_token: str,
+) -> str | None:
+    """Return Meta's challenge only for a valid, bounded subscribe handshake."""
+    if mode != "subscribe" or not isinstance(supplied_token, str):
+        return None
+    if not isinstance(configured_token, str) or not configured_token:
+        return None
+    if not isinstance(challenge, str) or not 1 <= len(challenge) <= 256:
+        return None
+    if not challenge.isascii() or any(ord(character) < 0x20 or ord(character) == 0x7F for character in challenge):
+        return None
+    try:
+        supplied_bytes = supplied_token.encode("utf-8")
+        configured_bytes = configured_token.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    if not hmac.compare_digest(supplied_bytes, configured_bytes):
+        return None
+    return challenge
+
+
 def verify_meta_webhook_signature(
     raw_body: bytes,
     signature_header: str | None,

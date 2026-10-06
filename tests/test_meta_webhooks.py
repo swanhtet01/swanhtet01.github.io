@@ -2,10 +2,36 @@ from __future__ import annotations
 
 import unittest
 
-from supermega_runtime.meta_webhooks import verify_meta_webhook_signature
+from supermega_runtime.meta_webhooks import (
+    verify_meta_webhook_challenge,
+    verify_meta_webhook_signature,
+)
 
 
 class MetaWebhookSignatureTests(unittest.TestCase):
+    def test_accepts_bounded_subscribe_challenge_for_matching_token(self) -> None:
+        self.assertEqual(
+            verify_meta_webhook_challenge("subscribe", "verify-me", "challenge-1", "verify-me"),
+            "challenge-1",
+        )
+
+    def test_rejects_wrong_mode_token_and_missing_configuration(self) -> None:
+        for values in (
+            ("unsubscribe", "verify-me", "challenge-1", "verify-me"),
+            ("subscribe", "wrong", "challenge-1", "verify-me"),
+            ("subscribe", "verify-me", "challenge-1", ""),
+            (None, "verify-me", "challenge-1", "verify-me"),
+        ):
+            with self.subTest(values=values):
+                self.assertIsNone(verify_meta_webhook_challenge(*values))
+
+    def test_rejects_empty_long_or_control_character_challenge(self) -> None:
+        for challenge in ("", "c" * 257, "line1\r\nline2"):
+            with self.subTest(challenge_length=len(challenge)):
+                self.assertIsNone(
+                    verify_meta_webhook_challenge("subscribe", "token", challenge, "token")
+                )
+
     def test_known_hmac_sha256_vector(self) -> None:
         self.assertTrue(
             verify_meta_webhook_signature(
