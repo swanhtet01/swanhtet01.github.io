@@ -3361,7 +3361,10 @@ export function validateCommerceState(value: unknown): CommerceState {
     for (const field of ['nameMyanmar', 'nameEnglish', 'phone', 'addressMyanmar', 'addressEnglish'] as const) {
       const text = profile[field]
       const limit = field.startsWith('address') ? 180 : field === 'phone' ? 40 : 80
-      if (typeof text !== 'string' || text !== text.trim() || Array.from(text).length > limit || /[\u0000-\u001f\u007f]/u.test(text)) {
+      if (typeof text !== 'string' || text !== text.trim() || Array.from(text).length > limit || Array.from(text).some((character) => {
+        const code = character.charCodeAt(0)
+        return code <= 0x1f || code === 0x7f
+      })) {
         rejectInvalid(`merchantProfile.${field} must be canonical printable text within its character limit.`)
       }
     }

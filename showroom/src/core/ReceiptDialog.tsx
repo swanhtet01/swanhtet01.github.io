@@ -167,10 +167,13 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState('')
 
-  useEffect(() => {
-    const profile = merchantProfile
-    if (profile) setProfileDraft({ nameMyanmar: profile.nameMyanmar, nameEnglish: profile.nameEnglish, phone: profile.phone, addressMyanmar: profile.addressMyanmar, addressEnglish: profile.addressEnglish })
-  }, [merchantProfile])
+  function openMerchantProfileSetup() {
+    setProfileDraft(merchantProfile
+      ? { nameMyanmar: merchantProfile.nameMyanmar, nameEnglish: merchantProfile.nameEnglish, phone: merchantProfile.phone, addressMyanmar: merchantProfile.addressMyanmar, addressEnglish: merchantProfile.addressEnglish }
+      : { nameMyanmar: '', nameEnglish: '', phone: '', addressMyanmar: '', addressEnglish: '' })
+    setProfileError('')
+    setSetupOpen(true)
+  }
 
   useEffect(() => {
     const dialog = ref.current
@@ -224,7 +227,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
   const showSubtotalLine = hasPromotion || hasTax || hasDeliveryFee
 
   return <>
-    <button className="text-link receipt-profile-trigger" disabled={disabled} onClick={() => { setProfileError(''); setSetupOpen(true) }} type="button">{merchantProfile ? 'Receipt details' : 'Set up customer receipt'}</button>
+    <button className="text-link receipt-profile-trigger" disabled={disabled} onClick={openMerchantProfileSetup} type="button">{merchantProfile ? 'Receipt details' : 'Set up customer receipt'}</button>
     <dialog aria-labelledby="receipt-dialog-title" className="receipt-dialog" onClose={() => { setSetupOpen(false); onClose() }} ref={ref}>
       {setupOpen ? <form className="receipt-profile-form" onSubmit={(event) => void saveMerchantProfile(event)} style={{ display: 'grid', gap: 12, padding: 16 }}>
         <header className="receipt-dialog-header"><span className="core-eyebrow">Customer receipt</span><h2 id="receipt-dialog-title">Business details</h2><p>These details appear on printed customer receipts.</p></header>
@@ -283,7 +286,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
         <p className="receipt-dialog-notice">{ack.notice}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{copyResult?.record === ack ? copyResult.notice : ''}</p>
         <div className="receipt-dialog-actions">
-          {merchantProfile ? <button className="core-button compact" onClick={printCustomerReceipt} type="button">Print customer receipt</button> : <button className="core-button compact" onClick={() => setSetupOpen(true)} type="button">Set up customer receipt</button>}
+          {merchantProfile ? <button className="core-button compact" onClick={printCustomerReceipt} type="button">Print customer receipt</button> : <button className="core-button compact" onClick={openMerchantProfileSetup} type="button">Set up customer receipt</button>}
           <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
           <button className="core-button compact" onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
           <button className="core-button compact" onClick={onClose} type="button">{bi('Close')}</button>
