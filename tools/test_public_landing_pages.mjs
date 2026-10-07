@@ -22,6 +22,7 @@ const discoverablePages = manifest.pages.filter(page => !page.productId || activ
 const config = JSON.parse(readFileSync(resolve(outputDir, 'config.json'), 'utf8'))
 const readStatic = (path) => readFileSync(resolve(staticDir, path), 'utf8')
 const publicObservabilitySource = readStatic('vercel-insights.js')
+const publicCarouselSource = readStatic('platform-carousel.js')
 const publicGeneratorSource = readFileSync(resolve(root, 'tools/create_public_vercel_output.mjs'), 'utf8')
 const skipLinkTouchTargetCss = '.skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }'
 
@@ -45,6 +46,7 @@ for (const route of ['/website/', '/ecommerce/']) {
   check(countOccurrences(entry, '"description":') === 1, `manifest_description_unique:${route}`)
   check(!/\b(preview|trial|demo)\b/i.test(description), `manifest_description_no_preview_funnel:${route}`)
 }
+check(publicCarouselSource.includes('data-gallery-previous') && publicCarouselSource.includes('data-gallery-next') && publicCarouselSource.includes('prefers-reduced-motion'), 'public_carousel_runtime_controls_and_motion')
 check(countOccurrences(publicGeneratorSource, skipLinkTouchTargetCss) === 1, 'landing_skip_link_touch_target_source_contract')
 check(publicGeneratorSource.includes('--blue: #5b4ee8;') && publicGeneratorSource.includes('background:#f1f0fb;border:1px solid #dedbf4;'), 'landing_indigo_visual_system_source_contract')
 check(!publicGeneratorSource.includes('#edf4f0') && !publicGeneratorSource.includes('#dce8e1'), 'landing_legacy_green_frames_removed')
@@ -124,8 +126,11 @@ for (const page of landingPages) {
   check((html.match(/<h1>/g) || []).length === 1, `landing_single_headline:${page.route}`)
   check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
   check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
-  const expectedGalleryControls = productScreens[page.productId]?.length > 1 ? productScreens[page.productId].length : 0
-  check(countOccurrences(html, 'type="radio" name="'+page.productId+'-screens"') === expectedGalleryControls, `landing_gallery_controls:${page.route}`)
+  const carousel = (productScreens[page.productId]?.length || 0) > 1
+  check(html.includes('aria-roledescription="carousel"') && html.includes('aspect-ratio:16/10'), `landing_gallery_uniform_carousel_frame:${page.route}`)
+  check(countOccurrences(html, 'data-gallery-previous') === Number(carousel) && countOccurrences(html, 'data-gallery-next') === Number(carousel), `landing_gallery_navigation:${page.route}`)
+  check(html.includes('role="group" aria-roledescription="slide"'), `landing_gallery_accessible_slides:${page.route}`)
+  check(carousel === html.includes('<script src="/platform-carousel.js" defer></script>'), `landing_gallery_script:${page.route}`)
   check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
   if (page.productId === 'ecommerce') {
@@ -243,7 +248,9 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   const body = html.slice(html.indexOf('<body')).replace(/<script[\s\S]*?<\/script>/g, '')
   const interfaceFigureCount = (body.match(/<figure class="platform-image/g) || []).length
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
-  check((body.match(/<button\b/g) || []).length === 0, `marketing_has_no_controls:${route}`)
+  const marketingButtons = (body.match(/<button\b/g) || []).length
+  const routeProduct = route === '/' ? null : route.slice(1, -1)
+  check(marketingButtons === ((productScreens[routeProduct]?.length || 0) > 1 ? 2 : 0), `marketing_only_gallery_controls:${route}`)
   check(interfaceFigureCount > 0, `interface_figures_present:${route}`)
   const expectedCaptureScreens = route === '/' ? Object.values(productScreens).map((screens) => screens[0]) : productScreens[route.slice(1, -1)] || []
   for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)

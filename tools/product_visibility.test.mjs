@@ -8,8 +8,13 @@ import { activeSetupProductContracts, productContracts, seedSetupForProduct,
   rememberProductSetup, readProductSetup, setupProductFromQuery } from '../showroom/src/core/product-setup.ts'
 
 const root = resolve(import.meta.dirname, '..')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const publicOutputDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`, 'static')
+  : resolve(root, '.vercel/output/static')
 const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 'utf8'))
-const html = async path => readFile(resolve(root, '.vercel/output/static', path), 'utf8')
+const html = async path => readFile(resolve(publicOutputDir, path), 'utf8')
 const main = value => value.match(/<main[\s\S]*?<\/main>/)?.[0] ?? ''
 
 test('retired direct setup stops before write-capable onboarding hooks mount', async () => {
@@ -136,7 +141,10 @@ test('Plant public route becomes compatibility-only, not sales or new setup', as
   assert.doesNotMatch(content, /Open retained workspace|href="[^\"]*\/plant\//)
   assert.doesNotMatch(content, /first-job-templates|Start free sample|Request assisted setup|product=plant|\?template=|\?pack=/)
   assert.doesNotMatch(await html('sitemap.xml'), /<loc>https:\/\/supermega.dev\/plant\/<\/loc>/)
-  const config = JSON.parse(await readFile(resolve(root,'.vercel/output/config.json'),'utf8'))
+  const configPath = isolatedOutputId
+    ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`, 'config.json')
+    : resolve(root, '.vercel/output/config.json')
+  const config = JSON.parse(await readFile(configPath,'utf8'))
   assert.ok(config.routes.some(route => route.headers?.Location === '/plant/'))
   assert.ok(!config.routes.some(route => route.headers?.Location === '/#plant'))
 })

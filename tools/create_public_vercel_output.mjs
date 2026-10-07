@@ -422,18 +422,19 @@ const sharedStyle = `
   .editorial-hero {padding:100px 0 64px;max-width:940px}
   .editorial-hero h1 {font-size:clamp(48px,7.5vw,100px);line-height:1.02;letter-spacing:-.065em;margin:20px 0 28px;font-weight:650}
   .editorial-hero .lede {max-width:610px;font-size:21px;line-height:1.6;color:var(--muted)}
-  .platform-gallery {position:relative;display:grid;gap:14px}
-  .platform-gallery > input {position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-  .platform-slides {min-width:0}
-  .platform-slides .platform-image {display:none}
-  .platform-gallery[data-single] .platform-image {display:block}
-  .platform-gallery > input:nth-child(1):checked ~ .platform-slides .platform-image:nth-child(1), .platform-gallery > input:nth-child(2):checked ~ .platform-slides .platform-image:nth-child(2), .platform-gallery > input:nth-child(3):checked ~ .platform-slides .platform-image:nth-child(3), .platform-gallery > input:nth-child(4):checked ~ .platform-slides .platform-image:nth-child(4) {display:block}
-  .platform-gallery-controls {display:flex;gap:8px;flex-wrap:wrap}
-  .platform-gallery-controls label {display:inline-flex;align-items:center;min-height:44px;padding:9px 16px;border:1px solid var(--line-strong);border-radius:999px;color:var(--muted);font-size:13px;font-weight:650;cursor:pointer;background:#fff}
-  .platform-gallery > input:nth-child(1):checked ~ .platform-gallery-controls label:nth-child(1), .platform-gallery > input:nth-child(2):checked ~ .platform-gallery-controls label:nth-child(2), .platform-gallery > input:nth-child(3):checked ~ .platform-gallery-controls label:nth-child(3), .platform-gallery > input:nth-child(4):checked ~ .platform-gallery-controls label:nth-child(4) {border-color:var(--blue);color:var(--blue);background:#f1efff}
-  .platform-gallery > input:focus-visible ~ .platform-gallery-controls label {outline:2px solid var(--blue);outline-offset:3px}
+  .platform-gallery {display:grid;gap:12px;min-width:0}
+  .platform-slides {display:flex;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:24px}
+  .platform-slides::-webkit-scrollbar {display:none}
+  .platform-slides .platform-image {flex:0 0 100%;box-sizing:border-box;scroll-snap-align:start}
+  .platform-gallery[data-single] .platform-slides {overflow:hidden}
+  .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
+  .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
+  .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#f7f6ff}
+  .platform-gallery-controls button:focus-visible {outline:2px solid var(--blue);outline-offset:3px}
+  .platform-gallery-controls button:disabled {opacity:.4;cursor:default}
+  .platform-gallery-status {min-width:48px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;text-align:center}
   .platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;border-radius:24px;overflow:hidden}
-  .platform-image img {width:100%;max-width:1440px;height:auto;display:block;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08)}
+  .platform-image img {width:100%;height:auto;aspect-ratio:16/10;object-fit:contain;display:block;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08);background:#fff}
   .platform-image figcaption {padding:16px 0 0;color:#615f73;font-size:12px}
   .product-proof {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden;list-style:none;padding:0}
   .product-proof li {min-width:0;padding:18px 20px}
@@ -618,11 +619,10 @@ function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
  assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
- const gallery=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
- const galleryControls=item.screens.map(([, ,caption],index)=>`<label for="${id}-screen-${index+1}">${escapeHtml(caption)}</label>`).join('')
+ const gallery=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
  const galleryHtml=item.screens.length === 1
-  ? `<div class="platform-gallery" data-single aria-label="${label} interface view"><div class="platform-slides">${gallery}</div></div>`
-  : `<div class="platform-gallery" aria-label="${label} interface views">${item.screens.map(([, ,caption],index)=>`<input type="radio" name="${id}-screens" id="${id}-screen-${index+1}" aria-label="${escapeHtml(caption)}"${index === 0 ? ' checked' : ''} />`).join('')}<div class="platform-slides">${gallery}</div><div class="platform-gallery-controls" aria-label="Choose ${label} view">${galleryControls}</div></div>`
+  ? `<div class="platform-gallery" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${gallery}</div></div>`
+  : `<div class="platform-gallery" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${gallery}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
   return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}${galleryHtml}<ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
 function productCard(id) {
@@ -642,7 +642,7 @@ function productLandingHtml(product,page) {
  const storyBody=escapeHtml(stories[product.id].body)
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
  schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>`})
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>${stories[product.id].screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`})
 }
 
 const contactScript = `<script>(function(){
@@ -1367,6 +1367,14 @@ await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'to
 await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
+await writeStatic('platform-carousel.js', `(function(){
+  document.querySelectorAll('[data-platform-carousel]').forEach(function(carousel){
+    var track=carousel.querySelector('.platform-slides'),slides=Array.from(track.querySelectorAll('.platform-image')),previous=carousel.querySelector('[data-gallery-previous]'),next=carousel.querySelector('[data-gallery-next]'),status=carousel.querySelector('[data-gallery-status]'),active=0,timer;
+    function update(){var left=track.getBoundingClientRect().left;active=slides.reduce(function(best,slide,index){return Math.abs(slide.getBoundingClientRect().left-left)<Math.abs(slides[best].getBoundingClientRect().left-left)?index:best},0);status.textContent=(active+1)+' of '+slides.length;previous.disabled=active===0;next.disabled=active===slides.length-1;}
+    function go(index){slides[Math.max(0,Math.min(index,slides.length-1))].scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'nearest',inline:'start'});}
+    previous.addEventListener('click',function(){go(active-1)});next.addEventListener('click',function(){go(active+1)});track.addEventListener('scroll',function(){clearTimeout(timer);timer=setTimeout(update,80)},{passive:true});track.addEventListener('keydown',function(event){if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();go(active+(event.key==='ArrowRight'?1:-1))}});window.addEventListener('resize',update);update();
+  });
+})();`)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
 for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)

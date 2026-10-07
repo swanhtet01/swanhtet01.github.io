@@ -97,6 +97,7 @@ const expectedStaticFiles = new Set([
   'fonts/noto-sans-latin.woff2',
   'fonts/noto-sans-latin-OFL.txt',
   'vercel-insights.js',
+  'platform-carousel.js',
   'images/actual-shop-today.png',
   'images/actual-shop-sell.png',
   'images/actual-shop-orders.png',
@@ -238,12 +239,11 @@ if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique
 // JSON-LD structured data: the homepage carries one Organization schema and each
 // product landing page one Product schema, sourced verbatim from the manifest.
 // Every JSON-LD element must keep type="application/ld+json" so it remains an
-// HTML data block that browsers never execute — that is what keeps the pinned
-// single-hash script-src contract valid without hashing these blocks.
+// HTML data block that browsers never execute.
 const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
 const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
 for (const [route, page] of pages) {
-  const expectedExecutable = route === '/contact/' ? 2 : 1
+  const expectedExecutable = route === '/contact/' ? 2 : page.html.includes('data-platform-carousel') ? 2 : 1
   if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
   const blocks = jsonLdBlocks(page.html)
   const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
