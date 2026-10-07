@@ -4,7 +4,7 @@ Version: 1.3.2
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-07
-Status: ACTIVE — PR #639 exact head `139b115bc5b5439294d5cc00eca8ca2ee282b365`, OPEN with independent review unset. Exact-head App CI `37556841582`, Dependency Security Audit `37556845955`, and Kernel Console `37556845968` pass; owner-gated release was skipped. No merge, preview, or deployment. Public screenshots are real synthetic-record captures dated Oct 2–4, but they show the prior product layout and are not current design evidence. Hosted founder sign-in/save/reload/isolation, customer acceptance, refreshed screenshots, hardware acceptance, and inbound social-channel ingestion remain unproven.
+Status: ACTIVE — PR #639 OPEN with independent review unset. Latest product-code commit `f085fae7c302ca16f44ada6b4e7b60d2f83b7dd1` passed App CI `37560309908`, Dependency Security Audit `37560314528`, and Kernel Console `37560314543`; owner-gated release was skipped. A goal-evidence-only follow-up is now on the branch with exact-head CI pending. No merge, preview, or deployment. Public screenshots remain genuine synthetic-record captures from Oct 2–4, but show the prior product layout and are not current design or hosted evidence. Hosted founder sign-in/save/reload/isolation, customer acceptance, refreshed screenshots, hardware acceptance, and inbound social-channel ingestion remain unproven. Next product slice: define a validated Shop merchant-profile source before building the separate customer receipt; the current order record is not a customer receipt.
 
 ## 1. Controlling objective
 
