@@ -127,7 +127,16 @@ for (const page of landingPages) {
   check(html.includes('class="platform-gallery"') && html.includes('class="platform-image"') && html.includes('class="product-proof"') && html.includes('class="feature-line"'), `landing_interface_and_features:${page.route}`)
   check(countOccurrences(html, '<figure class="platform-image') === productScreens[page.productId]?.length, `landing_product_views:${page.route}`)
   const carousel = (productScreens[page.productId]?.length || 0) > 1
-  check(html.includes('aria-roledescription="carousel"') && html.includes('aspect-ratio:16/10'), `landing_gallery_uniform_carousel_frame:${page.route}`)
+  check(
+    html.includes('aria-roledescription="carousel"') &&
+      html.includes('align-items:stretch') &&
+      html.includes('display:flex;flex:0 0 100%;flex-direction:column') &&
+      html.includes('width:100%;height:auto;max-width:1440px') &&
+      html.includes('margin-top:auto;padding:16px 0 0') &&
+      !html.includes('aspect-ratio:16/10') &&
+      !html.includes('object-fit:contain'),
+    `landing_gallery_native_ratio_equal_width_slides:${page.route}`,
+  )
   check(countOccurrences(html, 'data-gallery-previous') === Number(carousel) && countOccurrences(html, 'data-gallery-next') === Number(carousel), `landing_gallery_navigation:${page.route}`)
   check(html.includes('role="group" aria-roledescription="slide"'), `landing_gallery_accessible_slides:${page.route}`)
   check(carousel === html.includes('<script src="/platform-carousel.js" defer></script>'), `landing_gallery_script:${page.route}`)

@@ -423,9 +423,9 @@ const sharedStyle = `
   .editorial-hero h1 {font-size:clamp(48px,7.5vw,100px);line-height:1.02;letter-spacing:-.065em;margin:20px 0 28px;font-weight:650}
   .editorial-hero .lede {max-width:610px;font-size:21px;line-height:1.6;color:var(--muted)}
   .platform-gallery {display:grid;gap:12px;min-width:0}
-  .platform-slides {display:flex;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:24px}
+  .platform-slides {display:flex;align-items:stretch;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:24px}
   .platform-slides::-webkit-scrollbar {display:none}
-  .platform-slides .platform-image {flex:0 0 100%;box-sizing:border-box;scroll-snap-align:start}
+  .platform-slides .platform-image {display:flex;flex:0 0 100%;flex-direction:column;box-sizing:border-box;scroll-snap-align:start}
   .platform-gallery[data-single] .platform-slides {overflow:hidden}
   .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
   .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
@@ -434,8 +434,8 @@ const sharedStyle = `
   .platform-gallery-controls button:disabled {opacity:.4;cursor:default}
   .platform-gallery-status {min-width:48px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;text-align:center}
   .platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;border-radius:24px;overflow:hidden}
-  .platform-image img {width:100%;height:auto;aspect-ratio:16/10;object-fit:contain;display:block;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08);background:#fff}
-  .platform-image figcaption {padding:16px 0 0;color:#615f73;font-size:12px}
+  .platform-image img {display:block;width:100%;height:auto;max-width:1440px;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08);background:#fff}
+  .platform-image figcaption {margin-top:auto;padding:16px 0 0;color:#615f73;font-size:12px}
   .product-proof {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden;list-style:none;padding:0}
   .product-proof li {min-width:0;padding:18px 20px}
   .product-proof li+li {border-left:1px solid var(--line)}
