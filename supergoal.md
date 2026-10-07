@@ -4,7 +4,7 @@ Version: 1.3.2
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-07
-Status: ACTIVE — PR #639 exact head `22188fdaa74b1eea22f8104b3f2cfb3ae8458b18`, OPEN with independent review unset. Exact-head App CI `37549840140`, Dependency Security Audit `375498575657`, and Kernel Console `37549847486` pass; owner-gated release was skipped. No merge, preview, or deployment. Public screenshots remain genuine but dated Oct 2–4, not current after later product changes. Hosted founder sign-in/save/reload/isolation, customer acceptance, current screenshots, hardware acceptance, and inbound social-channel ingestion remain unproven.
+Status: ACTIVE — PR #639 exact head `139b115bc5b5439294d5cc00eca8ca2ee282b365`, OPEN with independent review unset. Exact-head App CI `37556841582`, Dependency Security Audit `37556845955`, and Kernel Console `37556845968` pass; owner-gated release was skipped. No merge, preview, or deployment. Public screenshots are real synthetic-record captures dated Oct 2–4, but they show the prior product layout and are not current design evidence. Hosted founder sign-in/save/reload/isolation, customer acceptance, refreshed screenshots, hardware acceptance, and inbound social-channel ingestion remain unproven.
 
 ## 1. Controlling objective
 
