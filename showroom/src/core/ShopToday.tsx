@@ -338,6 +338,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
     currentWorkspaceCapability,
   )
   const visiblePriorities = profitControl.priorities.slice(0, 2)
+  const summaryMetrics = metrics.filter((metric) => metric.label !== "Today's sales")
   const remainingPriorityCount = profitControl.hiddenPriorityCount + Math.max(0, profitControl.priorities.length - visiblePriorities.length)
   const financeModule = modules.find((module) => module.label === 'Finance controls')
   const attentionPriority = visiblePriorities.find((priority) => priority.id !== 'close_ready')
@@ -354,7 +355,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
         {catalogReady ? <Link className="core-button primary" to="/shop/?tab=counter">New sale</Link> : null}
       </header>
       <div className="shop-today-metrics" aria-label="Shop summary">
-        {metrics.map((metric, index) => <article data-index={index} data-tone={metric.tone ?? 'ready'} key={metric.label}>
+        {summaryMetrics.map((metric, index) => <article data-index={index} data-tone={metric.tone ?? 'ready'} key={metric.label}>
           <small>{metric.label}</small>
           <strong>{metric.value}</strong>
           <span>{metric.detail}</span>

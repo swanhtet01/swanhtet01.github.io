@@ -2251,7 +2251,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-today-heading h2 { margin: .25rem 0 .375rem; font-size: clamp(2rem,3vw,2.75rem); line-height: 1; letter-spacing: -.055em; }
 .shop-today-heading p { margin: 0; color: var(--core-muted); font-size: .8125rem; line-height: 1.5; }
 .shop-today-heading .core-button { flex: 0 0 auto; }
-.shop-today-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid var(--core-line); border-radius: 1rem; background: color-mix(in srgb,var(--core-panel) 97%,var(--core-accent) 3%); overflow: hidden; }
+.shop-today-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); border: 1px solid var(--core-line); border-radius: 1rem; background: color-mix(in srgb,var(--core-panel) 97%,var(--core-accent) 3%); overflow: hidden; }
 .shop-today-metrics article { min-width: 0; min-height: 6.5rem; position: relative; display: grid; align-content: center; gap: .3125rem; border-right: 1px solid var(--core-line); padding: 1rem 1.125rem; }
 .shop-today-metrics article:last-child { border-right: 0; }
 .shop-today-metrics article::before { width: .4375rem; height: .4375rem; position: absolute; top: 1rem; right: 1rem; border-radius: 99px; background: var(--core-success); content: ''; }
