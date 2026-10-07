@@ -191,6 +191,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
+        "commerce.merchant_profile.saved",
         "commerce.storefront.merchandising.imported",
         "commerce.tax_configuration.saved",
         "commerce.account_mapping.saved",

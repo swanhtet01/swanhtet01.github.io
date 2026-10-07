@@ -410,6 +410,31 @@ def tax_configuration(
     }
 
 
+def shop_merchant_profile(
+    revision: int,
+    *,
+    name_myanmar: str = "ဆိုင်ကောင်း",
+    name_english: str = "Good Shop",
+    phone: str = "09 123 456 789",
+    address_myanmar: str = "ရန်ကုန်",
+    address_english: str = "Yangon",
+) -> dict[str, object]:
+    return {
+        "schema": "supermega.shop.merchant_profile.v1",
+        "revision": revision,
+        "nameMyanmar": name_myanmar,
+        "nameEnglish": name_english,
+        "phone": phone,
+        "addressMyanmar": address_myanmar,
+        "addressEnglish": address_english,
+        "proof": action_evidence(
+            action_id=f"ACT-SHOP-MERCHANT-R{revision}",
+            reason="Update the Shop business profile.",
+            evidence_reference=f"SHOP-MERCHANT-PROFILE:R{revision}",
+        ),
+    }
+
+
 def account_mapping_configuration(
     revision: int,
     *,
@@ -3608,6 +3633,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.close.saved",
                     "commerce.website_intake.converted",
                     "commerce.storefront.configuration.saved",
+                    "commerce.merchant_profile.saved",
                     "commerce.storefront.merchandising.imported",
                     "commerce.tax_configuration.saved",
                     "commerce.account_mapping.saved",
@@ -7591,6 +7617,70 @@ class CommerceRuntimeTests(unittest.TestCase):
                 expected_version=saved.version,
                 payload=payload,
             )
+
+    def test_shop_merchant_profile_is_tenant_command_bound_and_revisioned(self) -> None:
+        self.assertIn("commerce.merchant_profile.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.merchant_profile.saved", COMMERCE_HUMAN_EVENTS)
+        current = catalog_state()
+        profile = shop_merchant_profile(1)
+        first = deepcopy(current)
+        first["merchantProfile"] = profile
+        saved = apply_event(
+            current,
+            "commerce.merchant_profile.saved",
+            first,
+            profile["proof"],  # type: ignore[arg-type]
+        )
+        self.assertEqual(validate_commerce_state(saved)["merchantProfile"], profile)
+        self.assertEqual(
+            apply_event(current, "commerce.merchant_profile.saved", first, profile["proof"]),  # type: ignore[arg-type]
+            saved,
+        )
+
+        changed = deepcopy(saved)
+        changed["merchantProfile"] = shop_merchant_profile(2, name_myanmar="ဆိုင်အသစ်")
+        updated = apply_event(
+            saved,
+            "commerce.merchant_profile.saved",
+            changed,
+            changed["merchantProfile"]["proof"],  # type: ignore[index,arg-type]
+        )
+        self.assertEqual(updated["merchantProfile"]["revision"], 2)  # type: ignore[index]
+
+        unchanged = deepcopy(updated)
+        unchanged["merchantProfile"] = shop_merchant_profile(3, name_myanmar="ဆိုင်အသစ်")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                updated,
+                "commerce.merchant_profile.saved",
+                unchanged,
+                unchanged["merchantProfile"]["proof"],  # type: ignore[index,arg-type]
+            )
+
+        unrelated = deepcopy(updated)
+        unrelated["items"][0]["price"] = 999  # type: ignore[index]
+        unrelated["merchantProfile"] = shop_merchant_profile(3, name_myanmar="ဆိုင်တိုး")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                updated,
+                "commerce.merchant_profile.saved",
+                unrelated,
+                unrelated["merchantProfile"]["proof"],  # type: ignore[index,arg-type]
+            )
+
+        wrong_evidence = dict(profile["proof"])
+        wrong_evidence["actor"] = "different operator"
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.merchant_profile.saved", first, wrong_evidence)  # type: ignore[arg-type]
+
+        invalid_name = deepcopy(first)
+        invalid_name["merchantProfile"]["nameMyanmar"] = "  "  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(invalid_name)
+        invalid_control = deepcopy(first)
+        invalid_control["merchantProfile"]["addressEnglish"] = "Yangon\nReceipt"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(invalid_control)
 
     def test_tax_configuration_is_versioned_bound_and_freezes_order_calculation(self) -> None:
         current = catalog_state()

@@ -361,6 +361,7 @@ const expectedHumanCommerceEvents = [
   'commerce.inventory.transferred',
   'commerce.item.created',
   'commerce.item.updated',
+  'commerce.merchant_profile.saved',
   'commerce.order.advanced',
   'commerce.order.cancelled',
   'commerce.order.correction_recorded',

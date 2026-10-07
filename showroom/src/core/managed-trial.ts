@@ -158,6 +158,7 @@ export type ManagedCommerceEvent =
   | 'commerce.website_intake.created'
   | 'commerce.website_intake.converted'
   | 'commerce.storefront.configuration.saved'
+  | 'commerce.merchant_profile.saved'
   | 'commerce.tax_configuration.saved'
   | 'commerce.account_mapping.saved'
   | 'commerce.customer_credit_policy.saved'

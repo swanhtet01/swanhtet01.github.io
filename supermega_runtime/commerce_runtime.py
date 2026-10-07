@@ -46,6 +46,7 @@ COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v3"
 COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"
 COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v1"
 COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = "supermega.commerce.order-acknowledgement.v1"
+COMMERCE_MERCHANT_PROFILE_SCHEMA = "supermega.shop.merchant_profile.v1"
 COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
@@ -53,6 +54,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
+        "commerce.merchant_profile.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
@@ -106,6 +108,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
+        "commerce.merchant_profile.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
@@ -344,6 +347,18 @@ _ISO_TIMESTAMP_PATTERN = re.compile(
 )
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
+_MERCHANT_PROFILE_FIELDS = frozenset(
+    {
+        "schema",
+        "revision",
+        "nameMyanmar",
+        "nameEnglish",
+        "phone",
+        "addressMyanmar",
+        "addressEnglish",
+        "proof",
+    }
+)
 _SERVICE_SCHEDULE_FIELDS = frozenset(
     {
         "schema",
@@ -887,6 +902,40 @@ def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> 
     if with_order_id:
         _text(proof["orderId"], f"{field}.orderId", maximum=160)
     return proof
+
+
+def _validate_merchant_profile(value: object, field: str = "merchantProfile") -> dict[str, Any]:
+    profile = _object(value, field)
+    _exact_fields(profile, field, required=_MERCHANT_PROFILE_FIELDS)
+    if profile["schema"] != COMMERCE_MERCHANT_PROFILE_SCHEMA:
+        raise TrialValidationError(f"{field}.schema is not recognized.")
+    revision = _integer(profile["revision"], f"{field}.revision", minimum=1)
+    limits = {
+        "nameMyanmar": 80,
+        "nameEnglish": 80,
+        "phone": 40,
+        "addressMyanmar": 180,
+        "addressEnglish": 180,
+    }
+    for key, maximum in limits.items():
+        text = profile[key]
+        if (
+            not isinstance(text, str)
+            or text != text.strip()
+            or len(text) > maximum
+            or re.search(r"[\x00-\x1f\x7f]", text)
+        ):
+            raise TrialValidationError(
+                f"{field}.{key} must be canonical printable text within its character limit."
+            )
+    if not profile["nameMyanmar"] and not profile["nameEnglish"]:
+        raise TrialValidationError("merchant profile needs a business name in Burmese or English.")
+    proof = _action_proof(profile["proof"], f"{field}.proof")
+    expected_action_id = f"ACT-SHOP-MERCHANT-R{revision}"
+    expected_reference = f"SHOP-MERCHANT-PROFILE:R{revision}"
+    if proof["actionId"] != expected_action_id or proof["evidenceReference"] != expected_reference:
+        raise TrialValidationError(f"{field}.proof does not match its revision.")
+    return profile
 
 
 def _same_accountable_actor(left: str, right: str) -> bool:
@@ -1622,6 +1671,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "websiteIntakes",
                 "storefrontRequests",
                 "storefrontConfiguration",
+                "merchantProfile",
                 "purchaseBudgetEnvelopes",
                 "supplierSourcingDecisions",
                 "purchaseRequisitions",
@@ -1643,6 +1693,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     )
     if state.get("schema") != COMMERCE_SCHEMA:
         raise TrialValidationError(f"commerce state schema must be {COMMERCE_SCHEMA}.")
+    if "merchantProfile" in state:
+        _validate_merchant_profile(state["merchantProfile"])
 
     items = _list(state["items"], "commerce state.items")
     orders = _list(state["orders"], "commerce state.orders")
@@ -5377,6 +5429,12 @@ def _validate_event_evidence(
             raise TrialValidationError(
                 "command evidence must match the saved Ecommerce storefront configuration."
             )
+    elif event_type == "commerce.merchant_profile.saved":
+        profile = next_state["merchantProfile"]
+        if not _proof_matches_evidence(profile["proof"], evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved Shop merchant profile."
+            )
     elif event_type == "commerce.tax_configuration.saved":
         proof = next_state["taxConfigurations"][0]["proof"]
         if not _proof_matches_evidence(proof, evidence):
@@ -8273,6 +8331,14 @@ def _require_storefront_configuration_unchanged(
 ) -> None:
     if _storefront_configuration(current) != _storefront_configuration(next_state):
         raise TrialValidationError("event cannot change: storefrontConfiguration.")
+
+
+def _require_merchant_profile_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if current.get("merchantProfile") != next_state.get("merchantProfile"):
+        raise TrialValidationError("event cannot change: merchantProfile.")
 
 
 def _require_purchase_orders_unchanged(
@@ -11360,6 +11426,47 @@ def _validate_storefront_configuration_saved(
         )
 
 
+def _validate_merchant_profile_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    missing = object()
+    for key in set(current) | set(next_state):
+        if key != "merchantProfile" and current.get(key, missing) != next_state.get(key, missing):
+            raise TrialValidationError(
+                "commerce.merchant_profile.saved may only change the Shop merchant profile."
+            )
+    before = current.get("merchantProfile")
+    after = next_state.get("merchantProfile")
+    if after is None:
+        raise TrialValidationError(
+            "commerce.merchant_profile.saved requires a merchant profile."
+        )
+    normalized = _validate_merchant_profile(after)
+    if before is None:
+        if normalized["revision"] != 1:
+            raise TrialValidationError(
+                "the first merchant profile must start at revision one."
+            )
+        return
+    prior = _validate_merchant_profile(before)
+    if normalized["revision"] != prior["revision"] + 1:
+        raise TrialValidationError(
+            "merchant profile revision must advance exactly once."
+        )
+    fields = (
+        "nameMyanmar",
+        "nameEnglish",
+        "phone",
+        "addressMyanmar",
+        "addressEnglish",
+    )
+    if all(normalized[field] == prior[field] for field in fields):
+        raise TrialValidationError(
+            "an unchanged merchant profile cannot advance its revision."
+        )
+
+
 def _validate_tax_configuration_saved(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -12216,6 +12323,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.website_intake.created": _validate_website_intake_created,
     "commerce.website_intake.converted": _validate_website_intake_converted,
     "commerce.storefront.configuration.saved": _validate_storefront_configuration_saved,
+    "commerce.merchant_profile.saved": _validate_merchant_profile_saved,
     "commerce.storefront_request.received": _validate_storefront_request_received,
     "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
     "commerce.account_mapping.saved": _validate_account_mapping_saved,
@@ -12313,6 +12421,8 @@ def reduce_commerce_state(
         _require_storefront_requests_unchanged(current_state, next_state)
     if event_type != "commerce.storefront.configuration.saved":
         _require_storefront_configuration_unchanged(current_state, next_state)
+    if event_type != "commerce.merchant_profile.saved":
+        _require_merchant_profile_unchanged(current_state, next_state)
     if event_type != "commerce.tax_configuration.saved":
         _require_tax_configurations_unchanged(current_state, next_state)
     if event_type != "commerce.account_mapping.saved":

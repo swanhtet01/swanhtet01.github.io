@@ -90,6 +90,7 @@ import {
   commerceCurrentPromotionPolicy,
   commerceCurrentShippingPolicy,
   commerceCurrentPaymentPolicy,
+  commerceMerchantProfileActionId,
   commerceCustomerCreditReview,
   commerceOrderCalculation,
   commerceOrderAcknowledgement,
@@ -162,10 +163,12 @@ import {
   registerCommerceItem,
   reserveCommerceOrder,
   saveCommerceClose,
+  saveCommerceMerchantProfile,
   settleCommerceRefund,
   updateCommerceItem,
   validateCommerceState,
   type CommerceActionProof,
+  type CommerceMerchantProfileInput,
   type CommerceCloseSettlementInputLine,
   type CommerceCorrectionKind,
   type CommerceCorrectionReasonCode,
@@ -1693,6 +1696,17 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     intake: WebsiteEcommerceHandoffContext | null
   }>({ status: 'checking', intake: null })
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange, retryManagedCommerceLoad] = useCommerceWorkspace(managedIdentity)
+  async function saveCustomerReceiptProfile(input: CommerceMerchantProfileInput) {
+    const revision = (commerce.merchantProfile?.revision ?? 0) + 1
+    const proof: CommerceActionProof = {
+      actionId: commerceMerchantProfileActionId(revision),
+      capturedAt: new Date().toISOString(),
+      actor: managedIdentity?.email || readLastOperator() || 'Shop operator',
+      reason: 'Set up customer receipt business details',
+      evidenceReference: `SHOP-MERCHANT-PROFILE:R${revision}`,
+    }
+    await mutateCommerce('commerce.merchant_profile.saved', commandUuid(), proof, (current) => saveCommerceMerchantProfile(current, input, proof))
+  }
   // Workspace headroom. LOCAL SHOPS ONLY: a company account keeps the ledger server-side
   // and neither local ceiling applies to it (workspace-runtime.ts branches on
   // !managedIdentity long before any of this), so a signed-in operator must never be told
@@ -7190,7 +7204,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     {counterBoundary}
     {shopCatalogSetupNotice}
     <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
-    <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
+    <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
 
@@ -7701,7 +7715,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       </div> : null}
     </details> : null}
   </section>
-  <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
+  <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
   {actionGate}</div>
 
   if (tab === 'inventory') return <div className="operation-module shop-stock-module">

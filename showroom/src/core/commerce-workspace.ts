@@ -29,6 +29,7 @@ import {
 
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
+export const COMMERCE_MERCHANT_PROFILE_SCHEMA = 'supermega.shop.merchant_profile.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
@@ -1312,6 +1313,7 @@ export type CommerceState = {
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
+  merchantProfile?: CommerceMerchantProfile
   purchaseBudgetEnvelopes?: CommercePurchaseBudgetEnvelope[]
   supplierSourcingDecisions?: CommerceSupplierSourcingDecision[]
   purchaseRequisitions?: CommercePurchaseRequisition[]
@@ -1326,6 +1328,19 @@ export type CommerceActionProof = {
   reason: string
   evidenceReference: string
 }
+
+export type CommerceMerchantProfile = {
+  schema: typeof COMMERCE_MERCHANT_PROFILE_SCHEMA
+  revision: number
+  nameMyanmar: string
+  nameEnglish: string
+  phone: string
+  addressMyanmar: string
+  addressEnglish: string
+  proof: CommerceActionProof
+}
+
+export type CommerceMerchantProfileInput = Omit<CommerceMerchantProfile, 'schema' | 'revision' | 'proof'>
 
 export type CommerceItemUpdate = {
   sku: string
@@ -1687,6 +1702,11 @@ export function commerceStorefrontConfigurationActionId(revision: number, shopCa
     rejectInvalid('Storefront configuration action identity is invalid.')
   }
   return `ACT-STOREFRONT-R${revision}-${shopCatalogDigest.slice('sha256:'.length)}`
+}
+
+export function commerceMerchantProfileActionId(revision: number) {
+  if (!Number.isSafeInteger(revision) || revision < 1) rejectInvalid('Merchant profile revision is invalid.')
+  return `ACT-SHOP-MERCHANT-R${revision}`
 }
 
 function optionalText(value: unknown) {
@@ -2400,6 +2420,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) rejectInvalid('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) rejectInvalid('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) rejectInvalid('Commerce storefront configuration must be an object when present.')
+  if (value.merchantProfile !== undefined && !isRecord(value.merchantProfile)) rejectInvalid('Commerce merchant profile must be an object when present.')
   if (value.purchaseBudgetEnvelopes !== undefined && !Array.isArray(value.purchaseBudgetEnvelopes)) rejectInvalid('Commerce purchase budget envelopes must be an array when present.')
   if (value.supplierSourcingDecisions !== undefined && !Array.isArray(value.supplierSourcingDecisions)) rejectInvalid('Commerce supplier sourcing decisions must be an array when present.')
   if (value.purchaseRequisitions !== undefined && !Array.isArray(value.purchaseRequisitions)) rejectInvalid('Commerce purchase requisitions must be an array when present.')
@@ -2486,6 +2507,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const catalogBaselineActionIds: string[] = []
   const catalogChangeActionIds: string[] = []
   const taxConfigurationActionIds: string[] = []
+  const merchantProfileActionIds: string[] = []
   const accountMappingConfigurationActionIds: string[] = []
   const customerCreditPolicyActionIds: string[] = []
   const promotionPolicyActionIds: string[] = []
@@ -3327,6 +3349,34 @@ export function validateCommerceState(value: unknown): CommerceState {
     for (const field of ['actor', 'reason', 'evidenceReference'] as const) {
       canonicalText(saved[field], `storefrontConfiguration.saved.${field}`)
     }
+  }
+
+  if (value.merchantProfile !== undefined) {
+    const profile = value.merchantProfile
+    if (!isRecord(profile)
+      || !hasExactKeys(profile, ['schema', 'revision', 'nameMyanmar', 'nameEnglish', 'phone', 'addressMyanmar', 'addressEnglish', 'proof'])
+      || profile.schema !== COMMERCE_MERCHANT_PROFILE_SCHEMA) rejectInvalid('Commerce merchant profile is invalid.')
+    assertSafeInteger(profile.revision, 'merchantProfile.revision', 1)
+    const revision = Number(profile.revision)
+    for (const field of ['nameMyanmar', 'nameEnglish', 'phone', 'addressMyanmar', 'addressEnglish'] as const) {
+      const text = profile[field]
+      const limit = field.startsWith('address') ? 180 : field === 'phone' ? 40 : 80
+      if (typeof text !== 'string' || text !== text.trim() || Array.from(text).length > limit || /[\u0000-\u001f\u007f]/u.test(text)) {
+        rejectInvalid(`merchantProfile.${field} must be canonical printable text within its character limit.`)
+      }
+    }
+    if (!profile.nameMyanmar && !profile.nameEnglish) rejectInvalid('Merchant profile needs a business name in Burmese or English.')
+    if (!isRecord(profile.proof)
+      || !hasExactKeys(profile.proof, actionProofFields)
+      || !validProof(profile.proof as CommerceActionProof)) rejectInvalid('merchantProfile.proof is invalid.')
+    const proof = profile.proof as CommerceActionProof
+    const actionId = commerceMerchantProfileActionId(revision)
+    if (proof.actionId !== actionId || proof.evidenceReference !== `SHOP-MERCHANT-PROFILE:R${revision}`) rejectInvalid('merchantProfile.proof does not match its revision.')
+    if (!validTimestamp(proof.capturedAt)) rejectInvalid('merchantProfile.proof.capturedAt is invalid.')
+    canonicalText(proof.actor, 'merchantProfile.proof.actor')
+    canonicalText(proof.reason, 'merchantProfile.proof.reason')
+    canonicalText(proof.evidenceReference, 'merchantProfile.proof.evidenceReference')
+    merchantProfileActionIds.push(actionId)
   }
 
   for (const [index, candidate] of orders.entries()) {
@@ -4607,6 +4657,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...catalogChangeActionIds.filter((actionId) => !catalogBaselineActionSet.has(actionId)),
     ...catalogBaselineActionSet,
     ...taxConfigurationActionIds,
+    ...merchantProfileActionIds,
     ...accountMappingConfigurationActionIds,
     ...customerCreditPolicyActionIds,
     ...promotionPolicyActionIds,
@@ -4889,6 +4940,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commerceCatalogBaselines(state).some((baseline) => baseline.proof.actionId === actionId)
     || commerceCatalogChanges(state).some((change) => change.proof.actionId === actionId)
     || commerceTaxConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
+    || state.merchantProfile?.proof.actionId === actionId
     || commerceAccountMappingConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
     || commerceCustomerCreditPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commercePromotionPolicies(state).some((policy) => policy.proof.actionId === actionId)
@@ -4906,6 +4958,54 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
         || claim.creditNotes.some((credit) => credit.recording.actionId === actionId)))
     || state.storefrontConfiguration?.saved.actionId === actionId
     || state.inventoryFoundation?.commands.some((command) => command.payload.proof.actionId === actionId)
+}
+
+export function saveCommerceMerchantProfile(
+  state: CommerceState,
+  input: CommerceMerchantProfileInput,
+  proof: CommerceActionProof,
+): CommerceState | null {
+  let current: CommerceState
+  try {
+    current = validateCommerceState(structuredClone(state))
+  } catch {
+    return null
+  }
+  if (typeof input?.nameMyanmar !== 'string'
+    || typeof input?.nameEnglish !== 'string'
+    || typeof input?.phone !== 'string'
+    || typeof input?.addressMyanmar !== 'string'
+    || typeof input?.addressEnglish !== 'string') return null
+  let profileInput: CommerceMerchantProfileInput
+  try {
+    profileInput = {
+      nameMyanmar: canonicalBlankableText(input.nameMyanmar, 'Burmese business name', 80),
+      nameEnglish: canonicalBlankableText(input.nameEnglish, 'English business name', 80),
+      phone: canonicalBlankableText(input.phone, 'Business phone', 40),
+      addressMyanmar: canonicalBlankableText(input.addressMyanmar, 'Burmese business address', 180),
+      addressEnglish: canonicalBlankableText(input.addressEnglish, 'English business address', 180),
+    }
+  } catch {
+    return null
+  }
+  if (!profileInput.nameMyanmar && !profileInput.nameEnglish) return null
+  const existing = current.merchantProfile
+  if (existing && ['nameMyanmar', 'nameEnglish', 'phone', 'addressMyanmar', 'addressEnglish']
+    .every((field) => existing[field as keyof CommerceMerchantProfile] === profileInput[field as keyof CommerceMerchantProfileInput])) return current
+  const revision = (existing?.revision ?? 0) + 1
+  if (!validProof(proof)
+    || proof.actionId !== commerceMerchantProfileActionId(revision)
+    || proof.evidenceReference !== `SHOP-MERCHANT-PROFILE:R${revision}`
+    || actionIdIsUsed(current, proof.actionId)) return null
+  return validateCommerceState({
+    ...current,
+    merchantProfile: {
+      schema: COMMERCE_MERCHANT_PROFILE_SCHEMA,
+      revision,
+      ...profileInput,
+      proof: { ...proof },
+    },
+  })
 }
 
 function sameWebsiteSource(left: CommerceWebsiteSource, right: CommerceWebsiteSource) {

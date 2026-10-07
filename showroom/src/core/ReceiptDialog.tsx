@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
-import { type CommerceOrderAcknowledgement, commerceOrderAcknowledgementText } from './commerce-workspace'
+import { type CommerceMerchantProfile, type CommerceMerchantProfileInput, type CommerceOrderAcknowledgement, commerceOrderAcknowledgementText } from './commerce-workspace'
 import { bi } from './i18n-actions'
 import { PaymentQrButton } from './PaymentQr'
 import { copyOrderRecordText } from './copy-order-record'
+import { shopCustomerReceiptText } from './shop-customer-receipt'
 
 function formatReceiptDate(iso: string) {
   try {
@@ -145,7 +146,7 @@ function openPrintWindow(ack: CommerceOrderAcknowledgement) {
   }
 }
 
-export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
+export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantProfile, onSaveMerchantProfile, disabled = false }: {
   ack: CommerceOrderAcknowledgement | null
   /**
    * S3 PR2 customer points, display-only: the named customer's current balance
@@ -156,24 +157,63 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
   loyalty?: { balancePoints: number; redeemedPoints: number } | null
   onClose: () => void
   paymentQrScope: string
+  merchantProfile?: CommerceMerchantProfile
+  onSaveMerchantProfile?: (input: CommerceMerchantProfileInput) => Promise<void>
+  disabled?: boolean
 }) {
   const ref = useRef<HTMLDialogElement>(null)
+  const [setupOpen, setSetupOpen] = useState(false)
+  const [profileDraft, setProfileDraft] = useState<CommerceMerchantProfileInput>({ nameMyanmar: '', nameEnglish: '', phone: '', addressMyanmar: '', addressEnglish: '' })
+  const [profileBusy, setProfileBusy] = useState(false)
+  const [profileError, setProfileError] = useState('')
+
+  useEffect(() => {
+    const profile = merchantProfile
+    if (profile) setProfileDraft({ nameMyanmar: profile.nameMyanmar, nameEnglish: profile.nameEnglish, phone: profile.phone, addressMyanmar: profile.addressMyanmar, addressEnglish: profile.addressEnglish })
+  }, [merchantProfile])
 
   useEffect(() => {
     const dialog = ref.current
     if (!dialog) return
-    if (ack) {
+    if (ack || setupOpen) {
       if (!dialog.open) dialog.showModal()
     } else {
       if (dialog.open) dialog.close()
     }
-  }, [ack])
+  }, [ack, setupOpen])
 
   async function copyReceiptText() {
     if (!ack) return
     const current = ack
     const notice = await copyOrderRecordText(commerceOrderAcknowledgementText(current), navigator.clipboard)
     setCopyResult({ record: current, notice })
+  }
+
+  async function saveMerchantProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!onSaveMerchantProfile) return
+    setProfileBusy(true)
+    setProfileError('')
+    try {
+      await onSaveMerchantProfile(profileDraft)
+      setSetupOpen(false)
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Receipt details could not be saved.')
+    } finally {
+      setProfileBusy(false)
+    }
+  }
+
+  function printCustomerReceipt() {
+    if (!ack || !merchantProfile) return
+    const receipt = shopCustomerReceiptText(ack, merchantProfile)
+    const escaped = receipt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const url = URL.createObjectURL(new Blob([`<!doctype html><html lang="my"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sales receipt</title><style>body{font:14px/1.45 ui-monospace,monospace;white-space:pre-wrap;max-width:72mm;margin:4mm auto;padding:0 2mm}@media print{body{margin:0;max-width:none}}</style></head><body>${escaped}</body></html>`], { type: 'text/html' }))
+    const win = window.open(url, '_blank')
+    if (win) {
+      win.addEventListener('load', () => win.print())
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+    } else URL.revokeObjectURL(url)
   }
 
   const [copyResult, setCopyResult] = useState<{ record: CommerceOrderAcknowledgement; notice: string } | null>(null)
@@ -183,9 +223,19 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
   const hasDeliveryFee = ack ? (ack.delivery?.feeMmk ?? 0) > 0 : false
   const showSubtotalLine = hasPromotion || hasTax || hasDeliveryFee
 
-  return (
-    <dialog aria-labelledby="receipt-dialog-title" className="receipt-dialog" onClose={onClose} ref={ref}>
-      {ack ? <>
+  return <>
+    <button className="text-link receipt-profile-trigger" disabled={disabled} onClick={() => { setProfileError(''); setSetupOpen(true) }} type="button">{merchantProfile ? 'Receipt details' : 'Set up customer receipt'}</button>
+    <dialog aria-labelledby="receipt-dialog-title" className="receipt-dialog" onClose={() => { setSetupOpen(false); onClose() }} ref={ref}>
+      {setupOpen ? <form className="receipt-profile-form" onSubmit={(event) => void saveMerchantProfile(event)} style={{ display: 'grid', gap: 12, padding: 16 }}>
+        <header className="receipt-dialog-header"><span className="core-eyebrow">Customer receipt</span><h2 id="receipt-dialog-title">Business details</h2><p>These details appear on printed customer receipts.</p></header>
+        <label>Burmese business name<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameMyanmar: event.target.value }))} value={profileDraft.nameMyanmar} /></label>
+        <label>English business name<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameEnglish: event.target.value }))} value={profileDraft.nameEnglish} /></label>
+        <label>Phone<input autoComplete="tel" maxLength={40} onChange={(event) => setProfileDraft((draft) => ({ ...draft, phone: event.target.value }))} value={profileDraft.phone} /></label>
+        <label>Burmese address<textarea autoComplete="street-address" maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressMyanmar: event.target.value }))} rows={2} value={profileDraft.addressMyanmar} /></label>
+        <label>English address<textarea maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressEnglish: event.target.value }))} rows={2} value={profileDraft.addressEnglish} /></label>
+        <p aria-live="polite" role="status">{profileError}</p>
+        <div className="receipt-dialog-actions"><button className="core-button compact" disabled={profileBusy} onClick={() => setSetupOpen(false)} type="button">Cancel</button><button className="core-button primary compact" disabled={disabled || profileBusy || !profileDraft.nameMyanmar.trim() && !profileDraft.nameEnglish.trim()} type="submit">{profileBusy ? 'Saving…' : 'Save details'}</button></div>
+      </form> : ack ? <>
         <header className="receipt-dialog-header">
           <span className="core-eyebrow">{bi('Order record')}</span>
           <h2 id="receipt-dialog-title">{ack.customer}</h2>
@@ -233,11 +283,12 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope }: {
         <p className="receipt-dialog-notice">{ack.notice}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{copyResult?.record === ack ? copyResult.notice : ''}</p>
         <div className="receipt-dialog-actions">
+          {merchantProfile ? <button className="core-button compact" onClick={printCustomerReceipt} type="button">Print customer receipt</button> : <button className="core-button compact" onClick={() => setSetupOpen(true)} type="button">Set up customer receipt</button>}
           <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
           <button className="core-button compact" onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
           <button className="core-button compact" onClick={onClose} type="button">{bi('Close')}</button>
         </div>
       </> : null}
     </dialog>
-  )
+  </>
 }
