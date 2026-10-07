@@ -5,12 +5,19 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`)
+  : resolve(root, '.vercel/output')
+const staticDir = resolve(outputDir, 'static')
 // Offline transport only. Readiness API responses are synthetic, not provider evidence.
 const preload = `
 import fs from 'node:fs';
+const outputDir=${JSON.stringify(outputDir)};
 const manifest=JSON.parse(fs.readFileSync('site-manifest.json'));
-const config=JSON.parse(fs.readFileSync('.vercel/output/config.json'));
-const release=JSON.parse(fs.readFileSync('.vercel/output/static/__release.json'));
+const config=JSON.parse(fs.readFileSync(outputDir+'/config.json'));
+const release=JSON.parse(fs.readFileSync(outputDir+'/static/__release.json'));
 const mode=process.env.TEST_PUBLIC_MUTATION;
 globalThis.fetch=async input=>{
  const u=new URL(input);
@@ -30,12 +37,12 @@ globalThis.fetch=async input=>{
   if(mode==='image-html') return new Response('<html>fallback</html>',{headers:{'content-type':'text/html'}});
   if(mode==='image-corrupt') return new Response('broken',{headers:{'content-type':'image/png'}});
   const path=mode==='image-stale'?'/images/actual-shop-today.png':u.pathname;
-  return new Response(fs.readFileSync('.vercel/output/static'+path),{headers:{'content-type':'image/png'}});
+  return new Response(fs.readFileSync(outputDir+'/static'+path),{headers:{'content-type':'image/png'}});
  }
- if(u.pathname.endsWith('.png')) return new Response(fs.readFileSync('.vercel/output/static'+u.pathname),{headers:{'content-type':'image/png'}});
+ if(u.pathname.endsWith('.png')) return new Response(fs.readFileSync(outputDir+'/static'+u.pathname),{headers:{'content-type':'image/png'}});
  const page=manifest.pages.find(p=>p.route===u.pathname);
  if(!page) throw Error('offline_fixture_unknown_route');
- let html=fs.readFileSync('.vercel/output/static/'+page.file,'utf8');
+ let html=fs.readFileSync(outputDir+'/static/'+page.file,'utf8');
  if(mode==='pilot-pitch'&&u.pathname==='/contact/') html+='<p>Request managed company intelligence.</p>';
  if(mode==='missing-source'&&u.pathname==='/contact/') html=html.replaceAll('source.value=location.href','REMOVED');
  if(mode==='missing-offer') html=html.replaceAll('class="platform-image"','REMOVED');
@@ -51,15 +58,15 @@ globalThis.fetch=async input=>{
 before(() => {
   const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', timeout: 10000 })
   assert.equal(result.status, 0, result.stderr)
-  const release = JSON.parse(readFileSync(resolve(root, '.vercel/output/static/__release.json'), 'utf8'))
+  const release = JSON.parse(readFileSync(resolve(staticDir, '__release.json'), 'utf8'))
   assert.equal(release.commit, result.stdout.trim(), 'Run public:build for the current candidate before public verification; tests never replace deployment artifacts.')
 })
 
 function run(mutation = '') {
-  const release = JSON.parse(readFileSync(resolve(root, '.vercel/output/static/__release.json'), 'utf8'))
+  const release = JSON.parse(readFileSync(resolve(staticDir, '__release.json'), 'utf8'))
   const result = spawnSync(process.execPath, ['--import', `data:text/javascript;base64,${Buffer.from(preload).toString('base64')}`, 'tools/verify_public_release_live.mjs'], {
     cwd: root, encoding: 'utf8', timeout: 15000,
-    env: { SystemRoot: process.env.SystemRoot, PATH: process.env.PATH, PUBLIC_VERIFY_ATTEMPTS: '1', EXPECTED_RELEASE_COMMIT: release.commit, TEST_PUBLIC_MUTATION: mutation },
+    env: { SystemRoot: process.env.SystemRoot, PATH: process.env.PATH, SUPERMEGA_PUBLIC_OUTPUT_ID: isolatedOutputId, PUBLIC_VERIFY_ATTEMPTS: '1', EXPECTED_RELEASE_COMMIT: release.commit, TEST_PUBLIC_MUTATION: mutation },
   })
   return { ...result, output: result.stdout + result.stderr }
 }

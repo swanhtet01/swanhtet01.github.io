@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 
-const html = readFileSync('.vercel/output/static/contact/index.html', 'utf8')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve('.tmp', `supermega-public-output-${isolatedOutputId}`, 'static')
+  : resolve('.vercel/output/static')
+const html = readFileSync(resolve(outputDir, 'contact/index.html'), 'utf8')
 const page = html.match(/<main\b[\s\S]*?<\/main>/)?.[0] ?? ''
 const formHtml = page.match(/<form class="contact-form"[\s\S]*?<\/form>/)?.[0] ?? ''
 const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
