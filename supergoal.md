@@ -4,7 +4,7 @@ Version: 1.3.2
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-07
-Status: ACTIVE — PR #639 is at `73b1c2fb`, OPEN/BLOCKED with independent review unset. Exact-head App CI `37537487057`, Security Audit `37537492737`, and Kernel Console `37537492711` pass; release was skipped by its owner gate. No merge, preview promotion, or deployment. The paste-first Shop message panel is retired; structured Website/Ecommerce requests arrive automatically, but hosted/managed acceptance remains unverified. Hosted sign-in, persistence, isolation, customer acceptance, true current-product captures, hardware acceptance, and connected social-channel ingestion remain open. Local, uncommitted challenge-verification work is not part of this PR head.
+Status: ACTIVE — PR #639 exact head `22188fdaa74b1eea22f8104b3f2cfb3ae8458b18`, OPEN with independent review unset. Exact-head App CI `37549840140`, Dependency Security Audit `375498575657`, and Kernel Console `37549847486` pass; owner-gated release was skipped. No merge, preview, or deployment. Public screenshots remain genuine but dated Oct 2–4, not current after later product changes. Hosted founder sign-in/save/reload/isolation, customer acceptance, current screenshots, hardware acceptance, and inbound social-channel ingestion remain unproven.
 
 ## 1. Controlling objective
 
@@ -807,3 +807,10 @@ Historical transport errors do not supersede the later verified host correction 
 - **CI FAILURE:** exact-head run `37491912033` passed lint and reached app verification, then stopped at step 43/669 because `tools/test_barcode_scan_boundary.mjs` still asserted the old five-site scanner count. The production build itself and earlier static verifier passed.
 - **FIX:** boundary test now expects six Shop/Plant scanner placements and checks the stock-count call site, exact SKU resolution, unique-location rule, and absence of inventory mutation/command enqueue in the scanner handler. Local `node tools/test_barcode_scan_boundary.mjs` PASS 77 checks; `git diff --check` PASS.
 - **STATUS:** awaiting a fresh exact-head CI run after the test-contract correction. No app behavior changed in this repair. PR #639 remains OPEN/BLOCKED by independent review; no merge/deploy.
+
+### 2026-10-07 — exact-head and connector architecture audit
+
+- **EXACT SOURCE / CI:** `22188fdaa74b1eea22f8104b3f2cfb3ae8458b18` is clean and pushed to PR #639. App CI, Dependency Security Audit (including app/kernel/platform/runtime), and Kernel Console pass; release is skipped. PR remains open; independent review, preview, merge and deployment are not established.
+- **PUBLIC GALLERY:** image provenance now shows individual Oct 2 or Oct 4 capture dates. Those real app captures still predate current product changes and cannot be presented as current or as hosted/customer proof.
+- **REVERSE ENGINEERING:** source confirms Facebook and Instagram connector adapters are outbound send/health only. `supermega_runtime/meta_webhooks.py` verifies Meta challenge/signature primitives, but no production runtime route calls them. The shared `public.supermega_leads` table has no customer workspace key and is the company-lead path; it is unsafe as a destination for customer social inquiries.
+- **NEXT TECHNICAL SLICE:** first define a dedicated tenant-scoped private inbox/event persistence boundary using the existing managed membership model, durable event idempotency, raw-message minimization and human review. Then implement bounded inbound Meta Page verification/routing and synthetic cross-tenant denial/replay tests. Do not claim integration availability or connect a real Page until the server boundary, provider permissions, hosted isolation and customer acceptance are separately verified.
