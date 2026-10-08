@@ -8,6 +8,7 @@ import { visualizer } from 'rollup-plugin-visualizer'
 import { clientSetupManifestPlugin } from './scripts/client-setup-manifest.ts'
 
 const projectRoot = realpathSync(dirname(fileURLToPath(import.meta.url)))
+const buildOutput = resolve(process.env.SUPERMEGA_BUILD_OUTPUT || resolve(projectRoot, 'dist'))
 const localApi = process.env.SUPERMEGA_LOCAL_API?.trim()
 // Opt-in bundle visualization: `npm run build:analyze` (or ANALYZE=1 npm run build).
 // Never runs by default, so app:build / app:verify stay unaffected.
@@ -86,7 +87,7 @@ export default defineConfig(({ command }) => ({
     localHealthPlugin(),
     shouldAnalyzeBundle
       ? visualizer({
-          filename: resolve(projectRoot, 'dist/bundle-stats.html'),
+          filename: resolve(buildOutput, 'bundle-stats.html'),
           gzipSize: true,
           brotliSize: true,
           template: 'treemap',
@@ -106,6 +107,21 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       output: {
         onlyExplicitManualChunks: true,
+        // Vite embeds each async chunk's full dependency paths in its local preload table.
+        // Keeping a human-readable suffix on every dynamic chunk repeats several KB of names
+        // across the graph. Content hashes stay immutable; preserve names only where release,
+        // route, or operations contracts inspect them directly. The manifest remains the source
+        // of truth for screen identity and offline precaching.
+        chunkFileNames(chunk) {
+          const named = new Set([
+            'account-routes', 'ClientDataOnboarding', 'commerce-model', 'core-app',
+            'ManagedAccountPage', 'ManagedLoginPage', 'operating-models',
+            'ProductOnboardingPage', 'preload-helper', 'router', 'SettingsPage',
+            'ShopServiceSchedule', 'shop-planning-models', 'local-client-import',
+            'website-leads', 'website-model', 'WorkspaceControlsPage',
+          ])
+          return named.has(chunk.name) ? `assets/${chunk.name}-[hash].js` : 'assets/[hash].js'
+        },
         manualChunks(id) {
           // Keep lightweight login/recovery routing separate even when the
           // managed Auth transport also consumes the strict review-return parser.
