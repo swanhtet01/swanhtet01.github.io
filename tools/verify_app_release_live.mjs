@@ -85,10 +85,18 @@ export function verifyCurrentReleaseAssets({
   return { contract: 'supermega.current-release-assets.v1', checks, groups: groups.length }
 }
 
-async function readArtifactChunk(assetsDir, assetNames, pattern) {
+async function readArtifactChunk(assetsDir, assetNames, pattern, signature = '') {
   const name = assetNames.find((candidate) => pattern.test(candidate))
-  if (!name) throw new Error(`artifact_chunk_missing:${pattern.source}`)
-  return readFile(join(assetsDir, name), 'utf8')
+  if (name) return readFile(join(assetsDir, name), 'utf8')
+  if (!signature) throw new Error(`artifact_chunk_missing:${pattern.source}`)
+  // Most chunks now have content-hash-only names. Resolve those by a unique
+  // product contract string, then keep the same scoped release assertions.
+  const matches = (await Promise.all(assetNames.filter((candidate) => candidate.endsWith('.js')).map(async (candidate) => {
+    const content = await readFile(join(assetsDir, candidate), 'utf8')
+    return content.includes(signature) ? content : null
+  }))).filter(Boolean)
+  if (matches.length !== 1) throw new Error(`artifact_chunk_signature_matches:${pattern.source}:${matches.length}`)
+  return matches[0]
 }
 
 export function extractRelativeJavascriptDependencies(value) {
@@ -133,18 +141,18 @@ if (artifactSelfTest) {
     activationRunbookChunk,
   ] = await Promise.all([
     readArtifactChunk(assetsDir, assetNames, /^(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^ProductSystemNavigator-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ProductSystemNavigator-[A-Za-z0-9_-]+\.js$/, 'Choose a workflow or import your data.'),
     readArtifactChunk(assetsDir, assetNames, /^ProductOnboardingPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^SettingsPage-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^EcommerceProduct-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^ecommerce-order-review-packet-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^WebsiteProduct-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^EcommerceProduct-[A-Za-z0-9_-]+\.js$/, 'Extra order tools'),
+    readArtifactChunk(assetsDir, assetNames, /^ecommerce-order-review-packet-[A-Za-z0-9_-]+\.js$/, 'Review this packet against the saved Shop catalog'),
+    readArtifactChunk(assetsDir, assetNames, /^WebsiteProduct-[A-Za-z0-9_-]+\.js$/, 'Website starter brief generated'),
     readOptionalArtifactChunk(assetsDir, assetNames, /^website-model-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ClientDataOnboarding-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedLoginPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedAccountPage-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^CompanyBackupPanel-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^ManagedActivationRunbook-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^CompanyBackupPanel-[A-Za-z0-9_-]+\.js$/, 'Customer-owned and encrypted'),
+    readArtifactChunk(assetsDir, assetNames, /^ManagedActivationRunbook-[A-Za-z0-9_-]+\.js$/, 'Evidence to go live'),
   ])
   const evidenceVersion = extractTrialEvidenceVersion(settingsChunk)
   if (!Number.isInteger(evidenceVersion)) throw new Error('artifact_settings_evidence_version_missing')

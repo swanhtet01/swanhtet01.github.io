@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -16,6 +16,7 @@ import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
 import { websiteDraftDifference } from './website-draft-difference'
+import { websiteInquiryViewReducer, websiteInquiryWindow, type WebsiteInquiryFilter } from './website-inquiry-window'
 import {
   captureWebsiteLead,
   emptyWebsiteLeadLedger,
@@ -234,6 +235,10 @@ export function WebsiteProduct() {
   const [leadDraft, setLeadDraft] = useState({ name: '', contact: '', request: '', consentRecorded: false })
   const [leadOwner, setLeadOwner] = useState('')
   const [leadDecisionNote, setLeadDecisionNote] = useState('')
+  const [leadView, dispatchLeadView] = useReducer(websiteInquiryViewReducer, { filter: 'open', page: 0 })
+  const [leadActionId, setLeadActionId] = useState('')
+  const leadActionRef = useRef('')
+  const leadListStatusRef = useRef<HTMLParagraphElement>(null)
   const editSessionScope = storageMode === 'managed'
     ? managedActorId ? `managed:${managedActorId}` : ''
     : storageMode
@@ -922,6 +927,10 @@ export function WebsiteProduct() {
   // the "N new" badge, and the export -- with every captured inquiry still sitting on disk.
   const websiteLeads = websiteInboxLeads(leadLedger)
   const leadCounts = websiteLeadCounts(leadLedger)
+  const leadWindow = websiteInquiryWindow(websiteLeads, leadView.filter, leadView.page)
+  useEffect(() => {
+    dispatchLeadView({ type: 'ledger', leads: websiteLeads })
+  }, [websiteLeads])
   const releaseRecordRequired = storageMode === 'managed'
   const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges && contentChecksPass
   const websiteTodayStep = storageIssue || canRepairLocalStorage
@@ -1162,11 +1171,13 @@ export function WebsiteProduct() {
         }), { durable: true })
         if (!result.ok) throw new Error(result.error)
         setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
+        dispatchLeadView({ type: 'confirmed', ledger: result.workspace.leadLedger })
         setNotice('Inquiry saved to the company Website inbox for manager review. No message, CRM write, or external send ran.')
         return
       }
       if (saveLeadLedger(next, 'Inquiry saved to the local Website inbox. No message, CRM write, or external send ran.')) {
         setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
+        dispatchLeadView({ type: 'ledger', leads: next.leads })
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The Website inquiry is invalid.')
@@ -1174,6 +1185,9 @@ export function WebsiteProduct() {
   }
 
   async function decideLead(leadId: string, status: 'qualified' | 'closed') {
+    if (leadActionRef.current) return
+    leadActionRef.current = leadId
+    setLeadActionId(leadId)
     try {
       const next = reviewWebsiteLead(leadLedger, leadId, {
         status,
@@ -1193,16 +1207,25 @@ export function WebsiteProduct() {
         }), { durable: true })
         if (!result.ok) throw new Error(result.error)
         setLeadDecisionNote('')
+        dispatchLeadView({ type: 'confirmed', ledger: result.workspace.leadLedger })
         setNotice(status === 'qualified'
           ? 'Inquiry qualified and assigned in this company account. No customer message was sent.'
           : 'Inquiry closed in this company account. No customer message was sent.')
+        window.requestAnimationFrame(() => leadListStatusRef.current?.focus())
         return
       }
       if (saveLeadLedger(next, status === 'qualified'
         ? 'Inquiry qualified and assigned locally. No customer message was sent.'
-        : 'Inquiry closed locally. No customer message was sent.')) setLeadDecisionNote('')
+        : 'Inquiry closed locally. No customer message was sent.')) {
+        setLeadDecisionNote('')
+        dispatchLeadView({ type: 'ledger', leads: next.leads })
+        window.requestAnimationFrame(() => leadListStatusRef.current?.focus())
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The Website inquiry decision is invalid.')
+    } finally {
+      leadActionRef.current = ''
+      setLeadActionId('')
     }
   }
 
@@ -1486,12 +1509,29 @@ export function WebsiteProduct() {
                   {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export</a> : null}
                 </div>
                 {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible person<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Name or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing or closure reason" value={leadDecisionNote} /></label></div> : null}
+                {websiteLeads.length ? <div className="website-lead-list-controls">
+                  <label>Show inquiries
+                    <select onChange={(event) => dispatchLeadView({ type: 'filter', filter: event.target.value as WebsiteInquiryFilter })} value={leadView.filter}>
+                      <option value="open">Needs follow-up ({leadCounts.new + leadCounts.qualified})</option>
+                      <option value="all">All ({leadCounts.total})</option>
+                      <option value="closed">Closed ({leadCounts.closed})</option>
+                    </select>
+                  </label>
+                  <p ref={leadListStatusRef} role="status" tabIndex={-1}>{leadWindow.total
+                    ? `Showing ${leadWindow.start}–${leadWindow.end} of ${leadWindow.total}`
+                    : 'No inquiries in this view'}</p>
+                </div> : null}
                 <div className="website-lead-list">
-                  {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
+                  {leadWindow.items.length ? leadWindow.items.map((lead) => <article data-status={lead.status} key={lead.id}>
                     <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Responsible: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
-                    {lead.status !== 'closed' ? <div><button className="website-button is-primary is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
-                  </article>) : <div className="website-lead-empty"><strong>No inquiries yet</strong><p>Add a request when a customer gets in touch. Nothing is sent automatically.</p></div>}
+                    {lead.status !== 'closed' ? <div><button className="website-button is-primary is-compact" disabled={portalViewOnly || Boolean(leadActionId) || leadOwner.trim().length < 2} onClick={() => void decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={portalViewOnly || Boolean(leadActionId) || leadOwner.trim().length < 2} onClick={() => void decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
+                  </article>) : <div className="website-lead-empty"><strong>{websiteLeads.length ? 'No inquiries in this view' : 'No inquiries yet'}</strong><p>{websiteLeads.length ? 'Choose another status to see the other inquiries.' : 'Add a request when a customer gets in touch. Nothing is sent automatically.'}</p></div>}
                 </div>
+                {leadWindow.pageCount > 1 ? <nav aria-label="Inquiry pages" className="website-lead-pages">
+                  <button aria-disabled={leadWindow.page === 0} className="website-button is-secondary is-compact" onClick={() => dispatchLeadView({ type: 'page', page: leadWindow.page - 1, leads: websiteLeads })} type="button">Previous</button>
+                  <span>Page {leadWindow.page + 1} of {leadWindow.pageCount}</span>
+                  <button aria-disabled={leadWindow.page >= leadWindow.pageCount - 1} className="website-button is-secondary is-compact" onClick={() => dispatchLeadView({ type: 'page', page: leadWindow.page + 1, leads: websiteLeads })} type="button">Next</button>
+                </nav> : null}
               </section>
             </div>
           </section> : null}

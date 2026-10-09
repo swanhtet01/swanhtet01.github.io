@@ -723,7 +723,12 @@ else {
   else {
     // The operations route artifact, by the same chunk name this file already pins below.
     if (!precache.some((url) => /^\/assets\/core-app-[^/]+\.js$/.test(url))) fail('service_worker_precache_omits_operations_route')
-    if (!precache.some((url) => /^\/assets\/shop-batch-profit-control-first-use-[^/]+\.js$/.test(url))) {
+    // Rollup may give this content-hashed lazy chunk a compact filename. Verify the
+    // actual first-use code in the sealed cache instead of relying on its label.
+    const precachedShopFirstUse = await Promise.all(precache
+      .filter((url) => url.endsWith('.js'))
+      .map((url) => readFile(resolve(dist, url.slice(1)), 'utf8')))
+    if (!precachedShopFirstUse.some((source) => source.includes('shop_batch_first_use_commerce_snapshot_unavailable'))) {
       fail('service_worker_precache_omits_shop_batch_first_use')
     }
     // Everything the built document loads, so the shell the worker falls back to can boot.
