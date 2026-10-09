@@ -735,7 +735,7 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
         named: Boolean(entry.textContent?.trim()),
         hasNext: [...entry.querySelectorAll('small')].some((small) => small.textContent?.trim().startsWith('Next:')),
       }));
-      const queues = [...(operatingView?.querySelectorAll('article[aria-label="Order queue"],article[aria-label="Stock watch"]') || [])].map((entry) => ({
+      const queues = [...(operatingView?.querySelectorAll('article[aria-label="Order queue"],article[aria-label="Product list"]') || [])].map((entry) => ({
         name: entry.querySelector('header strong')?.textContent?.trim() || '',
         target: entry.querySelector('footer a[href]')?.getAttribute('href') || '',
         status: entry.querySelector('header > b')?.textContent?.trim() || '',
@@ -2084,7 +2084,7 @@ const tests = [
     ...viewport,
     expectedPath: '/shop/?tab=today',
     // innerText reflects the visual text-transform contract for these operator labels.
-    expectedText: ['Today', 'RECOMMENDED NEXT', 'WHY NOW', 'OWNER CHECK', 'Attention', 'Order queue', 'Stock watch', 'Advanced controls'],
+    expectedText: ['Today', 'QUICK TASK', 'Products', 'Order queue', 'Advanced controls'],
     absentText: ['Local Batch review stays off', 'Open a demo', 'Start trial'],
     exerciseShopDecisionDesk: true,
     isolatedBrowserContext: true,
@@ -2114,7 +2114,7 @@ const tests = [
     width: 1280,
     height: 900,
     expectedPath: '/shop/?tab=today',
-    expectedText: ['Today', 'Order queue', 'May', 'Stock watch', 'Cold drink pack', 'Daily close'],
+    expectedText: ['Today', 'Order queue', 'May', 'Products', 'Cold drink pack', 'Daily close'],
     absentText: ['Open a demo', 'Start trial'],
     exerciseShopOfflineRestore: true,
     isolatedBrowserContext: true,

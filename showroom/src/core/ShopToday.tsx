@@ -14,6 +14,7 @@ import { formatShopCostCoverage, formatShopMarginRate, projectShopCostCoverageAn
 import { formatShopProfitControlMetric } from './shop-profit-control'
 import type { ShopProfitControlBoard } from './shop-profit-control'
 import { projectShopTodaySalesPulse } from './shop-today-sales'
+import { ProductPhoto } from './ProductPhoto'
 
 export type ShopTodayMetric = {
   label: string
@@ -64,6 +65,7 @@ type ShopTodayProps = {
   closeQueue: ShopTodayCloseQueue
   metrics: ShopTodayMetric[]
   modules: ShopTodayModule[]
+  productImageScope: string
   nextAction: string
   nextActionLabel: string
   nextDetail: string
@@ -259,7 +261,7 @@ export function ShopBatchProfitControlPanel({
   </section>
 }
 
-export function ShopToday({ accountingExport = null, batchProfitControl = projectNoBatchProfitControl(), catalogReady, closeQueue, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, profitControl, recordStatus }: ShopTodayProps) {
+export function ShopToday({ accountingExport = null, batchProfitControl = projectNoBatchProfitControl(), catalogReady, closeQueue, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, productImageScope, profitControl, recordStatus }: ShopTodayProps) {
   const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
   const [activityAsOf] = useState(() => Date.now())
   const salesPulse = useMemo(() => projectShopTodaySalesPulse(commerce, activityAsOf), [activityAsOf, commerce])
@@ -272,11 +274,8 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       return (Number.isFinite(leftTime) ? leftTime : Number.MAX_SAFE_INTEGER)
         - (Number.isFinite(rightTime) ? rightTime : Number.MAX_SAFE_INTEGER)
     })
-    .slice(0, 3), [commerce.orders])
-  const lowStockItems = useMemo(() => commerce.items
-    .filter((item) => item.onHand <= item.reorderAt)
-    .sort((left, right) => (right.reorderAt - right.onHand) - (left.reorderAt - left.onHand) || left.name.localeCompare(right.name))
-    .slice(0, 5), [commerce.items])
+    .slice(0, 5), [commerce.orders])
+  const visibleProducts = commerce.items.slice(0, 6)
   const [batchFirstUse, setBatchFirstUse] = useState<ShopBatchFirstUseModuleState>({ status: 'idle' })
   const [localBatchProjection, setLocalBatchProjection] = useState<ShopBatchFirstUseProjectionResult | null>(null)
   const batchFirstUseAttempt = useRef(0)
@@ -329,7 +328,8 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
     currentWorkspaceCapability,
   )
   const visiblePriorities = profitControl.priorities.slice(0, 2)
-  const summaryMetrics = metrics.filter((metric) => metric.label !== "Today's sales")
+  const summaryMetrics = ["Today's sales", 'Open orders', 'Stock alerts']
+    .flatMap((label) => metrics.find((metric) => metric.label === label) ?? [])
   const remainingPriorityCount = profitControl.hiddenPriorityCount + Math.max(0, profitControl.priorities.length - visiblePriorities.length)
   const financeModule = modules.find((module) => module.label === 'Finance controls')
   const attentionPriority = visiblePriorities.find((priority) => priority.id !== 'close_ready')
@@ -339,9 +339,8 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
     <section aria-labelledby="shop-today-title" className="shop-today-overview">
       <header className="shop-today-heading">
         <div>
-          <span className="core-eyebrow">Shop workspace</span>
           <h2 id="shop-today-title">Today</h2>
-          <p>{yangonDay.format(new Date(activityAsOf))} · Sales, queues and owner decisions from the current Shop record.</p>
+          <p>{yangonDay.format(new Date(activityAsOf))}</p>
         </div>
         {catalogReady ? <Link className="core-button primary" to="/shop/?tab=counter">New sale</Link> : null}
       </header>
@@ -354,42 +353,28 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </div>
     </section>
 
-    <section aria-label="Recommended next" className="shop-next-focus" data-track={nextTrack.toLowerCase()}>
-      <div className="shop-next-focus-copy">
-        <header><span className="core-eyebrow">Recommended next</span><b>{nextTrack}</b></header>
-        <h3>{nextAction}</h3>
-        <div className="shop-next-focus-guidance">
-          <div><span>Why now</span><p>{nextDetail}</p></div>
-          <div><span>Owner check</span><p>{nextOwnerGate}</p></div>
-        </div>
-      </div>
-      <div className="shop-today-actions">
-        <Link className="core-button primary shop-decision-action" to={nextTo}>{nextActionLabel}</Link>
-        {catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
-      </div>
-    </section>
-
     <section aria-label="Shop operating view" className="shop-operations-board" data-track={nextTrack.toLowerCase()}>
+      <article aria-label="Product list" className="shop-operations-card shop-stock-watch-card">
+        <header><span><strong>Products</strong></span><b>{commerce.items.length} total</b></header>
+        <div className="shop-operating-list shop-product-list">
+          {visibleProducts.length ? visibleProducts.map((item) => <Link data-low-stock={item.onHand <= item.reorderAt} key={item.sku} to="/shop/?tab=inventory">
+            <ProductPhoto className="shop-today-product-photo" fallback={<span aria-hidden="true" className="shop-today-product-fallback">{item.name.trim().slice(0, 1).toUpperCase()}</span>} scope={productImageScope} sku={item.sku} />
+            <span><strong>{item.name}</strong><small>{item.onHand} in stock{item.onHand <= item.reorderAt ? ' · reorder' : ''}</small></span>
+            <span><b>{formatMmk(item.price)}</b></span>
+          </Link>) : <p className="shop-operating-empty"><strong>No products yet</strong><span>Add a product to start selling.</span></p>}
+        </div>
+        <footer><Link to="/shop/?tab=inventory">View products <span aria-hidden="true">→</span></Link></footer>
+      </article>
+
       <article aria-label="Order queue" className="shop-operations-card shop-order-queue-card">
-        <header><span><small>Orders</small><strong>Order queue</strong></span><b>{activeOrders.length} open</b></header>
+        <header><span><strong>Order queue</strong></span><b>{activeOrders.length} shown</b></header>
         <div className="shop-operating-list">
           {activeOrders.length ? activeOrders.map((order) => <Link key={order.id} to="/shop/?tab=orders#shop-order-queue">
-            <span><strong>{privacySafeQueueCustomer(order.customer)}</strong><small>{order.item} · {order.id.slice(-8)}</small></span>
-            <span><b>{formatMmk(order.total)}</b><small>{order.status} · payment {order.paymentStatus}</small></span>
+            <span><strong>{order.item}</strong><small>{privacySafeQueueCustomer(order.customer)} · {order.quantity} item{order.quantity === 1 ? '' : 's'}</small></span>
+            <span><b>{formatMmk(order.total)}</b><small>{order.status} · {order.paymentStatus === 'pending' ? 'payment due' : 'paid'}</small></span>
           </Link>) : <p className="shop-operating-empty"><strong>Queue clear</strong><span>No open orders need fulfilment.</span></p>}
         </div>
         <footer><Link to="/shop/?tab=orders#shop-order-queue">Open all orders <span aria-hidden="true">→</span></Link></footer>
-      </article>
-
-      <article aria-label="Stock watch" className="shop-operations-card shop-stock-watch-card">
-        <header><span><small>Inventory</small><strong>Stock watch</strong></span><b data-tone={lowStockItems.length ? 'attention' : 'ready'}>{lowStockItems.length} low</b></header>
-        <div className="shop-operating-list">
-          {lowStockItems.length ? lowStockItems.map((item) => <Link key={item.sku} to="/shop/?tab=inventory">
-            <span><strong>{item.name}</strong><small>{item.sku}</small></span>
-            <span><b>{item.onHand} on hand</b><small>{Math.max(0, item.reorderAt - item.onHand)} below reorder</small></span>
-          </Link>) : <p className="shop-operating-empty"><strong>Stock covered</strong><span>No item is at or below its reorder level.</span></p>}
-        </div>
-        <footer><Link to="/shop/?tab=inventory">Review inventory <span aria-hidden="true">→</span></Link></footer>
       </article>
 
       <aside className="shop-operations-rail">
@@ -404,14 +389,26 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
           <p>{salesPulse.today.count} retained completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} · samples excluded</p>
         </article>
 
-        <article aria-label="Record safety" className="shop-next-compact">
+        <section aria-label="Recommended next" className="shop-next-focus" data-track={nextTrack.toLowerCase()}>
+          <div className="shop-next-focus-copy">
+            <header><span className="core-eyebrow">Quick task</span><b>{nextTrack}</b></header>
+            <h3>{nextAction}</h3>
+            <details className="shop-next-focus-guidance"><summary>Why this matters</summary>
+              <div><span>Why now</span><p>{nextDetail}</p></div>
+              <div><span>Owner check</span><p>{nextOwnerGate}</p></div>
+            </details>
+          </div>
+          <div className="shop-today-actions"><Link className="core-button primary shop-decision-action" to={nextTo}>{nextActionLabel}</Link></div>
+        </section>
+
+        {recordStatus.badge === 'Paused' || recordStatus.badge === 'Backup advised' ? <article aria-label="Record safety" className="shop-next-compact">
           <header><span className="core-eyebrow">Records</span><b>{recordStatus.badge}</b></header>
           <h3>{recordStatus.label}</h3>
           <p>{recordStatus.detail}</p>
           {recordStatus.target && recordStatus.actionLabel ? <div className="shop-today-actions"><Link className="core-button" to={recordStatus.target}>{recordStatus.actionLabel} <span aria-hidden="true">→</span></Link></div> : null}
-        </article>
+        </article> : null}
 
-        {financeModule ? accountingExport ? <article aria-label="Accountant handoff ready" className="shop-finance-task shop-accounting-ready" data-tone="ready">
+        {financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount) ? accountingExport ? <article aria-label="Accountant handoff ready" className="shop-finance-task shop-accounting-ready" data-tone="ready">
           <span><small>Accountant handoff</small><strong>Daily close · {accountingExport.businessDate}</strong><em>{accountingExport.mappingReady ? 'Mapping reviewed' : 'Mapping review needed'}</em></span>
           <span><b>{formatMmk(accountingExport.totalMmk)}</b><small>Balanced journal · no external posting</small></span>
           <button className="core-button" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">Download accountant CSV</button>
