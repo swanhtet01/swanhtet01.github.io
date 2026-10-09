@@ -1117,16 +1117,16 @@ export function inspectBusinessBrief(document) {
   const named = node => [...(node.labels || [])].some(label => label.textContent.trim())
   const submit = form?.querySelector('button[type="submit"]')
   const website = Boolean(websiteForm)
-  const count = website ? 5 : 3
+  const count = 3
   const essentialsRequired = website
-    ? fields.length === count && fields[0].required && fields[1].required && !fields[2].required && fields[3].required && fields[4].required
+    ? fields.length === count && fields[0].required && fields[1].required && !fields[2].required
     : fields.length === count && fields[0].required && fields[1].required && !fields[2].required
   const nativeBlocked = website ? !form?.checkValidity() && !submit?.disabled : submit?.disabled
   return {
     fieldsReady: fields.length === count && fields.every(node => editable(node) && named(node)),
     essentialsRequired,
     emptyContinueBlocked: fields.every(node => node.value === '') && visible(submit) && nativeBlocked
-      && submit.textContent.trim() === (website ? 'Create website' : 'Continue'),
+      && submit.textContent.trim() === (website ? 'Create my website' : 'Continue'),
   }
 }
 
@@ -2146,7 +2146,7 @@ const tests = [
     width: 1280,
     height: 900,
     expectedPath: '/website/?workspace=1',
-    expectedText: ['Your website', 'Tell us about the business', 'Main customers', 'What do you sell or provide?', 'Create website'],
+    expectedText: ['Start your website', 'Business name', 'What do you sell or provide?', 'Create my website'],
     screenshotName: 'website-business-setup-desktop-1280x900',
     seed: {},
   },
@@ -2157,7 +2157,7 @@ const tests = [
     height: 844,
     mobile: true,
     expectedPath: '/website/?workspace=1',
-    expectedText: ['Your website', 'Main customers', 'What do you sell or provide?', 'Create website'],
+    expectedText: ['Start your website', 'Business name', 'What do you sell or provide?', 'Create my website'],
     screenshotName: 'website-business-setup-mobile-390x844',
     seed: {},
   },
