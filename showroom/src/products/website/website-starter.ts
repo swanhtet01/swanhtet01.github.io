@@ -184,7 +184,8 @@ export function applyWebsiteStarterBrief(
   const businessName = normalizedLine(brief.businessName)
   const audience = normalizedLine(brief.audience)
   const offer = normalizedLine(brief.offer)
-  const proof = normalizedLine(brief.proof) || 'Contact the business for details.'
+  const offerHeading = offer.replace(/[\s.!?。！？]+$/u, '') || offer
+  const proof = normalizedLine(brief.proof) || offer
   const contactHref = normalizedLine(brief.contactHref)
   const offeringSections = (brief.offerings ?? '').split(/\r?\n/u).filter((line) => line.trim()).map((line, index) => {
     const separator = line.indexOf('|')
@@ -216,8 +217,8 @@ export function applyWebsiteStarterBrief(
         navigation: { label: 'Home', visible: true },
         hero: {
           eyebrow: `For ${audience || 'customers'}`,
-          headline: offer,
-          summary: audience ? `${businessName} helps ${audience}.` : `${businessName} offers ${offer}.`,
+          headline: offerHeading,
+          summary: audience ? `${businessName} helps ${audience.replace(/[\s.!?。！？]+$/u, '')}.` : `Explore what ${businessName} offers and how to get in touch.`,
           ctaLabel: `View ${secondaryPage.name.toLowerCase()}`,
           ctaHref: secondaryPage.slug,
         },

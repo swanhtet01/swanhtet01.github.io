@@ -12217,7 +12217,7 @@ async function verifyWebsiteRuntime() {
       && briefPreview.pages.every((page) => page.stage === 'draft')
       && briefPreview.pages[1].slug === '/catalog'
       && briefPreview.pages[2].slug === '/contact'
-      && briefPreview.pages[0].hero.headline === starterBrief.offer
+      && briefPreview.pages[0].hero.headline === 'Fresh everyday groceries with same-day local delivery'
       && briefPreview.pages[0].hero.summary === `${starterBrief.businessName} helps ${starterBrief.audience}.`
       && briefPreview.pages[0].sections[0].body === starterBrief.proof
       && briefPreview.pages[0].hero.ctaHref === '/catalog'

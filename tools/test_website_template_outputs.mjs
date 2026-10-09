@@ -29,6 +29,22 @@ const expected = {
   'catalog-showcase': { slug: '/catalog', label: 'Ask about an item', need: 'preferred variant' },
 }
 
+test('short first-use brief produces clean headings without invented business details', () => {
+  const output = applyWebsiteStarterBrief(createInitialWorkspace(), {
+    ...brief,
+    templateId: 'business-presence',
+    audience: '',
+    offer: 'Interior styling for local homes.',
+    proof: '',
+  }, capturedAt)
+  const home = output.pages.find(page => page.slug === '/')
+  assert.equal(home.hero.headline, 'Interior styling for local homes')
+  assert.equal(home.hero.summary, 'Explore what Example Studio offers and how to get in touch.')
+  assert.equal(home.sections[0].body, 'Interior styling for local homes.')
+  assert.doesNotMatch(JSON.stringify(output.pages), /Contact the business for details|homes\.\./)
+  assert.ok(output.pages.every(page => page.stage === 'draft'))
+})
+
 test('business brief stays unsaved until commit and survives reload without release evidence', async () => {
   const values = new Map()
   const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }
