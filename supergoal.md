@@ -1,12 +1,12 @@
 # SuperMega Supergoal
 
-Version: 1.3.3
+Version: 1.3.5
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-09
-Status: ACTIVE — isolated product candidate PR #646 builds on PR #639. Product-code head `1a916a2997017739820d663e6ffc6cfc608dd1d8` adds focused, reversible Sites section editing and readable Myanmar headings in exported sites. Its local typecheck, targeted lint, export/session checks and build checks pass; exact-head CI is pending. The preceding #646 head `b8a918fb` passed App CI `37948618893` and security checks. PR #639 remains OPEN/BLOCKED at `82bfa539` without eligible independent review. No production release occurred in this work block. The public gallery predates these changes. Hosted founder workflows, public Sites inquiry delivery, public Commerce buyer entry, managed media, hardware and customer acceptance remain incomplete or unproven.
+Status: ACTIVE — product clarity branch `redesign/product-workspace-clarity-20261009` starts at PR #646 head `b68c349a41081072098d7a64263f61858c212392`. Product commit `6c24b5792eb7e39d32efdaf4251c794eb40ecfcd` replaces the Sites inquiry wall with searchable list/detail triage, fixes the eight-record display limit, isolates assignment drafts by account and request, and combines Commerce editing with its customer view. Local typecheck, targeted lint, production build, full build verification and synthetic desktop/390px browser journeys pass. Artifact size is 3,246,190 / 3,250,000 bytes; Shop route wire cost is 474,693 / 475,000 bytes. These small remaining margins need reduction before adding more runtime dependencies. The base #646 App CI/security passed (`37953158279`, `37953161463`). Separate backend draft #647 passed App CI `37955688553`; its inquiry routes remain unmounted. Neither candidate has hosted customer acceptance. The public website/contact page still serves the older design; the gallery predates these changes. No production release occurred in this block.
 
-Integration ownership: the CTO owns this isolated PR #646 candidate. The overlapping CEO checkout contains uncommitted public-site work and a newer `supergoal.md` lineage; preserve it and reconcile this checkpoint during integration. Do not replace that checkout wholesale with this branch's document or call either dirty state a release candidate.
+Integration ownership: the CTO owns this isolated product clarity branch and the separate #647 backend candidate. Both build on #646; neither includes the other. The overlapping CEO checkout contains uncommitted public-site work and `supergoal.md` v1.4.44; preserve it and reconcile these facts during integration. This v1.3.5 is a branch checkpoint, not a replacement for that lineage. PR #639 last remained blocked by independent review; a source checkpoint does not remove that gate.
 
 ## 1. Controlling objective
 
@@ -83,9 +83,9 @@ Prioritize the weakest required part of the customer lifecycle. Do not spend suc
 
 | Required outcome | Current evidence | Next acceptance |
 |---|---|---|
-| Premium, intuitive product workflows | #646 source improves Shop Today, Sites setup/editor and Commerce store/orders; focused local checks and synthetic render evidence | Signed-in desktop/mobile journeys against the exact hosted candidate; real media and complete task outcomes |
+| Premium, intuitive product workflows | #646 plus `6c24b579` improves Shop Today, Sites editor/inquiry triage and Commerce store/orders; local checks and real-component synthetic evidence | Signed-in desktop/mobile journeys against the exact hosted candidate; real media, complete task outcomes and customer comprehension |
 | Founder access and reliable managed records | Historical identity/membership readback; current unauthenticated routes correctly reach Login | Founder sign-in, workspace discovery, save/reload, lost-response recovery and cross-workspace denial |
-| Sites customers can visit and inquire | Standalone HTML export and operator-entered inquiries | Implement and prove hosted page publication with tenant-bound public inquiry delivery; an export is not this service |
+| Sites customers can visit and inquire | Standalone HTML export and operator-entered inquiries; #647 adds tested but unmounted durable HTTP/storage adapters | Bind approved published pages to channels, integrate migration/configuration and real form/inbox delivery, then prove the hosted customer journey |
 | Commerce customers can send an order request | Local Store-to-Shop contracts; customer view remains inside the protected app | A separate public buyer entry with safe catalog exposure, durable request receipt, operator review and replay/isolation checks |
 | Truthful, usable company website | Cleaner contact/gallery candidate is unreleased; public captures are older | Clean integration, eligible review, protected release and route-matched actual captures |
 | Sellable and supportable offer | Hardware, Burmese comprehension and accepted customer installations remain unproven | Real scanner/printer checks, native-reader task checks, then capability-backed packaging and measured support cost |

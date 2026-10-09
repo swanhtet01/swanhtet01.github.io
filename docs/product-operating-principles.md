@@ -1,6 +1,6 @@
 # SuperMega product and operating principles
 
-Status: maintained decision guide, 28 September 2026. Current execution state and authority live in `../supergoal.md`; this document does not authorize spending or deployment.
+Status: maintained decision guide, updated 9 October 2026. Current execution state and authority live in `../supergoal.md`; this document does not authorize spending or deployment.
 
 ## Product promise
 
@@ -43,6 +43,16 @@ First experiment: propose mappings for messy customer catalogs. Preserve supplie
 Use first principles to identify the necessary customer outcome; systems thinking to trace intake through persistence, delivery, support and revenue; and eliminate/reduce/raise/create to simplify the interface.
 
 For every proposed change, answer: What observed problem does it solve? What existing capability can we reuse? What could it break? What evidence would prove improvement? What is the rollback or stop condition?
+
+### From observation to accepted change
+
+Start with the current product and a concrete task, not a list of frameworks. Record the source commit and compare the same task/state against a reference. Distinguish a vendor claim, an exercised reference workflow and our own verified behavior. Use REA for shipped artifacts or runtime questions that source cannot answer; ordinary source review does not need a reverse-engineering tool.
+
+Remove unnecessary decisions before adding decoration. Prefer one selected record with contextual actions over repeated action buttons; show editable content beside its actual output when that removes a navigation step. Keep drafts scoped to the account and record, preserve failed work, and test empty, busy, read-only, error and restored states. Synthetic data must exercise the real components, never replace missing capabilities with a persuasive mockup.
+
+For substantial changes, exercise the primary task at desktop and 390px phone width, inspect the actual render and console, and verify save/reopen plus relevant isolation. Compare step count, correction effort and completion failures with the previous flow. These are baseline checks, not a substitute for a Burmese-speaking customer completing the task. Capture marketing images only from the accepted product route, with provenance and illustrative-data disclosure where needed.
+
+Reuse existing test runners, UI primitives and fixtures before installing another skill or framework. Adopt a tool only for a named capability gap, with license/maintenance review, a bounded experiment and measurable improvement. Keep the operating brief small; store receipts once and link them rather than reproducing the backlog in every document.
 
 ## Release and commercial truth
 
