@@ -343,6 +343,9 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
   const primaryTask = (recordStatus.badge === 'Paused' || recordStatus.badge === 'Backup advised') && recordStatus.target && recordStatus.actionLabel
     ? { title: recordStatus.actionLabel, detail: recordStatus.detail, action: recordStatus.badge, target: recordStatus.target, ownerGate: recordStatus.detail }
     : { title: nextAction, detail: nextDetail, action: nextActionLabel, target: nextTo, ownerGate: nextOwnerGate }
+  const attentionPriority = recordStatus.badge === 'Paused' || recordStatus.badge === 'Backup advised'
+    ? undefined
+    : profitControl.priorities.find((priority) => priority.id !== 'close_ready')
   const maximumPulseMmk = Math.max(1, ...salesPulse.points.map((point) => point.grossMmk))
 
   return <div className="shop-today">
@@ -403,7 +406,9 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
         <section aria-label="Quick tasks" className="shop-next-focus">
           <header className="shop-next-focus-copy"><h3>Quick tasks</h3></header>
           <div className="shop-operating-list shop-task-list">
-            {taskLink(primaryTask.title, primaryTask.detail, primaryTask.action, primaryTask.target, primaryTask.ownerGate)}
+            {attentionPriority ? <Link data-priority-id={attentionPriority.id} data-state={profitControl.state} to={attentionPriority.target}>
+              <span><strong>{attentionPriority.title}</strong><small><strong>Next:</strong> {attentionPriority.actionLabel}</small></span>
+            </Link> : taskLink(primaryTask.title, primaryTask.detail, primaryTask.action, primaryTask.target, primaryTask.ownerGate)}
 
             {financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount) ? accountingExport ? <button className="shop-task-row shop-finance-task" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">
               <span><strong>Export</strong><small>Accountant CSV · {accountingExport.businessDate} · {accountingExport.mappingReady ? 'Mapped' : 'Unmapped'}</small></span>
