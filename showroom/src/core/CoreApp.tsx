@@ -2044,15 +2044,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     status: activeShift ? 'Shift open' : openShiftSessions.length > 1 ? 'Choose a shift' : 'No active shift',
     detail: activeShift
       ? `Open since ${formatTime(activeShift.opening.capturedAt)}`
-      : openShiftSessions.length > 1
-        ? 'Select one shift.'
+        : openShiftSessions.length > 1
+          ? 'Select one shift.'
         : legacyOperatingOrders.length
-          ? 'Close current work.'
+          ? 'Review orders first.'
           : 'Start before selling.',
     actionLabel: shopOperatingEligible
       ? operatingActivated
         ? activeShift || openShiftSessions.length > 1 ? undefined : 'Open shift'
-        : legacyOperatingOrders.length ? 'Finish current work' : 'Start Shop day'
+        : legacyOperatingOrders.length ? 'Review orders' : 'Start Shop day'
       : undefined,
     disabled: !commerceCanWrite || Boolean(pendingAction),
     onAction: reviewShopOperatingSession,
@@ -4096,7 +4096,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     if (!shopOperatingEligible || !commerceCanWrite || pendingAction) return
     if (!operatingActivated && legacyOperatingOrders.length) {
       navigate('/shop/?tab=orders#shop-close-controls')
-      setNotice('Close current work before starting a shift.')
+      setNotice('Close orders before starting a shift.')
       return
     }
     if (openShiftSessions.length) return
