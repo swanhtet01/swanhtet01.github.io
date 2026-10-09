@@ -4,9 +4,9 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 const require = createRequire(new URL('../showroom/package.json', import.meta.url))
-test('launcher promises a local request, not a delivered Shop order', () => {
+test('launcher presents Commerce without claiming a delivered Shop order', () => {
   const shell = readFileSync(new URL('../showroom/src/core/CoreShell.tsx', import.meta.url), 'utf8')
-  assert.ok(shell.includes("['Ecommerce', 'A product catalog and customer requests.', 'Open Ecommerce', '/ecommerce/']"))
+  assert.ok(shell.includes("['Commerce', 'A product catalog and customer requests.', 'Commerce', '/ecommerce/']"))
   assert.ok(!shell.includes('Send a sample order to Shop'))
 })
 const ts = require('typescript')
@@ -21,50 +21,66 @@ test('phone catalog remains readable with a retained Desktop preview selection',
   }
   assert.ok(block.includes('> .storefront-request-button { grid-column: 1 / -1; grid-row: 5; }'))
 })
-test('local entry consistently names a sample request in source and acceptance contracts', () => {
-  for (const path of ['../showroom/src/products/ecommerce/EcommerceProduct.tsx', './verify_app_build.mjs', './verify_app_release_live.mjs', './verify_exact_app_preview.mjs']) {
+test('local entry uses an honest order-request flow without sample language', () => {
+  for (const path of ['../showroom/src/products/ecommerce/EcommerceProduct.tsx']) {
     const text = readFileSync(new URL(path, import.meta.url), 'utf8')
-    if (path !== './verify_exact_app_preview.mjs') assert.ok(text.includes("'Try one sample request'"), path)
-    else assert.ok(text.includes("'Request catalog setup'"), path)
-    assert.ok(text.includes("'Try sample request'"), path)
-    assert.doesNotMatch(text, /'Try one customer order'|'Start sample order'/)
+    assert.doesNotMatch(text, /sample request|browser demo/i, path)
   }
+  const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
+  assert.ok(product.includes("'Open customer ordering'"))
 })
-test('assisted catalog setup stays available in both local views and preserves the draft tab', () => {
+test('assisted catalog setup stays available in both local views and preserves the explicit workspace', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const expression = product.match(/const showAssistedCatalogSetup = ([\s\S]*?)\n\s*const assistedCatalogEntry/)?.[1]
   assert.ok(expression)
   const ready = { catalogHydrating: false, managedIdentity: null, catalog: { source: 'sample' }, draftIssue: '', draftBusy: false, workspaceView: 'preview' }
-  assert.equal(vm.runInNewContext(expression, ready), true)
-  assert.equal(vm.runInNewContext(expression, {...ready,workspaceView:'setup'}), true)
+  assert.equal(vm.runInNewContext(expression, { ...ready, URLSearchParams, location: { search: '' } }), true)
+  assert.equal(vm.runInNewContext(expression, {...ready,workspaceView:'setup', URLSearchParams, location: { search: '' }}), true)
   for (const workspaceView of ['preview','setup']) {
     for (const blocked of [{catalogHydrating:true}, {managedIdentity:{}}, {catalog:{source:'unavailable'}}, {draftIssue:'read failed'}, {draftBusy:true}]) {
-      assert.equal(vm.runInNewContext(expression, {...ready,workspaceView,...blocked}), false)
+      assert.equal(vm.runInNewContext(expression, {...ready,workspaceView,...blocked, URLSearchParams, location: { search: '' }}), false)
     }
   }
   assert.ok(product.includes('href="/ecommerce/?setup=1"'))
-  assert.ok(product.includes("search.delete('setup')"))
-  assert.match(product, /Requests stay on this device and are not live orders/)
-  assert.match(product, /: ecommerceTodayHeadline\}/)
+  assert.ok(product.includes("new URLSearchParams(location.search).get('workspace') !== '1'"))
+  assert.match(product, /Requests stay on this device until Shop review/)
+  assert.ok(product.includes('headline={ecommerceTodayHeadline}'))
 })
 
-test('fresh assisted entry yields to retained work, carts, attention and editor state', () => {
+test('the assisted entry only appears before an explicit workspace route', () => {
   const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
-  const expression = product.match(/const assistedCatalogEntry = ([\s\S]*?)\n\s*if \(/)?.[1]
+  const expression = product.match(/const assistedCatalogEntry = ([\s\S]*?)\n\s*const workspaceCopy/)?.[1]
   assert.ok(expression)
-  const ready = { showAssistedCatalogSetup: true, workspaceView: 'preview', savedDraft: null, ecommerceTodayAction: 'Try sample request', ecommerceTodayState: 'ready', ecommerceTodayCartUnits: 0 }
+  const ready = { showAssistedCatalogSetup: true, URLSearchParams, location: { search: '' } }
   assert.equal(vm.runInNewContext(expression, ready), true)
-  for (const blocked of [{ showAssistedCatalogSetup: false }, { workspaceView: 'setup' }, { savedDraft: { revision: 1 } }, { ecommerceTodayAction: 'Review checkout' }, { ecommerceTodayAction: 'View request receipt' }, { ecommerceTodayAction: 'Fix order import' }, { ecommerceTodayState: 'attention' }, { ecommerceTodayState: 'setup' }, { ecommerceTodayCartUnits: 1 }]) {
-    assert.equal(vm.runInNewContext(expression, { ...ready, ...blocked }), false)
-  }
-  assert.ok(product.includes('{!assistedCatalogEntry ? <label className="ecommerce-workspace-switch">'))
-  assert.ok(product.includes('Explore the catalog'))
+  assert.equal(vm.runInNewContext(expression, { ...ready, location: { search: '?workspace=1' } }), false)
+  assert.equal(vm.runInNewContext(expression, { ...ready, showAssistedCatalogSetup: false }), false)
+  assert.ok(product.includes('{!assistedCatalogEntry ? <nav aria-label="Commerce workspace"'))
+  assert.ok(product.includes("sampleCatalogPreview ? 'Replace sample products' : 'Edit store'"))
+  assert.ok(!product.includes('aria-label="Storefront view"'))
+  assert.ok(product.includes('return <BusinessBrief product="ecommerce" />'))
+  assert.ok(!product.includes('Explore the catalog'))
   assert.ok(!product.includes('Let SuperMega prepare your catalog'))
   assert.ok(!product.includes('Review your catalog before launch.'))
-  const action = product.slice(product.indexOf('{assistedCatalogEntry ? <>'), product.indexOf('{ecommerceTodayGuided ? ('))
-  assert.doesNotMatch(action, /ecommerce-assisted-intake|What to send/)
-  assert.match(action, /<AssistedDeliveryScope product="ecommerce" \/>/)
-  assert.match(action, /<button className="core-button secondary" onClick=\{runOrderAutopilot\} type="button">Try sample request/)
+})
+
+test('orders use one real-record operating desk instead of a duplicate status hero', () => {
+  const product = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
+  const desk = readFileSync(new URL('../showroom/src/products/ecommerce/CommerceOrderDesk.tsx', import.meta.url), 'utf8')
+  assert.equal(product.match(/<CommerceOrderDesk/g)?.length, 1)
+  assert.doesNotMatch(product, /className="ecommerce-today"/)
+  for (const binding of [
+    'headline={ecommerceTodayHeadline}',
+    'summary={ecommerceTodaySummary}',
+    'primaryActionLabel={ecommerceTodayAction}',
+    'statusRows={ecommerceTodayMetrics}',
+    'onPrimaryAction={runOrderAutopilot}',
+  ]) assert.ok(product.includes(binding), binding)
+  assert.ok(desk.includes('aria-label="Commerce operating status"'))
+  assert.ok(desk.includes('const activeExceptions = EXCEPTIONS.filter'))
+  assert.ok(desk.includes('Ready for the next customer.'))
+  assert.ok(desk.includes('order{activeOrderCount === 1 ? \' is\' : \'s are\'} in fulfilment.'))
+  assert.doesNotMatch(desk, /disabled=\{!count\}|No action needed/)
 })
 const source = readFileSync(new URL('../showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('buying.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
@@ -78,8 +94,8 @@ assert.ok(action, 'actual request submit action exists')
 const label = action.children.find(child => ts.isJsxExpression(child))?.expression.getText(ast)
 const mode = action.openingElement.attributes.properties.find(prop => prop.name?.text === 'data-request-mode').initializer.expression.getText(ast)
 test('local request action promises only a device save, including its busy label', () => {
-  assert.equal(vm.runInNewContext(label, { quoteBusy: false, onRecordManagedRequest: undefined }), 'Save request on this device')
-  assert.equal(vm.runInNewContext(label, { quoteBusy: true, onRecordManagedRequest: undefined }), 'Saving on this device...')
+  assert.equal(vm.runInNewContext(label, { quoteBusy: false, onRecordManagedRequest: undefined }), 'Save request locally')
+  assert.equal(vm.runInNewContext(label, { quoteBusy: true, onRecordManagedRequest: undefined }), 'Saving locally...')
   assert.equal(vm.runInNewContext(mode, { onRecordManagedRequest: undefined }), 'local')
 })
 test('managed request action still names a send without claiming delivery completion', () => {
@@ -91,7 +107,7 @@ test('managed request action still names a send without claiming delivery comple
 test('rendered local proof rejects the old send claim rather than accepting either label', () => {
   const harness = readFileSync(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
   assert.ok(harness.includes('button[data-request-mode="local"]'))
-  assert.ok(harness.includes("submit?.textContent.trim() !== 'Save request on this device'"))
+  assert.ok(harness.includes("submit?.textContent.trim() !== 'Save request locally'"))
 })
 
 test('stale quote guidance does not invent a cart edit or an accepted order', () => {
@@ -105,9 +121,17 @@ test('stale quote guidance does not invent a cart edit or an accepted order', ()
   const strong = stale.children.find(child => ts.isJsxElement(child) && child.openingElement.tagName.getText(ast) === 'strong')
   const title = strong.children.find(child => ts.isJsxExpression(child)).expression.getText(ast)
   assert.equal(vm.runInNewContext(title, { latestRequestOrder: null }), 'Review a new total')
-  assert.equal(vm.runInNewContext(title, { latestRequestOrder: { id: 'fixture-order' } }), 'Start another order')
+  assert.equal(vm.runInNewContext(title, { latestRequestOrder: { id: 'fixture-order' } }), 'Order confirmed in Shop')
   assert.doesNotMatch(stale.getText(ast), /Cart changed|cannot continue with this cart/)
+  assert.match(stale.getText(ast), /Choose a product above to start another order/)
   assert.match(stale.getText(ast), /Review the current items and details before requesting a new total/)
+})
+
+test('confirmed orders collapse the empty checkout form into a clear status', () => {
+  assert.ok(source.includes("latestRequestOrder ? 'Order confirmed' : latestRequest ? 'Request saved' : 'Empty'"))
+  assert.ok(source.includes('{cart.length ? <form aria-busy={quoteBusy}'))
+  assert.ok(source.includes("latestRequest && !latestRequestOrder"))
+  assert.doesNotMatch(source, /latestRequest \? 'Recovered' : 'Empty'/)
 })
 
 test('only recorded orders use the Reorder label; saved quotes invite a fresh review', () => {
@@ -126,13 +150,13 @@ test('only recorded orders use the Reorder label; saved quotes invite a fresh re
 
 test('build gate requires truthful recovered-quote copy and rejects retired claims', () => {
   const verifier = readFileSync(new URL('./verify_app_build.mjs', import.meta.url), 'utf8')
-  const start = verifier.indexOf('  || !ecommerceBuyingUiSource.includes("latestRequestOrder ?')
+  const start = verifier.indexOf('  || !ecommerceBuyingUiSource.includes("latestRequestOrder ? \'Order confirmed in Shop\' : \'Review a new total\'")')
   const end = verifier.indexOf("  || !ecommerceBuyingUiSource.includes('{latestRequest ?", start)
   assert.ok(start >= 0 && end > start, 'exact recovered-quote gate must exist')
   const predicate = 'false ' + verifier.slice(start, end)
   const rejects = (ecommerceBuyingUiSource) => vm.runInNewContext(predicate, { ecommerceBuyingUiSource })
   assert.equal(rejects(source), false)
-  for (const marker of ['Review a new total', 'Review the current items and details', 'Review items again']) {
+  for (const marker of ['Order confirmed in Shop', 'Choose a product above to start another order', 'Review a new total', 'Review the current items and details', 'Review items again']) {
     assert.equal(rejects(source.replaceAll(marker, 'missing-copy')), true, marker)
   }
   for (const retired of ['Cart changed — review a new total', 'cannot continue with this cart']) {

@@ -8,8 +8,13 @@ import { activeSetupProductContracts, productContracts, seedSetupForProduct,
   rememberProductSetup, readProductSetup, setupProductFromQuery } from '../showroom/src/core/product-setup.ts'
 
 const root = resolve(import.meta.dirname, '..')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const publicOutputDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`, 'static')
+  : resolve(root, '.vercel/output/static')
 const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 'utf8'))
-const html = async path => readFile(resolve(root, '.vercel/output/static', path), 'utf8')
+const html = async path => readFile(resolve(publicOutputDir, path), 'utf8')
 const main = value => value.match(/<main[\s\S]*?<\/main>/)?.[0] ?? ''
 
 test('retired direct setup stops before write-capable onboarding hooks mount', async () => {
@@ -61,17 +66,16 @@ test('release assets require the current login choices and local workspace bound
   assert.throws(() => validate({ ...input, managedLoginChunk: 'Open your company. Try free demo Request company account' }), /missing_current_release_asset:company_login:/)
 })
 
-test('launcher consumes active policy without discarding retained or assigned access', async () => {
+test('unauthenticated launcher preserves managed-only access and hides browser-local workspace detail', async () => {
   const source = await readFile(resolve(root, 'showroom/src/core/CoreShell.tsx'), 'utf8')
-  assert.match(source, /setActiveSetupIds\(activeSetupProductContracts\.map\(product => product\.id\)\)/)
-  assert.ok(source.includes("Boolean(productSetups?.[PRODUCT_SETUP_KEY[name]]?.startedAt) || (name === 'Website' && Boolean(savedWebsiteName))"), 'local cards require saved work')
-  assert.match(source, /!managedPortal && !activeSetupIds\.includes\(setupKey\) && !setup/)
-  assert.match(source, /managedPortal && !managedProductIsVisible\(portalAccess\.products, setupKey\)/)
-  assert.match(source, /readProductSetup\(window\.localStorage, 'production'\)/)
-  assert.match(source, /setSetupLoadFailed\(true\)/)
-  assert.match(source, /\[managedPortal, setupLoadAttempt\]/)
-  assert.match(source, /setSetupLoadAttempt\(attempt => attempt \+ 1\)/)
-  assert.match(source, /Workspace unavailable/)
+  assert.match(source, /!emptyCompany && managedPortal \? <nav aria-label="Your workspace"/)
+  assert.match(source, /customerProducts\.filter\(\(\[name\]\) => managedProductIsVisible/)
+  assert.match(source, /if \(!managedProductIsVisible\(portalAccess\.products, setupKey\)\) return null/)
+  assert.match(source, /Sign in to your business\./)
+  assert.match(source, /to=\{managedLoginPath\(null\)\}>Login<\/Link>/)
+  for (const retiredBrowserDetail of ['localProductSetups', "readProductSetup(window.localStorage, 'production')", 'setSetupLoadFailed', 'Workspace unavailable', 'On this device']) {
+    assert.ok(!source.includes(retiredBrowserDetail), `unauthenticated root must not expose ${retiredBrowserDetail}`)
+  }
 })
 
 test('one source policy declares exactly three active acquisition doors', () => {
@@ -112,9 +116,12 @@ test('saved Plant setup survives visibility projection byte-for-byte', () => {
 
 test('generated public home and contact offer only active products', async () => {
   const home = main(await html('index.html')), contact = main(await html('contact/index.html'))
-  assert.equal((home.match(/class="product-story"/g)??[]).length, 3)
+  assert.equal((home.match(/class="product-card-compact"/g)??[]).length, 3)
+  assert.equal((home.match(/class="product-card-flow"/g)??[]).length, 3)
+  assert.match(home, /Contact SuperMega/)
   assert.doesNotMatch(home, /Plant|all four|href="[^\"]*(?:\/plant\/|product=plant)/)
-  assert.deepEqual([...contact.matchAll(/<option value="([^"]+)">/g)].map(m=>m[1]), ['guide','shop','ecommerce','website'])
+  assert.match(contact, /<input type="hidden" name="product" value="guide" \/>/)
+  assert.doesNotMatch(contact, /<select[^>]*name="product"/)
   for (const product of activeProductContracts(manifest)) {
     const page = main(await html(product.id+'/index.html'))
     const fullPage = await html(product.id+'/index.html')
@@ -134,7 +141,10 @@ test('Plant public route becomes compatibility-only, not sales or new setup', as
   assert.doesNotMatch(content, /Open retained workspace|href="[^\"]*\/plant\//)
   assert.doesNotMatch(content, /first-job-templates|Start free sample|Request assisted setup|product=plant|\?template=|\?pack=/)
   assert.doesNotMatch(await html('sitemap.xml'), /<loc>https:\/\/supermega.dev\/plant\/<\/loc>/)
-  const config = JSON.parse(await readFile(resolve(root,'.vercel/output/config.json'),'utf8'))
+  const configPath = isolatedOutputId
+    ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`, 'config.json')
+    : resolve(root, '.vercel/output/config.json')
+  const config = JSON.parse(await readFile(configPath,'utf8'))
   assert.ok(config.routes.some(route => route.headers?.Location === '/plant/'))
   assert.ok(!config.routes.some(route => route.headers?.Location === '/#plant'))
 })

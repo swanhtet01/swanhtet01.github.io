@@ -1,6 +1,7 @@
 export type ShopOperatingFlowInput = {
   incomingOnline: number
   incomingWebsite: number
+  stockConflicts: number
   confirmed: number
   preparing: number
   ready: number
@@ -11,7 +12,7 @@ export type ShopOperatingFlowInput = {
 }
 
 export type ShopOperatingStageId = 'intake' | 'accepted' | 'fulfilment' | 'money' | 'close'
-export type ShopOperatingActionId = 'review_intake' | 'protect_promise' | 'move_orders' | 'reconcile_money' | 'close_day' | 'new_order'
+export type ShopOperatingActionId = 'resolve_stock' | 'review_intake' | 'protect_promise' | 'move_orders' | 'reconcile_money' | 'close_day' | 'new_order'
 
 export type ShopOperatingStage = {
   id: ShopOperatingStageId
@@ -45,6 +46,7 @@ function records(value: number, singular: string, plural = `${singular}s`) {
 export function buildShopOperatingFlow(input: ShopOperatingFlowInput): ShopOperatingFlow {
   const incomingOnline = count(input.incomingOnline, 'Incoming online requests')
   const incomingWebsite = count(input.incomingWebsite, 'Incoming Website requests')
+  const stockConflicts = count(input.stockConflicts, 'Incoming stock conflicts')
   const confirmed = count(input.confirmed, 'Confirmed orders')
   const preparing = count(input.preparing, 'Preparing orders')
   const ready = count(input.ready, 'Ready orders')
@@ -57,13 +59,14 @@ export function buildShopOperatingFlow(input: ShopOperatingFlowInput): ShopOpera
   const moneyExceptions = paymentPending + refundDue
 
   const stages: ShopOperatingStage[] = [
-    { id: 'intake', label: 'Intake', count: incoming, detail: `${records(incomingOnline, 'online request')} · ${records(incomingWebsite, 'Website request')}`, target: '#shop-order-queue' },
+    { id: 'intake', label: 'Intake', count: incoming, detail: `${records(incomingOnline, 'online request')} · ${records(incomingWebsite, 'Website request')}${stockConflicts ? ` · ${records(stockConflicts, 'stock conflict')}` : ''}`, target: '#shop-order-queue' },
     { id: 'accepted', label: 'Accepted', count: confirmed, detail: records(confirmed, 'order'), target: '#shop-order-queue' },
     { id: 'fulfilment', label: 'Fulfil', count: inFulfilment, detail: `${records(preparing, 'preparing')} · ${records(ready, 'ready')}`, target: '#shop-order-queue' },
     { id: 'money', label: 'Money', count: moneyExceptions, detail: `${records(paymentPending, 'payment')} · ${records(refundDue, 'refund')}`, target: refundDue ? '#shop-order-history' : '#shop-order-queue' },
     { id: 'close', label: 'Close', count: closeReady, detail: records(closeReady, 'order'), target: '#shop-close-controls' },
   ]
 
+  if (stockConflicts) return { stages, next: { id: 'resolve_stock', title: `Resolve ${records(stockConflicts, 'stock conflict')}`, detail: 'Current available stock cannot cover an incoming request. Review the exact SKU and quantity before accepting it.', action: 'Review stock', target: '#shop-order-queue', orderMode: 'online' } }
   if (incoming) return { stages, next: { id: 'review_intake', title: `Review ${records(incoming, 'incoming request')}`, detail: 'Confirm customer, items, promise, fulfilment, and payment before Shop creates an order.', action: 'Open inbox', target: '#shop-order-queue', orderMode: 'online' } }
   if (overdue) return { stages, next: { id: 'protect_promise', title: `Protect ${records(overdue, 'late promise')}`, detail: 'Move the oldest promised order forward or record the exception with its owner.', action: 'Open order queue', target: '#shop-order-queue' } }
   if (refundDue) return { stages, next: { id: 'reconcile_money', title: `Record ${records(refundDue, 'settled refund')}`, detail: 'Confirm external refund evidence without sending money from SuperMega.', action: 'Open returns', target: '#shop-order-history' } }

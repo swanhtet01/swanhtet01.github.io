@@ -35,10 +35,10 @@ export function verifyCurrentReleaseAssets({
   activationRunbookChunk,
 }) {
   const groups = [
-    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Website', 'Ecommerce', 'Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.', 'Saved on this device.', 'Welcome back', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Login', 'supermega.last-product.v1', 'Your workspace', 'Shop', 'Website', 'Ecommerce', 'Sales, stock and your daily totals.', 'Your services, photos and contact details.', 'A product catalog and customer requests.', 'Welcome back', 'Sign in to your business.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['guided_outcomes', productOnboardingChunk, ['Add your first product', 'Continue to catalog', 'Run a sample production job', 'Create Plant and open the job', 'Prepare your business website', 'Continue to website setup', 'Set up your online store', 'Continue to store setup']],
     ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'Prepare your business content to continue.', 'First useful result:', 'Saves your setup, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
-    ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'One review records payment, handoff, stock, and the order record.', 'Keep as open order', 'Create order', 'Creates an open order; payment and handoff stay for Orders.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'It does not charge a wallet or card', 'No payment is captured']],
+    ['shop_plant', operationsChunk, ['Review & complete sale', 'Complete sale', 'Keep as open order', 'Create order', 'Counter context', 'Simple stock', 'Cashier set at review', 'Jobs', 'Problems', 'Record output', 'Close shift', 'This device records the sale, payment review, handoff and stock.', 'It does not charge or message anyone']],
     ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose a workflow or import your data.', 'Make ', ' mine', 'Your data', 'Upload your CSV to review and import your data.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
     ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
@@ -61,7 +61,7 @@ export function verifyCurrentReleaseAssets({
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
-  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
+  for (const forbidden of ['Run a sample production job', 'Jobs, materials, quality.', 'Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.', 'Saved on this device.']) {
     checks += 1
     if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
   }
@@ -100,6 +100,19 @@ async function readOptionalArtifactChunk(assetsDir, assetNames, pattern) {
   return name ? readFile(join(assetsDir, name), 'utf8') : ''
 }
 
+async function findChunkContaining(names, read, markers, missingCode) {
+  for (const name of names) {
+    const content = await read(name)
+    if (markers.every((marker) => content.includes(marker))) return content
+  }
+  throw new Error(missingCode)
+}
+
+function referencedJavascriptAssets(...corpora) {
+  return [...new Set(corpora.flatMap((corpus) =>
+    [...String(corpus || '').matchAll(/(?:assets\/|\.\/)([A-Za-z0-9_-]+\.js)/g)].map((match) => match[1])))].map((name) => `/assets/${name}`)
+}
+
 if (artifactSelfTest) {
   const root = resolve(import.meta.dirname, '..')
   const distDir = resolve(root, 'showroom', 'dist')
@@ -114,6 +127,8 @@ if (artifactSelfTest) {
     ...rootHtml.matchAll(/<link[^>]+href="([^"]+\.(?:js|css))"/g),
   ].map((match) => match[1].replace(/^\//, ''))
   const assetCorpus = (await Promise.all(rootAssetPaths.map((path) => readFile(resolve(distDir, path), 'utf8')))).join('\n')
+  const javascriptAssetNames = assetNames.filter((name) => name.endsWith('.js'))
+  const readJavascriptAsset = (name) => readFile(join(assetsDir, name), 'utf8')
   if (assetNames.some((name) => /^ProductHomeReadiness-[A-Za-z0-9_-]+\.js$/.test(name))) {
     throw new Error('retired_product_home_readiness_chunk_present')
   }
@@ -133,19 +148,37 @@ if (artifactSelfTest) {
     activationRunbookChunk,
   ] = await Promise.all([
     readArtifactChunk(assetsDir, assetNames, /^(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^ProductSystemNavigator-[A-Za-z0-9_-]+\.js$/),
+    findChunkContaining(javascriptAssetNames, readJavascriptAsset, ['Next steps', 'next_steps_opened', 'data_setup_opened'], 'product_system_navigator_chunk_missing'),
     readArtifactChunk(assetsDir, assetNames, /^ProductOnboardingPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^SettingsPage-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^EcommerceProduct-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^ecommerce-order-review-packet-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^WebsiteProduct-[A-Za-z0-9_-]+\.js$/),
+    findChunkContaining(javascriptAssetNames, readJavascriptAsset, ['Extra order tools', 'We could not verify your store changes.'], 'ecommerce_chunk_missing'),
+    findChunkContaining(javascriptAssetNames.filter((name) => !/^SettingsPage-/.test(name)), readJavascriptAsset, ['supermega.ecommerce.order_import_review_packet.v1'], 'ecommerce_packet_chunk_missing'),
+    findChunkContaining(javascriptAssetNames, readJavascriptAsset, ['Website starter brief generated', 'Your website'], 'website_chunk_missing'),
     readOptionalArtifactChunk(assetsDir, assetNames, /^website-model-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ClientDataOnboarding-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedLoginPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedAccountPage-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^CompanyBackupPanel-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^ManagedActivationRunbook-[A-Za-z0-9_-]+\.js$/),
+    findChunkContaining(javascriptAssetNames, readJavascriptAsset, ['supermega.company_backup.v1', 'Download encrypted backup'], 'company_backup_chunk_missing'),
+    findChunkContaining(javascriptAssetNames, readJavascriptAsset, ['Evidence to go live', 'proof gates ready'], 'managed_activation_runbook_chunk_missing'),
   ])
+  const routeAssets = referencedJavascriptAssets(assetCorpus, operationsChunk).map((path) => path.slice('/assets/'.length))
+  for (const [markers, expected, error] of [
+    [['Next steps', 'next_steps_opened', 'data_setup_opened'], productSystemNavigatorChunk, 'navigator_route_reference_missing'],
+    [['Extra order tools', 'We could not verify your store changes.'], ecommerceChunk, 'ecommerce_route_reference_missing'],
+    [['Website starter brief generated', 'Your website'], websiteChunk, 'website_route_reference_missing'],
+  ]) {
+    const linked = await findChunkContaining(routeAssets, readJavascriptAsset, markers, error)
+    if (linked !== expected) throw new Error(error)
+  }
+  for (const [corpus, markers, expected, error] of [
+    [settingsChunk, ['supermega.company_backup.v1', 'Download encrypted backup'], companyBackupChunk, 'company_backup_route_reference_missing'],
+    [settingsChunk, ['Evidence to go live', 'proof gates ready'], activationRunbookChunk, 'activation_runbook_route_reference_missing'],
+    [ecommerceChunk, ['supermega.ecommerce.order_import_review_packet.v1'], ecommercePacketChunk, 'ecommerce_packet_route_reference_missing'],
+  ]) {
+    const linkedAssets = referencedJavascriptAssets(corpus, assetCorpus).map((path) => path.slice('/assets/'.length))
+    const linked = await findChunkContaining(linkedAssets, readJavascriptAsset, markers, error)
+    if (linked !== expected) throw new Error(error)
+  }
   const evidenceVersion = extractTrialEvidenceVersion(settingsChunk)
   if (!Number.isInteger(evidenceVersion)) throw new Error('artifact_settings_evidence_version_missing')
   const websiteDependencyCorpus = (await Promise.all(
@@ -422,9 +455,14 @@ if (/assets\/ProductHomeReadiness-[A-Za-z0-9_-]+\.js/.test(assetCorpus)) {
 const operationsChunkPath = /assets\/(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!operationsChunkPath) throw new Error('operations_chunk_missing')
 const operationsChunk = (await get(`/${operationsChunkPath}`)).body
-const productSystemNavigatorChunkPath = /assets\/ProductSystemNavigator-[A-Za-z0-9_-]+\.js/.exec(`${assetCorpus}\n${operationsChunk}`)?.[0]
-if (!productSystemNavigatorChunkPath) throw new Error('product_system_navigator_chunk_missing')
-const productSystemNavigatorChunk = (await get(`/${productSystemNavigatorChunkPath}`)).body
+const linkedAssetCache = new Map()
+const readLinkedAsset = (path) => {
+  if (!linkedAssetCache.has(path)) linkedAssetCache.set(path, get(path).then((response) => response.body))
+  return linkedAssetCache.get(path)
+}
+const routeAssetPaths = referencedJavascriptAssets(assetCorpus, operationsChunk)
+const productSystemNavigatorChunk = await findChunkContaining(routeAssetPaths, readLinkedAsset,
+  ['Next steps', 'next_steps_opened', 'data_setup_opened'], 'product_system_navigator_chunk_missing')
 const productOnboardingChunkPath = /assets\/ProductOnboardingPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!productOnboardingChunkPath) throw new Error('product_onboarding_chunk_missing')
 const productOnboardingChunk = (await get(`/${productOnboardingChunkPath}`)).body
@@ -437,9 +475,9 @@ const managedLoginChunk = (await get(`/${managedLoginChunkPath}`)).body
 const managedAccountChunkPath = /assets\/ManagedAccountPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!managedAccountChunkPath) throw new Error('managed_account_chunk_missing')
 const managedAccountChunk = (await get(`/${managedAccountChunkPath}`)).body
-const companyBackupChunkPath = /assets\/CompanyBackupPanel-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
-if (!companyBackupChunkPath) throw new Error('company_backup_chunk_missing')
-const companyBackupChunk = (await get(`/${companyBackupChunkPath}`)).body
+const settingsAssetPaths = referencedJavascriptAssets(settingsChunk, assetCorpus)
+const companyBackupChunk = await findChunkContaining(settingsAssetPaths, readLinkedAsset,
+  ['supermega.company_backup.v1', 'Download encrypted backup'], 'company_backup_chunk_missing')
 const companyBackupCorpus = `${settingsChunk}\n${companyBackupChunk}`
 const liveEvidenceVersion = extractTrialEvidenceVersion(settingsChunk)
 if (!Number.isInteger(liveEvidenceVersion)) throw new Error('live_settings_evidence_version_missing')
@@ -452,25 +490,21 @@ const clientDataOnboardingChunk = (await get(`/${clientDataOnboardingChunkPath}`
 const operatingModelsChunkPath = /assets\/operating-models-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!operatingModelsChunkPath) throw new Error('operating_models_chunk_missing')
 const operatingModelsChunk = (await get(`/${operatingModelsChunkPath}`)).body
-const ecommerceChunkPath = /assets\/EcommerceProduct-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
-if (!ecommerceChunkPath) throw new Error('ecommerce_chunk_missing')
-const ecommerceChunk = (await get(`/${ecommerceChunkPath}`)).body
-const ecommercePacketChunkPath = /assets\/ecommerce-order-review-packet-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
-if (!ecommercePacketChunkPath) throw new Error('ecommerce_packet_chunk_missing')
-const ecommercePacketChunk = (await get(`/${ecommercePacketChunkPath}`)).body
+const ecommerceChunk = await findChunkContaining(routeAssetPaths, readLinkedAsset,
+  ['Extra order tools', 'We could not verify your store changes.'], 'ecommerce_chunk_missing')
+const ecommercePacketChunk = await findChunkContaining(referencedJavascriptAssets(ecommerceChunk, assetCorpus), readLinkedAsset,
+  ['supermega.ecommerce.order_import_review_packet.v1'], 'ecommerce_packet_chunk_missing')
 const ecommerceProductCorpus = `${ecommerceChunk}\n${ecommercePacketChunk}`
-const websiteChunkPath = /assets\/WebsiteProduct-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
-if (!websiteChunkPath) throw new Error('website_chunk_missing')
-const websiteProductChunk = (await get(`/${websiteChunkPath}`)).body
+const websiteProductChunk = await findChunkContaining(routeAssetPaths, readLinkedAsset,
+  ['Website starter brief generated', 'Your website'], 'website_chunk_missing')
 const websiteModelChunkPath = /assets\/website-model-[A-Za-z0-9_-]+\.js/.exec(`${assetCorpus}\n${websiteProductChunk}`)?.[0]
 const websiteModelChunk = websiteModelChunkPath ? (await get(`/${websiteModelChunkPath}`)).body : ''
 const websiteDependencyCorpus = (await Promise.all(
   extractRelativeJavascriptDependencies(websiteProductChunk).map(async (name) => (await get(`/assets/${name}`)).body),
 )).join('\n')
 const websiteChunk = `${websiteProductChunk}\n${websiteModelChunk}\n${websiteDependencyCorpus}`
-const activationRunbookChunkPath = /assets\/ManagedActivationRunbook-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
-if (!activationRunbookChunkPath) throw new Error('managed_activation_runbook_chunk_missing')
-const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).body
+const activationRunbookChunk = await findChunkContaining(settingsAssetPaths, readLinkedAsset,
+  ['Evidence to go live', 'proof gates ready'], 'managed_activation_runbook_chunk_missing')
 const releaseAssetVerification = verifyCurrentReleaseAssets({
   manifest,
   assetCorpus,
@@ -593,22 +627,30 @@ if (!operationsChunk.includes('Other products')
   || !assetCorpus.includes('.stock-record-content')
   || !assetCorpus.includes('.data-row.stock-empty-row')) throw new Error('missing_live_shop_stock_worklist_contract')
 for (const required of [
-  'Browser-local sample only.',
-  'Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.',
-  'It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.',
-  'Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.',
-  'No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.',
+  'This device records the sale, payment review, handoff and stock.',
+  'This device creates the order and reserves stock. Payment and fulfilment stay pending.',
+  'It does not charge or message anyone, or write to a company account.',
 ]) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_shop_counter_local_boundary:${required}`)
 }
 const shopLiveCopyUpdates = new Map([
   ['Owner gate', 'Review'],
-  ['Write gate', 'Write status'],
+  ['Write gate', 'Review before writes'],
   ['Owner approves writes', 'Review before writes'],
   ['Sample Shop catalog item loaded for review.'],
   ['AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed.', 'AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and manager review before any accounting export is reviewed.'],
   ['budget and owner approval required', 'budget and review required'],
   ['The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.', 'A manager confirms every sale, payment, stock, supplier, refund, and accounting review.'],
+  ['Order control', 'Daily tools'],
+  ['Review Ecommerce inbox', 'Ecommerce inbox'],
+  ['Reconcile payment exceptions', 'Review payment exceptions'],
+  ['Online inbox', 'Ecommerce inbox'],
+  ['Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.', 'Review before writes'],
+  ['Shop order lifecycle', 'Daily tools'],
+  ['Order lifecycle', 'Daily tools'],
+  ['Capture to return', 'Ecommerce inbox'],
+  ['AI guides capture, reserve, fulfil, collect, replenish, and returns.', 'Review before writes'],
+  ['Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.', 'Review before writes'],
 ])
 for (const required of ['Recommended next step', 'Recommended Shop next step', 'Agent job', 'Owner gate', 'Restore Shop write readiness', 'Review online order requests', 'Finish fulfilment queue', 'Receive purchase orders', 'Reorder low stock', 'Set up stock locations', 'Shop setup guide', 'Import products once. Then run the daily queue.', 'The assistant prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets.', 'The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.', 'Products', 'Import catalog', 'Location + ATP', 'Simple count first', 'Owner approves writes', 'Order control', 'Review Ecommerce inbox', 'Reconcile payment exceptions', 'Online inbox', 'Write gate', 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.', 'Shop order lifecycle', 'Order lifecycle', 'Capture to return', 'AI guides capture, reserve, fulfil, collect, replenish, and returns.', 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.', 'Shop accounting readiness', 'Accounting readiness', 'AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed.', 'No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.', 'Restore accounting readiness', 'Approve pending Shop action', 'Review refund exposure', 'Receive supplier evidence', 'Reconcile stock evidence', 'Accounting package ready', 'Export gate', 'Shop accounting export packet', 'Accounting export packet', 'AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review.', 'No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.', 'Ready for accountant review', 'Close before export', 'No export package yet', 'CSV ready', 'Review import', 'Not posted', 'Not configured', 'External proof only', 'Need close evidence', 'Shop procurement readiness', 'Procurement readiness', 'AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness.', 'No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.', 'Supplier control', 'AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue.', 'No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.', 'Start supplier request', 'Preferred supplier', 'Supplier request drafted for', 'no RFQ, message, payment, payable, costing, or stock write is created.', 'Supplier request is clear. No uncovered reorder item needs a draft.', 'Restore purchasing readiness', 'Approve pending supplier action', 'Resolve late supplier order', 'Prepare receiving evidence', 'Close partial receipt', 'Choose supplier and arrival', 'Monitor supplier promise', 'Supplier controls ready', 'Suppliers', 'Open units', 'Gate', 'Need', 'On order', 'Remaining', 'Arrival', 'Receipt', 'Order uncovered stock', 'Receive or cancel late PO', 'Check arriving PO', 'Track open supply', 'Supply ready', 'Capture', 'Reserve', 'Fulfil', 'Collect', 'Replenish', 'Return']) {
   const currentRequired = shopLiveCopyUpdates.get(required) ?? required

@@ -29,6 +29,7 @@ import {
 
 export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as const
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
+export const COMMERCE_MERCHANT_PROFILE_SCHEMA = 'supermega.shop.merchant_profile.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
@@ -403,6 +404,7 @@ export type CommerceOrder = {
   createdAt: string
   customer: string
   owner?: string
+  shiftId?: string
   channel: string
   item: string
   itemSku?: string
@@ -662,7 +664,20 @@ export type CommerceClose = {
   operator?: string
   reason?: string
   evidenceReference?: string
+  shiftId?: string
   settlement?: CommerceCloseSettlement
+}
+
+export type CommerceOperatingUnit = {
+  id: string
+  name: string
+  registration: CommerceActionProof
+}
+
+export type CommerceShiftSession = {
+  id: string
+  unitId: string
+  opening: CommerceActionProof
 }
 
 export type CommerceCloseSettlementLine = {
@@ -693,6 +708,7 @@ export type CommerceCloseSettlementInputLine = {
 
 export type CommerceCloseExpectation = {
   businessDate: string
+  shiftId?: string
   orderIds: string[]
   total: number
   paymentExceptionOrderIds: string[]
@@ -1284,6 +1300,8 @@ export type CommerceState = {
   orders: CommerceOrder[]
   movements: CommerceStockMovement[]
   closes: CommerceClose[]
+  operatingUnits?: CommerceOperatingUnit[]
+  shiftSessions?: CommerceShiftSession[]
   catalogBaselines?: CommerceCatalogBaseline[]
   catalogChanges?: CommerceCatalogChange[]
   taxConfigurations?: CommerceTaxConfiguration[]
@@ -1295,6 +1313,7 @@ export type CommerceState = {
   websiteIntakes?: CommerceWebsiteIntake[]
   storefrontRequests?: CommerceStorefrontRequest[]
   storefrontConfiguration?: CommerceStorefrontConfiguration
+  merchantProfile?: CommerceMerchantProfile
   purchaseBudgetEnvelopes?: CommercePurchaseBudgetEnvelope[]
   supplierSourcingDecisions?: CommerceSupplierSourcingDecision[]
   purchaseRequisitions?: CommercePurchaseRequisition[]
@@ -1309,6 +1328,19 @@ export type CommerceActionProof = {
   reason: string
   evidenceReference: string
 }
+
+export type CommerceMerchantProfile = {
+  schema: typeof COMMERCE_MERCHANT_PROFILE_SCHEMA
+  revision: number
+  nameMyanmar: string
+  nameEnglish: string
+  phone: string
+  addressMyanmar: string
+  addressEnglish: string
+  proof: CommerceActionProof
+}
+
+export type CommerceMerchantProfileInput = Omit<CommerceMerchantProfile, 'schema' | 'revision' | 'proof'>
 
 export type CommerceItemUpdate = {
   sku: string
@@ -1431,6 +1463,7 @@ export type CommerceWebsiteOrderInput = {
   fulfilmentMethod: 'pickup' | 'local_delivery'
   paymentMethod: 'cash_on_delivery' | 'manual_qr' | 'manual_bank_transfer'
   promisedAt: string
+  shiftId?: string
 }
 
 export type CommercePurchaseOrderInput = {
@@ -1581,15 +1614,11 @@ const correctionReasonCodes: CommerceCorrectionReasonCode[] = ['pricing_error', 
 const websiteIntakeStatuses: CommerceWebsiteIntakeStatus[] = ['pending_confirmation', 'converted']
 const closeSnapshotFields = ['businessDate', 'orderIds', 'paymentExceptionOrderIds', 'stockExceptionSkus', 'actionId', 'operator', 'reason', 'evidenceReference'] as const
 const refundSettlementFields = ['refundSettledAt', 'refundSettlementActionId', 'refundSettledBy', 'refundSettlementReason', 'refundEvidenceReference'] as const
+const actionProofFields = ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'] as const
+const actionProofTextFields = ['actionId', 'actor', 'reason', 'evidenceReference'] as const
 const websiteIntakeIdPattern = /^WINT-[A-Z0-9-]{8,80}$/
 const websiteFingerprintPattern = /^web-[a-f0-9]{8}$/
-const storefrontRequestIdPattern = /^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const storefrontIdempotencyPattern = /^ECI-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const storefrontQuoteIdPattern = /^ECQ-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const storefrontCustomerIdPattern = /^CUS-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const storefrontAddressIdPattern = /^ADR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const supportIntentIdPattern = /^ESR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const supportCaseIdPattern = /^CASE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const uuidSuffixPattern = /^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/
 const maxStorefrontRequests = 100
 const maxPurchaseRequisitions = 100
@@ -1613,17 +1642,11 @@ const maxSupportCasesPerOrder = 100
 const maxSupportServiceEventsPerCase = 100
 const maxCorrectionsPerOrder = 100
 const maxCollectionActionsPerOrder = 100
-const closeIdPattern = /^CLOSE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const closeActionIdPattern = /^ACT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
+const maxOperatingUnits = 100
+const maxShiftSessions = 2_000
+const operatingIntegrityError = 'Commerce operating records are invalid.'
 const businessDatePattern = /^\d{4}-\d{2}-\d{2}$/
-const purchaseOrderIdPattern = /^PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const purchaseRequisitionIdPattern = /^PR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const purchaseBudgetEnvelopeIdPattern = /^PBE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const supplierSourcingDecisionIdPattern = /^SSD-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const purchaseBudgetCodePattern = /^[A-Z0-9][A-Z0-9_-]{2,39}$/
-const supplierInvoiceIdPattern = /^PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const supplierReturnIdPattern = /^SRET-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
-const supplierCreditIdPattern = /^SCN-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
 const taxJurisdictionCodePattern = /^[A-Z0-9][A-Z0-9_-]{1,15}$/
 const externalAccountCodePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/
@@ -1632,6 +1655,10 @@ export const commerceAccountRoles: CommerceAccountRole[] = [...legacyCommerceAcc
 const isoTimestampPattern = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const myanmarUtcOffsetMs = (6 * 60 + 30) * 60 * 1000
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
+
+function hasPrefixedUuid(value: unknown, prefix: string) {
+  return typeof value === 'string' && value.startsWith(prefix) && uuidSuffixPattern.test(value.slice(prefix.length))
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -1675,6 +1702,11 @@ export function commerceStorefrontConfigurationActionId(revision: number, shopCa
     rejectInvalid('Storefront configuration action identity is invalid.')
   }
   return `ACT-STOREFRONT-R${revision}-${shopCatalogDigest.slice('sha256:'.length)}`
+}
+
+export function commerceMerchantProfileActionId(revision: number) {
+  if (!Number.isSafeInteger(revision) || revision < 1) rejectInvalid('Merchant profile revision is invalid.')
+  return `ACT-SHOP-MERCHANT-R${revision}`
 }
 
 function optionalText(value: unknown) {
@@ -1725,7 +1757,7 @@ function sameStringArray(left: string[], right: string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
-function hasExactKeys(value: Record<string, unknown>, required: string[], optional: string[] = []) {
+function hasExactKeys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []) {
   const fields = Object.keys(value)
   return required.every((field) => fields.includes(field))
     && fields.every((field) => required.includes(field) || optional.includes(field))
@@ -1765,7 +1797,7 @@ function storefrontCustomerProfile(value: unknown, field: string): CommerceStore
   const id = canonicalText(value.id, `${field}.id`, 40)
   const phone = canonicalText(value.phone, `${field}.phone`, 32)
   const digitCount = phone.replace(/\D/g, '').length
-  if (!storefrontCustomerIdPattern.test(id)
+  if (!hasPrefixedUuid(id, 'CUS-')
     || !/^\+?[0-9][0-9 ()-]{5,31}$/.test(phone)
     || digitCount < 6
     || digitCount > 15
@@ -1794,7 +1826,7 @@ function storefrontDeliveryAddress(value: unknown, field: string): CommerceStore
     'savedAt', 'previousDigest', 'addressDigest',
   ]) || value.schema !== 'supermega.ecommerce.delivery_address_snapshot.v1') rejectInvalid(`${field} is invalid.`)
   const id = canonicalText(value.id, `${field}.id`, 40)
-  if (!storefrontAddressIdPattern.test(id)
+  if (!hasPrefixedUuid(id, 'ADR-')
     || !validTimestamp(value.savedAt)
     || typeof value.addressDigest !== 'string'
     || !sha256DigestPattern.test(value.addressDigest)
@@ -1834,8 +1866,8 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
   if (!/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,179}$/.test(scope)) rejectInvalid(`${field}.scope is invalid.`)
   const requestId = canonicalText(value.id, `${field}.id`, 40)
   const idempotencyKey = canonicalText(value.idempotencyKey, `${field}.idempotencyKey`, 40)
-  if (!storefrontRequestIdPattern.test(requestId)
-    || !storefrontIdempotencyPattern.test(idempotencyKey)
+  if (!hasPrefixedUuid(requestId, 'ECR-')
+    || !hasPrefixedUuid(idempotencyKey, 'ECI-')
     || requestId.slice(4) !== idempotencyKey.slice(4)
     || !validTimestamp(value.createdAt)
     || typeof value.sourcePreviewDigest !== 'string'
@@ -1890,7 +1922,7 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
       || JSON.stringify(quoteDeliveryAddress) !== JSON.stringify(deliveryAddress)) rejectInvalid(`${field}.quote customer identity does not match the request.`)
   }
   const quoteId = canonicalText(quote.quoteId, `${field}.quote.quoteId`, 40)
-  if (!storefrontQuoteIdPattern.test(quoteId) || quoteId.slice(4) !== idempotencyKey.slice(4)) rejectInvalid(`${field}.quote identity is invalid.`)
+  if (!hasPrefixedUuid(quoteId, 'ECQ-') || quoteId.slice(4) !== idempotencyKey.slice(4)) rejectInvalid(`${field}.quote identity is invalid.`)
   if (!validTimestamp(quote.expiresAt)
     || (timestampMicros(quote.expiresAt) as bigint) <= (timestampMicros(quote.quotedAt) as bigint)
     || (timestampMicros(quote.expiresAt) as bigint) - (timestampMicros(quote.quotedAt) as bigint) > 1_800_000_000n) rejectInvalid(`${field}.quote expiry is invalid.`)
@@ -2039,6 +2071,31 @@ export function commerceOrderItemSummary(lines: CommerceOrderLine[]) {
 function reservationLinesForOrder(order: CommerceOrder) {
   if (order.lines !== undefined) return order.lines.map((line) => ({ sku: line.sku, quantity: line.quantity }))
   return order.itemSku ? [{ sku: order.itemSku, quantity: order.quantity }] : []
+}
+
+export type CommerceStockConflict = {
+  sku: string
+  requested: number
+  available: number
+  reason: 'invalid_request' | 'missing_catalog' | 'insufficient_stock'
+}
+
+export function commerceStockConflict(items: CommerceItem[], lines: Array<{ sku: string; quantity: number }>): CommerceStockConflict | null {
+  const requestedBySku = new Map<string, number>()
+  for (const line of lines) {
+    if (typeof line?.sku !== 'string' || !line.sku.trim() || !Number.isSafeInteger(line.quantity) || line.quantity < 1) {
+      return { sku: typeof line?.sku === 'string' && line.sku.trim() ? line.sku : 'Unknown SKU', requested: Number.isSafeInteger(line?.quantity) ? line.quantity : 0, available: 0, reason: 'invalid_request' }
+    }
+    const requested = (requestedBySku.get(line.sku) ?? 0) + line.quantity
+    if (!Number.isSafeInteger(requested)) return { sku: line.sku, requested: line.quantity, available: 0, reason: 'invalid_request' }
+    requestedBySku.set(line.sku, requested)
+  }
+  for (const [sku, requested] of requestedBySku) {
+    const matches = items.filter((item) => item.sku === sku)
+    if (matches.length !== 1) return { sku, requested, available: 0, reason: 'missing_catalog' }
+    if (matches[0].onHand < requested) return { sku, requested, available: matches[0].onHand, reason: 'insufficient_stock' }
+  }
+  return null
 }
 
 function shopInventoryAvailableBySku(foundation: ShopInventoryState, catalogSkus: string[]) {
@@ -2363,10 +2420,15 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.websiteIntakes !== undefined && !Array.isArray(value.websiteIntakes)) rejectInvalid('Commerce Website intakes must be an array when present.')
   if (value.storefrontRequests !== undefined && !Array.isArray(value.storefrontRequests)) rejectInvalid('Commerce storefront requests must be an array when present.')
   if (value.storefrontConfiguration !== undefined && !isRecord(value.storefrontConfiguration)) rejectInvalid('Commerce storefront configuration must be an object when present.')
+  if (value.merchantProfile !== undefined && !isRecord(value.merchantProfile)) rejectInvalid('Commerce merchant profile must be an object when present.')
   if (value.purchaseBudgetEnvelopes !== undefined && !Array.isArray(value.purchaseBudgetEnvelopes)) rejectInvalid('Commerce purchase budget envelopes must be an array when present.')
   if (value.supplierSourcingDecisions !== undefined && !Array.isArray(value.supplierSourcingDecisions)) rejectInvalid('Commerce supplier sourcing decisions must be an array when present.')
   if (value.purchaseRequisitions !== undefined && !Array.isArray(value.purchaseRequisitions)) rejectInvalid('Commerce purchase requisitions must be an array when present.')
   if (value.purchaseOrders !== undefined && !Array.isArray(value.purchaseOrders)) rejectInvalid('Commerce purchase orders must be an array when present.')
+  const hasOperatingUnits = value.operatingUnits !== undefined
+  const hasShiftSessions = value.shiftSessions !== undefined
+  if (hasOperatingUnits !== hasShiftSessions
+    || (hasOperatingUnits && (!Array.isArray(value.operatingUnits) || !Array.isArray(value.shiftSessions)))) rejectInvalid(operatingIntegrityError)
   if (value.inventoryFoundation !== undefined) {
     const inventory = value.inventoryFoundation
     if (!isRecord(inventory)
@@ -2402,6 +2464,8 @@ export function validateCommerceState(value: unknown): CommerceState {
   const supplierSourcingDecisions = (value.supplierSourcingDecisions ?? []) as unknown[]
   const purchaseRequisitions = (value.purchaseRequisitions ?? []) as unknown[]
   const purchaseOrders = (value.purchaseOrders ?? []) as unknown[]
+  const operatingUnits = (value.operatingUnits ?? []) as unknown[]
+  const shiftSessions = (value.shiftSessions ?? []) as unknown[]
   if (catalogBaselines.length > maxCatalogBaselines) rejectInvalid(`Commerce catalog baselines cannot exceed ${maxCatalogBaselines}.`)
   if (catalogChanges.length > maxCatalogChanges) rejectInvalid(`Commerce catalog changes cannot exceed ${maxCatalogChanges}.`)
   if (taxConfigurations.length > maxTaxConfigurations) rejectInvalid(`Commerce tax configurations cannot exceed ${maxTaxConfigurations}.`)
@@ -2415,6 +2479,9 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (storefrontRequests.length > maxStorefrontRequests) rejectInvalid(`Commerce storefront requests cannot exceed ${maxStorefrontRequests}.`)
   if (purchaseRequisitions.length > maxPurchaseRequisitions) rejectInvalid(`Commerce purchase requisitions cannot exceed ${maxPurchaseRequisitions}.`)
   if (purchaseOrders.length > maxPurchaseOrders) rejectInvalid(`Commerce purchase orders cannot exceed ${maxPurchaseOrders}.`)
+  if ((hasOperatingUnits && operatingUnits.length < 1)
+    || operatingUnits.length > maxOperatingUnits
+    || shiftSessions.length > maxShiftSessions) rejectInvalid(operatingIntegrityError)
   const itemSkus: string[] = []
   const itemBySku = new Map<string, Record<string, unknown>>()
   const orderIds: string[] = []
@@ -2433,13 +2500,14 @@ export function validateCommerceState(value: unknown): CommerceState {
   const collectionActionIds: string[] = []
   const orderReturns: Array<{ orderId: string; record: CommerceOrderReturn }> = []
   const closeActionIds: string[] = []
-  const closeBusinessDates: string[] = []
+  const closeScopeKeys: string[] = []
   const closedOrderIds: string[] = []
   const websiteIntakeCreationActionIds: string[] = []
   const websiteIntakeConversionActionIds: string[] = []
   const catalogBaselineActionIds: string[] = []
   const catalogChangeActionIds: string[] = []
   const taxConfigurationActionIds: string[] = []
+  const merchantProfileActionIds: string[] = []
   const accountMappingConfigurationActionIds: string[] = []
   const customerCreditPolicyActionIds: string[] = []
   const promotionPolicyActionIds: string[] = []
@@ -2465,7 +2533,55 @@ export function validateCommerceState(value: unknown): CommerceState {
   const supplierInvoiceReferences: string[] = []
   const activePurchaseOrderSkus: string[] = []
   const purchaseOrderById = new Map<string, CommercePurchaseOrder>()
+  const operatingUnitActionIds: string[] = []
+  const shiftSessionActionIds: string[] = []
+  const operatingUnitById = new Map<string, CommerceOperatingUnit>()
+  const shiftSessionById = new Map<string, CommerceShiftSession>()
+  const operatingUnitNames = new Set<string>()
+  let lastUnitRegistrationAt: bigint | null = null
   let storefrontConfigurationActionId = ''
+
+  for (const candidate of operatingUnits) {
+    if (!isRecord(candidate)
+      || !hasExactKeys(candidate, ['id', 'name', 'registration'])
+      || typeof candidate.id !== 'string'
+      || !hasPrefixedUuid(candidate.id, 'UNIT-')
+      || typeof candidate.name !== 'string'
+      || !candidate.name.trim()
+      || candidate.name !== candidate.name.trim()
+      || candidate.name.length > 120
+      || !validOperatingProof(candidate.registration as CommerceActionProof)) rejectInvalid(operatingIntegrityError)
+    const id = candidate.id
+    const name = candidate.name.toLocaleLowerCase()
+    const registration = candidate.registration as CommerceActionProof
+    const registeredAt = timestampMicros(registration.capturedAt) as bigint
+    operatingUnitActionIds.push(registration.actionId)
+    if (operatingUnitById.has(id)
+      || operatingUnitNames.has(name)
+      || (lastUnitRegistrationAt !== null && registeredAt < lastUnitRegistrationAt)) rejectInvalid(operatingIntegrityError)
+    operatingUnitById.set(id, candidate as unknown as CommerceOperatingUnit)
+    operatingUnitNames.add(name)
+    lastUnitRegistrationAt = registeredAt
+  }
+
+  for (const candidate of shiftSessions) {
+    if (!isRecord(candidate)
+      || !hasExactKeys(candidate, ['id', 'unitId', 'opening'])
+      || typeof candidate.id !== 'string'
+      || !hasPrefixedUuid(candidate.id, 'SHIFT-')
+      || typeof candidate.unitId !== 'string'
+      || !hasPrefixedUuid(candidate.unitId, 'UNIT-')
+      || !validOperatingProof(candidate.opening as CommerceActionProof)) rejectInvalid(operatingIntegrityError)
+    const id = candidate.id
+    const unitId = candidate.unitId
+    const unit = operatingUnitById.get(unitId)
+    const opening = candidate.opening as CommerceActionProof
+    if (!unit
+      || (timestampMicros(opening.capturedAt) as bigint) < (timestampMicros(unit.registration.capturedAt) as bigint)
+      || shiftSessionById.has(id)) rejectInvalid(operatingIntegrityError)
+    shiftSessionActionIds.push(opening.actionId)
+    shiftSessionById.set(id, candidate as unknown as CommerceShiftSession)
+  }
 
   for (const [index, candidate] of items.entries()) {
     if (!isRecord(candidate)) rejectInvalid(`items[${index}] is invalid.`)
@@ -2494,12 +2610,12 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.price, `catalogBaselines[${index}].price`, 1)
     assertSafeInteger(candidate.reorderAt, `catalogBaselines[${index}].reorderAt`)
     if (!isRecord(candidate.proof)
-      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.proof, actionProofFields)
       || !validProof(candidate.proof as CommerceActionProof)) {
       rejectInvalid(`catalogBaselines[${index}].proof is invalid.`)
     }
     const proof = candidate.proof as unknown as CommerceActionProof
-    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+    for (const field of actionProofTextFields) {
       canonicalText(proof[field], `catalogBaselines[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
     }
     if (typeof candidate.anchorDigest !== 'string'
@@ -2542,12 +2658,12 @@ export function validateCommerceState(value: unknown): CommerceState {
       rejectInvalid(`catalogChanges[${index}] cannot record an unchanged item.`)
     }
     if (!isRecord(candidate.proof)
-      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.proof, actionProofFields)
       || !validProof(candidate.proof as CommerceActionProof)) {
       rejectInvalid(`catalogChanges[${index}].proof is invalid.`)
     }
     const proof = candidate.proof as unknown as CommerceActionProof
-    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+    for (const field of actionProofTextFields) {
       canonicalText(proof[field], `catalogChanges[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
     }
     const change = candidate as unknown as CommerceCatalogChange
@@ -2603,7 +2719,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (Number(candidate.rateBasisPoints) > 10_000) rejectInvalid(`taxConfigurations[${index}].rateBasisPoints must be at most 10000.`)
     if (candidate.mode !== 'exclusive' && candidate.mode !== 'inclusive') rejectInvalid(`taxConfigurations[${index}].mode is invalid.`)
     if (!isRecord(candidate.proof)
-      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.proof, actionProofFields)
       || !validProof(candidate.proof as CommerceActionProof)) {
       rejectInvalid(`taxConfigurations[${index}].proof is invalid.`)
     }
@@ -2616,7 +2732,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         rejectInvalid(`taxConfigurations[${index}].effectiveFrom must be at or after its review proof.`)
       }
     }
-    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+    for (const field of actionProofTextFields) {
       canonicalText(configuration.proof[field], `taxConfigurations[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
     }
     if (newerTaxConfiguration
@@ -2662,12 +2778,12 @@ export function validateCommerceState(value: unknown): CommerceState {
       if (!externalAccountCodePattern.test(code)) rejectInvalid(`${field}.externalAccountCode is invalid.`)
     }
     if (!isRecord(candidate.proof)
-      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.proof, actionProofFields)
       || !validProof(candidate.proof as CommerceActionProof)) {
       rejectInvalid(`accountMappingConfigurations[${index}].proof is invalid.`)
     }
     const configuration = candidate as unknown as CommerceAccountMappingConfiguration
-    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+    for (const field of actionProofTextFields) {
       canonicalText(configuration.proof[field], `accountMappingConfigurations[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
     }
     if (newerAccountMappingConfiguration
@@ -2691,7 +2807,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!customerCreditTerms.has(Number(candidate.maxPaymentTermsDays))) rejectInvalid(`${field}.maxPaymentTermsDays is invalid.`)
     if (candidate.status !== 'active' && candidate.status !== 'hold') rejectInvalid(`${field}.status is invalid.`)
     if (!isRecord(candidate.proof)
-      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.proof, actionProofFields)
       || !validProof(candidate.proof as CommerceActionProof)) rejectInvalid(`${field}.proof is invalid.`)
     const policy = candidate as unknown as CommerceCustomerCreditPolicy
     if (newerCustomerCreditPolicy
@@ -2724,7 +2840,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       rejectInvalid(`${field} effective window is invalid.`)
     }
     if (!isRecord(candidate.proof)
-      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.proof, actionProofFields)
       || !validProof(candidate.proof as CommerceActionProof)
       || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) {
       rejectInvalid(`${field}.proof is invalid.`)
@@ -2760,7 +2876,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       || candidate.effectiveUntil !== null && (!validTimestamp(candidate.effectiveUntil)
         || (timestampMicros(candidate.effectiveUntil) as bigint) <= (timestampMicros(candidate.effectiveFrom) as bigint))) rejectInvalid(`${field} effective window is invalid.`)
     if (!isRecord(candidate.proof)
-      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.proof, actionProofFields)
       || !validProof(candidate.proof as CommerceActionProof)
       || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) rejectInvalid(`${field}.proof is invalid.`)
     const policy = candidate as unknown as CommerceShippingPolicy
@@ -2791,7 +2907,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       || candidate.effectiveUntil !== null && (!validTimestamp(candidate.effectiveUntil)
         || (timestampMicros(candidate.effectiveUntil) as bigint) <= (timestampMicros(candidate.effectiveFrom) as bigint))) rejectInvalid(`${field} effective window is invalid.`)
     if (!isRecord(candidate.proof)
-      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.proof, actionProofFields)
       || !validProof(candidate.proof as CommerceActionProof)
       || (timestampMicros(candidate.proof.capturedAt) as bigint) > (timestampMicros(candidate.effectiveFrom) as bigint)) rejectInvalid(`${field}.proof is invalid.`)
     const policy = candidate as unknown as CommercePaymentPolicy
@@ -2809,7 +2925,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       'ceilingMmk', 'perRequisitionLimitMmk', 'approval',
     ])) rejectInvalid(`${field} is invalid.`)
     const id = canonicalText(candidate.id, `${field}.id`, 80)
-    if (!purchaseBudgetEnvelopeIdPattern.test(id)) rejectInvalid(`${field}.id is invalid.`)
+    if (!hasPrefixedUuid(id, 'PBE-')) rejectInvalid(`${field}.id is invalid.`)
     const budgetCode = canonicalText(candidate.budgetCode, `${field}.budgetCode`, 40)
     if (!purchaseBudgetCodePattern.test(budgetCode) || budgetCode !== budgetCode.toUpperCase()) rejectInvalid(`${field}.budgetCode is invalid.`)
     canonicalText(candidate.label, `${field}.label`, 120)
@@ -2820,7 +2936,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.perRequisitionLimitMmk, `${field}.perRequisitionLimitMmk`, 1)
     if (Number(candidate.perRequisitionLimitMmk) > Number(candidate.ceilingMmk)) rejectInvalid(`${field} per-requisition limit exceeds its ceiling.`)
     if (!isRecord(candidate.approval)
-      || !hasExactKeys(candidate.approval, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.approval, actionProofFields)
       || !validProof(candidate.approval as CommerceActionProof)
       || candidate.approval.capturedAt !== candidate.createdAt) rejectInvalid(`${field}.approval is invalid.`)
     const envelope = candidate as unknown as CommercePurchaseBudgetEnvelope
@@ -2851,7 +2967,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       'unitCostToleranceBasisPoints', 'deliveryToleranceDays', 'approval',
     ]) || !Array.isArray(candidate.quotes) || candidate.quotes.length < 1 || candidate.quotes.length > 5) rejectInvalid(`${field} is invalid.`)
     const id = canonicalText(candidate.id, `${field}.id`, 80)
-    if (!supplierSourcingDecisionIdPattern.test(id)) rejectInvalid(`${field}.id is invalid.`)
+    if (!hasPrefixedUuid(id, 'SSD-')) rejectInvalid(`${field}.id is invalid.`)
     const sku = canonicalText(candidate.sku, `${field}.sku`, 80)
     if (!itemBySku.has(sku)) rejectInvalid(`${field}.sku is unknown.`)
     assertSafeInteger(candidate.quantity, `${field}.quantity`, 1)
@@ -2860,7 +2976,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (Number(candidate.unitCostToleranceBasisPoints) > 2_000 || Number(candidate.deliveryToleranceDays) > 30) rejectInvalid(`${field} tolerance is invalid.`)
     const createdAt = canonicalText(candidate.createdAt, `${field}.createdAt`, 35)
     if (!validTimestamp(createdAt) || !isRecord(candidate.approval)
-      || !hasExactKeys(candidate.approval, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.approval, actionProofFields)
       || !validProof(candidate.approval as CommerceActionProof)
       || candidate.approval.capturedAt !== createdAt) rejectInvalid(`${field}.approval is invalid.`)
     const quoteReferences: string[] = []
@@ -2903,7 +3019,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ], ['budgetEnvelopeId', 'sourceSourcingDecisionId'])) rejectInvalid(`purchaseRequisitions[${index}] is invalid.`)
     const field = `purchaseRequisitions[${index}]`
     const id = canonicalText(candidate.id, `${field}.id`, 80)
-    if (!purchaseRequisitionIdPattern.test(id)) rejectInvalid(`${field}.id is invalid.`)
+    if (!hasPrefixedUuid(id, 'PR-')) rejectInvalid(`${field}.id is invalid.`)
     if (!validTimestamp(candidate.createdAt) || !validTimestamp(candidate.expectedAt)
       || (timestampMicros(candidate.expectedAt) as bigint) <= (timestampMicros(candidate.createdAt) as bigint)) rejectInvalid(`${field} dates are invalid.`)
     canonicalText(candidate.supplier, `${field}.supplier`, 120)
@@ -2917,7 +3033,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (typeof candidate.sourceDecisionDigest !== 'string' || !sha256DigestPattern.test(candidate.sourceDecisionDigest)
       || typeof candidate.sourceReplenishmentDigest !== 'string' || !sha256DigestPattern.test(candidate.sourceReplenishmentDigest)) rejectInvalid(`${field} source evidence is invalid.`)
     if (!isRecord(candidate.approval)
-      || !hasExactKeys(candidate.approval, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.approval, actionProofFields)
       || !validProof(candidate.approval as CommerceActionProof)
       || candidate.approval.capturedAt !== candidate.createdAt) rejectInvalid(`${field}.approval is invalid.`)
     if (candidate.budgetEnvelopeId !== undefined) {
@@ -2961,7 +3077,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       ['requisitionId', 'expectedAt', 'unitCostMmk', 'cancellation', 'supplierInvoice', 'supplierReturns'],
     )) rejectInvalid(`purchaseOrders[${index}] is invalid.`)
     const id = canonicalText(candidate.id, `purchaseOrders[${index}].id`, 80)
-    if (!purchaseOrderIdPattern.test(id)) rejectInvalid(`purchaseOrders[${index}].id is invalid.`)
+    if (!hasPrefixedUuid(id, 'PO-')) rejectInvalid(`purchaseOrders[${index}].id is invalid.`)
     if (!validTimestamp(candidate.createdAt)) rejectInvalid(`purchaseOrders[${index}].createdAt is invalid.`)
     if (candidate.expectedAt !== undefined
       && (!validTimestamp(candidate.expectedAt)
@@ -2987,7 +3103,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       convertedRequisitionIds.push(requisitionId)
     }
     if (!isRecord(candidate.creation)
-      || !hasExactKeys(candidate.creation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(candidate.creation, actionProofFields)
       || !validProof(candidate.creation as CommerceActionProof)
       || candidate.creation.capturedAt !== candidate.createdAt) {
       rejectInvalid(`purchaseOrders[${index}].creation is invalid.`)
@@ -2997,18 +3113,18 @@ export function validateCommerceState(value: unknown): CommerceState {
         || sameAccountableActor(candidate.creation.actor as string, linkedRequisition.approval.actor))) {
       rejectInvalid(`purchaseOrders[${index}] requires a later confirmation by a different operator.`)
     }
-    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+    for (const field of actionProofTextFields) {
       canonicalText(candidate.creation[field], `purchaseOrders[${index}].creation.${field}`, field === 'actionId' ? 160 : 180)
     }
     purchaseOrderActionIds.push(candidate.creation.actionId as string)
     if (candidate.cancellation !== undefined) {
       if (!isRecord(candidate.cancellation)
-        || !hasExactKeys(candidate.cancellation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+        || !hasExactKeys(candidate.cancellation, actionProofFields)
         || !validProof(candidate.cancellation as CommerceActionProof)
         || (timestampMicros(candidate.cancellation.capturedAt) as bigint) < (timestampMicros(candidate.createdAt) as bigint)) {
         rejectInvalid(`purchaseOrders[${index}].cancellation is invalid.`)
       }
-      for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+      for (const field of actionProofTextFields) {
         canonicalText(candidate.cancellation[field], `purchaseOrders[${index}].cancellation.${field}`, field === 'actionId' ? 160 : 180)
       }
       purchaseOrderActionIds.push(candidate.cancellation.actionId as string)
@@ -3023,7 +3139,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           'unitCostMmk', 'totalMmk', 'recording',
         ], ['payableReview'])) rejectInvalid(`${field} is invalid.`)
       const invoiceId = canonicalText(invoice.id, `${field}.id`, 80)
-      if (!supplierInvoiceIdPattern.test(invoiceId)) rejectInvalid(`${field}.id is invalid.`)
+      if (!hasPrefixedUuid(invoiceId, 'PINV-')) rejectInvalid(`${field}.id is invalid.`)
       const supplierReference = canonicalText(invoice.supplierReference, `${field}.supplierReference`, 80)
       if (!validTimestamp(invoice.issuedAt)
         || !validTimestamp(invoice.dueAt)
@@ -3039,18 +3155,18 @@ export function validateCommerceState(value: unknown): CommerceState {
         rejectInvalid(`${field}.totalMmk must equal quantity times unit cost.`)
       }
       if (!isRecord(invoice.recording)
-        || !hasExactKeys(invoice.recording, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+        || !hasExactKeys(invoice.recording, actionProofFields)
         || !validProof(invoice.recording as CommerceActionProof)
         || (timestampMicros(invoice.recording.capturedAt) as bigint) < (timestampMicros(invoice.issuedAt) as bigint)) {
         rejectInvalid(`${field}.recording is invalid.`)
       }
-      for (const proofField of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+      for (const proofField of actionProofTextFields) {
         canonicalText(invoice.recording[proofField], `${field}.recording.${proofField}`, proofField === 'actionId' ? 160 : 180)
       }
       purchaseOrderActionIds.push(invoice.recording.actionId as string)
       if (invoice.payableReview !== undefined) {
         if (!isRecord(invoice.payableReview)
-          || !hasExactKeys(invoice.payableReview, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+          || !hasExactKeys(invoice.payableReview, actionProofFields)
           || !validProof(invoice.payableReview as CommerceActionProof)
           || (timestampMicros(invoice.payableReview.capturedAt) as bigint) < (timestampMicros(invoice.recording.capturedAt) as bigint)) {
           rejectInvalid(`${field}.payableReview is invalid.`)
@@ -3075,7 +3191,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         ]) || !Array.isArray(returnCandidate.creditNotes)
           || returnCandidate.creditNotes.length > maxSupplierCreditsPerReturn) rejectInvalid(`${field} is invalid.`)
         const returnId = canonicalText(returnCandidate.id, `${field}.id`, 80)
-        if (!supplierReturnIdPattern.test(returnId)) rejectInvalid(`${field}.id is invalid.`)
+        if (!hasPrefixedUuid(returnId, 'SRET-')) rejectInvalid(`${field}.id is invalid.`)
         const createdAt = timestampMicros(returnCandidate.createdAt)
         if (createdAt === null || createdAt < (timestampMicros(candidate.createdAt) as bigint)
           || (newerReturnAt !== null && createdAt > newerReturnAt)) rejectInvalid(`${field}.createdAt is outside the purchase chronology.`)
@@ -3088,7 +3204,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         if (returnCandidate.physicalReturnStatus !== 'not_dispatched'
           || returnCandidate.supplierContacted !== false || returnCandidate.accountingPosted !== false
           || !isRecord(returnCandidate.authorization)
-          || !hasExactKeys(returnCandidate.authorization, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+          || !hasExactKeys(returnCandidate.authorization, actionProofFields)
           || !validProof(returnCandidate.authorization as CommerceActionProof)
           || returnCandidate.authorization.capturedAt !== returnCandidate.createdAt) rejectInvalid(`${field} overclaims return execution or has invalid authorization.`)
         purchaseOrderActionIds.push(returnCandidate.authorization.actionId as string)
@@ -3100,13 +3216,13 @@ export function validateCommerceState(value: unknown): CommerceState {
             'id', 'supplierReference', 'issuedAt', 'amountMmk', 'accountingPosted', 'recording',
           ])) rejectInvalid(`${creditField} is invalid.`)
           const creditId = canonicalText(creditCandidate.id, `${creditField}.id`, 80)
-          if (!supplierCreditIdPattern.test(creditId)) rejectInvalid(`${creditField}.id is invalid.`)
+          if (!hasPrefixedUuid(creditId, 'SCN-')) rejectInvalid(`${creditField}.id is invalid.`)
           const supplierReference = canonicalText(creditCandidate.supplierReference, `${creditField}.supplierReference`, 80)
           const issuedAt = timestampMicros(creditCandidate.issuedAt)
           assertSafeInteger(creditCandidate.amountMmk, `${creditField}.amountMmk`, 1)
           if (issuedAt === null || issuedAt < createdAt || creditCandidate.accountingPosted !== false
             || !isRecord(creditCandidate.recording)
-            || !hasExactKeys(creditCandidate.recording, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+            || !hasExactKeys(creditCandidate.recording, actionProofFields)
             || !validProof(creditCandidate.recording as CommerceActionProof)
             || (timestampMicros(creditCandidate.recording.capturedAt) as bigint) < issuedAt
             || (newerCreditAt !== null && (timestampMicros(creditCandidate.recording.capturedAt) as bigint) > newerCreditAt)) rejectInvalid(`${creditField} is outside the claim chronology or overclaims posting.`)
@@ -3216,7 +3332,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       }
     }
     if (!isRecord(storefrontConfiguration.saved)
-      || !hasExactKeys(storefrontConfiguration.saved, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(storefrontConfiguration.saved, actionProofFields)
       || !validProof(storefrontConfiguration.saved as CommerceActionProof)
       || storefrontConfiguration.saved.evidenceReference !== `ECOMMERCE-STOREFRONT:${storefrontConfiguration.shopCatalogDigest}:R${storefrontConfiguration.revision}`) {
       rejectInvalid('storefrontConfiguration.saved is invalid.')
@@ -3235,12 +3351,47 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
   }
 
+  if (value.merchantProfile !== undefined) {
+    const profile = value.merchantProfile
+    if (!isRecord(profile)
+      || !hasExactKeys(profile, ['schema', 'revision', 'nameMyanmar', 'nameEnglish', 'phone', 'addressMyanmar', 'addressEnglish', 'proof'])
+      || profile.schema !== COMMERCE_MERCHANT_PROFILE_SCHEMA) rejectInvalid('Commerce merchant profile is invalid.')
+    assertSafeInteger(profile.revision, 'merchantProfile.revision', 1)
+    const revision = Number(profile.revision)
+    for (const field of ['nameMyanmar', 'nameEnglish', 'phone', 'addressMyanmar', 'addressEnglish'] as const) {
+      const text = profile[field]
+      const limit = field.startsWith('address') ? 180 : field === 'phone' ? 40 : 80
+      if (typeof text !== 'string' || text !== text.trim() || Array.from(text).length > limit || Array.from(text).some((character) => {
+        const code = character.charCodeAt(0)
+        return code <= 0x1f || code === 0x7f
+      })) {
+        rejectInvalid(`merchantProfile.${field} must be canonical printable text within its character limit.`)
+      }
+    }
+    if (!profile.nameMyanmar && !profile.nameEnglish) rejectInvalid('Merchant profile needs a business name in Burmese or English.')
+    if (!isRecord(profile.proof)
+      || !hasExactKeys(profile.proof, actionProofFields)
+      || !validProof(profile.proof as CommerceActionProof)) rejectInvalid('merchantProfile.proof is invalid.')
+    const proof = profile.proof as CommerceActionProof
+    const actionId = commerceMerchantProfileActionId(revision)
+    if (proof.actionId !== actionId || proof.evidenceReference !== `SHOP-MERCHANT-PROFILE:R${revision}`) rejectInvalid('merchantProfile.proof does not match its revision.')
+    if (!validTimestamp(proof.capturedAt)) rejectInvalid('merchantProfile.proof.capturedAt is invalid.')
+    canonicalText(proof.actor, 'merchantProfile.proof.actor')
+    canonicalText(proof.reason, 'merchantProfile.proof.reason')
+    canonicalText(proof.evidenceReference, 'merchantProfile.proof.evidenceReference')
+    merchantProfileActionIds.push(actionId)
+  }
+
   for (const [index, candidate] of orders.entries()) {
     if (!isRecord(candidate)) rejectInvalid(`orders[${index}] is invalid.`)
     orderIds.push(requiredText(candidate.id, `orders[${index}].id`))
     if (!validTimestamp(candidate.createdAt)) rejectInvalid(`orders[${index}].createdAt is invalid.`)
     for (const field of ['customer', 'channel', 'item', 'payment'] as const) requiredText(candidate[field], `orders[${index}].${field}`)
     if (candidate.owner !== undefined) canonicalText(candidate.owner, `orders[${index}].owner`, 120)
+    if (candidate.shiftId !== undefined) {
+      const shiftId = canonicalText(candidate.shiftId, `orders[${index}].shiftId`, 80)
+      if (!hasPrefixedUuid(shiftId, 'SHIFT-') || !shiftSessionById.has(shiftId) || candidate.owner === undefined) rejectInvalid(operatingIntegrityError)
+    }
     if (candidate.itemSku !== undefined && !itemSkus.includes(requiredText(candidate.itemSku, `orders[${index}].itemSku`))) rejectInvalid(`orders[${index}].itemSku is unknown.`)
     assertSafeInteger(candidate.quantity, `orders[${index}].quantity`, 1)
     assertSafeInteger(candidate.total, `orders[${index}].total`)
@@ -3477,12 +3628,12 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.completion !== undefined) {
       if (candidate.status !== 'completed'
         || !isRecord(candidate.completion)
-        || !hasExactKeys(candidate.completion, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+        || !hasExactKeys(candidate.completion, actionProofFields)
         || !validProof(candidate.completion as CommerceActionProof)) {
         rejectInvalid(`orders[${index}].completion is invalid.`)
       }
       const completion = candidate.completion as CommerceActionProof
-      for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+      for (const field of actionProofTextFields) {
         canonicalText(completion[field], `orders[${index}].completion.${field}`, field === 'actionId' ? 160 : 180)
       }
       if ((timestampMicros(completion.capturedAt) as bigint) < (timestampMicros(candidate.createdAt) as bigint)
@@ -3591,7 +3742,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           || !hasExactKeys(actionCandidate, ['kind', 'proof'])
           || actionCandidate.kind !== 'customer_contact'
           || !isRecord(actionCandidate.proof)
-          || !hasExactKeys(actionCandidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+          || !hasExactKeys(actionCandidate.proof, actionProofFields)
           || !validProof(actionCandidate.proof as CommerceActionProof)) {
           rejectInvalid(`orders[${index}].collectionActions[${actionIndex}] is invalid.`)
         }
@@ -3603,7 +3754,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           rejectInvalid(`orders[${index}].collectionActions[${actionIndex}] is outside the order chronology.`)
         }
         newerActionAt = capturedAt
-        for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+        for (const field of actionProofTextFields) {
           canonicalText(proof[field], `orders[${index}].collectionActions[${actionIndex}].proof.${field}`, field === 'actionId' ? 160 : 180)
         }
         collectionActionIds.push(proof.actionId)
@@ -3674,17 +3825,17 @@ export function validateCommerceState(value: unknown): CommerceState {
         const sourceRequestId = canonicalText(caseCandidate.sourceRequestId, `${field}.sourceRequestId`, 40)
         const expectedCaseId = `CASE-${sourceIntentId.slice(4)}`
         const expectedEvidence = `ECOMMERCE-SUPPORT:${sourceIntentId.slice(4)}:${String(candidate.id)}:${sourceRequestId}`
-        if (!supportCaseIdPattern.test(caseId)
-          || !supportIntentIdPattern.test(sourceIntentId)
+        if (!hasPrefixedUuid(caseId, 'CASE-')
+          || !hasPrefixedUuid(sourceIntentId, 'ESR-')
           || caseId !== expectedCaseId
-          || !storefrontRequestIdPattern.test(sourceRequestId)
+          || !hasPrefixedUuid(sourceRequestId, 'ECR-')
           || sourceRequestId !== candidate.sourceRecordId
           || !validTimestamp(caseCandidate.customerRequestedAt)
           || !supportCategories.includes(caseCandidate.category as CommerceSupportCategory)
           || caseCandidate.externalMessageSent !== false
           || caseCandidate.refundStarted !== false
           || !isRecord(caseCandidate.opening)
-          || !hasExactKeys(caseCandidate.opening, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+          || !hasExactKeys(caseCandidate.opening, actionProofFields)
           || !validProof(caseCandidate.opening as CommerceActionProof)
           || caseCandidate.opening.evidenceReference !== expectedEvidence) {
           rejectInvalid(`${field} boundary is invalid.`)
@@ -3720,7 +3871,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         const originalTimeline = initialService
           ? validateSupportServiceTimeline(caseCandidate.serviceEvents, `${field}.serviceEvents`, caseId, initialService, openingAt, supportActionIds)
           : null
-        for (const proofField of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+        for (const proofField of actionProofTextFields) {
           canonicalText(opening[proofField], `${field}.opening.${proofField}`, proofField === 'actionId' ? 160 : 300)
         }
         const originalResolution = caseCandidate.resolution === undefined
@@ -3735,7 +3886,7 @@ export function validateCommerceState(value: unknown): CommerceState {
             || !supportPriorities.includes(caseCandidate.reopen.priority as CommerceSupportPriority)
             || !validTimestamp(caseCandidate.reopen.dueAt)
             || !isRecord(caseCandidate.reopen.proof)
-            || !hasExactKeys(caseCandidate.reopen.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+            || !hasExactKeys(caseCandidate.reopen.proof, actionProofFields)
             || !validProof(caseCandidate.reopen.proof as CommerceActionProof)
             || caseCandidate.reopen.proof.evidenceReference !== `SUPPORT-REOPEN:${caseId}:${originalResolution.proof.actionId}`) {
             rejectInvalid(`${field}.reopen is invalid.`)
@@ -4039,6 +4190,17 @@ export function validateCommerceState(value: unknown): CommerceState {
   for (const [actionId, actionMovements] of movementsByAction) {
     if (actionMovements.length < 2) continue
     const first = actionMovements[0]
+    if (first.kind === 'count') {
+      if (actionMovements.some((movement) => movement.kind !== 'count'
+        || movement.createdAt !== first.createdAt
+        || movement.actor !== first.actor
+        || movement.reason !== first.reason
+        || movement.evidenceReference !== first.evidenceReference)
+        || new Set(actionMovements.map((movement) => movement.id)).size !== actionMovements.length) {
+        rejectInvalid(`Stock count batch ${actionId} is not one exact reviewed count group.`)
+      }
+      continue
+    }
     if ((first.kind !== 'reserve' && first.kind !== 'release')
       || !first.orderId
       || new Set(actionMovements.map((movement) => movement.sku)).size !== actionMovements.length
@@ -4064,14 +4226,28 @@ export function validateCommerceState(value: unknown): CommerceState {
       balance = priorBalance
     }
   }
+  const operatingActivationAt = operatingUnitById.size
+    ? [...operatingUnitById.values()]
+      .map((unit) => timestampMicros(unit.registration.capturedAt) as bigint)
+      .reduce((earliest, capturedAt) => capturedAt < earliest ? capturedAt : earliest)
+    : null
   for (const [orderId, count] of reserveByOrder) {
+    // one owner-bound reservation action covering every order line
     const order = orderById.get(orderId)
     const reservation = reserveMovementByOrder.get(orderId)
+    const shiftSession = order?.shiftId ? shiftSessionById.get(order.shiftId as string) : undefined
     if (!order
       || count !== reservationLinesForOrder(order as unknown as CommerceOrder).length
       || reserveActionsByOrder.get(orderId)?.size !== 1
-      || (order.owner !== undefined && reservation?.actor !== order.owner)) rejectInvalid(`${orderId} does not have one owner-bound reservation action covering every order line.`)
+      || (order.owner !== undefined && reservation?.actor !== order.owner)
+      || (operatingActivationAt !== null && order.shiftId === undefined && reservation
+        && (timestampMicros(reservation.createdAt) as bigint) >= operatingActivationAt)
+      || (order.shiftId !== undefined && (!shiftSession || !reservation
+        || (timestampMicros(reservation.createdAt) as bigint) < (timestampMicros(shiftSession.opening.capturedAt) as bigint)))) {
+      rejectInvalid(`${orderId} has invalid reservation evidence.`)
+    }
   }
+  if ((orders as unknown as CommerceOrder[]).some((order) => order.shiftId && !reserveByOrder.has(order.id))) rejectInvalid(operatingIntegrityError)
   for (const [orderId, count] of releaseByOrder) {
     const order = orderById.get(orderId)
     const expected = order ? reservationLinesForOrder(order as unknown as CommerceOrder).length : 0
@@ -4121,13 +4297,14 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'createdAt', 'total', 'orders'],
-      [...closeSnapshotFields, 'settlement'],
+      [...closeSnapshotFields, 'shiftId', 'settlement'],
     )) rejectInvalid(`closes[${index}] is invalid.`)
     closeIds.push(requiredText(candidate.id, `closes[${index}].id`))
     if (!validTimestamp(candidate.createdAt)) rejectInvalid(`closes[${index}].createdAt is invalid.`)
     assertSafeInteger(candidate.total, `closes[${index}].total`)
     assertSafeInteger(candidate.orders, `closes[${index}].orders`)
     const presentSnapshotFields = closeSnapshotFields.filter((field) => candidate[field] !== undefined)
+    if (candidate.shiftId !== undefined && presentSnapshotFields.length !== closeSnapshotFields.length) rejectInvalid(operatingIntegrityError)
     if (presentSnapshotFields.length && presentSnapshotFields.length !== closeSnapshotFields.length) {
       rejectInvalid(`closes[${index}] has incomplete exception and operator evidence.`)
     }
@@ -4139,7 +4316,10 @@ export function validateCommerceState(value: unknown): CommerceState {
       const orderIdsForClose = candidate.orderIds.map((value, referenceIndex) => canonicalText(value, `closes[${index}].orderIds[${referenceIndex}]`, 160))
       const paymentExceptionOrderIds = candidate.paymentExceptionOrderIds.map((value, referenceIndex) => canonicalText(value, `closes[${index}].paymentExceptionOrderIds[${referenceIndex}]`, 160))
       const stockExceptionSkus = candidate.stockExceptionSkus.map((value, referenceIndex) => canonicalText(value, `closes[${index}].stockExceptionSkus[${referenceIndex}]`, 80))
-      if (!businessDatePattern.test(businessDate) || businessDate !== myanmarBusinessDate(String(candidate.createdAt))) rejectInvalid(`closes[${index}].businessDate must match its Myanmar close date.`)
+      if (!businessDatePattern.test(businessDate)
+        || (candidate.shiftId === undefined && businessDate !== myanmarBusinessDate(String(candidate.createdAt)))) {
+        rejectInvalid(`closes[${index}].businessDate must match its Myanmar operating date.`)
+      }
       assertUnique(orderIdsForClose, `closes[${index}] order ID`)
       assertUnique(paymentExceptionOrderIds, `closes[${index}] payment exception order ID`)
       assertUnique(stockExceptionSkus, `closes[${index}] stock exception SKU`)
@@ -4152,6 +4332,19 @@ export function validateCommerceState(value: unknown): CommerceState {
         rejectInvalid(`closes[${index}] exception references must be sorted.`)
       }
       const memberOrders = orderIdsForClose.map((orderId) => orderById.get(orderId) as unknown as CommerceOrder)
+      const shiftId = candidate.shiftId === undefined
+        ? null
+        : canonicalText(candidate.shiftId, `closes[${index}].shiftId`, 80)
+      const shiftSession = shiftId ? shiftSessionById.get(shiftId) : null
+      if (shiftId && (!hasPrefixedUuid(shiftId, 'SHIFT-')
+        || !shiftSession
+        || myanmarBusinessDate(shiftSession.opening.capturedAt) !== businessDate
+        || (timestampMicros(candidate.createdAt as string) as bigint) < (timestampMicros(shiftSession.opening.capturedAt) as bigint)
+        || memberOrders.some((order) => order.shiftId !== shiftId)
+        || paymentExceptionOrderIds.some((orderId) => (orderById.get(orderId) as unknown as CommerceOrder).shiftId !== shiftId))) {
+        rejectInvalid(operatingIntegrityError)
+      }
+      if (!shiftId && memberOrders.some((order) => order.shiftId !== undefined)) rejectInvalid(operatingIntegrityError)
       const memberAdjustedTotals = memberOrders.map(commerceOrderAdjustedTotal)
       if (memberOrders.some((order) => order.status !== 'completed' || order.paymentStatus !== 'reconciled')
         || memberAdjustedTotals.some((total) => total === null)
@@ -4159,11 +4352,11 @@ export function validateCommerceState(value: unknown): CommerceState {
         || candidate.total !== memberAdjustedTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0)) {
         rejectInvalid(`closes[${index}] totals must match its completed, reconciled order membership.`)
       }
-      if (!closeIdPattern.test(String(candidate.id))) rejectInvalid(`closes[${index}].id must be a full close UUID.`)
+      if (!hasPrefixedUuid(candidate.id, 'CLOSE-')) rejectInvalid(`closes[${index}].id must be a full close UUID.`)
       const actionId = canonicalText(candidate.actionId, `closes[${index}].actionId`, 160)
-      if (!closeActionIdPattern.test(actionId)) rejectInvalid(`closes[${index}].actionId must be a full action UUID.`)
+      if (!hasPrefixedUuid(actionId, 'ACT-')) rejectInvalid(`closes[${index}].actionId must be a full action UUID.`)
       closeActionIds.push(actionId)
-      closeBusinessDates.push(businessDate)
+      closeScopeKeys.push(shiftId ? `shift:${shiftId}` : `legacy:${businessDate}`)
       closedOrderIds.push(...orderIdsForClose)
       canonicalText(candidate.operator, `closes[${index}].operator`)
       canonicalText(candidate.reason, `closes[${index}].reason`)
@@ -4218,8 +4411,43 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
   }
   assertUnique(closeIds, 'Daily close ID')
-  assertUnique(closeBusinessDates, 'Daily close business date')
+  assertUnique(closeScopeKeys, 'Daily close scope')
   assertUnique(closedOrderIds, 'Closed order ID')
+
+  const scopedCloseByShift = new Map((closes as unknown as CommerceClose[])
+    .filter((close) => close.shiftId)
+    .map((close) => [close.shiftId as string, close]))
+  for (const shiftSession of shiftSessionById.values()) {
+    const close = scopedCloseByShift.get(shiftSession.id)
+    if (!close) continue
+    const shiftOrders = (orders as unknown as CommerceOrder[]).filter((order) => order.shiftId === shiftSession.id)
+    const eligibleOrderIds = shiftOrders
+      .filter((order) => order.status === 'completed' && order.paymentStatus === 'reconciled')
+      .map((order) => order.id)
+      .sort()
+    const closeAt = timestampMicros(close.createdAt) as bigint
+    if (shiftOrders.some((order) => order.status !== 'cancelled'
+      && (order.status !== 'completed' || order.paymentStatus !== 'reconciled'))
+      || !sameStringArray(close.orderIds ?? [], eligibleOrderIds)
+      || shiftOrders.some((order) => commerceOrderCloseBasis(order) > closeAt)
+      || validatedMovements.some((movement) => movement.orderId
+        && shiftOrders.some((order) => order.id === movement.orderId)
+        && (movement.kind === 'reserve' || movement.kind === 'release')
+        && (timestampMicros(movement.createdAt) as bigint) > closeAt)) rejectInvalid(operatingIntegrityError)
+  }
+  for (const operatingUnit of operatingUnitById.values()) {
+    const sessions = [...shiftSessionById.values()]
+      .filter((session) => session.unitId === operatingUnit.id)
+    for (let index = 0; index < sessions.length - 1; index += 1) {
+      const currentSession = sessions[index]
+      const nextSession = sessions[index + 1]
+      const currentClose = scopedCloseByShift.get(currentSession.id)
+      if (!currentClose
+        || (timestampMicros(currentClose.createdAt) as bigint) > (timestampMicros(nextSession.opening.capturedAt) as bigint)) {
+        rejectInvalid(operatingIntegrityError)
+      }
+    }
+  }
 
   const intakeIds: string[] = []
   const intakeSources: string[] = []
@@ -4255,12 +4483,12 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (itemName !== item.name || itemVariant !== optionalText(item.variant) || candidate.total !== Number(candidate.quantity) * Number(candidate.unitPrice)) {
       rejectInvalid(`websiteIntakes[${index}] does not match its retained Commerce snapshot.`)
     }
-    if (!isRecord(candidate.creation) || !hasExactKeys(candidate.creation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])) {
+    if (!isRecord(candidate.creation) || !hasExactKeys(candidate.creation, actionProofFields)) {
       rejectInvalid(`websiteIntakes[${index}].creation is invalid.`)
     }
     const creation = candidate.creation as CommerceActionProof
     if (!validProof(creation) || creation.capturedAt !== candidate.createdAt) rejectInvalid(`websiteIntakes[${index}].creation is invalid.`)
-    for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) canonicalText(creation[field], `websiteIntakes[${index}].creation.${field}`, field === 'actionId' ? 160 : 180)
+    for (const field of actionProofTextFields) canonicalText(creation[field], `websiteIntakes[${index}].creation.${field}`, field === 'actionId' ? 160 : 180)
     if (candidate.snapshotDigest !== undefined) {
       const snapshot: Omit<CommerceWebsiteIntake, 'snapshotDigest' | 'conversion' | 'status'> = {
         id: intakeId,
@@ -4291,7 +4519,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       }
       const conversion = candidate.conversion as CommerceActionProof & { orderId: string }
       if (!validProof(conversion)) rejectInvalid(`websiteIntakes[${index}].conversion is invalid.`)
-      for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) canonicalText(conversion[field], `websiteIntakes[${index}].conversion.${field}`, field === 'actionId' ? 160 : 180)
+      for (const field of actionProofTextFields) canonicalText(conversion[field], `websiteIntakes[${index}].conversion.${field}`, field === 'actionId' ? 160 : 180)
       const orderId = canonicalText(conversion.orderId, `websiteIntakes[${index}].conversion.orderId`, 160)
       const order = orderById.get(orderId)
       const matchingReservation = movements.filter((movement) => isRecord(movement)
@@ -4342,8 +4570,8 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (candidate.schema !== 'supermega.ecommerce.order_request.v1'
       || candidate.mode !== 'browser-local-request'
       || candidate.state !== 'pending_shop_review'
-      || !storefrontRequestIdPattern.test(requestId)
-      || !storefrontIdempotencyPattern.test(idempotencyKey)
+      || !hasPrefixedUuid(requestId, 'ECR-')
+      || !hasPrefixedUuid(idempotencyKey, 'ECI-')
       || requestId.slice(4) !== idempotencyKey.slice(4)
       || !validTimestamp(candidate.createdAt)
       || typeof candidate.sourcePreviewDigest !== 'string'
@@ -4432,11 +4660,14 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...catalogChangeActionIds.filter((actionId) => !catalogBaselineActionSet.has(actionId)),
     ...catalogBaselineActionSet,
     ...taxConfigurationActionIds,
+    ...merchantProfileActionIds,
     ...accountMappingConfigurationActionIds,
     ...customerCreditPolicyActionIds,
     ...promotionPolicyActionIds,
     ...shippingPolicyActionIds,
     ...paymentPolicyActionIds,
+    ...operatingUnitActionIds,
+    ...shiftSessionActionIds,
     ...purchaseBudgetEnvelopeActionIds,
     ...supplierSourcingDecisionActionIds,
     ...websiteIntakeCreationActionIds,
@@ -4694,6 +4925,8 @@ function movementFor(
 
 function actionIdIsUsed(state: CommerceState, actionId: string) {
   return state.movements.some((movement) => movement.actionId === actionId)
+    || state.operatingUnits?.some((unit) => unit.registration.actionId === actionId)
+    || state.shiftSessions?.some((session) => session.opening.actionId === actionId)
     || state.orders.some((order) => order.paymentReconciliationActionId === actionId || order.refundSettlementActionId === actionId)
     || state.orders.some((order) => order.advancementActionIds?.includes(actionId))
     || state.orders.some((order) => order.completion?.actionId === actionId)
@@ -4710,6 +4943,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commerceCatalogBaselines(state).some((baseline) => baseline.proof.actionId === actionId)
     || commerceCatalogChanges(state).some((change) => change.proof.actionId === actionId)
     || commerceTaxConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
+    || state.merchantProfile?.proof.actionId === actionId
     || commerceAccountMappingConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
     || commerceCustomerCreditPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commercePromotionPolicies(state).some((policy) => policy.proof.actionId === actionId)
@@ -4729,6 +4963,54 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || state.inventoryFoundation?.commands.some((command) => command.payload.proof.actionId === actionId)
 }
 
+export function saveCommerceMerchantProfile(
+  state: CommerceState,
+  input: CommerceMerchantProfileInput,
+  proof: CommerceActionProof,
+): CommerceState | null {
+  let current: CommerceState
+  try {
+    current = validateCommerceState(structuredClone(state))
+  } catch {
+    return null
+  }
+  if (typeof input?.nameMyanmar !== 'string'
+    || typeof input?.nameEnglish !== 'string'
+    || typeof input?.phone !== 'string'
+    || typeof input?.addressMyanmar !== 'string'
+    || typeof input?.addressEnglish !== 'string') return null
+  let profileInput: CommerceMerchantProfileInput
+  try {
+    profileInput = {
+      nameMyanmar: canonicalBlankableText(input.nameMyanmar, 'Burmese business name', 80),
+      nameEnglish: canonicalBlankableText(input.nameEnglish, 'English business name', 80),
+      phone: canonicalBlankableText(input.phone, 'Business phone', 40),
+      addressMyanmar: canonicalBlankableText(input.addressMyanmar, 'Burmese business address', 180),
+      addressEnglish: canonicalBlankableText(input.addressEnglish, 'English business address', 180),
+    }
+  } catch {
+    return null
+  }
+  if (!profileInput.nameMyanmar && !profileInput.nameEnglish) return null
+  const existing = current.merchantProfile
+  if (existing && ['nameMyanmar', 'nameEnglish', 'phone', 'addressMyanmar', 'addressEnglish']
+    .every((field) => existing[field as keyof CommerceMerchantProfile] === profileInput[field as keyof CommerceMerchantProfileInput])) return current
+  const revision = (existing?.revision ?? 0) + 1
+  if (!validProof(proof)
+    || proof.actionId !== commerceMerchantProfileActionId(revision)
+    || proof.evidenceReference !== `SHOP-MERCHANT-PROFILE:R${revision}`
+    || actionIdIsUsed(current, proof.actionId)) return null
+  return validateCommerceState({
+    ...current,
+    merchantProfile: {
+      schema: COMMERCE_MERCHANT_PROFILE_SCHEMA,
+      revision,
+      ...profileInput,
+      proof: { ...proof },
+    },
+  })
+}
+
 function sameWebsiteSource(left: CommerceWebsiteSource, right: CommerceWebsiteSource) {
   return left.fingerprint === right.fingerprint
     && left.approvalId === right.approvalId
@@ -4744,6 +5026,17 @@ function sameActionProof(left: CommerceActionProof, right: CommerceActionProof) 
     && left.actor === right.actor
     && left.reason === right.reason
     && left.evidenceReference === right.evidenceReference
+}
+
+function validOperatingProof(proof: CommerceActionProof) {
+  return validProof(proof)
+    && isRecord(proof)
+    && hasExactKeys(proof, actionProofFields)
+    && [proof.actionId, proof.actor, proof.reason, proof.evidenceReference].every((value) => value === value.trim())
+    && proof.actionId.length <= 160
+    && proof.actor.length <= 120
+    && proof.reason.length <= 180
+    && proof.evidenceReference.length <= 180
 }
 
 function sameCatalogChange(left: CommerceCatalogChange, right: CommerceCatalogChange) {
@@ -4826,7 +5119,7 @@ function validateSupportServiceTimeline(
       || !supportPriorities.includes(serviceCandidate.priority as CommerceSupportPriority)
       || !validTimestamp(serviceCandidate.dueAt)
       || !isRecord(serviceCandidate.proof)
-      || !hasExactKeys(serviceCandidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !hasExactKeys(serviceCandidate.proof, actionProofFields)
       || !validProof(serviceCandidate.proof as CommerceActionProof)
       || serviceCandidate.proof.evidenceReference !== `SUPPORT-SERVICE:${caseId}`) {
       rejectInvalid(`${serviceField} is invalid.`)
@@ -4892,7 +5185,7 @@ function validateSupportResolution(
     || !hasExactKeys(value, ['outcome', 'note', 'proof'])
     || !supportResolutionOutcomes.includes(value.outcome as CommerceSupportResolutionOutcome)
     || !isRecord(value.proof)
-    || !hasExactKeys(value.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+    || !hasExactKeys(value.proof, actionProofFields)
     || !validProof(value.proof as CommerceActionProof)) {
     rejectInvalid(`${field} is invalid.`)
   }
@@ -5031,28 +5324,6 @@ export function commercePaymentDecision(
   if (!policy.allowedFulfilments.includes(fulfilment)) return { ...base, status: 'rejected', reason: 'fulfilment_not_allowed' }
   if (policy.maximumOrderMmk !== null && orderAmountMmk > policy.maximumOrderMmk) return { ...base, status: 'rejected', reason: 'amount_exceeded' }
   return { ...base, status: 'approved', reason: 'approved' }
-}
-
-export function restoreBrowserLocalSamplePaymentPolicies(
-  stateValue: CommerceState,
-  decision: CommercePaymentDecision,
-  fulfilment: 'pickup' | 'delivery',
-  orderAmountMmk: number,
-) {
-  const state = validateCommerceState(stateValue)
-  if (commercePaymentPolicies(state).length) return state
-  const samplePolicies = createSeedCommerce().paymentPolicies ?? []
-  const expected = commercePaymentDecision(
-    samplePolicies,
-    decision.adapter,
-    fulfilment,
-    orderAmountMmk,
-    decision.reviewedAt,
-  )
-  if (!expected
-    || expected.status !== 'approved'
-    || JSON.stringify(expected) !== JSON.stringify(decision)) return null
-  return validateCommerceState({ ...state, paymentPolicies: samplePolicies })
 }
 
 export function commercePaymentAdapterLabel(adapter: CommercePaymentAdapter) {
@@ -6304,6 +6575,17 @@ export function convertCommerceWebsiteIntake(
     || timestampMicros(input.promisedAt) === null
     || (timestampMicros(input.promisedAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)) return null
   const current = validateCommerceState(state)
+  const scopedMode = current.operatingUnits !== undefined && current.shiftSessions !== undefined
+  if (!scopedMode && input.shiftId !== undefined) return null
+  const shiftSession = scopedMode && typeof input.shiftId === 'string'
+    ? current.shiftSessions?.find((session) => session.id === input.shiftId)
+    : null
+  if (scopedMode) {
+    const closedShiftIds = new Set(current.closes.flatMap((close) => close.shiftId ? [close.shiftId] : []))
+    if (!shiftSession
+      || closedShiftIds.has(shiftSession.id)
+      || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(shiftSession.opening.capturedAt) as bigint)) return null
+  }
   const intakes = commerceWebsiteIntakes(current)
   const intake = intakes.find((candidate) => candidate.id === intakeId)
   if (!intake) return null
@@ -6315,6 +6597,7 @@ export function convertCommerceWebsiteIntake(
       && order.fulfilment === (input.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery')
       && order.fulfilmentReference === intake.id
       && order.promisedAt === input.promisedAt
+      && order.shiftId === input.shiftId
       && order.payment === (input.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : input.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer')
       && sameActionProof(intake.conversion, proof)
       && (!current.inventoryFoundation || shopInventoryOrderActionMatches(
@@ -6332,7 +6615,7 @@ export function convertCommerceWebsiteIntake(
     || item.name !== intake.itemName
     || (item.variant ?? undefined) !== (intake.itemVariant ?? undefined)
     || item.price !== intake.unitPrice
-    || item.onHand < intake.quantity) return null
+    || commerceStockConflict(current.items, [{ sku: intake.sku, quantity: intake.quantity }])) return null
   const nextBalance = safeBalance(item.onHand, -intake.quantity)
   if (nextBalance === null) return null
   const orderId = `ORD-WEB-${intake.id.slice(5)}`
@@ -6347,6 +6630,7 @@ export function convertCommerceWebsiteIntake(
   if (!calculation) return null
   const order: CommerceOrder = {
     id: orderId,
+    ...(shiftSession ? { shiftId: shiftSession.id } : {}),
     createdAt: proof.capturedAt,
     customer: input.customer,
     owner: proof.actor,
@@ -7292,8 +7576,18 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     if (storedOrder.calculation?.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA) {
       storedBusinessOrder.total = storedOrder.calculation.listedSubtotalMmk
     }
+    storedBusinessOrder.status = 'confirmed'
+    storedBusinessOrder.paymentStatus = 'pending'
+    storedBusinessOrder.refundStatus = 'none'
     delete storedBusinessOrder.calculation
     delete storedBusinessOrder.creditDecision
+    for (const field of [
+      'paymentReconciledAt', 'paymentReconciliationActionId', 'paymentReconciledBy',
+      'paymentReconciliationReason', 'paymentEvidenceReference', 'refundSettledAt',
+      'refundSettlementActionId', 'refundSettledBy', 'refundSettlementReason',
+      'refundEvidenceReference', 'collectionActions', 'advancementActionIds', 'completion',
+      'returns', 'supportCases', 'corrections',
+    ] as const) delete storedBusinessOrder[field]
     const requestedBusinessOrder = { ...order }
     delete requestedBusinessOrder.calculation
     if (requestedBusinessOrder.lines === undefined) delete storedBusinessOrder.lines
@@ -7312,6 +7606,15 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
       ))
       && JSON.stringify(storedBusinessOrder) === JSON.stringify(requestedBusinessOrder) ? state : null
   }
+  const scopedMode = state.operatingUnits !== undefined && state.shiftSessions !== undefined
+  if (!scopedMode && order.shiftId !== undefined) return null
+  if (scopedMode) {
+    const shiftSession = state.shiftSessions?.find((session) => session.id === order.shiftId)
+    const closedShiftIds = new Set(state.closes.flatMap((close) => close.shiftId ? [close.shiftId] : []))
+    if (!shiftSession
+      || closedShiftIds.has(shiftSession.id)
+      || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(shiftSession.opening.capturedAt) as bigint)) return null
+  }
   const capturedLines = order.lines === undefined ? undefined : validatedOrderLineSnapshots(order)
   if (order.lines !== undefined && !capturedLines) return null
   const legacyItem = order.lines === undefined && order.itemSku
@@ -7326,6 +7629,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   }] : [])
   if (!lines.length
     || (order.lines === undefined && (order.item !== legacyItem?.name || legacyItem.price * order.quantity !== order.total))) return null
+  if (commerceStockConflict(state.items, lines)) return null
   if (actionIdIsUsed(state, proof.actionId)) return null
   const duplicate = state.orders.some((candidate) => candidate.id === order.id || Boolean(order.sourceRecordId && candidate.sourceRecordId === order.sourceRecordId))
   if (duplicate) return null
@@ -7336,8 +7640,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     if (!item
       || item.name !== line.name
       || item.variant !== line.variant
-      || item.price !== line.unitPriceMmk
-      || item.onHand < line.quantity) return null
+      || item.price !== line.unitPriceMmk) return null
     const nextBalance = safeBalance(item.onHand, -line.quantity)
     if (nextBalance === null) return null
     nextBalances.set(item.sku, nextBalance)
@@ -7417,7 +7720,7 @@ export function approveCommercePurchaseBudgetEnvelope(
   proof: CommerceActionProof,
 ) {
   if (!validProof(proof)
-    || !purchaseBudgetEnvelopeIdPattern.test(input.id)
+    || !hasPrefixedUuid(input.id, 'PBE-')
     || typeof input.budgetCode !== 'string' || input.budgetCode !== input.budgetCode.trim().toUpperCase() || !purchaseBudgetCodePattern.test(input.budgetCode)
     || typeof input.label !== 'string' || input.label !== input.label.trim() || !input.label || input.label.length > 120
     || !validTimestamp(input.periodStart) || !validTimestamp(input.periodEnd)
@@ -7452,7 +7755,7 @@ export function approveCommerceSupplierSourcingDecision(
   input: CommerceSupplierSourcingDecisionInput,
   proof: CommerceActionProof,
 ) {
-  if (!validProof(proof) || !supplierSourcingDecisionIdPattern.test(input.id)) return null
+  if (!validProof(proof) || !hasPrefixedUuid(input.id, 'SSD-')) return null
   const current = validateCommerceState(state)
   const history = commerceSupplierSourcingDecisions(current)
   const proposed: CommerceSupplierSourcingDecision = {
@@ -7479,9 +7782,9 @@ export function approveCommercePurchaseRequisition(
   const supplier = optionalText(input.supplier)
   const totalMmk = input.quantityRequested * input.unitCostMmk
   if (!validProof(proof)
-    || !purchaseRequisitionIdPattern.test(input.id)
-    || !purchaseBudgetEnvelopeIdPattern.test(input.budgetEnvelopeId)
-    || !supplierSourcingDecisionIdPattern.test(input.sourceSourcingDecisionId)
+    || !hasPrefixedUuid(input.id, 'PR-')
+    || !hasPrefixedUuid(input.budgetEnvelopeId, 'PBE-')
+    || !hasPrefixedUuid(input.sourceSourcingDecisionId, 'SSD-')
     || !validTimestamp(input.expectedAt)
     || (timestampMicros(input.expectedAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)
     || !supplier || supplier !== input.supplier || supplier.length > 120
@@ -7542,7 +7845,7 @@ export function createCommercePurchaseOrder(
   const supplier = optionalText(input.supplier)
   const unitCostMmk = input.unitCostMmk
   if (!validProof(proof)
-    || !purchaseOrderIdPattern.test(input.id)
+    || !hasPrefixedUuid(input.id, 'PO-')
     || !validTimestamp(input.expectedAt)
     || (timestampMicros(input.expectedAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)
     || !supplier
@@ -7858,7 +8161,7 @@ export function recordCommerceSupplierInvoice(
   proof: CommerceActionProof,
 ) {
   if (!validProof(proof)
-    || !supplierInvoiceIdPattern.test(input.id)
+    || !hasPrefixedUuid(input.id, 'PINV-')
     || !validTimestamp(input.issuedAt)
     || !validTimestamp(input.dueAt)
     || (timestampMicros(input.dueAt) as bigint) < (timestampMicros(input.issuedAt) as bigint)
@@ -7946,7 +8249,7 @@ export function authorizeCommerceSupplierReturn(
   } catch {
     return null
   }
-  if (!validProof(proof) || !supplierReturnIdPattern.test(input.id)) return null
+  if (!validProof(proof) || !hasPrefixedUuid(input.id, 'SRET-')) return null
   const current = validateCommerceState(state)
   const purchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrderId)
   const receipt = current.movements.find((movement) => movement.id === receiptMovementId)
@@ -8002,8 +8305,8 @@ export function recordCommerceSupplierCreditNote(
   } catch {
     return null
   }
-  if (!validProof(proof) || !supplierReturnIdPattern.test(supplierReturnId)
-    || !supplierCreditIdPattern.test(input.id) || !validTimestamp(input.issuedAt)
+  if (!validProof(proof) || !hasPrefixedUuid(supplierReturnId, 'SRET-')
+    || !hasPrefixedUuid(input.id, 'SCN-') || !validTimestamp(input.issuedAt)
     || !Number.isSafeInteger(input.amountMmk) || input.amountMmk < 1
     || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(input.issuedAt) as bigint)) return null
   const current = validateCommerceState(state)
@@ -8330,6 +8633,135 @@ export function countCommerceStock(
   }
   if (inventoryFoundation) nextState.inventoryFoundation = inventoryFoundation
   return validateCommerceState(nextState)
+}
+
+export type CommerceStockCountBatchLine = {
+  sku: string
+  expectedOnHand: number
+  countedQuantity: number
+  locationCount?: {
+    countId: string
+    stockUnitId: string
+    locationId: string
+    expectedQuantity: number
+    countedQuantity: number
+    expectedHeadDigest: string
+  }
+}
+
+/** Apply a reviewed multi-item stocktake atomically with one accountable action proof. */
+export function countCommerceStockBatch(
+  state: CommerceState,
+  lines: CommerceStockCountBatchLine[],
+  proof: CommerceActionProof,
+) {
+  if (!validProof(proof) || !Array.isArray(lines) || lines.length < 1 || lines.length > 200) return null
+  const current = validateCommerceState(state)
+  const catalogSkus = current.items.map((item) => item.sku).sort()
+  const initialItemBySku = new Map(current.items.map((item) => [item.sku, item]))
+  const targetKeys = new Set<string>()
+  const expectedOnHandBySku = new Map<string, number>()
+  const initialHeadDigest = current.inventoryFoundation?.headDigest
+  const existingBatchMovements = current.movements.filter((movement) => movement.actionId === proof.actionId)
+
+  for (const [index, line] of lines.entries()) {
+    if (!line || typeof line.sku !== 'string' || !Number.isSafeInteger(line.expectedOnHand) || line.expectedOnHand < 0
+      || !Number.isSafeInteger(line.countedQuantity) || line.countedQuantity < 0) return null
+    const item = initialItemBySku.get(line.sku)
+    if (!item || (!existingBatchMovements.length && item.onHand !== line.expectedOnHand)) return null
+    const priorExpected = expectedOnHandBySku.get(line.sku)
+    if (priorExpected !== undefined && priorExpected !== line.expectedOnHand) return null
+    expectedOnHandBySku.set(line.sku, line.expectedOnHand)
+    if (current.inventoryFoundation) {
+      const location = line.locationCount
+      if (!location || (!existingBatchMovements.length && location.expectedHeadDigest !== initialHeadDigest)
+        || !Number.isSafeInteger(location.expectedQuantity) || location.expectedQuantity < 0
+        || !Number.isSafeInteger(location.countedQuantity) || location.countedQuantity < 0
+        || location.countedQuantity !== line.countedQuantity) return null
+      const key = `${location.stockUnitId}\u0000${location.locationId}`
+      if (targetKeys.has(key)) return null
+      targetKeys.add(key)
+    } else {
+      if (line.locationCount || targetKeys.has(line.sku)) return null
+      targetKeys.add(line.sku)
+    }
+    if (!existingBatchMovements.length && index === 0 && current.inventoryFoundation
+      && initialHeadDigest !== line.locationCount?.expectedHeadDigest) return null
+  }
+
+  const movementSuffix = (index: number) => `COUNT-BATCH-${index + 1}`
+  const expectedMovementId = (index: number) => `MOV2:${encodeURIComponent(proof.actionId)}:${movementSuffix(index)}`
+  const locationProof = (index: number): CommerceActionProof => ({
+    ...proof,
+    actionId: `ACT-${sha256Hex(JSON.stringify([proof.actionId, 'shop-stock-count-line', index + 1])).slice(0, 40).toUpperCase()}`,
+  })
+  if (existingBatchMovements.length) {
+    if (existingBatchMovements.length !== lines.length) return null
+    const expectedBalances = new Map(expectedOnHandBySku)
+    for (const [index, line] of lines.entries()) {
+      const movement = existingBatchMovements.find((candidate) => candidate.id === expectedMovementId(index))
+      if (!movement || movement.kind !== 'count' || movement.sku !== line.sku || !sameProof(movement, proof)) return null
+      const before = expectedBalances.get(line.sku)
+      const delta = current.inventoryFoundation
+        ? line.locationCount!.countedQuantity - line.locationCount!.expectedQuantity
+        : line.countedQuantity - line.expectedOnHand
+      if (before === undefined || movement.expectedQuantity !== before || movement.quantityDelta !== delta
+        || movement.countedQuantity !== before + delta) return null
+      expectedBalances.set(line.sku, before + delta)
+      if (current.inventoryFoundation) {
+        try {
+          const replay = countShopInventory(current.inventoryFoundation, {
+            ...line.locationCount!, proof: locationProof(index), catalogSkus,
+            expectedHeadDigest: current.inventoryFoundation.headDigest,
+          })
+          if (!replay.replayed) return null
+        } catch { return null }
+      }
+    }
+    return current
+  }
+  if (actionIdIsUsed(current, proof.actionId)) return null
+
+  const nextItems = current.items.map((item) => ({ ...item }))
+  let inventoryFoundation = current.inventoryFoundation
+  const newMovements = [] as CommerceStockMovement[]
+  for (const [index, line] of lines.entries()) {
+    const item = nextItems.find((candidate) => candidate.sku === line.sku)
+    if (!item) return null
+    const expectedTotal = item.onHand
+    if (inventoryFoundation) {
+      try {
+        const locationResult = countShopInventory(inventoryFoundation, {
+          ...line.locationCount!, proof: locationProof(index), catalogSkus,
+          expectedHeadDigest: inventoryFoundation.headDigest,
+        })
+        if (locationResult.replayed) return null
+        inventoryFoundation = locationResult.state as ShopInventoryState
+        const projection = projectShopInventory(inventoryFoundation, catalogSkus)
+        const nextTotal = projection.balances
+          .filter((balance) => balance.sku === line.sku)
+          .reduce((sum, balance) => sum + balance.onHand, 0)
+        if (!Number.isSafeInteger(nextTotal)) return null
+        item.onHand = nextTotal
+      } catch { return null }
+    } else {
+      item.onHand = line.countedQuantity
+    }
+    const quantityDelta = item.onHand - expectedTotal
+    if (!Number.isSafeInteger(quantityDelta)) return null
+    newMovements.push(movementFor(proof, {
+      kind: 'count', sku: line.sku, quantityDelta, expectedQuantity: expectedTotal, countedQuantity: item.onHand,
+    }, movementSuffix(index)))
+  }
+
+  if (inventoryFoundation && !shopInventoryMatchesItems(inventoryFoundation, nextItems)) return null
+  const nextState: CommerceState = {
+    ...current,
+    items: nextItems,
+    movements: [...newMovements.reverse(), ...current.movements],
+    ...(inventoryFoundation ? { inventoryFoundation } : {}),
+  }
+  try { return validateCommerceState(nextState) } catch { return null }
 }
 
 export function commerceOrderHasReleasableReservation(state: CommerceState, orderId: string) {
@@ -8743,8 +9175,8 @@ export function commerceOrderSupportOpenExpectation(
     || order.status !== 'completed'
     || !order.completion
     || !order.sourceRecordId
-    || !storefrontRequestIdPattern.test(order.sourceRecordId)
-    || !supportIntentIdPattern.test(sourceIntentId)
+    || !hasPrefixedUuid(order.sourceRecordId, 'ECR-')
+    || !hasPrefixedUuid(sourceIntentId, 'ESR-')
     || order.supportCases?.some((entry) => entry.sourceIntentId === sourceIntentId)) return null
   return {
     orderId,
@@ -9063,8 +9495,8 @@ export function recordCommerceOrderSupportCase(
     || !input.orderId
     || input.orderId !== input.orderId.trim()
     || input.orderId.length > 160
-    || !supportIntentIdPattern.test(input.sourceIntentId)
-    || !storefrontRequestIdPattern.test(input.sourceRequestId)
+    || !hasPrefixedUuid(input.sourceIntentId, 'ESR-')
+    || !hasPrefixedUuid(input.sourceRequestId, 'ECR-')
     || !supportCategories.includes(input.category)
     || !supportPriorities.includes(input.priority)
     || typeof input.owner !== 'string'
@@ -9170,7 +9602,7 @@ export function recordCommerceOrderSupportServiceEvent(
     || !input.orderId
     || input.orderId !== input.orderId.trim()
     || input.orderId.length > 160
-    || !supportCaseIdPattern.test(input.caseId)
+    || !hasPrefixedUuid(input.caseId, 'CASE-')
     || !supportServiceEventKinds.includes(input.kind)
     || !supportPriorities.includes(input.priority)
     || typeof input.owner !== 'string'
@@ -9308,7 +9740,7 @@ export function reopenCommerceOrderSupportCase(
     || !input.orderId
     || input.orderId !== input.orderId.trim()
     || input.orderId.length > 160
-    || !supportCaseIdPattern.test(input.caseId)
+    || !hasPrefixedUuid(input.caseId, 'CASE-')
     || typeof input.sourceResolutionActionId !== 'string'
     || !input.sourceResolutionActionId
     || !supportPriorities.includes(input.priority)
@@ -9381,7 +9813,7 @@ export function resolveCommerceOrderSupportCase(
     || !input.orderId
     || input.orderId !== input.orderId.trim()
     || input.orderId.length > 160
-    || !supportCaseIdPattern.test(input.caseId)
+    || !hasPrefixedUuid(input.caseId, 'CASE-')
     || !supportResolutionOutcomes.includes(input.outcome)
     || typeof input.note !== 'string'
     || !input.note
@@ -9542,6 +9974,7 @@ export function recordCommerceOrderCorrection(
 
 function sameCloseExpectation(left: CommerceCloseExpectation, right: CommerceCloseExpectation) {
   return left.businessDate === right.businessDate
+    && left.shiftId === right.shiftId
     && left.total === right.total
     && left.stateSnapshot === right.stateSnapshot
     && sameStringArray(left.orderIds, right.orderIds)
@@ -9559,17 +9992,31 @@ function commerceOrderCloseBasis(order: CommerceOrder) {
     .reduce((latest, timestamp) => timestamp > latest ? timestamp : latest, 0n)
 }
 
-export function commerceCloseExpectation(state: CommerceState, capturedAt: string): CommerceCloseExpectation | null {
+export function commerceCloseExpectation(state: CommerceState, capturedAt: string, shiftId?: string): CommerceCloseExpectation | null {
   if (!validTimestamp(capturedAt)) return null
   const current = validateCommerceState(state)
   if (current.closes.some((close) => !close.orderIds || !close.businessDate)) return null
-  const businessDate = myanmarBusinessDate(capturedAt)
-  if (current.closes.some((close) => close.businessDate === businessDate)) return null
+  const scopedMode = current.operatingUnits !== undefined && current.shiftSessions !== undefined
+  const shiftSession = shiftId === undefined
+    ? null
+    : current.shiftSessions?.find((session) => session.id === shiftId) ?? null
+  if (shiftId !== undefined && (!scopedMode
+    || !shiftSession
+    || current.closes.some((close) => close.shiftId === shiftId)
+    || (timestampMicros(capturedAt) as bigint) < (timestampMicros(shiftSession.opening.capturedAt) as bigint))) return null
+  const businessDate = shiftSession ? myanmarBusinessDate(shiftSession.opening.capturedAt) : myanmarBusinessDate(capturedAt)
+  if (!shiftSession && current.closes.some((close) => close.shiftId === undefined && close.businessDate === businessDate)) return null
   const previouslyClosedOrderIds = new Set(current.closes.flatMap((close) => close.orderIds ?? []))
-  const eligibleOrders = current.orders
+  const scopedOrders = current.orders.filter((order) => shiftSession
+    ? order.shiftId === shiftSession.id
+    : order.shiftId === undefined)
+  if (shiftSession && scopedOrders.some((order) => order.status !== 'cancelled'
+    && (order.status !== 'completed' || order.paymentStatus !== 'reconciled'))) return null
+  const eligibleOrders = scopedOrders
     .filter((order) => order.status === 'completed'
       && order.paymentStatus === 'reconciled'
       && !previouslyClosedOrderIds.has(order.id))
+  if (scopedMode && !shiftSession && eligibleOrders.length === 0) return null
   if (eligibleOrders.some((order) => commerceOrderCloseBasis(order) > (timestampMicros(capturedAt) as bigint))) return null
   const orderIds = eligibleOrders
     .map((order) => order.id)
@@ -9580,9 +10027,10 @@ export function commerceCloseExpectation(state: CommerceState, capturedAt: strin
   if (!Number.isSafeInteger(total)) return null
   return {
     businessDate,
+    ...(shiftSession ? { shiftId: shiftSession.id } : {}),
     orderIds,
     total,
-    paymentExceptionOrderIds: current.orders
+    paymentExceptionOrderIds: scopedOrders
       .filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
       .map((order) => order.id)
       .sort(),
@@ -9677,15 +10125,22 @@ export function saveCommerceClose(
   if (!validProof(proof)
     || !validTimestamp(proof.capturedAt)
     || [proof.actionId, proof.actor, proof.reason, proof.evidenceReference].some((value) => value !== value.trim())
-    || !closeActionIdPattern.test(proof.actionId)
-    || !closeIdPattern.test(closeId)) return null
+    || !hasPrefixedUuid(proof.actionId, 'ACT-')
+    || !hasPrefixedUuid(closeId, 'CLOSE-')) return null
   const current = validateCommerceState(state)
   const settlement = settlementInput === undefined ? undefined : buildCommerceCloseSettlement(current, expected, settlementInput)
   if (settlementInput !== undefined && !settlement) return null
   const existing = current.closes.find((close) => close.id === closeId)
-  if (existing) return sameCloseProof(existing, proof) && JSON.stringify(existing.settlement) === JSON.stringify(settlement) ? current : null
+  if (existing) return sameCloseProof(existing, proof)
+    && existing.businessDate === expected.businessDate
+    && existing.shiftId === expected.shiftId
+    && existing.total === expected.total
+    && sameStringArray(existing.orderIds ?? [], expected.orderIds)
+    && sameStringArray(existing.paymentExceptionOrderIds ?? [], expected.paymentExceptionOrderIds)
+    && sameStringArray(existing.stockExceptionSkus ?? [], expected.stockExceptionSkus)
+    && JSON.stringify(existing.settlement) === JSON.stringify(settlement) ? current : null
   if (actionIdIsUsed(current, proof.actionId)) return null
-  const actual = commerceCloseExpectation(current, proof.capturedAt)
+  const actual = commerceCloseExpectation(current, proof.capturedAt, expected.shiftId)
   if (!actual || !expected || !sameCloseExpectation(actual, expected)) return null
   const close: CommerceClose = {
     id: closeId,
@@ -9700,6 +10155,7 @@ export function saveCommerceClose(
     operator: proof.actor,
     reason: proof.reason,
     evidenceReference: proof.evidenceReference,
+    ...(actual.shiftId ? { shiftId: actual.shiftId } : {}),
     ...(settlement ? { settlement } : {}),
   }
   return validateCommerceState({ ...current, closes: [close, ...current.closes] })

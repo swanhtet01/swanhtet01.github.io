@@ -51,6 +51,7 @@ const AUTH_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const AUTH_CODE = /^[A-Za-z0-9._~-]{16,2048}$/
 const AUTH_TOKEN = /^[A-Za-z0-9._~-]{16,16384}$/
 const ALL_ZERO_HEX = /^0+$/
+const MANAGED_BOOTSTRAP_TIMEOUT_MS = 8000
 
 /**
  * Opaque random hex for a W3C trace/span id — never derived from request
@@ -151,11 +152,13 @@ export type ManagedStateRecord = {
 
 export type ManagedCommerceEvent =
   | 'commerce.workspace.initialized'
+  | 'commerce.shift.opened'
   | 'commerce.item.created'
   | 'commerce.item.updated'
   | 'commerce.website_intake.created'
   | 'commerce.website_intake.converted'
   | 'commerce.storefront.configuration.saved'
+  | 'commerce.merchant_profile.saved'
   | 'commerce.tax_configuration.saved'
   | 'commerce.account_mapping.saved'
   | 'commerce.customer_credit_policy.saved'
@@ -3481,13 +3484,27 @@ export async function saveManagedPlantEquipmentMaintenanceStrategy(request: {
 }
 
 export async function loadManagedBootstrap(expectedIdentity?: ManagedIdentity) {
-  const bootstrap = await authorizedRequest<ManagedBootstrap>(
-    '/api/trial/v1/bootstrap',
-    {},
-    true,
-    expectedIdentity,
-  )
-  return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
+  try {
+    const bootstrap = await authorizedRequest<ManagedBootstrap>(
+      '/api/trial/v1/bootstrap',
+      {
+        cache: 'no-store',
+        redirect: 'error',
+        credentials: 'omit',
+        signal: AbortSignal.timeout(MANAGED_BOOTSTRAP_TIMEOUT_MS),
+      },
+      true,
+      expectedIdentity,
+    )
+    return expectedIdentity ? assertManagedBootstrapIdentity(bootstrap, expectedIdentity) : bootstrap
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new ManagedTrialError('Company account took too long to respond. Try again.', {
+        code: 'managed_bootstrap_timeout',
+      })
+    }
+    throw error
+  }
 }
 
 export async function loadManagedCompanyBrief(
@@ -3685,28 +3702,15 @@ export async function saveManagedServiceSchedule(request: {
   return { version: result.version, schedule: nextSchedule }
 }
 
-export async function prepareManagedOrderIntakeDraft(request: {
-  identity: ManagedIdentity
-  message: string
-  sourceLabel: string
-}) {
-  return authorizedRequest<unknown>(
-    '/api/trial/v1/commerce/order-intake/drafts',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        source_label: request.sourceLabel,
-        message: request.message,
-      }),
-    },
-    true,
-    request.identity,
-  )
-}
-
 function managedCounterOrderIntent(state: Record<string, unknown>, evidence: ManagedCommandEvidence) {
   const orders = Array.isArray(state.orders) ? state.orders : []
   const movements = Array.isArray(state.movements) ? state.movements : []
+  const operatingUnits = state.operatingUnits
+  const shiftSessions = state.shiftSessions
+  const scopedMode = operatingUnits !== undefined || shiftSessions !== undefined
+  if (scopedMode && (!Array.isArray(operatingUnits) || !Array.isArray(shiftSessions))) {
+    throw errorManagedOrderIntentInvalid('The Shop operating-session record is incomplete.')
+  }
   const reservation = movements.find((candidate) => isRecord(candidate)
     && candidate.kind === 'reserve'
     && candidate.actionId === evidence.actionId
@@ -3717,11 +3721,49 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
   if (!isRecord(order)) {
     throw errorManagedOrderIntentInvalid('The managed Shop order intent could not be isolated from the reviewed action.')
   }
+  if (!scopedMode && order.shiftId !== undefined) {
+    throw errorManagedOrderIntentInvalid('The managed Shop order cannot name a shift before operating sessions are active.')
+  }
+  if (scopedMode) {
+    const shift = typeof order.shiftId === 'string'
+      ? (shiftSessions as unknown[]).find((candidate) => isRecord(candidate) && candidate.id === order.shiftId)
+      : null
+    const unit = isRecord(shift) && typeof shift.unitId === 'string'
+      ? (operatingUnits as unknown[]).find((candidate) => isRecord(candidate) && candidate.id === shift.unitId)
+      : null
+    const opening = isRecord(shift) && isRecord(shift.opening) ? shift.opening : null
+    const closes = Array.isArray(state.closes) ? state.closes : []
+    const capturedAt = Date.parse(evidence.capturedAt)
+    const openedAt = isRecord(opening) && typeof opening.capturedAt === 'string'
+      ? Date.parse(opening.capturedAt)
+      : Number.NaN
+    if (!shift
+      || !unit
+      || !Number.isFinite(capturedAt)
+      || !Number.isFinite(openedAt)
+      || capturedAt < openedAt
+      || closes.some((candidate) => isRecord(candidate) && candidate.shiftId === order.shiftId)) {
+      throw errorManagedOrderIntentInvalid('The managed Shop order must be bound to one open operating shift.')
+    }
+  }
+  const completesAtCounter = order.status === 'completed' && order.paymentStatus === 'reconciled'
+  const staysOpen = order.status === 'confirmed' && order.paymentStatus === 'pending'
+  if (!completesAtCounter && !staysOpen) {
+    throw errorManagedOrderIntentInvalid('The managed Shop order must be either open or fully reviewed at the counter.')
+  }
   const advancedFields = [
     'sourceRecordId', 'evidenceReference', 'promotionDecision', 'shippingDecision',
     'taxDecision', 'paymentDecision', 'returns', 'supportCases', 'corrections',
   ]
   if (advancedFields.some((field) => order[field] !== undefined)) return null
+  const completionFields = [
+    'advancementActionIds', 'completion', 'paymentReconciledAt',
+    'paymentReconciliationActionId', 'paymentReconciledBy',
+    'paymentReconciliationReason', 'paymentEvidenceReference',
+  ]
+  if (staysOpen && completionFields.some((field) => order[field] !== undefined)) {
+    throw errorManagedOrderIntentInvalid('The managed Shop open order contains counter-completion fields.')
+  }
   if (!Array.isArray(order.lines)
     || !order.lines.length
     || order.lines.some((line) => !isRecord(line)
@@ -3752,8 +3794,12 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
     }
     paymentTermsDays = days
   }
+  if (completesAtCounter && (paymentTermsDays !== 0 || order.channel !== 'Walk-in' || order.fulfilment !== 'pickup')) {
+    throw errorManagedOrderIntentInvalid('Managed counter completion requires a Walk-in pickup sale with immediate payment terms.')
+  }
   return {
     orderId: order.id,
+    ...(typeof order.shiftId === 'string' ? { shiftId: order.shiftId } : {}),
     customer: order.customer,
     channel: order.channel,
     payment: order.payment,
@@ -3761,6 +3807,7 @@ function managedCounterOrderIntent(state: Record<string, unknown>, evidence: Man
     fulfilmentReference: order.fulfilmentReference,
     promisedAt: order.promisedAt,
     paymentTermsDays,
+    ...(completesAtCounter ? { completeAtCounter: true } : {}),
     lines: order.lines.map((line) => ({
       sku: (line as Record<string, unknown>).sku,
       quantity: (line as Record<string, unknown>).quantity,

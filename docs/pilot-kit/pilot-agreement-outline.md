@@ -29,7 +29,7 @@ NOT LEGAL ADVICE. This is an outline of talking points to align on with the desi
 
 ## What the pilot never does
 
-Read the app's own routine-sale gate line together — it is the whole boundary in one sentence: `Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.`
+Read the app's own routine-sale gate line together — it is the whole boundary in one sentence: `This device records the sale, payment review, handoff and stock. It does not charge or message anyone, or write to a company account.`
 
 In the handoff generator's words: `This pilot does not include automatic customer messages, provider payment, accounting posting, deployment, or production activation.` And on results: `no improvement is guaranteed before the final review`.
 

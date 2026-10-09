@@ -45,7 +45,7 @@ export default async function handler(req, res) {
 
   const result = verifyNotify(body)
   if (!result.ok) {
-    console.warn('[kbzpay-notify] rejected:', result.reason, JSON.stringify(body).slice(0, 200))
+    console.warn('[kbzpay-notify] rejected:', result.reason)
     res.status(400).json({ return_code: 'FAIL', return_msg: result.reason || 'invalid_signature' })
     return
   }

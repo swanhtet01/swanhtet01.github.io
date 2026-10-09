@@ -46,12 +46,15 @@ COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v3"
 COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"
 COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v1"
 COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = "supermega.commerce.order-acknowledgement.v1"
+COMMERCE_MERCHANT_PROFILE_SCHEMA = "supermega.shop.merchant_profile.v1"
 COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
+        "commerce.shift.opened",
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
+        "commerce.merchant_profile.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
@@ -101,9 +104,11 @@ COMMERCE_EVENTS = frozenset(
 COMMERCE_HUMAN_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
+        "commerce.shift.opened",
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
+        "commerce.merchant_profile.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
@@ -198,6 +203,12 @@ _SHA256_DIGEST_PATTERN = re.compile(r"sha256:[a-f0-9]{64}")
 _COMMAND_ID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 )
+_OPERATING_UNIT_ID_PATTERN = re.compile(
+    r"UNIT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SHIFT_SESSION_ID_PATTERN = re.compile(
+    r"SHIFT-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
 _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
 _MAX_PURCHASE_BUDGET_ENVELOPES = 200
@@ -214,6 +225,8 @@ _MAX_CUSTOMER_CREDIT_POLICIES = 500
 _MAX_PROMOTION_POLICIES = 200
 _MAX_SHIPPING_POLICIES = 200
 _MAX_PAYMENT_POLICIES = 200
+_MAX_OPERATING_UNITS = 100
+_MAX_SHIFT_SESSIONS = 2_000
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
 _MAX_SUPPORT_CASES_PER_ORDER = 100
@@ -334,6 +347,18 @@ _ISO_TIMESTAMP_PATTERN = re.compile(
 )
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
+_MERCHANT_PROFILE_FIELDS = frozenset(
+    {
+        "schema",
+        "revision",
+        "nameMyanmar",
+        "nameEnglish",
+        "phone",
+        "addressMyanmar",
+        "addressEnglish",
+        "proof",
+    }
+)
 _SERVICE_SCHEDULE_FIELDS = frozenset(
     {
         "schema",
@@ -403,6 +428,7 @@ _ORDER_REQUIRED_FIELDS = frozenset(
 )
 _ORDER_OPTIONAL_FIELDS = frozenset(
     {
+        "shiftId",
         "itemSku",
         "paymentReconciledAt",
         "paymentReconciliationActionId",
@@ -725,7 +751,9 @@ _PRODUCTION_RETURN_EXCLUSIVE_FIELDS = frozenset(
         "productionReturnLocationId",
     }
 )
-_CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"settlement"}
+_CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"shiftId", "settlement"}
+_OPERATING_UNIT_FIELDS = frozenset({"id", "name", "registration"})
+_SHIFT_SESSION_FIELDS = frozenset({"id", "unitId", "opening"})
 _CLOSE_SETTLEMENT_FIELDS = frozenset(
     {"schema", "status", "totalExpectedMmk", "totalCountedMmk", "totalVarianceMmk", "lines"}
 )
@@ -874,6 +902,40 @@ def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> 
     if with_order_id:
         _text(proof["orderId"], f"{field}.orderId", maximum=160)
     return proof
+
+
+def _validate_merchant_profile(value: object, field: str = "merchantProfile") -> dict[str, Any]:
+    profile = _object(value, field)
+    _exact_fields(profile, field, required=_MERCHANT_PROFILE_FIELDS)
+    if profile["schema"] != COMMERCE_MERCHANT_PROFILE_SCHEMA:
+        raise TrialValidationError(f"{field}.schema is not recognized.")
+    revision = _integer(profile["revision"], f"{field}.revision", minimum=1)
+    limits = {
+        "nameMyanmar": 80,
+        "nameEnglish": 80,
+        "phone": 40,
+        "addressMyanmar": 180,
+        "addressEnglish": 180,
+    }
+    for key, maximum in limits.items():
+        text = profile[key]
+        if (
+            not isinstance(text, str)
+            or text != text.strip()
+            or len(text) > maximum
+            or re.search(r"[\x00-\x1f\x7f]", text)
+        ):
+            raise TrialValidationError(
+                f"{field}.{key} must be canonical printable text within its character limit."
+            )
+    if not profile["nameMyanmar"] and not profile["nameEnglish"]:
+        raise TrialValidationError("merchant profile needs a business name in Burmese or English.")
+    proof = _action_proof(profile["proof"], f"{field}.proof")
+    expected_action_id = f"ACT-SHOP-MERCHANT-R{revision}"
+    expected_reference = f"SHOP-MERCHANT-PROFILE:R{revision}"
+    if proof["actionId"] != expected_action_id or proof["evidenceReference"] != expected_reference:
+        raise TrialValidationError(f"{field}.proof does not match its revision.")
+    return profile
 
 
 def _same_accountable_actor(left: str, right: str) -> bool:
@@ -1609,6 +1671,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "websiteIntakes",
                 "storefrontRequests",
                 "storefrontConfiguration",
+                "merchantProfile",
                 "purchaseBudgetEnvelopes",
                 "supplierSourcingDecisions",
                 "purchaseRequisitions",
@@ -1621,6 +1684,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "promotionPolicies",
                 "shippingPolicies",
                 "paymentPolicies",
+                "operatingUnits",
+                "shiftSessions",
                 "inventoryFoundation",
                 "serviceSchedule",
             }
@@ -1628,6 +1693,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     )
     if state.get("schema") != COMMERCE_SCHEMA:
         raise TrialValidationError(f"commerce state schema must be {COMMERCE_SCHEMA}.")
+    if "merchantProfile" in state:
+        _validate_merchant_profile(state["merchantProfile"])
 
     items = _list(state["items"], "commerce state.items")
     orders = _list(state["orders"], "commerce state.orders")
@@ -1686,6 +1753,90 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("paymentPolicies", []),
         "commerce state.paymentPolicies",
     )
+    has_operating_units = "operatingUnits" in state
+    has_shift_sessions = "shiftSessions" in state
+    if has_operating_units != has_shift_sessions:
+        raise TrialValidationError(
+            "commerce state must retain operatingUnits and shiftSessions together."
+        )
+    operating_units = _list(
+        state.get("operatingUnits", []),
+        "commerce state.operatingUnits",
+    )
+    shift_sessions = _list(
+        state.get("shiftSessions", []),
+        "commerce state.shiftSessions",
+    )
+    if (
+        (has_operating_units and not operating_units)
+        or len(operating_units) > _MAX_OPERATING_UNITS
+        or len(shift_sessions) > _MAX_SHIFT_SESSIONS
+    ):
+        raise TrialValidationError("commerce operating records are invalid.")
+
+    operating_unit_by_id: dict[str, dict[str, Any]] = {}
+    operating_unit_names: set[str] = set()
+    operating_unit_action_ids: list[str] = []
+    shift_session_by_id: dict[str, dict[str, Any]] = {}
+    shift_session_action_ids: list[str] = []
+    latest_unit_registration: datetime | None = None
+    latest_shift_opening: datetime | None = None
+    for index, candidate in enumerate(operating_units):
+        field = f"commerce state.operatingUnits[{index}]"
+        unit = _object(candidate, field)
+        _exact_fields(unit, field, required=_OPERATING_UNIT_FIELDS)
+        unit_id = _text(unit["id"], f"{field}.id", maximum=80)
+        name = _text(unit["name"], f"{field}.name", maximum=120)
+        registration = _action_proof(unit["registration"], f"{field}.registration")
+        registered_at = datetime.fromisoformat(
+            registration["capturedAt"].replace("Z", "+00:00")
+        )
+        if (
+            _OPERATING_UNIT_ID_PATTERN.fullmatch(unit_id) is None
+            or not name
+            or unit_id in operating_unit_by_id
+            or name.casefold() in operating_unit_names
+            or (
+                latest_unit_registration is not None
+                and registered_at < latest_unit_registration
+            )
+        ):
+            raise TrialValidationError("commerce operating records are invalid.")
+        for key, maximum in (("actor", 120), ("reason", 180), ("evidenceReference", 180)):
+            _text(registration[key], f"{field}.registration.{key}", maximum=maximum)
+        operating_unit_by_id[unit_id] = unit
+        operating_unit_names.add(name.casefold())
+        operating_unit_action_ids.append(registration["actionId"])
+        latest_unit_registration = registered_at
+
+    for index, candidate in enumerate(shift_sessions):
+        field = f"commerce state.shiftSessions[{index}]"
+        session = _object(candidate, field)
+        _exact_fields(session, field, required=_SHIFT_SESSION_FIELDS)
+        shift_id = _text(session["id"], f"{field}.id", maximum=80)
+        unit_id = _text(session["unitId"], f"{field}.unitId", maximum=80)
+        opening = _action_proof(session["opening"], f"{field}.opening")
+        opened_at = datetime.fromisoformat(opening["capturedAt"].replace("Z", "+00:00"))
+        unit = operating_unit_by_id.get(unit_id)
+        if (
+            _SHIFT_SESSION_ID_PATTERN.fullmatch(shift_id) is None
+            or unit is None
+            or shift_id in shift_session_by_id
+            or (
+                latest_shift_opening is not None
+                and opened_at < latest_shift_opening
+            )
+            or opened_at
+            < datetime.fromisoformat(
+                str(unit["registration"]["capturedAt"]).replace("Z", "+00:00")
+            )
+        ):
+            raise TrialValidationError("commerce operating records are invalid.")
+        for key, maximum in (("actor", 120), ("reason", 180), ("evidenceReference", 180)):
+            _text(opening[key], f"{field}.opening.{key}", maximum=maximum)
+        shift_session_by_id[shift_id] = session
+        shift_session_action_ids.append(opening["actionId"])
+        latest_shift_opening = opened_at
     if "serviceSchedule" in state:
         _validate_service_schedule(state["serviceSchedule"])
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
@@ -2855,6 +3006,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             _text(order[field], f"orders[{index}].{field}")
         if "owner" in order:
             _text(order["owner"], f"orders[{index}].owner", maximum=120)
+        if "shiftId" in order:
+            shift_id = _text(order["shiftId"], f"orders[{index}].shiftId", maximum=80)
+            if (
+                _SHIFT_SESSION_ID_PATTERN.fullmatch(shift_id) is None
+                or shift_id not in shift_session_by_id
+                or "owner" not in order
+            ):
+                raise TrialValidationError("commerce operating records are invalid.")
         item_sku = order.get("itemSku")
         if item_sku is not None:
             item_sku = _text(item_sku, f"orders[{index}].itemSku", maximum=80)
@@ -4369,6 +4528,31 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if len(action_movements) < 2:
             continue
         first = action_movements[0]
+        if all(movement["kind"] == "count" for movement in action_movements):
+            reviewed_order = list(reversed(action_movements))
+            expected_batch_ids = [
+                _movement_id(action_id, f"COUNT-BATCH-{index + 1}")
+                for index in range(len(reviewed_order))
+            ]
+            if (
+                [movement["id"] for movement in reviewed_order] != expected_batch_ids
+                or any(
+                    any(
+                        movement.get(field) != first.get(field)
+                        for field in (
+                            "createdAt",
+                            "actor",
+                            "reason",
+                            "evidenceReference",
+                        )
+                    )
+                    for movement in action_movements
+                )
+            ):
+                raise TrialValidationError(
+                    f"Stock movement action {action_id} is not one exact reviewed count batch."
+                )
+            continue
         if (
             first["kind"] not in {"reserve", "release"}
             or not first.get("orderId")
@@ -4418,9 +4602,24 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"its expected balance for {sku}."
                 )
             balance = prior_balance
+    operating_activation_at = min(
+        (
+            datetime.fromisoformat(
+                str(unit["registration"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            for unit in operating_unit_by_id.values()
+        ),
+        default=None,
+    )
     for order_id, count in reserve_by_order.items():
         order = order_by_id.get(order_id)
         reservation = reserve_movement_by_order.get(order_id)
+        shift = shift_session_by_id.get(str(order.get("shiftId"))) if order else None
+        reservation_at = (
+            datetime.fromisoformat(str(reservation["createdAt"]).replace("Z", "+00:00"))
+            if reservation
+            else None
+        )
         if (
             not order
             or count != len(_reservation_lines(order))
@@ -4429,10 +4628,29 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "owner" in order
                 and (not reservation or reservation["actor"] != order["owner"])
             )
+            or (
+                operating_activation_at is not None
+                and "shiftId" not in order
+                and reservation_at is not None
+                and reservation_at >= operating_activation_at
+            )
+            or (
+                "shiftId" in order
+                and (
+                    shift is None
+                    or reservation_at is None
+                    or reservation_at
+                    < datetime.fromisoformat(
+                        str(shift["opening"]["capturedAt"]).replace("Z", "+00:00")
+                    )
+                )
+            )
         ):
             raise TrialValidationError(
                 f"{order_id} does not have one owner-bound reservation action covering every order line."
             )
+    if any("shiftId" in order and order["id"] not in reserve_by_order for order in orders):
+        raise TrialValidationError("commerce operating records are invalid.")
     for order_id, count in release_by_order.items():
         order = order_by_id.get(order_id)
         expected = len(_reservation_lines(order)) if order else 0
@@ -4520,7 +4738,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
 
     close_ids: list[str] = []
     close_action_ids: list[str] = []
-    close_business_dates: list[str] = []
+    close_scope_keys: list[str] = []
     closed_order_ids: list[str] = []
     for index, candidate in enumerate(closes):
         close = _object(candidate, f"closes[{index}]")
@@ -4569,12 +4787,23 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     )
                 )
             ]
+            shift_id = (
+                _text(close["shiftId"], f"closes[{index}].shiftId", maximum=80)
+                if "shiftId" in close
+                else None
+            )
+            shift_session = shift_session_by_id.get(shift_id or "")
+            expected_business_date = (
+                _myanmar_business_date(str(shift_session["opening"]["capturedAt"]))
+                if shift_session is not None
+                else _myanmar_business_date(str(close["createdAt"]))
+            )
             if (
                 not _BUSINESS_DATE_PATTERN.fullmatch(business_date)
-                or business_date != _myanmar_business_date(str(close["createdAt"]))
+                or business_date != expected_business_date
             ):
                 raise TrialValidationError(
-                    f"closes[{index}].businessDate must match its close timestamp."
+                    f"closes[{index}].businessDate must match its operating date."
                 )
             _unique(order_ids_for_close, f"closes[{index}] order ID")
             _unique(payment_exception_order_ids, f"closes[{index}] payment exception order ID")
@@ -4592,6 +4821,23 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if any(sku not in item_by_sku for sku in stock_exception_skus):
                 raise TrialValidationError(f"closes[{index}] references an unknown stock exception SKU.")
             member_orders = [order_by_id[order_id] for order_id in order_ids_for_close]
+            close_at = datetime.fromisoformat(str(close["createdAt"]).replace("Z", "+00:00"))
+            if shift_id is not None and (
+                _SHIFT_SESSION_ID_PATTERN.fullmatch(shift_id) is None
+                or shift_session is None
+                or close_at
+                < datetime.fromisoformat(
+                    str(shift_session["opening"]["capturedAt"]).replace("Z", "+00:00")
+                )
+                or any(order.get("shiftId") != shift_id for order in member_orders)
+                or any(
+                    order_by_id[order_id].get("shiftId") != shift_id
+                    for order_id in payment_exception_order_ids
+                )
+            ):
+                raise TrialValidationError("commerce operating records are invalid.")
+            if shift_id is None and any("shiftId" in order for order in member_orders):
+                raise TrialValidationError("commerce operating records are invalid.")
             member_adjusted_totals = [_order_adjusted_total(order) for order in member_orders]
             if (
                 any(
@@ -4616,7 +4862,9 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"closes[{index}].actionId must be a full action UUID."
                 )
             close_action_ids.append(close_action_id)
-            close_business_dates.append(business_date)
+            close_scope_keys.append(
+                f"shift:{shift_id}" if shift_id is not None else f"legacy:{business_date}"
+            )
             closed_order_ids.extend(order_ids_for_close)
             _text(close["operator"], f"closes[{index}].operator")
             _text(close["reason"], f"closes[{index}].reason")
@@ -4673,8 +4921,57 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 ):
                     raise TrialValidationError(f"closes[{index}].settlement totals are invalid.")
     _unique(close_ids, "Daily close ID")
-    _unique(close_business_dates, "Daily close business date")
+    _unique(close_scope_keys, "Daily close scope")
     _unique(closed_order_ids, "Closed order ID")
+
+    close_by_shift = {
+        close["shiftId"]: close
+        for close in closes
+        if isinstance(close, Mapping) and isinstance(close.get("shiftId"), str)
+    }
+    for shift_id, shift in shift_session_by_id.items():
+        close = close_by_shift.get(shift_id)
+        if close is None:
+            continue
+        shift_orders = [
+            order for order in orders
+            if isinstance(order, Mapping) and order.get("shiftId") == shift_id
+        ]
+        eligible_order_ids = sorted(
+            str(order["id"])
+            for order in shift_orders
+            if order["status"] == "completed" and order["paymentStatus"] == "reconciled"
+        )
+        close_at = datetime.fromisoformat(str(close["createdAt"]).replace("Z", "+00:00"))
+        if (
+            any(
+                order["status"] != "cancelled"
+                and (order["status"] != "completed" or order["paymentStatus"] != "reconciled")
+                for order in shift_orders
+            )
+            or close.get("orderIds", []) != eligible_order_ids
+            or any(_commerce_order_close_basis(order) > close_at for order in shift_orders)
+            or any(
+                movement.get("orderId") in {order["id"] for order in shift_orders}
+                and movement.get("kind") in {"reserve", "release"}
+                and datetime.fromisoformat(str(movement["createdAt"]).replace("Z", "+00:00")) > close_at
+                for movement in movements
+                if isinstance(movement, Mapping)
+            )
+        ):
+            raise TrialValidationError("commerce operating records are invalid.")
+    for unit_id in operating_unit_by_id:
+        sessions = [session for session in shift_sessions if session["unitId"] == unit_id]
+        for current_session, next_session in zip(sessions, sessions[1:]):
+            current_close = close_by_shift.get(current_session["id"])
+            if (
+                current_close is None
+                or datetime.fromisoformat(str(current_close["createdAt"]).replace("Z", "+00:00"))
+                > datetime.fromisoformat(
+                    str(next_session["opening"]["capturedAt"]).replace("Z", "+00:00")
+                )
+            ):
+                raise TrialValidationError("commerce operating records are invalid.")
 
     intake_ids: list[str] = []
     intake_sources: list[str] = []
@@ -4890,6 +5187,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *promotion_policy_action_ids,
             *shipping_policy_action_ids,
             *payment_policy_action_ids,
+            *operating_unit_action_ids,
+            *shift_session_action_ids,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -5060,7 +5359,27 @@ def _validate_event_evidence(
         raise TrialValidationError(
             "command evidence actor must be the new order owner."
         )
-    if event_type == "commerce.item.updated":
+    if event_type == "commerce.shift.opened":
+        registered_unit = len(next_state["operatingUnits"]) == len(
+            current.get("operatingUnits", [])
+        ) + 1
+        opening = next_state["shiftSessions"][-1]
+        expected_opening = {
+            **evidence,
+            **({"actionId": f"{evidence['actionId']}-SHIFT"} if registered_unit else {}),
+        }
+        if opening.get("opening") != expected_opening:
+            raise TrialValidationError(
+                "command evidence must match the opened shift proof."
+            )
+        if (
+            registered_unit
+            and next_state["operatingUnits"][-1].get("registration") != evidence
+        ):
+            raise TrialValidationError(
+                "command evidence must match the operating unit registration proof."
+            )
+    elif event_type == "commerce.item.updated":
         changes = _catalog_changes(next_state)
         proof = changes[0]["proof"] if changes else {}
         if not isinstance(proof, Mapping) or not _proof_matches_evidence(
@@ -5109,6 +5428,12 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(saved, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved Ecommerce storefront configuration."
+            )
+    elif event_type == "commerce.merchant_profile.saved":
+        profile = next_state["merchantProfile"]
+        if not _proof_matches_evidence(profile["proof"], evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved Shop merchant profile."
             )
     elif event_type == "commerce.tax_configuration.saved":
         proof = next_state["taxConfigurations"][0]["proof"]
@@ -5454,7 +5779,17 @@ def _validate_event_evidence(
             else {}
         )
         proof = (
-            latest_payload.get("proof", {})
+            {
+                "actionId": next_state["movements"][0].get("actionId"),
+                "capturedAt": next_state["movements"][0].get("createdAt"),
+                "actor": next_state["movements"][0].get("actor"),
+                "reason": next_state["movements"][0].get("reason"),
+                "evidenceReference": next_state["movements"][0].get("evidenceReference"),
+            }
+            if event_type == "commerce.stock.counted"
+            and next_state.get("movements")
+            and isinstance(next_state["movements"][0], Mapping)
+            else latest_payload.get("proof", {})
             if isinstance(latest_payload, Mapping)
             else {}
         )
@@ -5473,6 +5808,15 @@ def _validate_event_evidence(
         "commerce.order.cancelled": "order_release",
         "commerce.website_intake.converted": "order_reserve",
     }.get(event_type)
+    location_order_evidence: Mapping[str, Any] = evidence
+    if (
+        event_type == "commerce.order.created"
+        and next_state["orders"]
+        and next_state["orders"][0].get("status") == "completed"
+    ):
+        location_order_kind = "order_fulfil"
+        completion = next_state["orders"][0].get("completion")
+        location_order_evidence = completion if isinstance(completion, Mapping) else {}
     if event_type == "commerce.order.advanced":
         _, advanced_order = _one_changed(
             current["orders"], next_state["orders"], "orders"
@@ -5494,7 +5838,7 @@ def _validate_event_evidence(
             not isinstance(payload, Mapping)
             or payload.get("kind") != location_order_kind
             or not isinstance(location_proof, Mapping)
-            or not _proof_matches_evidence(location_proof, evidence)
+            or not _proof_matches_evidence(location_proof, location_order_evidence)
         ):
             raise TrialValidationError(
                 "command evidence must match the order location proof."
@@ -6355,6 +6699,59 @@ def _validate_spa_counter_order_identity_and_tender(
         )
 
 
+def _fulfil_counter_location_inventory(
+    value: object,
+    *,
+    order_id: str,
+    proof: Mapping[str, Any],
+    catalog_skus: Sequence[str],
+) -> dict[str, Any]:
+    """Append the deterministic fulfilment paired with a server-built reservation."""
+
+    current = validate_shop_inventory_state(value, catalog_skus)
+    reserve_commands = [
+        command["payload"]
+        for command in current["commands"]
+        if command["payload"].get("kind") == "order_reserve"
+        and command["payload"].get("orderId") == order_id
+    ]
+    if len(reserve_commands) != 1:
+        raise TrialValidationError(
+            "counter completion requires one location reservation for its order."
+        )
+    allocations = reserve_commands[0].get("allocations")
+    if not isinstance(allocations, list) or not allocations:
+        raise TrialValidationError(
+            "counter completion location reservations are missing."
+        )
+    reservation_ids = sorted(str(row["reservationId"]) for row in allocations)
+    command_id = _order_inventory_command_id("ORF", order_id)
+    body = {
+        "sequence": current["revision"] + 1,
+        "previousDigest": current["headDigest"],
+        "payload": {
+            "kind": "order_fulfil",
+            "id": command_id,
+            "orderId": order_id,
+            "reservationIds": reservation_ids,
+            "proof": dict(proof),
+        },
+    }
+    envelope = {**body, "digest": _order_inventory_digest(body)}
+    try:
+        return validate_shop_inventory_state(
+            {
+                "schema": current["schema"],
+                "revision": body["sequence"],
+                "headDigest": envelope["digest"],
+                "commands": [*current["commands"], envelope],
+            },
+            catalog_skus,
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+
+
 def create_commerce_order_from_intent(
     current_value: Mapping[str, Any],
     intent_value: Mapping[str, Any],
@@ -6380,8 +6777,35 @@ def create_commerce_order_from_intent(
                 "lines",
             }
         ),
+        optional=frozenset({"completeAtCounter"}) | frozenset({"shiftId"}),
     )
     evidence = _action_proof(evidence_value, "evidence")
+    scoped_mode = "operatingUnits" in current and "shiftSessions" in current
+    shift_id = intent.get("shiftId")
+    if scoped_mode:
+        if not isinstance(shift_id, str):
+            raise TrialValidationError("order intent requires one open Shop shift.")
+        shift_id = _text(shift_id, "order intent.shiftId", maximum=80)
+        shift = next(
+            (session for session in current["shiftSessions"] if session["id"] == shift_id),
+            None,
+        )
+        closed_shift_ids = {
+            close["shiftId"] for close in current["closes"] if "shiftId" in close
+        }
+        if (
+            _SHIFT_SESSION_ID_PATTERN.fullmatch(shift_id) is None
+            or shift is None
+            or shift_id in closed_shift_ids
+            or datetime.fromisoformat(evidence["capturedAt"].replace("Z", "+00:00"))
+            < datetime.fromisoformat(str(shift["opening"]["capturedAt"]).replace("Z", "+00:00"))
+        ):
+            raise TrialValidationError("order intent requires one open Shop shift.")
+    elif shift_id is not None:
+        raise TrialValidationError("legacy order intent cannot name a Shop shift.")
+    complete_at_counter = intent.get("completeAtCounter", False)
+    if not isinstance(complete_at_counter, bool):
+        raise TrialValidationError("order intent.completeAtCounter must be a boolean.")
     order_id = _text(intent["orderId"], "order intent.orderId", maximum=160)
     customer = _text(intent["customer"], "order intent.customer", maximum=180)
     channel = _text(intent["channel"], "order intent.channel", maximum=180)
@@ -6406,6 +6830,20 @@ def create_commerce_order_from_intent(
     )
     if payment_terms_days not in _CUSTOMER_CREDIT_TERMS:
         raise TrialValidationError("order intent.paymentTermsDays is unsupported.")
+    if complete_at_counter:
+        service_schedule = _service_schedule(current)
+        if service_schedule is not None and service_schedule["industryPackId"] == "spa":
+            raise TrialValidationError(
+                "Spa counter tender records require separate payment reconciliation."
+            )
+        if channel != "Walk-in" or fulfilment != "pickup" or payment_terms_days != 0:
+            raise TrialValidationError(
+                "counter completion requires a Walk-in pickup order with immediate payment terms."
+            )
+        if len(evidence["actionId"]) > 142:
+            raise TrialValidationError(
+                "counter completion actionId is too long for deterministic lifecycle proofs."
+            )
     _validate_spa_counter_order_identity_and_tender(
         current,
         customer=customer,
@@ -6510,6 +6948,7 @@ def create_commerce_order_from_intent(
         }
     order = {
         "id": order_id,
+        **({"shiftId": shift_id} if shift_id is not None else {}),
         "createdAt": created_at,
         "customer": customer,
         "owner": evidence["actor"],
@@ -6568,6 +7007,46 @@ def create_commerce_order_from_intent(
                 customer_reference=customer,
                 lines=[{"sku": line["sku"], "quantity": line["quantity"]} for line in lines],
                 proof=evidence,
+                catalog_skus=[item["sku"] for item in current["items"]],
+            )
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(str(exc)) from exc
+    next_state = validate_commerce_state(next_state)
+    if not complete_at_counter:
+        return next_state
+
+    payment_proof = {
+        **evidence,
+        "actionId": f"{evidence['actionId']}-PAYMENT",
+    }
+    preparing_action_id = f"{evidence['actionId']}-ADVANCE-CONFIRMED"
+    ready_action_id = f"{evidence['actionId']}-ADVANCE-PREPARING"
+    completion_proof = {
+        **evidence,
+        "actionId": f"{evidence['actionId']}-ADVANCE-READY",
+    }
+    completed_order = {
+        **order,
+        "paymentStatus": "reconciled",
+        "paymentReconciledAt": payment_proof["capturedAt"],
+        "paymentReconciliationActionId": payment_proof["actionId"],
+        "paymentReconciledBy": payment_proof["actor"],
+        "paymentReconciliationReason": payment_proof["reason"],
+        "paymentEvidenceReference": payment_proof["evidenceReference"],
+        "status": "completed",
+        "advancementActionIds": [preparing_action_id, ready_action_id],
+        "completion": completion_proof,
+    }
+    next_state = {
+        **next_state,
+        "orders": [completed_order, *next_state["orders"][1:]],
+    }
+    if foundation is not None:
+        try:
+            next_state["inventoryFoundation"] = _fulfil_counter_location_inventory(
+                next_state["inventoryFoundation"],
+                order_id=order_id,
+                proof=completion_proof,
                 catalog_skus=[item["sku"] for item in current["items"]],
             )
         except ShopInventoryValidationError as exc:
@@ -7832,6 +8311,15 @@ def _require_website_intakes_unchanged(current: Mapping[str, Any], next_state: M
         raise TrialValidationError("event cannot change: websiteIntakes.")
 
 
+def _require_operating_records_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    for field in ("operatingUnits", "shiftSessions"):
+        if (field in current) != (field in next_state) or current.get(field) != next_state.get(field):
+            raise TrialValidationError(f"event cannot change: {field}.")
+
+
 def _require_storefront_requests_unchanged(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     if _storefront_requests(current) != _storefront_requests(next_state):
         raise TrialValidationError("event cannot change: storefrontRequests.")
@@ -7843,6 +8331,14 @@ def _require_storefront_configuration_unchanged(
 ) -> None:
     if _storefront_configuration(current) != _storefront_configuration(next_state):
         raise TrialValidationError("event cannot change: storefrontConfiguration.")
+
+
+def _require_merchant_profile_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if current.get("merchantProfile") != next_state.get("merchantProfile"):
+        raise TrialValidationError("event cannot change: merchantProfile.")
 
 
 def _require_purchase_orders_unchanged(
@@ -8665,9 +9161,206 @@ def _validate_new_order_and_reservation(
     )
 
 
+def _validate_completed_counter_sale(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if (
+        len(next_state["orders"]) != len(current["orders"]) + 1
+        or next_state["orders"][1:] != current["orders"]
+    ):
+        raise TrialValidationError(
+            "counter completion must prepend exactly one completed order."
+        )
+    order = next_state["orders"][0]
+    if (
+        order.get("status") != "completed"
+        or order.get("paymentStatus") != "reconciled"
+        or order.get("refundStatus") != "none"
+        or order.get("channel") != "Walk-in"
+        or order.get("fulfilment") != "pickup"
+        or "paymentDueAt" in order
+        or "creditDecision" in order
+    ):
+        raise TrialValidationError(
+            "counter completion requires one paid Walk-in pickup order without credit or refund exceptions."
+        )
+    added_count = len(next_state["movements"]) - len(current["movements"])
+    added_movements = next_state["movements"][:added_count]
+    if added_count < 1 or next_state["movements"][added_count:] != current["movements"]:
+        raise TrialValidationError(
+            "counter completion requires attributable stock reservations."
+        )
+    first_movement = added_movements[0]
+    root_proof = {
+        "actionId": first_movement.get("actionId"),
+        "capturedAt": first_movement.get("createdAt"),
+        "actor": first_movement.get("actor"),
+        "reason": first_movement.get("reason"),
+        "evidenceReference": first_movement.get("evidenceReference"),
+    }
+    root_proof = _action_proof(root_proof, "counter completion root proof")
+    if any(
+        movement.get("actionId") != root_proof["actionId"]
+        or movement.get("createdAt") != root_proof["capturedAt"]
+        or movement.get("actor") != root_proof["actor"]
+        or movement.get("reason") != root_proof["reason"]
+        or movement.get("evidenceReference") != root_proof["evidenceReference"]
+        for movement in added_movements
+    ):
+        raise TrialValidationError(
+            "counter completion reservations must share one reviewed root proof."
+        )
+    expected_payment_proof = {
+        **root_proof,
+        "actionId": f"{root_proof['actionId']}-PAYMENT",
+    }
+    expected_completion_proof = {
+        **root_proof,
+        "actionId": f"{root_proof['actionId']}-ADVANCE-READY",
+    }
+    expected_advancements = [
+        f"{root_proof['actionId']}-ADVANCE-CONFIRMED",
+        f"{root_proof['actionId']}-ADVANCE-PREPARING",
+    ]
+    retained_payment_proof = {
+        "actionId": order.get("paymentReconciliationActionId"),
+        "capturedAt": order.get("paymentReconciledAt"),
+        "actor": order.get("paymentReconciledBy"),
+        "reason": order.get("paymentReconciliationReason"),
+        "evidenceReference": order.get("paymentEvidenceReference"),
+    }
+    if (
+        retained_payment_proof != expected_payment_proof
+        or order.get("advancementActionIds") != expected_advancements
+        or order.get("completion") != expected_completion_proof
+    ):
+        raise TrialValidationError(
+            "counter completion lifecycle proofs must be deterministic from the reviewed action."
+        )
+
+    open_order = dict(order)
+    for field in _RECONCILIATION_FIELDS | {"advancementActionIds", "completion"}:
+        open_order.pop(field, None)
+    open_order["paymentStatus"] = "pending"
+    open_order["status"] = "confirmed"
+    open_state = {
+        **dict(next_state),
+        "orders": [open_order, *current["orders"]],
+    }
+    current_foundation = _inventory_foundation(current)
+    final_foundation = _inventory_foundation(next_state)
+    if current_foundation is not None:
+        if final_foundation is None:
+            raise TrialValidationError(
+                "counter completion cannot remove location inventory."
+            )
+        commands = final_foundation["commands"]
+        if len(commands) != len(current_foundation["commands"]) + 2:
+            raise TrialValidationError(
+                "counter completion must append one location reservation and one fulfilment."
+            )
+        fulfilment_command = commands[-1]
+        reserved_commands = commands[:-1]
+        reserve_proof = reserved_commands[-1]["payload"].get("proof")
+        if reserve_proof != root_proof:
+            raise TrialValidationError(
+                "counter completion location reservation must match the reviewed root proof."
+            )
+        open_state["inventoryFoundation"] = {
+            **final_foundation,
+            "revision": final_foundation["revision"] - 1,
+            "headDigest": fulfilment_command["previousDigest"],
+            "commands": reserved_commands,
+        }
+    elif final_foundation is not None:
+        raise TrialValidationError(
+            "counter completion cannot create location inventory implicitly."
+        )
+    _validate_new_order_and_reservation(
+        current,
+        open_state,
+        event_type="commerce.order.created",
+    )
+
+    paid_order = {
+        **open_order,
+        "paymentStatus": "reconciled",
+        "paymentReconciledAt": expected_payment_proof["capturedAt"],
+        "paymentReconciliationActionId": expected_payment_proof["actionId"],
+        "paymentReconciledBy": expected_payment_proof["actor"],
+        "paymentReconciliationReason": expected_payment_proof["reason"],
+        "paymentEvidenceReference": expected_payment_proof["evidenceReference"],
+    }
+    paid_state = {**open_state, "orders": [paid_order, *current["orders"]]}
+    _validate_reconciled(open_state, paid_state)
+
+    preparing_order = {
+        **paid_order,
+        "status": "preparing",
+        "advancementActionIds": [expected_advancements[0]],
+    }
+    preparing_state = {
+        **paid_state,
+        "orders": [preparing_order, *current["orders"]],
+    }
+    _validate_advanced(paid_state, preparing_state)
+    ready_order = {
+        **preparing_order,
+        "status": "ready",
+        "advancementActionIds": expected_advancements,
+    }
+    ready_state = {
+        **preparing_state,
+        "orders": [ready_order, *current["orders"]],
+    }
+    _validate_advanced(preparing_state, ready_state)
+    _validate_advanced(ready_state, next_state)
+
+
 def _validate_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
-    _validate_new_order_and_reservation(current, next_state, event_type="commerce.order.created")
+    if next_state["orders"] and next_state["orders"][0].get("status") == "completed":
+        _validate_completed_counter_sale(current, next_state)
+    else:
+        _validate_new_order_and_reservation(
+            current,
+            next_state,
+            event_type="commerce.order.created",
+        )
     _require_website_intakes_unchanged(current, next_state)
+
+
+def _validate_shift_opened(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    current_units = current.get("operatingUnits", [])
+    current_shifts = current.get("shiftSessions", [])
+    next_units = next_state.get("operatingUnits", [])
+    next_shifts = next_state.get("shiftSessions", [])
+    if not all(isinstance(value, list) for value in (current_units, current_shifts, next_units, next_shifts)):
+        raise TrialValidationError("commerce.shift.opened requires valid operating records.")
+    if len(next_shifts) != len(current_shifts) + 1 or next_shifts[:-1] != current_shifts:
+        raise TrialValidationError("commerce.shift.opened must append exactly one shift session.")
+    if current_units:
+        adds_unit = (
+            len(next_units) == len(current_units) + 1
+            and next_units[:-1] == current_units
+            and next_shifts[-1].get("unitId") == next_units[-1].get("id")
+        )
+        if next_units != current_units and not adds_unit:
+            raise TrialValidationError(
+                "commerce.shift.opened may only append the shift's new operating unit."
+            )
+    elif (
+        "operatingUnits" in current
+        or "shiftSessions" in current
+        or len(next_units) != 1
+        or len(next_shifts) != 1
+        or next_shifts[0].get("unitId") != next_units[0].get("id")
+    ):
+        raise TrialValidationError(
+            "the first commerce.shift.opened command must register one operating unit and one shift."
+        )
 
 
 def _validate_item_created(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -9338,108 +10031,159 @@ def _validate_counted(
     _require_storefront_requests_unchanged(current, next_state)
     _require_storefront_configuration_unchanged(current, next_state)
     _require_purchase_orders_unchanged(current, next_state)
+    movement_count = len(next_state["movements"]) - len(current["movements"])
     if (
-        len(next_state["movements"]) != len(current["movements"]) + 1
-        or next_state["movements"][1:] != current["movements"]
+        movement_count < 1
+        or movement_count > 200
+        or next_state["movements"][movement_count:] != current["movements"]
     ):
         raise TrialValidationError(
-            "commerce.stock.counted must prepend exactly one count movement."
+            "commerce.stock.counted must prepend one reviewed group of count movements."
         )
-    movement = next_state["movements"][0]
-    if (
-        movement.get("kind") != "count"
-        or "orderId" in movement
-        or "purchaseOrderId" in movement
-        or movement.get("id") != _movement_id(str(movement.get("actionId")))
-    ):
-        raise TrialValidationError(
-            "stock count requires one attributable count movement."
-        )
-    matching_indexes = [
-        index
-        for index, item in enumerate(current["items"])
-        if item["sku"] == movement["sku"]
+    newest_movements = next_state["movements"][:movement_count]
+    ordered_movements = list(reversed(newest_movements))
+    first_movement = ordered_movements[0]
+    action_id = str(first_movement.get("actionId"))
+    batch_movement_ids = [
+        _movement_id(action_id, f"COUNT-BATCH-{index + 1}")
+        for index in range(movement_count)
     ]
-    if len(matching_indexes) != 1 or len(next_state["items"]) != len(
-        current["items"]
-    ):
-        raise TrialValidationError("stock count must reference one existing item.")
-    item_index = matching_indexes[0]
-    before_item = current["items"][item_index]
-    before_foundation = _inventory_foundation(current)
-    after_foundation = _inventory_foundation(next_state)
-    counted_quantity = movement["countedQuantity"]
-    if before_foundation is not None:
-        if after_foundation is None:
-            raise TrialValidationError(
-                "location-managed stock count cannot remove its inventory record."
-            )
-        before_commands = before_foundation["commands"]
-        after_commands = after_foundation["commands"]
-        if (
-            len(after_commands) != len(before_commands) + 1
-            or after_commands[:-1] != before_commands
-        ):
-            raise TrialValidationError(
-                "location-managed stock count must append exactly one location count."
-            )
-        location_count = after_commands[-1]["payload"]
-        if location_count.get("kind") != "count":
-            raise TrialValidationError(
-                "location-managed stock count requires one count command."
-            )
-        catalog_skus = sorted(item["sku"] for item in current["items"])
-        matching_balances = [
-            balance
-            for balance in shop_inventory_balances(
-                before_foundation, catalog_skus
-            )
-            if balance["stockUnitId"] == location_count["stockUnitId"]
-            and balance["locationId"] == location_count["locationId"]
-        ]
-        if len(matching_balances) != 1:
-            raise TrialValidationError(
-                "location count must reference one existing stock-unit balance."
-            )
-        balance = matching_balances[0]
-        if (
-            balance["sku"] != movement["sku"]
-            or location_count["expectedQuantity"] != balance["onHand"]
-            or location_count["countedQuantity"] < balance["reserved"]
-        ):
-            raise TrialValidationError(
-                "location count must match its SKU, physical balance, and reservations."
-            )
-        counted_quantity = (
-            before_item["onHand"]
-            + location_count["countedQuantity"]
-            - balance["onHand"]
-        )
-    elif after_foundation is not None:
-        raise TrialValidationError(
-            "commerce.stock.counted cannot initialize location inventory."
-        )
-    expected_after = {
-        **before_item,
-        "onHand": counted_quantity,
+    is_batch = [movement.get("id") for movement in ordered_movements] == batch_movement_ids
+    is_legacy_single = movement_count == 1 and first_movement.get("id") == _movement_id(action_id)
+    if not (is_batch or is_legacy_single):
+        raise TrialValidationError("stocktake movement IDs must match the reviewed batch order.")
+    if len(next_state["items"]) != len(current["items"]):
+        raise TrialValidationError("stocktake cannot add or remove catalog items.")
+    item_by_sku = {item["sku"]: item for item in current["items"]}
+    expected_quantities = {
+        item["sku"]: item["onHand"] for item in current["items"]
     }
-    if (
-        movement["expectedQuantity"] != before_item["onHand"]
-        or movement["quantityDelta"]
-        != counted_quantity - before_item["onHand"]
-        or movement["countedQuantity"] != counted_quantity
-        or next_state["items"][item_index] != expected_after
-        or any(
-            before != after
-            for index, (before, after) in enumerate(
-                zip(current["items"], next_state["items"], strict=True)
+    changed_skus: set[str] = set()
+    seen_targets: set[tuple[str, str] | str] = set()
+    for index, movement in enumerate(ordered_movements):
+        if (
+            movement.get("kind") != "count"
+            or movement.get("actionId") != action_id
+            or "orderId" in movement
+            or "purchaseOrderId" in movement
+            or any(
+                movement.get(field) != first_movement.get(field)
+                for field in ("createdAt", "actor", "reason", "evidenceReference")
             )
-            if index != item_index
-        )
-    ):
+        ):
+            raise TrialValidationError("stocktake lines must share one reviewed action proof.")
+        sku = movement.get("sku")
+        before_item = item_by_sku.get(sku)
+        if before_item is None:
+            raise TrialValidationError("stock count must reference one existing item.")
+        before_quantity = expected_quantities[sku]
+        if movement.get("expectedQuantity") != before_quantity:
+            raise TrialValidationError("stocktake lines must reconcile in their reviewed order.")
+        before_foundation = _inventory_foundation(current)
+        after_foundation = _inventory_foundation(next_state)
+        if before_foundation is None:
+            if after_foundation is not None or sku in changed_skus:
+                raise TrialValidationError(
+                    "a simple stocktake cannot add locations or count one SKU twice."
+                )
+            counted_quantity = movement.get("countedQuantity")
+            if not isinstance(counted_quantity, int) or isinstance(counted_quantity, bool) or counted_quantity < 0:
+                raise TrialValidationError("stocktake counts must be nonnegative whole units.")
+            target: tuple[str, str] | str = sku
+            variance = counted_quantity - before_quantity
+        else:
+            if after_foundation is None:
+                raise TrialValidationError(
+                    "location-managed stock count cannot remove its inventory record."
+                )
+            before_commands = before_foundation["commands"]
+            after_commands = after_foundation["commands"]
+            if (
+                len(after_commands) != len(before_commands) + movement_count
+                or after_commands[:-movement_count] != before_commands
+            ):
+                raise TrialValidationError(
+                    "location-managed stocktake must append one location count per reviewed line."
+                )
+            location_count = after_commands[len(before_commands) + index]["payload"]
+            if location_count.get("kind") != "count":
+                raise TrialValidationError("location-managed stocktake lines must be count commands.")
+            location_proof = location_count.get("proof")
+            expected_location_action = "ACT-" + sha256(
+                json.dumps(
+                    [action_id, "shop-stock-count-line", index + 1],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()[:40].upper()
+            if (
+                not isinstance(location_proof, Mapping)
+                or location_proof.get("actionId")
+                != (action_id if is_legacy_single else expected_location_action)
+                or any(
+                    location_proof.get(proof_field) != first_movement.get(movement_field)
+                    for proof_field, movement_field in (
+                        ("capturedAt", "createdAt"),
+                        ("actor", "actor"),
+                        ("reason", "reason"),
+                        ("evidenceReference", "evidenceReference"),
+                    )
+                )
+            ):
+                raise TrialValidationError(
+                    "location count proof must be derived from its reviewed stocktake line."
+                )
+            catalog_skus = sorted(item["sku"] for item in current["items"])
+            target = (str(location_count.get("stockUnitId")), str(location_count.get("locationId")))
+            matching_balances = [
+                balance
+                for balance in shop_inventory_balances(before_foundation, catalog_skus)
+                if (balance["stockUnitId"], balance["locationId"]) == target
+            ]
+            if len(matching_balances) != 1:
+                raise TrialValidationError(
+                    "location count must reference one existing stock-unit balance."
+                )
+            balance = matching_balances[0]
+            counted_physical = location_count.get("countedQuantity")
+            if (
+                balance["sku"] != sku
+                or location_count.get("expectedQuantity") != balance["onHand"]
+                or not isinstance(counted_physical, int)
+                or isinstance(counted_physical, bool)
+                or counted_physical < balance["reserved"]
+            ):
+                raise TrialValidationError(
+                    "location count must match its SKU, physical balance, and reservations."
+                )
+            variance = counted_physical - balance["onHand"]
+            counted_quantity = before_quantity + variance
+        if target in seen_targets:
+            raise TrialValidationError("stocktake cannot count one product location twice.")
+        seen_targets.add(target)
+        if (
+            movement.get("quantityDelta") != counted_quantity - before_quantity
+            or movement.get("countedQuantity") != counted_quantity
+        ):
+            raise TrialValidationError("stock movement must match the exact reviewed count.")
+        expected_quantities[sku] = counted_quantity
+        changed_skus.add(sku)
+
+    expected_items = [
+        {**item, "onHand": expected_quantities[item["sku"]]}
+        for item in current["items"]
+    ]
+    if next_state["items"] != expected_items:
         raise TrialValidationError(
-            "stock count may only set one matching item to its exact counted quantity."
+            "stocktake may only update catalog quantities to their exact reviewed totals."
         )
+    changed_fields = {"items", "movements", "inventoryFoundation"}
+    if set(current) != set(next_state) or any(
+        current[key] != next_state[key]
+        for key in current
+        if key not in changed_fields
+    ):
+        raise TrialValidationError("stocktake cannot modify unrelated Commerce records.")
 
 
 def _validate_production_inventory_transition(
@@ -10350,6 +11094,7 @@ def _commerce_order_close_basis(order: Mapping[str, Any]) -> datetime:
 def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "orders", "movements")
     _require_website_intakes_unchanged(current, next_state)
+    _require_operating_records_unchanged(current, next_state)
     if len(next_state["closes"]) != len(current["closes"]) + 1 or next_state["closes"][1:] != current["closes"]:
         raise TrialValidationError("commerce.close.saved must prepend exactly one close snapshot.")
     if any(
@@ -10364,17 +11109,48 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
         for prior_close in current["closes"]
         for order_id in prior_close.get("orderIds", [])
     }
+    close = next_state["closes"][0]
+    shift_id = close.get("shiftId")
+    scoped_mode = "operatingUnits" in current and "shiftSessions" in current
+    shift = next(
+        (
+            session
+            for session in current.get("shiftSessions", [])
+            if session["id"] == shift_id
+        ),
+        None,
+    )
+    if shift_id is not None and (
+        not scoped_mode
+        or not isinstance(shift_id, str)
+        or shift is None
+        or any(prior.get("shiftId") == shift_id for prior in current["closes"])
+    ):
+        raise TrialValidationError("daily close requires one open Shop shift.")
+    scoped_orders = [
+        order
+        for order in current["orders"]
+        if order.get("shiftId") == shift_id
+        and (shift_id is not None or "shiftId" not in order)
+    ]
+    if shift is not None and any(
+        order["status"] != "cancelled"
+        and (order["status"] != "completed" or order["paymentStatus"] != "reconciled")
+        for order in scoped_orders
+    ):
+        raise TrialValidationError("close every open order in this shift before closing it.")
     eligible = sorted(
         [
             order
-            for order in current["orders"]
+            for order in scoped_orders
             if order["status"] == "completed"
             and order["paymentStatus"] == "reconciled"
             and order["id"] not in previously_closed_order_ids
         ],
         key=lambda order: order["id"],
     )
-    close = next_state["closes"][0]
+    if scoped_mode and shift is None and not eligible:
+        raise TrialValidationError("legacy daily close has no unshifted completed orders.")
     if not _CLOSE_SNAPSHOT_FIELDS.issubset(close):
         raise TrialValidationError("new daily closes require exception and operator evidence.")
     if close["orderIds"] != [order["id"] for order in eligible]:
@@ -10389,14 +11165,22 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
         or close["total"] != sum(total or 0 for total in adjusted_totals)
     ):
         raise TrialValidationError("daily close totals must match completed, reconciled orders.")
-    if close["businessDate"] != _myanmar_business_date(close["createdAt"]) or any(
-        prior_close.get("businessDate") == close["businessDate"]
+    expected_business_date = _myanmar_business_date(
+        shift["opening"]["capturedAt"] if shift is not None else close["createdAt"]
+    )
+    duplicate_scope = any(
+        prior_close.get("shiftId") == shift_id
+        and (
+            shift_id is not None
+            or prior_close.get("businessDate") == close["businessDate"]
+        )
         for prior_close in current["closes"]
-    ):
-        raise TrialValidationError("daily close requires one unique business date.")
+    )
+    if close["businessDate"] != expected_business_date or duplicate_scope:
+        raise TrialValidationError("daily close requires one unique operating scope.")
     expected_payment_exceptions = sorted(
         order["id"]
-        for order in current["orders"]
+        for order in scoped_orders
         if order["refundStatus"] == "due"
         or (order["status"] != "cancelled" and order["paymentStatus"] == "pending")
     )
@@ -10639,6 +11423,47 @@ def _validate_storefront_configuration_saved(
     if not same_imported_content and "activation" in after:
         raise TrialValidationError(
             "Ecommerce activation provenance must be cleared when imported content changes."
+        )
+
+
+def _validate_merchant_profile_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    missing = object()
+    for key in set(current) | set(next_state):
+        if key != "merchantProfile" and current.get(key, missing) != next_state.get(key, missing):
+            raise TrialValidationError(
+                "commerce.merchant_profile.saved may only change the Shop merchant profile."
+            )
+    before = current.get("merchantProfile")
+    after = next_state.get("merchantProfile")
+    if after is None:
+        raise TrialValidationError(
+            "commerce.merchant_profile.saved requires a merchant profile."
+        )
+    normalized = _validate_merchant_profile(after)
+    if before is None:
+        if normalized["revision"] != 1:
+            raise TrialValidationError(
+                "the first merchant profile must start at revision one."
+            )
+        return
+    prior = _validate_merchant_profile(before)
+    if normalized["revision"] != prior["revision"] + 1:
+        raise TrialValidationError(
+            "merchant profile revision must advance exactly once."
+        )
+    fields = (
+        "nameMyanmar",
+        "nameEnglish",
+        "phone",
+        "addressMyanmar",
+        "addressEnglish",
+    )
+    if all(normalized[field] == prior[field] for field in fields):
+        raise TrialValidationError(
+            "an unchanged merchant profile cannot advance its revision."
         )
 
 
@@ -11460,6 +12285,7 @@ def _validate_service_schedule_initialized(
 
 
 _TRANSITION_VALIDATORS = {
+    "commerce.shift.opened": _validate_shift_opened,
     "commerce.item.created": _validate_item_created,
     "commerce.item.updated": _validate_item_updated,
     "commerce.order.created": _validate_created,
@@ -11497,6 +12323,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.website_intake.created": _validate_website_intake_created,
     "commerce.website_intake.converted": _validate_website_intake_converted,
     "commerce.storefront.configuration.saved": _validate_storefront_configuration_saved,
+    "commerce.merchant_profile.saved": _validate_merchant_profile_saved,
     "commerce.storefront_request.received": _validate_storefront_request_received,
     "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
     "commerce.account_mapping.saved": _validate_account_mapping_saved,
@@ -11518,9 +12345,11 @@ def reduce_commerce_state(
 
     if event_type not in COMMERCE_EVENTS:
         raise TrialValidationError("event_type must be a supported Commerce lifecycle event.")
+    completed_counter_intent = False
     if event_type == "commerce.storefront.merchandising.imported":
         return _apply_storefront_merchandising_import(current, payload)
     if event_type == "commerce.order.created" and isinstance(payload.get("intent"), Mapping):
+        completed_counter_intent = payload["intent"].get("completeAtCounter") is True
         payload = {
             "state": create_commerce_order_from_intent(
                 current,
@@ -11569,19 +12398,31 @@ def reduce_commerce_state(
             or _promotion_policies(next_state)
             or _shipping_policies(next_state)
             or _payment_policies(next_state)
+            or next_state.get("operatingUnits")
+            or next_state.get("shiftSessions")
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
 
     current_state = validate_commerce_state(current)
+    if event_type == "commerce.order.created" and next_state["orders"]:
+        completed_counter_state = next_state["orders"][0].get("status") == "completed"
+        if completed_counter_state != completed_counter_intent:
+            raise TrialValidationError(
+                "completed counter sales require the explicit server-derived order intent."
+            )
     if event_type != "commerce.item.updated":
         _require_catalog_changes_unchanged(current_state, next_state)
+    if event_type != "commerce.shift.opened":
+        _require_operating_records_unchanged(current_state, next_state)
     if event_type not in {"commerce.item.created", "commerce.item.updated"}:
         _require_catalog_baselines_unchanged(current_state, next_state)
     if event_type != "commerce.storefront_request.received":
         _require_storefront_requests_unchanged(current_state, next_state)
     if event_type != "commerce.storefront.configuration.saved":
         _require_storefront_configuration_unchanged(current_state, next_state)
+    if event_type != "commerce.merchant_profile.saved":
+        _require_merchant_profile_unchanged(current_state, next_state)
     if event_type != "commerce.tax_configuration.saved":
         _require_tax_configurations_unchanged(current_state, next_state)
     if event_type != "commerce.account_mapping.saved":

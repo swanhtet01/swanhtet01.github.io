@@ -218,8 +218,9 @@ requireContract('ordered integration batches preserve production safeguards and 
   && releaseIntegrationBatch.includes('createClientDemoWorkspace')
   && releaseIntegrationBatch.includes("file: 'showroom/src/core/client-onboarding.ts'")
   && releaseIntegrationBatch.includes('function managedLoginPath(product: string | null)')
-  && releaseIntegrationBatch.includes('Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser.')
-  && releaseIntegrationBatch.includes('Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders.')
+  && releaseIntegrationBatch.includes('This device records the sale, payment review, handoff and stock.')
+  && releaseIntegrationBatch.includes('This device creates the order and reserves stock. Payment and fulfilment stay pending.')
+  && releaseIntegrationBatch.includes('It does not charge or message anyone, or write to a company account.')
   && releaseIntegrationBatch.includes('loadManagedOwnerControlRun')
   && releaseIntegrationBatch.includes('const ProductSystemNavigator = lazy(')
   && releaseIntegrationBatch.includes('Choose what you want to run.')
@@ -386,7 +387,7 @@ requireContract('pinned Vercel CLI', workflow.includes('vercel@56.1.0'))
 requireContract('app build contract',
   config.buildCommand === 'npm run app:build'
   && generator.includes("buildCommand: 'npm run app:build'")
-  && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
+  && packageJson.scripts?.['app:build'] === 'node --test tools/test_production_entry.mjs && npm run app:release:write && npm --prefix showroom run build'
   && packageJson.scripts?.['app:build:checked'] === 'npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && ciWorkflow.includes('run: npm run app:build:checked'))
 const canonicalVerifySteps = packageJson.scripts?.['app:verify:steps']?.split(' && ') ?? []
@@ -395,21 +396,22 @@ requireContract('checked build produces a fresh artifact exactly once before ver
   && canonicalVerifySteps[0] === 'npm run app:build'
   && canonicalVerifySteps.filter((step) => step === 'npm run app:build').length === 1
   && canonicalVerifySteps.indexOf('node tools/verify_app_build.mjs') > 0)
-requireContract('CI verifies exact-source desktop and 390px journeys for three active products and retired Plant safety',
+requireContract('CI verifies exact-source unauthenticated access gates across app entry routes',
   ciWorkflow.includes('timeout-minutes: 15')
   && ciWorkflow.includes("SUPERMEGA_CI_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
   && ciWorkflow.includes("ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
   && ciWorkflow.includes('Verify exact source checkout')
   && ciWorkflow.includes('test "$(git rev-parse HEAD)" = "$SUPERMEGA_CI_SOURCE_SHA"')
   && ciWorkflow.includes("SUPERMEGA_RELEASE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
-  && ciWorkflow.includes('Verify desktop and 390px product journeys')
+  && ciWorkflow.includes('Verify unauthenticated product access gates')
+  && renderedJourneyVerifier.includes('unauthenticatedEntryContract')
   && ciWorkflow.includes('SUPERMEGA_RENDERED_EVIDENCE_DIR: ${{ runner.temp }}/supermega-app-entry-rendered-${{ github.run_id }}-${{ github.run_attempt }}')
   && ciWorkflow.includes('node tools/verify_app_entry_rendered.mjs')
   && ciWorkflow.includes('--out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json"')
   && ciWorkflow.includes('--screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR"')
   && ciWorkflow.includes('--expected-head "$SUPERMEGA_CI_SOURCE_SHA"')
   && !ciWorkflow.includes('--expected-head "$GITHUB_SHA"')
-  && ciWorkflow.indexOf('Build and verify canonical app') < ciWorkflow.indexOf('Verify desktop and 390px product journeys')
+  && ciWorkflow.indexOf('Build and verify canonical app') < ciWorkflow.indexOf('Verify unauthenticated product access gates')
   && ['shop', 'website', 'ecommerce'].every((product) => renderedJourneyVerifier.includes(`route: '/${product}/`))
   && renderedJourneyVerifier.includes('...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,')
   && renderedJourneyVerifier.includes('retirementCaseId: spec.id, requireLauncherProducts: true,')
@@ -669,6 +671,8 @@ requireContract('unlinked preview deployment is retired',
   previewServer.includes('PREVIEW_DEPLOY_MODE = "canonical_preview"')
   && previewServer.includes('CANONICAL_VERCEL_TEAM_ID = "team_wI4l7ZgSxcEztQPSlCCYVeJ5"')
   && previewServer.includes('CANONICAL_APP_VERCEL_PROJECT_ID = "prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG"')
+  && previewServer.includes('for name in ("VERCEL_TOKEN", "VERCEL_OIDC_TOKEN")')
+  && previewServer.includes('vercel_credential_missing')
   && previewServer.includes('_require_canonical_preview_deploy_target()')
   && previewServer.includes('vercel@56.1.0')
   && !previewServer.includes('deploy_claimable_preview.sh')
@@ -693,6 +697,11 @@ requireContract('preview release review is exact and server-owned',
 requireContract('canonical preview deploys one pinned prebuilt artifact',
   previewServer.includes('deploy_environment["SUPERMEGA_RELEASE_COMMIT"] = normalized_revision')
   && previewServer.includes('["pull", "--yes", "--environment=preview"]')
+  && previewServer.includes('_require_canonical_preview_managed_runtime(normalized_revision, deploy_environment)')
+  && previewServer.includes('verify_acceptance_runtime_environment.mjs')
+  && previewServer.includes('[node_path, str(verifier_path), revision]')
+  && previewServer.includes('dotenv_values(preview_environment_path, interpolate=False)')
+  && previewServer.includes('canonical_preview_managed_runtime_not_ready:')
   && previewServer.includes('["build", "--yes"]')
   && previewServer.includes('"--prebuilt"')
   && previewServer.includes('f"githubCommitSha={normalized_revision}"')
@@ -704,6 +713,7 @@ requireContract('canonical preview deploys one pinned prebuilt artifact',
   && !previewServer.includes('"--token"')
   && !previewServer.includes('"urls": urls')
   && previewServer.indexOf('["pull", "--yes", "--environment=preview"]') < previewServer.indexOf('["build", "--yes"]')
+  && previewServer.indexOf('_require_canonical_preview_managed_runtime(normalized_revision, deploy_environment)') < previewServer.indexOf('["build", "--yes"]')
   && previewServer.indexOf('["build", "--yes"]') < previewServer.indexOf('"deploy",\n                "--prebuilt"'))
 
 const normalizeCrons = (crons) => (crons || [])

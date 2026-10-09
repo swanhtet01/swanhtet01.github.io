@@ -40,44 +40,80 @@
   background: rgba(36,84,230, .05);
 }
 
-.ecommerce-workspace-switch {
+.ecommerce-mode-nav {
   order: 1;
-  width: min(100%, 360px);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  scroll-margin-top: .75rem;
+  width: max-content;
+  max-width: 100%;
+  min-height: 3.25rem;
+  display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  border: 1px solid rgba(37,48,74, .12);
-  border-radius: 12px;
-  padding: 5px 6px 5px 12px;
-  background: rgba(238, 244, 239, .96);
-  box-shadow: 0 8px 20px rgba(25, 54, 42, .08);
-  backdrop-filter: blur(16px);
+  gap: .25rem;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+  border: .0625rem solid var(--core-line);
+  border-radius: .75rem;
+  padding: .25rem;
+  background: var(--core-panel);
 }
 
-.theme-dark .ecommerce-workspace-switch { border-color: rgba(86,240,193,.12); background: rgba(12,18,26,.96); }
+.shell-nav-icon[data-icon="commerce-orders"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Cpath d='M7 3.75h10v16.5H7zM9.75 8h4.5M9.75 11.5h4.5M9.75 15h3'/%3E%3C/svg%3E");
+}
 
-.ecommerce-workspace-switch > span,
+.shell-nav-icon[data-icon="commerce-store"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Cpath d='M4 8.25h16l-1.1-4.5H5.1L4 8.25ZM5.25 8.25v11h13.5v-11M9 19.25v-6.5h6v6.5'/%3E%3C/svg%3E");
+}
+
+.shell-nav-icon[data-icon="commerce-setup"] {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.7'%3E%3Cpath d='M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3C/svg%3E");
+}
+
+.ecommerce-mode-nav > a {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: .5rem;
+  padding: 0 .875rem;
+  background: transparent;
+  color: var(--core-muted);
+  font: inherit;
+  font-size: .8125rem;
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ecommerce-mode-nav > a:hover,
+.ecommerce-mode-nav > a[aria-current='page'] { background: color-mix(in srgb, var(--core-panel) 86%, var(--core-accent) 14%); color: var(--core-accent); }
+.ecommerce-mode-nav > a:focus-visible { outline: .125rem solid var(--core-accent); outline-offset: .125rem; }
+
+@media (min-width: 841px) {
+  .commerce-product-shell .ecommerce-mode-nav { display: none; }
+}
+
+.ecommerce-orders-workspace {
+  order: 2;
+  min-width: 0;
+  display: grid;
+  align-content: start;
+}
+
 .ecommerce-preview-size > span {
-  /* --core-muted is #526078 in light, so this is byte-identical there and only changes
-     dark mode, where the literal measured 3.07:1 on the themed panel behind it. */
   color: var(--core-muted);
   font-size: 0.6875rem;
   font-weight: var(--font-weight-bold);
 }
 
-.ecommerce-workspace-switch select,
 .ecommerce-preview-size select {
   min-height: 46px;
   min-width: 0;
   border: 1px solid rgba(37,48,74, .14);
   border-radius: 9px;
   padding: 0 34px 0 12px;
-  /* Design phase 2 item 12: #fff/#171b26 are byte-identical to --core-panel/--core-ink in
-     light. The .ecommerce-workspace-switch shell already flips dark (:56 above), so these
-     selects were the one part of it that did not -- tokenizing gives them the matching
-     .theme-dark remap the switch itself already has. */
   background: var(--core-panel);
   color: var(--core-ink);
   font: inherit;
@@ -103,111 +139,244 @@
   display: none;
 }
 
-.ecommerce-today {
+.commerce-order-desk {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.15fr);
-  gap: 12px 18px;
-  margin: 0 0 12px;
-  border: 1px solid rgba(37,48,74, .14);
-  border-radius: 14px;
-  padding: 16px;
-  background: linear-gradient(135deg, #fff 0%, #f3f8f4 100%);
-  box-shadow: 0 12px 32px rgba(25, 54, 42, .06);
+  gap: 1rem;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  border: .0625rem solid rgba(37, 48, 74, .14);
+  border-radius: 1.125rem;
+  padding: 1.125rem;
+  background:
+    radial-gradient(circle at 92% -18%, color-mix(in srgb, var(--core-panel) 70%, var(--core-accent) 30%), transparent 34%),
+    var(--core-panel);
+  box-shadow: 0 1.25rem 3.75rem rgba(23, 27, 38, .07);
 }
 
-.ecommerce-today[data-state="attention"] { border-color: rgba(183, 105, 27, .28); }
-.ecommerce-today[data-state="setup"] { border-color: rgba(54, 106, 184, .25); }
+.commerce-order-desk[data-state="attention"] { border-color: rgba(183, 105, 27, .3); }
+.commerce-order-desk[data-state="setup"] { border-color: rgba(54, 106, 184, .26); }
 
-.ecommerce-today-priority > .ecommerce-service-actions {
-  grid-area: action;
-  align-items: stretch;
-  flex-direction: column;
+.commerce-order-desk-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1.25rem;
 }
 
-.ecommerce-today-priority {
+.commerce-order-desk-head > div:first-child {
   min-width: 0;
+  max-width: 46rem;
   display: grid;
-  align-content: center;
-  justify-items: start;
-  gap: 7px;
+  gap: .4375rem;
 }
 
-.ecommerce-today-priority h2 {
-  max-width: 560px;
+.commerce-order-desk-head h2 {
   margin: 0;
-  /* Deliberately a literal, not var(--core-ink). The card behind this heading is painted
-     with a hardcoded light gradient (.ecommerce-today, background: linear-gradient(135deg,
-     #fff, #f3f8f4)) and this stylesheet has no .theme-dark overrides at all, so the card
-     stays white in dark mode. A token that flips with the theme therefore puts near-white
-     text on a white card: measured 1.07:1, against 16.22:1 for this literal. Until the card
-     itself becomes theme-aware, the text on it must be theme-blind too. */
-  color: #171b26;
-  font-size: clamp(1.375rem, 2.4vw, 2.125rem);
-  line-height: 1.04;
-  letter-spacing: -.035em;
+  color: var(--core-ink);
+  font-size: clamp(1.75rem, 2.8vw, 2.625rem);
+  line-height: 1.02;
+  letter-spacing: -.045em;
 }
 
-.ecommerce-today-priority p {
-  max-width: 590px;
-  margin: 0 0 4px;
-  color: #5f6f66;
-  font-size: 0.8125rem;
-  line-height: 1.48;
+.commerce-order-desk-head p,
+.commerce-next-request > p {
+  margin: 0;
+  color: var(--core-muted);
+  font-size: .875rem;
+  line-height: 1.5;
 }
 
-.ecommerce-today-metrics {
-  min-width: 0;
+.commerce-order-desk-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+.commerce-operating-status {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-self: stretch;
   overflow: hidden;
-  border: 1px solid rgba(37,48,74, .12);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, .78);
+  border: .0625rem solid color-mix(in srgb, var(--core-line) 82%, var(--core-accent) 18%);
+  border-radius: .875rem;
+  background: color-mix(in srgb, var(--core-panel) 96%, var(--core-accent) 4%);
 }
 
-.ecommerce-today-metrics span {
+.commerce-operating-status > div {
   min-width: 0;
-  min-height: 64px;
+  min-height: 4.25rem;
   display: grid;
   align-content: center;
-  gap: 4px;
-  border-right: 1px solid rgba(37,48,74, .09);
-  padding: 10px 12px;
+  gap: .25rem;
+  border-right: .0625rem solid var(--core-line);
+  padding: .75rem .875rem;
 }
 
-.ecommerce-today-metrics span:last-child { border-right: 0; }
-
-.ecommerce-today-metrics small {
-  /* Also deliberately a literal, for the same reason as the heading above: this sits on the
-     same hardcoded light gradient. Measured on that card, #6b786f is 4.62:1 and passes;
-     var(--core-quiet) resolves to #7a8a9c in dark and drops to 3.53:1. An earlier reading of
-     4.2:1 here was taken against the page ground rather than the card. */
-  color: #6b786f;
-  font-size: 0.5625rem;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-.ecommerce-today-metrics strong {
+.commerce-operating-status > div:last-child { border-right: 0; }
+.commerce-operating-status small {
   overflow: hidden;
-  color: #171b26;
-  font-size: 0.8125rem;
+  color: var(--core-muted);
+  font-size: .625rem;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: .045em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.commerce-operating-status strong {
+  overflow: hidden;
+  color: var(--core-ink);
+  font-size: .9375rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ecommerce-today-context {
-  grid-column: 1 / -1;
+.commerce-order-desk-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(17rem, .75fr);
+  gap: .75rem;
+}
+
+.commerce-next-request,
+.commerce-exception-queue {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: .75rem;
+  border: .0625rem solid var(--core-line);
+  border-radius: .875rem;
+  padding: .9375rem;
+  background: color-mix(in srgb, var(--core-panel) 97%, var(--core-accent) 3%);
+}
+
+.commerce-next-request[data-empty="true"] {
+  align-content: center;
+  min-height: 11.5rem;
+}
+
+.commerce-order-card-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.commerce-order-card-head > div { min-width: 0; display: grid; gap: .25rem; }
+.commerce-order-card-head h3,
+.commerce-next-request h3 { margin: 0; color: var(--core-ink); font-size: 1.125rem; line-height: 1.2; }
+.commerce-next-request > .core-button { justify-self: start; }
+
+.commerce-order-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: .0625rem solid var(--core-line);
+  border-radius: .625rem;
+}
+
+.commerce-order-meta span {
+  min-width: 0;
+  display: grid;
+  gap: .1875rem;
+  border-right: .0625rem solid var(--core-line);
+  padding: .625rem;
+}
+
+.commerce-order-meta span:last-child { border-right: 0; }
+.commerce-order-meta small { color: var(--core-muted); font-size: .625rem; font-weight: var(--font-weight-bold); letter-spacing: .04em; text-transform: uppercase; }
+.commerce-order-meta strong { overflow: hidden; color: var(--core-ink); font-size: .8125rem; text-overflow: ellipsis; white-space: nowrap; }
+
+.commerce-order-flags { display: flex; flex-wrap: wrap; gap: .375rem; }
+.commerce-order-flags span,
+.commerce-order-clear {
+  border-radius: 999rem;
+  padding: .375rem .625rem;
+  background: rgba(177, 113, 0, .09);
+  color: #785000;
+  font-size: .6875rem;
+  font-weight: var(--font-weight-bold);
+}
+
+.commerce-order-clear { justify-self: start; margin: 0; background: rgba(24, 133, 86, .09); color: #0c6840; }
+.commerce-order-reference summary { min-height: 2.75rem; align-content: center; color: var(--core-muted); cursor: pointer; font-size: .75rem; font-weight: var(--font-weight-semibold); }
+.commerce-order-reference small { display: block; overflow-wrap: anywhere; color: var(--core-muted); font-family: var(--core-mono); font-size: .6875rem; }
+
+.commerce-exception-list { display: grid; gap: .375rem; }
+.commerce-exception-list button {
+  min-width: 0;
+  min-height: 3.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  border: .0625rem solid var(--core-line);
+  border-radius: .625rem;
+  padding: .5rem .625rem;
+  background: var(--core-panel);
+  color: var(--core-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.commerce-exception-list button:hover { border-color: color-mix(in srgb, var(--core-accent) 42%, var(--core-line)); background: color-mix(in srgb, var(--core-panel) 95%, var(--core-accent) 5%); }
+.commerce-exception-list button:focus-visible { outline: .125rem solid var(--core-accent); outline-offset: .125rem; }
+.commerce-exception-list button span { min-width: 0; display: grid; gap: .125rem; }
+.commerce-exception-list button strong { font-size: .8125rem; }
+.commerce-exception-list button small { overflow: hidden; color: var(--core-muted); font-size: .6875rem; text-overflow: ellipsis; white-space: nowrap; }
+.commerce-exception-list button b { min-width: 1.75rem; border-radius: 999rem; padding: .25rem .5rem; background: color-mix(in srgb, var(--core-panel) 84%, var(--core-accent) 16%); color: var(--core-accent); font-family: var(--core-mono); font-size: .6875rem; text-align: center; }
+
+.commerce-exception-clear {
+  min-height: 7rem;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  border: .0625rem solid rgba(24, 133, 86, .15);
+  border-radius: .75rem;
+  padding: .875rem;
+  background: rgba(24, 133, 86, .055);
+}
+
+.commerce-exception-clear > span {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(24, 133, 86, .12);
+  color: #0c6840;
+  font-weight: var(--font-weight-black);
+}
+.commerce-exception-clear p { min-width: 0; display: grid; gap: .1875rem; margin: 0; }
+.commerce-exception-clear strong { color: var(--core-ink); font-size: .8125rem; }
+.commerce-exception-clear small { color: var(--core-muted); font-size: .6875rem; line-height: 1.45; }
+
+.commerce-order-context {
   margin: 0;
-  border-top: 1px solid rgba(37,48,74, .1);
-  padding-top: 10px;
-  color: #345444;
-  font-size: 0.6875rem;
+  border-top: .0625rem solid var(--core-line);
+  padding-top: .75rem;
+  color: var(--core-muted);
+  font-size: .75rem;
   font-weight: var(--font-weight-semibold);
 }
 
+@media (max-width: 58rem) {
+  .commerce-order-desk-head { align-items: stretch; flex-direction: column; }
+  .commerce-order-desk-actions { justify-content: flex-start; }
+  .commerce-order-desk-body { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 35rem) {
+  .commerce-order-desk { padding: .75rem; }
+  .commerce-order-desk-actions { display: grid; grid-template-columns: 1fr; }
+  .commerce-operating-status > div { min-height: 3.75rem; padding: .625rem; }
+  .commerce-operating-status strong { font-size: .8125rem; }
+  .commerce-order-meta { grid-template-columns: 1fr; }
+  .commerce-order-meta span { border-right: 0; border-bottom: .0625rem solid var(--core-line); }
+  .commerce-order-meta span:last-child { border-bottom: 0; }
+}
 .ecommerce-business-controls {
   order: 3;
   margin-top: 12px;
@@ -248,7 +417,7 @@
   border: 1px solid rgba(37,48,74, .14);
   border-radius: 10px;
   padding: 12px;
-  background: #fff;
+  background: var(--core-panel);
 }
 
 .ecommerce-ai-desk > div:first-child {
@@ -259,16 +428,16 @@
 
 .ecommerce-ai-desk h2 {
   margin: 0;
-  color: #171b26;
-  font-size: 1.0625rem;
+  color: var(--core-ink);
+  font-size: 1.125rem;
   line-height: 1.2;
 }
 
 .ecommerce-ai-desk p {
   max-width: 680px;
   margin: 0;
-  color: #66746b;
-  font-size: 0.75rem;
+  color: var(--core-muted);
+  font-size: .75rem;
   line-height: 1.45;
 }
 
@@ -289,7 +458,7 @@
   gap: 2px;
   border-right: 1px solid rgba(37,48,74, .1);
   padding: 6px 8px;
-  background: rgba(36,84,230, .04);
+  background: color-mix(in srgb, var(--core-panel) 94%, var(--core-accent) 6%);
 }
 
 .ecommerce-ai-desk-queue span:last-child {
@@ -348,25 +517,25 @@
   grid-template-columns: minmax(0, 1fr) minmax(280px, .95fr);
   gap: 14px;
   align-items: center;
-  border: 1px solid rgba(36,84,230, .18);
-  border-radius: 12px;
-  padding: 14px;
-  background: #f5faf6;
+  border: 1px solid color-mix(in srgb, var(--core-accent) 18%, var(--core-line));
+  border-radius: 1rem;
+  padding: 16px;
+  background: color-mix(in srgb, var(--core-panel) 96%, var(--core-accent) 4%);
 }
 
 .ecommerce-payment-delivery-cockpit {
-  border-color: rgba(21, 94, 117, .2);
-  background: #f2f8fb;
+  border-color: color-mix(in srgb, var(--core-accent) 18%, var(--core-line));
+  background: color-mix(in srgb, var(--core-panel) 96%, var(--core-accent) 4%);
 }
 
 .ecommerce-request-inbox-cockpit {
-  border-color: rgba(12, 106, 86, .2);
-  background: #f4fbf8;
+  border-color: color-mix(in srgb, var(--core-accent) 18%, var(--core-line));
+  background: color-mix(in srgb, var(--core-panel) 96%, var(--core-accent) 4%);
 }
 
 .ecommerce-order-import-cockpit {
-  border-color: rgba(70, 85, 165, .18);
-  background: #f7f8ff;
+  border-color: color-mix(in srgb, var(--core-accent) 18%, var(--core-line));
+  background: color-mix(in srgb, var(--core-panel) 96%, var(--core-accent) 4%);
 }
 
 .ecommerce-order-import-workspace {
@@ -1197,6 +1366,80 @@
   overflow-wrap: anywhere;
 }
 
+.ecommerce-order-progress {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 2px 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(37, 48, 74, .12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .76);
+  list-style: none;
+}
+
+.ecommerce-order-progress li {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 1px 6px;
+  align-content: center;
+  padding: 8px;
+  color: #66746b;
+}
+
+.ecommerce-order-progress li + li {
+  border-inline-start: 1px solid rgba(37, 48, 74, .1);
+}
+
+.ecommerce-order-progress li > span {
+  grid-row: 1 / 3;
+  align-self: center;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(37, 48, 74, .18);
+  border-radius: 50%;
+  background: #fff;
+  font-size: .5rem;
+  font-weight: var(--font-weight-bold);
+}
+
+.ecommerce-order-progress strong,
+.ecommerce-order-progress small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ecommerce-order-progress strong {
+  color: #27332d;
+  font-size: .5625rem;
+  line-height: 1.25;
+}
+
+.ecommerce-order-progress small {
+  font-size: .5rem;
+  line-height: 1.25;
+}
+
+.ecommerce-order-progress li[data-state="complete"] > span,
+.ecommerce-order-progress li[data-state="current"] > span {
+  border-color: rgba(87, 69, 238, .32);
+  background: rgba(87, 69, 238, .1);
+  color: #4338ca;
+}
+
+.ecommerce-order-progress li[data-state="current"] {
+  background: linear-gradient(135deg, rgba(87, 69, 238, .08), rgba(255, 255, 255, .86));
+}
+
+.ecommerce-order-progress li[data-state="current"] strong {
+  color: #312e81;
+}
+
 .ecommerce-quote-boundaries {
   grid-column: 1 / -1;
   display: grid;
@@ -1407,11 +1650,6 @@
   font-size: 0.625rem;
 }
 
-/* This block sits on the themed panel, so its light-theme literals carried straight into
-   dark mode and failed AA there: #66746b measured 3.80:1 and #2454e6 3.26:1 against
-   --core-panel. --core-green is exactly #2454e6 in light, so that one is byte-identical
-   there. #66746b is not a token; --core-quiet (#5f6f67 light) is the nearest and is a
-   shade darker, which only moves light mode further above the floor. */
 .ecommerce-after-purchase > summary small,
 .ecommerce-after-purchase > div p {
   color: var(--core-quiet);
@@ -1566,18 +1804,6 @@
     flex-direction: column;
   }
 
-  .ecommerce-today {
-    grid-template-columns: 1fr;
-    padding: 13px;
-  }
-
-  .ecommerce-today-priority .core-button { width: 100%; }
-
-  .ecommerce-today-metrics span {
-    min-height: 58px;
-    padding: 8px;
-  }
-
   .ecommerce-ai-desk {
     grid-template-columns: 1fr;
   }
@@ -1711,12 +1937,17 @@
 }
 
 @media (max-width: 840px) {
-  .ecommerce-workspace-switch {
+  .ecommerce-mode-nav {
     position: sticky;
     z-index: 18;
     top: 54px;
+    scroll-margin-top: 54px;
     width: 100%;
+    background: color-mix(in srgb, var(--core-bg) 94%, transparent);
+    backdrop-filter: blur(16px);
   }
+
+  .ecommerce-mode-nav > a { flex: 1 0 auto; }
 
   .ecommerce-setup,
   .ecommerce-preview-panel {
@@ -1730,44 +1961,6 @@
   .ecommerce-buying-workspace {
     scroll-margin-top: 112px;
   }
-}
-
-/* The cockpits keep their light tints in dark mode -- see the .ecommerce-today-priority h2
-   note above for why the cards themselves cannot flip while their text is theme-blind. The
-   consequence is that any SHARED token-coloured text landing on them inherits the dark
-   theme's palette and disappears: --core-accent resolves to the bright mint #56f0c1, which
-   measured 1.36:1 on the ops cockpits and 1.44:1 on the AI desk across 23 elements.
-   Only reachable with the enterprise controls expanded, which is why earlier sweeps of this
-   route reported it clean.
-   The fix matches the rest of this file: on a theme-blind card, the text must be theme-blind
-   too. #2454e6 is exactly what --core-green resolves to in LIGHT, so these read identically
-   in both themes rather than introducing a new colour. Verified: 5.9:1 on the cockpit tint,
-   5.73:1 on white.
-   Attempting the opposite -- darkening the cards -- was measured and reverted: it took the
-   failures from 25 to 201, because it hid every deliberately dark literal already on them. */
-.theme-dark .ecommerce-ops-cockpit .core-eyebrow,
-.theme-dark .ecommerce-ops-cockpit .text-link,
-.theme-dark .ecommerce-ai-desk .core-eyebrow,
-.theme-dark .ecommerce-ai-desk .text-link {
-  color: #2454e6;
-}
-
-/* The mirror image of the block above, and the reason a blanket rule would be wrong here.
-   This summary sits on .ecommerce-business-controls, which DOES use var(--core-panel) and so
-   is genuinely dark in dark mode -- but its text is a theme-blind dark literal, giving
-   1.42:1 for the label and 3.8:1 for the sub-line. On a themed card the text must be themed
-   too, which is the exact opposite of what the light cockpits need. */
-.theme-dark .ecommerce-enterprise-controls > summary {
-  color: var(--core-ink);
-}
-
-/* Scoped to the enterprise-controls summary ALONE. The original rule these share also
-   styles .ecommerce-order-import-workspace summaries, which sit on a LIGHT cockpit -- and
-   --core-quiet resolves to #7a8a9c in dark, giving 3.34:1 there. Including it made one
-   surface better and another worse; the light one keeps its #66746b literal, which measures
-   4.6:1 on that tint. */
-.theme-dark .ecommerce-enterprise-controls > summary small {
-  color: var(--core-quiet);
 }
 
 /* 375px audit, deferred P2 sweep: interactive text below 12px and tap targets below 44px on
@@ -1790,7 +1983,7 @@
 
 /* Myanmar script foundation (design phase 1): heading floors for surfaces that
    render user/customer data; the core body stack already covers the island. */
-.ecommerce-heading h1, .ecommerce-today-priority h2 { line-height: 1.3; letter-spacing: 0; }
+.ecommerce-heading h1, .commerce-order-desk-head h2 { line-height: 1.3; letter-spacing: 0; }
 .ecommerce-product :lang(my), .ecommerce-product [lang="my"] { line-height: 1.65; letter-spacing: 0; }
 
 /* Design phase 1 — checkout + cart legibility (tribunal rank 8), and the art

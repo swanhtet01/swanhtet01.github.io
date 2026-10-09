@@ -11,13 +11,8 @@
 //   far less than a parallel Ecommerce catalog would (that catalog IS Shop's, via
 //   readStorefrontCatalog) and it is what website-trade-brief.ts already proved out.
 //
-// Unlike website-trade-brief.ts's TRADE_COPY, this table is intentionally partial -- only trades
-// whose Ecommerce storefront copy has actually been written appear here. A trade id absent from
-// the table is treated exactly like an id workingSamplePlan cannot resolve to a known trade at
-// all: ecommerceTradeStorefront returns null, and every caller falls back to today's exact
-// generic wording. That "no id or no match -> return null / fall back to generic" discipline is
-// the one website-trade-brief.ts documents, and it is what keeps a hand-imported CSV -- where the
-// trade cannot be determined -- reading exactly as it does today.
+// This registry is complete for every Shop trade. An unrecognised or unselected trade still
+// returns null so callers retain their existing generic fallback rather than guessing a business type.
 import type { ShopBusinessTemplateId } from '../shop/business-templates.ts'
 import type { EcommercePaymentAdapter } from './ecommerce-buying-lifecycle.ts'
 
@@ -48,8 +43,7 @@ export type EcommerceTradeStorefront = {
   // workingSamplePlan already computes per row for every workflow template, so a trade's labels
   // apply the same way regardless of which workflow chose the row.
   collections: { featured: string; rest: string }
-  // The merchandising note shown on every row, replacing the workflow-specific "Demo ... listing"
-  // wording with trade-specific guidance.
+  // The merchandising note shown on every row with concise, trade-specific review guidance.
   note: string
   // SKUs to rank ahead of the plain onHand sort, so a trade's own hero products lead the
   // storefront instead of whatever happens to carry the highest stock count. A bakery storefront
@@ -66,38 +60,36 @@ export type EcommerceTradeStorefront = {
   guidedOrder?: EcommerceGuidedOrderMix
 }
 
-// Only trades with Ecommerce-appropriate copy appear here -- see the file header. Section (d) of
-// TEMPLATE-EXPANSION.md scopes which trades are worth writing next; item 5's acceptance bar was
-// bakery alone, item 6 adds hardware as the delivery/cash_on_delivery example its acceptance
-// criterion names.
-const TRADE_STOREFRONT: Readonly<Partial<Record<ShopBusinessTemplateId, EcommerceTradeStorefront>>> = {
-  'beauty-spa': {
-    // The Spa Website and onboarding samples already promise appointment-led treatments while
-    // Ecommerce currently carries only the two real home-care SKUs. Keep the storefront honest:
-    // it can collect product requests for pickup, but it does not pretend to book an appointment.
-    summary: (businessName) => `Browse ${businessName}'s home-care products after your treatment -- request items for pickup and confirm availability before collection.`,
-    collections: { featured: 'Home care', rest: 'More for your routine' },
-    note: 'Demo spa listing: confirm treatment suitability, counter stock, and pickup time before launch.',
-    preferredSkus: ['SPA-OIL-100ML', 'SPA-COMPRESS'],
-    guidedOrder: { fulfilment: 'pickup', paymentAdapter: 'pay_on_pickup' },
+// Every shipped Shop trade has a Commerce definition. The type intentionally rejects an
+// incomplete registry when a new Shop template is added.
+const TRADE_STOREFRONT: Readonly<Record<ShopBusinessTemplateId, EcommerceTradeStorefront>> = {
+  'mini-mart': {
+    summary: (businessName) => `Browse ${businessName}'s everyday groceries and household essentials, then send a request for availability and collection.`,
+    collections: { featured: 'Everyday essentials', rest: 'More for the home' },
+    note: 'Confirm quantities, current price and collection time before accepting the request.',
+    preferredSkus: ['RICE-25KG', 'OIL-1L', 'SUGAR-1KG'],
   },
-  bakery: {
-    summary: (businessName) => `Browse ${businessName}'s fresh bread, cakes and pastries -- order ahead for a cake, or pick up what's ready today.`,
-    collections: { featured: 'Fresh today', rest: 'Order ahead' },
-    note: "Demo bakery listing: confirm today's bake list, pickup time and pricing before launch.",
-    preferredSkus: ['BREAD-WHITE', 'CROISSANT-BUTTER', 'CAKE-SLICE-CHOC', 'TART-EGG'],
-    // A bakery customer collects their own cake in person and settles at the counter -- the exact
-    // pickup/pay_on_pickup pair guided-sample-order.ts already defaulted to before this item.
-    guidedOrder: { fulfilment: 'pickup', paymentAdapter: 'pay_on_pickup' },
+  pharmacy: {
+    summary: (businessName) => `Browse ${businessName}'s pharmacy products and daily supplies, then ask the team to confirm the exact item before collection.`,
+    collections: { featured: 'Daily care', rest: 'Health essentials' },
+    note: 'Confirm the exact product, strength, availability and any prescription requirement before accepting the request.',
   },
-  // Hardware SKUs (business-templates.ts's hardware seed) and its 'Site delivery before concrete
-  // pour' pending order both point the same way: a hardware customer orders bulk site materials
-  // for delivery and settles in cash when the load arrives -- delivery/cash_on_delivery, the
-  // non-pickup pairing TEMPLATE-EXPANSION.md's item 6 acceptance criterion names explicitly.
+  'phone-electronics': {
+    summary: (businessName) => `Browse ${businessName}'s phone accessories and small electronics, then confirm compatibility before collection.`,
+    collections: { featured: 'Device essentials', rest: 'Accessories and power' },
+    note: 'Confirm the device model, connector, compatibility, price and warranty terms before accepting the request.',
+    preferredSkus: ['CHARGER-TYPEC', 'CABLE-USBC-1M', 'EARBUD-TWS', 'POWERBANK-10K'],
+  },
+  fashion: {
+    summary: (businessName) => `Browse ${businessName}'s clothing and accessories, then request the size, colour and style you need.`,
+    collections: { featured: 'New arrivals', rest: 'Wardrobe staples' },
+    note: 'Confirm the item, size, colour, measurements, availability and exchange terms before accepting the request.',
+    preferredSkus: ['TSHIRT-M-WHT', 'JEANS-32', 'LONGYI-WMN', 'BLOUSE-S'],
+  },
   hardware: {
-    summary: (businessName) => `Browse ${businessName}'s building materials, tools and site consumables -- request a delivery quantity for manager review.`,
-    collections: { featured: 'Site essentials', rest: 'Tools' },
-    note: 'Demo hardware listing: confirm delivery address, quantity and pricing before launch.',
+    summary: (businessName) => `Browse ${businessName}'s building materials, tools and site consumables, then request a quantity for review.`,
+    collections: { featured: 'Site essentials', rest: 'Tools and supplies' },
+    note: 'Confirm the delivery address, quantity, price and handover terms before accepting the request.',
     preferredSkus: ['CEMENT-50KG', 'REBAR-10MM', 'NAIL-2IN-KG', 'PAINT-4L-WHT'],
     guidedOrder: {
       fulfilment: 'delivery',
@@ -110,12 +102,45 @@ const TRADE_STOREFRONT: Readonly<Partial<Record<ShopBusinessTemplateId, Ecommerc
       },
     },
   },
+  'tea-coffee': {
+    summary: (businessName) => `Browse ${businessName}'s tea, coffee and food, then request a collection time for your order.`,
+    collections: { featured: 'Ready to order', rest: 'Tea-time favourites' },
+    note: 'Confirm ingredients, quantities, collection time and current availability before accepting the request.',
+    preferredSkus: ['TEA-SWEET', 'COFFEE-MILK', 'MOHINGA-BOWL', 'NANPYAR-PE'],
+  },
+  'auto-parts': {
+    summary: (businessName) => `Browse ${businessName}'s vehicle parts and consumables, then request a compatibility check for your vehicle.`,
+    collections: { featured: 'Service essentials', rest: 'Parts and consumables' },
+    note: 'Confirm the vehicle model, year, part number, fitment, price and availability before accepting the request.',
+    preferredSkus: ['OIL-ENG-4L', 'FILTER-OIL', 'PAD-BRAKE-FR', 'BATT-12V60'],
+  },
+  restaurant: {
+    summary: (businessName) => `Browse ${businessName}'s menu, then request the dishes and collection time that work for your table or group.`,
+    collections: { featured: 'Kitchen favourites', rest: 'More from the menu' },
+    note: 'Confirm dietary requirements, quantities, preparation time and collection or table details before accepting the request.',
+    preferredSkus: ['CURRY-CHICKEN', 'NOODLE-SHAN', 'SALAD-LAHPET', 'GRILL-TILAPIA'],
+  },
+  'beauty-spa': {
+    summary: (businessName) => `Browse ${businessName}'s home-care products and request items for pickup after confirming availability.`,
+    collections: { featured: 'Home care', rest: 'More for your routine' },
+    note: 'Confirm treatment suitability, counter stock and pickup time before accepting the request.',
+    preferredSkus: ['SPA-OIL-AROMA', 'SPA-SERUM', 'SPA-THANAKA', 'SPA-ROLLON'],
+    guidedOrder: { fulfilment: 'pickup', paymentAdapter: 'pay_on_pickup' },
+  },
+  bakery: {
+    summary: (businessName) => `Browse ${businessName}'s bread, cakes and pastries, then request a collection time for what you need.`,
+    collections: { featured: 'Fresh today', rest: 'Order ahead' },
+    note: "Confirm today's bake list, ingredients, price and collection time before accepting the request.",
+    preferredSkus: ['BREAD-WHITE', 'CROISSANT-BUTTER', 'CAKE-SLICE-CHOC', 'TART-EGG'],
+    guidedOrder: { fulfilment: 'pickup', paymentAdapter: 'pay_on_pickup' },
+  },
 }
 
+export const ecommerceTradeStorefrontIds = Object.freeze(Object.keys(TRADE_STOREFRONT).sort() as ShopBusinessTemplateId[])
+
 /**
- * Returns this trade's Ecommerce storefront copy, or null when the trade is unknown or has no
- * copy written yet. Callers MUST fall back to their own generic copy on null -- see the file
- * header for why a wrong guess here is worse than the generic wording it would replace.
+ * Returns this trade's Ecommerce storefront copy, or null when the trade is unknown or absent.
+ * Callers retain their generic fallback on null instead of guessing a business type.
  */
 export function ecommerceTradeStorefront(tradeId: ShopBusinessTemplateId | null): EcommerceTradeStorefront | null {
   if (!tradeId) return null

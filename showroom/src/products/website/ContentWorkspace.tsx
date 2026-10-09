@@ -60,15 +60,25 @@ export function ContentWorkspace({
       </header>
 
       <div className="website-editor-scroll" data-editor-section={editorSection}>
-        <label className="website-editor-section-picker">
-          <span>Edit</span>
-          <select aria-label="Page section to edit" onChange={(event) => setEditorSection(event.target.value as EditorSection)} value={editorSection}>
-            <option value="hero">Hero</option>
-            <option value="sections">Content sections</option>
-            <option value="page">Page details</option>
-            <option value="seo">Search metadata</option>
-          </select>
-        </label>
+        <div aria-label="Page section to edit" className="website-editor-section-picker" role="tablist">
+          {([
+            ['hero', 'Hero'],
+            ['sections', 'Sections'],
+            ['page', 'Page details'],
+            ['seo', 'Search'],
+          ] as const).map(([section, label]) => (
+            <button
+              aria-selected={editorSection === section}
+              className={editorSection === section ? 'is-active' : ''}
+              key={section}
+              onClick={() => setEditorSection(section)}
+              role="tab"
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         <fieldset className="website-fieldset" data-content-section="page">
           <legend>Page record</legend>
@@ -98,7 +108,7 @@ export function ContentWorkspace({
           <legend>Hero</legend>
           <div className="website-form-grid">
             <label>
-              <span>Eyebrow</span>
+              <span>Short label above the headline</span>
               <input
                 maxLength={80}
                 onChange={(event) => editPage((current) => ({
@@ -134,7 +144,7 @@ export function ContentWorkspace({
             </label>
             <div className="website-form-grid two-columns">
               <label>
-                <span>CTA label</span>
+                <span>Button text</span>
                 <input
                   maxLength={40}
                   onChange={(event) => editPage((current) => ({
@@ -145,7 +155,7 @@ export function ContentWorkspace({
                 />
               </label>
               <label>
-                <span>CTA destination</span>
+                <span>Button link</span>
                 <input
                   autoCapitalize="none"
                   maxLength={160}
@@ -212,7 +222,7 @@ export function ContentWorkspace({
                 </header>
                 <div className="website-form-grid">
                   <label>
-                    <span>Eyebrow</span>
+                    <span>Short label above the heading</span>
                     <input
                       maxLength={60}
                       onChange={(event) => editPage((current) => ({
@@ -329,16 +339,7 @@ export function ContentWorkspace({
           >
             Return to draft
           </button>
-        ) : (
-          <button
-            className="website-button is-primary"
-            disabled={issues.length > 0}
-            onClick={() => onUpdatePage((current) => ({ ...current, stage: 'ready' }))}
-            type="button"
-          >
-            Mark page ready
-          </button>
-        )}
+        ) : null}
       </footer>
     </section>
   )

@@ -1,6 +1,7 @@
 // Explicit .ts extension: verify_app_build.mjs imports this module directly under node, where an
 // extensionless specifier does not resolve. Vite tolerates either, so the omission only shows in CI.
 import { isShopServiceSku, type ShopBusinessTemplateId } from '../shop/business-templates.ts'
+import { createTemplateManifestRegistry, templateManifestKey, validateTemplateManifest, type TemplateManifest } from '../../core/template-manifest.ts'
 import { ecommerceTradeStorefront } from './ecommerce-trade-storefront.ts'
 import {
   COMMERCE_KEY,
@@ -55,8 +56,34 @@ type LocalEcommerceMerchandisingImportOptions = {
 
 const defaultStorefrontSummary = 'Browse this reviewed collection with clear local pricing and availability from Shop.'
 const LOCAL_ECOMMERCE_BUYING_STATE_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'
-const workingSampleTemplateIds = ['social-storefront', 'pickup-preorder', 'wholesale-request'] as const
-type EcommerceWorkingSampleTemplateId = typeof workingSampleTemplateIds[number]
+export const ecommerceWorkingSampleTemplateIds = ['social-storefront', 'pickup-preorder', 'wholesale-request'] as const
+export type EcommerceWorkingSampleTemplateId = typeof ecommerceWorkingSampleTemplateIds[number]
+
+function buildEcommerceWorkingSampleManifest(templateId: EcommerceWorkingSampleTemplateId): TemplateManifest {
+  const fulfilment = templateId !== 'social-storefront'
+  const manifest = validateTemplateManifest({
+    schema: 'supermega.template-manifest.v1',
+    id: `commerce-${templateId}`,
+    version: 'v1',
+    capabilities: fulfilment ? ['commerce.storefront', 'commerce.fulfilment'] : ['commerce.storefront'],
+    slots: fulfilment
+      ? { identity: true, catalog: true, content: true, fulfilment: true }
+      : { identity: true, catalog: true, content: true },
+  })
+  if (!templateManifestKey(manifest).startsWith(`commerce-${templateId}@`)) throw new Error(`${templateId} has an invalid manifest key.`)
+  return manifest
+}
+
+/** Portable, versioned capability declarations for the shipped Commerce workflows. */
+export const ecommerceWorkingSampleManifests = createTemplateManifestRegistry(
+  ecommerceWorkingSampleTemplateIds.map(buildEcommerceWorkingSampleManifest),
+)
+
+export function ecommerceWorkingSampleManifest(id: EcommerceWorkingSampleTemplateId): TemplateManifest {
+  const manifest = ecommerceWorkingSampleManifests.find(`commerce-${id}`, 'v1')
+  if (!manifest) throw new Error(`${id} has no registered Commerce manifest.`)
+  return manifest
+}
 
 type EcommerceWorkingSampleInput = {
   templateId: EcommerceWorkingSampleTemplateId
@@ -70,11 +97,11 @@ function workingSamplePlan(
   preferredSkus: readonly string[] = [],
   trade: ShopBusinessTemplateId | null = null,
 ) {
-  if (!workingSampleTemplateIds.includes(input.templateId)) throw new Error('Choose a supported Ecommerce working sample.')
+  if (!ecommerceWorkingSampleTemplateIds.includes(input.templateId)) throw new Error('Choose a supported Ecommerce working sample.')
+  ecommerceWorkingSampleManifest(input.templateId)
   // trade is a second, orthogonal axis on top of the workflow template id above -- see
-  // ecommerce-trade-storefront.ts's file header. null (no trade, or a trade with no copy written
-  // yet) MUST reproduce today's exact generic wording below, byte for byte: an owner who imported
-  // their own CSV, where the trade cannot be determined, gets unchanged behavior.
+  // ecommerce-trade-storefront.ts's file header. null means the source trade cannot be determined,
+  // so use neutral operational wording rather than making a claim about the business type.
   const tradeCopy = ecommerceTradeStorefront(trade)
   // The client's own working-sample products come before the generic Shop seed items, so a
   // storefront shows that business rather than demo household goods left over from Shop's seed.
@@ -123,10 +150,10 @@ function workingSamplePlan(
       note: tradeCopy
         ? tradeCopy.note
         : input.templateId === 'social-storefront'
-          ? 'Demo social listing: confirm campaign copy and availability before launch.'
+          ? 'Confirm campaign copy and availability before accepting the request.'
           : input.templateId === 'pickup-preorder'
-            ? 'Demo pickup listing: confirm collection time and availability before launch.'
-            : 'Demo trade listing: confirm quantities, pricing, and delivery terms before launch.',
+            ? 'Confirm collection time and availability before accepting the request.'
+            : 'Confirm quantities, pricing, and delivery terms before accepting the request.',
     }
   })
   return { rows, summary }
@@ -147,7 +174,7 @@ async function matchesWorkingSample(
   // a strict superset of the old one-axis loop, not a behavior change for the no-trade case.
   const candidateTrades = trade ? ([trade, null] as const) : ([null] as const)
   for (const candidateTrade of candidateTrades) {
-    for (const templateId of workingSampleTemplateIds) {
+    for (const templateId of ecommerceWorkingSampleTemplateIds) {
       const plan = workingSamplePlan(catalog, { templateId, businessName: current.storeName }, preferredSkus, candidateTrade)
       const preview = buildStorefrontPreview(catalog, {
         storeName: current.storeName,

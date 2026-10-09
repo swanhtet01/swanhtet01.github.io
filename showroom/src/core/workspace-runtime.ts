@@ -22,6 +22,7 @@ import {
   type CommerceSyncStatus,
 } from './commerce-sync-outbox'
 import { requestStorageDurability } from './storage-durability'
+import { reportManagedPersistenceFailure } from './client-error-reporter'
 import {
   currentManagedIdentity,
   loadManagedBootstrap,
@@ -125,6 +126,7 @@ export type Approval = {
 export type ActionDomain = 'commerce' | 'production'
 
 export type ActionKind =
+  | 'shift_open'
   | 'order_create'
   | 'order_status'
   | 'order_cancel'
@@ -536,6 +538,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
   }))
   const snapshotRef = useRef(localSnapshot)
   const identityRef = useRef(managedIdentity)
+  const [managedLoadAttempt, setManagedLoadAttempt] = useState(0)
   const [syncStatus, setSyncStatus] = useState<CommerceSyncStatus>(() => managedIdentity ? managedCommerceSyncStatus : checkingCommerceSyncStatus)
   const syncStatusRef = useRef(syncStatus)
 
@@ -631,6 +634,14 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
     return () => window.removeEventListener('storage', refreshFromStorage)
   }, [managedIdentity])
 
+  const retryManagedLoad = useCallback(() => {
+    if (!identityRef.current || snapshotRef.current.mode !== 'managed-error') return
+    const next = { ...snapshotRef.current, mode: 'managed-loading' as const, error: '', writeReady: false }
+    snapshotRef.current = next
+    setManagedSnapshot(next)
+    setManagedLoadAttempt((attempt) => attempt + 1)
+  }, [])
+
   // Load the stuck change's evidence as soon as the till freezes, so the recovery
   // control can show what it would discard before the operator commits to discarding it.
   const stuck = !managedIdentity && (syncStatus.status === 'conflict' || syncStatus.status === 'unavailable')
@@ -711,12 +722,13 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       })
       .catch((error) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
+        reportManagedPersistenceFailure('shop.load', error, 'Managed Shop could not be loaded.')
         const next = { state: createEmptyCommerce(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Shop could not be loaded.', writeReady: false }
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
     return () => { active = false }
-  }, [managedIdentity])
+  }, [managedIdentity, managedLoadAttempt])
 
   async function mutate(
     eventType: ManagedCommerceEvent,
@@ -879,6 +891,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
         } catch (refreshError) {
+          reportManagedPersistenceFailure('shop.reconcile', refreshError, 'Shop changed and the latest revision could not be loaded.')
           const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Shop changed and the latest revision could not be loaded.'
           const rejected = { ...snapshotRef.current, error: refreshMessage }
           snapshotRef.current = rejected
@@ -887,6 +900,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
         }
         throw new ShopReviewRequiredError('Shop changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
+      reportManagedPersistenceFailure('shop.save', error, 'The managed Shop write was not confirmed.')
       if (identityRef.current && sameManagedIdentity(identityRef.current, managedIdentity)) {
         const rejected = { ...snapshotRef.current, error: message }
         snapshotRef.current = rejected
@@ -900,7 +914,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
   const canWrite = managedIdentity
     ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error && visible.writeReady
     : visible.mode === 'local' && !visible.error && visible.writeReady && syncStatus.status === 'ready'
-  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus, stuckRecovery, discardStuckChange] as const
+  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus, stuckRecovery, discardStuckChange, retryManagedLoad] as const
 }
 
 type ProductionWorkspaceMode = 'local' | 'managed-loading' | 'managed-ready' | 'managed-unprovisioned' | 'managed-error'
@@ -933,6 +947,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
   }))
   const snapshotRef = useRef(localSnapshot)
   const identityRef = useRef(managedIdentity)
+  const [managedLoadAttempt, setManagedLoadAttempt] = useState(0)
 
   useEffect(() => {
     identityRef.current = managedIdentity
@@ -952,6 +967,14 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
     return () => window.removeEventListener('storage', refreshFromStorage)
   }, [managedIdentity])
 
+  const retryManagedLoad = useCallback(() => {
+    if (!identityRef.current || snapshotRef.current.mode !== 'managed-error') return
+    const next = { ...snapshotRef.current, mode: 'managed-loading' as const, error: '', writeReady: false }
+    snapshotRef.current = next
+    setManagedSnapshot(next)
+    setManagedLoadAttempt((attempt) => attempt + 1)
+  }, [])
+
   useEffect(() => {
     if (!managedIdentity) return undefined
 
@@ -966,12 +989,13 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
       })
       .catch((error) => {
         if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
+        reportManagedPersistenceFailure('plant.load', error, 'Managed Plant could not be loaded.')
         const next = { state: createEmptyProduction(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Plant could not be loaded.', writeReady: false }
         snapshotRef.current = next
         setManagedSnapshot(next)
       })
     return () => { active = false }
-  }, [managedIdentity])
+  }, [managedIdentity, managedLoadAttempt])
 
   async function mutate(
     eventType: ManagedProductionEvent,
@@ -1080,6 +1104,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
           snapshotRef.current = conflict
           setManagedSnapshot(conflict)
         } catch (refreshError) {
+          reportManagedPersistenceFailure('plant.reconcile', refreshError, 'Plant changed and the latest revision could not be loaded.')
           const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Plant changed and the latest revision could not be loaded.'
           const rejected = { ...snapshotRef.current, error: refreshMessage }
           snapshotRef.current = rejected
@@ -1088,6 +1113,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
         }
         throw new PlantReviewRequiredError('Plant changed in another session. The latest revision is loaded; review and confirm the action again.')
       }
+      reportManagedPersistenceFailure('plant.save', error, 'The managed Plant write was not confirmed.')
       if (identityRef.current && sameManagedIdentity(identityRef.current, managedIdentity)) {
         const rejected = { ...snapshotRef.current, error: message }
         snapshotRef.current = rejected
@@ -1101,7 +1127,7 @@ export function useProductionWorkspace(managedIdentity: ManagedIdentity | null =
   const canWrite = managedIdentity
     ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error && visible.writeReady
     : visible.mode === 'local' && !visible.error && visible.writeReady
-  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite] as const
+  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, retryManagedLoad] as const
 }
 
 export function useApprovalWorkspace() {
@@ -1163,6 +1189,13 @@ export function managedIdentitySettled(enabled: boolean, probed: boolean): boole
 // behind it, and no managed identity came back.
 export function localShopConfirmed(runtimeStatus: string, settled: boolean, managedIdentity: unknown): boolean {
   return runtimeStatus !== 'checking' && settled && !managedIdentity
+}
+
+// Product routes must not expose the browser-local workspace as an unauthenticated
+// fallback. Keep the account probe's unresolved frame separate from a confirmed sign-out.
+export function operationsEntryDecision(runtimeStatus: string, settled: boolean, managedIdentity: unknown): 'checking' | 'login' | 'workspace' {
+  if (runtimeStatus === 'checking' || (runtimeStatus === 'enterprise' && !settled)) return 'checking'
+  return managedIdentity ? 'workspace' : 'login'
 }
 
 // Third tuple element is `settled`: whether the identity question has actually been

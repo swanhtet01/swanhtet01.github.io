@@ -172,20 +172,13 @@ export const capabilities: readonly Capability[] = [
   },
   {
     id: 'device-reset',
-    label: 'Reset this device',
+    label: 'Workspace portability',
     tier: 'free',
-    outcome: 'Erase everything on this device, with a restore point taken first.',
-    reason: 'Leaving is always free.',
+    outcome: 'Back up, restore, or move your workspace without losing control of your records.',
+    reason: 'Your records remain portable and recoverable without a paid plan.',
   },
 
   // --- premium: work that needs our compute -------------------------------------------
-  {
-    id: 'ai-order-intake',
-    label: 'Read orders from messages',
-    tier: 'premium',
-    outcome: 'Paste a customer’s Messenger or Viber message and get a draft order, where every field is quoted from what they actually wrote.',
-    reason: 'A model reads the message on our servers, and that costs us money per message.',
-  },
   {
     id: 'ai-demand-advice',
     label: 'Reorder and demand advice',
@@ -292,9 +285,9 @@ export function shopPlanGuideForTemplate(templateId: ShopBusinessTemplateId): Sh
     templateId,
     coreFocus: shopTemplateFocus[templateId],
     core: coreIds.map(capability),
-    premium: ['ai-order-intake', 'cloud-backup', 'ai-demand-advice'].map((id) => ({
+    premium: ['cloud-backup', 'ai-demand-advice'].map((id) => ({
       ...capability(id),
-      availabilityLabel: id === 'ai-order-intake' ? 'Availability confirmed during setup' : 'Planned',
+      availabilityLabel: 'Planned',
     })),
     managed: ['shared-workspace', 'staff-roles', 'verified-statements'].map((id) => ({
       ...capability(id), availabilityLabel: 'Availability confirmed during setup',

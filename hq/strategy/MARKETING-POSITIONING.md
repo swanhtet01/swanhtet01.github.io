@@ -85,13 +85,12 @@ they are the argument:
 Three things sit above free, and the reason in each case is a real cost to us,
 not a lever on the owner:
 
-- **Reading orders out of messages** (`ai-order-intake`) — a model reads the
-  message on our servers and that costs money per message. The *manual* version
-  of the same screen is free and works with no account: paste a message, map
-  each field, and every mapped field is held to an exact quote from what the
-  customer actually wrote (`core/channel-order-intake.ts`,
-  `core/ChannelOrderIntake.tsx:216-221` — with no managed identity the panel
-  offers "Map manually" rather than hiding).
+- **Connected channel order capture** (`ai-order-intake`) — not currently
+  available or priced. The manual message-paste UI was retired on 2026-10-07.
+  Structured Website and Ecommerce requests do arrive in Shop automatically;
+  Facebook, Messenger, Telegram, TikTok and Viber ingestion is not a live
+  capability. Do not market channel coverage or an AI message reader until a
+  provider connector has passed authenticated, idempotent end-to-end acceptance.
 - **Automatic off-device backup** (`cloud-backup`) — we hold the storage.
   Manual encrypted backup (AES-GCM-256 with a PBKDF2-SHA-256 key from the
   owner's passphrase, `core/company-backup.ts:345-398`) stays free forever.

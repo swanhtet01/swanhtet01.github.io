@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,7 +12,12 @@ import { activeProductContracts } from '../showroom/src/core/product-visibility.
 
 const run = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const outputDir = resolve(root, '.vercel', 'output')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve(root, '.tmp', `supermega-public-output-${isolatedOutputId}`)
+  : resolve(root, '.vercel', 'output')
+if (isolatedOutputId && existsSync(outputDir)) throw new Error('public_isolated_output_already_exists')
 const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 'utf8'))
@@ -108,6 +114,7 @@ if (previewAppBinding) release.previewNavigation = previewAppBinding
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SuperMega terminal mark" shape-rendering="geometricPrecision"><rect width="64" height="64" rx="8" fill="${brand.colors.background}"/><rect x="1" y="1" width="62" height="62" rx="7" fill="none" stroke="${brand.colors.ink}" stroke-opacity=".16"/><path d="M13 18 27 32 13 46" fill="none" stroke="${brand.colors.accent}" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/><path d="M34 46h17" fill="none" stroke="${brand.colors.ink}" stroke-width="4.5" stroke-linecap="square"/></svg>\n`
 
 const sharedStyle = `
+  @font-face { font-family: "SuperMega Noto Sans"; src: url("/fonts/noto-sans-latin.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
   :root {
     color-scheme: light;
     --bg: #ffffff;
@@ -127,10 +134,11 @@ const sharedStyle = `
     --blue-soft: rgba(91,78,232, .1);
     --shadow: 0 22px 65px rgba(28,26,48, .1);
     --radius: 16px;
+    --font-latin: "SuperMega Noto Sans", "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
   }
   * { box-sizing: border-box; }
   html { min-width: 320px; scroll-behavior: smooth; background: var(--bg); }
-  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Myanmar Text", "Noto Sans Myanmar", sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
+  body { min-width: 320px; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--ink); font-family: var(--font-latin), sans-serif; line-height: 1.55; text-rendering: optimizeLegibility; }
   body::before { display: none; content: ""; }
   body::after { display: none; content: ""; }
   a { color: inherit; }
@@ -236,22 +244,24 @@ const sharedStyle = `
   .principle-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .principle-card { min-height: 235px; padding: 24px; }
   .principle-card p { color: var(--muted); }
-  .contact-layout { display: grid; grid-template-columns: minmax(0,.78fr) minmax(430px,1.22fr); gap: 76px; align-items: start; padding-bottom: 110px; }
+  .contact-layout { display: block; padding-bottom: 110px; }
   .contact-copy { padding-top: 24px; }
   .contact-copy p { color: var(--muted); font-size: 18px; }
   .contact-page .page-hero { padding: 36px 0 24px; }
   .contact-page .page-hero .lede { font-size: 18px; }
-  .contact-page { max-width: 680px; }
-  .contact-page .contact-layout { display: flex; flex-direction: column; gap: 20px; }
-  .contact-page .contact-form { padding: 24px; }
+  .contact-page { max-width: 760px; }
+  .contact-page .contact-layout { display: block; }
+  .contact-page .contact-form { width:100%; padding: 30px; gap: 22px; border-color: #e1dfed; border-radius: 22px; box-shadow: 0 24px 70px rgba(28,26,48,.07); }
+  .contact-page .field-grid { gap: 22px 16px; }
+  .contact-page .field-grid label { gap: 9px; color: var(--ink); font-size: 13px; font-weight: 650; }
+  .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { min-height: 52px; border-color: #dedce9; border-radius: 12px; background: #fff; font-size: 15px; }
+  .contact-page .field-grid textarea { min-height: 136px; line-height: 1.55; }
+  .contact-page .contact-form .button { min-height: 52px; justify-self: start; padding-inline: 26px; }
   .contact-page .contact-copy summary { cursor: pointer; min-height: 44px; align-content: center; color: var(--muted); }
   .contact-page .contact-copy[open] { padding-bottom: 20px; }
   .contact-page .contact-form h3 { display: none; }
   .contact-page .page-hero h1 { font-size: clamp(32px, 5vw, 48px); }
   .contact-page .form-note { font-size: 12px; line-height: 1.5; }
-  .contact-page .contact-copy { padding-top: 0; }
-  .contact-page .contact-copy h2 { font-size: 24px; }
-  .contact-page .contact-copy p { font-size: 16px; }
   .trial-proof-summary { margin-top: 34px; padding: 24px 0; border-block: 1px solid var(--line); }
   .trial-proof-summary[hidden] { display: none; }
   .trial-proof-summary h3 { margin-top: 8px; }
@@ -268,7 +278,6 @@ const sharedStyle = `
   label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
   label.wide { grid-column: 1/-1; }
   .contact-service { grid-column: 1/-1; }
-  .contact-service summary { min-height: 44px; align-content: center; cursor: pointer; font-size: 13px; color: var(--muted); }
   input, select, textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 11px; padding: 13px 14px; background: #fff; color: var(--ink); outline: none; }
   input:focus, select:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(91,78,232,.1); }
   textarea { min-height: 150px; resize: vertical; }
@@ -413,17 +422,57 @@ const sharedStyle = `
   .editorial-hero {padding:100px 0 64px;max-width:940px}
   .editorial-hero h1 {font-size:clamp(48px,7.5vw,100px);line-height:1.02;letter-spacing:-.065em;margin:20px 0 28px;font-weight:650}
   .editorial-hero .lede {max-width:610px;font-size:21px;line-height:1.6;color:var(--muted)}
+  .platform-gallery {display:grid;gap:12px;min-width:0}
+  .platform-slides {display:flex;align-items:stretch;min-width:0;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:24px}
+  .platform-slides::-webkit-scrollbar {display:none}
+  .platform-slides .platform-image {display:flex;flex:0 0 100%;flex-direction:column;box-sizing:border-box;scroll-snap-align:start}
+  .platform-gallery[data-single] .platform-slides {overflow:hidden}
+  .platform-gallery-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:40px}
+  .platform-gallery-controls button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line-strong);border-radius:50%;color:var(--ink);background:#fff;font-size:20px;cursor:pointer}
+  .platform-gallery-controls button:hover:not(:disabled) {border-color:var(--blue);color:var(--blue);background:#f7f6ff}
+  .platform-gallery-controls button:focus-visible {outline:2px solid var(--blue);outline-offset:3px}
+  .platform-gallery-controls button:disabled {opacity:.4;cursor:default}
+  .platform-gallery-status {min-width:48px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;text-align:center}
   .platform-image {margin:0;padding:24px;background:#f1f0fb;border:1px solid #dedbf4;border-radius:24px;overflow:hidden}
-  .platform-image img {width:100%;height:auto;display:block;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08)}
-  .platform-image figcaption {padding:16px 0 0;color:#615f73;font-size:12px}
+  .platform-image img {display:block;width:100%;height:auto;max-width:1440px;margin-inline:auto;border-radius:12px;box-shadow:0 16px 48px rgba(28,26,48,.08);background:#fff}
+  .platform-image figcaption {margin-top:auto;padding:16px 0 0;color:#615f73;font-size:12px}
+  .product-proof {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel-solid);overflow:hidden;list-style:none;padding:0}
+  .product-proof li {min-width:0;padding:18px 20px}
+  .product-proof li+li {border-left:1px solid var(--line)}
+  .product-proof span {display:block;margin-bottom:8px;color:var(--blue-strong);font-family:"SFMono-Regular",Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .product-proof strong {display:block;font-size:15px;line-height:1.4}
   .product-story {padding:80px 0;border-top:1px solid var(--line)}
   .story-heading {display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:end;margin-bottom:32px}
   .story-heading h2 {font-size:clamp(32px,4vw,52px);letter-spacing:-.045em;line-height:1.12;margin:12px 0 0}
   .story-heading p {font-size:18px;line-height:1.65;color:var(--muted);margin:0;max-width:500px}
   .feature-line {display:flex;flex-wrap:wrap;gap:12px 30px;list-style:none;padding:24px 0 0;margin:0;font-size:14px;color:#49465f}
+  .feature-line > li {flex:1 1 240px;min-width:0;padding:12px 0}
+  .feature-line h2, .feature-line h3 {margin:0 0 10px;font-size:18px;letter-spacing:-.025em;color:var(--ink)}
+  .feature-line p {margin:0;max-width:34ch;font-size:15px;line-height:1.7;color:var(--muted)}
+  .story-link {display:inline-flex;align-items:center;gap:7px;color:var(--blue);text-decoration:none}
+  .story-link:hover, .story-link:focus-visible {text-decoration:underline;text-underline-offset:4px}
+  .story-link span {font-size:14px;transition:transform .18s ease}
+  .story-link:hover span, .story-link:focus-visible span {transform:translateX(3px)}
+  .platform-image img[width="940"] {max-width:940px}
   .platform-note {padding:36px 0 80px;max-width:700px;font-size:24px;line-height:1.5;letter-spacing:-.025em}
+  .product-cards {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:0 0 76px}
+  .product-card-compact {min-width:0;display:flex;flex-direction:column;padding:14px;border:1px solid var(--line-strong);border-radius:24px;background:var(--panel-solid);box-shadow:0 18px 60px rgba(28,26,48,.06)}
+  .product-card-compact .platform-image {padding:10px;border-radius:14px}
+  .product-card-compact .platform-image figcaption {padding:10px 4px 2px}
+  .product-card-copy {display:flex;flex:1;flex-direction:column;padding:24px 10px 10px}
+  .product-card-copy h2 {margin:12px 0 12px;font-size:clamp(26px,2.6vw,38px);line-height:1.08;letter-spacing:-.045em}
+  .product-card-copy > p {margin:0;color:var(--muted);font-size:16px;line-height:1.6}
+  .product-card-flow {display:flex;flex-wrap:wrap;gap:7px;margin:22px 0 24px;padding:0;list-style:none}
+  .product-card-flow li {padding:7px 10px;border:1px solid var(--line);border-radius:999px;color:#49465f;font-size:12px;line-height:1.2}
+  .product-card-copy .story-link {margin-top:auto;padding-top:4px;font-size:14px;font-weight:700}
+  .home-contact {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:28px;margin:0 0 80px;padding:34px 36px;border:1px solid #d9d5fb;border-radius:24px;background:linear-gradient(135deg,#f6f5ff,#eeecff)}
+  .home-contact h2 {margin:0 0 8px;font-size:clamp(28px,3vw,42px);line-height:1.1;letter-spacing:-.04em}
+  .home-contact p {max-width:650px;margin:0;color:var(--muted);font-size:16px;line-height:1.6}
   .site-header {background:#fff}
-  @media(max-width:760px){.editorial-hero{padding:64px 0 40px}.editorial-hero .lede{font-size:18px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.feature-line{gap:12px 20px}}
+  .header-actions{display:flex;align-items:center;gap:8px}
+  @media(max-width:980px){.product-cards{grid-template-columns:1fr}.product-card-compact{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(0,1.1fr);align-items:stretch}.product-card-copy{padding:20px 18px}.product-card-compact .platform-image{display:flex;flex-direction:column;justify-content:center}}
+  @media(max-width:760px){.editorial-hero{padding:56px 0 38px}.editorial-hero h1{font-size:clamp(44px,15vw,66px)}.editorial-hero .lede{font-size:18px}.story-heading{grid-template-columns:1fr;gap:18px}.product-story{padding:48px 0}.platform-gallery{grid-template-columns:1fr;gap:12px}.platform-image{padding:10px;border-radius:14px}.platform-image img{border-radius:8px}.product-proof{grid-template-columns:1fr}.product-proof li+li{border-top:1px solid var(--line);border-left:0}.feature-line{gap:12px 20px}.product-cards{gap:14px;padding-bottom:48px}.product-card-compact{display:flex}.product-card-copy{padding:20px 8px 10px}.product-card-copy h2{font-size:30px}.home-contact{grid-template-columns:1fr;margin-bottom:52px;padding:26px 24px}.home-contact .button{width:100%}}
+  @media(max-width:760px){.contact-page .contact-form{padding:20px}}
 
 `
 
@@ -431,8 +480,8 @@ function brandHtml() {
   return `<a class="brand" href="/" aria-label="SuperMega home"><span class="brand-mark" aria-hidden="true">&gt;_</span><span class="brand-name">SUPERMEGA</span></a>`
 }
 
-function headerHtml() {
-  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></header>`
+function headerHtml(route) {
+  return `<header class="site-header"><div class="frame header-inner">${brandHtml()}<div class="header-actions"><a class="nav-link" href="/contact/">Contact</a><a class="button compact header-cta" href="https://app.supermega.dev/login">Login</a></div></div></header>`
 }
 
 function footerHtml(route) {
@@ -528,24 +577,72 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Sales and stock, in sync.', body:'Record sales, track orders and keep stock up to date.', image:'platform-stock.jpg', alt:'Stock screen with product availability, prices and reorder levels', features:['Sales counter','Stock and purchasing','Order tracking']},
- website: {title:'A website that works for you.', body:'Manage your pages, services and inquiries without rebuilding your website.', image:'platform-pages.jpg', alt:'Page editor with page paths and content checks', features:['Page editing','Search metadata','Inquiry inbox']},
- ecommerce: {title:'Turn your catalog into orders.', body:'Browse products and send an order. Your team confirms each order and payment. Arrange delivery with your customer. Manage stock in Shop.', image:'platform-catalog.jpg', alt:'Catalog with product cards, prices and cart controls', features:['Product catalog','Cart and requests','Order follow-through']},
+ shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['actual-shop-today.png','Shop operating view showing fulfilment priorities, stock alerts and money awaiting collection','Today and priorities'],['actual-shop-sell.png','Shop counter showing product search, a live sale and local payment choices','Counter and payment'],['actual-shop-orders.png','Shop order queue showing payment handoff, the next action and queue health','Orders and fulfilment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
+ website: {title:'Publish clearly. Capture every inquiry.', body:'Manage pages, readiness checks and customer inquiries without assembling a separate toolchain.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and publish'],['Result','Qualified inquiries in one inbox']]},
+ ecommerce: {title:'Take the order through delivery.', body:'Connect the catalog, customer request, payment review and fulfilment follow-through. Your team confirms each order and payment. Arrange delivery with your customer.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Customer request and Shop review',1280,900]], proof:[['Record','Catalog, customer and order'],['Action','Confirm, pack and dispatch'],['Result','One traceable fulfilment flow']]},
+}
+const productOutcomes = {
+ shop: [
+  ['Serve the next customer', 'Find products, build a sale and record payment from the counter. Keep the order available for receipts and follow-up.'],
+  ['Know what needs restocking', 'Review stock levels, purchasing and demand together. Move from a shortage to the items that need attention.'],
+  ['Close with clear records', 'Follow open orders, review payment exceptions and prepare a daily close with accounting exports.'],
+ ],
+ website: [
+  ['Start with your business', 'Bring your services, contact details and business information into one place. Build your pages around what customers need to know.'],
+  ['Keep every page current', 'Edit page content and search metadata. Check missing information before preparing the site for publication.'],
+  ['Turn interest into follow-up', 'Keep customer inquiries in an inbox so your team can review the request and decide the next step.'],
+ ],
+ ecommerce: [
+  ['Sell from one catalog', 'Use your Shop products and prices to build a storefront. Customers choose items and review their cart.'],
+  ['Bring online requests into Shop', 'Open the exact customer request for stock, payment and fulfilment review. Confirmed orders continue through Shop.'],
+  ['Handle the next exception', 'See which request needs attention first. Review payment issues, expiring quotes and refunds from the same workflow.'],
+ ],
+}
+const interfaceCaptureDates = {
+ 'actual-shop-today.png': '2 Oct 2026',
+ 'actual-shop-sell.png': '2 Oct 2026',
+ 'actual-shop-orders.png': '2 Oct 2026',
+ 'actual-shop-stock.png': '2 Oct 2026',
+ 'actual-sites-editor.png': '4 Oct 2026',
+ 'actual-sites-inquiries.png': '4 Oct 2026',
+ 'actual-sites-pages.png': '2 Oct 2026',
+ 'actual-sites-setup.png': '2 Oct 2026',
+ 'actual-commerce-catalog.png': '2 Oct 2026',
+ 'actual-commerce-order-request.png': '4 Oct 2026',
+}
+function interfaceDisclosure(image) {
+ const capturedAt=interfaceCaptureDates[image]
+ assert(typeof capturedAt === 'string', `interface_capture_date_missing:${image}`)
+ return `App capture · synthetic example records · captured ${capturedAt}`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
- return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><span class="eyebrow">${label}</span><h2>${item.title}</h2></div><p>${item.body}</p></div>`}<figure class="platform-image"><img src="/images/${item.image}" alt="${item.alt}" width="${id === 'ecommerce' ? 940 : 960}" height="${id === 'website' ? 430 : id === 'ecommerce' ? 370 : 350}" loading="lazy" /><figcaption>${label} interface &middot; illustrative records</figcaption></figure><ul class="feature-line">${item.features.map(f=>`<li>${f}</li>`).join('')}</ul></section>`
+ const route=manifest.pages.find(page=>page.productId===id)?.route
+ assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
+ const gallery=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
+ const galleryHtml=item.screens.length === 1
+  ? `<div class="platform-gallery" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${gallery}</div></div>`
+  : `<div class="platform-gallery" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${gallery}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
+  return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}${galleryHtml}<ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
+}
+function productCard(id) {
+ const item=stories[id], label=publicProducts.find(product=>product.id===id).name
+ const route=manifest.pages.find(page=>page.productId===id)?.route
+ assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
+ const [image,alt,caption,width=1440,height=900]=item.screens[0]
+ return `<article class="product-card-compact" id="${id}"><figure class="platform-image"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="lazy" /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure><div class="product-card-copy"><span class="eyebrow">${label}</span><h2>${item.title}</h2><p>${item.body}</p><ul class="product-card-flow" aria-label="${label} includes">${item.proof.map(([,value])=>`<li>${escapeHtml(value)}</li>`).join('')}</ul><a class="story-link" href="${escapeHtml(route)}">Explore ${label}<span aria-hidden="true">&rarr;</span></a></div></article>`
 }
 const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePage.description,
  schema:{'@type':'Organization',name:'SuperMega',url:canonical('/'),description:homePage.description},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Your business.<br>Working together.</h1><p class="lede">Manage sales and stock. Publish your website. Take orders online.</p></section><div id="products">${['shop','website','ecommerce'].map(id => productStory(id)).join('')}</div><p class="platform-note">Shop. Sites. Commerce. One SuperMega account.</p></main>`,
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Run in-store sales, your website and online orders from one clear platform.</p></section><div class="product-cards" id="products">${['shop','website','ecommerce'].map(id => productCard(id)).join('')}</div><section class="home-contact" aria-labelledby="home-contact-title"><div><h2 id="home-contact-title">Not sure where to start?</h2><p>Tell us how your business works today. We’ll help you choose the right product.</p></div><a class="button" href="/contact/">Contact SuperMega</a></section></main>`,
 })
 
 function productLandingHtml(product,page) {
  const description=page.description||product.description
+ const storyBody=escapeHtml(stories[product.id].body)
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
  schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${stories[product.id].body}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>`})
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>${stories[product.id].screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`})
 }
 
 const contactScript = `<script>(function(){
@@ -584,29 +681,20 @@ const contactScript = `<script>(function(){
   function updateBriefHint(){
     if(!goal)return;
     var hints={
-      website:'What does your business offer, who should the site reach, and what should visitors do? Existing text or photos are optional. Do not paste passwords or customer records.',
-      ecommerce:'What do you sell, roughly how many products, and how should you receive customer requests? Mention delivery or collection needs. Do not paste payment slips or customer records.',
-      shop:'What type of shop do you run, which devices do staff use, and what is the main daily task to improve? Do not paste customer records or payment details.',
-      guide:'Tell us your business type and the main result you need. We can help choose the right service. Do not paste passwords, payment details or customer records.'
+      website:'Tell us about your business and what you want visitors to do.',
+      ecommerce:'What do you sell, and how should customers place orders?',
+      shop:'What do you sell, and what should run more smoothly each day?',
+      guide:'Tell us what your business does and what you need help with.'
     };
     goal.placeholder=hints[product&&product.value]||hints.guide;
   }
-  var serviceChoice=form.querySelector('[data-contact-service]'),serviceSummary=form.querySelector('[data-contact-service-summary]');
-  function updateServiceSummary(){var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];if(serviceSummary)serviceSummary.textContent=serviceName||'Choose a service';if(heading&&handoff.toString())heading.textContent='Finish your '+(serviceName||'contact')+' request.';}
-  updateServiceSummary();
-  if(serviceChoice&&['website','ecommerce'].includes(requestedProduct)&&query.get('source')===requestedProduct+'-brief'&&company&&company.value.trim()&&goal&&goal.value.trim())serviceChoice.open=false;
-  var briefChoice=form.querySelector('[data-contact-brief]'),briefSummary=form.querySelector('[data-contact-brief-summary]');
-  function updateBriefSummary(){if(briefSummary)briefSummary.textContent=company&&company.value.trim()?'Review brief — '+company.value.trim().slice(0,80):'Business brief';}
-  updateBriefSummary();
-  if(briefChoice&&['website','ecommerce','shop'].includes(requestedProduct)&&company&&company.value.trim()&&goal&&goal.value.trim())briefChoice.open=false;
-  if(company)company.addEventListener('input',updateBriefSummary);
-  form.addEventListener('invalid',function(event){if(briefChoice&&(event.target===company||event.target===goal))briefChoice.open=true;},true);
-  form.addEventListener('reset',function(){if(briefChoice)briefChoice.open=true;if(briefSummary)briefSummary.textContent='Business brief';});
-  updateBriefHint();
-  if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateBriefHint();updateServiceSummary();if(briefChoice)briefChoice.open=true});
+   function updateServiceSummary(){var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];if(heading&&handoff.toString())heading.textContent='Finish your '+(serviceName||'contact')+' request.';}
+   updateServiceSummary();
+   updateBriefHint();
+   if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateBriefHint();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
-    var productName=product&&product.selectedOptions.length?product.selectedOptions[0].textContent:'managed AI';
+    var productName=product&&({guide:'contact',shop:'Shop',website:'Sites',ecommerce:'Commerce'})[product.value]||'contact';
     if(heading)heading.textContent='Finish your '+productName+' request.';
     if(lede)lede.textContent='Add your contact details, review your brief, and send.';
     if(copyHeading)copyHeading.textContent=proof?'Your request summary is attached.':'Your brief is ready to review.';
@@ -627,7 +715,7 @@ const contactScript = `<script>(function(){
       var controller=new AbortController();
       var pending=fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:payload,signal:controller.signal}).then(async function(response){return {response:response,body:await response.json().catch(function(){return null})}});
       var result=await Promise.race([pending,new Promise(function(resolve,reject){deadline=setTimeout(function(){reject(new Error('receipt_unconfirmed'));controller.abort()},20000)})]);
-var response=result.response,body=result.body;if(!response.ok){if(response.status===400&&body&&body.status==='error'&&['invalid_request','required_fields_missing','product_not_supported','trial_proof_invalid','idempotency_key_required'].includes(body.reason)){unconfirmedPayload=null;submittedFields=null;requestKey.value='';status.textContent=body.reason==='trial_proof_invalid'?'The attached request summary is invalid. Your brief is still here. Reopen the request from SuperMega without the invalid summary.':'This brief was rejected before delivery. Your details are still here. Check the required fields and product, then submit your corrected brief.';return;}throw new Error(body&&body.reason||'send_failed');}if(!body||body.status!=='ready'||typeof body.request_id!=='string'||!/^LEAD-[0-9A-F]{16}$/.test(body.request_id)||typeof body.proof_bound!=='boolean')throw new Error('receipt_unconfirmed');var edited=JSON.stringify(Object.fromEntries(new FormData(form).entries()))!==submittedFields;if(!edited){form.reset();proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;updateBriefHint();updateServiceSummary();if(serviceChoice)serviceChoice.open=true;if(heading)heading.textContent='Request received.';if(lede)lede.textContent='Reference: '+body.request_id+'. Keep this for follow-up.';if(copyHeading)copyHeading.textContent='What to include';if(copy)copy.textContent='Include your products or services, location and contact details.';submit.textContent='Send another request';}requestKey.value='';unconfirmedPayload=null;submittedFields=null;status.textContent='Request received: '+body.request_id+'. Keep this reference. Next: review of scope, price and timing.'+(edited?' Your later edits are still here and have not been sent. Submit them separately if needed.':'');
+var response=result.response,body=result.body;if(!response.ok){if(response.status===400&&body&&body.status==='error'&&['invalid_request','required_fields_missing','product_not_supported','trial_proof_invalid','idempotency_key_required'].includes(body.reason)){unconfirmedPayload=null;submittedFields=null;requestKey.value='';status.textContent=body.reason==='trial_proof_invalid'?'The attached request summary is invalid. Your brief is still here. Reopen the request from SuperMega without the invalid summary.':'This brief was rejected before delivery. Your details are still here. Check the required fields and product, then submit your corrected brief.';return;}throw new Error(body&&body.reason||'send_failed');}if(!body||body.status!=='ready'||typeof body.request_id!=='string'||!/^LEAD-[0-9A-F]{16}$/.test(body.request_id)||typeof body.proof_bound!=='boolean')throw new Error('receipt_unconfirmed');var edited=JSON.stringify(Object.fromEntries(new FormData(form).entries()))!==submittedFields;if(!edited){form.reset();proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;updateBriefHint();updateServiceSummary();if(heading)heading.textContent='Request received.';if(lede)lede.textContent='Reference: '+body.request_id+'. Keep this for follow-up.';if(copyHeading)copyHeading.textContent='What to include';if(copy)copy.textContent='Include your products or services, location and contact details.';submit.textContent='Send another request';}requestKey.value='';unconfirmedPayload=null;submittedFields=null;status.textContent='Request received: '+body.request_id+'. Keep this reference. Next: review of scope, price and timing.'+(edited?' Your later edits are still here and have not been sent. Submit them separately if needed.':'');
     }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached request summary changed or does not match this request. Open the request again from SuperMega.':'We could not confirm receipt. Your details are still here. Please try again; the same request reference will be reused.';if(unconfirmedPayload)status.textContent+=' Retry sends the original brief, not later edits. Later edits stay here until the original receipt is confirmed. Keep this page open and retry here; reloading or closing it loses this retry state.';}finally{clearTimeout(deadline);if(!unconfirmedPayload)window.removeEventListener('beforeunload',warnUnconfirmedNavigation);submit.disabled=false;}
   });
 })();</script>`
@@ -647,7 +735,7 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what your business needs.</h1><p class="lede" data-contact-lede>Products, partnerships or a question. We’re here.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Your business brief</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><details class="contact-service" data-contact-service open><summary data-contact-service-summary>Choose a service</summary><label>What do you need?<select name="product"><option value="guide">Help me choose</option>${publicProducts.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')}</select></label></details><input type="hidden" name="template" maxlength="120" /><details class="contact-service" data-contact-brief open><summary data-contact-brief-summary>Business brief</summary><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label class="wide">What would you like us to prepare?<textarea name="goal" required maxlength="4000" placeholder="For example: a website for my salon, a catalog for customer requests, or sales and stock for my retail counter."></textarea></label></details></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-note">We use your email to reply about this request.</p><p class="form-status" data-form-status aria-live="polite"></p></form><details class="contact-copy"><summary>Brief tips</summary><h2 data-contact-copy-heading>What to include</h2><p data-contact-copy>Include your products or services, location and contact details.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Attached request details</span><h3>Request summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></details></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what your business needs.</h1><p class="lede" data-contact-lede>A useful tool, a custom workflow, or a question. We’ll reply with a clear next step.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">How can we help?<textarea name="goal" required maxlength="4000" placeholder="Tell us what your business does and what you would like to improve."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-note">We’ll reply by email.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({
@@ -1274,9 +1362,19 @@ await mkdir(staticDir, { recursive: true })
 await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
-for (const image of ['platform-stock.jpg','platform-pages.jpg','platform-catalog.jpg']) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+for (const image of [...new Set(Object.values(stories).flatMap((story) => story.screens.map(([file]) => file)))]) await writeStatic(`images/${image}`, await readFile(resolve(root,'tools/public-assets',image)))
+await writeStatic('fonts/noto-sans-latin.woff2', await readFile(resolve(root,'tools/public-assets/noto-sans-latin.woff2')))
+await writeStatic('fonts/noto-sans-latin-OFL.txt', await readFile(resolve(root,'tools/public-assets/noto-sans-latin-OFL.txt')))
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('vercel-insights.js', publicObservabilityScript)
+await writeStatic('platform-carousel.js', `(function(){
+  document.querySelectorAll('[data-platform-carousel]').forEach(function(carousel){
+    var track=carousel.querySelector('.platform-slides'),slides=Array.from(track.querySelectorAll('.platform-image')),previous=carousel.querySelector('[data-gallery-previous]'),next=carousel.querySelector('[data-gallery-next]'),status=carousel.querySelector('[data-gallery-status]'),active=0,timer;
+    function update(){var left=track.getBoundingClientRect().left;active=slides.reduce(function(best,slide,index){return Math.abs(slide.getBoundingClientRect().left-left)<Math.abs(slides[best].getBoundingClientRect().left-left)?index:best},0);status.textContent=(active+1)+' of '+slides.length;previous.disabled=active===0;next.disabled=active===slides.length-1;}
+    function go(index){slides[Math.max(0,Math.min(index,slides.length-1))].scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'nearest',inline:'start'});}
+    previous.addEventListener('click',function(){go(active-1)});next.addEventListener('click',function(){go(active+1)});track.addEventListener('scroll',function(){clearTimeout(timer);timer=setTimeout(update,80)},{passive:true});track.addEventListener('keydown',function(event){if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();go(active+(event.key==='ArrowRight'?1:-1))}});window.addEventListener('resize',update);update();
+  });
+})();`)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
 for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)

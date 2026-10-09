@@ -1,5 +1,6 @@
 import type { CommerceItem, CommerceProductionMaterialUnit } from '../../core/commerce-workspace.ts'
 import type { ShopIndustryPackId } from '../../core/shop-service-scheduling.ts'
+import { createTemplateManifestRegistry, templateManifestKey, validateTemplateManifest, type TemplateManifest } from '../../core/template-manifest.ts'
 
 export const SHOP_BUSINESS_TEMPLATE_SCHEMA = 'supermega.shop.business_template.v1' as const
 
@@ -583,10 +584,39 @@ export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = shopBusine
   (template) => ({ ...template, catalog: [...template.catalog, ...rows(packServiceRows[template.industryPackId])] }),
 )
 
+function buildShopBusinessTemplateManifest(template: ShopBusinessTemplate): TemplateManifest {
+  const manifest = validateTemplateManifest({
+    schema: 'supermega.template-manifest.v1',
+    id: `shop-${template.id}`,
+    version: 'v1',
+    capabilities: ['shop.counter', 'shop.inventory', 'website.presence', 'website.inquiries', 'commerce.storefront', 'commerce.fulfilment'],
+    slots: { identity: true, catalog: true, services: true, content: true, fulfilment: true },
+  })
+  if (!templateManifestKey(manifest).startsWith(`shop-${template.id}@`)) throw new Error(`${template.id} has an invalid manifest key.`)
+  return manifest
+}
+
+/** Portable cross-product manifests for every shipped Shop reference pack. */
+export const shopBusinessTemplateManifests = createTemplateManifestRegistry(
+  shopBusinessTemplates.map(buildShopBusinessTemplateManifest),
+)
+
 export function shopBusinessTemplate(id: ShopBusinessTemplateId) {
   const template = shopBusinessTemplates.find((candidate) => candidate.id === id)
   if (!template) throw new Error('Choose a supported Shop business template.')
   return template
+}
+
+/**
+ * A portable capability declaration for this reference pack. It deliberately contains no catalog,
+ * copy, customer data or executable behavior: the product-specific data stays in its own bounded
+ * model while every connected surface can make the same safe capability decision.
+ */
+export function shopBusinessTemplateManifest(id: ShopBusinessTemplateId): TemplateManifest {
+  const template = shopBusinessTemplate(id)
+  const manifest = shopBusinessTemplateManifests.find(`shop-${template.id}`, 'v1')
+  if (!manifest) throw new Error(`${template.id} has no registered manifest.`)
+  return manifest
 }
 
 export function shopBusinessTemplateFromQuery(value: string | null): ShopBusinessTemplateId | null {
@@ -657,6 +687,7 @@ export function validateShopBusinessTemplates() {
     templateIds.add(template.id)
     if (!/^[a-z][a-z0-9-]{1,39}$/.test(template.id)) throw new Error(`${template.id} is not a canonical template id.`)
     if (!template.name.en.trim() || !template.name.my.trim()) throw new Error(`${template.id} needs both English and Myanmar display names.`)
+    shopBusinessTemplateManifest(template.id)
     if (template.catalog.length < 12 || template.catalog.length > 20) throw new Error(`${template.id} must carry 12 to 20 starter items.`)
     const skus = new Set<string>()
     for (const item of template.catalog) {

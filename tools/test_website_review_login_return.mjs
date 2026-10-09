@@ -38,7 +38,7 @@ test('login retains existing membership/bootstrap checks before navigation', () 
   assert.ok(!review.includes('target="_blank"'))
 })
 
-test('rendered review login offers no sample, trial activation or self-registration detour', () => {
+test('rendered login offers no local workspace, sample, trial activation or self-registration detour', () => {
   const require = createRequire(new URL('../showroom/package.json', import.meta.url))
   const ts = require('typescript')
   const source = readFileSync(new URL('../showroom/src/core/ManagedLoginPage.tsx', import.meta.url), 'utf8')
@@ -70,11 +70,8 @@ test('rendered review login offers no sample, trial activation or self-registrat
     } else {
       assert.match(content, ready ? /Create an account/ : /Contact support/)
       if (!ready) {
-        if (hostname === 'localhost') assert.match(content, /Saved work on this device/)
-        else {
-          assert.doesNotMatch(content, /Saved work on this device/)
-          assert.equal(nodes.some(node => node.type === 'a' && /choose=1/.test(node.props.to ?? '')), false)
-        }
+        assert.doesNotMatch(content, /Saved work on this device/)
+        assert.equal(nodes.some(node => node.type === 'a' && /choose=1/.test(node.props.to ?? '')), false)
         assert.doesNotMatch(content, /Try a sample/)
       }
     }

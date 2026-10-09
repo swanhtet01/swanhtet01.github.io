@@ -1,22 +1,35 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 
-const html = readFileSync('.vercel/output/static/contact/index.html', 'utf8')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve('.tmp', `supermega-public-output-${isolatedOutputId}`, 'static')
+  : resolve('.vercel/output/static')
+const html = readFileSync(resolve(outputDir, 'contact/index.html'), 'utf8')
+const page = html.match(/<main\b[\s\S]*?<\/main>/)?.[0] ?? ''
+const formHtml = page.match(/<form class="contact-form"[\s\S]*?<\/form>/)?.[0] ?? ''
 const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .map(match => match[1]).find(value => value.includes('[data-contact-form]'))
 assert.ok(script, 'actual generated contact script exists')
 
-test('service brief asks for a business result without requiring template knowledge', () => {
-  assert.match(html, /Tell us what your business needs\./)
-  assert.match(html, /What to include/)
-  assert.match(html, /scope, price and timing/)
-  assert.match(html, /We use your email to reply about this request\./)
-  assert.match(html, /<input type="hidden" name="template" maxlength="120"/)
-  assert.doesNotMatch(html, /Template, if known|>Send workflow<|>Send the workflow</)
-  assert.match(html, />Send message<\/button>/)
-  assert.match(html, /name="goal" required maxlength="4000"/)
+test('contact form stays concise and does not make customers classify the request', () => {
+  assert.match(page, /Tell us what your business needs\./)
+  assert.match(page, /A useful tool, a custom workflow, or a question/)
+  assert.match(formHtml, /We’ll reply by email\./)
+  assert.match(formHtml, /<label>Email<input name="email"/)
+  assert.match(formHtml, /Company \(optional\)/)
+  assert.match(formHtml, /How can we help\?/)
+  assert.match(formHtml, /Tell us what your business does and what you would like to improve\./)
+  assert.match(formHtml, /<input type="hidden" name="product" value="guide"/)
+  assert.doesNotMatch(page, /<select name="product"|trial-proof-summary|Attached request details|What to include|Readiness|Behavior|Decisions|Reply email|What would you like us to prepare\?|Do not paste/)
+  assert.match(formHtml, /<input type="hidden" name="template" maxlength="120"/)
+  assert.doesNotMatch(page, /Template, if known|>Send workflow<|>Send the workflow</)
+  assert.match(formHtml, />Send message<\/button>/)
+  assert.match(formHtml, /name="goal" required maxlength="4000"/)
 })
 
 function harness(responses, search = '', hash = '') {
@@ -77,21 +90,17 @@ function harness(responses, search = '', hash = '') {
   return { invalid: field => events.get('form:invalid')({ target: form.querySelector('[name="' + field + '"]') }), reset: () => form.reset(), fields, headings, calls, timers, windowEvents, historyCalls, location, changeProduct: value => { form.querySelector('[name="product"]').value = value; events.get('[name="product"]:change')() }, expire: () => { for (const callback of [...timers.values()]) callback() }, submit: () => handler({ preventDefault() {} }), resets: () => resets }
 }
 
-test('complete assisted briefs collapse the editable service choice only', () => {
-  assert.match(html, /data-contact-service open/)
+test('product-specific links prefill a private route value without a visible product selector', () => {
+  assert.doesNotMatch(html, /<select name="product"/)
   for (const product of ['website', 'ecommerce']) {
     const state = harness([], `?product=${product}&source=${product}-brief`, '#company=Example&goal=Prepare%20our%20site')
-    assert.equal(state.fields.get('[data-contact-service]').open, false)
-    assert.equal(state.fields.get('[data-contact-service-summary]').textContent, { website: 'Sites', ecommerce: 'Commerce' }[product])
-    state.changeProduct('shop')
-    assert.equal(state.fields.get('[data-contact-service-summary]').textContent, 'Shop')
-    assert.equal(state.headings.get('[data-contact-heading]').textContent, 'Finish your Shop request.')
+    assert.equal(state.fields.get('[name="product"]').value, product)
+    assert.equal(state.fields.get('[name="product"]').value, product)
+    assert.equal(state.headings.get('[data-contact-heading]').textContent, `Finish your ${product === 'website' ? 'Sites' : 'Commerce'} request.`)
     assert.equal(state.fields.get('[name="goal"]').value, 'Prepare our site')
     assert.equal(state.calls.length, 0)
   }
-  for (const [search, hash] of [['', ''], ['?product=website', '#company=Example&goal=Prepare'], ['?product=website&source=website-brief', '#company=Example']]) {
-    assert.equal(harness([], search, hash).fields.get('[data-contact-service]').open, true)
-  }
+  assert.doesNotMatch(html, /<details/)
 })
 
 test('prefilled brief does not claim that customer setup is complete', () => {
@@ -121,12 +130,12 @@ test('product handoffs prefill hidden context and product changes discard stale 
 
 const receipt = { status: 'ready', request_id: 'LEAD-0123456789ABCDEF', proof_bound: false }
 test('product-specific brief guidance preserves drafts and never sends on selection', () => {
-  const expectations = { website: 'what should visitors do?', ecommerce: 'how should you receive customer requests?', shop: 'which devices do staff use', guide: 'help choose the right service' }
+  const expectations = { website: 'what you want visitors to do', ecommerce: 'how should customers place orders', shop: 'what should run more smoothly', guide: 'what you need help with' }
   for (const [product, hint] of Object.entries(expectations)) {
     const state = harness([], '?product=' + product)
     const goal = state.fields.get('[name="goal"]')
     assert.ok(goal.placeholder.includes(hint))
-    assert.match(goal.placeholder, /Do not paste/)
+    assert.doesNotMatch(goal.placeholder, /Do not paste/)
     goal.value = 'Keep my own brief exactly as written'
     state.changeProduct('website')
     assert.equal(goal.value, 'Keep my own brief exactly as written')
@@ -265,13 +274,11 @@ test('valid generated receipt confirms and clears the brief', async () => {
 
 test('confirmed reset refreshes guidance and clears attached-summary fields for the next brief', async () => {
   const state = harness([{ body: receipt }], '?product=ecommerce')
-  assert.match(state.fields.get('[name="goal"]').placeholder, /receive customer requests/)
+  assert.match(state.fields.get('[name="goal"]').placeholder, /place orders/)
   state.fields.set('[name="proof_digest"]', { value: 'synthetic-old-summary' })
   await state.submit()
   assert.equal(state.resets(), 1)
-  assert.equal(state.fields.get('[data-contact-service]').open, true)
-  assert.equal(state.fields.get('[data-contact-service-summary]').textContent, 'Choose a service')
-  assert.match(state.fields.get('[name="goal"]').placeholder, /help choose the right service/)
+  assert.match(state.fields.get('[name="goal"]').placeholder, /what you need help with/)
   assert.equal(state.fields.get('[name="proof_digest"]').value, '')
   assert.equal(state.calls.length, 1)
 })
@@ -437,20 +444,17 @@ test('a failed second request cannot retain the earlier success heading', async 
   assert.match(state.headings.get('[data-contact-lede]').textContent, /^Reference: LEAD-FEDCBA9876543210/)
 })
 
- test('complete three-product briefs stay editable and reveal invalid fields', () => {
-  assert.match(html, /data-contact-brief open/)
+test('product links preserve prefilled business details as editable fields', () => {
+  assert.match(formHtml, /<label class="wide">Company \(optional\)<input/)
   for (const product of ['shop', 'website', 'ecommerce']) {
     const state = harness([], `?product=${product}`, '#company=Example&goal=Prepare%20our%20business')
-    assert.equal(state.fields.get('[data-contact-brief]').open, false)
-    assert.equal(state.fields.get('[data-contact-brief-summary]').textContent, 'Review brief — Example')
-    state.invalid('goal')
-    assert.equal(state.fields.get('[data-contact-brief]').open, true)
+    assert.equal(state.fields.get('[name="company"]').value, 'Example')
+    assert.equal(state.fields.get('[name="goal"]').value, 'Prepare our business')
     state.reset()
-    assert.equal(state.fields.get('[data-contact-brief-summary]').textContent, 'Business brief')
     assert.equal(state.calls.length, 0)
   }
   const incomplete = harness([], '?product=website', '#company=Example')
-  assert.equal(incomplete.fields.get('[data-contact-brief]').open, true)
+  assert.equal(incomplete.fields.get('[name="company"]').value, 'Example')
 })
 
 
@@ -462,10 +466,10 @@ test('synthetic business briefs survive service corrections without repeat entry
   ]
   for (const brief of briefs) {
     const state = harness([{ body: receipt }], `?product=${brief.product}&template=original`, '#' + new URLSearchParams({ company: brief.company, goal: brief.goal }))
-    assert.equal(state.fields.get('[data-contact-brief]').open, false)
+    assert.equal(state.fields.get('[name="company"]').value, brief.company)
     const corrected = brief.product === 'shop' ? 'ecommerce' : 'shop'
     state.changeProduct(corrected)
-    assert.equal(state.fields.get('[data-contact-brief]').open, true, 'show the existing brief when its service changes')
+    assert.equal(state.fields.get('[name="product"]').value, corrected)
     assert.equal(state.fields.get('[name="company"]').value, brief.company)
     assert.equal(state.fields.get('[name="goal"]').value, brief.goal)
     assert.equal(state.fields.get('[name="template"]').value, '')

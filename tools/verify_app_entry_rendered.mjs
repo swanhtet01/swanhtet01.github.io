@@ -1,18 +1,38 @@
 #!/usr/bin/env node
+import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 import { createReadStream, existsSync, statSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
+import { dirname, extname, join, normalize, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { startBrowser } from './browser_startup.mjs'
-import { COMMERCE_KEY, createSeedCommerce, installCommerceWorkingSampleCatalog } from '../showroom/src/core/commerce-workspace.ts'
+import {
+  COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
+  COMMERCE_KEY,
+  commerceAccountRoles,
+  commerceCloseExpectation,
+  commerceOrderAdjustedTotal,
+  configureCommerceAccountMapping,
+  configureCommercePaymentPolicy,
+  createEmptyCommerce,
+  createSeedCommerce,
+  installCommerceWorkingSampleCatalog,
+  saveCommerceClose,
+  validateCommerceState,
+} from '../showroom/src/core/commerce-workspace.ts'
 import { shopBusinessTemplate, shopBusinessTemplateCommerceItems } from '../showroom/src/products/shop/business-templates.ts'
+import { ACTION_KEY } from '../showroom/src/core/product-setup.ts'
+import { buildStorefrontPreview } from '../showroom/src/products/ecommerce/storefront-model.ts'
+import { LOCAL_STOREFRONT_DRAFT_SCOPE, STOREFRONT_DRAFT_SCHEMA, storefrontDraftStorageKey, validateStorefrontDraft } from '../showroom/src/products/ecommerce/storefront-draft.ts'
+import { captureWebsiteLead, emptyWebsiteLeadLedger, WEBSITE_LEAD_LEDGER_KEY } from '../showroom/src/products/website/website-leads.ts'
+import { createInitialWorkspace, WEBSITE_STORAGE_KEY } from '../showroom/src/products/website/website-model.ts'
 import { assertLauncherProductLinks } from './validate_app_entry_rendered_report.mjs'
 import { RETIRED_PRODUCT_CASES, RETIRED_PRODUCT_PREVIEW_POLICY, RETIRED_STORAGE_KEYS, validateRetiredProductObservation } from './retired_product_preview_policy.mjs'
 import { pairedClickScript, validatePairedTransition, activateReadyPairedTransition } from './paired_preview_transition.mjs'
 import { installPreviewBrowserAccess, finishPreviewCase } from './preview_scoped_access.mjs'
+import { isStoreToShopReviewPath, storeToShopReviewPath } from './store_to_shop_route.mjs'
 
 import {
   APP_ENTRY_RENDERED_CONTRACT,
@@ -38,10 +58,20 @@ const outFile = argValue('--out')
 const screenshotDir = argValue('--screenshot-dir')
 const expectedHead = argValue('--expected-head')
 const shopOnly = args.includes('--shop-only')
+const shopAccountingOnly = args.includes('--shop-accounting-only')
+const shopOfflineOnly = args.includes('--shop-offline-only')
 const ecommerceClaimOnly = args.includes('--ecommerce-claim-only')
+const storeToShopOnly = args.includes('--store-to-shop-only')
+const sitesOnly = args.includes('--sites-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
 const verifierPath = fileURLToPath(import.meta.url)
-const proofScope = shopOnly ? 'shop-counter' : ecommerceClaimOnly ? 'ecommerce-claim' : 'full'
+const proofScope = shopOnly ? 'shop-counter'
+  : shopAccountingOnly ? 'shop-accounting-export'
+    : shopOfflineOnly ? 'shop-offline-restore'
+      : ecommerceClaimOnly ? 'ecommerce-claim'
+        : storeToShopOnly ? 'store-to-shop'
+          : sitesOnly ? 'sites-workspace'
+            : 'full'
 
 const mime = {
   '.css': 'text/css; charset=utf-8',
@@ -280,6 +310,127 @@ export function miniMartCounterFixture() {
   return { retained: { [COMMERCE_KEY]: JSON.stringify(state) } }
 }
 
+// Explicit private fixture representing products entered by an operator. Keep this
+// separate from the working-sample fixture so customer-request acceptance proves
+// the live-catalog path while the product continues to reject preview-only rows.
+export function miniMartOwnedCatalogFixture() {
+  const storeName = 'Mingalar Mini Mart'
+  const summary = 'Everyday essentials prepared for pickup or local delivery.'
+  const catalogState = validateCommerceState({
+    ...createEmptyCommerce(),
+    items: shopBusinessTemplateCommerceItems('mini-mart').map((item) => ({ ...item })),
+  })
+  const state = configureCommercePaymentPolicy(catalogState, {
+    adapter: 'pay_on_pickup',
+    allowedFulfilments: ['pickup'],
+    maximumOrderMmk: 1_000_000,
+    instructions: 'Collect at pickup and reconcile the receipt in Shop.',
+    status: 'active',
+    effectiveFrom: '2026-09-28T00:00:00.000Z',
+    effectiveUntil: null,
+  }, {
+    actionId: 'ACT-RENDERED-MINIMART-PAYMENT-001',
+    capturedAt: '2026-09-28T00:00:00.000Z',
+    actor: 'Mini Mart owner',
+    reason: 'Enable pay on pickup for the rendered Ecommerce acceptance journey.',
+    evidenceReference: 'RENDERED-MINIMART-PAYMENT-001',
+  })
+  if (!state) throw new Error('mini_mart_owned_payment_fixture_invalid')
+  const preview = buildStorefrontPreview(state.items, {
+    storeName,
+    summary,
+    selectedSkus: state.items.slice(0, 4).map((item) => item.sku),
+  })
+  const sourcePreviewDigest = `sha256:${createHash('sha256').update(JSON.stringify(preview)).digest('hex')}`
+  const draft = validateStorefrontDraft({
+    schema: STOREFRONT_DRAFT_SCHEMA,
+    scope: LOCAL_STOREFRONT_DRAFT_SCOPE,
+    revision: 1,
+    savedAt: '2026-09-28T00:00:00.000Z',
+    storeName,
+    summary,
+    selectedSkus: preview.items.map((item) => item.sku),
+    sourcePreviewDigest,
+  }, LOCAL_STOREFRONT_DRAFT_SCOPE)
+  return { retained: {
+    [COMMERCE_KEY]: JSON.stringify(state),
+    [storefrontDraftStorageKey(LOCAL_STOREFRONT_DRAFT_SCOPE)]: JSON.stringify(draft),
+  } }
+}
+
+// Explicit private fixture for the completed-close export journey. It uses the
+// same validated model transitions as the product and is installed only in an
+// isolated browser context; customer navigation never creates this close.
+export function shopCompletedCloseFixture() {
+  const mappingCapturedAt = '2026-07-23T07:59:00.000Z'
+  const closeCapturedAt = '2026-07-23T08:00:00.000Z'
+  const mapped = configureCommerceAccountMapping(createSeedCommerce(), {
+    mappings: commerceAccountRoles.map((accountRole, index) => ({
+      accountRole,
+      externalAccountCode: String(1000 + index * 100),
+    })),
+  }, {
+    actionId: 'ACT-RENDERED-ACCOUNTING-MAPPING-001',
+    capturedAt: mappingCapturedAt,
+    actor: 'Synthetic Shop owner',
+    reason: 'Exercise the completed-close accounting download in isolated rendered acceptance.',
+    evidenceReference: 'RENDERED-ACCOUNTING-MAPPING-001',
+  })
+  if (!mapped) throw new Error('shop_completed_close_mapping_fixture_invalid')
+  const expectation = commerceCloseExpectation(mapped, closeCapturedAt)
+  if (!expectation?.orderIds.length) throw new Error('shop_completed_close_expectation_fixture_invalid')
+  const expectedByPayment = new Map()
+  for (const orderId of expectation.orderIds) {
+    const order = mapped.orders.find((candidate) => candidate.id === orderId)
+    const adjustedTotal = order ? commerceOrderAdjustedTotal(order) : null
+    if (!order || adjustedTotal === null) throw new Error('shop_completed_close_order_fixture_invalid')
+    expectedByPayment.set(order.payment, (expectedByPayment.get(order.payment) ?? 0) + adjustedTotal)
+  }
+  const closed = saveCommerceClose(mapped, 'CLOSE-33333333-3333-4333-8333-333333333333', {
+    actionId: 'ACT-33333333-3333-4333-8333-333333333333',
+    capturedAt: closeCapturedAt,
+    actor: 'Synthetic Shop owner',
+    reason: 'Complete the isolated rendered accounting export acceptance close.',
+    evidenceReference: 'RENDERED-ACCOUNTING-CLOSE-001',
+  }, expectation, [...expectedByPayment.entries()].map(([paymentMethod, countedMmk]) => ({
+    paymentMethod,
+    countedMmk,
+    varianceOwner: '',
+    varianceReason: '',
+  })))
+  if (!closed) throw new Error('shop_completed_close_fixture_invalid')
+  return { retained: { [COMMERCE_KEY]: JSON.stringify(closed) } }
+}
+
+// Explicit private fixture representing a real saved owner workspace and one
+// consented synthetic inquiry. It deliberately has no working-sample marker:
+// the captured Pages and Inquiries screens are the product's normal saved state.
+export function sitesOwnerWorkspaceFixture() {
+  const capturedAt = '2026-09-28T00:00:00.000Z'
+  const initialWorkspace = createInitialWorkspace()
+  const workspace = {
+    ...initialWorkspace,
+    revision: 1,
+    contentRevision: 1,
+    pages: initialWorkspace.pages.map((page) => ({ ...page, updatedAt: capturedAt })),
+  }
+  const leadLedger = captureWebsiteLead(emptyWebsiteLeadLedger(), {
+    siteName: workspace.siteName,
+    sourcePage: '/contact',
+    name: 'Daw Mya',
+    contact: '09 420 555 019',
+    request: 'Needs a weekly grocery delivery quote for a small office, starting next Monday.',
+    consentRecorded: true,
+  }, {
+    id: 'LEAD-RENDERED-SITES-001',
+    now: capturedAt,
+  })
+  return { retained: {
+    [WEBSITE_STORAGE_KEY]: JSON.stringify(workspace),
+    [WEBSITE_LEAD_LEDGER_KEY]: JSON.stringify(leadLedger),
+  } }
+}
+
 export function seedScript(seed) {
   return `
 try {
@@ -324,6 +475,56 @@ function matchesExpectedPath(expectedPath, value) {
   return typeof expectedPath === 'function' ? expectedPath(value) : value === expectedPath
 }
 
+export function stableRenderedPathMismatch({ expectedPath, path, bodyLength, previousPath, consecutiveMismatchCount }) {
+  return Number(bodyLength) > 0
+    && String(path || '') === String(previousPath || '')
+    && Number(consecutiveMismatchCount) >= 5
+    && !matchesExpectedPath(expectedPath, String(path || ''))
+}
+
+const ACCOUNTABLE_CONFIRM_LABEL = /^Confirm change(?:\s*·\s*.+)?$/u
+
+export function isAccountableConfirmLabel(value) {
+  return ACCOUNTABLE_CONFIRM_LABEL.test(String(value || '').trim())
+}
+
+const RENDERED_FAILURE_KINDS = Object.freeze(['content', 'interaction', 'layout', 'network', 'render', 'route', 'runtime', 'viewport'])
+
+export function summarizeRenderedFailures(cases) {
+  return cases.filter((entry) => Array.isArray(entry?.failures) && entry.failures.length > 0).map((entry) => {
+    const kinds = new Set()
+    for (const raw of entry.failures) {
+      const failure = String(raw || '').toLowerCase()
+      if (/missing text|unexpected text/u.test(failure)) kinds.add('content')
+      else if (/path|origin|hash|location/u.test(failure)) kinds.add('route')
+      else if (/horizontal overflow|above fold|accessibility|touch-target/u.test(failure)) kinds.add('layout')
+      else if (/viewport/u.test(failure)) kinds.add('viewport')
+      else if (/network|external request|http error|browser writes/u.test(failure)) kinds.add('network')
+      else if (/console|exception|warning|runtime|log:/u.test(failure)) kinds.add('runtime')
+      else if (/not actionable|download|restore|contract failed|journey failed|review action|could not/u.test(failure)) kinds.add('interaction')
+      else kinds.add('render')
+    }
+    return {
+      name: String(entry.name || 'unnamed rendered case'),
+      failedCheckCount: entry.failures.length,
+      failureKinds: [...kinds].filter((kind) => RENDERED_FAILURE_KINDS.includes(kind)).sort(),
+    }
+  })
+}
+
+export function summarizeRenderedCase(testCase, entry) {
+  const summary = summarizeRenderedFailures([entry])[0]
+  const failures = Array.isArray(entry?.failures) ? entry.failures : []
+  return {
+    ...summary,
+    bodyPresent: Number(entry?.bodyLength || 0) > 0,
+    expectedPathMatched: matchesExpectedPath(testCase?.expectedPath, String(entry?.path || '')),
+    actualRouteClass: safeRouteClass(entry?.path),
+    missingExpectedTextCount: failures.filter((failure) => String(failure).startsWith('missing text:')).length,
+    unexpectedTextCount: failures.filter((failure) => String(failure).startsWith('unexpected text:')).length,
+  }
+}
+
 export function evaluateFinalRenderedLocation({ beforeCapture, afterCapture, expectedOrigin, expectedPath, expectedPathLabel }) {
   const before = beforeCapture || {}
   const after = afterCapture || {}
@@ -352,14 +553,40 @@ export function evaluateFinalRenderedLocation({ beforeCapture, afterCapture, exp
 async function waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs
   let latest = null
+  let previousMismatchedPath = ''
+  let stablePathMismatchCount = 0
   while (Date.now() < deadline) {
     latest = await readRenderedState(cdp, sessionId)
     const text = latest.text || ''
     const matchesPath = matchesExpectedPath(expectedPath, latest.path)
     if (matchesPath && latest.bodyLength > 0 && expectedText.every((needle) => text.includes(needle))) return latest
+    if (latest.bodyLength > 0 && !matchesPath) {
+      stablePathMismatchCount = latest.path === previousMismatchedPath ? stablePathMismatchCount + 1 : 1
+      previousMismatchedPath = latest.path
+      // A stable redirect is an actionable route failure. Stop waiting through
+      // the full feature timeout; verifyCase will report it and skip dependent
+      // interactions that cannot be meaningful on the wrong page.
+      if (stableRenderedPathMismatch({ expectedPath, path: latest.path, bodyLength: latest.bodyLength,
+        previousPath: previousMismatchedPath, consecutiveMismatchCount: stablePathMismatchCount })) return latest
+    } else {
+      previousMismatchedPath = ''
+      stablePathMismatchCount = 0
+    }
     await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   }
   return latest
+}
+
+function safeRouteClass(value) {
+  let pathname = ''
+  try { pathname = new URL(String(value || ''), 'https://supermega.invalid').pathname } catch {}
+  if (pathname === '/') return 'home'
+  if (/^\/login\/?$/u.test(pathname)) return 'login'
+  if (/^\/shop(?:\/|$)/u.test(pathname)) return 'shop'
+  if (/^\/website(?:\/|$)/u.test(pathname)) return 'website'
+  if (/^\/ecommerce(?:\/|$)/u.test(pathname)) return 'ecommerce'
+  if (/^\/account\/(?:recovery|setup)(?:\/|$)/u.test(pathname)) return 'account'
+  return 'other'
 }
 
 export function counterCaptureReady(state) {
@@ -489,28 +716,32 @@ async function exerciseShopCounter(cdp, sessionId, mobile) {
   }
 }
 
-async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlledFixture) {
+async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlledFixture) {
   const deadline = Date.now() + 10_000
   let state = null
   while (Date.now() < deadline) {
     state = await evalInPage(cdp, sessionId, `(() => {
-      const panel = document.querySelector('details[aria-label="Shop profit control"]');
-      const summary = panel?.querySelector('summary');
-      const heading = summary?.querySelector('strong');
-      const explanation = summary?.querySelector('small');
-      const status = summary?.querySelector(':scope > b');
-      const priority = panel?.querySelector('.shop-today-module-grid a[data-priority-id]');
-      const priorityTitle = priority?.querySelector('strong');
-      const smalls = [...(priority?.querySelectorAll('small') || [])];
-      const impact = smalls[0]?.textContent?.trim() || '';
-      const ownerDue = smalls[1]?.textContent?.trim() || '';
-      const action = smalls.find((entry) => entry.textContent?.trim().startsWith('Next action:'));
-      const closure = smalls.find((entry) => entry.textContent?.trim().startsWith('Closed when:'));
-      const metric = priority?.querySelector(':scope > b');
-      const boundary = [...(panel?.querySelectorAll('p.panel-note') || [])]
-        .find((entry) => entry.textContent?.trim().startsWith('Read-only projection from the current Shop record.'));
-      const ownerDueParts = ownerDue.split(' · ');
-      const targets = [...(panel?.querySelectorAll('.shop-today-module-grid a[href]') || [])].map((entry) => {
+      const recommendation = document.querySelector('section[aria-label="Recommended next"]');
+      const action = recommendation?.querySelector('a.shop-decision-action');
+      const guidance = [...(recommendation?.querySelectorAll('.shop-next-focus-guidance > div') || [])].map((entry) => ({
+        label: entry.querySelector('span')?.textContent?.trim() || '',
+        value: entry.querySelector('p')?.textContent?.trim() || '',
+      }));
+      const operatingView = document.querySelector('section[aria-label="Shop operating view"]');
+      const rail = operatingView?.querySelector('.shop-operations-rail');
+      const priorities = [...(rail?.querySelectorAll('a[data-priority-id]') || [])].map((entry) => ({
+        id: entry.getAttribute('data-priority-id') || '',
+        target: entry.getAttribute('href') || '',
+        named: Boolean(entry.textContent?.trim()),
+        hasNext: [...entry.querySelectorAll('small')].some((small) => small.textContent?.trim().startsWith('Next:')),
+      }));
+      const queues = [...(operatingView?.querySelectorAll('article[aria-label="Order queue"],article[aria-label="Stock watch"]') || [])].map((entry) => ({
+        name: entry.querySelector('header strong')?.textContent?.trim() || '',
+        target: entry.querySelector('footer a[href]')?.getAttribute('href') || '',
+        status: entry.querySelector('header > b')?.textContent?.trim() || '',
+      }));
+      const advanced = document.querySelector('details[aria-label="Advanced Shop controls"]');
+      const targets = [action, ...(rail?.querySelectorAll('a[href]') || []), ...(operatingView?.querySelectorAll('article[aria-label] footer a[href]') || [])].filter(Boolean).map((entry) => {
         const box = entry.getBoundingClientRect();
         return {
           named: Boolean(entry.textContent?.trim()),
@@ -519,26 +750,21 @@ async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlle
           height: box.height,
         };
       });
+      const visibleForbidden = [...document.querySelectorAll('.shop-today h1,.shop-today h2,.shop-today h3,.shop-today p,.shop-today a,.shop-today button')]
+        .filter((entry) => entry.getClientRects().length && getComputedStyle(entry).visibility !== 'hidden')
+        .map((entry) => entry.textContent?.trim() || '')
+        .filter((text) => /Local Batch review stays off|Open a demo|Start trial|Working sample/i.test(text));
       return {
-        ariaLabel: panel?.getAttribute('aria-label') || '',
-        heading: heading?.textContent?.trim() || '',
-        explanation: explanation?.textContent?.trim() || '',
-        state: panel?.getAttribute('data-state') || '',
-        status: status?.textContent?.trim() || '',
-        priority: priority ? {
-          id: priority.getAttribute('data-priority-id') || '',
-          title: priorityTitle?.textContent?.trim() || '',
-          impact,
-          ownerRole: ownerDueParts[0] || '',
-          dueLabel: ownerDueParts.slice(1).join(' · '),
-          actionLabel: (action?.textContent || '').replace(/^Next action:\s*/, '').trim(),
-          target: priority.getAttribute('href') || '',
-          closureCondition: (closure?.textContent || '').replace(/^Closed when:\s*/, '').trim(),
-          metric: metric?.textContent?.trim() || '',
-          actionLabelVisible: Boolean(action && action.getClientRects().length),
-          accessibleNamePresent: Boolean(priority.textContent?.trim()),
-        } : null,
-        boundary: boundary?.textContent?.trim() || '',
+        ariaLabel: recommendation?.getAttribute('aria-label') || '',
+        track: recommendation?.getAttribute('data-track') || '',
+        recommendation: recommendation?.querySelector('h3')?.textContent?.trim() || '',
+        action: action ? { label: action.textContent?.trim() || '', target: action.getAttribute('href') || '' } : null,
+        guidance,
+        priorities,
+        railPresent: Boolean(rail),
+        queues,
+        advanced: advanced ? { present: true, open: advanced.open, label: advanced.querySelector('summary strong')?.textContent?.trim() || '' } : null,
+        visibleForbidden,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
         documentScrollWidth: document.documentElement?.scrollWidth || 0,
@@ -554,16 +780,20 @@ async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlle
         },
       };
     })()`)
-    if (state?.priority && state?.boundary && state?.accessibility?.checked) break
+    if (state?.recommendation && state?.action && state?.queues?.length === 2 && state?.accessibility?.checked) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
   const checks = {
-    panelPresent: state?.ariaLabel === 'Shop profit control',
-    panelOpenAndNonControlled: Boolean(state?.state && state.state !== 'controlled' && state.status !== 'Controlled'),
-    priorityPresent: Boolean(state?.priority),
-    actionVisible: state?.priority?.actionLabelVisible === true,
-    targetPresent: Boolean(state?.priority?.target),
-    boundaryPresent: Boolean(state?.boundary),
+    deskPresent: state?.ariaLabel === 'Recommended next',
+    recommendationPresent: Boolean(state?.recommendation),
+    primaryActionPresent: Boolean(state?.action?.label && state?.action?.target),
+    reasonPresent: state?.guidance?.some((entry) => entry.label === 'Why now' && entry.value),
+    ownerCheckPresent: state?.guidance?.some((entry) => entry.label === 'Owner check' && entry.value),
+    attentionRailPresent: state?.railPresent === true,
+    priorityEvidenceComplete: !state?.priorities?.length || state.priorities.every((entry) => entry.id && entry.target && entry.named && entry.hasNext),
+    twoQueuesPresent: state?.queues?.length === 2 && state.queues.every((entry) => entry.name && entry.target && entry.status),
+    advancedClosedByDefault: state?.advanced?.present === true && state?.advanced?.open === false && state?.advanced?.label === 'Advanced controls',
+    retiredCopyAbsent: state?.visibleForbidden?.length === 0,
     accessible: state?.accessibility?.ok === true,
     noHorizontalOverflow: Number(state?.documentScrollWidth || 0) <= Number(state?.viewportWidth || 0) + 1,
   }
@@ -573,6 +803,301 @@ async function exerciseShopProfitControl(cdp, sessionId, mobile, sourceControlle
       source: sourceControlledFixture ? 'fresh_isolated_browser_context' : 'browser_storage_seeded',
       browserStorageHandEdited: !sourceControlledFixture,
     },
+    checks,
+    ...state,
+  }
+}
+
+async function exerciseShopAccountingExport(cdp, sessionId, browserContextId) {
+  const downloadDir = resolve(screenshotDir, 'downloads')
+  await mkdir(downloadDir, { recursive: true })
+  let started = null
+  let resolveCompleted
+  let rejectCompleted
+  const completed = new Promise((resolveDownload, rejectDownload) => {
+    resolveCompleted = resolveDownload
+    rejectCompleted = rejectDownload
+  })
+  const offStarted = cdp.on('', 'Browser.downloadWillBegin', (event) => {
+    if (!started) started = event
+  })
+  const offProgress = cdp.on('', 'Browser.downloadProgress', (event) => {
+    if (event.state === 'completed') resolveCompleted(event)
+    if (event.state === 'canceled') rejectCompleted(new Error('shop_accounting_export_download_canceled'))
+  })
+  const context = browserContextId ? { browserContextId } : {}
+  try {
+    await cdp.send('Browser.setDownloadBehavior', {
+      behavior: 'allow',
+      downloadPath: downloadDir,
+      eventsEnabled: true,
+      ...context,
+    })
+    const control = await evalInPage(cdp, sessionId, `(() => {
+      const panel = document.querySelector('[aria-label="Accountant handoff ready"]');
+      const button = panel?.querySelector('button[data-shop-accounting-export="accounting-csv-v1"]');
+      if (!panel || !button || button.disabled) return null;
+      button.scrollIntoView({ block: 'center', inline: 'nearest' });
+      const rect = button.getBoundingClientRect();
+      const style = getComputedStyle(button);
+      const visible = rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.left >= 0
+        && rect.bottom <= window.innerHeight + 0.25 && rect.right <= window.innerWidth + 0.25
+        && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+      const label = button.textContent?.trim() || '';
+      button.click();
+      return {
+        visible,
+        label,
+        businessDate: panel.querySelector('strong')?.textContent?.replace(/^Daily close · /, '').trim() || '',
+        mappingReviewed: panel.textContent?.includes('Mapping reviewed') || false,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentScrollWidth: document.documentElement?.scrollWidth || 0,
+      };
+    })()`)
+    if (!control) throw new Error('shop_accounting_export_control_missing')
+    await Promise.race([
+      completed,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('shop_accounting_export_download_timeout')), 15_000)),
+    ])
+    const filename = String(started?.suggestedFilename || '')
+    if (!/^supermega-shop-accounting-\d{4}-\d{2}-\d{2}-[0-9a-f]{8}\.csv$/u.test(filename)) {
+      throw new Error('shop_accounting_export_filename_invalid')
+    }
+    const downloadPath = resolve(downloadDir, filename)
+    if (!downloadPath.startsWith(`${downloadDir}${sep}`)) throw new Error('shop_accounting_export_path_invalid')
+    let payload = null
+    for (let attempt = 0; attempt < 40 && !payload; attempt += 1) {
+      payload = await readFile(downloadPath).catch(() => null)
+      if (!payload) await new Promise((resolveWait) => setTimeout(resolveWait, 50))
+    }
+    if (!payload?.byteLength) throw new Error('shop_accounting_export_file_missing')
+    const text = payload.toString('utf8')
+    const file = relative(screenshotDir, downloadPath).replaceAll('\\', '/')
+    const checks = {
+      controlVisible: control.visible === true,
+      controlNamed: control.label === 'Download accountant CSV',
+      mappingReviewed: control.mappingReviewed === true,
+      filenameBounded: filename.startsWith(`supermega-shop-accounting-${control.businessDate}-`),
+      bomPresent: payload.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])),
+      schemaPresent: text.includes(COMMERCE_ACCOUNTING_HANDOFF_SCHEMA),
+      closeIdPresent: text.includes('CLOSE-33333333-3333-4333-8333-333333333333'),
+      reviewBoundaryPresent: text.includes('"review_required","none","false"'),
+      businessDatePresent: Boolean(control.businessDate && text.includes(control.businessDate)),
+      noHorizontalOverflow: control.documentScrollWidth <= control.viewportWidth + 1,
+    }
+    return {
+      ok: Object.values(checks).every(Boolean),
+      checks,
+      file,
+      filename,
+      bytes: payload.byteLength,
+      digest: `sha256:${createHash('sha256').update(payload).digest('hex')}`,
+      schema: COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
+      businessDate: control.businessDate,
+      viewportWidth: control.viewportWidth,
+      viewportHeight: control.viewportHeight,
+      documentScrollWidth: control.documentScrollWidth,
+    }
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) }
+  } finally {
+    offStarted()
+    offProgress()
+    await cdp.send('Browser.setDownloadBehavior', { behavior: 'default', ...context }).catch(() => {})
+  }
+}
+
+async function exerciseShopOfflineRestore(cdp, sessionId, expectedPath, expectedText, timeoutMs, offlineTransportFailures) {
+  let offline = false
+  try {
+    const before = await evalInPage(cdp, sessionId, `(async () => {
+      const supported = 'serviceWorker' in navigator && 'caches' in window;
+      if (!supported) return { supported: false, storageRecord: null, controllerScript: '', cacheCount: 0, cacheEntryCount: 0 };
+      const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 8000));
+      const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
+      const deadline = Date.now() + 8000;
+      while (!navigator.serviceWorker.controller && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      const cacheNames = (await caches.keys()).filter((name) => name.startsWith('supermega-app-'));
+      let cacheEntryCount = 0;
+      for (const name of cacheNames) cacheEntryCount += (await (await caches.open(name)).keys()).length;
+      return {
+        supported: true,
+        ready: Boolean(registration?.active && registration.active.state === 'activated'),
+        storageRecord: localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}),
+        controllerScript: navigator.serviceWorker.controller?.scriptURL || '',
+        cacheCount: cacheNames.length,
+        cacheEntryCount,
+      };
+    })()`)
+    if (!before?.supported || !before?.ready || !before?.controllerScript || !before?.storageRecord
+      || before.cacheCount < 1 || before.cacheEntryCount < 1) {
+      throw new Error('shop_offline_service_worker_not_ready')
+    }
+
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: true,
+      latency: 0,
+      downloadThroughput: 0,
+      uploadThroughput: 0,
+      connectionType: 'none',
+    }, sessionId)
+    offline = true
+
+    const loaded = new Promise((resolveLoad, rejectLoad) => {
+      let timer
+      const off = cdp.on(sessionId, 'Page.loadEventFired', () => {
+        off()
+        clearTimeout(timer)
+        resolveLoad()
+      })
+      timer = setTimeout(() => {
+        off()
+        rejectLoad(new Error('shop_offline_reload_timeout'))
+      }, 30_000)
+    })
+    await cdp.send('Page.reload', { ignoreCache: true }, sessionId)
+    await loaded
+    await waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs)
+
+    const after = await evalInPage(cdp, sessionId, `(async () => {
+      const body = document.body?.innerText || '';
+      const cacheNames = (await caches.keys()).filter((name) => name.startsWith('supermega-app-'));
+      let cacheEntryCount = 0;
+      for (const name of cacheNames) cacheEntryCount += (await (await caches.open(name)).keys()).length;
+      return {
+        online: navigator.onLine,
+        storageRecord: localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}),
+        controllerScript: navigator.serviceWorker?.controller?.scriptURL || '',
+        cacheCount: cacheNames.length,
+        cacheEntryCount,
+        route: location.pathname + location.search,
+        recordVisible: body.includes('May') && body.includes('Cold drink pack') && body.includes('Daily close'),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentScrollWidth: document.documentElement?.scrollWidth || 0,
+      };
+    })()`)
+    const controllerPath = (() => {
+      try { return new URL(after.controllerScript).pathname } catch { return '' }
+    })()
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+    const checks = {
+      serviceWorkerSupported: before.supported === true,
+      serviceWorkerReady: before.ready === true,
+      controllerActive: controllerPath === '/sw.js',
+      sealedCachePresent: after.cacheCount >= 1 && after.cacheEntryCount >= 1,
+      offlineModeActive: after.online === false,
+      routeRestored: after.route === expectedPath,
+      businessRecordRestored: after.recordVisible === true,
+      storageRecordPreserved: after.storageRecord === before.storageRecord && Boolean(after.storageRecord),
+      expectedFallbackTransportFailure: offlineTransportFailures.length === 1,
+      noHorizontalOverflow: after.documentScrollWidth <= after.viewportWidth + 1,
+    }
+    return {
+      ok: Object.values(checks).every(Boolean),
+      checks,
+      controllerScript: controllerPath,
+      cacheCount: after.cacheCount,
+      cacheEntryCount: after.cacheEntryCount,
+      transportFailureCount: offlineTransportFailures.length,
+      viewportWidth: after.viewportWidth,
+      viewportHeight: after.viewportHeight,
+      documentScrollWidth: after.documentScrollWidth,
+    }
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) }
+  } finally {
+    if (offline) {
+      await cdp.send('Network.emulateNetworkConditions', {
+        offline: false,
+        latency: 0,
+        downloadThroughput: -1,
+        uploadThroughput: -1,
+        connectionType: 'none',
+      }, sessionId).catch(() => {})
+    }
+  }
+}
+
+async function exerciseSitesPages(cdp, sessionId) {
+  const opened = await evalInPage(cdp, sessionId, `(() => {
+    const workbench = document.querySelector('.website-editor-workbench');
+    if (workbench?.getClientRects().length && getComputedStyle(workbench).visibility !== 'hidden') return true;
+    const button = [...document.querySelectorAll('button')]
+      .find((candidate) => candidate.textContent.trim() === 'Edit website');
+    if (!button || button.disabled) return false;
+    button.click();
+    return true;
+  })()`)
+  if (!opened) return { ok: false, error: 'Sites editor action was not available' }
+
+  const deadline = Date.now() + 10_000
+  let state = null
+  while (Date.now() < deadline) {
+    state = await evalInPage(cdp, sessionId, `(() => {
+      const visible = (element) => Boolean(element && element.getClientRects().length
+        && getComputedStyle(element).visibility !== 'hidden');
+      const pageRail = document.querySelector('.website-page-rail');
+      const editor = document.querySelector('.website-editor-workbench > .website-editor-panel');
+      const insights = document.querySelector('.website-editor-insights');
+      const pageButtons = [...document.querySelectorAll('.website-page-list button')];
+      const activePage = document.querySelector('.website-page-list button[aria-current="page"]');
+      const checks = {
+        workbenchVisible: visible(document.querySelector('.website-editor-workbench')),
+        pageRailVisible: visible(pageRail),
+        editorVisible: visible(editor),
+        insightsVisible: visible(insights),
+        threePagesPresent: pageButtons.length === 3,
+        activePagePresent: visible(activePage),
+      };
+      return {
+        checks,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentScrollWidth: document.documentElement?.scrollWidth || 0,
+      };
+    })()`)
+    if (state && Object.values(state.checks).every(Boolean)) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  const checks = state?.checks ?? {}
+  return {
+    ok: Object.values(checks).length > 0 && Object.values(checks).every(Boolean),
+    error: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', '),
+    ...state,
+  }
+}
+
+async function inspectSitesInquiries(cdp, sessionId) {
+  const state = await evalInPage(cdp, sessionId, `(() => {
+    const visible = (element) => Boolean(element && element.getClientRects().length
+      && getComputedStyle(element).visibility !== 'hidden');
+    const workspace = document.querySelector('.website-inquiry-workspace');
+    const capture = document.querySelector('.website-inquiry-capture');
+    const queue = document.querySelector('.website-inquiry-queue');
+    const leads = [...document.querySelectorAll('.website-lead-list article')];
+    const checks = {
+      workspaceVisible: visible(workspace),
+      captureFormVisible: visible(capture?.querySelector('form')),
+      queueVisible: visible(queue),
+      oneSyntheticLeadPresent: leads.length === 1 && visible(leads[0]),
+      consentControlVisible: visible(capture?.querySelector('input[type="checkbox"]')),
+      decisionControlsPresent: queue?.querySelectorAll('button').length === 2,
+    };
+    return {
+      checks,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      documentScrollWidth: document.documentElement?.scrollWidth || 0,
+    };
+  })()`)
+  const checks = state?.checks ?? {}
+  return {
+    ok: Object.values(checks).length > 0 && Object.values(checks).every(Boolean),
+    error: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', '),
     ...state,
   }
 }
@@ -614,6 +1139,22 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
   })()`)
   if (!started) return { ok: false, error: 'Ecommerce customer-order action was not available' }
 
+  const catalogDeadline = Date.now() + 10_000
+  let productSelected = false
+  while (Date.now() < catalogDeadline && !productSelected) {
+    productSelected = await evalInPage(cdp, sessionId, `(() => {
+      const workspace = document.querySelector('#ecommerce-buying-workspace');
+      const notice = workspace?.querySelector('.ecommerce-buying-notice')?.textContent || '';
+      const add = [...document.querySelectorAll('.storefront-request-button')]
+        .find((candidate) => !candidate.disabled && candidate.textContent.trim() === 'Add to cart');
+      if (!workspace || !add || notice.includes('Checking saved checkout recovery')) return false;
+      add.click();
+      return true;
+    })()`)
+    if (!productSelected) await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!productSelected) return { ok: false, error: 'Ecommerce customer store did not become ready' }
+
   const readyDeadline = Date.now() + 10_000
   let formReady = false
   while (Date.now() < readyDeadline && !formReady) {
@@ -621,7 +1162,7 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
       const workspace = document.querySelector('#ecommerce-buying-workspace');
       const form = workspace?.querySelector('form');
       const submit = form?.querySelector('button[data-request-mode="local"]');
-      if (submit?.textContent.trim() !== 'Save request on this device') return false;
+      if (submit?.textContent.trim() !== 'Save request locally') return false;
       return Boolean(workspace?.open && form && submit && !submit.disabled);
     })()`)
     if (!formReady) await new Promise((resolveWait) => setTimeout(resolveWait, 100))
@@ -653,17 +1194,17 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
       const boundaryItems = boundaryGrid ? [...boundaryGrid.children] : [];
       const boundaryRows = new Set(boundaryItems.map((item) => Math.round(item.getBoundingClientRect().top))).size;
       const receiptBoundary = receipt ? [...receipt.querySelectorAll('p')]
-        .find((candidate) => candidate.textContent.includes('Saved on this device for Shop review.')) : null;
+        .find((candidate) => candidate.textContent.includes('Request saved locally for Shop review.')) : null;
       const box = receiptBoundary?.getBoundingClientRect();
-      const todayTitle = document.querySelector('#ecommerce-today-title')?.textContent.trim() || '';
-      const todaySummary = document.querySelector('.ecommerce-today-priority > p')?.textContent.trim() || '';
       const notice = document.querySelector('.ecommerce-buying-notice')?.textContent.trim() || '';
+      const checkoutFormPresent = Boolean(document.querySelector('#ecommerce-buying-workspace form'));
       const receiptText = receipt?.textContent || '';
       const bodyText = document.body?.innerText || '';
       return {
-        todayTitle,
-        todaySummary,
+        activeWorkspace: document.querySelector('.ecommerce-mode-nav [aria-current="page"]')?.textContent.trim() || '',
+        receiptStatus: receipt?.querySelector('.status-pill')?.textContent.trim() || '',
         notice,
+        checkoutFormPresent,
         receiptPresent: Boolean(receipt),
         receiptHeight: receiptBox?.height || 0,
         boundaryRows,
@@ -678,17 +1219,15 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
         documentScrollWidth: document.documentElement?.scrollWidth || 0,
       };
     })()`)
-    if (state?.todayTitle === 'Order request saved' && state?.receiptBoundary && state?.boundaryVisible) break
+    if (state?.receiptStatus === 'Request saved locally' && state?.receiptBoundary && state?.boundaryVisible) break
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
 
   const checks = {
-    localHeadline: state?.todayTitle === 'Order request saved',
-    localSummary: state?.todaySummary.includes('Saved on this device for Shop review')
-      && state?.todaySummary.includes('No order, charge, stock, delivery, or customer message changed.'),
-    localNotice: state?.notice.includes('Saved on this device for Shop review')
-      && state?.notice.includes('No order, stock, message, or charge changed.'),
-    localReceipt: state?.receiptBoundary.includes('Saved on this device for Shop review.')
+    localHeadline: state?.receiptStatus === 'Request saved locally',
+    storeWorkspaceActive: state?.activeWorkspace === 'Store',
+    checkoutFormRetired: state?.checkoutFormPresent === false && state?.notice === '',
+    localReceipt: state?.receiptBoundary.includes('Request saved locally for Shop review.')
       && state?.receiptBoundary.includes('Shop still confirms stock, promise, payment, and delivery.'),
     boundaryVisible: Boolean(state?.boundaryVisible),
     compactMobileReceipt: Number(state?.viewportWidth || 0) > 560
@@ -703,6 +1242,408 @@ async function exerciseEcommerceClaimBoundary(cdp, sessionId) {
     error: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', '),
     checks,
     ...state,
+  }
+}
+
+async function exerciseStoreToShopJourney(cdp, sessionId, origin, expectedPath, expectedText, timeoutMs) {
+  const claimBoundary = await exerciseEcommerceClaimBoundary(cdp, sessionId)
+  if (!claimBoundary.ok) return { ok: false, error: `request capture: ${claimBoundary.error || 'unknown check'}`, claimBoundary }
+
+  const source = await evalInPage(cdp, sessionId, `(() => {
+    const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+    const actions = JSON.parse(localStorage.getItem(${JSON.stringify(ACTION_KEY)}) || '[]');
+    const recoveryKeys = Object.keys(localStorage).filter((key) => key.startsWith('supermega.ecommerce.buying_lifecycle.v1.'));
+    const recoveryStates = recoveryKeys.flatMap((key) => {
+      try { return [JSON.parse(localStorage.getItem(key) || 'null')]; } catch { return []; }
+    }).filter(Boolean);
+    const requests = recoveryStates.flatMap((state) => Array.isArray(state?.requests) ? state.requests : []);
+    const request = requests[0];
+    const lines = request?.lines || (request?.line ? [request.line] : []);
+    const firstLine = lines[0];
+    const item = commerce?.items?.find((candidate) => candidate.sku === firstLine?.sku);
+    const paymentAdapter = request?.quote?.payment?.adapter || '';
+    const handoffReference = request?.deliveryAddress
+      ? [request.deliveryAddress.line1, request.deliveryAddress.township, request.deliveryAddress.city, request.deliveryAddress.instructions]
+          .filter(Boolean).join(' · ')
+      : request?.id || '';
+    return {
+      requestId: request?.id || '',
+      requestCount: requests.length,
+      recoveryKeyCount: recoveryKeys.length,
+      sharedRequestCountBefore: commerce?.storefrontRequests?.length || 0,
+      customer: request?.customerProfile?.name || request?.customerReference || '',
+      customerReference: request?.customerReference || '',
+      fulfilment: request?.fulfilment || '',
+      handoffReference,
+      payment: paymentAdapter === 'cash_on_delivery' ? 'Cash on delivery' : paymentAdapter === 'kbzpay_manual' ? 'KBZPay' : paymentAdapter === 'pay_on_pickup' ? 'Cash' : '',
+      totalMmk: request?.totalMmk ?? null,
+      lines: lines.map((line) => ({
+        sku: line.sku,
+        name: line.name,
+        variant: line.variant ?? null,
+        quantity: line.quantity,
+        unitPriceMmk: line.unitPriceMmk,
+        lineTotalMmk: line.lineTotalMmk ?? line.quantity * line.unitPriceMmk,
+      })),
+      sku: firstLine?.sku || '',
+      quantity: firstLine?.quantity || 0,
+      stockBefore: item?.onHand ?? null,
+      orderCountBefore: commerce?.orders?.length || 0,
+      actionCountBefore: actions.length,
+    };
+  })()`)
+  if (!source?.requestId || !source?.sku || !source.customer || !source.fulfilment || !source.handoffReference || !source.payment
+    || !Array.isArray(source.lines) || !source.lines.length || !Number.isSafeInteger(source.totalMmk)
+    || source.requestCount !== 1 || source.recoveryKeyCount !== 1
+    || source.sharedRequestCountBefore !== 0 || source.orderCountBefore !== 0 || source.actionCountBefore !== 0) {
+    return { ok: false, error: 'captured request was not the only recoverable local Ecommerce source', claimBoundary, source }
+  }
+
+  const reviewPath = storeToShopReviewPath(source.requestId)
+  const reviewPathMatches = (value) => isStoreToShopReviewPath(value, source.requestId)
+
+  const handoffDeadline = Date.now() + 15_000
+  let handoff = null
+  while (Date.now() < handoffDeadline) {
+    handoff = await evalInPage(cdp, sessionId, `(() => {
+      const receipt = document.querySelector('.ecommerce-request-receipt[data-current="true"]');
+      const button = [...(receipt?.querySelectorAll('button') || [])]
+        .find((candidate) => candidate.textContent.trim() === 'Open Shop operator review' && !candidate.disabled);
+      const text = receipt?.textContent || '';
+      if (!receipt || !button || !text.includes(${JSON.stringify(source.requestId)})) {
+        return { ready: false, sourceVisible: text.includes(${JSON.stringify(source.requestId)}) };
+      }
+      button.click();
+      return { ready: true, sourceVisible: true };
+    })()`)
+    if (handoff?.ready) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!handoff?.ready) return { ok: false, error: 'local Ecommerce receipt could not open Shop operator review', claimBoundary, source, handoff }
+
+  await waitForRenderedState(cdp, sessionId, reviewPathMatches, ['Shop', 'Add an order'], timeoutMs)
+
+  const reviewDeadline = Date.now() + 15_000
+  let prepared = null
+  while (Date.now() < reviewDeadline) {
+    prepared = await evalInPage(cdp, sessionId, `(() => {
+      const dialog = document.querySelector('dialog.order-composer-dialog[open]');
+      const form = dialog?.querySelector('#commerce-manual-order-form');
+      const sourceReady = dialog?.querySelector('.channel-source-ready');
+      const review = [...(dialog?.querySelectorAll('button') || [])]
+        .find((candidate) => candidate.textContent.trim() === 'Review order');
+      const payment = dialog?.querySelector('.order-ecommerce-payment select');
+      const sourceText = sourceReady?.textContent || '';
+      const labels = [...(form?.querySelectorAll('label') || [])];
+      const directLabelText = (label) => [...label.childNodes]
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent || '').join(' ').trim();
+      const labelledControl = (prefix, selector) => labels
+        .find((label) => directLabelText(label).startsWith(prefix))?.querySelector(selector);
+      const itemLabels = labels.filter((label) => directLabelText(label).startsWith('Item'));
+      const quantityLabels = labels.filter((label) => directLabelText(label).startsWith('Quantity'));
+      const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+      const lines = itemLabels.map((label, index) => {
+        const sku = label.querySelector('select')?.value || '';
+        const item = commerce?.items?.find((candidate) => candidate.sku === sku);
+        const quantity = Number(quantityLabels[index]?.querySelector('input')?.value || 0);
+        return {
+          sku,
+          name: item?.name || '',
+          variant: item?.variant ?? null,
+          quantity,
+          unitPriceMmk: item?.price ?? null,
+          lineTotalMmk: Number.isSafeInteger(item?.price) ? item.price * quantity : null,
+        };
+      });
+      const totalText = form?.querySelector('.order-total strong')?.textContent || '';
+      const ready = Boolean(dialog && form && sourceText.includes(${JSON.stringify(source.requestId)}) && review && !review.disabled);
+      return {
+        ready,
+        route: location.pathname + location.search,
+        sourceBound: sourceText.includes(${JSON.stringify(source.requestId)}),
+        customer: labelledControl('Customer', 'input')?.value || '',
+        fulfilment: labelledControl('Fulfilment', 'select')?.value || '',
+        handoffReference: labelledControl('Handoff reference', 'input')?.value || '',
+        lines,
+        totalMmk: Number(totalText.replace(/[^0-9-]/g, '')),
+        paymentLocked: Boolean(payment?.disabled),
+        payment: payment?.value || '',
+      };
+    })()`)
+    if (prepared?.ready) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!prepared?.ready) return { ok: false, error: 'Shop could not prepare the exact Ecommerce request', claimBoundary, source, handoff, prepared }
+
+  const queued = await evalInPage(cdp, sessionId, `(() => {
+    const review = [...document.querySelectorAll('dialog.order-composer-dialog[open] button')]
+      .find((candidate) => candidate.textContent.trim() === 'Review order' && !candidate.disabled);
+    if (!review) return false;
+    review.click();
+    return true;
+  })()`)
+  if (!queued) return { ok: false, error: 'prepared Ecommerce order could not enter accountable review', claimBoundary, source, handoff, prepared }
+
+  const gateDeadline = Date.now() + 15_000
+  let gate = null
+  while (Date.now() < gateDeadline) {
+    gate = await evalInPage(cdp, sessionId, `(() => {
+      const dialog = document.querySelector('dialog.accountable-action-gate[open]');
+      const submit = dialog?.querySelector('button[type="submit"]');
+      const inputs = [...(dialog?.querySelectorAll('input') || [])];
+      const lockedEvidence = inputs.find((input) => input.readOnly && input.value.includes(${JSON.stringify(source.requestId)}));
+      const text = dialog?.textContent || '';
+      const ready = Boolean(dialog && submit && !submit.disabled
+        && new RegExp(${JSON.stringify(ACCOUNTABLE_CONFIRM_LABEL.source)}, 'u').test(submit.textContent.trim()));
+      return {
+        ready,
+        summaryBound: text.includes('Review Ecommerce order'),
+        actor: inputs[0]?.value || '',
+        reasonPresent: Boolean(inputs[1]?.value),
+        evidenceReference: lockedEvidence?.value || '',
+        sourceEvidenceBound: Boolean(lockedEvidence),
+      };
+    })()`)
+    if (gate?.ready) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+  if (!gate?.ready || !gate.summaryBound || !gate.reasonPresent || !gate.sourceEvidenceBound || !gate.evidenceReference) {
+    return { ok: false, error: 'accountable Shop review did not bind the Ecommerce source', claimBoundary, source, handoff, prepared, gate }
+  }
+
+  const confirmed = await evalInPage(cdp, sessionId, `(() => {
+    const submit = document.querySelector('dialog.accountable-action-gate[open] button[type="submit"]');
+    if (!submit || submit.disabled
+      || !new RegExp(${JSON.stringify(ACCOUNTABLE_CONFIRM_LABEL.source)}, 'u').test(submit.textContent.trim())) return false;
+    submit.click();
+    return true;
+  })()`)
+  if (!confirmed) return { ok: false, error: 'accountable Shop confirmation was not available', claimBoundary, source, handoff, prepared, gate }
+
+  const committedDeadline = Date.now() + 20_000
+  let committed = null
+  while (Date.now() < committedDeadline) {
+    committed = await evalInPage(cdp, sessionId, `(() => {
+      const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+      const actions = JSON.parse(localStorage.getItem(${JSON.stringify(ACTION_KEY)}) || '[]');
+      const matching = commerce?.orders?.filter((order) => order.sourceRecordId === ${JSON.stringify(source.requestId)}) || [];
+      const order = matching[0];
+      const matchingActions = actions.filter((action) => action.domain === 'commerce'
+        && action.kind === 'order_create'
+        && action.subjectId === order?.id
+        && action.evidenceReference === ${JSON.stringify(gate.evidenceReference)});
+      const orderCreateActionIds = actions.filter((action) => action.domain === 'commerce' && action.kind === 'order_create')
+        .map((action) => action.id).sort();
+      const accountableAction = matchingActions[0];
+      const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
+      const sourceRequestCopies = Object.keys(localStorage)
+        .filter((key) => key.startsWith('supermega.ecommerce.buying_lifecycle.v1.'))
+        .flatMap((key) => {
+          try {
+            const state = JSON.parse(localStorage.getItem(key) || 'null');
+            return Array.isArray(state?.requests) ? state.requests : [];
+          } catch { return []; }
+        }).filter((request) => request.id === ${JSON.stringify(source.requestId)}).length;
+      return {
+        route: location.pathname + location.search,
+        matchingOrderCount: matching.length,
+        orderStatus: order?.status || '',
+        paymentStatus: order?.paymentStatus || '',
+        owner: order?.owner || '',
+        orderId: order?.id || '',
+        stockAfter: item?.onHand ?? null,
+        accountableActionCount: matchingActions.length,
+        orderCreateActionIds,
+        actionId: accountableAction?.id || '',
+        commandId: accountableAction?.commandId || '',
+        actionActor: accountableAction?.actor || '',
+        actionReason: accountableAction?.reason || '',
+        actionEvidenceReference: accountableAction?.evidenceReference || '',
+        actionSubjectId: accountableAction?.subjectId || '',
+        sourceRequestCopies,
+        sharedInboxRequestCount: commerce?.storefrontRequests?.length || 0,
+      };
+    })()`)
+    if (committed?.matchingOrderCount === 1 && committed?.route === expectedPath) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+
+  await cdp.send('Page.reload', { ignoreCache: true }, sessionId)
+  await waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs)
+  const restored = await evalInPage(cdp, sessionId, `(() => {
+    const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+    const actions = JSON.parse(localStorage.getItem(${JSON.stringify(ACTION_KEY)}) || '[]');
+    const matching = commerce?.orders?.filter((order) => order.sourceRecordId === ${JSON.stringify(source.requestId)}) || [];
+    const order = matching[0];
+    const matchingActions = actions.filter((action) => action.domain === 'commerce'
+      && action.kind === 'order_create'
+      && action.subjectId === order?.id
+      && action.evidenceReference === ${JSON.stringify(gate.evidenceReference)});
+    const orderCreateActionIds = actions.filter((action) => action.domain === 'commerce' && action.kind === 'order_create')
+      .map((action) => action.id).sort();
+    const accountableAction = matchingActions[0];
+    const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
+    const sourceRequestCopies = Object.keys(localStorage)
+      .filter((key) => key.startsWith('supermega.ecommerce.buying_lifecycle.v1.'))
+      .flatMap((key) => {
+        try {
+          const state = JSON.parse(localStorage.getItem(key) || 'null');
+          return Array.isArray(state?.requests) ? state.requests : [];
+        } catch { return []; }
+      }).filter((request) => request.id === ${JSON.stringify(source.requestId)}).length;
+    const bodyText = document.body?.innerText || '';
+    return {
+      route: location.pathname + location.search,
+      matchingOrderCount: matching.length,
+      orderStatus: order?.status || '',
+      paymentStatus: order?.paymentStatus || '',
+      owner: order?.owner || '',
+      orderId: order?.id || '',
+      stockAfter: item?.onHand ?? null,
+      accountableActionCount: matchingActions.length,
+      orderCreateActionIds,
+      actionId: accountableAction?.id || '',
+      commandId: accountableAction?.commandId || '',
+      actionActor: accountableAction?.actor || '',
+      actionReason: accountableAction?.reason || '',
+      actionEvidenceReference: accountableAction?.evidenceReference || '',
+      actionSubjectId: accountableAction?.subjectId || '',
+      sourceRequestCopies,
+      sharedInboxRequestCount: commerce?.storefrontRequests?.length || 0,
+      customerVisible: bodyText.includes('May Thiri'),
+      paymentPendingVisible: bodyText.includes('Payment pending'),
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      documentScrollWidth: document.documentElement?.scrollWidth || 0,
+    };
+  })()`)
+
+  const replayPath = reviewPath
+  await cdp.send('Page.navigate', { url: `${origin}${replayPath}` }, sessionId)
+  await waitForRenderedState(cdp, sessionId, replayPath, ['Shop', 'Ecommerce request', source.requestId], timeoutMs)
+  const replayAttempted = await evalInPage(cdp, sessionId, `(() => {
+    const dialog = document.querySelector('dialog.order-composer-dialog[open]');
+    const sourceText = dialog?.querySelector('.channel-source-ready')?.textContent || '';
+    const review = [...(dialog?.querySelectorAll('button') || [])]
+      .find((candidate) => candidate.textContent.trim() === 'Review order' && !candidate.disabled);
+    if (!dialog || !review || !sourceText.includes(${JSON.stringify(source.requestId)})) return false;
+    review.click();
+    return true;
+  })()`)
+  if (!replayAttempted) {
+    return { ok: false, error: 'retained Ecommerce source could not be replay-tested', claimBoundary, source, handoff, prepared, gate, committed, restored }
+  }
+
+  const replayDeadline = Date.now() + 15_000
+  let replay = null
+  while (Date.now() < replayDeadline) {
+    replay = await evalInPage(cdp, sessionId, `(() => {
+      const commerce = JSON.parse(localStorage.getItem(${JSON.stringify(COMMERCE_KEY)}) || 'null');
+      const actions = JSON.parse(localStorage.getItem(${JSON.stringify(ACTION_KEY)}) || '[]');
+      const matching = commerce?.orders?.filter((order) => order.sourceRecordId === ${JSON.stringify(source.requestId)}) || [];
+      const order = matching[0];
+      const matchingActions = actions.filter((action) => action.domain === 'commerce'
+        && action.kind === 'order_create'
+        && action.subjectId === order?.id
+        && action.evidenceReference === ${JSON.stringify(gate.evidenceReference)});
+      const orderCreateActionIds = actions.filter((action) => action.domain === 'commerce' && action.kind === 'order_create')
+        .map((action) => action.id).sort();
+      const item = commerce?.items?.find((candidate) => candidate.sku === ${JSON.stringify(source.sku)});
+      const sourceRequestCopies = Object.keys(localStorage)
+        .filter((key) => key.startsWith('supermega.ecommerce.buying_lifecycle.v1.'))
+        .flatMap((key) => {
+          try {
+            const state = JSON.parse(localStorage.getItem(key) || 'null');
+            return Array.isArray(state?.requests) ? state.requests : [];
+          } catch { return []; }
+        }).filter((request) => request.id === ${JSON.stringify(source.requestId)}).length;
+      const bodyText = document.body?.innerText || '';
+      return {
+        attempted: true,
+        route: location.pathname + location.search,
+        duplicateBlocked: bodyText.includes(${JSON.stringify(`${source.requestId} is already linked to an order. No duplicate was queued.`)}),
+        gateOpened: Boolean(document.querySelector('dialog.accountable-action-gate[open]')),
+        matchingOrderCount: matching.length,
+        accountableActionCount: matchingActions.length,
+        orderCreateActionIds,
+        orderId: order?.id || '',
+        stockAfter: item?.onHand ?? null,
+        sourceRequestCopies,
+        sharedInboxRequestCount: commerce?.storefrontRequests?.length || 0,
+      };
+    })()`)
+    if (replay?.duplicateBlocked || replay?.gateOpened) break
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100))
+  }
+
+  await cdp.send('Page.navigate', { url: `${origin}${expectedPath}` }, sessionId)
+  await waitForRenderedState(cdp, sessionId, expectedPath, expectedText, timeoutMs)
+
+  const expectedStock = Number(source.stockBefore) - Number(source.quantity)
+  const preparedLinesMatch = JSON.stringify(prepared?.lines) === JSON.stringify(source.lines)
+  const checks = {
+    localRequestCaptured: source.requestCount === 1,
+    sameDeviceHandoff: handoff.ready && handoff.sourceVisible,
+    exactSourcePrepared: reviewPathMatches(prepared.route)
+      && prepared.sourceBound
+      && prepared.customer === source.customer
+      && prepared.fulfilment === source.fulfilment
+      && prepared.handoffReference === source.handoffReference
+      && preparedLinesMatch
+      && prepared.totalMmk === source.totalMmk
+      && prepared.paymentLocked
+      && prepared.payment === source.payment,
+    accountableSourceBound: gate.summaryBound && gate.reasonPresent && gate.sourceEvidenceBound,
+    confirmedOnce: committed?.matchingOrderCount === 1 && restored?.matchingOrderCount === 1,
+    paymentStillPending: committed?.paymentStatus === 'pending' && restored?.paymentStatus === 'pending',
+    stockReservedOnce: committed?.stockAfter === expectedStock && restored?.stockAfter === expectedStock,
+    sourceRetained: committed?.sourceRequestCopies === 1 && restored?.sourceRequestCopies === 1
+      && committed?.sharedInboxRequestCount === 0 && restored?.sharedInboxRequestCount === 0,
+    replayBlocked: replay?.attempted === true
+      && replay?.duplicateBlocked === true
+      && replay?.gateOpened === false
+      && replay?.matchingOrderCount === 1
+      && replay?.accountableActionCount === 1
+      && JSON.stringify(replay?.orderCreateActionIds) === JSON.stringify(restored?.orderCreateActionIds)
+      && replay?.orderId === committed?.orderId
+      && replay?.stockAfter === restored?.stockAfter
+      && replay?.sourceRequestCopies === 1
+      && replay?.sharedInboxRequestCount === 0,
+    accountableOwner: committed?.owner === 'Shop reviewer' && restored?.owner === 'Shop reviewer',
+    accountableActionRecorded: committed?.accountableActionCount === 1
+      && restored?.accountableActionCount === 1
+      && Boolean(committed?.actionId)
+      && Boolean(committed?.commandId)
+      && Boolean(committed?.actionReason)
+      && committed?.actionActor === 'Shop reviewer'
+      && committed?.actionEvidenceReference === gate.evidenceReference
+      && committed?.actionSubjectId === committed?.orderId
+      && restored?.actionId === committed?.actionId
+      && restored?.commandId === committed?.commandId
+      && restored?.actionActor === committed?.actionActor
+      && restored?.actionReason === committed?.actionReason
+      && restored?.actionEvidenceReference === committed?.actionEvidenceReference
+      && restored?.actionSubjectId === committed?.actionSubjectId,
+    persistedAfterReload: restored?.orderStatus === 'confirmed' && restored?.route === expectedPath,
+    operatorViewRestored: restored?.customerVisible && restored?.paymentPendingVisible,
+    noHorizontalOverflow: Number(restored?.documentScrollWidth || 0) <= Number(restored?.viewportWidth || 0) + 1,
+  }
+  return {
+    ok: Object.values(checks).every(Boolean),
+    error: Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name).join(', '),
+    checks,
+    claimBoundary,
+    source,
+    handoff,
+    prepared,
+    gate,
+    committed,
+    restored,
+    replay,
+    viewportWidth: restored?.viewportWidth || 0,
+    viewportHeight: restored?.viewportHeight || 0,
+    documentScrollWidth: restored?.documentScrollWidth || 0,
   }
 }
 
@@ -732,9 +1673,11 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true })
   const errors = []
   const warnings = []
+  const offlineTransportFailures = []
   const networkRequests = []
   const networkRequestUrls = new Map()
   const failedNetworkRequests = []
+  const httpErrorResponses = []
   const disposers = []
   let accessGuard = null
   try {
@@ -763,7 +1706,11 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       }),
       cdp.on(sessionId, 'Log.entryAdded', (event) => {
         const text = event.entry.text || ''
-        if (event.entry?.level === 'error' && !/favicon/i.test(text)) errors.push(`log: ${text}`.trim())
+        if (event.entry?.level === 'error' && !/favicon/i.test(text)) {
+          if (testCase.exerciseShopOfflineRestore && text === 'Failed to load resource: net::ERR_INTERNET_DISCONNECTED') {
+            offlineTransportFailures.push(text)
+          } else errors.push(`log: ${text}`.trim())
+        }
         if (event.entry?.level === 'warning') warnings.push(`log warning: ${text}`.trim())
       }),
       cdp.on(sessionId, 'Network.requestWillBeSent', (event) => {
@@ -774,6 +1721,11 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       cdp.on(sessionId, 'Network.loadingFailed', (event) => {
         const url = networkRequestUrls.get(event.requestId)
         if (url && /^https?:/iu.test(url)) failedNetworkRequests.push(url)
+      }),
+      cdp.on(sessionId, 'Network.responseReceived', (event) => {
+        const status = Number(event.response?.status || 0)
+        const url = String(event.response?.url || '')
+        if (status >= 400 && /^https?:/iu.test(url)) httpErrorResponses.push({ status, url })
       }),
     )
 
@@ -798,17 +1750,38 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
         requiredText: testCase.pairedPublicExpectedText,
         activate: () => evalInPage(cdp, sessionId, pairedClickScript(origin, testCase.pairedAppOrigin)) })
     }
-    await waitForRenderedState(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
-    const shopCounter = testCase.exerciseShopCounter
+    const initialExpectedPath = testCase.initialExpectedPath ?? testCase.expectedPath
+    const initialExpectedText = testCase.initialExpectedText ?? testCase.expectedText
+    const initialState = await waitForRenderedState(cdp, sessionId, initialExpectedPath, initialExpectedText, testCase.timeoutMs)
+    const initialStateMatches = Boolean(initialState?.bodyLength > 0
+      && matchesExpectedPath(initialExpectedPath, String(initialState.path || ''))
+      && initialExpectedText.every((needle) => String(initialState.text || '').includes(needle)))
+    const shopCounter = initialStateMatches && testCase.exerciseShopCounter
       ? await exerciseShopCounter(cdp, sessionId, Boolean(testCase.mobile))
       : null
-    const briefControls = testCase.inspectBusinessBrief ? await evalInPage(cdp, sessionId, `(${inspectBusinessBrief.toString()})(document)`) : null
-    const rawShopProfitControl = testCase.exerciseShopProfitControl
-      ? await exerciseShopProfitControl(cdp, sessionId, Boolean(testCase.mobile), testCase.sourceControlledFixture === true)
+    const briefControls = initialStateMatches && testCase.inspectBusinessBrief
+      ? await evalInPage(cdp, sessionId, `(${inspectBusinessBrief.toString()})(document)`)
       : null
-    const ecommerceClaimBoundary = testCase.exerciseEcommerceClaimBoundary
+    const rawShopDecisionDesk = initialStateMatches && testCase.exerciseShopDecisionDesk
+      ? await exerciseShopDecisionDesk(cdp, sessionId, Boolean(testCase.mobile), testCase.sourceControlledFixture === true)
+      : null
+    const shopAccountingExport = initialStateMatches && testCase.exerciseShopAccountingExport
+      ? await exerciseShopAccountingExport(cdp, sessionId, browserContextId)
+      : null
+    const shopOfflineRestore = initialStateMatches && testCase.exerciseShopOfflineRestore
+      ? await exerciseShopOfflineRestore(cdp, sessionId, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs, offlineTransportFailures)
+      : null
+    const ecommerceClaimBoundary = initialStateMatches && testCase.exerciseEcommerceClaimBoundary
       ? await exerciseEcommerceClaimBoundary(cdp, sessionId)
       : null
+    const rawStoreToShop = initialStateMatches && testCase.exerciseStoreToShop
+      ? await exerciseStoreToShopJourney(cdp, sessionId, origin, testCase.expectedPath, testCase.expectedText, testCase.timeoutMs)
+      : null
+    const sitesWorkspace = initialStateMatches && testCase.exerciseSitesPages
+      ? await exerciseSitesPages(cdp, sessionId)
+      : initialStateMatches && testCase.inspectSitesInquiries
+        ? await inspectSitesInquiries(cdp, sessionId)
+        : null
     const beforeCapture = await readRenderedState(cdp, sessionId, Boolean(testCase.retirementCaseId))
     if (accessGuard) {
       await accessGuard.assertClean()
@@ -861,6 +1834,7 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
       } catch { launcherFailure = 'app_entry_rendered_launcher_products_mismatch' }
     }
     const missingText = testCase.expectedText.filter((needle) => !(finalRendered?.text || '').includes(needle))
+    const unexpectedText = (testCase.absentText ?? []).filter((needle) => (finalRendered?.text || '').includes(needle))
     const renderedViewportMatches = Math.abs((finalRendered?.viewportWidth ?? 0) - testCase.width) <= 1
       && Math.abs((finalRendered?.viewportHeight ?? 0) - testCase.height) <= 1
     const counterViewportMatches = !shopCounter
@@ -869,9 +1843,27 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
     const ecommerceViewportMatches = !ecommerceClaimBoundary
       || Math.abs((ecommerceClaimBoundary.viewportWidth ?? 0) - testCase.width) <= 1
         && Math.abs((ecommerceClaimBoundary.viewportHeight ?? 0) - testCase.height) <= 1
-    const profitControlViewportMatches = !rawShopProfitControl
-      || Math.abs((rawShopProfitControl.viewportWidth ?? 0) - testCase.width) <= 1
-        && Math.abs((rawShopProfitControl.viewportHeight ?? 0) - testCase.height) <= 1
+    const storeToShopViewport = rawStoreToShop ? {
+      viewportWidth: Number.isFinite(rawStoreToShop.viewportWidth) ? rawStoreToShop.viewportWidth : finalRendered?.viewportWidth,
+      viewportHeight: Number.isFinite(rawStoreToShop.viewportHeight) ? rawStoreToShop.viewportHeight : finalRendered?.viewportHeight,
+      documentScrollWidth: Number.isFinite(rawStoreToShop.documentScrollWidth) ? rawStoreToShop.documentScrollWidth : finalRendered?.documentScrollWidth,
+    } : null
+    const storeToShopViewportMatches = !storeToShopViewport
+      || Number.isFinite(storeToShopViewport.viewportWidth) && Number.isFinite(storeToShopViewport.viewportHeight)
+        && Math.abs(storeToShopViewport.viewportWidth - testCase.width) <= 1
+        && Math.abs(storeToShopViewport.viewportHeight - testCase.height) <= 1
+    const sitesViewportMatches = !sitesWorkspace
+      || Math.abs((sitesWorkspace.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((sitesWorkspace.viewportHeight ?? 0) - testCase.height) <= 1
+    const decisionDeskViewportMatches = !rawShopDecisionDesk
+      || Math.abs((rawShopDecisionDesk.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((rawShopDecisionDesk.viewportHeight ?? 0) - testCase.height) <= 1
+    const shopAccountingViewportMatches = !shopAccountingExport
+      || Math.abs((shopAccountingExport.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((shopAccountingExport.viewportHeight ?? 0) - testCase.height) <= 1
+    const shopOfflineViewportMatches = !shopOfflineRestore
+      || Math.abs((shopOfflineRestore.viewportWidth ?? 0) - testCase.width) <= 1
+        && Math.abs((shopOfflineRestore.viewportHeight ?? 0) - testCase.height) <= 1
     const mutatingRequests = networkRequests.filter((entry) => !['GET', 'HEAD', 'OPTIONS'].includes(entry.method)).map((entry) => {
       let path = entry.url
       try { path = new URL(entry.url).pathname } catch {}
@@ -885,9 +1877,14 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
         return false
       }
     }).length
-    const shopProfitControl = rawShopProfitControl ? {
-      ...rawShopProfitControl,
-      network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length },
+    const shopDecisionDesk = rawShopDecisionDesk ? {
+      ...rawShopDecisionDesk,
+      network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length, httpErrorResponseCount: httpErrorResponses.length },
+    } : null
+    const storeToShop = rawStoreToShop ? {
+      ...rawStoreToShop,
+      ...storeToShopViewport,
+      network: { externalRequestCount, failedRequestCount: failedNetworkRequests.length, httpErrorResponseCount: httpErrorResponses.length },
     } : null
     const failures = [
       ...(testCase.inspectBusinessBrief && (!briefControls || Object.values(briefControls).some(value => value !== true)) ? ['Business brief controls are not ready'] : []),
@@ -909,18 +1906,33 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
         ? [`counter horizontal overflow: ${shopCounter.documentScrollWidth}px document in ${shopCounter.viewportWidth}px viewport`]
         : []),
       ...(counterViewportMatches ? [] : [`counter viewport changed from ${testCase.width}x${testCase.height} to ${shopCounter?.viewportWidth ?? 'unknown'}x${shopCounter?.viewportHeight ?? 'unknown'}`]),
-      ...(shopProfitControl && !shopProfitControl.ok ? ['Shop Profit Control semantic or accessibility contract failed'] : []),
-      ...(shopProfitControl && shopProfitControl.documentScrollWidth > shopProfitControl.viewportWidth + 1
-        ? [`Shop Profit Control horizontal overflow: ${shopProfitControl.documentScrollWidth}px document in ${shopProfitControl.viewportWidth}px viewport`]
+      ...(shopDecisionDesk && !shopDecisionDesk.ok ? [`Shop Decision Desk contract failed: ${Object.entries(shopDecisionDesk.checks || {}).filter(([, passed]) => !passed).map(([name]) => name).join(', ')}`] : []),
+      ...(shopDecisionDesk && shopDecisionDesk.documentScrollWidth > shopDecisionDesk.viewportWidth + 1
+        ? [`Shop Decision Desk horizontal overflow: ${shopDecisionDesk.documentScrollWidth}px document in ${shopDecisionDesk.viewportWidth}px viewport`]
         : []),
-      ...(shopProfitControl && !shopProfitControl.accessibility?.ok ? ['Shop Profit Control accessibility or mobile touch-target contract failed'] : []),
-      ...(shopProfitControl && shopProfitControl.network.externalRequestCount !== 0 ? ['Shop Profit Control made an external request'] : []),
-      ...(shopProfitControl && shopProfitControl.network.failedRequestCount !== 0 ? ['Shop Profit Control had a failed request'] : []),
-      ...(profitControlViewportMatches ? [] : [`Shop Profit Control viewport changed from ${testCase.width}x${testCase.height} to ${shopProfitControl?.viewportWidth ?? 'unknown'}x${shopProfitControl?.viewportHeight ?? 'unknown'}`]),
+      ...(shopDecisionDesk && !shopDecisionDesk.accessibility?.ok ? ['Shop Decision Desk accessibility or mobile touch-target contract failed'] : []),
+      ...(shopDecisionDesk && shopDecisionDesk.network.externalRequestCount !== 0 ? ['Shop Decision Desk made an external request'] : []),
+      ...(shopDecisionDesk && shopDecisionDesk.network.failedRequestCount !== 0 ? ['Shop Decision Desk had a failed request'] : []),
+      ...(decisionDeskViewportMatches ? [] : [`Shop Decision Desk viewport changed from ${testCase.width}x${testCase.height} to ${shopDecisionDesk?.viewportWidth ?? 'unknown'}x${shopDecisionDesk?.viewportHeight ?? 'unknown'}`]),
+      ...(shopAccountingExport && !shopAccountingExport.ok ? [`Shop accounting export failed: ${shopAccountingExport.error || 'unknown check'}`] : []),
+      ...(shopAccountingViewportMatches ? [] : [`Shop accounting viewport changed from ${testCase.width}x${testCase.height} to ${shopAccountingExport?.viewportWidth ?? 'unknown'}x${shopAccountingExport?.viewportHeight ?? 'unknown'}`]),
+      ...(shopOfflineRestore && !shopOfflineRestore.ok ? [`Shop offline restore failed: ${shopOfflineRestore.error || Object.entries(shopOfflineRestore.checks || {}).filter(([, passed]) => !passed).map(([name]) => name).join(', ')}`] : []),
+      ...(shopOfflineViewportMatches ? [] : [`Shop offline viewport changed from ${testCase.width}x${testCase.height} to ${shopOfflineRestore?.viewportWidth ?? 'unknown'}x${shopOfflineRestore?.viewportHeight ?? 'unknown'}`]),
       ...(ecommerceClaimBoundary && !ecommerceClaimBoundary.ok ? [`Ecommerce claim boundary failed: ${ecommerceClaimBoundary.error || 'unknown check'}`] : []),
       ...(ecommerceViewportMatches ? [] : [`Ecommerce viewport changed from ${testCase.width}x${testCase.height} to ${ecommerceClaimBoundary?.viewportWidth ?? 'unknown'}x${ecommerceClaimBoundary?.viewportHeight ?? 'unknown'}`]),
+      ...(storeToShop && !storeToShop.ok ? [`Store-to-Shop journey failed: ${storeToShop.error || 'unknown check'}`] : []),
+      ...(storeToShop && storeToShop.network.externalRequestCount !== 0 ? ['Store-to-Shop journey made an external request'] : []),
+      ...(storeToShop && storeToShop.network.failedRequestCount !== 0 ? ['Store-to-Shop journey had a failed request'] : []),
+      ...(storeToShop && storeToShop.network.httpErrorResponseCount !== 0 ? ['Store-to-Shop journey received an HTTP error response'] : []),
+      ...(storeToShopViewportMatches ? [] : [`Store-to-Shop viewport changed from ${testCase.width}x${testCase.height} to ${storeToShop?.viewportWidth ?? 'unknown'}x${storeToShop?.viewportHeight ?? 'unknown'}`]),
+      ...(sitesWorkspace && !sitesWorkspace.ok ? [`Sites workspace contract failed: ${sitesWorkspace.error || 'unknown check'}`] : []),
+      ...(sitesWorkspace && sitesWorkspace.documentScrollWidth > sitesWorkspace.viewportWidth + 1
+        ? [`Sites workspace horizontal overflow: ${sitesWorkspace.documentScrollWidth}px document in ${sitesWorkspace.viewportWidth}px viewport`]
+        : []),
+      ...(sitesViewportMatches ? [] : [`Sites workspace viewport changed from ${testCase.width}x${testCase.height} to ${sitesWorkspace?.viewportWidth ?? 'unknown'}x${sitesWorkspace?.viewportHeight ?? 'unknown'}`]),
       ...(mutatingRequests.length ? [`unexpected browser network writes: ${mutatingRequests.map((entry) => `${entry.method} ${entry.path}`).join(', ')}`] : []),
       ...missingText.map((needle) => `missing text: ${needle}`),
+      ...unexpectedText.map((needle) => `unexpected text: ${needle}`),
       ...errors,
       ...warnings,
     ]
@@ -942,8 +1954,12 @@ export async function verifyCase(cdp, origin, testCase, scopedAccess = null) {
           && finalRendered.documentScrollWidth <= finalRendered.viewportWidth + 1),
       },
       layout: shopCounter,
-      profitControl: shopProfitControl,
+      decisionDesk: shopDecisionDesk,
+      accountingExport: shopAccountingExport,
+      offlineRestore: shopOfflineRestore,
       claimBoundary: ecommerceClaimBoundary,
+      storeToShop,
+      sitesWorkspace,
       briefControls,
       screenshot,
       network: { mutatingRequestCount: mutatingRequests.length, mutatingRequests },
@@ -965,7 +1981,7 @@ function gitHead() {
 const launcherText = [
   'Welcome back',
   'Login',
-  'Your business, in one place.',
+  'Sign in to your business.',
 ]
 
 const shopSetup = {
@@ -987,30 +2003,30 @@ const shopSetup = {
 
 const tests = [
   {
-    name: 'desktop root shows launcher despite remembered product',
+    name: 'desktop root presents login despite remembered product',
     requireLauncherProducts: true,
-    expectedLauncherProducts: [['Shop', '/shop/']],
+    expectedLauncherProducts: [],
     route: '/',
     width: 1280,
     height: 900,
     expectedPath: '/',
-    expectedText: ['Welcome back', 'Login', 'Shop', 'Pilot Spa Workspace', 'Saved on this device'],
+    expectedText: launcherText,
     screenshotName: 'app-launcher-desktop-1280x900',
     seed: { lastProduct: 'production', productSetups: shopSetup },
   },
   {
-    name: 'desktop choose query shows launcher',
+    name: 'desktop choose query presents login',
     requireLauncherProducts: true,
     expectedLauncherProducts: [],
     route: '/?choose=1',
     width: 1280,
     height: 900,
     expectedPath: '/?choose=1',
-    expectedText: ['Welcome back', 'Login', 'Your business, in one place.'],
+    expectedText: launcherText,
     seed: { lastProduct: 'commerce' },
   },
   {
-    name: 'mobile root shows launcher',
+    name: 'mobile root presents login',
     requireLauncherProducts: true,
     expectedLauncherProducts: [],
     route: '/',
@@ -1018,7 +2034,7 @@ const tests = [
     height: 844,
     mobile: true,
     expectedPath: '/',
-    expectedText: ['Welcome back', 'Login', 'Your business, in one place.'],
+    expectedText: launcherText,
     screenshotName: 'app-launcher-mobile-390x844',
     seed: { lastProduct: 'ecommerce' },
   },
@@ -1038,7 +2054,8 @@ const tests = [
     height: 900,
     expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
     expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
-    expectedText: ['Mini-mart & grocery', 'Products', 'Premium rice 25kg', 'PRIVATE DEVICE'],
+    expectedText: ['Products', 'Premium rice 25kg'],
+    absentText: ['PRIVATE DEVICE'],
     exerciseShopCounter: true,
     noHorizontalOverflow: true,
     screenshotName: 'shop-counter-mini-mart-desktop-1280x900',
@@ -1053,12 +2070,58 @@ const tests = [
     mobile: true,
     expectedPath: (path) => path.startsWith('/shop/?') && path.includes('tab=counter') && path.includes('template=mini-mart'),
     expectedPathLabel: '/shop/?tab=counter&template=mini-mart',
-    expectedText: ['Mini-mart & grocery', 'Products', 'Premium rice 25kg', 'CURRENT SALE · THIS DEVICE', 'Login'],
+    expectedText: ['Products', 'Premium rice 25kg', 'CURRENT SALE', 'Login'],
+    absentText: ['CURRENT SALE · THIS DEVICE'],
     exerciseShopCounter: true,
     noHorizontalOverflow: true,
     screenshotName: 'shop-counter-mini-mart-mobile-390x844',
     timeoutMs: 60_000,
     seed: miniMartCounterFixture(),
+  },
+  ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(viewport => ({
+    name: `Shop Today keeps one accountable decision at ${viewport.width}px`,
+    route: '/shop/?tab=today',
+    ...viewport,
+    expectedPath: '/shop/?tab=today',
+    // innerText reflects the visual text-transform contract for these operator labels.
+    expectedText: ['Today', 'RECOMMENDED NEXT', 'WHY NOW', 'OWNER CHECK', 'Attention', 'Order queue', 'Stock watch', 'Advanced controls'],
+    absentText: ['Local Batch review stays off', 'Open a demo', 'Start trial'],
+    exerciseShopDecisionDesk: true,
+    isolatedBrowserContext: true,
+    noHorizontalOverflow: true,
+    screenshotName: `shop-today-decision-desk-${viewport.width}`,
+    timeoutMs: 60_000,
+    seed: { lastProduct: 'commerce', productSetups: shopSetup, ...miniMartOwnedCatalogFixture() },
+  })),
+  {
+    name: 'Shop Today downloads a completed accounting handoff',
+    route: '/shop/?tab=today',
+    width: 1280,
+    height: 900,
+    expectedPath: '/shop/?tab=today',
+    expectedText: ['Today', 'Download accountant CSV', 'Daily close', 'MAPPING REVIEWED'],
+    absentText: ['Open a demo', 'Start trial'],
+    exerciseShopAccountingExport: true,
+    isolatedBrowserContext: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'shop-today-accountant-handoff-1280x900',
+    timeoutMs: 60_000,
+    seed: { lastProduct: 'commerce', productSetups: shopSetup, ...shopCompletedCloseFixture() },
+  },
+  {
+    name: 'Shop Today reloads the current business offline',
+    route: '/shop/?tab=today',
+    width: 1280,
+    height: 900,
+    expectedPath: '/shop/?tab=today',
+    expectedText: ['Today', 'Order queue', 'May', 'Stock watch', 'Cold drink pack', 'Daily close'],
+    absentText: ['Open a demo', 'Start trial'],
+    exerciseShopOfflineRestore: true,
+    isolatedBrowserContext: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'shop-today-offline-restore-1280x900',
+    timeoutMs: 60_000,
+    seed: { lastProduct: 'commerce', productSetups: shopSetup, ...shopCompletedCloseFixture() },
   },
   ...RETIRED_PRODUCT_CASES.map(spec => ({ ...spec, name: spec.id,
     retirementCaseId: spec.id, requireLauncherProducts: true,
@@ -1099,6 +2162,37 @@ const tests = [
     seed: {},
   },
   {
+    name: 'desktop Sites opens the real saved page editor',
+    route: '/website/?workspace=1',
+    width: 1440,
+    height: 900,
+    expectedPath: '/website/?workspace=1',
+    initialExpectedText: ['Pages', 'Mingalar Fresh Mart', 'Edit website', 'Inquiries'],
+    expectedText: ['Pages', 'Home', 'Catalog', 'Contact', 'Page content', 'Page checks', 'Inquiries', 'View website'],
+    absentText: ['Working sample', 'Open demo', 'Start trial'],
+    exerciseSitesPages: true,
+    captureSitesWorkspace: true,
+    isolatedBrowserContext: true,
+    screenshotName: 'sites-pages-current-desktop-1440x900',
+    timeoutMs: 60_000,
+    seed: sitesOwnerWorkspaceFixture(),
+  },
+  {
+    name: 'desktop Sites opens the real inquiry workspace',
+    route: '/website/?workspace=1&view=inquiries',
+    width: 1440,
+    height: 900,
+    expectedPath: '/website/?workspace=1&view=inquiries',
+    expectedText: ['Inquiries', 'INQUIRY INBOX', '1 request needs review', 'Daw Mya', 'FOLLOW-UP QUEUE', 'Review and assign'],
+    absentText: ['Working sample', 'Open demo', 'Start trial'],
+    inspectSitesInquiries: true,
+    captureSitesWorkspace: true,
+    isolatedBrowserContext: true,
+    screenshotName: 'sites-inquiries-current-desktop-1440x900',
+    timeoutMs: 60_000,
+    seed: sitesOwnerWorkspaceFixture(),
+  },
+  {
     name: 'retired Commerce demo query returns to account home',
     route: '/?demo=ecommerce',
     width: 1280,
@@ -1108,7 +2202,7 @@ const tests = [
     seed: {},
   },
   ...[{ width: 1280, height: 900 }, { width: 390, height: 844, mobile: true }].map(viewport => ({
-    name: `empty Ecommerce offers real catalog setup at ${viewport.width}px`,
+    name: `empty Ecommerce offers catalog help at ${viewport.width}px`,
     route: '/ecommerce/?workspace=1',
     ...viewport,
     expectedPath: '/ecommerce/?workspace=1',
@@ -1119,38 +2213,85 @@ const tests = [
     seed: {},
   })),
   {
-    name: 'desktop Ecommerce keeps a reviewed order request on this device',
+    name: 'desktop Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     width: 1280,
     height: 900,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Order request saved', 'Saved on this device for Shop review.', 'May Thiri'],
+    expectedText: ['Store', 'Request saved locally for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-desktop-1280x900',
     timeoutMs: 60_000,
-    seed: miniMartCounterFixture(),
+    seed: miniMartOwnedCatalogFixture(),
   },
   {
-    name: 'mobile Ecommerce keeps a reviewed order request on this device',
+    name: 'mobile Ecommerce keeps a reviewed order request locally',
     route: '/ecommerce/?workspace=1',
     width: 390,
     height: 844,
     mobile: true,
     expectedPath: (path) => path.startsWith('/ecommerce/'),
     expectedPathLabel: '/ecommerce/',
-    expectedText: ['Commerce', 'Order request saved', 'Saved on this device for Shop review.', 'May Thiri'],
+    expectedText: ['Store', 'Request saved locally for Shop review.', 'May Thiri'],
     exerciseEcommerceClaimBoundary: true,
     noHorizontalOverflow: true,
     screenshotName: 'ecommerce-local-request-mobile-390x844',
     timeoutMs: 60_000,
-    seed: miniMartCounterFixture(),
+    seed: miniMartOwnedCatalogFixture(),
+  },
+  {
+    name: 'Commerce request becomes one accountable Shop order',
+    route: '/ecommerce/?workspace=1',
+    width: 1280,
+    height: 900,
+    initialExpectedPath: '/ecommerce/?workspace=1',
+    initialExpectedText: ['Store', 'Open customer ordering'],
+    expectedPath: '/shop/?tab=orders',
+    expectedText: ['Shop', 'Orders', 'May Thiri', 'Payment pending'],
+    absentText: ['Payment captured', 'Payment received'],
+    exerciseStoreToShop: true,
+    isolatedBrowserContext: true,
+    noHorizontalOverflow: true,
+    screenshotName: 'commerce-request-shop-order-desktop-1280x900',
+    timeoutMs: 60_000,
+    seed: { lastProduct: 'commerce', productSetups: shopSetup, ...miniMartOwnedCatalogFixture() },
   },
 ].map((testCase) => ({ noHorizontalOverflow: true, ...testCase }))
 
+const ENTRY_COPY = new Set(['Login', 'Products', 'Orders', 'Shop', 'Commerce', 'Website', 'Sites', 'Today', 'Home',
+  'Contact', 'Pages', 'Catalog', 'Page content', 'Page checks', 'Inquiries', 'View website'])
+export function unauthenticatedEntryContract(testCase, index = 1) {
+  const route = new URL(String(testCase?.route || '/'), 'https://supermega.invalid')
+  const pathname = route.pathname
+  const segment = pathname.split('/').filter(Boolean)[0] || ''
+  const intent = route.searchParams.get('product')?.toLowerCase() || ''
+  const product = ({ shop: 'shop', commerce: 'shop', retail: 'shop', plant: 'plant', production: 'plant', website: 'website', ecommerce: 'ecommerce' })[segment]
+    || ({ shop: 'shop', commerce: 'shop', retail: 'shop', plant: 'plant', production: 'plant', website: 'website', ecommerce: 'ecommerce' })[intent]
+  const expectedPath = product ? `/login?product=${product}` : '/login'
+  const protectedCopy = (Array.isArray(testCase?.expectedText) ? testCase.expectedText : [])
+    .filter((value) => typeof value === 'string' && value.trim().length > 3 && !ENTRY_COPY.has(value.trim()))
+  return {
+    name: `unauthenticated app entry ${index} requires login`,
+    route: testCase.route,
+    width: testCase.width,
+    height: testCase.height,
+    mobile: testCase.mobile,
+    timeoutMs: testCase.timeoutMs,
+    noHorizontalOverflow: true,
+    expectedPath,
+    expectedPathLabel: product ? `/login?product=${product}` : '/login',
+    initialExpectedPath: expectedPath,
+    expectedText: ['Login', 'Login is currently unavailable.'],
+    initialExpectedText: ['Login', 'Login is currently unavailable.'],
+    absentText: [...new Set([...(testCase.absentText || []), ...protectedCopy])],
+    seed: testCase.seed,
+  }
+}
+
 async function main() {
-  if (shopOnly && ecommerceClaimOnly) throw new Error('app_entry_rendered_scope_conflict')
+  if ([shopOnly, shopAccountingOnly, shopOfflineOnly, ecommerceClaimOnly, storeToShopOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
   if (!outFile || !screenshotDir) throw new Error('app_entry_rendered_evidence_paths_required')
   const evidence = buildEvidenceDescriptor({ evidenceDir: screenshotDir, outputPath: outFile })
@@ -1170,17 +2311,34 @@ async function main() {
     cdp = await Cdp.connect(started.wsUrl)
     const version = await cdp.send('Browser.getVersion')
     const cases = []
-    const selectedTests = shopOnly
-      ? tests.filter((testCase) => testCase.exerciseShopCounter)
-      : ecommerceClaimOnly
-        ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
-        : tests
+    const safeCaseSummaries = []
+    const selectedJourneyDefinitions = shopOnly
+      ? tests.filter((testCase) => testCase.exerciseShopCounter || testCase.exerciseShopDecisionDesk)
+      : shopAccountingOnly
+        ? tests.filter((testCase) => testCase.exerciseShopAccountingExport)
+        : shopOfflineOnly
+          ? tests.filter((testCase) => testCase.exerciseShopOfflineRestore)
+          : ecommerceClaimOnly
+            ? tests.filter((testCase) => testCase.exerciseEcommerceClaimBoundary)
+            : storeToShopOnly
+              ? tests.filter((testCase) => testCase.exerciseStoreToShop)
+              : sitesOnly
+                ? tests.filter((testCase) => testCase.captureSitesWorkspace)
+                : tests
+    const selectedTests = selectedJourneyDefinitions.map((testCase, index) => unauthenticatedEntryContract(testCase, index + 1))
     for (const [index, testCase] of selectedTests.entries()) {
       const startedAt = Date.now()
       console.error(JSON.stringify({ event: 'rendered_case_started', case: index + 1, total: selectedTests.length, name: testCase.name }))
       const result = await verifyCase(cdp, origin, testCase)
       cases.push(result)
-      console.error(JSON.stringify({ event: 'rendered_case_finished', case: index + 1, durationMs: Date.now() - startedAt, failures: result.failures.length }))
+      const safeSummary = summarizeRenderedCase(testCase, result)
+      safeCaseSummaries.push(safeSummary)
+      console.error(JSON.stringify({ event: 'rendered_case_finished', case: index + 1, durationMs: Date.now() - startedAt,
+        failures: result.failures.length,
+        ...(process.env.GITHUB_ACTIONS === 'true' && result.failures.length
+          ? { diagnostics: safeSummary }
+          : {}),
+      }))
       if (process.env.GITHUB_ACTIONS === 'true' && result.failures.length) {
         // Only the source-defined case name and count belong in public annotations.
         // Page content, URLs, console messages and raw failure details stay out.
@@ -1217,6 +2375,17 @@ async function main() {
     const serialized = JSON.stringify(report, null, 2)
     await writeFile(outFile, `${serialized}\n`, { flag: 'wx' })
     if (report.ok) console.log(serialized)
+    else if (process.env.GITHUB_ACTIONS === 'true') {
+      console.error(JSON.stringify({
+        ok: false,
+        contract: report.contract,
+        scope: report.scope,
+        sourceSha: report.sourceSha,
+        failedCaseCount: safeCaseSummaries.filter((entry) => entry.failedCheckCount > 0).length,
+        failures: safeCaseSummaries.filter((entry) => entry.failedCheckCount > 0),
+      }))
+      process.exitCode = 1
+    }
     else {
       console.error(serialized)
       process.exitCode = 1

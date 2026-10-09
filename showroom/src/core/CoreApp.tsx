@@ -1,29 +1,32 @@
 import { spaCounterFields } from './shop-spa-counter-fields'
-import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
-import { createCounterTicketSession, emptyCounterBasket, type CounterBasket } from './shop-parked-tickets'
+import { createCounterTicketSession, emptyCounterBasket, type CounterBasket, type CounterTicketStorageScope } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
   shopBusinessTemplateCommerceItems,
   shopBusinessTemplateFromQuery,
-  shopBusinessTemplates,
   type ShopBusinessTemplate,
 } from '../products/shop/business-templates'
-import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
+import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
 import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
 import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
 import { downloadBlob } from './download-file'
 import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
+import { applyStockCountScan } from './shop-stock-count-scan'
+const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
+const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
-import { bi } from './i18n-actions'
+import { bi, confirmedBurmese } from './i18n-actions'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
   ACTION_KEY,
@@ -44,6 +47,7 @@ import {
   productionActionProof,
   useCommerceWorkspace,
   localShopConfirmed,
+  operationsEntryDecision,
   useManagedIdentity,
   useProductionWorkspace,
   useSetupWorkspace,
@@ -54,6 +58,7 @@ import {
   type PendingAccountableAction,
 } from './workspace-runtime'
 import { getStorageDurability, measureCommerceHeadroom, subscribeStorageDurability } from './storage-durability'
+import { managedAccountPath } from './account-routes'
 import { formatTime } from './team-work'
 import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
@@ -61,6 +66,7 @@ import { paymentQrScopeForWorkspace } from './payment-qr-store'
 import { productImageScopeForWorkspace } from './product-image-store'
 import { SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX, readShopLoyaltySettings, shopLoyaltyBalances, shopLoyaltyDisplayPoints, shopLoyaltyRedeemedPointsForOrder, shopLoyaltyRedemptionAllowed, shopLoyaltyScopeForWorkspace } from './shop-loyalty'
 import { projectShopProfitControl } from './shop-profit-control'
+import { projectShopTodayCompletedSales } from './shop-today-sales'
 import { managedPlantStarterPlan, plantIndustryPack, plantIndustryPackIdFromSearch, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
@@ -70,7 +76,7 @@ import {
   authorizeCommerceSupplierReturn,
   cancelCommercePurchaseOrder,
   cancelCommerceOrder,
-  countCommerceStock,
+  countCommerceStockBatch,
   commerceAccountingHandoff,
   commerceAccountingHandoffCsv,
   commerceDailyCloseCsv,
@@ -84,6 +90,7 @@ import {
   commerceCurrentPromotionPolicy,
   commerceCurrentShippingPolicy,
   commerceCurrentPaymentPolicy,
+  commerceMerchantProfileActionId,
   commerceCustomerCreditReview,
   commerceOrderCalculation,
   commerceOrderAcknowledgement,
@@ -105,6 +112,7 @@ import {
   commerceSupportWorkloadExport,
   commerceOrderItemSummary,
   commerceOrderLocationAllocationPreview,
+  commerceStockConflict,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
   commerceOrderPromiseUrgency,
@@ -154,12 +162,13 @@ import {
   recordCommerceOrderCorrection,
   registerCommerceItem,
   reserveCommerceOrder,
-  restoreBrowserLocalSamplePaymentPolicies,
   saveCommerceClose,
+  saveCommerceMerchantProfile,
   settleCommerceRefund,
   updateCommerceItem,
   validateCommerceState,
   type CommerceActionProof,
+  type CommerceMerchantProfileInput,
   type CommerceCloseSettlementInputLine,
   type CommerceCorrectionKind,
   type CommerceCorrectionReasonCode,
@@ -183,6 +192,7 @@ import {
   type CommerceOrderAcknowledgement,
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
+import { openCommerceShiftSession, registerCommerceOperatingUnit } from './commerce-operating-session'
 import { projectShopInventory } from './shop-inventory-foundation'
 import { projectShopArAgingSummary } from './shop-ar-aging-summary'
 import { projectShopApAgingSummary } from './shop-ap-aging-summary'
@@ -277,7 +287,6 @@ import {
   readShopServiceSchedule,
   shopIndustryPack,
   shopScheduleVocabulary,
-  type ShopIndustryPack,
   type ShopServiceSchedule as ShopServiceScheduleState,
 } from './shop-service-scheduling'
 import { projectShopAppointmentTillReconciliation } from './shop-appointment-till-reconciliation'
@@ -288,7 +297,6 @@ import { lockedCapabilityNotice } from './capability-tiers'
 const ProductDataImport = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductDataImport })))
 const WebsiteCommerceIntake = lazy(() => import('../products/WebsiteCommerceIntake').then((module) => ({ default: module.WebsiteCommerceIntake })))
 
-const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
 const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module) => ({ default: module.ShopOperatingFlow })))
 const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
@@ -296,6 +304,17 @@ const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: 
 const ShopMonthlyStatement = lazy(() => import('./ShopMonthlyStatement').then((module) => ({ default: module.ShopMonthlyStatement })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
 const ReceiptDialog = lazy(() => import('./ReceiptDialog').then((module) => ({ default: module.ReceiptDialog })))
+const CASHIER_COMPLETE_MY = confirmedBurmese('Complete')
+const CASHIER_SAVE_MY = confirmedBurmese('Save')
+const coreUi = Object.freeze({
+  d: 'datetime-local',
+  q: 'core-button primary compact',
+  f: 'core-form compact-form',
+  e: 'supermega.ecommerce.shop_draft.v7',
+  m: 'managed-ready',
+  p: 'pending_confirmation',
+  o: 'commerce.order.created',
+})
 
 type PurchaseOrderDraft =
   | { mode: 'create'; requisitionId?: string; sku: string; supplier: string; expectedAt: string; quantity: string; unitCostMmk: string }
@@ -351,11 +370,14 @@ type SupplierCreditDraft = {
   amountMmk: string
 }
 
-type StockCountDraft = {
+export type StockCountDraft = {
   sku: string
   stockUnitId: string
   locationId: string
   quantity: string
+  expectedOnHand: number
+  expectedPhysicalQuantity: number
+  expectedHeadDigest: string | null
 }
 
 type TaxConfigurationDraft = {
@@ -557,6 +579,14 @@ function ecommerceReschedulePromiseAllowed(draft: EcommerceShopDraftV2, intent: 
   return draft.pricing.shipping.status === 'approved'
     && draft.pricing.shipping.promiseMinutes !== null
     && requested >= reviewed + draft.pricing.shipping.promiseMinutes * 60_000
+}
+
+export function shopInboxRequestWindow<T extends { id: string }>(requests: readonly T[], requestedId: string | null, limit = 20) {
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('Shop inbox window limit must be a positive safe integer.')
+  const visible = requests.slice(0, limit)
+  if (!requestedId || visible.some((request) => request.id === requestedId)) return visible
+  const target = requests.find((request) => request.id === requestedId)
+  return target ? [target, ...visible.slice(0, limit - 1)] : visible
 }
 
 function productCanonicalPath(product: ProductId) {
@@ -937,6 +967,16 @@ function fulfilmentLabel(value: string | undefined) {
   return value ?? ''
 }
 
+function shopOrderPrimaryActionLabel(order: CommerceOrder) {
+  if (order.refundStatus === 'due') return 'Record settled refund'
+  if (order.paymentStatus === 'pending' && order.channel === 'Walk-in' && order.fulfilment === 'pickup') return 'Paid & handed over'
+  if (order.status === 'ready' && order.paymentStatus === 'pending') return 'Record payment'
+  if (order.status === 'confirmed') return 'Start preparing'
+  if (order.status === 'preparing') return order.fulfilment === 'delivery' ? 'Mark packed for delivery' : order.fulfilment === 'pickup' ? 'Ready for pickup' : 'Mark ready'
+  if (order.status === 'ready') return order.fulfilment === 'delivery' ? 'Record delivered' : order.fulfilment === 'pickup' ? 'Record picked up' : 'Complete handoff'
+  return 'Review order'
+}
+
 function commerceOrderReturnLines(order: CommerceOrder) {
   return order.lines?.map((line) => ({
     sku: line.sku,
@@ -1042,7 +1082,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     try {
       await onConfirm({ actor: responsibleActor, reason: confirmedReason, evidenceReference: confirmedEvidence })
       // Remember only a name the operator actually supplied, and only after the change
-      // applied. Six actions offer a ROLE placeholder as actorSuggestion — 'Sample cashier',
+      // applied. Six actions offer a ROLE placeholder as actorSuggestion — 'Counter cashier',
       // 'Plant operator', 'Shift supervisor'. Confirming one of those untouched must not
       // turn the placeholder into the default identity for every later action, which would
       // sign the whole device's audit trail with a name nobody ever claimed.
@@ -1064,8 +1104,8 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>{isPaymentReconciliation ? 'Payment evidence reference' : 'Reference'}<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder={isPaymentReconciliation ? 'Internal slip file ID or counter reference' : 'Message ID, receipt, count sheet, or observation'} /></label>{isPaymentReconciliation ? <p className="form-notice">For QR payments, record an internal slip file ID or counter reference only. Do not enter a customer phone number, wallet ID, account number, or payment credentials. This records your review; it does not verify or charge a payment.</p> : null}</>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">{isCounterSettlement
-        ? 'Browser-local sample only. Confirming records the cashier’s reviewed payment and handoff, completes the sale, and updates sample stock in this browser. It does not charge a wallet or card, contact a customer, write to a server or company account, or move real stock.'
-        : 'Browser-local sample only. Confirming creates an open sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.'}</p> : null}
+        ? 'This device records the sale, payment review, handoff and stock. It does not charge or message anyone, or write to a company account.'
+        : 'This device creates the order and reserves stock. Payment and fulfilment stay pending. It does not charge or message anyone, or write to a company account.'}</p> : null}
       <div className="form-actions"><button className="core-button" data-action-gate="cancel" disabled={busy || confirmationLocked} onClick={onCancel} type="button">{bi('Cancel')}</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? bi('Retry same confirmation') : isCounterSettlement ? 'Complete sale' : bi(isCounterConfirmation ? 'Create order' : 'Confirm change')}</button></div>
       {error
         ? <div className="form-notice" data-action-gate="error" data-tone="error" role="alert">
@@ -1101,13 +1141,6 @@ export function OperationsPage({ product }: { product: ProductId }) {
   // answered at all, the probe settled behind it, and no identity returned. Its lifecycle
   // is enumerated frame by frame in tools/storage_durability.test.mjs.
   const confirmedLocalShop = localShopConfirmed(runtime.status, managedIdentitySettled, managedIdentity)
-  const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
-  const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
-  const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
-  const ecommerceCorrectionNavigationIntent = (location.state as { ecommerceCorrectionIntent?: EcommerceCorrectionIntent } | null)?.ecommerceCorrectionIntent ?? null
-  const ecommerceCancellationNavigationIntent = (location.state as { ecommerceCancellationIntent?: EcommerceCancellationIntent } | null)?.ecommerceCancellationIntent ?? null
-  const ecommerceOrderAmendmentNavigationIntent = (location.state as { ecommerceOrderAmendmentIntent?: EcommerceOrderAmendmentIntent } | null)?.ecommerceOrderAmendmentIntent ?? null
-  const ecommerceOrderRescheduleNavigationIntent = (location.state as { ecommerceOrderRescheduleIntent?: EcommerceOrderRescheduleIntent } | null)?.ecommerceOrderRescheduleIntent ?? null
   const shopCounterSearch = (location.state as { shopCounterSearch?: string } | null)?.shopCounterSearch?.trim().slice(0, 80) ?? ''
   const shopCounterCustomer = (location.state as { shopCounterCustomer?: string } | null)?.shopCounterCustomer?.trim().slice(0, 120) ?? ''
   const shopCounterClientId = (location.state as { shopCounterClientId?: string } | null)?.shopCounterClientId?.trim().slice(0, 80) ?? ''
@@ -1138,6 +1171,10 @@ export function OperationsPage({ product }: { product: ProductId }) {
     navigate(`${productCanonicalPath(view)}?${params}`, { replace: true })
   }
 
+  const entryDecision = operationsEntryDecision(runtime.status, managedIdentitySettled, managedIdentity)
+  if (entryDecision === 'checking') return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Checking company access…</p></div>
+  if (entryDecision === 'login') return <Navigate replace to={managedAccountPath('/login', view, location.search)} />
+
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
   const requestedShopTemplateState = shopTemplateDoorState(requestedShopTemplateId, confirmedLocalShop, Boolean(managedIdentity))
   const productCopy = view === 'commerce'
@@ -1162,7 +1199,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{view === 'commerce' ? bi(tab.label) : tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} confirmedLocalShop={confirmedLocalShop} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1174,6 +1211,18 @@ type ShopCounterReview = {
   outcome: 'paid_handoff' | 'open_order'
   beforeCommit: (orderId: string) => Promise<boolean>
   onCommitted: (orderId: string) => void
+}
+
+type ShopRecordStatus = {
+  actionLabel: string | null
+  badge: string
+  detail: string
+  label: string
+  target: string | null
+}
+
+function makeShopRecordStatus(label: string, badge: string, detail: string, target: string | null, actionLabel: string | null): ShopRecordStatus {
+  return { actionLabel, badge, detail, label, target }
 }
 
 // Read-only. Commerce never writes this key and must not start: the appointment book owns it,
@@ -1198,28 +1247,49 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, industryPack, initialCustomer, initialQuery, items, localDemoStatus, lowStockCount, loyaltyPoints, onReview, openOrderCount, paymentQrScope, persistLocalDraft, productImageScope, recordedOrderIds, sampleCatalogActive }: {
-  businessTemplate: ShopBusinessTemplate | null
+type ShopOperatingView = {
+  actionLabel?: string
+  choice?: ReactNode
+  disabled?: boolean
+  detail: string
+  onAction: (event: MouseEvent<HTMLButtonElement>) => void
+  operator: string
+  status: string
+  unit: string
+}
+
+function ShopOperatingStrip({ actionLabel, choice, detail, disabled, onAction, operator, status, unit }: ShopOperatingView) {
+  return <section aria-label="Shift" className="summary-strip compact-summary shop-operating-strip">
+    <span className="shop-operating-status"><span><small>Shift</small><strong aria-live="polite">{status}</strong></span>{choice ?? (actionLabel ? <button className="core-button compact" disabled={disabled} onClick={onAction} title={detail} type="button">{actionLabel}</button> : <small>{detail}</small>)}</span>
+    <span><small>Operating unit</small><strong>{unit}</strong></span><span><small>Operator</small><strong>{operator}</strong></span>
+  </section>
+}
+
+function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, stockLocationCount }: {
   canCompleteInOneReview: boolean
   disabled: boolean
-  industryPack: ShopIndustryPack | null
+  draftStorageScope?: CounterTicketStorageScope | null
   initialCustomer: string
   initialQuery: string
   items: CommerceItem[]
-  localDemoStatus: 'local' | 'records-at-risk' | null
   lowStockCount: number
   loyaltyPoints: ReadonlyMap<string, number> | null
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
+  operatorLabel: string
+  operatingContext: ReactNode
   paymentQrScope: string
   persistLocalDraft: boolean
   productImageScope: string
+  recordStatus: ShopRecordStatus
   recordedOrderIds: string[]
-  sampleCatalogActive: boolean
+  stockLocationCount: number
 }) {
   const [tickets] = useState(() => {
     if (!persistLocalDraft) return createCounterTicketSession(null, null, initialCustomer)
-    try { return createCounterTicketSession(window.localStorage, navigator.locks ?? null, initialCustomer) }
+    try { return draftStorageScope
+      ? createCounterTicketSession(window.localStorage, navigator.locks ?? null, initialCustomer, draftStorageScope)
+      : createCounterTicketSession(window.localStorage, navigator.locks ?? null, initialCustomer) }
     catch { return createCounterTicketSession({ getItem: () => { throw new Error('unavailable') }, setItem: () => { throw new Error('unavailable') } }, null) }
   })
   const ticketSnapshot = useSyncExternalStore(tickets.subscribe, tickets.getSnapshot)
@@ -1241,6 +1311,17 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   const salePanelRef = useRef<HTMLElement>(null)
   const saleSearchRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
+    const focusCounterSearch = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== '/' || event.altKey || event.ctrlKey || event.metaKey) return
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return
+      event.preventDefault()
+      saleSearchRef.current?.focus()
+    }
+    document.addEventListener('keydown', focusCounterSearch)
+    return () => document.removeEventListener('keydown', focusCounterSearch)
+  }, [])
+  useEffect(() => {
     if (!cartOpen || !salePanelRef.current) return
     return installShopSaleFocus(salePanelRef.current, () => setCartOpen(false), () => saleSearchRef.current)
   }, [cartOpen])
@@ -1256,6 +1337,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
   const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
   const effectiveOutcome = canCompleteInOneReview ? outcome : 'open_order'
+  const cartLowStockLines = lines.filter(({ item, quantity }) => item.onHand - quantity <= item.reorderAt)
 
   // Never silently discard unavailable lines from recovery or from a parked table.
   const catalogChanged = Object.entries(cart).some(([sku, quantity]) => {
@@ -1344,28 +1426,23 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
     }, event.currentTarget)
   }
 
-  const counterContextLabel = businessTemplate && sampleCatalogActive
-    ? `${businessTemplate.name.en} · Counter`
-    : industryPack && sampleCatalogActive
-    ? `${industryPack.name} · Counter`
-    : 'Counter'
-
   return <section aria-label="Sales counter" className="shop-counter-surface">
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
           <div>
-            <span className="core-eyebrow">{counterContextLabel}</span>
+            <span className="core-eyebrow">Counter</span>
             <h2>Products</h2>
-            {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Tickets on this device ({parked.length} parked)</button> : null}
-            {openOrderCount > 0 || lowStockCount > 0 || localDemoStatus === 'records-at-risk' ? <nav aria-label="Shop attention" className="shop-counter-summary">
+            {operatingContext}
+            {persistLocalDraft && parked.length > 0 ? <button className="text-link" type="button" onClick={() => { setCartOpen(true); setTicketsOpen(true) }}>Parked sales ({parked.length})</button> : null}
+            <nav aria-label="Counter context" className="shop-counter-summary">
               {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} open orders</Link> : null}
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
-              {localDemoStatus === 'records-at-risk' ? <Link className="shop-counter-local-link" data-risk="true" to="/settings/#workspace-recovery">Back up records</Link> : null}
-            </nav> : null}
-            {persistLocalDraft ? <span className="shop-counter-device-boundary">This device only</span> : null}
+              <Link to="/shop/?tab=inventory">{stockLocationCount > 0 ? `${stockLocationCount} stock ${stockLocationCount === 1 ? 'location' : 'locations'}` : 'Simple stock'}</Link>
+              <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
+            </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
         </header>
         {/* The tile is named by REFERENCE, not by aria-label. An aria-label on a
             button replaces its whole subtree in the accessibility tree, so the
@@ -1395,7 +1472,7 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
             hidden all compute the identical name and description, and only the plain
             one leaves a traversable StaticText behind. */}
         <span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi('Add to this sale')}</span>
-        {visibleItems.length ? <div className="shop-item-grid">
+        {visibleItems.length ? <><div aria-hidden="true" className="shop-counter-column-head"><span>Product</span><span>Price</span><span>Stock</span><span>Sale</span></div><div className="shop-item-grid">
           {visibleItems.map((item, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
             const artKind = items.indexOf(item) % 5
@@ -1412,13 +1489,13 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
             const describedBy = [priceId, stockId, quantity ? quantityId : ''].filter(Boolean).join(' ')
             return <button aria-describedby={describedBy} aria-labelledby={labelledBy} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
               <ProductPhoto className="shop-product-art shop-product-photo" fallback={<ShopProductArtwork kind={artKind} />} scope={productImageScope} sku={item.sku} />
-              <span className="shop-product-copy"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}<b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
-              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
+              <span className="shop-product-copy"><span className="shop-product-name"><strong id={nameId}>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" id={myId} lang="my">{item.nameMy}</small> : null}{item.variant ? <small id={variantId}>{item.variant}</small> : null}</span><b id={priceId}>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''} id={stockId}>{item.onHand ? `${item.onHand} in stock` : bi('Out of stock')}</small></span>
+              {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`} id={quantityId}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">Add</span>}
             </button>
           })}
-        </div> : <Empty>{items.length
+        </div></> : <Empty>{items.length
           ? bi('No matching item. Search by name or SKU.')
-          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Add or import products</Link> before the first sale.</>}</Empty>}
+          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Bring existing products</Link> or add one item before the first sale.</>}</Empty>}
       </section>
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
@@ -1431,20 +1508,21 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           <Link to="/shop/?tab=orders">Review recorded orders</Link></div> : null}
         {catalogChanged ? <p className="authority-note" role="alert">Saved quantities exceed current stock, or an item was removed. Review quantities or clear this basket; it has not been silently reduced.</p> : null}
         {!persistLocalDraft && unitCount > 0 ? <p className="authority-note">Unsubmitted basket is kept in this tab only. Review it before leaving or switching company.</p> : null}
-        <header><div><span className="core-eyebrow">{`${activeLabel || bi('Current sale')}${persistLocalDraft ? ' · this device' : ''}`}</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : bi('Ready for the first item')}</h2></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
-        {persistLocalDraft && (parked.length > 0 || unitCount > 0 || recoveryPaused) ? <details className="shop-sale-details shop-parked-tickets" open={ticketsOpen} onToggle={event => setTicketsOpen(event.currentTarget.open)}><summary>Parked tickets ({parked.length}) · this device</summary>
-          <p>Saved here only; not sent to kitchen, paid or stock-reserved. Review current prices when resumed.</p>
-          <label>Table or ticket name<input maxLength={40} placeholder={activeLabel || 'Table 1'} value={ticketLabel} onChange={event => setTicketLabel(event.target.value)} /></label>
+        <header><div><span className="core-eyebrow">{activeLabel || bi('Current sale')}</span><h2>Current sale</h2><p>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} selected` : 'Choose a product to start'}</p></div><div className="shop-cart-actions">{Object.keys(cart).length ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
+        {persistLocalDraft && (parked.length > 0 || unitCount > 0 || recoveryPaused) ? <details className="shop-sale-details shop-parked-tickets" open={ticketsOpen} onToggle={event => setTicketsOpen(event.currentTarget.open)}><summary>{parked.length ? `Parked sales (${parked.length})` : 'Save sale for later'}</summary>
+          <p>Name and park this sale to serve someone else. Resume it on this device later.</p>
+          <label>Sale name<input maxLength={40} placeholder={activeLabel || 'Table 1'} value={ticketLabel} onChange={event => setTicketLabel(event.target.value)} /></label>
           <button type="button" disabled={!Object.keys(cart).length || recoveryPaused || !(ticketLabel.trim() || activeLabel)} onClick={() => {
             if (tickets.dispatch({ kind: 'park', id: crypto.randomUUID(), label: ticketLabel.trim() || activeLabel })) { setTicketLabel(''); setCartOpen(false) }
-          }}>Park current ticket</button>
+          }}>Park sale</button>
           {parked.map(ticket => <button type="button" key={ticket.id} disabled={Object.keys(cart).length > 0 || recoveryPaused} onClick={() => {
             if (tickets.dispatch({ kind: 'resume', id: ticket.id })) { setTicketLabel(''); setTicketsOpen(false); setCartOpen(true) }
           }}>Resume {ticket.label} · {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0)} {Object.values(ticket.cart).reduce((sum, qty) => sum + qty, 0) === 1 ? 'item' : 'items'}</button>)}
           {ticketSnapshot.pending ? <p role="status">Saving on this device…</p> : null}
         </details> : null}
-        <div className="shop-cart-lines">
-          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}<small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>{bi('Your sale is empty')}</strong><small>{bi('Tap any product to begin.')}</small></div>}
+        {lines.length ? <div aria-hidden="true" className="shop-cart-column-head"><span>Item</span><span>Price</span><span>Quantity</span><span>Total</span></div> : null}
+        <div aria-label="Current sale items" className="shop-cart-lines">
+          {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div className="shop-cart-item"><strong>{item.name}</strong>{item.nameMy ? <small className="shop-product-my" lang="my">{item.nameMy}</small> : null}</div><span className="shop-cart-unit-price">{formatMoney(item.price)}</span><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b className="shop-cart-line-total">{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><span aria-hidden="true">01</span><strong>{bi('Ready for the next sale')}</strong><small>{bi('Search, scan or choose a product.')}</small></div>}
         </div>
         {unitCount ? <><div className="shop-sale-details">
           <label>{bi('Customer')} <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
@@ -1463,7 +1541,23 @@ function ShopCounter({ businessTemplate, canCompleteInOneReview, disabled, indus
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
           {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Keep as open order</strong><small>Use for pay-later or later handoff. Otherwise this sale completes now.</small></span></label> : null}
         </div>
-        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? 'Review & complete sale' : bi('Review order')}<span aria-hidden="true">→</span></button><small>{effectiveOutcome === 'paid_handoff' ? 'One review records payment, handoff, stock, and the order record.' : 'Creates an open order; payment and handoff stay for Orders.'}</small></footer></> : null}
+        <div className="shop-counter-outcomes" aria-label="Sale review summary"><article><small>Payment method</small><strong>{payment}</strong></article><article><small>After review</small><strong>{effectiveOutcome === 'paid_handoff' ? 'Complete at counter' : 'Continue in Orders'}</strong></article></div>
+        <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label"><span>Review &amp; complete sale</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
+      </aside>
+      <aside aria-label="Sale follow-up" className="shop-counter-followup">
+        <header>
+          <h2>Sale follow-up</h2>
+          <span className="shop-counter-followup-status" data-ready={unitCount > 0 && payment ? 'true' : 'false'}>{unitCount ? payment ? 'Ready to review' : 'Choose payment' : 'Waiting for items'}</span>
+        </header>
+        <ol className="shop-counter-steps">
+          <li data-complete={unitCount > 0 ? 'true' : 'false'}><span>1</span><div><strong>Build the sale</strong><small>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} · ${formatMoney(total)}` : 'Choose or scan products'}</small></div></li>
+          <li data-complete={unitCount > 0 && Boolean(payment) ? 'true' : 'false'}><span>2</span><div><strong>Confirm payment</strong><small>{unitCount ? payment ? `${payment} selected` : 'Choose a method' : 'Available after items are added'}</small></div></li>
+          <li data-complete="false"><span>3</span><div><strong>Record the result</strong><small>{effectiveOutcome === 'paid_handoff' ? 'Review once to complete the sale and open its record' : 'Review once, then finish payment and handoff in Orders'}</small></div></li>
+        </ol>
+        <section className="shop-counter-stock-note" data-risk={cartLowStockLines.length ? 'true' : 'false'}>
+          <div><span aria-hidden="true">{cartLowStockLines.length ? '!' : '✓'}</span><div><strong>{cartLowStockLines.length ? 'Stock needs attention' : 'Stock check'}</strong><p>{cartLowStockLines.length ? `${cartLowStockLines.length} ${cartLowStockLines.length === 1 ? 'line reaches' : 'lines reach'} the reorder level after this sale.` : unitCount ? 'No cart line reaches its reorder level after review.' : lowStockCount ? `${lowStockCount} ${lowStockCount === 1 ? 'item needs' : 'items need'} attention in Stock.` : 'No item is currently below its reorder level.'}</p></div></div>
+          <Link to="/shop/?tab=inventory">Review stock</Link>
+        </section>
       </aside>
     </div>
     {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
@@ -1563,14 +1657,9 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
-  ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
-  ecommerceCorrectionNavigationIntent: EcommerceCorrectionIntent | null
-  ecommerceNavigationDraft: EcommerceShopDraft | null
-  ecommerceOrderAmendmentNavigationIntent: EcommerceOrderAmendmentIntent | null
-  ecommerceOrderRescheduleNavigationIntent: EcommerceOrderRescheduleIntent | null
-  ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
-  ecommerceSupportNavigationIntent: EcommerceSupportIntent | null
+const SHOP_CATALOG_IMPORT_STEPS = ['Choose CSV', 'Match columns', 'Fix row issues', 'Confirm once', 'Open Counter'] as const
+
+function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
   confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
@@ -1583,6 +1672,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 }) {
   const navigate = useNavigate()
   const commerceLocation = useLocation()
+  const requestedEcommerceIntent = useMemo(
+    () => ecommerceShopIntentReference(new URLSearchParams(commerceLocation.search)),
+    [commerceLocation.search],
+  )
   const purchaseOrderClock = useMinuteClock()
   const counterDraftContext = shopCounterDraftContext(confirmedLocalShop, managedIdentity)
   const scheduleScopeKey = counterDraftContext.key
@@ -1602,7 +1695,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     status: 'checking' | 'ready' | 'error'
     intake: WebsiteEcommerceHandoffContext | null
   }>({ status: 'checking', intake: null })
-  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange] = useCommerceWorkspace(managedIdentity)
+  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync, commerceStuckRecovery, discardStuckCommerceChange, retryManagedCommerceLoad] = useCommerceWorkspace(managedIdentity)
+  async function saveCustomerReceiptProfile(input: CommerceMerchantProfileInput) {
+    const revision = (commerce.merchantProfile?.revision ?? 0) + 1
+    const proof: CommerceActionProof = {
+      actionId: commerceMerchantProfileActionId(revision),
+      capturedAt: new Date().toISOString(),
+      actor: managedIdentity?.email || readLastOperator() || 'Shop operator',
+      reason: 'Set up customer receipt business details',
+      evidenceReference: `SHOP-MERCHANT-PROFILE:R${revision}`,
+    }
+    await mutateCommerce('commerce.merchant_profile.saved', commandUuid(), proof, (current) => saveCommerceMerchantProfile(current, input, proof))
+  }
   // Workspace headroom. LOCAL SHOPS ONLY: a company account keeps the ledger server-side
   // and neither local ceiling applies to it (workspace-runtime.ts branches on
   // !managedIdentity long before any of this), so a signed-in operator must never be told
@@ -1624,10 +1728,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   // comparing only the pack id reported a successful template install as "preserved".
   const installedShopSampleId = commerceWorkingSampleCatalogId(commerce)
   const activeShopBusinessTemplate = requestedShopTemplate?.id === installedShopSampleId ? requestedShopTemplate : null
-  const shopSampleCatalogActive = Boolean(activeShopBusinessTemplate || (shopPack && installedShopSampleId && (
-    installedShopSampleId === shopPack.id
-    || shopBusinessTemplates.some((template) => template.id === installedShopSampleId && template.industryPackId === shopPack.id)
-  )))
   // A URL is navigation, not permission to populate or replace a business catalog.
   // Retain existing records; actual products are entered or imported in Stock.
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
@@ -1662,6 +1762,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }, [confirmedLocalShop, managedIdentity])
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
+  const [selectedShopShift, setSelectedShopShift] = useState('')
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
   const [quantity, setQuantity] = useState(1)
   const [extraOrderLines, setExtraOrderLines] = useState<Array<{ sku: string; quantity: number }>>([])
@@ -1674,7 +1775,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [paymentTermsDays, setPaymentTermsDays] = useState<0 | 7 | 30>(0)
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
-  const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
   const [orderDraftRead, setOrderDraftRead] = useState<CommerceOrderDraftReadResult>({ status: 'empty', draft: null, error: '' })
   const [orderDraftActive, setOrderDraftActive] = useState(false)
   const [resumedOrderDraft, setResumedOrderDraft] = useState<CommerceOrderDraft | null>(null)
@@ -1682,6 +1782,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [orderDraftSaving, setOrderDraftSaving] = useState(false)
   const [orderDraftConflict, setOrderDraftConflict] = useState(false)
   const [orderDraftInitializedScope, setOrderDraftInitializedScope] = useState('')
+  const [focusedEcommerceRequestId, setFocusedEcommerceRequestId] = useState<string | null>(null)
   const orderDraftInitialized = orderDraftInitializedScope === orderDraftScope
   const orderComposerRef = useRef<HTMLDialogElement>(null)
   const pendingOrderComposerReveal = useRef<'' | 'ecommerce-request' | 'ecommerce-inbox' | 'ecommerce-inbox-request'>('')
@@ -1721,6 +1822,34 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const orderDraftResetEpochRef = useRef(0)
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
+  const [recoveredEcommerceIntent, setRecoveredEcommerceIntent] = useState<{ scope: string; id: string; intents: EcommerceShopNavigationIntents } | null>(null)
+  useEffect(() => {
+    if (!requestedEcommerceIntent || !confirmedLocalShop && (!managedIdentity || workspaceMode !== 'managed-ready')) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(({ recoverEcommerceShopIntent }) => recoverEcommerceShopIntent(ecommerceBuyingScope, requestedEcommerceIntent, commerce))
+      .then((intents) => { if (current) setRecoveredEcommerceIntent({ scope: ecommerceBuyingScope, id: requestedEcommerceIntent.id, intents }) })
+      .catch((error) => {
+        if (!current) return
+        setRecoveredEcommerceIntent(null)
+        navigate('/shop/?tab=orders', { replace: true, state: null })
+        setNotice(error instanceof Error ? error.message : 'The Ecommerce request could not be recovered. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, confirmedLocalShop, ecommerceBuyingScope, managedIdentity, navigate, requestedEcommerceIntent, workspaceMode])
+  const {
+    orderDraft: ecommerceNavigationDraft = null,
+    returnIntent: ecommerceReturnNavigationIntent = null,
+    supportIntent: ecommerceSupportNavigationIntent = null,
+    correctionIntent: ecommerceCorrectionNavigationIntent = null,
+    cancellationIntent: ecommerceCancellationNavigationIntent = null,
+    amendmentIntent: ecommerceOrderAmendmentNavigationIntent = null,
+    rescheduleIntent: ecommerceOrderRescheduleNavigationIntent = null,
+  } = requestedEcommerceIntent
+    && recoveredEcommerceIntent?.scope === ecommerceBuyingScope
+    && recoveredEcommerceIntent.id === requestedEcommerceIntent.id
+    ? recoveredEcommerceIntent.intents
+    : {} as Partial<EcommerceShopNavigationIntents>
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [managedTemplateDraft, setManagedTemplateDraft] = useState({ reviewed: false, reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
@@ -1733,6 +1862,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [supplierReturnDraft, setSupplierReturnDraft] = useState<SupplierReturnDraft | null>(null)
   const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
+  const [stockCountBatchDrafts, setStockCountBatchDrafts] = useState<StockCountDraft[]>([])
+  const [stocktakeRecoveryReadyScope, setStocktakeRecoveryReadyScope] = useState<string | null>(null)
+  const stocktakeScopeReady = stocktakeRecoveryReadyScope === scheduleScopeKey
+  const [stockCountBarcode, setStockCountBarcode] = useState('')
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
   const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
   const [orderAmendmentReview, setOrderAmendmentReview] = useState<{ intent: EcommerceOrderAmendmentIntent; replacementRequest: EcommerceOrderRequestV2; draft: EcommerceShopDraftV2 } | null>(null)
@@ -1793,7 +1926,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }))
   const manualOrderQuantity = manualOrderLineDrafts.reduce((total, line) => total + Math.max(line.quantity, 0), 0)
   const manualOrderTotal = manualOrderLineItems.reduce((total, line) => total + (line.item?.price ?? 0) * Math.max(line.quantity, 0), 0)
-  const manualOrderPricedTotal = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+  const manualOrderPricedTotal = preparedEcommerceDraft?.schema === coreUi.e
     ? preparedEcommerceDraft.totalMmk
     : manualOrderTotal
   const orderCreditCalculation = commerceOrderCalculation(commerce, manualOrderPricedTotal, new Date(purchaseOrderClock).toISOString())
@@ -1854,7 +1987,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const resumedOrderCanRebind = Boolean(currentOrderRecoveryInput
     && currentOrderRecoveryInput.lines.every((line) => line.availableAtSave >= line.quantity))
   const legacyCloseNeedsMigration = commerce.closes.some((close) => !close.orderIds || !close.businessDate)
-  const closePreview = commerceCloseExpectation(commerce, new Date().toISOString())
+  const operatingActivated = commerce.operatingUnits !== undefined && commerce.shiftSessions !== undefined
+  const closedShiftIds = new Set(commerce.closes.flatMap((close) => close.shiftId ? [close.shiftId] : []))
+  const openShiftSessions = (commerce.shiftSessions ?? []).filter((shift) => !closedShiftIds.has(shift.id))
+  const activeShift = openShiftSessions.length === 1 ? openShiftSessions[0] : openShiftSessions.find((shift) => selectedShopShift === `${counterDraftContext.key}:${shift.id}`) ?? null
+  const activeOperatingUnit = commerce.operatingUnits?.find((unit) => unit.id === activeShift?.unitId)
+    ?? (commerce.operatingUnits?.length === 1 ? commerce.operatingUnits[0] : null)
+  const shopShiftChoice = openShiftSessions.length > 1 ? <div aria-label="Choose the shift for new records" className="shop-payment-options shop-shift-choices" role="group">{openShiftSessions.map((shift) => <button aria-pressed={shift.id === activeShift?.id} className="shop-shift-choice" disabled={!commerceCanWrite || Boolean(pendingAction)} key={shift.id} onClick={() => setSelectedShopShift(`${counterDraftContext.key}:${shift.id}`)} type="button">{commerce.operatingUnits?.find((unit) => unit.id === shift.unitId)?.name ?? 'Operating unit'}</button>)}</div> : null
+  const shopOperatingEligible = confirmedLocalShop || Boolean(managedIdentity)
+  const shopShiftRequired = Boolean(managedIdentity) || (confirmedLocalShop && operatingActivated)
+  const closePreview = commerceCloseExpectation(commerce, new Date().toISOString(), activeShift?.id)
   const closePreviewOrderIds = new Set(closePreview?.orderIds ?? [])
   const closableOrders = commerce.orders.filter((order) => closePreviewOrderIds.has(order.id))
   const reconciledValue = closePreview?.total ?? 0
@@ -1892,6 +2034,29 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return rightShortage - leftShortage || left.index - right.index
     })
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+  const closedOrderIds = new Set(commerce.closes.flatMap((close) => close.orderIds ?? []))
+  const legacyOperatingOrders = operatingActivated ? [] : commerce.orders.filter((order) => order.status !== 'cancelled' && !closedOrderIds.has(order.id))
+  const currentOperator = activeShift?.opening.actor || managedIdentity?.email || readLastOperator() || 'Cashier set at review'
+  const shopOperatingView: ShopOperatingView = {
+    unit: activeOperatingUnit?.name ?? (openShiftSessions.length > 1 ? 'Choose below' : 'Main shop'),
+    operator: currentOperator,
+    choice: shopShiftChoice,
+    status: activeShift ? 'Shift open' : openShiftSessions.length > 1 ? 'Choose a shift' : 'No active shift',
+    detail: activeShift
+      ? `Open since ${formatTime(activeShift.opening.capturedAt)}`
+      : openShiftSessions.length > 1
+        ? 'Select one shift.'
+        : legacyOperatingOrders.length
+          ? 'Close current work.'
+          : 'Start before selling.',
+    actionLabel: shopOperatingEligible
+      ? operatingActivated
+        ? activeShift || openShiftSessions.length > 1 ? undefined : 'Open shift'
+        : legacyOperatingOrders.length ? 'Finish current work' : 'Start Shop day'
+      : undefined,
+    disabled: !commerceCanWrite || Boolean(pendingAction),
+    onAction: reviewShopOperatingSession,
+  }
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
   const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
   // "Which treatments did I finish today and never ring up?" Derived, never stored, and it
@@ -1995,10 +2160,17 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (!artifact) return null
     return {
       filename: `supermega-shop-accounting-${artifact.businessDate}-${artifact.digest.slice(7, 15)}.csv`,
-      href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceAccountingHandoffCsv(artifact)}`)}`,
       artifact,
     }
   }, [commerce, latestClose])
+  const downloadLatestAccountingHandoff = () => {
+    if (!latestAccountingDownload) return
+    downloadBlob(
+      latestAccountingDownload.filename,
+      new Blob([`\uFEFF${commerceAccountingHandoffCsv(latestAccountingDownload.artifact)}`], { type: 'text/csv;charset=utf-8' }),
+    )
+    emitMetric({ product: 'shop', capability: 'shop-accounting-handoff', action: 'accounting.export.downloaded', ts: Date.now() })
+  }
   const supplierPayablesDownload = useMemo(() => {
     const artifact = commerceSupplierPayablesHandoff(commerce)
     if (!artifact) return null
@@ -2034,17 +2206,27 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const websiteIntakes = commerceWebsiteIntakes(commerce)
   const localWebsiteIntake = localWebsiteIntakeRead.intake
   const legacyWebsiteWorkWaiting = managedIdentity
-    ? websiteIntakes.some((intake) => intake.status === 'pending_confirmation')
+    ? websiteIntakes.some((intake) => intake.status === coreUi.p)
     : confirmedLocalShop && localWebsiteIntakeRead.status === 'ready'
       && Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
   const storefrontRequests = commerceStorefrontRequests(commerce)
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))
+  const pendingStorefrontStockConflicts = new Map(pendingStorefrontRequests.flatMap((request) => {
+    const conflict = commerceStockConflict(commerce.items, commerceStorefrontRequestLines(request))
+    return conflict ? [[request.id, conflict] as const] : []
+  }))
+  const pendingWebsiteStockConflictCount = managedIdentity
+    ? websiteIntakes.filter((intake) => intake.status === coreUi.p && commerceStockConflict(commerce.items, [{ sku: intake.sku, quantity: intake.quantity }])).length
+    : Number(Boolean(legacyWebsiteWorkWaiting && localWebsiteIntake?.order && commerceStockConflict(commerce.items, localWebsiteIntake.order.lines)))
+  const pendingStockConflictCount = pendingStorefrontStockConflicts.size + pendingWebsiteStockConflictCount
   const requestedStorefrontRequestIsWaiting = Boolean(
     requestedRequestId
     && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
   )
+  const activeEcommerceInboxRequestId = requestedRequestId ?? focusedEcommerceRequestId
+  const visiblePendingStorefrontRequests = shopInboxRequestWindow(pendingStorefrontRequests, activeEcommerceInboxRequestId)
   const purchaseOrderRows = commercePurchaseOrders(commerce)
     .map((purchaseOrder) => ({
       purchaseOrder,
@@ -2297,12 +2479,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ? Number(stockCountQuantityText)
     : Number.NaN
   const stockCountQuantityResult = stockCountItem
+    && stockCountDraft !== null
     && Number.isSafeInteger(stockCountQuantity)
     && stockCountQuantity >= 0
     && (!commerce.inventoryFoundation || Boolean(stockCountBalance))
     && (!stockCountBalance || stockCountQuantity >= stockCountBalance.reserved)
     && (!stockCountBalance || stockCountBalance.tracking !== 'serial' || stockCountQuantity <= 1)
-    && Number.isSafeInteger(stockCountItem.onHand + stockCountQuantity - (stockCountBalance?.onHand ?? stockCountItem.onHand))
+    && Number.isSafeInteger(stockCountDraft.expectedOnHand + stockCountQuantity - stockCountDraft.expectedPhysicalQuantity)
     ? stockCountQuantity
     : null
   const stockCountTargetValue = stockCountBalance
@@ -2413,7 +2596,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setPromisedAt('')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(null)
-        setOrderEntryMode('manual')
       })
     }
     void import('./commerce-order-draft')
@@ -2474,7 +2656,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (!orderDraftActive
       || !orderDraftInitialized
-      || orderEntryMode !== 'manual'
       || preparedChannelDraft
       || preparedEcommerceDraft
       || pendingAction
@@ -2563,7 +2744,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     orderDraftInitialized,
     orderDraftRead.status,
     orderDraftScope,
-    orderEntryMode,
     pendingAction,
     preparedChannelDraft,
     preparedEcommerceDraft,
@@ -2572,7 +2752,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   useEffect(() => {
     if (!ecommerceNavigationDraft
-      || managedIdentity && workspaceMode !== 'managed-ready'
+      || managedIdentity && workspaceMode !== coreUi.m
       || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-shop-handoff')
@@ -2599,10 +2779,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           setNotice('The Ecommerce request no longer matches the current Shop catalog. Nothing was prepared.')
           return
         }
-        const navigationCustomer = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v7'
+        const navigationCustomer = ecommerceNavigationDraft.schema === coreUi.e
           ? ecommerceNavigationDraft.customerProfile?.name ?? ecommerceNavigationDraft.customerReference
           : ecommerceNavigationDraft.customerReference
-        const navigationAddress = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v7'
+        const navigationAddress = ecommerceNavigationDraft.schema === coreUi.e
           ? ecommerceNavigationDraft.deliveryAddress
           : null
         setPreparedChannelDraft(null)
@@ -2619,10 +2799,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           ? `${navigationAddress.line1} · ${navigationAddress.township} · ${navigationAddress.city}${navigationAddress.instructions ? ` · ${navigationAddress.instructions}` : ''}`
           : ecommerceNavigationDraft.sourceRequestId)
         setPromisedAt(defaultOrderPromiseInput())
-        setOrderEntryMode('manual')
         setOrderDraftActive(true)
         setResumedOrderDraft(null)
         setOrderDraftConflict(false)
+        consumedEcommerceDraftId.current = navigationDraftId
         setNotice(`${recordDisplayReference(ecommerceNavigationDraft.sourceRequestId)} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
         pendingOrderComposerReveal.current = 'ecommerce-request'
       })
@@ -2635,7 +2815,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (!ecommerceReturnNavigationIntent
       || tab !== 'orders'
-      || managedIdentity && workspaceMode !== 'managed-ready'
+      || managedIdentity && workspaceMode !== coreUi.m
       || consumedEcommerceReturnIntentId.current === ecommerceReturnNavigationIntent.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-buying-lifecycle')
@@ -2676,7 +2856,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           disposition: intent.disposition,
           sourceIntent: intent,
         })
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Confirm the received item and stock condition; no refund has started.`)
         requestAnimationFrame(() => returnEditorRef.current?.querySelector<HTMLElement>('#order-return-quantity')?.focus())
       })
@@ -2692,7 +2871,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (!ecommerceCancellationNavigationIntent
       || tab !== 'orders'
-      || managedIdentity && workspaceMode !== 'managed-ready'
+      || managedIdentity && workspaceMode !== coreUi.m
       || consumedEcommerceCancellationIntentId.current === ecommerceCancellationNavigationIntent.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-buying-lifecycle')
@@ -2700,8 +2879,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         if (!current) return
         const intent = validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)
         consumedEcommerceCancellationIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (!ecommerceCancellationMatchesCurrentShop(commerce, intent)) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCancellationDraft(null)
           setNotice('The cancellation request no longer matches the current Shop order, payment, refund, or reserved stock. Nothing was prepared.')
           return
@@ -2727,7 +2906,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (!ecommerceOrderAmendmentNavigationIntent
       || tab !== 'orders'
-      || managedIdentity && workspaceMode !== 'managed-ready'
+      || managedIdentity && workspaceMode !== coreUi.m
       || consumedEcommerceOrderAmendmentIntentId.current === ecommerceOrderAmendmentNavigationIntent.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-buying-lifecycle')
@@ -2736,7 +2915,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
         if (!current) return
         consumedEcommerceOrderAmendmentIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (!recovered.state || recovered.status !== 'ready') throw new Error(recovered.error || 'Order amendment recovery is unavailable.')
         const storedIntent = recovered.state.amendmentIntents.find((candidate) => candidate.id === intent.id)
         const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
@@ -2777,7 +2955,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (!ecommerceOrderRescheduleNavigationIntent
       || tab !== 'orders'
-      || managedIdentity && workspaceMode !== 'managed-ready'
+      || managedIdentity && workspaceMode !== coreUi.m
       || consumedEcommerceOrderRescheduleIntentId.current === ecommerceOrderRescheduleNavigationIntent.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-buying-lifecycle')
@@ -2786,7 +2964,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
         if (!current) return
         consumedEcommerceOrderRescheduleIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (!recovered.state || recovered.status !== 'ready') throw new Error(recovered.error || 'Order reschedule recovery is unavailable.')
         const storedIntent = recovered.state.rescheduleIntents.find((candidate) => candidate.id === intent.id)
         const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
@@ -2830,7 +3007,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (!ecommerceSupportNavigationIntent
       || tab !== 'orders'
-      || managedIdentity && workspaceMode !== 'managed-ready'
+      || managedIdentity && workspaceMode !== coreUi.m
       || consumedEcommerceSupportIntentId.current === ecommerceSupportNavigationIntent.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-buying-lifecycle')
@@ -2842,8 +3019,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const outcome = order ? projectEcommerceSupportOutcome(intent, order) : null
         const expected = commerceOrderSupportOpenExpectation(commerce, intent.orderId, intent.id)
         consumedEcommerceSupportIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (existing) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setSupportDraft(null)
           setNotice(outcome
             ? `${intent.id} is already ${outcome.state} as ${outcome.caseId}. Ecommerce can recover the accountable Shop outcome.`
@@ -2855,6 +3032,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           || !order.completion
           || order.sourceRecordId !== intent.sourceRequestId
           || !expected) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setNotice('The Ecommerce help request no longer matches a completed Shop order. Nothing was prepared.')
           return
         }
@@ -2880,7 +3058,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (!ecommerceCorrectionNavigationIntent
       || tab !== 'orders'
-      || managedIdentity && workspaceMode !== 'managed-ready'
+      || managedIdentity && workspaceMode !== coreUi.m
       || consumedEcommerceCorrectionIntentId.current === ecommerceCorrectionNavigationIntent.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-buying-lifecycle')
@@ -2889,7 +3067,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
         if (!current) return
         consumedEcommerceCorrectionIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         const storedIntent = recovered.state?.correctionIntents.find((candidate) => candidate.id === intent.id)
         if (recovered.status !== 'ready' || !storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent)) {
           throw new Error('The balance request no longer matches its recovered Ecommerce evidence. Nothing was prepared.')
@@ -2898,6 +3075,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const outcome = order ? lifecycle.projectEcommerceCorrectionOutcome(intent, order) : null
         const existing = order?.corrections?.filter((record) => record.evidenceReference === intent.evidenceReference) ?? []
         if (outcome || existing.length) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCorrectionDraft(null)
           setNotice(outcome
             ? `${intent.id} was already reviewed by ${outcome.reviewedBy}. Ecommerce can recover the correction outcome; no second note was prepared.`
@@ -2913,6 +3091,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           || expectation.sourceCalculationDigest !== intent.sourceCalculationDigest
           || expectation.correctionCount !== intent.sourceCorrectionCount
           || expectation.currentBalanceMmk !== intent.originalBalanceMmk) {
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
           setCorrectionDraft(null)
           setNotice('The Ecommerce balance request no longer matches the current Shop calculation, payment, refund, or correction history. Nothing was prepared.')
           return
@@ -2940,25 +3119,25 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     return () => { current = false }
   }, [commerce, ecommerceBuyingScope, ecommerceCorrectionNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
 
+  const openRequestedEcommerceOrder = useEffectEvent((requestId: string) => {
+    openOrderComposer()
+    void reviewStorefrontRequest(requestId)
+  })
+
   useEffect(() => {
     const sourceKey = requestedRequestId || 'ecommerce-inbox'
     if (requestedSource !== 'ecommerce-inbox'
       || consumedEcommerceInboxSource.current === sourceKey
       || tab !== 'orders'
       || !managedIdentity
-      || workspaceMode !== 'managed-ready') return
+      || workspaceMode !== coreUi.m) return
     consumedEcommerceInboxSource.current = sourceKey
-    setOrderEntryMode('online')
-    setOrderDraftActive(true)
-    setResumedOrderDraft(null)
-    setOrderDraftConflict(false)
-    setNotice(requestedStorefrontRequestIsWaiting
-      ? `${requestedRequestId} is ready for Shop review. Choose Review to prepare the order.`
-      : pendingStorefrontRequests.length
-        ? `${pendingStorefrontRequests.length} Ecommerce ${pendingStorefrontRequests.length === 1 ? 'request is' : 'requests are'} waiting for Shop review.`
-        : 'The Ecommerce inbox is open. No request currently needs Shop review.')
-    pendingOrderComposerReveal.current = requestedStorefrontRequestIsWaiting ? 'ecommerce-inbox-request' : 'ecommerce-inbox'
-  }, [managedIdentity, navigate, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, tab, workspaceMode])
+    setFocusedEcommerceRequestId(requestedStorefrontRequestIsWaiting ? requestedRequestId : null)
+    if (requestedStorefrontRequestIsWaiting && requestedRequestId) {
+      openRequestedEcommerceOrder(requestedRequestId)
+      pendingOrderComposerReveal.current = 'ecommerce-request'
+    }
+  }, [managedIdentity, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, tab, workspaceMode])
 
   // The composer only mounts on the orders tab, so reveal a queued Ecommerce handoff on whichever commit
   // first has that dialog rather than on a single animation frame: requestAnimationFrame never runs while
@@ -2975,9 +3154,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     pendingOrderComposerReveal.current = ''
     if (!dialog.open) dialog.showModal()
     if (reveal === 'ecommerce-request') orderPaymentRef.current?.focus({ preventScroll: true })
-    else if (reveal === 'ecommerce-inbox-request') ecommerceInboxTargetRef.current?.focus()
     else orderComposerHeadingRef.current?.focus()
-    if (reveal !== 'ecommerce-request') navigate('/shop/?tab=orders', { replace: true })
   })
 
   async function initializeManagedCatalog(event: FormEvent) {
@@ -3061,7 +3238,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <p className="panel-copy">This company already has a managed Shop catalog. The public trade link did not replace, merge, or relabel it, and no starter item, sale, customer, payment, or stock record was created.</p>
     <p className="authority-note">Continue only with the existing company catalog, or ask the workspace owner to review a separate catalog migration.</p>
     <div className="form-actions"><Link className="core-button primary" to="/shop/?tab=counter">Continue existing managed Shop</Link><Link className="text-link" to="/settings/#controls">Open workspace controls</Link></div>
-  </section> : managedIdentity && effectiveMode !== 'managed-ready' ? (() => {
+  </section> : managedIdentity && effectiveMode !== coreUi.m ? (() => {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) {
       const catalogForm = <form className="core-form compact-form shop-first-product-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
@@ -3095,7 +3272,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Shop</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{commerceStorageError || 'Shop remains read-only until the authenticated tenant state is confirmed.'}</p>
-      <div className="form-actions"><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
+      <div className="form-actions">{effectiveMode === 'managed-error' ? <button className="core-button primary" onClick={retryManagedCommerceLoad} type="button">Retry company account</button> : null}<Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
     </section>
   })() : null
 
@@ -3108,7 +3285,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const commerceWriteBanner = localEvictionWarningReplacesWriteBanner ? null : <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Company records' : 'Private device'}</span>
     <p>{commerceStorageError
-      ? `Writes paused: ${commerceStorageError}${managedIdentity && workspaceMode === 'managed-ready' ? ' Reload Shop and check Orders before recording the sale again; it may already be saved.' : ''}`
+      ? `Writes paused: ${commerceStorageError}${managedIdentity && workspaceMode === coreUi.m ? ' Reload Shop and check Orders before recording the sale again; it may already be saved.' : ''}`
       : commerceSync.status === 'checking'
         ? commerceSync.message
         : commerceSync.status === 'pending' || commerceSync.status === 'conflict' || commerceSync.status === 'unavailable'
@@ -3118,7 +3295,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         : commerceSync.message || notice || (managedIdentity
           ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the company account.`
           : 'Records on this device stay separate. Log in to use shared team records.')}</p>
-    {commerceSync.status === 'pending' || (managedIdentity && workspaceMode === 'managed-ready' && Boolean(commerceStorageError))
+    {commerceSync.status === 'pending' || (managedIdentity && workspaceMode === coreUi.m && Boolean(commerceStorageError))
       ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
       : !commerceCanWrite && commerceSync.status !== 'checking'
         ? <Link to="/settings/#controls">Open Settings</Link>
@@ -3224,6 +3401,45 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     {storageHeadroomNotice}
     {commerceStuckRecoveryPanel}
   </>
+  const commerceSyncBlocked = commerceSync.status === 'pending'
+    || commerceSync.status === 'conflict'
+    || commerceSync.status === 'unavailable'
+  const localHeadroomNeedsAttention = Boolean(commerceHeadroom && commerceHeadroom.level !== 'clear')
+  const shopRecordStatus = commerceStorageError || commerceSyncBlocked || !commerceCanWrite
+    ? makeShopRecordStatus(
+      'Writes paused',
+      'Paused',
+      commerceStorageError || commerceSync.message || 'Shop could not confirm a safe write path.',
+      confirmedLocalShop ? '/settings/#workspace-recovery' : '/settings/#controls',
+      confirmedLocalShop ? 'Open recovery' : 'Open settings',
+    )
+    : commerceSync.status === 'checking'
+      ? makeShopRecordStatus('Checking', 'Checking', 'Shop is confirming this record before writes begin.', null, null)
+      : managedIdentity
+        ? makeShopRecordStatus(
+          `Company revision ${managedVersion ?? 0} confirmed`,
+          'Company record',
+          'Company records confirmed. Photos, payment QR and drafts stay on this device.',
+          '/settings/#controls',
+          'Workspace settings',
+        )
+        : makeShopRecordStatus(
+          'Saved on this device',
+          storageDurability.state === 'denied' || localHeadroomNeedsAttention ? 'Backup advised' : 'Device record',
+          storageDurability.state === 'denied'
+            ? 'Saved here. This browser may clear Shop records when storage is low.'
+            : localHeadroomNeedsAttention
+              ? 'Saved here. Back up before this device runs out of Shop record space.'
+              : 'This Shop record stays on this device. Back up before changing devices.',
+          '/settings/#workspace-recovery',
+          'Back up records',
+        )
+  const operatingBoundary = <>
+    {commerceStorageError || commerceSyncBlocked || commerceSync.status === 'checking' || !commerceCanWrite ? commerceWriteBanner : null}
+    {storageDurability.quotaExceeded ? storageDurabilityNotice : null}
+    {commerceHeadroom?.level === 'urgent' ? storageHeadroomNotice : null}
+    {commerceStuckRecoveryPanel}
+  </>
   const compactCounterStatus = confirmedLocalShop
     && !managedIdentity
     && commerceCanWrite
@@ -3231,10 +3447,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     && !commerceStorageError
     && !storageDurability.quotaExceeded
     && (!commerceHeadroom || commerceHeadroom.level === 'clear')
-  const counterLocalDemoStatus = compactCounterStatus
-    ? storageDurability.state === 'denied' ? 'records-at-risk' as const : 'local' as const
-    : null
-  const counterBoundary = compactCounterStatus && !notice ? null : commerceBoundary
+  const counterBoundary = compactCounterStatus && !notice ? null : operatingBoundary
   const shopCatalogSetupNotice = confirmedLocalShop && !managedIdentity && requestedShopTemplate && !activeShopBusinessTemplate
     ? <div className="production-mode-banner shop-catalog-setup-notice" role="status">
       <p>Add your products and prices to set up your {requestedShopTemplate.name.en.toLowerCase()} catalog.</p>
@@ -3326,19 +3539,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Memory', 'Saves helpful patterns'],
     ['Safety', 'Review first'],
   ] as const
-  const shopSetupGuideRows = [
-    ['Products', commerce.items.length ? `${commerce.items.length} current SKU` : 'Import catalog'],
-    ['Stock', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + ATP' : 'Simple count first'],
-    ['Orders', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
-    ['Payments', paymentReview.length ? `${paymentReview.length} exception` : 'Review only'],
-    ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
-    ['Boundary', 'Review before writes'],
-  ] as const
   const [catalogImportOpen, setCatalogImportOpen] = useState(false)
+  const catalogIsEmpty = commerce.items.length === 0
+  const catalogImportRequested = commerceLocation.hash === '#shop-catalog-import'
+  const catalogImportVisible = catalogIsEmpty || catalogImportOpen || catalogImportRequested
+  function toggleCatalogImport() {
+    if (catalogImportRequested) navigate('/shop/?tab=inventory', { replace: true })
+    setCatalogImportOpen((open) => catalogImportRequested ? false : !open)
+  }
   const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
-    <div><strong>Add your products</strong><p>Upload a CSV to add products in bulk.</p></div>
-    <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportOpen} className="core-button" disabled={commerceControlsDisabled} onClick={() => setCatalogImportOpen((open) => !open)} type="button">{catalogImportOpen ? 'Close upload' : 'Upload product data'}</button>
-    {catalogImportOpen ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
+    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Bring your existing products into Shop' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Check the mapping and any row issues, confirm once, then open Counter.' : 'Review a CSV before adding products in bulk.'}</p></div>
+    {catalogIsEmpty ? <div aria-label="Import to first sale" className="catalog-onboarding-status">{SHOP_CATALOG_IMPORT_STEPS.map((step, index) => <span key={step}><small>Step {index + 1}</small><strong>{step}</strong></span>)}</div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Bring existing products'}</button>}
+    {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
   </section>
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
@@ -3361,15 +3573,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <p>Open the next useful Shop task. SuperMega brings together online requests, orders, payments, purchasing, and stock so the manager can review one clear step at a time.</p>
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Open next step</button>
-  </section>
-  const shopSetupGuide = <section aria-label="Shop setup guide" className="shop-order-control shop-setup-guide">
-    <div>
-      <span className="core-eyebrow">Shop setup guide</span>
-      <strong>Import products once. Then run the daily queue.</strong>
-      <small>Use this only when you are adding real products, receiving stock, checking payment problems, or preparing end-of-day reports. Daily selling stays in the main order screen.</small>
-    </div>
-    <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <button className={coreUi.q} onClick={runShopAutopilot} type="button">Open next step</button>
   </section>
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
@@ -3401,7 +3605,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setPaymentTermsDays(0)
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
-    setOrderEntryMode('manual')
   }
 
   function detachPreparedOrderSources(options: { channel?: boolean; ecommerce?: boolean } = {}) {
@@ -3419,7 +3622,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     return removed
   }
 
-  function openOrderComposer(mode: 'manual' | 'online' = 'manual') {
+  function openOrderComposer() {
     if (!commerceCanWrite) {
       setNotice('Shop changes are paused. Open Settings before adding an order.')
       return
@@ -3437,7 +3640,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
     setOrderDraftIssue('')
-    setOrderEntryMode(mode)
     showOrderComposer()
   }
 
@@ -3487,7 +3689,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
-    setOrderEntryMode('manual')
     setResumedOrderDraft(draft)
     setOrderDraftActive(true)
     setOrderDraftConflict(false)
@@ -3791,30 +3992,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (pendingAction.presentation === 'counter' && !counterSettlement) navigate(`/shop/?tab=orders#${commerceOrderTargetId(pendingAction.subjectId)}`)
   }
 
-  function useChannelDraft(draft: ChannelOrderDraft) {
-    if (!commerceCanWrite) {
-      setNotice('Shop changes are paused because this workspace cannot confirm writes.')
-      return
-    }
-    if (pendingAction || !channelOrderDraftIsReady(draft)) {
-      setNotice('Finish the current accountable action before using another channel draft.')
-      return
-    }
-    setCustomer(draft.customer)
-    setChannel(draft.channel)
-    setSku(draft.sku)
-    setQuantity(draft.quantity)
-    setExtraOrderLines([])
-    setPayment(draft.payment)
-    setFulfilment('')
-    setFulfilmentReference(draft.sourceRecordId)
-    setPromisedAt(defaultOrderPromiseInput())
-    setPreparedChannelDraft(draft)
-    setPreparedEcommerceDraft(null)
-    setOrderEntryMode('manual')
-    setNotice(`${draft.sourceRecordId} mapped locally. Review the structured order before any stock changes.`)
-  }
-
   async function reviewStorefrontRequest(requestId: string) {
     if (!commerceCanWrite || pendingAction) {
       setNotice('Finish the current Shop action before reviewing an Ecommerce request.')
@@ -3857,7 +4034,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setPromisedAt(draft.pricing.shipping.promiseMinutes
           ? localDateTimeInputValue(new Date(Date.parse(draft.confirmedAt) + draft.pricing.shipping.promiseMinutes * 60_000))
           : defaultOrderPromiseInput())
-        setOrderEntryMode('manual')
         setNotice(`${request.id} loaded from the authenticated inbox with ${draft.lines.length} ${draft.lines.length === 1 ? 'item' : 'items'}. Confirm the promise and payment, then use the separate Shop action gate.`)
         return
       }
@@ -3878,7 +4054,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setFulfilment(draft.fulfilment)
       setFulfilmentReference(draft.sourceRequestId)
       setPromisedAt(defaultOrderPromiseInput())
-      setOrderEntryMode('manual')
       setNotice(`${request.id} loaded from the authenticated inbox. Confirm the promise and payment, then use the separate Shop action gate.`)
     } catch (error) {
       detachPreparedOrderSources({ channel: false })
@@ -3909,7 +4084,45 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setNotice('Item removed from this order draft. Shop data has not changed.')
   }
 
+  function requireOpenShopShift() {
+    if (!shopShiftRequired || activeShift) return true
+    setNotice(openShiftSessions.length > 1
+      ? 'Choose one open shift first.'
+      : 'Open a Shop shift first.')
+    return false
+  }
+
+  function reviewShopOperatingSession(event: MouseEvent<HTMLButtonElement>) {
+    if (!shopOperatingEligible || !commerceCanWrite || pendingAction) return
+    if (!operatingActivated && legacyOperatingOrders.length) {
+      navigate('/shop/?tab=orders#shop-close-controls')
+      setNotice('Close current work before starting a shift.')
+      return
+    }
+    if (openShiftSessions.length) return
+    const unitId = activeOperatingUnit?.id ?? uid('UNIT')
+    const shiftId = uid('SHIFT')
+    const unitName = activeOperatingUnit?.name ?? 'Main shop'
+    queueAction({
+      kind: 'shift_open',
+      subjectId: shiftId,
+      summary: `Open ${unitName} shift`,
+      before: operatingActivated ? `${unitName} · no shift` : 'No shift',
+      after: `${unitName} · open · records bound`,
+      actorSuggestion: currentOperator === 'Cashier set at review' ? 'Shop owner' : currentOperator,
+      reasonSuggestion: 'Start shift.',
+      evidenceReferenceSuggestion: `Shift ${shiftId}`,
+      evidenceReferenceLocked: true,
+      apply: (action) => mutateCommerce('commerce.shift.opened', action.commandId, commerceActionProof(action), (current) => {
+        const proof = commerceActionProof(action)
+        const registered = operatingActivated ? current : registerCommerceOperatingUnit(current, { id: unitId, name: unitName }, proof)
+        return registered && openCommerceShiftSession(registered, { id: shiftId, unitId }, operatingActivated ? proof : { ...proof, actionId: `${proof.actionId}-SHIFT` })
+      }),
+    }, event.currentTarget)
+  }
+
   function reviewCounterSale(review: ShopCounterReview, returnFocus: HTMLElement) {
+    if (!requireOpenShopShift()) return
     if (!review.lines.length || !review.payment) {
       setNotice('Add at least one item and choose payment before reviewing the sale.')
       return
@@ -3948,6 +4161,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const promisedAt = new Date(reviewedAt.getTime() + 30 * 60 * 1000).toISOString()
     const order: CommerceOrder = {
       id: orderId,
+      ...(activeShift ? { shiftId: activeShift.id } : {}),
       createdAt: reviewedAt.toISOString(),
       customer: counterFields.customer || 'Guest',
       channel: 'Walk-in',
@@ -3964,9 +4178,17 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       total: orderTotal,
       status: 'confirmed',
     }
+    let stockSourceReview = ''
     if (commerce.inventoryFoundation) {
       try {
-        commerceOrderLocationAllocationPreview(commerce, order)
+        const quantitiesByLocation = new Map<string, number>()
+        for (const allocation of commerceOrderLocationAllocationPreview(commerce, order)) {
+          quantitiesByLocation.set(allocation.locationId, (quantitiesByLocation.get(allocation.locationId) ?? 0) + allocation.quantity)
+        }
+        stockSourceReview = [...quantitiesByLocation.entries()].map(([locationId, quantity]) => {
+          const location = managedInventoryProjection?.locations.find((candidate) => candidate.id === locationId)
+          return `${location?.name ?? locationId} × ${quantity}`
+        }).join(', ')
       } catch {
         setNotice('Location stock cannot cover this sale. Receive or move stock, then try again.')
         return
@@ -3985,10 +4207,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       summary: completesSale ? `Complete ${formatMoney(order.total)} counter sale` : `Create ${formatMoney(order.total)} counter order`,
       before: `${lineReview} · ${review.payment}`,
       after: completesSale
-        ? `Order ${displayReference} completed · ${review.payment} reconciled · Stock ${stockReview}`
-        : `Order ${displayReference} confirmed · Reserved stock ${stockReview}`,
+        ? `Order ${displayReference} completed · ${review.payment} reconciled · Stock ${stockReview}${stockSourceReview ? ` · Stock source ${stockSourceReview}` : ''}`
+        : `Order ${displayReference} confirmed · Reserved stock ${stockReview}${stockSourceReview ? ` · Stock source ${stockSourceReview}` : ''}`,
       presentation: 'counter',
-      actorSuggestion: managedIdentity ? undefined : 'Sample cashier',
+      actorSuggestion: managedIdentity ? undefined : 'Counter cashier',
       evidenceReferenceSuggestion: `Counter order ${displayReference}`,
       evidenceReferenceLocked: true,
       reasonSuggestion: completesSale ? `${review.payment} received and the customer took the order.` : 'Walk-in counter order reviewed.',
@@ -3996,22 +4218,27 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const proof = commerceActionProof(action)
         const ownedOrder = { ...order, owner: action.actor }
         if (!await review.beforeCommit(order.id)) throw new Error('Counter recovery could not be secured. No new sale was attempted.')
-        // Browser-local counter settlement is one crash-safe workspace write. The same
-        // pure lifecycle transitions used by Orders are composed inside one recovery
-        // intent, with a unique proof id per recorded step. Managed workspaces stay on
-        // the server-supported open-order intent until a compound command exists there.
-        await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => {
+        // Counter settlement is one crash-safe workspace write. The same pure lifecycle
+        // transitions used by Orders are composed inside one reviewed intent, with a
+        // unique proof id per recorded step. Managed persistence re-derives the complete
+        // sale from this order intent under the server state lock.
+        await mutateCommerce(coreUi.o, action.commandId, proof, (current) => {
           let state = reserveCommerceOrder(current, ownedOrder, proof)
           if (!state || !completesSale) return state
-          if (managedIdentity) return null
-          state = reconcileCommercePayment(state, order.id, { ...proof, actionId: `${proof.actionId}:payment` })
+          state = reconcileCommercePayment(state, order.id, { ...proof, actionId: `${proof.actionId}-PAYMENT` })
           if (!state) return null
           for (let step = 0; step < 3; step += 1) {
             const live = state.orders.find((candidate) => candidate.id === order.id)
             if (!live || live.status === 'cancelled') return null
             if (live.status === 'completed') break
             const stepStatus = live.status
-            const advanced = advanceCommerceOrder(state, order.id, stepStatus, { ...proof, actionId: `${proof.actionId}:advance-${stepStatus}` }, 'client')
+            const advanced = advanceCommerceOrder(
+              state,
+              order.id,
+              stepStatus,
+              { ...proof, actionId: `${proof.actionId}-ADVANCE-${stepStatus.toUpperCase()}` },
+              managedIdentity ? 'managed-server' : 'client',
+            )
             if (!advanced) return null
             state = advanced
           }
@@ -4029,6 +4256,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function recordOrder(event: FormEvent) {
     event.preventDefault()
+    if (!requireOpenShopShift()) return
     if (orderDraftConflict || resumedOrderNeedsReview) {
       setOrderDraftIssue(orderDraftConflict
         ? 'Close this form and resume the latest saved order before review.'
@@ -4117,33 +4345,33 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? ecommerceDraft.lines
         : [ecommerceDraft.line]
       : []
-    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const ecommercePayment = ecommerceDraft?.schema === coreUi.e
       ? ecommerceDraft.pricing.payment.adapter === 'cash_on_delivery'
         ? 'Cash on delivery'
         : ecommerceDraft.pricing.payment.adapter === 'kbzpay_manual'
           ? 'KBZPay'
           : 'Cash'
       : ''
-    const ecommerceCustomer = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const ecommerceCustomer = ecommerceDraft?.schema === coreUi.e
       ? ecommerceDraft.customerProfile?.name ?? ecommerceDraft.customerReference
       : ecommerceDraft?.customerReference ?? ''
-    if (ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    if (ecommerceDraft?.schema === coreUi.e
       && commerce.inventoryFoundation
       && !managedInventoryProjection?.locations.some((candidate) => candidate.id === ecommerceDraft.operatingContext.operatingUnitLocationId)) {
       detachPreparedOrderSources({ ecommerce: true })
       setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')
       return
     }
-    const promotionDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const promotionDecision = ecommerceDraft?.schema === coreUi.e
       ? ecommerceDraft.pricing.promotion
       : undefined
-    const shippingDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const shippingDecision = ecommerceDraft?.schema === coreUi.e
       ? ecommerceDraft.pricing.shipping
       : undefined
-    const paymentDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const paymentDecision = ecommerceDraft?.schema === coreUi.e
       ? ecommerceDraft.pricing.payment
       : undefined
-    const taxDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const taxDecision = ecommerceDraft?.schema === coreUi.e
       ? ecommerceDraft.pricing.tax
       : undefined
     if (taxDecision) {
@@ -4207,6 +4435,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const recoveryResetEpochAtReview = orderDraftResetEpochRef.current
     const order: CommerceOrder = {
       id: uid('ORD'),
+      ...(activeShift ? { shiftId: activeShift.id } : {}),
       createdAt: reviewedAt.toISOString(),
       customer: customer.trim() || 'Guest',
       channel,
@@ -4297,22 +4526,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       apply: async (action) => {
         const ownedOrder = { ...order, owner: action.actor }
         const proof = commerceActionProof(action)
-        await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => {
-          const paymentPolicyState = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
-            && !managedIdentity
-            && paymentDecision
-            && (current.paymentPolicies?.length ?? 0) === 0
-            ? restoreBrowserLocalSamplePaymentPolicies(
-                current,
-                paymentDecision,
-                ecommerceDraft.fulfilment,
-                ecommerceDraft.totalMmk,
-              )
-            : current
-          return paymentPolicyState
-            ? reserveCommerceOrder(paymentPolicyState, ownedOrder, proof)
-            : null
-        })
+        await mutateCommerce(coreUi.o, action.commandId, proof, (current) => (
+          reserveCommerceOrder(current, ownedOrder, proof)
+        ))
         emitMetric({ product: 'shop', capability: 'shop-orders', action: 'order.created', ts: Date.now() })
         if (ecommerceDraft) {
           consumedEcommerceDraftId.current = ecommerceDraft.id
@@ -4371,6 +4587,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function queueWebsiteOrder(record: WebsiteOrderRecord, promisedAtInput: string) {
+    if (!requireOpenShopShift()) return
     if (commerce.orders.some((order) => order.id === record.id || order.sourceRecordId === record.id)) {
       setNotice(`${record.id} is already in the Shop order queue.`)
       return
@@ -4399,6 +4616,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const orderFulfilment = record.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery'
     const order: CommerceOrder = {
       id: record.id,
+      ...(activeShift ? { shiftId: activeShift.id } : {}),
       createdAt: record.createdAt,
       customer: record.customerReference,
       channel: 'Website',
@@ -4424,12 +4642,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       summary: `Confirm ${record.id} from Website`,
       before: `ready for confirmation · ${item.sku} · ${beforeStock} on hand`,
       after: `confirmed · owner: confirming operator · promised ${formatTime(canonicalPromisedAt)} · ${fulfilmentLabel(orderFulfilment)} · ${record.id} · ${beforeStock - line.quantity} on hand`,
-      apply: (action) => mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, { ...order, owner: action.actor }, commerceActionProof(action))),
+      apply: (action) => mutateCommerce(coreUi.o, action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, { ...order, owner: action.actor }, commerceActionProof(action))),
     })
   }
 
   function queueManagedWebsiteIntake(intakeId: string, input: CommerceWebsiteOrderInput): boolean {
-    const intake = websiteIntakes.find((candidate) => candidate.id === intakeId && candidate.status === 'pending_confirmation')
+    if (!requireOpenShopShift()) return false
+    const reviewedInput: CommerceWebsiteOrderInput = activeShift
+      ? { ...input, shiftId: activeShift.id }
+      : input
+    const intake = websiteIntakes.find((candidate) => candidate.id === intakeId && candidate.status === coreUi.p)
     const item = intake ? commerce.items.find((candidate) => candidate.sku === intake.sku) : null
     if (!intake || !item || item.onHand < intake.quantity || item.price !== intake.unitPrice) {
       setNotice('Managed Website intake failed closed. Recheck the retained intake, catalog price, and available stock.')
@@ -4451,7 +4673,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         'commerce.website_intake.converted',
         action.commandId,
         commerceActionProof(action),
-        (current) => convertCommerceWebsiteIntake(current, intake.id, input, commerceActionProof(action)),
+        (current) => convertCommerceWebsiteIntake(current, intake.id, reviewedInput, commerceActionProof(action)),
       ),
     })
   }
@@ -4513,6 +4735,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   function settleSale(orderId: string) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
+    if (order.channel !== 'Walk-in' || order.fulfilment !== 'pickup') return setNotice('Follow fulfilment steps.')
     if (order.paymentStatus !== 'pending') {
       setNotice(`${order.id} payment is already reconciled. Advance fulfilment instead.`)
       return
@@ -5296,7 +5519,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       ? `${draft.deliveryAddress.line1} · ${draft.deliveryAddress.township} · ${draft.deliveryAddress.city}${draft.deliveryAddress.instructions ? ` · ${draft.deliveryAddress.instructions}` : ''}`
       : draft.sourceRequestId)
     setPromisedAt(promisedAt ? localDateTimeInputValue(new Date(promisedAt)) : defaultOrderPromiseInput())
-    setOrderEntryMode('manual')
     setOrderDraftActive(true)
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
@@ -5871,10 +6093,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function openStockCount() {
-    if (stockCountDraft) {
+    if (!stocktakeScopeReady) {
+      setNotice('Restoring stocktake…')
+      return
+    }
+    if (stockCountDraft || stockCountBatchDrafts.length) {
       const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
-      setNotice('Continue the available-stock count below. Your draft was preserved.')
+      setNotice(`Continue the stocktake. ${stockCountBatchDrafts.length} ${stockCountBatchDrafts.length === 1 ? 'item is' : 'items are'} ready for one review.`)
       return
     }
     if (purchaseOrderDraft) {
@@ -5892,12 +6118,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       ? managedInventoryProjection?.balances.find((balance) => balance.sku === suggestedItem?.sku)
         ?? managedInventoryProjection?.balances[0]
       : undefined
+    const suggestedSku = suggestedBalance?.sku ?? suggestedItem?.sku ?? ''
+    const suggestedCatalogItem = commerce.items.find((item) => item.sku === suggestedSku)
+    const sessionHeadDigest = managedInventoryProjection?.headDigest ?? null
+    setStockCountBatchDrafts([])
     const suggestedDraft: StockCountDraft = {
-      sku: suggestedBalance?.sku ?? suggestedItem?.sku ?? '',
+      sku: suggestedSku,
       stockUnitId: suggestedBalance?.stockUnitId ?? '',
       locationId: suggestedBalance?.locationId ?? '',
       quantity: '',
+      expectedOnHand: suggestedCatalogItem?.onHand ?? 0,
+      expectedPhysicalQuantity: suggestedBalance?.onHand ?? suggestedCatalogItem?.onHand ?? 0,
+      expectedHeadDigest: sessionHeadDigest,
     }
+    setStockCountBarcode('')
     setStockCountDraft(suggestedDraft)
     setNotice(commerce.inventoryFoundation
       ? suggestedBalance
@@ -5911,18 +6145,26 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function cancelStockCount() {
     setStockCountDraft(null)
+    setStockCountBatchDrafts([])
+    setStockCountBarcode('')
     setNotice('Stock count closed. Shop data was not modified.')
     requestAnimationFrame(() => stockCountTriggerRef.current?.focus())
   }
 
   function selectStockCountTarget(value: string) {
+    setStockCountBarcode('')
     if (!commerce.inventoryFoundation) {
-      setStockCountDraft((current) => current ? {
+      const item = commerce.items.find((candidate) => candidate.sku === value)
+      if (!item) return
+      selectStockCountDraft({
         sku: value,
         stockUnitId: '',
         locationId: '',
         quantity: '',
-      } : current)
+        expectedOnHand: item.onHand,
+        expectedPhysicalQuantity: item.onHand,
+        expectedHeadDigest: stockCountDraft?.expectedHeadDigest ?? null,
+      })
       return
     }
     const separator = value.indexOf('|')
@@ -5931,92 +6173,228 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const balance = managedInventoryProjection?.balances.find((candidate) => (
       candidate.stockUnitId === stockUnitId && candidate.locationId === locationId
     ))
-    setStockCountDraft((current) => current ? {
+    const item = commerce.items.find((candidate) => candidate.sku === balance?.sku)
+    if (!balance || !item) return
+    selectStockCountDraft({
       sku: balance?.sku ?? '',
       stockUnitId: balance?.stockUnitId ?? '',
       locationId: balance?.locationId ?? '',
       quantity: '',
-    } : current)
+      expectedOnHand: item.onHand,
+      expectedPhysicalQuantity: balance.onHand,
+      expectedHeadDigest: stockCountDraft?.expectedHeadDigest ?? null,
+    })
+  }
+
+  function stockCountDraftKey(draft: StockCountDraft) {
+    return `${draft.sku}\u0000${draft.stockUnitId}\u0000${draft.locationId}`
+  }
+
+  function selectStockCountDraft(nextDraft: StockCountDraft) {
+    const nextKey = stockCountDraftKey(nextDraft)
+    const entries = [...stockCountBatchDrafts]
+    if (stockCountDraft && stockCountDraftKey(stockCountDraft) !== nextKey && stockCountDraft.quantity.trim()) {
+      const existing = entries.findIndex((entry) => stockCountDraftKey(entry) === stockCountDraftKey(stockCountDraft))
+      if (existing >= 0) entries[existing] = stockCountDraft
+      else entries.push(stockCountDraft)
+    }
+    const selected = entries.findIndex((entry) => stockCountDraftKey(entry) === nextKey)
+    const restoredDraft = selected >= 0 ? entries.splice(selected, 1)[0] : nextDraft
+    setStockCountBatchDrafts(entries)
+    setStockCountDraft(restoredDraft)
+  }
+
+  function applyScannedStockCount(item: CommerceItem, balance?: { stockUnitId: string; locationId: string; tracking?: string; onHand: number }) {
+    const target = {
+      sku: item.sku,
+      stockUnitId: balance?.stockUnitId,
+      locationId: balance?.locationId,
+      serial: balance?.tracking === 'serial',
+    }
+    const targetKey = `${target.sku}\u0000${target.stockUnitId ?? ''}\u0000${target.locationId ?? ''}`
+    const currentMatches = stockCountDraft && stockCountDraftKey(stockCountDraft) === targetKey
+    const entries = [...stockCountBatchDrafts]
+    if (!currentMatches && stockCountDraft?.quantity.trim()) {
+      if (!/^[0-9]+$/.test(stockCountDraft.quantity.trim())) {
+        setNotice('Correct the current count before scanning another item. Your count is preserved.')
+        return
+      }
+      const currentIndex = entries.findIndex((entry) => stockCountDraftKey(entry) === stockCountDraftKey(stockCountDraft))
+      if (currentIndex >= 0) entries[currentIndex] = stockCountDraft
+      else entries.push(stockCountDraft)
+    }
+    const priorTargetIndex = entries.findIndex((entry) => stockCountDraftKey(entry) === targetKey)
+    const priorTarget = currentMatches ? stockCountDraft : priorTargetIndex >= 0 ? entries[priorTargetIndex] : null
+    const result = applyStockCountScan(priorTarget, target)
+    if (result.status === 'invalid-current') {
+      setNotice('Correct the current count before scanning another unit. Your count is preserved.')
+      return
+    }
+    if (result.status === 'serial-limit') {
+      setNotice('This item is tracked by serial number. Count its unique units manually; the draft is unchanged.')
+      return
+    }
+    if (result.status === 'count-overflow') {
+      setNotice('The scanned count reached its safe limit. Review this item before continuing.')
+      return
+    }
+    if (!result.draft) return
+    if (priorTargetIndex >= 0) entries.splice(priorTargetIndex, 1)
+    const nextDraft: StockCountDraft = {
+      ...result.draft,
+      expectedOnHand: priorTarget?.expectedOnHand ?? item.onHand,
+      expectedPhysicalQuantity: priorTarget?.expectedPhysicalQuantity ?? balance?.onHand ?? item.onHand,
+      expectedHeadDigest: priorTarget?.expectedHeadDigest ?? stockCountDraft?.expectedHeadDigest ?? null,
+    }
+    setStockCountBatchDrafts(entries)
+    setStockCountDraft(nextDraft)
+    setNotice(`${result.draft?.quantity} ${result.draft?.quantity === '1' ? 'unit' : 'units'} scanned for ${item.name}. Keep scanning or review the count.`)
+    requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLInputElement>('#stock-count-quantity')?.focus())
+  }
+
+  function selectStockCountBarcode(rawValue: string) {
+    const code = rawValue.trim()
+    if (!code) return
+    const item = commerce.items.find((candidate) => candidate.sku.toLowerCase() === code.toLowerCase())
+    if (!item) {
+      setNotice('No Shop product matches that barcode. Check the code or choose the product below.')
+      return
+    }
+    setStockCountBarcode('')
+    const balances = commerce.inventoryFoundation
+      ? managedInventoryProjection?.balances.filter((balance) => balance.sku === item.sku) ?? []
+      : []
+    const balance = balances.length === 1
+      ? balances[0]
+      : balances.find((candidate) => candidate.stockUnitId === stockCountDraft?.stockUnitId
+        && candidate.locationId === stockCountDraft?.locationId)
+    if (commerce.inventoryFoundation && balances.length !== 1) {
+      if (balance) {
+        applyScannedStockCount(item, balance)
+        return
+      }
+      setNotice(balances.length
+        ? `${item.name} found. Choose the location and lot to count.`
+        : `${item.name} found, but no countable location and lot is available.`)
+      if (!stockCountDraft?.quantity.trim()) {
+        selectStockCountDraft({
+          sku: item.sku,
+          stockUnitId: '',
+          locationId: '',
+          quantity: '',
+          expectedOnHand: item.onHand,
+          expectedPhysicalQuantity: item.onHand,
+          expectedHeadDigest: stockCountDraft?.expectedHeadDigest ?? null,
+        })
+        requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>('#stock-count-sku')?.focus())
+      }
+      return
+    }
+    applyScannedStockCount(item, balance)
   }
 
   function reviewStockCount(event: FormEvent) {
     event.preventDefault()
-    if (!stockCountDraft || !stockCountItem || stockCountQuantityResult === null || (commerce.inventoryFoundation && !stockCountBalance)) {
+    const drafts = [...stockCountBatchDrafts, ...(stockCountDraft?.quantity.trim() ? [stockCountDraft] : [])]
+    if (!drafts.length) {
       setNotice(commerce.inventoryFoundation
-        ? 'Choose one location and lot, then enter a physical count that includes its reserved units.'
-        : 'Choose one item and enter a non-negative whole-unit available count.')
+        ? 'Count at least one location and lot before reviewing the stocktake.'
+        : 'Count at least one product before reviewing the stocktake.')
       return
     }
-    const item = stockCountItem
-    const countedPhysicalQuantity = stockCountQuantityResult
-    const expectedAvailable = item.onHand
-    const expectedPhysicalQuantity = stockCountBalance?.onHand ?? expectedAvailable
-    const countedAvailable = expectedAvailable + countedPhysicalQuantity - expectedPhysicalQuantity
-    const variance = countedPhysicalQuantity - expectedPhysicalQuantity
-    const varianceLabel = variance === 0
-      ? 'no variance'
-      : `${variance > 0 ? '+' : ''}${variance.toLocaleString()} variance`
-    const countLocation = stockCountBalance
-      ? managedInventoryProjection?.locations.find((location) => location.id === stockCountBalance.locationId)
-      : undefined
-    const targetLabel = stockCountBalance
-      ? `${countLocation?.name ?? stockCountBalance.locationId} / ${stockCountBalance.trackingCode}`
-      : item.sku
-    const locationCount = commerce.inventoryFoundation && stockCountBalance
-      ? {
+    const lines: Parameters<typeof countCommerceStockBatch>[1] = []
+    const displayRows: Array<{ item: CommerceItem; target: string; before: string; after: string }> = []
+    const seenTargets = new Set<string>()
+    for (const draft of drafts) {
+      const key = stockCountDraftKey(draft)
+      if (seenTargets.has(key)) {
+        setNotice('This stocktake contains the same item and location twice. Remove the duplicate before review.')
+        return
+      }
+      seenTargets.add(key)
+      const item = commerce.items.find((candidate) => candidate.sku === draft.sku)
+      const balance = commerce.inventoryFoundation
+        ? managedInventoryProjection?.balances.find((candidate) => candidate.stockUnitId === draft.stockUnitId && candidate.locationId === draft.locationId)
+        : undefined
+      const quantityText = draft.quantity.trim()
+      const quantity = /^[0-9]+$/.test(quantityText) ? Number(quantityText) : Number.NaN
+      const validQuantity = Number.isSafeInteger(quantity) && quantity >= 0
+        && (!balance || quantity >= balance.reserved)
+        && (!balance || balance.tracking !== 'serial' || quantity <= 1)
+      if (!item || !validQuantity || (commerce.inventoryFoundation && !balance)) {
+        setNotice(commerce.inventoryFoundation
+          ? `Enter a valid physical count for ${draft.sku}, including reserved units, and choose its location and lot.`
+          : `Enter a valid whole-unit count for ${draft.sku}.`)
+        return
+      }
+      if (item.onHand !== draft.expectedOnHand
+        || (commerce.inventoryFoundation && (managedInventoryProjection?.headDigest !== draft.expectedHeadDigest
+          || balance?.onHand !== draft.expectedPhysicalQuantity))) {
+        setNotice(`Stock changed while counting ${draft.sku}. The batch was kept; update its physical count before review.`)
+        return
+      }
+      const targetLocation = balance
+        ? managedInventoryProjection?.locations.find((location) => location.id === balance.locationId)
+        : undefined
+      const target = balance ? `${targetLocation?.name ?? balance.locationId} / ${balance.trackingCode}` : draft.sku
+      const countedTotal = balance
+        ? draft.expectedOnHand + quantity - draft.expectedPhysicalQuantity
+        : quantity
+      if (!Number.isSafeInteger(countedTotal) || countedTotal < 0) {
+        setNotice(`The total available count for ${draft.sku} is outside the safe range.`)
+        return
+      }
+      lines.push({
+        sku: draft.sku,
+        expectedOnHand: draft.expectedOnHand,
+        countedQuantity: quantity,
+        ...(balance ? { locationCount: {
           countId: uid('CNT'),
-          stockUnitId: stockCountBalance.stockUnitId,
-          locationId: stockCountBalance.locationId,
-          expectedQuantity: expectedPhysicalQuantity,
-          countedQuantity: countedPhysicalQuantity,
-          expectedHeadDigest: commerce.inventoryFoundation.headDigest,
-        }
-      : undefined
-    // A stock count with no variance is bookkeeping and needs no explanation. A count that
-    // disagrees with the record is the opposite — that is the entry someone audits later —
-    // so state the variance and leave the operator to say what caused it.
-    const countHasVariance = countedPhysicalQuantity !== expectedPhysicalQuantity
+          stockUnitId: balance.stockUnitId,
+          locationId: balance.locationId,
+          expectedQuantity: draft.expectedPhysicalQuantity,
+          countedQuantity: quantity,
+          expectedHeadDigest: draft.expectedHeadDigest ?? '',
+        } } : {}),
+      })
+      const variance = quantity - draft.expectedPhysicalQuantity
+      displayRows.push({
+        item,
+        target,
+        before: balance
+          ? `${target} / ${draft.expectedPhysicalQuantity.toLocaleString()} physical / ${balance.reserved.toLocaleString()} reserved`
+          : `${draft.sku} / ${draft.expectedOnHand.toLocaleString()} recorded available`,
+        after: balance
+          ? `${quantity.toLocaleString()} physical / ${variance === 0 ? 'no variance' : `${variance > 0 ? '+' : ''}${variance.toLocaleString()} variance`}`
+          : `${quantity.toLocaleString()} counted available / ${quantity === draft.expectedOnHand ? 'no variance' : `${quantity > draft.expectedOnHand ? '+' : ''}${(quantity - draft.expectedOnHand).toLocaleString()} variance`}`,
+      })
+    }
+    const hasVariance = lines.some((line) => line.countedQuantity !== (line.locationCount?.expectedQuantity ?? line.expectedOnHand))
+    const batchSummary = displayRows.map((row) => `${row.item.sku} ${row.before} → ${row.after}`).join('; ')
     queueAction({
       kind: 'inventory_count',
-      subjectId: item.sku,
-      ...(countHasVariance ? {} : { reasonSuggestion: `Routine stock count of ${item.name}; counted quantity matches the record.` }),
-      evidenceReferenceSuggestion: `Stock count ${item.sku}`,
-      summary: stockCountBalance ? `Count ${item.name} at ${targetLabel}` : `Count available stock for ${item.name}`,
-      before: stockCountBalance
-        ? `${targetLabel} / ${expectedPhysicalQuantity.toLocaleString()} physical / ${stockCountBalance.reserved.toLocaleString()} reserved / ${expectedAvailable.toLocaleString()} total available`
-        : `${item.sku} / ${expectedAvailable.toLocaleString()} recorded available`,
-      after: stockCountBalance
-        ? `${countedPhysicalQuantity.toLocaleString()} physical / ${varianceLabel} / ${countedAvailable.toLocaleString()} total available / count evidence only`
-        : `${countedAvailable.toLocaleString()} counted available / ${varianceLabel} / count evidence only`,
+      subjectId: `COUNT-BATCH-${lines.length}`,
+      ...(!hasVariance ? { reasonSuggestion: `Routine stocktake of ${lines.length} entries; counted quantities match the recorded stock.` } : {}),
+      evidenceReferenceSuggestion: `Shop stocktake batch · ${lines.length} entries`,
+      summary: `Review stocktake · ${lines.length} ${lines.length === 1 ? 'entry' : 'entries'}`,
+      before: displayRows.map((row) => row.before).join(' | '),
+      after: `${batchSummary} · one reviewed stocktake; no partial writes`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         let staleCount = false
         try {
           await mutateCommerce('commerce.stock.counted', action.commandId, proof, (current) => {
-            const replay = current.movements.find((movement) => movement.actionId === proof.actionId)
-            if (replay) return countCommerceStock(current, item.sku, countedAvailable, proof, locationCount)
-            const currentItems = current.items.filter((candidate) => candidate.sku === item.sku)
-            if (currentItems.length !== 1
-              || currentItems[0].onHand !== expectedAvailable
-              || (locationCount && current.inventoryFoundation?.headDigest !== locationCount.expectedHeadDigest)) {
-              staleCount = true
-              return null
-            }
-            return countCommerceStock(current, item.sku, countedAvailable, proof, locationCount)
+            const next = countCommerceStockBatch(current, lines, proof)
+            if (!next) staleCount = true
+            return next
           })
-          setStockCountDraft((current) => current?.sku === item.sku
-            && current.stockUnitId === (locationCount?.stockUnitId ?? '')
-            && current.locationId === (locationCount?.locationId ?? '') ? null : current)
+          setStockCountDraft(null)
+          setStockCountBatchDrafts([])
         } catch (error) {
           if (staleCount || error instanceof ShopReviewRequiredError) {
-            setStockCountDraft({
-              sku: item.sku,
-              stockUnitId: locationCount?.stockUnitId ?? '',
-              locationId: locationCount?.locationId ?? '',
-              quantity: '',
-            })
-            requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLInputElement>('#stock-count-quantity')?.focus())
-            throw new ShopReviewRequiredError(`Stock changed while you were reviewing. Nothing was applied. Recount ${targetLabel} against the latest stock record.`)
+            setStockCountDraft(null)
+            setStockCountBatchDrafts([])
+            throw new ShopReviewRequiredError('Stock changed while this stocktake was being reviewed. Nothing was applied. Reopen the count and recount against the latest stock record.')
           }
           throw error
         }
@@ -6498,9 +6876,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function closeDay() {
     const queuedAt = new Date().toISOString()
-    const expected = commerceCloseExpectation(commerce, queuedAt)
+    const expected = commerceCloseExpectation(commerce, queuedAt, activeShift?.id)
     if (!expected) {
-      setNotice(legacyCloseNeedsMigration
+      setNotice(shopShiftRequired && !activeShift
+        ? 'Open a Shop shift before recording a close.'
+        : legacyCloseNeedsMigration
         ? 'Legacy close history must be migrated before another daily close can be saved.'
         : 'This business date already has a close. Review the latest snapshot instead of closing it again.')
       return
@@ -6521,15 +6901,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     // and shown above. When the count does NOT match, say so in the reason rather than
     // hiding it behind a generic line: a short close is exactly the entry someone will
     // read back later.
+    const closeScope = expected.shiftId ? `${activeOperatingUnit?.name ?? 'Shop'} shift` : `day ${expected.businessDate}`
     const closeReason = settlement.status === 'matched'
-      ? `End of day ${expected.businessDate}. Counted cash matches the expected total.`
-      : `End of day ${expected.businessDate}. Settlement needs review — counted ${formatMoney(settlement.totalCountedMmk)} against expected ${formatMoney(expected.total)}.`
+      ? `End of ${closeScope}. Counted payments match the expected total.`
+      : `End of ${closeScope}. Settlement needs review — counted ${formatMoney(settlement.totalCountedMmk)} against expected ${formatMoney(expected.total)}.`
     queueAction({
       kind: 'daily_close',
       subjectId: closeId,
-      summary: `Close ${expected.businessDate}`,
+      summary: `Close ${closeScope}`,
       reasonSuggestion: closeReason,
-      evidenceReferenceSuggestion: `Daily close ${expected.businessDate}`,
+      evidenceReferenceSuggestion: `${expected.shiftId ? 'Shift' : 'Daily'} close ${expected.shiftId ?? expected.businessDate}`,
       before: `${commerce.closes.length} snapshots`,
       after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · expected ${formatMoney(expected.total)} · counted ${formatMoney(settlement.totalCountedMmk)} · settlement ${settlement.status.replace('_', ' ')} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
       apply: (action) => mutateCommerce(
@@ -6569,33 +6950,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const orderDraftRecoveryVisible = !orderDraftActive
     && !pendingAction
     && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked)
-  const shopOrderControlNext = orderDraftRecoveryBlocked
-    ? 'Repair saved order draft'
-    : pendingStorefrontRequests.length
-      ? 'Review Ecommerce inbox'
-      : actionOrders.length
-        ? 'Finish fulfilment queue'
-        : paymentReview.length
-          ? 'Reconcile payment exceptions'
-          : closableOrders.length
-            ? 'Save daily close'
-            : 'Ready for new orders'
-  const shopOrderControlRows = [
-    ['Online inbox', pendingStorefrontRequests.length ? `${pendingStorefrontRequests.length} waiting` : 'Clear'],
-    ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
-    ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
-    ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
-    ['Write status', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
-  ] as const
-  const shopOrderControlBoundary = 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.'
-  const shopOrderLifecycleRows = [
-    ['Capture', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online` : openOrders.length ? `${openOrders.length} open` : 'Ready'],
-    ['Reserve', managedInventoryProjection ? 'ATP active' : 'Catalog stock'],
-    ['Fulfil', actionOrders.length ? `${actionOrders.length} action` : openOrders.length ? 'In progress' : 'Ready'],
-    ['Collect', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
-    ['Replenish', activePurchaseOrders.length ? `${activePurchaseOrders.length} active PO` : lowStock.length ? `${lowStock.length} reorder` : 'Clear'],
-    ['Return', returnDraft ? 'Drafting' : commerce.orders.some((order) => order.returns?.length) ? 'Recorded' : 'Accountable'],
-  ] as const
   const pendingPaymentOrders = commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
   const refundExposureOrders = commerce.orders.filter((order) => order.refundStatus === 'due')
   const supplierReceiptExposure = overduePurchaseOrders.length + dueSoonPurchaseOrders.length + partiallyReceivedPurchaseOrders.length
@@ -6674,24 +7028,37 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
   ), 0)
   const incomingRequestCount = pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
-  const yangonDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' })
-  const todayInYangon = yangonDateFmt.format(new Date(purchaseOrderClock))
-  const todayOrders = commerce.orders.filter((order) => (
-    order.status !== 'cancelled' && yangonDateFmt.format(new Date(order.createdAt)) === todayInYangon
-  ))
-  const todayRevenue = todayOrders.reduce((sum, order) => sum + order.total, 0)
+  const completedSalesToday = projectShopTodayCompletedSales(commerce, purchaseOrderClock)
   const shopTodayMetrics = [
-    { label: 'Open orders', value: String(openOrders.length), tone: actionOrders.length ? 'attention' as const : 'ready' as const },
-    { label: "Today's sales", value: todayOrders.length ? formatMoney(todayRevenue) : '—' },
-    { label: 'Stock alerts', value: String(lowStock.length), tone: lowStock.length ? 'attention' as const : 'ready' as const },
-    { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
+    { label: 'Open orders', value: String(openOrders.length), detail: actionOrders.length ? `${actionOrders.length} need action` : 'Awaiting fulfilment', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
+    { label: "Today's sales", value: formatMoney(completedSalesToday.grossMmk), detail: `${completedSalesToday.count} completed · before returns` },
+    { label: 'Stock alerts', value: String(lowStock.length), detail: lowStock.length ? 'At or below reorder' : 'No reorder alerts', tone: lowStock.length ? 'attention' as const : 'ready' as const },
+    { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), detail: receivablesAging.overdueOrders ? `${receivablesAging.overdueOrders} overdue orders` : 'Customer balances', tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
   ]
+  const shopCloseQueue = {
+    actionLabel: paymentReview.length
+      ? 'Review payment exceptions'
+      : closableOrders.length
+        ? 'Count and close'
+        : latestClose
+          ? 'Review recorded close'
+          : 'Review close controls',
+    exceptionCount: paymentReview.length,
+    latestCloseRecorded: Boolean(latestClose),
+    orderCount: closableOrders.length,
+    paymentMethods: [...closeExpectedByPayment.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([paymentMethod, totalMmk]) => ({ paymentMethod, totalMmk })),
+    target: paymentReview.length ? '/shop/?tab=orders#shop-payment-review' : '/shop/?tab=orders#shop-close-controls',
+    tone: paymentReview.length ? 'attention' as const : 'ready' as const,
+    totalMmk: reconciledValue,
+  }
   const shopTodayModules = [
     { label: 'Sell & POS', detail: 'Counter, cart, payment choice, tax and receipt evidence', status: `${commerce.items.length} items`, to: '/shop/?tab=counter' },
     { label: 'Orders & fulfilment', detail: 'Channel intake, allocation, promise, delivery and returns', status: actionOrders.length ? `${actionOrders.length} need action` : `${openOrders.length} open`, to: '/shop/?tab=orders', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Inventory & purchasing', detail: 'Locations, lots, ATP, counts, suppliers and receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Customers & after-sales', detail: 'Credit, receivables, appointments, support and warranty trail', status: afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history' },
-    { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length ? 'attention' as const : 'ready' as const },
+    { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: shopCloseQueue.target, tone: shopCloseQueue.tone },
     { label: 'Online channels', detail: 'Sites and Commerce requests arrive in Shop', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
   ]
   const shopProfitControl = projectShopProfitControl({
@@ -6706,10 +7073,101 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     refundDueCount: refundExposureOrders.length,
     lowStockCount: lowStock.length,
     closeReadyCount: closableOrders.length,
-    closeReadyMmk: closableOrders.reduce((sum, order) => sum + order.total, 0),
+    closeReadyMmk: reconciledValue,
   })
   const stockAttentionRows = stockRows.filter(({ item }) => item.onHand <= item.reorderAt)
   const stockCatalogRows = stockRows.filter(({ item }) => item.onHand > item.reorderAt)
+  const stockUnitsAvailable = commerce.items.reduce((total, item) => total + item.onHand, 0)
+  const stockNextPurchaseRow = purchaseOrderDraftOrder
+    ?? overduePurchaseOrders.find(({ item }) => Boolean(item))
+    ?? partiallyReceivedPurchaseOrders.find(({ item }) => Boolean(item))
+    ?? dueSoonPurchaseOrders.find(({ item }) => Boolean(item))
+    ?? activePurchaseOrders.find(({ item }) => Boolean(item))
+  const stockNextItem = stockCountItem
+    ?? purchaseOrderDraftItem
+    ?? stockNextPurchaseRow?.item
+    ?? lowStock[0]
+    ?? commerce.items[0]
+  const stockNextDemand = stockNextItem
+    ? shopDemandIntelligence.rows.find((row) => row.sku === stockNextItem.sku)
+    : undefined
+  const stockNextPurchaseUrgency = stockNextPurchaseRow
+    ? commercePurchaseOrderArrivalUrgency(stockNextPurchaseRow.purchaseOrder, stockNextPurchaseRow.progress, purchaseOrderClock)
+    : null
+  const stockNextActionKind = !commerce.items.length
+    ? 'catalog'
+    : !commerceCanWrite
+      ? 'restore'
+      : pendingAction
+        ? 'pending'
+        : stockCountDraft
+          ? 'count'
+          : purchaseOrderDraft
+            ? purchaseOrderDraft.mode
+            : stockNextPurchaseRow
+              ? 'receive'
+              : lowStock.length
+                ? 'create'
+                : 'count'
+  const stockNextActionTitle = stockNextActionKind === 'catalog'
+    ? 'Add your first products'
+    : stockNextActionKind === 'restore'
+      ? 'Restore stock access'
+      : stockNextActionKind === 'pending'
+        ? 'Review the pending change'
+        : stockNextActionKind === 'receive'
+          ? purchaseOrderDraft?.mode === 'receive' ? 'Continue the stock receipt' : 'Receive the next purchase order'
+          : stockNextActionKind === 'create'
+            ? purchaseOrderDraft?.mode === 'create' ? 'Continue the purchase order' : 'Reorder the next item'
+            : stockCountDraft
+              ? 'Continue the stock count'
+              : 'Count physical stock'
+  const stockNextReason = stockNextActionKind === 'catalog'
+    ? 'Stock decisions start with the real items, prices and opening quantities your business uses.'
+    : stockNextActionKind === 'restore'
+      ? 'This workspace cannot safely record inventory changes until write access is restored.'
+      : stockNextActionKind === 'pending'
+        ? 'One reviewed change is waiting. Finish it before creating another inventory record.'
+        : stockNextActionKind === 'receive' && stockNextPurchaseRow
+          ? `${stockNextPurchaseRow.progress.remaining.toLocaleString()} units remain from ${stockNextPurchaseRow.purchaseOrder.supplier}.${stockNextPurchaseUrgency === 'late' ? ' The recorded arrival is late.' : stockNextPurchaseUrgency === 'due_soon' ? ' The recorded arrival is due soon.' : stockNextPurchaseRow.progress.status === 'partially_received' ? ' Part of this order has already been received.' : ''}`
+          : stockNextItem && stockNextItem.onHand <= stockNextItem.reorderAt
+            ? stockNextItem.onHand === stockNextItem.reorderAt
+              ? `${stockNextItem.name} is at its reorder level.`
+              : `${stockNextItem.name} is ${(stockNextItem.reorderAt - stockNextItem.onHand).toLocaleString()} units below its reorder level.`
+            : 'No item is below its reorder level. A physical count keeps available stock trustworthy.'
+  const stockNextOwnerCheck = stockNextActionKind === 'receive'
+    ? 'Count accepted and rejected units before confirming the receipt. No supplier payment runs here.'
+    : stockNextActionKind === 'create'
+      ? 'Confirm supplier, quantity, cost and expected arrival. The first review creates an internal requisition.'
+      : stockNextActionKind === 'count'
+        ? commerce.inventoryFoundation
+          ? 'Choose the exact location and lot, then enter the physical count. Reserved units remain protected.'
+          : 'Count saleable units that are not already set aside for open orders.'
+        : stockNextActionKind === 'pending'
+          ? 'Use the current review gate so the inventory trail keeps one accountable decision.'
+          : stockNextActionKind === 'restore'
+            ? 'Open workspace controls and restore the named-user write boundary before recording stock.'
+            : 'Check SKU, price, opening stock and reorder level before the catalog is saved.'
+  const stockNextTrack = stockNextActionKind === 'receive'
+    ? 'Receiving'
+    : stockNextActionKind === 'create'
+      ? 'Purchasing'
+      : stockNextActionKind === 'count'
+        ? 'Inventory control'
+        : stockNextActionKind === 'catalog'
+          ? 'Catalog'
+          : stockNextActionKind === 'restore'
+            ? 'Access'
+            : 'Review'
+  const nextOrder = actionOrders[0]
+  const nextOrderAction = nextOrder ? shopOrderPrimaryActionLabel(nextOrder) : 'The queue is clear'
+  const nextOrderDetail = nextOrder
+    ? `${nextOrder.customer} · ${commerceOrderDisplayReference(nextOrder.id)} · ${formatMoney(nextOrder.total)}`
+    : 'No payment, fulfilment or refund action is waiting.'
+  const urgentOrderCount = actionOrders.filter((order) => {
+    const urgency = commerceOrderPromiseUrgency(order, purchaseOrderClock)
+    return urgency === 'late' || urgency === 'due_soon' || urgency === 'unrecorded'
+  }).length
 
   function renderStockRow({ item }: (typeof stockRows)[number]) {
     const active = activePurchaseOrderBySku.get(item.sku)
@@ -6736,23 +7194,25 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
-    {commerceBoundary}
-    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} profitControl={shopProfitControl} /></Suspense>
+    {operatingBoundary}
+    {shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null}
+    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0} closeQueue={shopCloseQueue} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} recordStatus={shopRecordStatus} /></Suspense>
     {actionGate}
   </div>
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} businessTemplate={activeShopBusinessTemplate} canCompleteInOneReview={confirmedLocalShop && !managedIdentity} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity)} industryPack={shopPack} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} localDemoStatus={counterLocalDemoStatus} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordedOrderIds={commerce.orders.map(order => order.id)} sampleCatalogActive={shopSampleCatalogActive} />
-    <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
+    <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <dl className="order-queue-summary" aria-label="Order status"><div><dt>Need action</dt><dd>{actionOrders.length}</dd></div><div><dt>In fulfilment</dt><dd>{openOrders.length}</dd></div><div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div></dl>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
@@ -6782,7 +7242,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <small>{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'The original is already cancelled with this exact evidence. Resume the recovered replacement at the requested promise.' : 'Step 1 rechecks current promise policy, cancels, and releases the original. Step 2 separately confirms the repriced replacement and requested time.'}</small>
         </div>
         <div className="order-draft-recovery-actions">
-          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => void prepareOrderRescheduleReplacement()} type="button">{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'Resume reschedule' : 'Review reschedule'}</button>
+          <button className={coreUi.q} disabled={commerceControlsDisabled} onClick={() => void prepareOrderRescheduleReplacement()} type="button">{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'Resume reschedule' : 'Review reschedule'}</button>
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={() => { setOrderRescheduleReview(null); setNotice('Reschedule review closed. Nothing changed.') }} type="button">Close review</button>
         </div>
       </section> : null}
@@ -6794,7 +7254,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <small>{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'The original is already cancelled with this exact evidence. Resume the recovered replacement draft.' : 'Step 1 cancels and releases the original under accountable review. Step 2 separately confirms the repriced replacement order.'}</small>
         </div>
         <div className="order-draft-recovery-actions">
-          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => void prepareOrderAmendmentReplacement()} type="button">{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'Resume replacement' : 'Review replacement'}</button>
+          <button className={coreUi.q} disabled={commerceControlsDisabled} onClick={() => void prepareOrderAmendmentReplacement()} type="button">{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'Resume replacement' : 'Review replacement'}</button>
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={() => { setOrderAmendmentReview(null); setNotice('Order change review closed. Nothing changed.') }} type="button">Close review</button>
         </div>
       </section> : null}
@@ -6806,24 +7266,53 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <small>Shop rechecked the exact acknowledgement, active order, reserved stock, payment, and refund state. No message, refund, provider call, or cancellation has run.</small>
         </div>
         <div className="order-draft-recovery-actions">
-          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => cancelOrder(cancellationDraft.orderId, cancellationDraft)} type="button">Review cancellation</button>
+          <button className={coreUi.q} disabled={commerceControlsDisabled} onClick={() => cancelOrder(cancellationDraft.orderId, cancellationDraft)} type="button">Review cancellation</button>
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
+      {managedIdentity && pendingStorefrontRequests.length ? <section aria-label="Incoming Ecommerce orders" className="incoming-order-inbox">
+        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Ecommerce</span><h3>New online orders</h3><p>Orders arrive here automatically. Check stock, delivery and payment before adding one to Shop.</p></div><strong aria-label={`${pendingStorefrontRequests.length} orders waiting`}>{pendingStorefrontRequests.length}</strong></div>
+        <div className="incoming-order-list">
+          {visiblePendingStorefrontRequests.map((request) => {
+            const lines = commerceStorefrontRequestLines(request)
+            const stockConflict = pendingStorefrontStockConflicts.get(request.id)
+            const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
+            return <article key={request.id}><div><strong>{request.customerReference} · {itemSummary}</strong><small>{formatMoney(request.totalMmk)} · {request.fulfilment}{stockConflict ? ` · ${stockConflict.sku} needs stock review` : ''}</small></div><button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => { openOrderComposer(); void reviewStorefrontRequest(request.id) }} ref={request.id === activeEcommerceInboxRequestId ? ecommerceInboxTargetRef : undefined} type="button">Check order</button></article>
+          })}
+        </div>
+      </section> : null}
+      {legacyWebsiteWorkWaiting ? <section aria-label="Incoming Website orders" className="incoming-order-inbox">
+        <div className="incoming-order-inbox-head"><div><span className="core-eyebrow">Incoming</span><h3>Website requests waiting for review</h3></div><strong>{managedIdentity ? websiteIntakes.filter((intake) => intake.status === coreUi.p).length : 1}</strong></div>
+        <Suspense fallback={<p className="form-notice" role="status">Opening Website request…</p>}>
+          <WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === coreUi.p)?.id ?? 'local'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} />
+        </Suspense>
+      </section> : null}
+      <div className="order-workspace-grid">
+        <section aria-labelledby="shop-order-list-heading" className="order-queue-main">
+          <div className="order-queue-section-head"><div><span className="core-eyebrow">Live queue</span><h3 id="shop-order-list-heading">Orders to finish</h3></div><small>{actionOrders.length ? `${actionOrders.length} active` : 'All caught up'}</small></div>
+          <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onSettleSale={settleSale} onViewReceipt={setReceiptAck} orders={actionOrders} />
+        </section>
+        <aside aria-label="Order insights" className="order-insight-rail">
+          <section className="order-insight-card is-primary">
+            <span className="core-eyebrow">Next action</span>
+            <h3>{nextOrderAction}</h3>
+            <p>{nextOrderDetail}</p>
+            {nextOrder ? <a className={coreUi.q} href={`#${commerceOrderTargetId(nextOrder.id)}`}>Open next order</a> : <Link className="core-button compact" to="/shop/?tab=counter">Open the counter</Link>}
+          </section>
+          <section className="order-insight-card">
+            <div className="order-insight-heading"><span className="core-eyebrow">Queue health</span><strong>What needs attention</strong></div>
+            <dl className="order-health-list">
+              <div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div>
+              <div><dt>Promise attention</dt><dd>{urgentOrderCount}</dd></div>
+              <div><dt>Refunds due</dt><dd>{refundExposureOrders.length}</dd></div>
+            </dl>
+          </section>
+        </aside>
+      </div>
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
           {shopCommandCenter}
-          {shopSetupGuide}
-          <section className="shop-order-control" aria-label="Shop order control">
-            <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
-            <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-          </section>
-          <section className="shop-order-control" aria-label="Shop order lifecycle">
-            <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
-            <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-          </section>
           {shopAccountingReadiness}
           {shopAccountingPacket}
           {shopMonthlyStatementPanel}
@@ -6838,7 +7327,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
           disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
           incomingOnline={pendingStorefrontRequests.length}
-          incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === 'pending_confirmation').length : Number(legacyWebsiteWorkWaiting)}
+          incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === coreUi.p).length : Number(legacyWebsiteWorkWaiting)}
+          stockConflicts={pendingStockConflictCount}
           onOpenOrder={openOrderComposer}
           overdue={actionOrders.filter((order) => commerceOrderPromiseUrgency(order, purchaseOrderClock) === 'late').length}
           paymentPending={commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending').length}
@@ -6860,12 +7350,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       onScheduleChange={(schedule) => setScheduleSnapshot({ key: scheduleScopeKey, schedule })}
     /></Suspense> : null}
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
+      setFocusedEcommerceRequestId(null)
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
       setOrderDraftConflict(false)
     }} ref={orderComposerRef}>
-      <div className="order-composer-head"><div><span className="core-eyebrow">New order</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>Add an order</h2><p>Choose the fastest source. Nothing changes until the separate confirmation step.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close new order" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
-      {orderDraftActive && orderEntryMode === 'manual' && !preparedChannelDraft && !preparedEcommerceDraft && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
+      <div className="order-composer-head"><div><span className="core-eyebrow">New order</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>Add an order</h2><p>Add order details. Review the order before saving.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close new order" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
+      {orderDraftActive && !preparedChannelDraft && !preparedEcommerceDraft && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftConflict
             ? 'Saved draft changed in another tab'
@@ -6882,33 +7373,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         </div>
         {resumedOrderNeedsReview ? <button className="core-button compact" disabled={!resumedOrderCanRebind || orderDraftSaving || orderDraftConflict} onClick={() => void acceptCurrentOrderDraftCatalog()} type="button">Use current Shop values</button> : null}
       </div> : null}
-      {!preparedEcommerceDraft && !preparedChannelDraft ? <div aria-label="Order source" className="order-entry-methods" role="group">
-        <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter order</button>
-        <button aria-pressed={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} type="button">From message</button>
-        <button aria-pressed={orderEntryMode === 'online'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('online')} type="button">Online request</button>
-      </div> : null}
       {orderNotice ? <p className="form-notice order-entry-notice" aria-live="polite">{orderNotice}</p> : null}
-      {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><Suspense fallback={<p className="form-notice" role="status">Loading message intake…</p>}><ChannelOrderIntake disabled={commerceControlsDisabled} identity={managedIdentity ?? undefined} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></Suspense></div> : null}
-      {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
-        <section className="website-intake">
-          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
-          {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => {
-            const lines = commerceStorefrontRequestLines(request)
-            const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
-            return <div className="website-intake-ready" key={request.id}>
-              <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
-              <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
-            </div>
-          }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
-          <Link className="text-link" to="/ecommerce/">Open Commerce</Link>
-        </section>
-        {confirmedLocalShop && localWebsiteIntakeRead.status === 'error' ? <div className="website-intake-record"><strong>Older Website order could not be checked.</strong><small>Reload before reviewing older Website handoffs. No order was created or changed.</small></div> : null}
-        {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><Suspense fallback={<div className="website-intake-record"><strong>Opening older Website order…</strong><small>No order is created until you review and confirm it.</small></div>}><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></Suspense></details> : null}
-      </div> : null}
-      {orderEntryMode === 'manual' ? <>
+      <>
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
-          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small></div>
+          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === coreUi.e ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
@@ -6926,12 +7395,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
                 setNotice('Fulfilment changed. The Ecommerce source link was removed; review this as a manual order.')
               }
             }}><option value="">Choose pickup or delivery</option><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>
-            <label>Promised for<input autoComplete="off" disabled={commerceControlsDisabled} id="commerce-order-promise" min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} ref={orderPromiseRef} required type="datetime-local" value={promisedAt} /></label>
+            <label>Promised for<input autoComplete="off" disabled={commerceControlsDisabled} id="commerce-order-promise" min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} ref={orderPromiseRef} required type={coreUi.d} value={promisedAt} /></label>
             <label>Payment due<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentTermsDays(Number(event.target.value) as 0 | 7 | 30)} value={paymentTermsDays}><option value="0">At handoff</option><option value="7">7 days after order</option><option value="30">30 days after order</option></select></label>
             <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
             <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); detachPreparedOrderSources() }}>{!commerce.items.some((item) => item.sku === selectedSku) && selectedSku ? <option disabled value={selectedSku}>{selectedSku} · no longer in Shop</option> : null}{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
-            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.promotion.status === 'approved' ? ` · ${preparedEcommerceDraft.pricing.promotion.code} -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)}` : ''}{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.shipping.feeMmk ? ` · delivery ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)}` : ''}{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.tax.taxMmk ? ` · tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)}` : ''}</span><strong>{formatMoney(manualOrderPricedTotal)}</strong></div>
+            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units{preparedEcommerceDraft?.schema === coreUi.e && preparedEcommerceDraft.pricing.promotion.status === 'approved' ? ` · ${preparedEcommerceDraft.pricing.promotion.code} -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)}` : ''}{preparedEcommerceDraft?.schema === coreUi.e && preparedEcommerceDraft.pricing.shipping.feeMmk ? ` · delivery ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)}` : ''}{preparedEcommerceDraft?.schema === coreUi.e && preparedEcommerceDraft.pricing.tax.taxMmk ? ` · tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)}` : ''}</span><strong>{formatMoney(manualOrderPricedTotal)}</strong></div>
           </div>
           {paymentTermsDays !== 0 ? <p className="form-notice" data-customer-credit-review={orderCreditReview?.reason ?? 'calculation_unavailable'}>
             {orderCreditReview?.allowed
@@ -6967,7 +7436,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment policy</span><select aria-readonly="true" disabled form="commerce-manual-order-form" ref={orderPaymentRef} value={payment}><option>{payment}</option></select></label> : null}
           <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
         </div>
-      </> : null}
+      </>
     </dialog>
   <ClosedOrderHistory
     canCorrect={canCorrectOrder}
@@ -7029,7 +7498,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     supportResolutionDraft={supportResolutionDraft}
     supportWorkloadDownload={supportWorkloadDownload}
   />
-  <details className="core-panel today-more order-daily-controls">
+  <details className="core-panel today-more order-daily-controls" id="shop-payment-review" open={Boolean(paymentReview.length)}>
     <summary><span>Pricing and credit policies</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
@@ -7037,7 +7506,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
       <details className="compact-disclosure" data-promotion-policy="versioned">
         <summary><span>Promotions</span><small>{currentPromotionPolicy ? `${currentPromotionPolicy.code} · ${formatTaxRate(currentPromotionPolicy.discountBasisPoints)} · ${currentPromotionPolicy.status}` : 'No policy for this code'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewPromotionPolicy}>
+        <form className={coreUi.f} onSubmit={reviewPromotionPolicy}>
           <div className="form-row">
             <label>Customer code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="WELCOME" required value={promotionPolicyDraft.code} /></label>
             <label>Discount (%)<input disabled={commerceControlsDisabled} inputMode="decimal" max="100" min="0.01" onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, discountPercent: event.target.value }))} required step="0.01" type="number" value={promotionPolicyDraft.discountPercent} /></label>
@@ -7047,8 +7516,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>Maximum discount (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, maximumDiscountMmk: event.target.value }))} required step="1" type="number" value={promotionPolicyDraft.maximumDiscountMmk} /></label>
           </div>
           <div className="form-row">
-            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={promotionPolicyDraft.effectiveFrom} /></label>
-            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={promotionPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={promotionPolicyDraft.effectiveUntil} /></label>
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type={coreUi.d} value={promotionPolicyDraft.effectiveFrom} /></label>
+            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={promotionPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type={coreUi.d} value={promotionPolicyDraft.effectiveUntil} /></label>
           </div>
           <label>Policy status<select disabled={commerceControlsDisabled} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, status: event.target.value as 'active' | 'inactive' }))} value={promotionPolicyDraft.status}><option value="active">Active · approve when limits match</option><option value="inactive">Inactive · reject this code safely</option></select></label>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review promotion</button></div>
@@ -7058,7 +7527,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </details>
       <details className="compact-disclosure" data-shipping-policy="versioned">
         <summary><span>Delivery zones</span><small>{currentShippingPolicy ? `${currentShippingPolicy.zoneCode} · ${formatMoney(currentShippingPolicy.feeMmk)} · ${currentShippingPolicy.promiseMinutes} min` : 'No policy for this zone'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewShippingPolicy}>
+        <form className={coreUi.f} onSubmit={reviewShippingPolicy}>
           <div className="form-row">
             <label>Zone code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, zoneCode: event.target.value.toUpperCase() }))} required value={shippingPolicyDraft.zoneCode} /></label>
             <label>Fee (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, feeMmk: event.target.value }))} required step="1" type="number" value={shippingPolicyDraft.feeMmk} /></label>
@@ -7069,8 +7538,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>Status<select disabled={commerceControlsDisabled} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, status: event.target.value as 'active' | 'inactive' }))} value={shippingPolicyDraft.status}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
           </div>
           <div className="form-row">
-            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={shippingPolicyDraft.effectiveFrom} /></label>
-            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={shippingPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={shippingPolicyDraft.effectiveUntil} /></label>
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type={coreUi.d} value={shippingPolicyDraft.effectiveFrom} /></label>
+            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={shippingPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type={coreUi.d} value={shippingPolicyDraft.effectiveUntil} /></label>
           </div>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review delivery zone</button></div>
           <p className="panel-copy">Shop owns delivery eligibility, fee, and promise. Saving creates a reviewed revision for future Ecommerce handoffs; it never books a courier or contacts a customer.</p>
@@ -7078,7 +7547,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </details>
       <details className="compact-disclosure" data-payment-policy="versioned">
         <summary><span>Payment methods</span><small>{currentPaymentPolicy ? `${paymentPolicyDraft.adapter.replaceAll('_', ' ')} · ${currentPaymentPolicy.allowedFulfilments.join(' + ')} · revision ${currentPaymentPolicy.revision}` : 'No policy for this method'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewPaymentPolicy}>
+        <form className={coreUi.f} onSubmit={reviewPaymentPolicy}>
           <div className="form-row">
             <label>Method<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, adapter: event.target.value as PaymentPolicyDraft['adapter'] }))} value={paymentPolicyDraft.adapter}><option value="cash_on_delivery">Cash on delivery</option><option value="pay_on_pickup">Pay on pickup</option><option value="kbzpay_manual">KBZPay · manual proof</option></select></label>
             <label>Allowed handoff<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, allowedFulfilments: event.target.value as PaymentPolicyDraft['allowedFulfilments'] }))} value={paymentPolicyDraft.allowedFulfilments}><option value="delivery">Delivery only</option><option value="pickup">Pickup only</option><option value="both">Delivery and pickup</option></select></label>
@@ -7089,8 +7558,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           </div>
           <label>Staff instructions<input disabled={commerceControlsDisabled} maxLength={240} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, instructions: event.target.value }))} required value={paymentPolicyDraft.instructions} /></label>
           <div className="form-row">
-            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={paymentPolicyDraft.effectiveFrom} /></label>
-            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={paymentPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={paymentPolicyDraft.effectiveUntil} /></label>
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type={coreUi.d} value={paymentPolicyDraft.effectiveFrom} /></label>
+            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={paymentPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type={coreUi.d} value={paymentPolicyDraft.effectiveUntil} /></label>
           </div>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review payment method</button></div>
           <p className="panel-copy">Shop approves only the method, fulfilment fit, order limit, and staff instructions for future Ecommerce handoffs. It never charges, transfers money, contacts a customer, or marks payment received.</p>
@@ -7099,7 +7568,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </details>
       <details className="compact-disclosure" data-customer-credit-policy="versioned">
         <summary><span>Customer credit</span><small>{commerce.customerCreditPolicies?.length ? `${commerce.customerCreditPolicies.length} reviewed ${commerce.customerCreditPolicies.length === 1 ? 'policy' : 'revisions'}` : 'Cash terms only'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewCustomerCreditPolicy}>
+        <form className={coreUi.f} onSubmit={reviewCustomerCreditPolicy}>
           <label>Customer<input disabled={commerceControlsDisabled} list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined} maxLength={120} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, customer: event.target.value }))} placeholder="Exact customer name or reference" required value={creditPolicyDraft.customer} /></label>
           <div className="form-row">
             <label>Credit limit (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, creditLimitMmk: event.target.value }))} placeholder="500000" required step="1" type="number" value={creditPolicyDraft.creditLimitMmk} /></label>
@@ -7113,7 +7582,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </details>
       <details className="compact-disclosure" data-tax-configuration="versioned">
         <summary><span>Tax schedule</span><small>{currentTaxConfiguration ? `${currentTaxConfiguration.code} · ${currentTaxConfiguration.jurisdictionCode ?? 'legacy scope'} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)}` : 'Not configured'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewTaxConfiguration}>
+        <form className={coreUi.f} onSubmit={reviewTaxConfiguration}>
           <div className="form-row">
             <label>Tax code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={12} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, code: event.target.value.toUpperCase() })} placeholder="Your configured code" required value={effectiveTaxDraft.code} /></label>
             <label>Rate (%)<input disabled={commerceControlsDisabled} inputMode="decimal" max="100" min="0" onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, ratePercent: event.target.value })} placeholder="Enter reviewed rate" required step="0.01" type="number" value={effectiveTaxDraft.ratePercent} /></label>
@@ -7121,7 +7590,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <label>Label<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, label: event.target.value })} placeholder="How staff recognize this code" required value={effectiveTaxDraft.label} /></label>
           <div className="form-row">
             <label>Jurisdiction code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={16} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, jurisdictionCode: event.target.value.toUpperCase() })} placeholder="Reviewed scope, e.g. MM" required value={effectiveTaxDraft.jurisdictionCode} /></label>
-            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, effectiveFrom: event.target.value })} required type="datetime-local" value={effectiveTaxDraft.effectiveFrom} /></label>
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, effectiveFrom: event.target.value })} required type={coreUi.d} value={effectiveTaxDraft.effectiveFrom} /></label>
           </div>
           <label>Price treatment<select disabled={commerceControlsDisabled} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, mode: event.target.value as CommerceTaxMode })} value={effectiveTaxDraft.mode}><option value="exclusive">Add tax to listed price</option><option value="inclusive">Tax included in listed price</option></select></label>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review tax setup</button></div>
@@ -7131,7 +7600,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </details>
       <details className="compact-disclosure" data-account-mapping="versioned">
         <summary><span>Account mapping</span><small>{currentAccountMappingConfiguration ? `Revision ${currentAccountMappingConfiguration.revision} · ${currentAccountMappingConfiguration.mappings.length}/7 roles mapped` : 'Required for mapped exports'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewAccountMapping}>
+        <form className={coreUi.f} onSubmit={reviewAccountMapping}>
           <div className="form-row">
             <label>Payment clearing<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, paymentClearing: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.paymentClearing} /></label>
             <label>Sales revenue<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, salesRevenue: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.salesRevenue} /></label>
@@ -7158,7 +7627,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       than the tail of a policy accordion. The anchor id moves with it, keeping
       the /shop/?tab=orders#shop-close-controls deep links working. */}
   <section aria-labelledby="shop-close-heading" className="core-panel shop-close-day" id="shop-close-controls">
-    <div className="section-head"><h2 id="shop-close-heading">Close the day</h2><small>{closableOrders.length ? `${closableOrders.length} ready` : latestClose ? 'Today is closed' : 'Nothing to close yet'}</small></div>
+    <div className="section-head"><h2 id="shop-close-heading">{shopOperatingEligible && operatingActivated ? 'Close shift' : 'Close the day'}</h2><small>{closableOrders.length ? `${closableOrders.length} ready` : activeShift ? 'Shift ready to close' : latestClose ? 'Latest close saved' : 'Nothing to close yet'}</small></div>
     {/* The appointment book does not post to the ledger, so a treatment completed in the book
         and never rung up at the counter is simply absent from this close and from every report
         after it. This is where she finds that out -- at the moment she is closing, not by going
@@ -7214,7 +7683,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
       </section>
     </details>
-    <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
+    <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? <span className="cashier-action-label"><span>Review and save close</span>{CASHIER_SAVE_MY ? <small lang="my">{CASHIER_SAVE_MY}</small> : null}</span> : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
     <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
     {/* Roadmap §2 item 5 — what was unusual about the day just closed, read from
         the closes already saved. Nothing here is a finding about money owed or
@@ -7242,25 +7711,32 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {latestCloseDownload ? <button className="core-button" data-close-export="accounting-csv-v1" onClick={() => downloadBlob(latestCloseDownload.filename, new Blob([closeExportFileText(latestCloseDownload.artifact)], { type: 'text/csv;charset=utf-8' }))} type="button">Download close CSV</button> : null}
       {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
         <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
-        <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href} onClick={() => emitMetric({ product: 'shop', capability: 'shop-accounting-handoff', action: 'accounting.export.downloaded', ts: Date.now() })}>Download accounting CSV</a>
+        <br /><button className="text-link" onClick={downloadLatestAccountingHandoff} type="button">Download accounting CSV</button>
       </div> : null}
     </details> : null}
   </section>
-  <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} loyalty={receiptLoyalty} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
+  <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
   {actionGate}</div>
 
-  if (tab === 'inventory') return <div className="operation-module">
+  if (tab === 'inventory') return <div className="operation-module shop-stock-module">
     {commerceBoundary}
     {!commerce.items.length ? shopCatalogOnboarding : null}
-    <section className="core-panel inventory-panel">
-      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></div></div>
-      {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
+    <section aria-label="Shop stock workspace" className="core-panel inventory-panel shop-stock-workspace">
+      <Suspense fallback={null}><ShopStocktakeDraftRecovery active={Boolean(stockCountDraft)} current={stockCountDraft} key={scheduleScopeKey} lines={stockCountBatchDrafts} onReady={setStocktakeRecoveryReadyScope} scopeKey={scheduleScopeKey} setCurrent={setStockCountDraft} setLines={setStockCountBatchDrafts} /></Suspense>
+      <header className="shop-stock-heading"><div><h2>Count. Receive. Reorder.</h2></div><button aria-expanded={Boolean(stockCountDraft && stocktakeScopeReady)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
+      <dl aria-label="Stock status" className="shop-stock-metrics">
+        <div data-tone={lowStock.length ? 'attention' : 'ready'}><dt>Stock alerts</dt><dd>{lowStock.length.toLocaleString()}</dd><small>{lowStock.length ? 'At or below reorder' : 'Reorder levels clear'}</small></div>
+        <div><dt>Units available</dt><dd>{stockUnitsAvailable.toLocaleString()}</dd><small>Across {commerce.items.length.toLocaleString()} {commerce.items.length === 1 ? 'product' : 'products'}</small></div>
+        <div data-tone={overduePurchaseOrders.length ? 'attention' : 'ready'}><dt>Active purchase orders</dt><dd>{activePurchaseOrders.length.toLocaleString()}</dd><small>{overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : activePurchaseOrders.length ? 'Receiving tracked' : 'No open orders'}</small></div>
+        <div><dt>Stock tracking</dt><dd>{managedInventoryProjection ? `${managedInventoryProjection.locations.length.toLocaleString()} locations` : 'Simple count'}</dd><small>{managedInventoryProjection ? 'Lots and available-to-promise' : 'Enable locations when needed'}</small></div>
+      </dl>
+      {stockCountDraft && stocktakeScopeReady && <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
-          <h3 id="stock-count-title">{commerce.inventoryFoundation ? 'Count one location' : 'Count available units'}</h3>
+          <h3 id="stock-count-title">Review a stocktake</h3>
           <small id="stock-count-help">{commerce.inventoryFoundation
-            ? 'Count every physical unit in the selected lot, including reserved units. This records count evidence only.'
-            : 'Exclude units already set aside for open orders. This records count evidence only.'}</small>
+            ? 'Scan each item and lot, then enter its physical count including reserved units. Nothing changes until you review the full stocktake.'
+            : 'Scan each item and enter its sellable count. Repeat scans add one unit; nothing changes until you review the full stocktake.'}</small>
           <strong aria-live="polite" id="stock-count-preview">{commerce.inventoryFoundation
             ? !stockCountBalance || !stockCountItem
               ? 'Choose one location and lot'
@@ -7273,19 +7749,56 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
                 ? `${stockCountItem.onHand.toLocaleString()} recorded · enter counted units`
                 : `${stockCountItem.onHand.toLocaleString()} recorded → ${stockCountQuantityResult.toLocaleString()} counted · ${stockCountQuantityResult === stockCountItem.onHand ? 'no variance' : `${stockCountQuantityResult > stockCountItem.onHand ? '+' : ''}${(stockCountQuantityResult - stockCountItem.onHand).toLocaleString()} variance`}`}</strong>
         </div>
-        <label>{commerce.inventoryFoundation ? 'Location and lot' : 'Item'}<select aria-describedby="stock-count-help" disabled={commerceControlsDisabled || Boolean(commerce.inventoryFoundation && !managedInventoryProjection)} id="stock-count-sku" onChange={(event) => selectStockCountTarget(event.target.value)} required value={commerce.inventoryFoundation ? stockCountTargetValue : stockCountDraft.sku}><option value="">{commerce.inventoryFoundation ? 'Choose location and lot' : 'Choose an item'}</option>{commerce.inventoryFoundation
+        <div className="sku-scan-row"><label>Scan item code · press Enter<input autoComplete="off" disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setStockCountBarcode(event.target.value)} onKeyDown={(event) => {
+          if (event.key !== 'Enter') return
+          event.preventDefault()
+          selectStockCountBarcode(stockCountBarcode)
+        }} placeholder="Scan barcode or type SKU" value={stockCountBarcode} /></label><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product barcode for this stock count" onDetected={selectStockCountBarcode} /></div>
+        {(stockCountBatchDrafts.length || stockCountDraft.quantity.trim()) ? <section aria-label="Counts ready for review" className="shop-stock-attention-card">
+          <header><span><span className="core-eyebrow">Stocktake</span><h3>Counts ready for review</h3></span><b>{stockCountBatchDrafts.length + (stockCountDraft.quantity.trim() ? 1 : 0)}</b></header>
+          <div className="data-table" role="list" aria-label="Stocktake counts">
+            {[...stockCountBatchDrafts, ...(stockCountDraft.quantity.trim() ? [stockCountDraft] : [])].map((draft) => {
+              const item = commerce.items.find((candidate) => candidate.sku === draft.sku)
+              const key = stockCountDraftKey(draft)
+              const isCurrent = key === stockCountDraftKey(stockCountDraft)
+              const targetBalance = commerce.inventoryFoundation
+                ? managedInventoryProjection?.balances.find((candidate) => candidate.stockUnitId === draft.stockUnitId && candidate.locationId === draft.locationId)
+                : undefined
+              const locationName = targetBalance && managedInventoryProjection?.locations.find((location) => location.id === targetBalance.locationId)?.name
+              return <div className="data-row" key={key} role="listitem"><span><strong>{item?.name ?? draft.sku}</strong><small>{commerce.inventoryFoundation ? `${locationName ?? targetBalance?.locationId ?? 'Location'} · ${targetBalance?.trackingCode ?? 'Lot'}` : draft.sku}</small></span><strong>{Number(draft.quantity).toLocaleString()} counted</strong>{isCurrent ? <small>Current count</small> : <button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setStockCountBatchDrafts((entries) => entries.filter((entry) => stockCountDraftKey(entry) !== key))} type="button">Remove</button>}</div>
+            })}
+          </div>
+        </section> : null}
+        <label>{commerce.inventoryFoundation ? 'Location and lot' : 'Item'}<select aria-describedby="stock-count-help" disabled={commerceControlsDisabled || Boolean(commerce.inventoryFoundation && !managedInventoryProjection)} id="stock-count-sku" onChange={(event) => selectStockCountTarget(event.target.value)} required={!stockCountBatchDrafts.length} value={commerce.inventoryFoundation ? stockCountTargetValue : stockCountDraft.sku}><option value="">{commerce.inventoryFoundation ? 'Choose location and lot' : 'Choose an item'}</option>{commerce.inventoryFoundation
           ? managedInventoryProjection?.balances.map((balance) => {
               const item = commerce.items.find((candidate) => candidate.sku === balance.sku)
               const location = managedInventoryProjection.locations.find((candidate) => candidate.id === balance.locationId)
               return <option key={`${balance.stockUnitId}|${balance.locationId}`} value={`${balance.stockUnitId}|${balance.locationId}`}>{item?.name ?? balance.sku} · {location?.name ?? balance.locationId} · {balance.trackingCode} · {balance.onHand.toLocaleString()} physical{balance.reserved ? ` · ${balance.reserved.toLocaleString()} reserved` : ''}</option>
             })
           : commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select></label>
-        <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required step="1" type="number" value={stockCountDraft.quantity} /></label>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockCountQuantityResult === null || Boolean(commerce.inventoryFoundation && !stockCountBalance)} type="submit">Review count</button></div>
-      </form> : null}
-      <div className="data-table stock-attention-table" data-stock-list="attention" role="table" aria-label="Shop stock">
-        <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
-        {stockAttentionRows.length ? stockAttentionRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No stock needs action.</strong><small>Count stock or open other products only when needed.</small></span></div>}
+        <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required={!stockCountBatchDrafts.length} step="1" type="number" value={stockCountDraft.quantity} /></label>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel stocktake</button><button className="core-button primary" disabled={commerceControlsDisabled || ((!stockCountBatchDrafts.length || Boolean(stockCountDraft.quantity.trim())) && stockCountQuantityResult === null) || Boolean(commerce.inventoryFoundation && stockCountDraft.quantity.trim() && !stockCountBalance)} type="submit">Review stocktake ({stockCountBatchDrafts.length + (stockCountDraft.quantity.trim() ? 1 : 0)})</button></div>
+      </form>}
+      <div className="shop-stock-grid">
+        <section aria-labelledby="shop-stock-attention-title" className="shop-stock-attention-card">
+          <header><span><span className="core-eyebrow">Inventory</span><h3 id="shop-stock-attention-title">Stock attention</h3><p>Low stock and active receiving work appear first.</p></span><b>{stockAttentionRows.length} {stockAttentionRows.length === 1 ? 'item' : 'items'}</b></header>
+          <div className="shop-stock-attention-scroll">
+            <div className="data-table stock-attention-table" data-stock-list="attention" role="table" aria-label="Shop stock">
+              <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
+              {stockAttentionRows.length ? stockAttentionRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No stock needs action.</strong><small>Count stock or open other products only when needed.</small></span></div>}
+            </div>
+          </div>
+        </section>
+        <aside aria-labelledby="shop-stock-next-title" className="shop-stock-next-action" data-action={stockNextActionKind}>
+          <header><span><span className="core-eyebrow">Next stock action</span><h3 id="shop-stock-next-title">{stockNextActionTitle}</h3></span><b>{stockNextTrack}</b></header>
+          {stockNextItem ? <div className="shop-stock-next-item"><ShopProductPhotoControl disabled={commerceControlsDisabled} name={stockNextItem.name} scope={productImageScope} sku={stockNextItem.sku} /><span><strong>{stockNextItem.name}</strong><small>{stockNextItem.sku}{stockNextDemand?.projectedDaysOfCover === null || stockNextDemand?.projectedDaysOfCover === undefined ? '' : ` · ${stockNextDemand.projectedDaysOfCover}d projected cover`}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>available</small></span></div> : null}
+          <div className="shop-stock-next-guidance"><div><span>Why now</span><p>{stockNextReason}</p></div><div><span>Owner check</span><p>{stockNextOwnerCheck}</p></div></div>
+          <footer><small>Record → recommendation → owner check → action → closure</small>{stockNextActionKind === 'catalog'
+            ? <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-import">Add products</Link>
+            : stockNextActionKind === 'restore'
+              ? <Link className="core-button primary" to="/settings/#controls">Open workspace controls</Link>
+              : <button className="core-button primary" disabled={commerceControlsDisabled || !stockNextItem} onClick={() => stockNextActionKind === 'count' ? openStockCount() : stockNextItem ? openPurchaseOrder(stockNextItem.sku) : undefined} type="button">{stockNextActionKind === 'pending' ? 'Pending review' : stockNextActionKind === 'receive' ? purchaseOrderDraft?.mode === 'receive' ? 'Continue receipt' : 'Receive stock' : stockNextActionKind === 'create' ? purchaseOrderDraft?.mode === 'create' ? 'Continue purchase order' : 'Create purchase order' : stockCountDraft ? 'Continue count' : 'Count stock'}</button>}</footer>
+        </aside>
       </div>
       <details className="inventory-tools-disclosure stock-catalog-disclosure">
         <summary><span><strong>Other products</strong><small>Healthy stock, pricing, and reorder levels</small></span><b>{stockCatalogRows.length} {stockCatalogRows.length === 1 ? 'item' : 'items'}</b></summary>
@@ -7316,14 +7829,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </details>
       {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierSourcing}>
         <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier sourcing</span><h3 id="supplier-sourcing-title">Compare quotes for {supplierSourcingDraft.itemName}</h3><small>{supplierSourcingDraft.quantity.toLocaleString()} units · immutable award evidence · no supplier contact</small></div>
-        {supplierSourcingDraft.quotes.map((quote, index) => <fieldset className="form-row" key={index}><legend><label><input checked={supplierSourcingDraft.selectedIndex === index} disabled={commerceControlsDisabled || (index === 1 && !quote.supplier.trim())} name="selected-supplier-quote" onChange={() => setSupplierSourcingDraft((current) => current ? { ...current, selectedIndex: index as 0 | 1 } : current)} type="radio" /> {index === 0 ? 'Primary quote' : 'Alternate quote (optional)'}</label></legend><label>Supplier<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'supplier', event.target.value)} required={index === 0} value={quote.supplier} /></label><label>Quote reference<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'quoteReference', event.target.value)} required={index === 0} value={quote.quoteReference} /></label><label>Approved-vendor reference<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'vendorApprovalReference', event.target.value)} required={index === 0} value={quote.vendorApprovalReference} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => updateSupplierQuote(index as 0 | 1, 'unitCostMmk', event.target.value)} required={index === 0} step="1" type="number" value={quote.unitCostMmk} /></label><label>Delivery<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'deliveryAt', event.target.value)} required={index === 0} type="datetime-local" value={quote.deliveryAt} /></label></fieldset>)}
-        <div className="form-row"><label>Quotes valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, validUntil: event.target.value } : current)} required type="datetime-local" value={supplierSourcingDraft.validUntil} /></label><label>Cost tolerance (%)<input disabled={commerceControlsDisabled} max="20" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, unitCostTolerancePercent: event.target.value } : current)} required step="0.1" type="number" value={supplierSourcingDraft.unitCostTolerancePercent} /></label><label>Delivery tolerance (days)<input disabled={commerceControlsDisabled} max="30" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, deliveryToleranceDays: event.target.value } : current)} required step="1" type="number" value={supplierSourcingDraft.deliveryToleranceDays} /></label></div>
+        {supplierSourcingDraft.quotes.map((quote, index) => <fieldset className="form-row" key={index}><legend><label><input checked={supplierSourcingDraft.selectedIndex === index} disabled={commerceControlsDisabled || (index === 1 && !quote.supplier.trim())} name="selected-supplier-quote" onChange={() => setSupplierSourcingDraft((current) => current ? { ...current, selectedIndex: index as 0 | 1 } : current)} type="radio" /> {index === 0 ? 'Primary quote' : 'Alternate quote (optional)'}</label></legend><label>Supplier<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'supplier', event.target.value)} required={index === 0} value={quote.supplier} /></label><label>Quote reference<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'quoteReference', event.target.value)} required={index === 0} value={quote.quoteReference} /></label><label>Approved-vendor reference<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'vendorApprovalReference', event.target.value)} required={index === 0} value={quote.vendorApprovalReference} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => updateSupplierQuote(index as 0 | 1, 'unitCostMmk', event.target.value)} required={index === 0} step="1" type="number" value={quote.unitCostMmk} /></label><label>Delivery<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'deliveryAt', event.target.value)} required={index === 0} type={coreUi.d} value={quote.deliveryAt} /></label></fieldset>)}
+        <div className="form-row"><label>Quotes valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, validUntil: event.target.value } : current)} required type={coreUi.d} value={supplierSourcingDraft.validUntil} /></label><label>Cost tolerance (%)<input disabled={commerceControlsDisabled} max="20" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, unitCostTolerancePercent: event.target.value } : current)} required step="0.1" type="number" value={supplierSourcingDraft.unitCostTolerancePercent} /></label><label>Delivery tolerance (days)<input disabled={commerceControlsDisabled} max="30" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, deliveryToleranceDays: event.target.value } : current)} required step="1" type="number" value={supplierSourcingDraft.deliveryToleranceDays} /></label></div>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierSourcingDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review supplier award</button></div>
       </form> : null}
       {purchaseBudgetDraft ? <form aria-labelledby="purchase-budget-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewPurchaseBudget}>
         <div className="stock-receipt-copy"><span className="core-eyebrow">Buying limits</span><h3 id="purchase-budget-title">Approve purchase budget</h3><small>Immutable commitment ceiling · internal authority only</small></div>
         <div className="form-row"><label>Budget code<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, budgetCode: event.target.value.toUpperCase() } : current)} required value={purchaseBudgetDraft.budgetCode} /></label><label>Budget name<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, label: event.target.value } : current)} required value={purchaseBudgetDraft.label} /></label></div>
-        <label>Valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, periodEnd: event.target.value } : current)} required type="datetime-local" value={purchaseBudgetDraft.periodEnd} /></label>
+        <label>Valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, periodEnd: event.target.value } : current)} required type={coreUi.d} value={purchaseBudgetDraft.periodEnd} /></label>
         <div className="form-row"><label>Total ceiling (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, ceilingMmk: event.target.value } : current)} required step="1" type="number" value={purchaseBudgetDraft.ceilingMmk} /></label><label>Per request (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, perRequisitionLimitMmk: event.target.value } : current)} required step="1" type="number" value={purchaseBudgetDraft.perRequisitionLimitMmk} /></label></div>
         <div className="stock-receipt-preview"><small>Authority</small><strong>{formatMoney(Number(purchaseBudgetDraft.ceilingMmk) || 0)} total · {formatMoney(Number(purchaseBudgetDraft.perRequisitionLimitMmk) || 0)} per request</strong></div>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setPurchaseBudgetDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review buying limits</button></div>
@@ -7337,7 +7850,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             : `${purchaseOrderDraftOrder?.purchaseOrder.id} · ${purchaseOrderDraftOrder?.purchaseOrder.supplier} · ${purchaseOrderDraftOrder?.purchaseOrder.expectedAt ? `expected ${formatIssueDue(purchaseOrderDraftOrder.purchaseOrder.expectedAt)}` : 'arrival not recorded'}`}</small>
         </div>
         {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference{managedInventoryProjection ? <select disabled={commerceControlsDisabled} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} required value={purchaseOrderDraft.supplier}><option value="">Choose supplier</option>{managedInventoryProjection.vendors.map((vendor) => <option key={vendor.id} value={vendor.name}>{vendor.name}</option>)}</select> : <input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} />}</label> : null}
-        {purchaseOrderDraft.mode === 'create' ? <label>Expected arrival<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, expectedAt: event.target.value } : current)} required type="datetime-local" value={purchaseOrderDraft.expectedAt} /></label> : null}
+        {purchaseOrderDraft.mode === 'create' ? <label>Expected arrival<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, expectedAt: event.target.value } : current)} required type={coreUi.d} value={purchaseOrderDraft.expectedAt} /></label> : null}
         <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Accepted units'}<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
         {purchaseOrderDraft.mode === 'create' ? <label>Unit cost (MMK)<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, unitCostMmk: event.target.value } : current)} placeholder="5000" required step="1" type="number" value={purchaseOrderDraft.unitCostMmk} /></label> : null}
         {purchaseOrderDraft.mode === 'receive' ? <div className="form-row"><label>Rejected units<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderQuantityResult ?? 0))} min="0" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, rejectedQuantity: event.target.value } : current)} required step="1" type="number" value={purchaseOrderDraft.rejectedQuantity} /></label><label>Discrepancy reason<select disabled={commerceControlsDisabled || purchaseOrderRejectedResult === 0} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, discrepancyCode: event.target.value as CommercePurchaseOrderDiscrepancyCode } : current)} required={Boolean(purchaseOrderRejectedResult)} value={purchaseOrderDraft.discrepancyCode}><option value="damaged">Damaged</option><option value="wrong_item">Wrong item</option><option value="quality_failed">Quality failed</option></select></label></div> : null}
@@ -7359,14 +7872,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {supplierCreditDraft && supplierCreditDraftRow && supplierCreditDraftClaim ? <form aria-label="Supplier credit review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierCredit}>
         <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier credit evidence</span><h3>{supplierCreditDraftRow.purchaseOrder.supplier}</h3><small>{supplierCreditDraftClaim.internalReturnReference} · {formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim))} outstanding</small></div>
         <label>Supplier credit reference<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, supplierReference: event.target.value } : current)} placeholder="Supplier credit note number" required value={supplierCreditDraft.supplierReference} /></label>
-        <div className="form-row"><label>Credit issued<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierCreditDraftClaim.createdAt))} onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type="datetime-local" value={supplierCreditDraft.issuedAt} /></label><label>Amount (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" max={commerceSupplierReturnClaimBalance(supplierCreditDraftClaim)} min="1" onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, amountMmk: event.target.value } : current)} required step="1" type="number" value={supplierCreditDraft.amountMmk} /></label></div>
+        <div className="form-row"><label>Credit issued<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierCreditDraftClaim.createdAt))} onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type={coreUi.d} value={supplierCreditDraft.issuedAt} /></label><label>Amount (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" max={commerceSupplierReturnClaimBalance(supplierCreditDraftClaim)} min="1" onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, amountMmk: event.target.value } : current)} required step="1" type="number" value={supplierCreditDraft.amountMmk} /></label></div>
         <div className="stock-receipt-preview"><small>Balance after</small><strong>{supplierCreditDraftReady ? formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim) - supplierCreditAmount) : 'Enter valid credit'}</strong><small>Evidence only · accounting not posted</small></div>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierCreditDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierCreditDraftReady} type="submit">Review supplier credit</button></div>
       </form> : null}
       {supplierInvoiceDraft && supplierInvoiceDraftRow ? <form aria-label="Supplier invoice review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierInvoice}>
         <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier invoice</span><h3>{supplierInvoiceDraftRow.purchaseOrder.supplier}</h3><small>{supplierInvoiceDraftRow.purchaseOrder.id} · three-way review only</small></div>
         <label>Invoice reference<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, supplierReference: event.target.value } : current)} placeholder="Supplier invoice number" required value={supplierInvoiceDraft.supplierReference} /></label>
-        <div className="form-row"><label>Invoice date<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierInvoiceDraftRow.purchaseOrder.createdAt))} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type="datetime-local" value={supplierInvoiceDraft.issuedAt} /></label><label>Due date<input disabled={commerceControlsDisabled} min={supplierInvoiceDraft.issuedAt} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type="datetime-local" value={supplierInvoiceDraft.dueAt} /></label></div>
+        <div className="form-row"><label>Invoice date<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierInvoiceDraftRow.purchaseOrder.createdAt))} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type={coreUi.d} value={supplierInvoiceDraft.issuedAt} /></label><label>Due date<input disabled={commerceControlsDisabled} min={supplierInvoiceDraft.issuedAt} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type={coreUi.d} value={supplierInvoiceDraft.dueAt} /></label></div>
         <div className="form-row"><label>Invoiced units<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, quantity: event.target.value } : current)} required step="1" type="number" value={supplierInvoiceDraft.quantity} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, unitCostMmk: event.target.value } : current)} required step="1" type="number" value={supplierInvoiceDraft.unitCostMmk} /></label></div>
         <div className="stock-receipt-preview"><small>Invoice total</small><strong>{supplierInvoiceTotal === null ? 'Enter valid terms' : formatMoney(supplierInvoiceTotal)}</strong></div>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierInvoiceDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierInvoiceDraftReady} type="submit">Review invoice</button></div>
@@ -7406,12 +7919,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           const returnSummary = purchaseOrder.supplierReturns?.length
             ? purchaseOrder.supplierReturns.map((claim) => `${claim.internalReturnReference}: ${commerceSupplierReturnClaimStatus(claim).replaceAll('_', ' ')}`).join(' · ')
             : null
+          const acceptedReceipts = commerce.movements.filter((movement) => movement.kind === 'receipt'
+            && movement.purchaseOrderId === purchaseOrder.id
+            && movement.quantityDelta > 0)
           return <article key={purchaseOrder.id}>
             <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small><small>{purchaseOrder.unitCostMmk === undefined ? 'Legacy PO · commercial terms not retained' : `${formatMoney(purchaseOrder.unitCostMmk)} each · ${formatMoney(purchaseOrder.unitCostMmk * purchaseOrder.quantityOrdered)}`}</small>{returnSummary ? <small>Returns · {returnSummary}</small> : null}<small data-arrival-risk={arrivalUrgency}>{purchaseOrder.expectedAt
               ? `Expected ${formatIssueDue(purchaseOrder.expectedAt)}${arrivalUrgency === 'late' ? ' · Late' : arrivalUrgency === 'due_soon' ? ' · Due soon' : ''}`
               : 'Arrival not recorded · legacy order'}</small></div>
             <span><strong>{progress.received} accepted{progress.rejected ? ` · ${progress.rejected} rejected` : ''}/{purchaseOrder.quantityOrdered}</strong><small>{invoiceMatch ? `Invoice · ${invoiceMatch.status.replaceAll('_', ' ')}` : progress.status.replaceAll('_', ' ')}</small></span>
             {nextControl}
+            {acceptedReceipts.length ? <div aria-label={`Accepted receipts for ${purchaseOrder.id}`} className="purchase-order-label-actions">
+              {acceptedReceipts.map((receipt) => <Suspense fallback={null} key={receipt.id}><ShopBarcodeLabels receipt={{ id: receipt.id, purchaseOrderId: purchaseOrder.id, sku: receipt.sku, itemName: item?.name ?? receipt.sku, acceptedQuantity: receipt.quantityDelta }} /></Suspense>)}
+            </div> : null}
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
@@ -7422,7 +7941,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <div className="form-row"><label>SKU<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan the product barcode into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input disabled={commerceControlsDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
           <div className="form-row"><label>Opening stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
           <label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
-          <div className="form-actions"><button className="core-button primary compact" disabled={commerceControlsDisabled} type="submit">Review catalog item</button></div>
+          <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review catalog item</button></div>
           <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
         </form>
       </details>
@@ -7580,14 +8099,12 @@ function OrderList({
 }) {
   const promiseNow = useMinuteClock()
   if (!orders.length) return <Empty>No orders need action.</Empty>
-  const nextAction: Record<'confirmed' | 'preparing' | 'ready', string> = { confirmed: 'Start preparing', preparing: 'Mark ready', ready: 'Complete' }
   return <div className="order-list">{orders.map((order) => {
     const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
     const needsPayment = order.paymentStatus === 'pending'
-    // The everyday outcome — paid and handed over — is the one-review primary for
-    // any active unpaid order; payment-only reconciliation (pay-later customers)
-    // stays reachable under More. Both remain the same recorded transitions.
-    const settleSaleIsPrimary = needsPayment && active
+    // The one-review shortcut belongs only to a walk-in pickup where the customer is
+    // physically at the counter. Channel orders keep their packing/delivery evidence.
+    const settleSaleIsPrimary = needsPayment && active && order.channel === 'Walk-in' && order.fulfilment === 'pickup'
     // 'completed' is deliberately absent. The record keeps payment at or before handover, so a
     // completed order cannot accept a payment proof stamped now -- offering it as the primary
     // action promises the owner something the transition will always refuse. advanceCommerceOrder
@@ -7601,10 +8118,16 @@ function OrderList({
     const promiseUrgency = active ? commerceOrderPromiseUrgency(order, promiseNow) : 'scheduled'
     const acknowledgement = acknowledgementDownloads.get(order.id)
     const canCancelOrder = active && canCancel(order.id)
-    const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || settleSaleIsPrimary
+    const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || (needsPayment && !reconcileIsPrimary)
+    const primaryActionLabel = shopOrderPrimaryActionLabel(order)
     const targetId = commerceOrderTargetId(order.id)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
+        <strong>{order.customer} · {order.lines
+          ? order.lines.length === 1
+            ? `${order.lines[0].name} × ${order.quantity}`
+            : `${order.lines.length} items · ${order.quantity} units`
+          : `${order.item} × ${order.quantity}`}</strong>
         <div className="order-statuses">
           <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'cancelled' : 'bounded'}`}>{order.status}</span>
           <span className={`status-pill ${order.paymentStatus === 'reconciled' ? 'approved' : 'pending'}`}>payment {order.paymentStatus}</span>
@@ -7613,11 +8136,6 @@ function OrderList({
           {promiseUrgency === 'due_soon' ? <span className="status-pill pending">due soon</span> : null}
           {promiseUrgency === 'unrecorded' ? <span className="status-pill pending">promise missing</span> : null}
         </div>
-        <strong>{order.customer} · {order.lines
-          ? order.lines.length === 1
-            ? `${order.lines[0].name} × ${order.quantity}`
-            : `${order.lines.length} items · ${order.quantity} units`
-          : `${order.item} × ${order.quantity}`}</strong>
         <details className="order-record-details">
           <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
           <div>
@@ -7630,14 +8148,14 @@ function OrderList({
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
-        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button">Paid &amp; handed over</button> : null}
-        {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
-        {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
-        {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
+        {settleSaleIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleSale(order.id)} type="button"><span className="cashier-action-label"><span>{primaryActionLabel}</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span></button> : null}
+        {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">{primaryActionLabel}</button> : null}
+        {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">{primaryActionLabel}</button> : null}
+        {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{primaryActionLabel}</button> : null}
         {hasSecondaryActions ? <details className="order-row-more">
           <summary aria-label={`More options for ${order.id}`}>More</summary>
           <div>
-            {settleSaleIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Record payment only</button> : null}
+            {needsPayment && !reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Record payment only</button> : null}
             {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
             <OrderReceiptActions acknowledgement={acknowledgement} onViewReceipt={onViewReceipt} />
             {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel order</button> : null}
@@ -7893,32 +8411,32 @@ function ClosedOrderHistory({
         <label>Quantity<input disabled={disabled} id="order-return-quantity" max={selectedLine.remaining} min="1" onChange={(event) => onChangeReturn({ quantity: event.target.value })} required step="1" type="number" value={activeReturnDraft.quantity} /></label>
         <label>Stock result<select disabled={disabled} onChange={(event) => onChangeReturn({ disposition: event.target.value as CommerceReturnDisposition })} value={activeReturnDraft.disposition}><option value="restock">Sellable · add to stock</option><option value="not_restocked">Not sellable · stock unchanged</option></select></label>
         {activeReturnDraft.disposition === 'restock' && returnLocationPreview ? <small role="note">Restock to {returnLocationPreview}</small> : null}
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
+        <div className="form-actions"><button className={coreUi.q} disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportDraft ? <form aria-label={`Open support case for ${order.id}`} className="order-return-editor" onSubmit={onReviewSupportOpen}>
         <div className="order-return-copy"><span className="core-eyebrow">Customer help</span><strong>{activeSupportDraft.intent.category.replaceAll('_', ' ')}</strong><small>{activeSupportDraft.intent.description}</small><small>Assign service responsibility before opening. This does not send a message or start a refund.</small></div>
         <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportOpen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportDraft.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} maxLength={120} onChange={(event) => onChangeSupportOpen({ owner: event.target.value })} required value={activeSupportDraft.owner} /></label></div>
-        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportOpen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportDraft.dueAt} /></label>
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
+        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportOpen({ dueAt: event.target.value })} required type={coreUi.d} value={activeSupportDraft.dueAt} /></label>
+        <div className="form-actions"><button className={coreUi.q} disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportReopen ? <form aria-label={`Reopen support case ${activeSupportReopen.caseId}`} className="order-return-editor" onSubmit={onReviewSupportReopen}>
         <div className="order-return-copy"><span className="core-eyebrow">Follow-up</span><strong>{activeSupportReopen.caseId}</strong><small>Retain resolution {activeSupportReopen.sourceResolutionActionId} and start one linked service cycle. This does not send a message or start a refund.</small></div>
         <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportReopen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportReopen.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} id={`support-reopen-${activeSupportReopen.caseId}`} maxLength={120} onChange={(event) => onChangeSupportReopen({ owner: event.target.value })} required value={activeSupportReopen.owner} /></label></div>
-        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportReopen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportReopen.dueAt} /></label>
+        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportReopen({ dueAt: event.target.value })} required type={coreUi.d} value={activeSupportReopen.dueAt} /></label>
         <label>Follow-up reason<textarea disabled={disabled} maxLength={300} onChange={(event) => onChangeSupportReopen({ note: event.target.value })} required rows={2} value={activeSupportReopen.note} /></label>
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review follow-up</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportReopen} type="button">Cancel</button></div>
+        <div className="form-actions"><button className={coreUi.q} disabled={disabled} type="submit">Review follow-up</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportReopen} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportService ? <form aria-label={`${commerceSupportServiceActionLabels[activeSupportService.kind]} ${activeSupportService.caseId}`} className="order-return-editor" onSubmit={onReviewSupportService}>
         <div className="order-return-copy"><span className="core-eyebrow">{commerceSupportServiceActionLabels[activeSupportService.kind]}</span><strong>{activeSupportService.caseId}</strong><small>{activeSupportService.kind === 'reassigned' ? 'Change only the accountable owner. Priority and due time stay immutable.' : activeSupportService.kind === 'escalated' ? 'Keep the owner and raise priority or bring a future due time forward.' : activeSupportService.kind === 'acknowledged' ? 'Record that the accountable owner accepted this case internally.' : 'Record that a first response is ready for independent delivery.'} No message, refund, or payment action runs.</small></div>
-        {activeSupportService.kind === 'reassigned' ? <label>New owner<input disabled={disabled} id={`support-service-${activeSupportService.caseId}`} maxLength={120} onChange={(event) => onChangeSupportService({ owner: event.target.value })} required value={activeSupportService.owner} /></label> : activeSupportService.kind === 'escalated' ? <><div className="form-row"><label>Owner<input disabled value={activeSupportService.owner} /></label><label>Priority<select disabled={disabled} id={`support-service-${activeSupportService.caseId}`} onChange={(event) => onChangeSupportService({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportService.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label></div><label>Earlier due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportService({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportService.dueAt} /></label></> : <small role="note">{activeSupportService.priority} priority · owner {activeSupportService.owner} · target {formatTime(new Date(activeSupportService.dueAt).toISOString())}</small>}
+        {activeSupportService.kind === 'reassigned' ? <label>New owner<input disabled={disabled} id={`support-service-${activeSupportService.caseId}`} maxLength={120} onChange={(event) => onChangeSupportService({ owner: event.target.value })} required value={activeSupportService.owner} /></label> : activeSupportService.kind === 'escalated' ? <><div className="form-row"><label>Owner<input disabled value={activeSupportService.owner} /></label><label>Priority<select disabled={disabled} id={`support-service-${activeSupportService.caseId}`} onChange={(event) => onChangeSupportService({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportService.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label></div><label>Earlier due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportService({ dueAt: event.target.value })} required type={coreUi.d} value={activeSupportService.dueAt} /></label></> : <small role="note">{activeSupportService.priority} priority · owner {activeSupportService.owner} · target {formatTime(new Date(activeSupportService.dueAt).toISOString())}</small>}
         <label>{activeSupportService.kind === 'first_response_ready' ? 'Response preparation note' : activeSupportService.kind === 'acknowledged' ? 'Acknowledgement note' : 'Reason'}<textarea disabled={disabled} id={activeSupportService.kind === 'acknowledged' || activeSupportService.kind === 'first_response_ready' ? `support-service-${activeSupportService.caseId}` : undefined} maxLength={300} onChange={(event) => onChangeSupportService({ note: event.target.value })} required rows={2} value={activeSupportService.note} /></label>
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review {activeSupportService.kind === 'acknowledged' ? 'acknowledgement' : activeSupportService.kind === 'first_response_ready' ? 'response readiness' : 'service change'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportService} type="button">Cancel</button></div>
+        <div className="form-actions"><button className={coreUi.q} disabled={disabled} type="submit">Review {activeSupportService.kind === 'acknowledged' ? 'acknowledgement' : activeSupportService.kind === 'first_response_ready' ? 'response readiness' : 'service change'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportService} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportResolution ? <form aria-label={`Resolve support case ${activeSupportResolution.caseId}`} className="order-return-editor" onSubmit={onReviewSupportResolution}>
         <div className="order-return-copy"><span className="core-eyebrow">Resolve help case</span><strong>{activeSupportResolution.caseId}</strong><small>Record the reviewed outcome only. External communication and financial action remain separate.</small></div>
         <label>Outcome<select disabled={disabled} onChange={(event) => onChangeSupportResolution({ outcome: event.target.value as CommerceSupportResolutionOutcome })} value={activeSupportResolution.outcome}><option value="information_provided">Information provided</option><option value="replacement_review_required">Replacement review required</option><option value="refund_review_required">Refund review required</option><option value="no_action">No action</option></select></label>
         <label>Resolution note<textarea disabled={disabled} id={`support-resolution-${activeSupportResolution.caseId}`} maxLength={300} onChange={(event) => onChangeSupportResolution({ note: event.target.value })} required rows={2} value={activeSupportResolution.note} /></label>
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review resolution</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
+        <div className="form-actions"><button className={coreUi.q} disabled={disabled} type="submit">Review resolution</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
       </form> : null}
       {activeCorrectionDraft ? <form aria-label={activeCorrectionDraft.loyalty ? `Redeem points on ${order.id}` : `Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
         <div className="order-return-copy"><span className="core-eyebrow">{activeCorrectionDraft.loyalty ? 'Redeem points' : 'Correction note'}</span><strong>{order.id}</strong><small>{activeCorrectionDraft.loyalty ? `${activeCorrectionDraft.loyalty.customer} holds ${loyaltyBalance.toLocaleString()} points. Points are redeemed as a credit note on this order — 1 point = 1 MMK.` : activeCorrectionDraft.sourceIntent ? `Prepared from customer request ${activeCorrectionDraft.sourceIntent.id}. Recheck the calculation; request details stay locked.` : 'The original invoice stays unchanged.'} This records review evidence; it does not post externally.</small></div>
@@ -7930,7 +8448,7 @@ function ClosedOrderHistory({
           </>}
         <label>{activeCorrectionDraft.loyalty ? 'Points to redeem' : 'Amount before tax'}<input disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} id="order-correction-amount" inputMode="numeric" max={activeCorrectionDraft.loyalty ? loyaltyBalance : undefined} min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
         {correctionCalculation ? <small role="note">Tax {formatMoney(correctionCalculation.taxMmk)} · note total {formatMoney(correctionCalculation.totalMmk)} · same tax snapshot as the original invoice</small> : null}
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled || !correctionCalculation} type="submit">{activeCorrectionDraft.loyalty ? 'Review redemption' : 'Review correction'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
+        <div className="form-actions"><button className={coreUi.q} disabled={disabled || !correctionCalculation} type="submit">{activeCorrectionDraft.loyalty ? 'Review redemption' : 'Review correction'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
       </form> : null}
     </article>})}</div>
     {pageCount > 1 ? <nav aria-label="Closed order pages" className="order-archive-pagination">
@@ -8066,7 +8584,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
 function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIdentity | null; tab: ProductionTab }) {
   const productionLocation = useLocation()
   const navigate = useNavigate()
-  const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite] = useProductionWorkspace(managedIdentity)
+  const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite, retryManagedProductionLoad] = useProductionWorkspace(managedIdentity)
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
   const relatedCommerceRef = useRef(relatedCommerce)
   const productionRef = useRef(production)
@@ -8858,7 +9376,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   }
 
   const effectiveMode = managedIdentity && (workspaceMode === 'local' || managedWorkspaceId !== managedIdentity.workspaceId) ? 'managed-loading' : workspaceMode
-  if (managedIdentity && effectiveMode !== 'managed-ready') {
+  if (managedIdentity && effectiveMode !== coreUi.m) {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Plant setup · {activePlantIndustryPack.name}</span><h2>Review your first operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
@@ -8866,7 +9384,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedProduction(formEvent)}>
         <div className="form-row"><label>Job ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, jobId: inputEvent.target.value }))} placeholder="JOB-001" required value={planDraft.jobId} /></label><label>Line or team<input maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, line: inputEvent.target.value }))} placeholder="Line 01" required value={planDraft.line} /></label></div>
         <div className="form-row"><label>Product or batch<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, product: inputEvent.target.value }))} placeholder="Product name" required value={planDraft.product} /></label><label>Target units<input min="1" onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, target: inputEvent.target.value }))} required step="1" type="number" value={planDraft.target} /></label></div>
-        <div className="form-row"><label>Priority<select onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, priority: inputEvent.target.value as ProductionJobPriority }))} value={planDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, dueAt: inputEvent.target.value }))} required type="datetime-local" value={planDraft.dueAt} /></label></div>
+        <div className="form-row"><label>Priority<select onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, priority: inputEvent.target.value as ProductionJobPriority }))} value={planDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, dueAt: inputEvent.target.value }))} required type={coreUi.d} value={planDraft.dueAt} /></label></div>
         <label>Responsible owner<input autoComplete="off" maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, owner: inputEvent.target.value }))} placeholder="Named person or role" required value={planDraft.owner} /></label>
         <div className="form-row"><label>Machine ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineId: inputEvent.target.value }))} placeholder="MC-01" required value={planDraft.machineId} /></label><label>Machine name<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineName: inputEvent.target.value }))} placeholder="Mixer 01" required value={planDraft.machineName} /></label></div>
         <label>Opening plan reason<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How this job and target were confirmed" required value={planDraft.reason} /></label>
@@ -8879,7 +9397,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Company Plant</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{productionStorageError || 'Plant remains read-only until the authenticated tenant state is confirmed.'}</p>
-      <div className="form-actions"><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
+      <div className="form-actions">{effectiveMode === 'managed-error' ? <button className="core-button primary" onClick={retryManagedProductionLoad} type="button">Retry company account</button> : null}<Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
     </section>
   }
 
@@ -10063,7 +10581,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         {plantJobView === 'board'
           ? <PlantJobBoard disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />
           : <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />}
-        {nextShopDemand ? <section aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'} className="stock-receipt-preview" data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'} data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>{nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'} · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} suggested</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} active order units · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} below reorder · {nextShopDemand.sourceOrderIds.length || 'no'} source {nextShopDemand.sourceOrderIds.length === 1 ? 'order' : 'orders'}</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? nextShopDemand.sourceOrderIds.length ? 'Shop demand selected' : 'Replenishment selected' : nextShopDemand.sourceOrderIds.length ? 'Use Shop demand' : 'Plan replenishment'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
+        {nextShopDemand ? <section aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'} className="stock-receipt-preview" data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'} data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>{nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'} · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} suggested</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} active order units · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} below reorder · {nextShopDemand.sourceOrderIds.length || 'no'} source {nextShopDemand.sourceOrderIds.length === 1 ? 'order' : 'orders'}</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className={coreUi.q} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? nextShopDemand.sourceOrderIds.length ? 'Shop demand selected' : 'Replenishment selected' : nextShopDemand.sourceOrderIds.length ? 'Use Shop demand' : 'Plan replenishment'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
         <CompletedJobHistory jobs={completedJobs} now={issueClock} />
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
@@ -10080,7 +10598,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <form className="core-form compact-form" onSubmit={createJob}>
             <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
             <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
-            <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setJobDraft((current) => ({ ...current, priority: event.target.value as ProductionJobPriority }))} value={jobDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setJobDraft((current) => ({ ...current, dueAt: event.target.value }))} required type="datetime-local" value={jobDraft.dueAt} /></label></div>
+            <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setJobDraft((current) => ({ ...current, priority: event.target.value as ProductionJobPriority }))} value={jobDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setJobDraft((current) => ({ ...current, dueAt: event.target.value }))} required type={coreUi.d} value={jobDraft.dueAt} /></label></div>
             <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, owner: event.target.value }))} placeholder="Named person or role" required value={jobDraft.owner} /></label>
             {selectedShopDemand ? <div className="form-notice" role="status"><strong>Governed Shop source.</strong> {selectedShopDemand.evidenceReference} · {selectedShopDemand.sourceOrderIds.join(', ') || 'reorder threshold'}<button className="text-link" disabled={Boolean(pendingAction)} onClick={() => setSelectedShopDemandDigest('')} type="button">Remove source</button></div> : null}
             <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review job</button>
@@ -10154,7 +10672,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       {scheduleDraft ? <>
         <OperationsDialogHeader eyebrow="Plant plan" titleId="job-schedule-title" title={<>Change {scheduleDraft.jobId} plan</>} closeLabel="Close job schedule" onClose={closeJobSchedule} />
         <form autoComplete="off" className="core-form" onSubmit={reviewJobSchedule}>
-          <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setScheduleDraft((current) => current ? { ...current, priority: event.target.value as ProductionJobPriority } : current)} value={scheduleDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setScheduleDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type="datetime-local" value={scheduleDraft.dueAt} /></label></div>
+          <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setScheduleDraft((current) => current ? { ...current, priority: event.target.value as ProductionJobPriority } : current)} value={scheduleDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setScheduleDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type={coreUi.d} value={scheduleDraft.dueAt} /></label></div>
           <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setScheduleDraft((current) => current ? { ...current, owner: event.target.value } : current)} placeholder="Named person or role" required value={scheduleDraft.owner} /></label>
           <p className="panel-copy">This records responsibility and run order only. It grants no access, assigns no machine, and dispatches no work. Target, output, quality hold, materials, and accounting stay unchanged.</p>
           <p className="panel-copy">Nothing changes until the accountable operator confirms a reason and evidence.</p>
@@ -10299,7 +10817,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <div className="form-row"><label>Type<select disabled={Boolean(issueMaintenanceFindingSource)} value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<input maxLength={120} onChange={(event) => setArea(event.target.value)} placeholder="Line, machine, or work centre" required value={area} /></label></div>
         <label>Observation<textarea maxLength={240} required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Describe what happened, not the assumption." /></label>
         <div className="form-row"><label>Priority<select value={severity} onChange={(event) => setSeverity(event.target.value as ProductionIssueSeverity)}>{productionIssueSeverities.map((candidate) => <option key={candidate} value={candidate}>{productionIssueSeverityLabels[candidate]}</option>)}</select></label><label>Owner<input autoComplete="off" maxLength={120} name="plant-issue-owner" onChange={(event) => setIssueOwner(event.target.value)} placeholder="Named person or role" required value={issueOwner} /></label></div>
-        <label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} name="plant-issue-due" onChange={(event) => setIssueDueInput(event.target.value)} required type="datetime-local" value={issueDueInput} /></label>
+        <label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} name="plant-issue-due" onChange={(event) => setIssueDueInput(event.target.value)} required type={coreUi.d} value={issueDueInput} /></label>
         <label>Containment / next action<textarea maxLength={240} onChange={(event) => setContainment(event.target.value)} placeholder="What happens next, and what stays on hold?" required value={containment} /></label>
         <p className="panel-copy">{issueMaintenanceFindingSource ? 'The completion link is immutable. This review opens one problem only; it does not change machine status, dispatch work, buy parts, or control equipment.' : 'Nothing is saved until the next accountable review is confirmed.'}</p>
         <div className="form-actions"><button className="core-button" onClick={closeIssueDialog} type="button">Cancel</button><button className="core-button primary" type="submit">Review problem</button></div>
@@ -10323,7 +10841,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <form autoComplete="off" className="core-form" onSubmit={reviewQualityCorrectiveResolution}>
           <label>Failure mode<input maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, failureMode: event.target.value } : current)} placeholder="Stable name used to find repeats" required value={qualityCorrectiveDraft.failureMode} /><small>Use the same short name when the same defect happens again.</small></label>
           <div className="form-row"><label>Cause category<select onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, causeCategory: event.target.value as ProductionQualityCauseCategory } : current)} value={qualityCorrectiveDraft.causeCategory}>{productionQualityCauseCategories.map((category) => <option key={category} value={category}>{productionQualityCauseLabels[category]}</option>)}</select></label><label>Effectiveness owner<input autoComplete="off" maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessOwner: event.target.value } : current)} placeholder="Named person or role" required value={qualityCorrectiveDraft.effectivenessOwner} /></label></div>
-          <label>Effectiveness review by<input min={localDateTimeInputValue(new Date())} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessDue: event.target.value } : current)} required type="datetime-local" value={qualityCorrectiveDraft.effectivenessDue} /></label>
+          <label>Effectiveness review by<input min={localDateTimeInputValue(new Date())} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessDue: event.target.value } : current)} required type={coreUi.d} value={qualityCorrectiveDraft.effectivenessDue} /></label>
           <label>Verified root cause<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, rootCause: event.target.value } : current)} placeholder="What evidence identifies the cause?" required value={qualityCorrectiveDraft.rootCause} /></label>
           <label>Corrective action<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, correctiveAction: event.target.value } : current)} placeholder="What changed to prevent recurrence?" required value={qualityCorrectiveDraft.correctiveAction} /></label>
           <label>Effectiveness evidence<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What result proves the action worked?" required value={qualityCorrectiveDraft.verificationResult} /></label>
