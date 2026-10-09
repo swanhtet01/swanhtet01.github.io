@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   createBlankSection,
@@ -24,6 +24,20 @@ export function ContentWorkspace({
   onUpdatePage,
 }: ContentWorkspaceProps) {
   const [editingSection, setEditingSection] = useState<string | null>(null)
+  const [removedSection, setRemovedSection] = useState<{ section: WebsitePage['sections'][number]; index: number } | null>(null)
+  const fieldsRef = useRef<HTMLDivElement>(null)
+  const addSectionRef = useRef<HTMLButtonElement>(null)
+  const focusAddSection = useRef(false)
+
+  useEffect(() => {
+    if (focusAddSection.current) {
+      addSectionRef.current?.focus()
+      focusAddSection.current = false
+    }
+    if (!editingSection) return
+    const field = fieldsRef.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>('[data-editor-start]')
+    field?.focus()
+  }, [editingSection, page.sections.length])
 
   function editPage(update: (current: WebsitePage) => WebsitePage) {
     onUpdatePage((current) => ({ ...update(current), stage: 'draft' }))
@@ -46,9 +60,31 @@ export function ContentWorkspace({
   }
 
   function addSection() {
+    if (page.sections.length >= MAX_WEBSITE_SECTIONS) return
     const section = createBlankSection()
     editPage((current) => ({ ...current, sections: [...current.sections, section] }))
     setEditingSection(`section:${section.id}`)
+  }
+
+  function removeSection(sectionId: string) {
+    const index = page.sections.findIndex((section) => section.id === sectionId)
+    if (index < 0) return
+    setRemovedSection({ section: page.sections[index], index })
+    editPage((current) => ({ ...current, sections: current.sections.filter((section) => section.id !== sectionId) }))
+    focusAddSection.current = true
+    setEditingSection(null)
+  }
+
+  function restoreSection() {
+    if (!removedSection || page.sections.length >= MAX_WEBSITE_SECTIONS
+      || page.sections.some((section) => section.id === removedSection.section.id)) return
+    editPage((current) => {
+      const sections = [...current.sections]
+      sections.splice(Math.min(removedSection.index, sections.length), 0, removedSection.section)
+      return { ...current, sections }
+    })
+    setEditingSection(`section:${removedSection.section.id}`)
+    setRemovedSection(null)
   }
 
   return (
@@ -95,11 +131,6 @@ export function ContentWorkspace({
         <div aria-label="Page sections" className="website-page-card-list">
           <fieldset className="website-fieldset website-page-card" data-content-section="hero">
             <legend className="sr-only">Welcome section</legend>
-            <div aria-hidden="true" className="website-page-card-art" data-kind="welcome">
-              <small>{page.hero.eyebrow || 'Welcome'}</small>
-              <strong>{page.hero.headline || 'Add a clear headline'}</strong>
-              <span />
-            </div>
             <div className="website-page-card-copy">
               <span className="website-eyebrow">Welcome</span>
               <h3>{page.hero.headline || 'Your main message'}</h3>
@@ -114,7 +145,7 @@ export function ContentWorkspace({
             >
               {editingSection === 'welcome' ? 'Done' : 'Edit'}
             </button>
-            {editingSection === 'welcome' ? <div className="website-page-card-fields" id="website-welcome-fields">
+            {editingSection === 'welcome' ? <div className="website-page-card-fields" id="website-welcome-fields" ref={fieldsRef}>
               <label>
                 <span>Short label</span>
                 <input
@@ -126,6 +157,7 @@ export function ContentWorkspace({
               <label>
                 <span>Headline</span>
                 <textarea
+                  data-editor-start
                   maxLength={140}
                   onChange={(event) => editPage((current) => ({ ...current, hero: { ...current.hero, headline: event.target.value } }))}
                   rows={2}
@@ -172,22 +204,27 @@ export function ContentWorkspace({
                 className="website-button is-secondary is-compact"
                 disabled={page.sections.length >= MAX_WEBSITE_SECTIONS}
                 onClick={addSection}
+                ref={addSectionRef}
                 title={page.sections.length >= MAX_WEBSITE_SECTIONS ? 'The four-section page limit is reached' : 'Add a section'}
                 type="button"
               >
                 Add section
               </button>
             </header>
+            {removedSection && !page.sections.some((section) => section.id === removedSection.section.id) ? <div className="website-section-undo" role="status">
+              <span>Section removed.</span>
+              <button
+                disabled={page.sections.length >= MAX_WEBSITE_SECTIONS}
+                onClick={restoreSection}
+                type="button"
+              >Undo</button>
+              {page.sections.length >= MAX_WEBSITE_SECTIONS ? <small>This page already has four sections.</small> : null}
+            </div> : null}
             <div className="website-page-card-list">
               {page.sections.length ? page.sections.map((section, index) => {
                 const editorId = `section:${section.id}`
                 const fieldsId = `website-section-fields-${section.id}`
                 return <article className="website-page-card website-section-card" data-content-section="section" key={section.id}>
-                  <div aria-hidden="true" className="website-page-card-art" data-kind="section">
-                    <small>{section.eyebrow || `Section ${index + 1}`}</small>
-                    <strong>{section.title || 'Add a section title'}</strong>
-                    <span />
-                  </div>
                   <div className="website-page-card-copy">
                     <span className="website-eyebrow">{section.eyebrow || `Section ${index + 1}`}</span>
                     <h3>{section.title || 'Untitled section'}</h3>
@@ -202,17 +239,14 @@ export function ContentWorkspace({
                   >
                     {editingSection === editorId ? 'Done' : 'Edit'}
                   </button>
-                  {editingSection === editorId ? <div className="website-page-card-fields" id={fieldsId}>
+                  {editingSection === editorId ? <div className="website-page-card-fields" id={fieldsId} ref={fieldsRef}>
                     <div className="website-section-order-actions">
                       <button aria-label={`Move section ${index + 1} up`} disabled={index === 0} onClick={() => moveSection(section.id, -1)} type="button">Move up</button>
                       <button aria-label={`Move section ${index + 1} down`} disabled={index === page.sections.length - 1} onClick={() => moveSection(section.id, 1)} type="button">Move down</button>
                       <button
                         aria-label={`Remove section ${index + 1}`}
                         className="is-danger"
-                        onClick={() => {
-                          editPage((current) => ({ ...current, sections: current.sections.filter((candidate) => candidate.id !== section.id) }))
-                          setEditingSection(null)
-                        }}
+                        onClick={() => removeSection(section.id)}
                         type="button"
                       >
                         Remove section
@@ -232,6 +266,7 @@ export function ContentWorkspace({
                     <label>
                       <span>Title</span>
                       <input
+                        data-editor-start
                         maxLength={120}
                         onChange={(event) => editPage((current) => ({
                           ...current,

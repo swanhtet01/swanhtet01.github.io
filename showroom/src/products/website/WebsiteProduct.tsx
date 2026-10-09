@@ -1552,6 +1552,7 @@ export function WebsiteProduct() {
                     </nav>
 
                     <ContentWorkspace
+                      key={selectedPage.id}
                       canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
                       deleteArmed={deleteCandidateId === selectedPage.id}
                       onDuplicate={copySelectedPage}
