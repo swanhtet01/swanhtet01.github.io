@@ -162,7 +162,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:4fbee3890045465ce7b35fddd821b2acc1531332b44b8915691db88aa734cdd6",
+    "digest": "sha256:9dbf54cfe9cacf6059ffc52b57053eca0277d9523954e2f6f03d290953639ff1",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -188,6 +188,7 @@
       "supabase/migrations/20260924231714_ecommerce_customer_decisions.sql",
       "supabase/migrations/20260929171000_ecommerce_decision_review_fk_index.sql",
       "supabase/migrations/20260930010000_app_rls_initplan_optimization.sql",
+      "supabase/proposals/website_inquiry_delivery.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -200,10 +201,14 @@
       "supermega_runtime/website_acceptance_schema.py",
       "supermega_runtime/website_customer_review.py",
       "supermega_runtime/website_customer_review_store.py",
+      "supermega_runtime/website_inquiry_api.py",
+      "supermega_runtime/website_inquiry_store.py",
+      "supermega_runtime/website_public_page.py",
       "supermega_runtime/website_release_foundation.py",
       "supermega_runtime/website_runtime.py",
       "tests/test_billing_rail.py",
       "tests/test_postgres17_rehearsal_contract.py",
+      "tests/test_website_inquiry_sql.py",
       "tests/test_website_runtime.py",
       "tools/activate_supermega_database.ps1",
       "tools/private_trial_v13_contract.py",
@@ -255,15 +260,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:a2e44a2593ce1c6125137c1e11a1c34aeb811e4bf5be06364cc20e0064b485c1",
-    "private_snapshot_before": "sha256:a2e44a2593ce1c6125137c1e11a1c34aeb811e4bf5be06364cc20e0064b485c1",
+    "private_snapshot_after": "sha256:31e319ea1ff242ed11233a39f0df8e549ebe0b8b64dca09d8494793df8dc57e6",
+    "private_snapshot_before": "sha256:31e319ea1ff242ed11233a39f0df8e549ebe0b8b64dca09d8494793df8dc57e6",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "c32f38757e503160b390ea4de2c8202d0a6f1fe6",
-    "implementation_digest": "sha256:4fbee3890045465ce7b35fddd821b2acc1531332b44b8915691db88aa734cdd6",
-    "tree": "f3370a33ce6fda5eb0ef8f06f60abbfa34a80143"
+    "head": "21167a2c4d1bada35191c0ae2a033ffc5a642fe8",
+    "implementation_digest": "sha256:9dbf54cfe9cacf6059ffc52b57053eca0277d9523954e2f6f03d290953639ff1",
+    "tree": "521554b540397e2d3c04a62495b1101ff560f478"
   },
   "status": "rehearsed",
   "storage": {
