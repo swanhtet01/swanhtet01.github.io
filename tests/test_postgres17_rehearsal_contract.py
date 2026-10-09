@@ -99,6 +99,10 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
         self.assertIn("website_customer_acceptances", account.TABLES)
         self.assertIn("supermega_runtime/website_acceptance_schema.py", module.IMPLEMENTATION_PATHS)
         self.assertIn("supermega_runtime/ecommerce_decision_schema.py", module.IMPLEMENTATION_PATHS)
+        for path in ("supermega_runtime/website_inquiry_api.py", "supermega_runtime/website_inquiry_store.py",
+                     "supermega_runtime/website_public_page.py", "supabase/proposals/website_inquiry_delivery.sql",
+                     "tests/test_website_inquiry_sql.py"):
+            self.assertIn(path, module.IMPLEMENTATION_PATHS)
 
     def test_rehearsal_declares_the_complete_fail_closed_boundary(self) -> None:
         source = REHEARSAL.read_text(encoding="utf-8")

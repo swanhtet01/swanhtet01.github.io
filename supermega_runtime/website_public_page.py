@@ -2,6 +2,7 @@
 
 from html import escape
 from secrets import token_urlsafe
+from unicodedata import category
 from urllib.parse import quote
 
 from fastapi.responses import HTMLResponse
@@ -94,6 +95,23 @@ def render_website_inquiry_page(record: dict, page_path: str = '/') -> HTMLRespo
     def page_url(slug):
         return base if slug == '/' else base + quote(slug, safe='/')
 
+    # The artifact has no locale field yet. Derive the document language from
+    # readable, approved text so Myanmar customers get the right browser and
+    # screen-reader language without letting markup, identifiers or CSS bias it.
+    readable = [artifact['siteName']]
+    for published_page in pages.values():
+        readable.extend((published_page['navigation']['label'], published_page['hero']['eyebrow'],
+                         published_page['hero']['headline'], published_page['hero']['summary'],
+                         published_page['seo']['title'], published_page['seo']['description']))
+        for section in published_page['sections']:
+            readable.extend((section['eyebrow'], section['title'], section['body']))
+    letters = [character for value in readable for character in str(value) if category(character).startswith('L')]
+    myanmar_letters = sum(ord(character) in range(0x1000, 0x10A0)
+                           or ord(character) in range(0xA9E0, 0xAA00)
+                           or ord(character) in range(0xAA60, 0xAA80)
+                           for character in letters)
+    language = 'my' if letters and myanmar_letters / len(letters) > 0.5 else 'en'
+
     def destination_url(destination):
         destination = destination.strip()
         if destination.startswith('#'):
@@ -117,7 +135,7 @@ def render_website_inquiry_page(record: dict, page_path: str = '/') -> HTMLRespo
     if page['id'] == contact_page['id']:
         form = f"""<section id="inquiry-form"><h2>Get in touch</h2><form method="post" action="/api/public/sites/{text(record['channelId'])}/inquiries"><fieldset><label>Name<input name="name" autocomplete="name" maxlength="80" required></label><label>Email or phone<input name="contact" autocomplete="email" maxlength="120" required></label><label>Message<textarea name="message" rows="4" maxlength="500" required></textarea></label><label class="consent"><input name="consent" type="checkbox" required><span>I agree to share these details with {text(artifact['siteName'])} so they can respond.</span></label></fieldset><button type="submit">Send message</button><p id="status" role="status" aria-live="polite"></p><noscript>Enable JavaScript to send this form.</noscript></form></section>"""
         script = f'<script nonce="{nonce}">{_SCRIPT}</script>'
-    html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{text(page['seo']['title'])}</title><meta name="description" content="{text(page['seo']['description'])}"><style nonce="{nonce}">{_STYLE}</style></head><body>
+    html = f"""<!doctype html><html lang="{language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{text(page['seo']['title'])}</title><meta name="description" content="{text(page['seo']['description'])}"><style nonce="{nonce}">{_STYLE}</style></head><body>
 <a class="skip-link" href="#main">Skip to content</a><header><a class="brand" href="{text(base)}">{text(artifact['siteName'])}</a><nav aria-label="Primary navigation">{navigation}</nav></header><main id="main" tabindex="-1"><section class="hero"><span class="eyebrow">{text(page['hero']['eyebrow'])}</span><h1>{text(page['hero']['headline'])}</h1><p>{text(page['hero']['summary'])}</p>{cta}</section>{sections}{form}</main><footer><span>{text(artifact['siteName'])}</span><a href="{text(contact_url)}">Contact us</a></footer>{script}</body></html>"""
     return HTMLResponse(html, headers={
         'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',

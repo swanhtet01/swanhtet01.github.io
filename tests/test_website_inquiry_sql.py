@@ -83,6 +83,32 @@ class WebsiteInquiryPageTests(unittest.TestCase):
             hero['ctaHref'] = destination
             self.assertNotIn('class="cta"', render_website_inquiry_page(record).body.decode())
 
+    def test_published_document_language_follows_readable_script(self):
+        from copy import deepcopy
+        from supermega_runtime.website_public_page import render_website_inquiry_page
+        from supermega_runtime.website_runtime import _website_artifact
+        state = _state()
+        page = state['pages'][0]
+        state['siteName'] = 'မြန်မာဆိုင်'
+        page['navigation']['label'] = 'ပင်မစာမျက်နှာ'
+        page['hero'].update(eyebrow='ကျွန်ုပ်တို့၏ဆိုင်', headline='မြန်မာစီးပွားရေးအတွက် ဝန်ဆောင်မှု',
+                            summary='လုပ်ငန်းတိုင်းအတွက် လွယ်ကူစွာ အသုံးပြုနိုင်သော ဝန်ဆောင်မှု။')
+        page['seo'].update(title='မြန်မာဆိုင်', description='ကျွန်ုပ်တို့အကြောင်း သိရှိရန်။')
+        page['sections'][0].update(eyebrow='ဝန်ဆောင်မှု', title='သင့်လုပ်ငန်းအတွက် အကူအညီ',
+                                   body='သင့်လုပ်ငန်းကို ပိုမိုလွယ်ကူစွာ စီမံပါ။')
+        record = {'channelId': str(uuid4()), 'pageId': 'page-home', 'artifact': _website_artifact(state)}
+        burmese = render_website_inquiry_page(record).body.decode()
+        self.assertIn('<html lang="my">', burmese)
+        mixed = deepcopy(state)
+        mixed['siteName'] = 'Synthetic Studio မြန်မာ'
+        mixed['pages'][0]['hero'].update(eyebrow='Business website', headline='Run your business clearly',
+                                         summary='Publish your services and meet your customers.')
+        mixed['pages'][0]['seo'].update(title='Business website', description='Publish pages for your business.')
+        mixed['pages'][0]['sections'][0].update(eyebrow='Services', title='How we help',
+                                                body='Clear service pages for local customers.')
+        self.assertIn('<html lang="en">', render_website_inquiry_page(
+            {**record, 'artifact': _website_artifact(mixed)}).body.decode())
+
     def test_form_retry_reuses_identity_and_receipt_controls_success(self):
         from supermega_runtime.website_public_page import _SCRIPT
         # Execute the shipped browser script against controlled DOM/network
