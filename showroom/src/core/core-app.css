@@ -2436,6 +2436,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-stock-next-action > footer .core-button { width: 100%; }
 
 @media (max-width: 840px) {
+  .shop-operating-strip { grid-template-columns: repeat(2,minmax(0,1fr))!important; }
+  .shop-operating-status { grid-column: 1 / -1; }
   .shop-today-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .shop-today-metrics article:nth-child(3) { grid-column: 1 / -1; }
   .shop-stock-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -2453,8 +2455,6 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 }
 
 @media (max-width: 560px) {
-  .shop-operating-strip { grid-template-columns: 1fr 1fr!important; }
-  .shop-operating-status { grid-column: 1 / -1; }
   .shop-stock-workspace { padding: .875rem; }
   .shop-stock-heading { align-items: stretch; flex-direction: column; }
   .shop-stock-heading > .core-button { width: 100%; }
