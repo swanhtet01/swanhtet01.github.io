@@ -9,18 +9,59 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import subprocess
 import unittest
 from uuid import uuid4
 
 from tools import rehearse_supermega_postgres17 as pg
 from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialNotReadyError, TrialPermissionDenied, TrialValidationError
 from supermega_runtime.website_inquiry_store import WebsiteInquiryStore
-from tests.test_website_runtime import _state
+from tests.test_website_runtime import _state, _published_state
 
 WORKSPACE = 'rehearsal-product'
 OWNER = TrialPrincipal(WORKSPACE, 'owner-product', 'human')
 ORIGIN = 'https://synthetic.example'
 BODY = {'name': 'မောင်မောင်', 'contact': 'synthetic@example.test', 'message': 'စျေးနှုန်း သိချင်ပါတယ်။', 'consent': True}
+
+
+class WebsiteInquiryPageTests(unittest.TestCase):
+    def test_form_retry_reuses_identity_and_receipt_controls_success(self):
+        from supermega_runtime.website_public_page import _SCRIPT
+        # Execute the shipped browser script against controlled DOM/network
+        # interfaces. This is a client behavior test, not hosted/browser proof.
+        program = """
+import assert from 'node:assert/strict';
+function harness(responses){
+  let submit; const requests=[]; const fields={disabled:false};
+  const button={disabled:false,textContent:'Send message'}; const status={textContent:''};
+  const form={action:'/api/public/sites/example/inquiries',reportValidity:()=>true,
+    querySelector:name=>name==='fieldset'?fields:button,
+    addEventListener:(name,handler)=>{submit=handler}};
+  const document={querySelector:()=>form,getElementById:()=>status};
+  const FormData=class{get(name){return {name:' Test ',contact:'test@example.test',message:' Hello ',consent:'on'}[name]}};
+  const crypto={randomUUID:()=> '00000000-0000-4000-8000-000000000001'};
+  const fetch=async(url,options)=>{requests.push(JSON.parse(options.body)); const response=responses.shift();
+    if(response instanceof Error)throw response;
+    return {ok:response===200,status:response,json:async()=>({status:'received',requestId:requests.at(-1).requestId})}};
+  new Function('document','FormData','crypto','fetch',SCRIPT)(document,FormData,crypto,fetch);
+  return {send:()=>submit({preventDefault(){}}),requests,fields,button,status};
+}
+const lost=harness([new Error('response lost'),200]); await lost.send();
+assert.equal(lost.button.disabled,false); assert.equal(lost.fields.disabled,true);
+assert.match(lost.status.textContent,/could not confirm/); await lost.send();
+assert.deepEqual(lost.requests[0],lost.requests[1]); assert.equal(lost.requests[0].name,'Test');
+assert.equal(lost.button.disabled,true); assert.match(lost.status.textContent,/has been received/);
+const invalid=harness([422]); await invalid.send();
+assert.equal(invalid.fields.disabled,false); assert.equal(invalid.button.disabled,false);
+const offline=harness([503,503]); await offline.send(); await offline.send();
+assert.deepEqual(offline.requests[0],offline.requests[1]); assert.doesNotMatch(offline.status.textContent,/has been received/);
+const removed=harness([404]); await removed.send(); assert.equal(removed.button.disabled,true);
+assert.match(removed.status.textContent,/no longer available/);
+console.log('PASS: loss retry, durable receipt, validation recovery, storage failure and withdrawal');
+"""
+        result = subprocess.run(['node', '--input-type=module', '--eval', 'const SCRIPT=' + json.dumps(_SCRIPT) + ';\n' + program],
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 @unittest.skipUnless(os.environ.get('SUPERMEGA_RUN_WEBSITE_INQUIRY_SQL') == '1', 'explicit disposable SQL rehearsal only')
@@ -69,20 +110,24 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         with pg._connect(self.admin_url) as connection:
             connection.execute('delete from app_private.website_inbox')
             connection.execute('delete from app_private.website_inquiry_channels')
+            # Reset this test-owned synthetic row without weakening version guards.
+            connection.execute("delete from app_private.workspace_state where workspace_id=%s and surface='website'", (WORKSPACE,))
+            connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values(%s,'website',1,%s::jsonb,%s)",
+                               (WORKSPACE, json.dumps(_published_state()), OWNER.actor_id))
         self.adapter = WebsiteInquiryStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=True))
+        self.origins = {}
 
-    def channel(self, *, enabled=True):
+    def channel(self, *, enabled=True, origin=ORIGIN):
         channel = str(uuid4())
-        result = self.adapter.prepare_channel(OWNER, channel_id=channel, page_id='page-home', expected_version=1, origin=ORIGIN)
+        self.origins[channel] = origin
+        result = self.adapter.prepare_channel(OWNER, channel_id=channel, page_id='page-home', expected_version=1, origin=origin)
         self.assertEqual(result, {'channelId': channel, 'enabled': False})
         if enabled:
-            # Explicitly synthetic fixture ONLY. No production activation API exists.
-            with pg._connect(self.admin_url) as connection:
-                connection.execute('update app_private.website_inquiry_channels set enabled=true where channel_id=%s', (channel,))
+            self.adapter.publish_channel(OWNER, channel_id=channel, expected_version=1, public_origin=origin)
         return channel
 
     def receive(self, channel, request=None, key='client', **overrides):
-        arguments = dict(channel_id=channel, request_id=request or str(uuid4()), origin=ORIGIN,
+        arguments = dict(channel_id=channel, request_id=request or str(uuid4()), origin=self.origins.get(channel, ORIGIN),
                          payload=BODY, client_key=sha256(key.encode()).hexdigest())
         arguments.update(overrides)
         return self.adapter.receive(**arguments)
@@ -144,7 +189,7 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         self.assertEqual(len(self.adapter.inbox(OWNER)['inquiries']), 1)
 
     def test_durable_client_budget_shared_between_channels_and_replay_does_not_spend(self):
-        first, second = self.channel(), self.channel()
+        first, second = self.channel(), self.channel(origin='https://second.example')
         request = str(uuid4())
         self.receive(first, request)
         for index in range(5):
@@ -155,7 +200,7 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         self.assertEqual(len(self.adapter.inbox(OWNER)['inquiries']), 6)
 
     def test_concurrent_channels_cannot_race_the_shared_budget(self):
-        channels = [self.channel(), self.channel()]
+        channels = [self.channel(), self.channel(origin='https://second.example')]
         def submit(index):
             try:
                 self.receive(channels[index % 2])
@@ -208,15 +253,124 @@ class WebsiteInquirySqlTests(unittest.TestCase):
             self.receive(channel)
         self.assertEqual(self.adapter.inbox(OWNER)['inquiries'], [])
 
-    def client(self, *, enabled=True, address='192.0.2.1', principal=OWNER):
+    def client(self, *, enabled=True, address='192.0.2.1', principal=OWNER, public_origin=ORIGIN):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from supermega_runtime.website_inquiry_api import create_website_inquiry_router
         app = FastAPI()
         app.include_router(create_website_inquiry_router(store=self.adapter, enabled=enabled,
             resolve_client_address=lambda request: address, resolve_principal=lambda request: principal,
-            abuse_key=bytes(range(32))))
+            abuse_key=bytes(range(32)), public_origin=public_origin))
         return TestClient(app)
+
+    def test_approved_page_publish_form_delivery_and_unpublish(self):
+        channel = self.channel(enabled=False)
+        client = self.client()
+        self.assertEqual(client.get(f'/sites/{channel}').status_code, 404)
+        publish = client.post(f'/api/trial/v1/website-inquiry-channels/{channel}/publish', json={'expectedVersion': 1})
+        self.assertEqual(publish.status_code, 200, publish.text)
+        self.assertTrue(publish.json()['enabled'])
+        page = client.get(f'/sites/{channel}')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('Run the website with evidence.', page.text)
+        self.assertIn(f'action="/api/public/sites/{channel}/inquiries"', page.text)
+        self.assertIn('name="consent"', page.text)
+        self.assertIn("connect-src 'self'", page.headers['content-security-policy'])
+        self.assertNotIn('unsafe-inline', page.headers['content-security-policy'])
+        self.assertNotIn(WORKSPACE, page.text)
+        self.assertNotIn('owner-product', page.text)
+        request = str(uuid4())
+        sent = client.post(f'/api/public/sites/{channel}/inquiries', json={**BODY, 'requestId': request}, headers={'Origin': ORIGIN})
+        self.assertEqual(sent.status_code, 200)
+        self.assertEqual(client.get('/api/trial/v1/website-inbox').json()['inquiries'][0]['requestId'], request)
+        self.assertNotIn(BODY['contact'], client.get(f'/sites/{channel}').text)
+        withdrawn = client.post(f'/api/trial/v1/website-inquiry-channels/{channel}/unpublish', json={'artifactDigest': publish.json()['artifactDigest']})
+        self.assertEqual(withdrawn.status_code, 200)
+        self.assertEqual(client.get(f'/sites/{channel}').status_code, 404)
+        self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries', json={**BODY, 'requestId': request}, headers={'Origin': ORIGIN}).status_code, 404)
+        self.assertEqual(client.post(f'/api/trial/v1/website-inquiry-channels/{channel}/publish', json={'expectedVersion': 1}).status_code, 409)
+        self.assertEqual(len(self.adapter.inbox(OWNER)['inquiries']), 1)
+
+    def test_publication_is_immutable_when_a_new_draft_is_saved(self):
+        channel = self.channel()
+        published = self.adapter.public_page(channel_id=channel, public_origin=ORIGIN)
+        with pg._connect(self.admin_url) as connection:
+            draft = _state()
+            draft['pages'][0]['hero']['headline'] = 'PRIVATE UNAPPROVED DRAFT'
+            connection.execute("update app_private.workspace_state set version=2,state_json=%s::jsonb where workspace_id=%s and surface='website'",
+                               (json.dumps(draft), WORKSPACE))
+        self.assertEqual(self.adapter.public_page(channel_id=channel, public_origin=ORIGIN), published)
+        retry = self.adapter.publish_channel(OWNER, channel_id=channel, expected_version=1, public_origin=ORIGIN)
+        self.assertEqual(retry['artifactDigest'], published['artifactDigest'])
+        with self.assertRaisesRegex(self.db_error, 'source_stale'):
+            self.adapter.publish_channel(OWNER, channel_id=channel, expected_version=2, public_origin=ORIGIN)
+        unapproved = str(uuid4())
+        self.adapter.prepare_channel(OWNER, channel_id=unapproved, page_id='page-home', expected_version=2, origin=ORIGIN)
+        with self.assertRaises(TrialValidationError):
+            self.adapter.publish_channel(OWNER, channel_id=unapproved, expected_version=2, public_origin=ORIGIN)
+        self.assertIsNone(self.adapter.public_page(channel_id=unapproved, public_origin=ORIGIN))
+
+    def test_publication_requires_exact_origin_current_source_and_human_access(self):
+        channel = self.channel(enabled=False)
+        route = f'/api/trial/v1/website-inquiry-channels/{channel}/publish'
+        self.assertEqual(self.client(principal=None).post(route, json={'expectedVersion': 1}).status_code, 401)
+        self.assertEqual(self.client(principal=TrialPrincipal('rehearsal-b','owner-b','human')).post(route, json={'expectedVersion': 1}).status_code, 403)
+        self.assertEqual(self.client(public_origin='').post(route, json={'expectedVersion': 1}).status_code, 503)
+        self.assertEqual(self.client(public_origin='https://other.example').post(route, json={'expectedVersion': 1}).status_code, 409)
+        self.assertEqual(self.client().post(route, json={'expectedVersion': 1, 'artifact': {}}).status_code, 422)
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("update app_private.workspace_state set version=2 where workspace_id=%s and surface='website'", (WORKSPACE,))
+        with self.assertRaisesRegex(TrialValidationError, 'source_stale'):
+            self.adapter.publish_channel(OWNER, channel_id=channel, expected_version=1, public_origin=ORIGIN)
+        self.assertIsNone(self.adapter.public_page(channel_id=channel, public_origin=ORIGIN))
+
+    def test_replacement_retires_previous_form_and_retains_its_inquiries(self):
+        previous = self.channel()
+        self.receive(previous)
+        replacement = self.channel()
+        self.assertIsNone(self.adapter.public_page(channel_id=previous, public_origin=ORIGIN))
+        self.assertIsNotNone(self.adapter.public_page(channel_id=replacement, public_origin=ORIGIN))
+        with self.assertRaisesRegex(self.db_error, 'website_inquiry_unavailable'):
+            self.receive(previous)
+        self.assertEqual(len(self.adapter.inbox(OWNER)['inquiries']), 1)
+
+    def test_concurrent_publications_leave_one_active_page(self):
+        channels = [self.channel(enabled=False), self.channel(enabled=False)]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            receipts = list(pool.map(lambda channel: self.adapter.publish_channel(OWNER,
+                channel_id=channel, expected_version=1, public_origin=ORIGIN), channels))
+        self.assertTrue(all(receipt['enabled'] for receipt in receipts))
+        self.assertEqual(sum(self.adapter.public_page(channel_id=channel, public_origin=ORIGIN) is not None
+                             for channel in channels), 1)
+
+    def test_sql_publication_rejects_forged_artifact_and_revoked_publisher(self):
+        channel = self.channel(enabled=False)
+        with self.assertRaisesRegex(self.db_error, 'approval_required'), pg._connect(self.runtime_url) as connection:
+            connection.execute("select set_config('app.workspace_id',%s,true),set_config('app.actor_id',%s,true),set_config('app.actor_kind','human',true)", (WORKSPACE, OWNER.actor_id))
+            connection.execute('select app_private.publish_website_inquiry_channel(%s,1,%s,%s,%s)',
+                               (channel, 'snapshot-managed-release', 'sha256:' + '0' * 64, ORIGIN))
+        # Roll back the synthetic revocation together with its denied action.
+        with self.assertRaisesRegex(self.db_error, 'access_denied'), pg._connect(self.admin_url) as connection:
+            connection.execute("select set_config('app.workspace_id',%s,true),set_config('app.actor_id',%s,true),set_config('app.actor_kind','human',true)", (WORKSPACE, OWNER.actor_id))
+            connection.execute("update app_private.workspace_memberships set status='revoked' where workspace_id=%s and actor_id=%s", (WORKSPACE, OWNER.actor_id))
+            connection.execute('select app_private.publish_website_inquiry_channel(%s,1,%s,%s,%s)',
+                               (channel, 'snapshot-managed-release', 'sha256:' + '0' * 64, ORIGIN))
+        with pg._connect(self.admin_url) as connection:
+            for role in ('anon', 'authenticated', 'service_role'):
+                for signature in ('publish_website_inquiry_channel(uuid,bigint,text,text,text)',
+                                  'unpublish_website_inquiry_channel(uuid,text)', 'read_website_inquiry_page(uuid,text)'):
+                    self.assertFalse(connection.execute('select has_function_privilege(%s,%s,%s)',
+                        (role, 'app_private.' + signature, 'execute')).fetchone()[0])
+        self.assertIsNone(self.adapter.public_page(channel_id=channel, public_origin=ORIGIN))
+
+    def test_public_renderer_escapes_customer_authored_content(self):
+        from supermega_runtime.website_public_page import render_website_inquiry_page
+        channel = self.channel()
+        page = self.adapter.public_page(channel_id=channel, public_origin=ORIGIN)
+        page['artifact']['pages'][0]['hero']['headline'] = '<script>alert("unsafe")</script>'
+        html = render_website_inquiry_page(page).body.decode()
+        self.assertIn('&lt;script&gt;', html)
+        self.assertNotIn('<script>alert', html)
 
     def test_http_to_database_to_operator_inbox(self):
         channel = self.channel()

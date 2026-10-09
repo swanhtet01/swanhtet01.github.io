@@ -2,7 +2,7 @@
 
 The hosting integration must supply verified client-address and managed identity
 resolvers. Never wire an unverified Forwarded/X-Forwarded-For header here. Public
-page release binding, operator UI and deployment migration remain prerequisites.
+page origin verification, operator UI and deployment migration remain prerequisites.
 """
 
 from collections.abc import Callable
@@ -11,6 +11,7 @@ import hmac
 import ipaddress
 import json
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -18,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .trial_store import TrialNotReadyError, TrialPermissionDenied, TrialPrincipal, TrialValidationError
 from .website_inquiry_store import WebsiteInquiryStore
+from .website_public_page import render_website_inquiry_page
 
 _HEADERS = {'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer'}
 
@@ -58,10 +60,20 @@ def create_website_inquiry_router(
     resolve_client_address: Callable[[Request], str] | None = None,
     resolve_principal: Callable[[Request], TrialPrincipal] | None = None,
     abuse_key: bytes = b'',
+    public_origin: str = '',
 ) -> APIRouter:
     router = APIRouter(tags=['website-inquiries'])
     configured = (enabled and callable(resolve_client_address) and callable(resolve_principal)
                   and isinstance(abuse_key, bytes) and len(abuse_key) >= 32 and len(set(abuse_key)) >= 10)
+    try:
+        origin_parts = urlsplit(public_origin)
+        publishing_configured = (configured and origin_parts.scheme == 'https' and bool(origin_parts.hostname)
+            and not origin_parts.username and not origin_parts.password and not origin_parts.path
+            and not origin_parts.query and not origin_parts.fragment and len(public_origin) <= 256
+            and public_origin == f'https://{origin_parts.netloc}'.lower()
+            and (origin_parts.port is None or 1 <= origin_parts.port <= 65535))
+    except (ValueError, TypeError):
+        publishing_configured = False
 
     def available(request):
         if not configured:
@@ -69,7 +81,7 @@ def create_website_inquiry_router(
         if request.query_params:
             raise _error(422, 'request_invalid')
 
-    async def invoke(operation):
+    async def invoke(operation, *, render=False):
         try:
             result = await run_in_threadpool(operation)
         except TrialPermissionDenied:
@@ -87,8 +99,15 @@ def create_website_inquiry_router(
                 'website_inquiry_invalid': (422, 'request_invalid'),
                 'website_inquiry_retry_conflict': (409, 'request_conflict'),
                 'website_inquiry_capacity': (429, 'try_later'),
+                'website_inquiry_access_denied': (403, 'access_denied'),
+                'website_inquiry_source_stale': (409, 'source_changed'),
+                'website_inquiry_approval_required': (422, 'approval_required'),
             }.get(code, (503, 'website_inquiries_unavailable'))
             raise _error(status, public_code) from None
+        if render:
+            if result is None:
+                raise _error(404, 'form_unavailable')
+            return render_website_inquiry_page(result)
         return JSONResponse(result, headers=_HEADERS)
 
     def principal(request):
@@ -142,5 +161,33 @@ def create_website_inquiry_router(
             raise _error(422, 'request_invalid')
         before = (query['beforeTime'], query['beforeChannel'], query['beforeRequest']) if query else None
         return await invoke(lambda: store.inbox(actor, before=before))
+
+    @router.get('/sites/{channel_id}')
+    async def page(channel_id: str, request: Request):
+        available(request)
+        if not publishing_configured:
+            raise _error(503, 'website_inquiries_unavailable')
+        return await invoke(lambda: store.public_page(channel_id=channel_id, public_origin=public_origin), render=True)
+
+    @router.post('/api/trial/v1/website-inquiry-channels/{channel_id}/publish')
+    async def publish(channel_id: str, request: Request):
+        available(request)
+        actor = principal(request)
+        if not publishing_configured:
+            raise _error(503, 'website_inquiries_unavailable')
+        body = await _body(request)
+        if set(body) != {'expectedVersion'}:
+            raise _error(422, 'request_invalid')
+        return await invoke(lambda: store.publish_channel(actor, channel_id=channel_id,
+            expected_version=body['expectedVersion'], public_origin=public_origin))
+
+    @router.post('/api/trial/v1/website-inquiry-channels/{channel_id}/unpublish')
+    async def unpublish(channel_id: str, request: Request):
+        available(request)
+        actor = principal(request)
+        body = await _body(request)
+        if set(body) != {'artifactDigest'}:
+            raise _error(422, 'request_invalid')
+        return await invoke(lambda: store.unpublish_channel(actor, channel_id=channel_id, artifact_digest=body['artifactDigest']))
 
     return router

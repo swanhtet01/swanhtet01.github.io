@@ -1,7 +1,7 @@
 """Durable Sites inquiry adapter; optional schema, no public activation or HTTP wiring.
 
-Channels are prepared from managed content and start disabled. Release binding,
-public request/address verification and inbox UI must be wired before activation.
+Channels start disabled; explicit publication retains an approved artifact.
+Hosting/address verification and inbox UI still require production integration.
 Customer text stays in PostgreSQL and never appears in errors or public receipts.
 """
 
@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from .trial_store import PostgresTrialStore, TrialPrincipal, TrialNotReadyError, TrialValidationError
 from .website_customer_review import _text, _time, _uuid
-from .website_runtime import validate_website_state
+from .website_runtime import validate_website_state, _current_release_source
 
 
 class WebsiteInquiryStore:
@@ -35,7 +35,8 @@ class WebsiteInquiryStore:
         if type(expected_version) is not int or expected_version < 1:
             raise TrialValidationError('website_inquiry_version_invalid')
         with self.store._guarded_cursor(principal, write=True, capability='website.write') as (cursor, _):
-            cursor.execute("""select version,state_json from app_private.workspace_state
+            cursor.execute("""select version,state_json,'sha256:' || encode(sha256(convert_to(
+                app_private.website_review_json(state_json),'UTF8')),'hex') as source_digest from app_private.workspace_state
                 where workspace_id=%s and surface='website' for share""", (principal.workspace_id,))
             source = cursor.fetchone()
             if source is None or source['version'] != expected_version:
@@ -44,20 +45,64 @@ class WebsiteInquiryStore:
             page = next((item for item in state['pages'] if item['id'] == page_id), None)
             if page is None:
                 raise TrialValidationError('website_inquiry_page_missing')
+            source_page = page['slug'].strip().rstrip('/') or '/'
             cursor.execute("""insert into app_private.website_inquiry_channels
-                (channel_id,workspace_id,page_id,source_version,site_name,source_page,allowed_origin,created_by)
-                values(%s,%s,%s,%s,%s,%s,%s,%s) on conflict(channel_id) do nothing""",
-                (channel_id, principal.workspace_id, page_id, expected_version, state['siteName'], page['slug'], origin, principal.actor_id))
+                (channel_id,workspace_id,page_id,source_version,source_digest,site_name,source_page,allowed_origin,created_by)
+                values(%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict(channel_id) do nothing""",
+                (channel_id, principal.workspace_id, page_id, expected_version, source['source_digest'], state['siteName'], source_page, origin, principal.actor_id))
             cursor.execute("""select workspace_id,page_id,source_version,site_name,source_page,allowed_origin,enabled
                 from app_private.website_inquiry_channels where channel_id=%s""", (channel_id,))
             channel = cursor.fetchone()
             if (channel is None or channel['workspace_id'] != principal.workspace_id
                     or channel['page_id'] != page_id or channel['allowed_origin'] != origin
                     or channel['source_version'] != expected_version or channel['site_name'] != state['siteName']
-                    or channel['source_page'] != page['slug']):
+                    or channel['source_page'] != source_page):
                 raise TrialValidationError('website_inquiry_channel_conflict')
             result = {'channelId': channel_id, 'enabled': channel['enabled']}
         return result
+
+    def publish_channel(self, principal: TrialPrincipal, *, channel_id: str,
+                        expected_version: int, public_origin: str) -> dict[str, Any]:
+        """Publish one prepared page from its exact saved approval, not request HTML."""
+        channel_id = _uuid(channel_id)
+        if type(expected_version) is not int or expected_version < 1:
+            raise TrialValidationError('website_inquiry_version_invalid')
+        with self.store._guarded_cursor(principal, write=True, capability='website.write') as (cursor, _):
+            cursor.execute("""select snapshot_id,artifact_digest from app_private.website_inquiry_channels
+                where channel_id=%s and workspace_id=%s""", (channel_id, principal.workspace_id))
+            prior = cursor.fetchone()
+            if prior and prior['snapshot_id']:
+                snapshot, digest = prior['snapshot_id'], prior['artifact_digest']
+            else:
+                cursor.execute("""select version,state_json from app_private.workspace_state
+                    where workspace_id=%s and surface='website' for share""", (principal.workspace_id,))
+                source = cursor.fetchone()
+                if source is None or source['version'] != expected_version:
+                    raise TrialValidationError('website_inquiry_source_stale')
+                release = _current_release_source(validate_website_state(source['state_json']))
+                snapshot, digest = release['snapshotId'], release['artifactDigest']
+            cursor.execute('select app_private.publish_website_inquiry_channel(%s,%s,%s,%s,%s) as receipt',
+                           (channel_id, expected_version, snapshot, digest, public_origin))
+            result = cursor.fetchone()['receipt']
+        return result
+
+    def unpublish_channel(self, principal: TrialPrincipal, *, channel_id: str, artifact_digest: str) -> dict[str, Any]:
+        channel_id = _uuid(channel_id)
+        artifact_digest = _text(artifact_digest, 71)
+        with self.store._guarded_cursor(principal, write=True, capability='website.write') as (cursor, _):
+            cursor.execute('select app_private.unpublish_website_inquiry_channel(%s,%s) as receipt', (channel_id, artifact_digest))
+            result = cursor.fetchone()['receipt']
+        return result
+
+    def public_page(self, *, channel_id: str, public_origin: str) -> dict[str, Any] | None:
+        channel_id = _uuid(channel_id)
+        with self.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                self.store._assert_runtime_role(cursor)
+                self.store._assert_schema(cursor)
+                cursor.execute("set local statement_timeout='5s'")
+                cursor.execute('select app_private.read_website_inquiry_page(%s,%s) as page', (channel_id, public_origin))
+                return cursor.fetchone()['page']
 
     def receive(self, *, channel_id: str, request_id: str, origin: str,
                 payload: Mapping[str, Any], client_key: str) -> dict[str, Any]:
