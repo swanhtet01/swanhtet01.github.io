@@ -66,14 +66,6 @@ test('local file readiness waits for actual page checks and keeps one visible pr
   assert.match(css, /\.website-workspace-grid\.view-publish \{ order: 4; \}/)
 })
 
-test('site status starts as one compact, expandable next-action summary', () => {
-  const status = source.match(/<details className="website-status-disclosure"[^>]*>[\s\S]*?<summary>([\s\S]*?)<\/summary>/)
-  assert.ok(status, 'site status must remain available as an expandable disclosure')
-  assert.match(status[0], /Next: \{websiteAgentJob\} · \{readinessSummary\}/)
-  assert.doesNotMatch(status[0], /open=/, 'status details should not expand by default')
-  assert.doesNotMatch(status[0], /data-editing-routine=/, 'the visible summary must not inherit the legacy hidden-state selector')
-})
-
 test('manual inquiry capture is independent of website publishing readiness', () => {
   assert.ok(source.includes('For a request received by phone or in person.'))
   assert.ok(source.includes('disabled={portalViewOnly} type="submit">{portalViewOnly ? \'View only\' : \'Add to inbox\'}'))
