@@ -641,6 +641,18 @@ export function EcommerceProduct() {
   const draftStorageBlocked = !managedIdentity
     && (draftReadStatus === 'invalid' || draftReadStatus === 'unavailable')
   const portalViewOnly = Boolean(managedIdentity && !managedCanWrite)
+  const canSaveStorefront = !sampleCatalogPreview
+    && !portalViewOnly
+    && hasUnsavedStorefront
+    && Boolean(previewResult.preview)
+    && Boolean(digest)
+    && !digestError
+    && !catalogHydrating
+    && !selectionReviewRequired
+    && !draftBusy
+    && !draftStorageBlocked
+    && !managedCatalogDigestPending
+    && !managedCatalogDigestError
 
   useEffect(() => {
     let current = true
@@ -2456,17 +2468,7 @@ export function EcommerceProduct() {
               {hasUnsavedFieldChanges ? <button className="core-button secondary" disabled={portalViewOnly || catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button> : null}
               <button
                 className="core-button primary"
-                disabled={portalViewOnly
-                  || !hasUnsavedStorefront
-                  || !previewResult.preview
-                  || !digest
-                  || Boolean(digestError)
-                  || catalogHydrating
-                  || selectionReviewRequired
-                  || draftBusy
-                  || draftStorageBlocked
-                  || managedCatalogDigestPending
-                  || Boolean(managedCatalogDigestError)}
+                disabled={!canSaveStorefront}
                 id="ecommerce-save-storefront"
                 onClick={() => void saveCurrentStorefront()}
                 ref={storefrontSaveRef}
@@ -2490,18 +2492,24 @@ export function EcommerceProduct() {
                 <strong>{sampleCatalogPreview ? 'Sample storefront is preview-only' : 'Store not saved'}</strong>
                 <small>{sampleCatalogPreview
                   ? 'Example products cannot accept customer requests. Replace them in Shop, then review and save the customer view.'
-                  : 'Save your product selection and prices before customers can order.'}</small>
+                  : canSaveStorefront
+                    ? 'These products and prices come from Shop. Save this store to accept customer requests.'
+                    : 'Review the product selection and prices before saving your store.'}</small>
               </span>
-              <button
-                aria-controls={sampleCatalogPreview ? undefined : 'ecommerce-setup-panel'}
-                className="core-button primary"
-                onClick={sampleCatalogPreview ? () => navigate('/shop/?tab=inventory') : finishStorefrontSetup}
-                type="button"
-              >
-                {sampleCatalogPreview ? 'Replace sample products' : 'Edit store'}
-              </button>
+              <div className="ecommerce-preview-gate-actions">
+                {canSaveStorefront ? <button className="core-button primary" onClick={() => void saveCurrentStorefront()} type="button">Save store</button> : null}
+                <button
+                  aria-controls={sampleCatalogPreview ? undefined : 'ecommerce-setup-panel'}
+                  className={`core-button ${canSaveStorefront ? 'secondary' : 'primary'}`}
+                  onClick={sampleCatalogPreview ? () => navigate('/shop/?tab=inventory') : finishStorefrontSetup}
+                  type="button"
+                >
+                  {sampleCatalogPreview ? 'Replace sample products' : 'Edit store'}
+                </button>
+              </div>
             </div>
           ) : null}
+          {draftNotice ? <p className="ecommerce-save-notice" role="status">{draftNotice}</p> : null}
 
           <div className={`ecommerce-preview-frame is-${device}`}>
             {previewResult.preview ? (
