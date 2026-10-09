@@ -2352,7 +2352,7 @@ export function EcommerceProduct() {
 
           <div className="ecommerce-copy-fields">
             <label><span>Store name</span><input disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} /></label>
-            <label><span>Description <small>optional</small></span><textarea disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} rows={2} value={summary} /></label>
+            <label><span>Description</span><textarea disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} required rows={2} value={summary} /></label>
           </div>
           <div className="ecommerce-catalog-head">
             <strong>Products</strong>
