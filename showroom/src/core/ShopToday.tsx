@@ -392,16 +392,18 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </article>
 
       <aside className="shop-operations-rail">
-        {salesPulse.today.count ? <article aria-label="Sales insight" className="shop-sales-pulse">
-          <header><span><small>Sales insight</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span><b data-direction={salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk)}</b></header>
-          <><div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
+        <article aria-label="Sales insight" className="shop-sales-pulse">
+          <header><span><small>Sales insight</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span>{salesPulse.today.count ? <b data-direction={salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk)}</b> : null}</header>
+          {salesPulse.today.count ? <>
+            <div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
             {salesPulse.points.map((point) => <span aria-label={`${point.label}: ${formatMmk(point.grossMmk)}`} key={point.hour}>
               <i aria-hidden="true" style={{ height: `${Math.max(point.grossMmk ? 12 : 2, Math.round((point.grossMmk / maximumPulseMmk) * 100))}%` }} />
               <small>{point.hour % 6 === 0 ? point.label : ''}</small>
             </span>)}
-          </div>
-          <p>{salesPulse.today.count} completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} today</p></>
-        </article> : null}
+            </div>
+            <p>{salesPulse.today.count} completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} today</p>
+          </> : <div className="shop-sales-empty"><strong>No sales yet today</strong><span>Completed counter sales will appear here.</span></div>}
+        </article>
 
         <section aria-label="Quick tasks" className="shop-next-focus">
           <header className="shop-next-focus-copy"><h3>Quick tasks</h3></header>

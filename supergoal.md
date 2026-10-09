@@ -79,11 +79,11 @@ Prioritize the weakest required part of the customer lifecycle. Do not spend suc
 
 ## 3. Current baseline and evidence boundaries
 
-### Current launch acceptance gaps — 9 October
+### Current launch acceptance gaps — 10 October
 
 | Required outcome | Current evidence | Next acceptance |
 |---|---|---|
-| Premium, intuitive product workflows | #646 plus `6c24b579` improves Shop Today, Sites editor/inquiry triage and Commerce store/orders; local checks and real-component synthetic evidence | Signed-in desktop/mobile journeys against the exact hosted candidate; real media, complete task outcomes and customer comprehension |
+| Premium, intuitive product workflows | PR #648 is still a draft at exact source head `6ee7e7d8`; its existing exact-head checks pass. The current working tree keeps Shop Sales insight visible with an honest zero-sales state; local build and app contracts pass. Browser preview is unavailable and public captures still predate current product source. | Review the cross-product UX findings, then bind real desktop/mobile captures and complete task outcomes to the exact current app source; prove customer comprehension |
 | Founder access and reliable managed records | Historical identity/membership readback; current unauthenticated routes correctly reach Login | Founder sign-in, workspace discovery, save/reload, lost-response recovery and cross-workspace denial |
 | Sites customers can visit and inquire | Standalone HTML export and operator-entered inquiries; #647 adds tested but unmounted durable HTTP/storage adapters | Bind approved published pages to channels, integrate migration/configuration and real form/inbox delivery, then prove the hosted customer journey |
 | Commerce customers can send an order request | Local Store-to-Shop contracts; customer view remains inside the protected app | A separate public buyer entry with safe catalog exposure, durable request receipt, operator review and replay/isolation checks |
@@ -835,3 +835,11 @@ Historical transport errors do not supersede the later verified host correction 
 - Keep real product captures at their native aspect ratios and render them at a consistent available width; align captions and stretch gallery cards to equal height. Do not crop or distort captures to make dimensions appear uniform.
 - Current isolated build at base `d98692be23d0850de81a5ea8b1e3654fa1b25ca4` passes the 395-check public landing-page contract with this layout. The captures themselves remain dated October 2/4 and are not proof of current hosted product behavior.
 - Next: recapture current Shop, Sites and Commerce routes from the exact app source using synthetic records; verify each image against its route and desktop/mobile rendering before claiming the showcase matches the product.
+
+### 2026-10-10 — Shop Today honest empty state and access-boundary check
+
+- **CHANGE:** the working tree based on `6ee7e7d8e031a5183a6bfce0c06df018dff7f7b7` keeps Sales insight visible before the first sale, shows the real zero total and a plain empty-state message, and omits chart data when no completed sales exist.
+- **LOCAL PASS:** Shop sales-velocity checks 41/41; targeted ShopToday ESLint; showroom Vite build and offline seal (38 files / 2,074,630 bytes); public build; `tools/verify_app_build.mjs` (3,246,747 bytes under the 3,250,000-byte cap); `git diff --check`. Four source-level entry decisions pass: unauthenticated local route → Login, pending access → checking, verified managed access → continue, account route → continue.
+- **PREVIEW LIMIT:** `127.0.0.1:4191` is a static `Isolated Shop acceptance` fixture served by the existing `python -m http.server` from `.tmp/qa-shop`, not the authenticated app. Its page policy blocks network access; a direct HTTP check was unavailable. The server was preserved. No browser render of this change is claimed.
+- **RELEASE LIMIT:** PR #648 is OPEN and draft at the base source head above; existing exact-head checks pass, but this working-tree change has not been committed or checked by CI. The public gallery captures remain older than current product source. No hosted founder acceptance, production release, provider/customer write or customer acceptance occurred.
+- **NEXT:** use the bounded Shop/Sites/Commerce source audit to select the next highest-impact usability fix. Then build a policy-permitted HTTP preview from the exact app source, refresh only route-matched genuine captures, push once the slice is validated, and repeat hosted founder sign-in/save/reload/recovery/isolation acceptance before release.
