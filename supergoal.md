@@ -1,12 +1,16 @@
 # SuperMega Supergoal
 
-Version: 1.3.3
+Version: 1.3.4
 Owner: Swan Htet, Founder  
 Maintainer: the active SuperMega operating agent, within the authority below  
 Updated: 2026-10-09
-Status: ACTIVE — isolated product candidate PR #646 builds on PR #639. Product-code head `1a916a2997017739820d663e6ffc6cfc608dd1d8` adds focused, reversible Sites section editing and readable Myanmar headings in exported sites. Its local typecheck, targeted lint, export/session checks and build checks pass; exact-head CI is pending. The preceding #646 head `b8a918fb` passed App CI `37948618893` and security checks. PR #639 remains OPEN/BLOCKED at `82bfa539` without eligible independent review. No production release occurred in this work block. The public gallery predates these changes. Hosted founder workflows, public Sites inquiry delivery, public Commerce buyer entry, managed media, hardware and customer acceptance remain incomplete or unproven.
+Status: ACTIVE — UI candidate PR #646 at `b68c349a41081072098d7a64263f61858c212392` passed full App CI `37953158279` and dependency security run `37953161463`. The next isolated branch, `feature/sites-inquiry-delivery-20261009`, starts from that exact head. Product-code commit `b9131e652ac890d715aa1a556e7681738549ef2d` adds a candidate Sites inquiry API and PostgreSQL inbox; 13 real disposable-database tests pass. It is not mounted in the production runtime, and its SQL is a proposal outside the deployment chain. PR #639 remains OPEN/BLOCKED at `82bfa539` without eligible independent review. No production release occurred. Hosted founder workflows, public Sites delivery, public Commerce buyer entry, managed media, hardware and customer acceptance remain incomplete or unproven.
 
 Integration ownership: the CTO owns this isolated PR #646 candidate. The overlapping CEO checkout contains uncommitted public-site work and a newer `supergoal.md` lineage; preserve it and reconcile this checkpoint during integration. Do not replace that checkout wholesale with this branch's document or call either dirty state a release candidate.
+
+Current backend slice: the CTO also owns `feature/sites-inquiry-delivery-20261009`. The candidate uses disabled, workspace-bound form channels; append-only customer inquiry rows; duplicate-safe receipts; shared durable budgets; an authenticated inbox with stable UTC pagination; and HTTP errors that omit customer/SQL content. CI now runs its disposable PostgreSQL rehearsal. Local proof includes simultaneous retries and cross-channel races, Burmese text, origin/disabled/suspended denial, browser-role and workspace isolation, HTTP body limits and forwarded-address spoof resistance. This is candidate API/storage evidence, not a customer browser journey.
+
+Next integration requirements: bind form activation to an approved hosted page/release, convert the tested SQL proposal into the reviewed migration/catalog chain, supply a verified hosting address resolver and server HMAC configuration, mount the routes, wire the actual page form and existing Sites inbox, add retention/archive lifecycle, then prove hosted customer submission through operator review. Do not enable channels by direct production SQL or claim incoming website inquiries already work. No raw IP address, model call, email send, payment or order mutation is part of this path.
 
 ## 1. Controlling objective
 
