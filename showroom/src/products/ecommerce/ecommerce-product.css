@@ -80,7 +80,7 @@
   background: transparent;
   color: var(--core-muted);
   font: inherit;
-  font-size: .8125rem;
+  font-size: .875rem;
   font-weight: var(--font-weight-bold);
   text-decoration: none;
   white-space: nowrap;
@@ -129,7 +129,7 @@
   gap: 8px;
 }
 
-.ecommerce-workspace {
+.ecommerce-product .ecommerce-workspace {
   order: 2;
   grid-template-columns: minmax(0, 1fr);
 }
@@ -217,17 +217,17 @@
 .commerce-operating-status small {
   overflow: hidden;
   color: var(--core-muted);
-  font-size: .625rem;
+  font-size: .75rem;
   font-weight: var(--font-weight-bold);
-  letter-spacing: .045em;
+  letter-spacing: 0;
   text-overflow: ellipsis;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 .commerce-operating-status strong {
   overflow: hidden;
   color: var(--core-ink);
-  font-size: .9375rem;
+  font-size: 1rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -349,6 +349,14 @@
   color: #0c6840;
   font-weight: var(--font-weight-black);
 }
+.commerce-exception-clear[data-state="setup"] {
+  border-color: rgba(54, 106, 184, .2);
+  background: rgba(54, 106, 184, .045);
+}
+.commerce-exception-clear[data-state="setup"] > span {
+  background: rgba(54, 106, 184, .12);
+  color: #27538e;
+}
 .commerce-exception-clear p { min-width: 0; display: grid; gap: .1875rem; margin: 0; }
 .commerce-exception-clear strong { color: var(--core-ink); font-size: .8125rem; }
 .commerce-exception-clear small { color: var(--core-muted); font-size: .6875rem; line-height: 1.45; }
@@ -405,112 +413,7 @@
 .ecommerce-business-controls > summary small { overflow: hidden; color: var(--core-muted); font-size: 0.5625rem; text-overflow: ellipsis; white-space: nowrap; }
 .ecommerce-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 0.625rem; font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .ecommerce-business-controls-content { display: grid; gap: 10px; padding: 10px; }
-.ecommerce-business-controls-content > .ecommerce-ai-desk,
 .ecommerce-business-controls-content > .ecommerce-ops-cockpit { margin: 0; }
-
-.ecommerce-ai-desk {
-  display: grid;
-  grid-template-columns: minmax(0, .9fr) minmax(300px, .75fr) minmax(280px, .8fr) auto;
-  align-items: center;
-  gap: .75rem;
-  margin: 0 0 12px;
-  border: 1px solid rgba(37,48,74, .14);
-  border-radius: 10px;
-  padding: 12px;
-  background: var(--core-panel);
-}
-
-.ecommerce-ai-desk > div:first-child {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.ecommerce-ai-desk h2 {
-  margin: 0;
-  color: var(--core-ink);
-  font-size: 1.125rem;
-  line-height: 1.2;
-}
-
-.ecommerce-ai-desk p {
-  max-width: 680px;
-  margin: 0;
-  color: var(--core-muted);
-  font-size: .75rem;
-  line-height: 1.45;
-}
-
-.ecommerce-ai-desk-queue {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid rgba(37,48,74, .12);
-  border-radius: 8px;
-}
-
-.ecommerce-ai-desk-queue span {
-  min-width: 0;
-  min-height: 46px;
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  border-right: 1px solid rgba(37,48,74, .1);
-  padding: 6px 8px;
-  background: color-mix(in srgb, var(--core-panel) 94%, var(--core-accent) 6%);
-}
-
-.ecommerce-ai-desk-queue span:last-child {
-  border-right: 0;
-}
-
-.ecommerce-ai-desk-queue small {
-  overflow: hidden;
-  color: #66746b;
-  font-size: 0.5rem;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: .04em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.ecommerce-ai-desk-queue strong {
-  overflow: hidden;
-  color: #171b26;
-  font-size: 0.625rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ecommerce-ai-agent-queue {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-}
-
-.ecommerce-ai-agent-queue span {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.ecommerce-ai-agent-queue small {
-  color: #66746b;
-  font-size: 0.5rem;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-.ecommerce-ai-agent-queue strong {
-  min-width: 0;
-  color: #171b26;
-  font-size: 0.6875rem;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
 
 .ecommerce-ops-cockpit {
   display: grid;
@@ -1804,31 +1707,6 @@
     flex-direction: column;
   }
 
-  .ecommerce-ai-desk {
-    grid-template-columns: 1fr;
-  }
-
-  .ecommerce-ai-desk .core-button {
-    width: 100%;
-  }
-
-  .ecommerce-ai-desk-queue {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .ecommerce-ai-agent-queue {
-    border-top: 1px solid rgba(37,48,74, .1);
-    padding-top: 8px;
-  }
-
-  .ecommerce-ai-desk-queue span:nth-child(2n) {
-    border-right: 0;
-  }
-
-  .ecommerce-ai-desk-queue span:nth-child(-n+2) {
-    border-bottom: 1px solid rgba(37,48,74, .1);
-  }
-
   .ecommerce-save-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2180,3 +2058,13 @@
   overflow-wrap: anywhere;
   margin-block: .25rem;
 }
+
+.ecommerce-product .commerce-order-desk .core-eyebrow { font-family: inherit; font-size: .6875rem; letter-spacing: 0; text-transform: none; }
+.ecommerce-product .commerce-order-meta small { font-size: .6875rem; letter-spacing: 0; }
+.ecommerce-product .commerce-order-meta strong,
+.ecommerce-product .commerce-exception-list button strong,
+.ecommerce-product .commerce-exception-clear strong { font-size: .875rem; }
+.ecommerce-product .commerce-order-flags span { font-size: .75rem; }
+.ecommerce-product .commerce-exception-list button small,
+.ecommerce-product .commerce-exception-clear small { font-size: .75rem; }
+.ecommerce-product .commerce-exception-list button b { font-family: inherit; font-size: .75rem; }
