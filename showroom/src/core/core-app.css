@@ -3284,3 +3284,5 @@ input, select, textarea,
   .shop-product-list > a { grid-template-columns: 2.75rem minmax(0,1fr) auto; }
   .shop-product-list > a > span:last-child { justify-items: end; }
 }
+
+.shop-task-list > button.shop-task-row { width: 100%; min-height: 3.5rem; border: 0; border-bottom: 1px solid var(--core-line); padding: .75rem 1rem; background: var(--core-panel); box-shadow: none; font: inherit; text-align: left; cursor: pointer; }

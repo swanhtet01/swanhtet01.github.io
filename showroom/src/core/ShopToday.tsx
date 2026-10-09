@@ -11,7 +11,6 @@ import {
 import type { ShopBatchFirstUseProjectionResult } from './shop-batch-profit-control-first-use'
 import { SHOP_BATCH_PROFIT_CONTROL_CONTRACT, SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256, projectNoBatchProfitControl, type ShopBatchProfitControlNoBatchProjection } from './shop-batch-profit-control-view'
 import { formatShopCostCoverage, formatShopMarginRate, projectShopCostCoverageAndMarginAtRisk } from './shop-cost-coverage-and-margin-at-risk'
-import { formatShopProfitControlMetric } from './shop-profit-control'
 import type { ShopProfitControlBoard } from './shop-profit-control'
 import { projectShopTodaySalesPulse } from './shop-today-sales'
 import { ProductPhoto } from './ProductPhoto'
@@ -91,6 +90,10 @@ type ShopBatchFirstUseModuleState =
   | { status: 'error' }
 
 const formatMmk = (value: number) => `${value.toLocaleString('en-US')} MMK`
+
+function taskLink(title: string, detail: string, action: string, to: string, ownerGate?: string) {
+  return <Link aria-description={ownerGate} to={to}><span><strong>{title}</strong><small>{detail}</small></span><b>{action}</b></Link>
+}
 
 const yangonDay = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -334,17 +337,12 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
     localBatchProjection,
     currentWorkspaceCapability,
   )
-  const visiblePriorities = profitControl.priorities.slice(0, 2)
   const summaryMetrics = ["Today's sales", 'Open orders', 'Stock alerts']
     .flatMap((label) => metrics.find((metric) => metric.label === label) ?? [])
-  const remainingPriorityCount = profitControl.hiddenPriorityCount + Math.max(0, profitControl.priorities.length - visiblePriorities.length)
   const financeModule = modules.find((module) => module.label === 'Finance controls')
-  const attentionPriority = visiblePriorities.find((priority) => priority.id !== 'close_ready')
-  const hasSecondaryWork = recordStatus.badge === 'Paused'
-    || recordStatus.badge === 'Backup advised'
-    || Boolean(financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount))
-    || Boolean(attentionPriority)
-    || remainingPriorityCount > 0
+  const primaryTask = (recordStatus.badge === 'Paused' || recordStatus.badge === 'Backup advised') && recordStatus.target && recordStatus.actionLabel
+    ? { title: recordStatus.actionLabel, detail: recordStatus.detail, action: recordStatus.badge, target: recordStatus.target, ownerGate: recordStatus.detail }
+    : { title: nextAction, detail: nextDetail, action: nextActionLabel, target: nextTo, ownerGate: nextOwnerGate }
   const maximumPulseMmk = Math.max(1, ...salesPulse.points.map((point) => point.grossMmk))
 
   return <div className="shop-today">
@@ -402,59 +400,25 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
           <p>{salesPulse.today.count} completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} today</p></>
         </article> : null}
 
-        <section aria-label="Recommended next" className="shop-next-focus" data-track={nextTrack.toLowerCase()}>
-          <div className="shop-next-focus-copy">
-            <header><span className="core-eyebrow">Quick task</span><b>{nextTrack}</b></header>
-            <h3>{nextAction}</h3>
-            <details className="shop-next-focus-guidance"><summary>Why this matters</summary>
-              <div><span>Why now</span><p>{nextDetail}</p></div>
-              <div><span>Owner check</span><p>{nextOwnerGate}</p></div>
-            </details>
+        <section aria-label="Quick tasks" className="shop-next-focus">
+          <header className="shop-next-focus-copy"><h3>Quick tasks</h3></header>
+          <div className="shop-operating-list shop-task-list">
+            {taskLink(primaryTask.title, primaryTask.detail, primaryTask.action, primaryTask.target, primaryTask.ownerGate)}
+
+            {financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount) ? accountingExport ? <button className="shop-task-row shop-finance-task" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">
+              <span><strong>Export</strong><small>Accountant CSV · {accountingExport.businessDate} · {accountingExport.mappingReady ? 'Mapped' : 'Unmapped'}</small></span>
+            </button> : taskLink('Close payments', closeQueue.exceptionCount
+                  ? `${closeQueue.exceptionCount} exceptions`
+                : closeQueue.orderCount ? `${closeQueue.orderCount} ready · ${formatMmk(closeQueue.totalMmk)}`
+                  : closeQueue.latestCloseRecorded ? 'Close on file' : 'Nothing to close', closeQueue.actionLabel, closeQueue.target, 'Not reconciled.') : null}
+
           </div>
-          <div className="shop-today-actions"><Link className="core-button primary shop-decision-action" to={nextTo}>{nextActionLabel}</Link></div>
-          {hasSecondaryWork ? <div className="shop-next-focus-secondary">
-
-        {recordStatus.badge === 'Paused' || recordStatus.badge === 'Backup advised' ? <article aria-label="Record safety" className="shop-next-compact">
-          <header><span className="core-eyebrow">Records</span><b>{recordStatus.badge}</b></header>
-          <h3>{recordStatus.label}</h3>
-          <p>{recordStatus.detail}</p>
-          {recordStatus.target && recordStatus.actionLabel ? <div className="shop-today-actions"><Link className="core-button" to={recordStatus.target}>{recordStatus.actionLabel} <span aria-hidden="true">→</span></Link></div> : null}
-        </article> : null}
-
-        {financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount) ? accountingExport ? <article aria-label="Accountant handoff ready" className="shop-finance-task shop-accounting-ready" data-tone="ready">
-          <span><small>Accountant handoff</small><strong>Daily close · {accountingExport.businessDate}</strong><em>{accountingExport.mappingReady ? 'Mapping reviewed' : 'Mapping review needed'}</em></span>
-          <span><b>{formatMmk(accountingExport.totalMmk)}</b><small>Balanced journal · no external posting</small></span>
-          <button className="core-button" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">Download accountant CSV</button>
-        </article> : <Link aria-label="Cash and wallet close queue" className="shop-finance-task" data-tone={closeQueue.tone} to={closeQueue.target}>
-          <span>
-            <small>Cash + wallets</small>
-            <strong>Cash and wallet close</strong>
-            <em>Shop-record expectation</em>
-            <small>{closeQueue.paymentMethods.length
-              ? closeQueue.paymentMethods.map((method) => `${method.paymentMethod} ${formatMmk(method.totalMmk)}`).join(' · ')
-              : closeQueue.latestCloseRecorded ? 'Latest close recorded' : 'No completed, reconciled orders waiting'}</small>
-            <small>Expected from completed, reconciled Shop orders. Wallet and bank settlement is not independently confirmed.</small>
-          </span>
-          <span>
-            <b>{closeQueue.exceptionCount
-              ? `${closeQueue.exceptionCount} payment ${closeQueue.exceptionCount === 1 ? 'exception' : 'exceptions'}`
-              : closeQueue.orderCount ? formatMmk(closeQueue.totalMmk) : closeQueue.latestCloseRecorded ? 'Close recorded' : 'Queue clear'}</b>
-            <small>{closeQueue.orderCount} {closeQueue.orderCount === 1 ? 'order' : 'orders'} ready</small>
-            <small>{closeQueue.actionLabel} <span aria-hidden="true">→</span></small>
-          </span>
-        </Link> : null}
-
-        {attentionPriority ? <Link className="shop-attention-compact" data-priority-id={attentionPriority.id} data-state={profitControl.state} data-tone={attentionPriority.severity === 'critical' || attentionPriority.severity === 'attention' ? 'attention' : 'ready'} to={attentionPriority.target}>
-          <span><small>Attention</small><strong>{attentionPriority.title}</strong><small><strong>Next:</strong> {attentionPriority.actionLabel}</small></span><b>{formatShopProfitControlMetric(attentionPriority.metric)}</b>
-        </Link> : null}
-        {remainingPriorityCount ? <p className="shop-decision-more">{remainingPriorityCount} more lower-priority {remainingPriorityCount === 1 ? 'signal is' : 'signals are'} available in Advanced controls.</p> : null}
-          </div> : null}
         </section>
       </aside>
     </section>
 
     <details aria-label="Advanced Shop controls" className="shop-today-workspaces shop-today-advanced">
-      <summary><span><strong>Advanced controls</strong><small>Profit, operations and safeguarded evidence</small></span><b>{marginControl.costCoverage.state === 'complete' ? 'Costs reviewed' : 'Review available'}</b></summary>
+      <summary><span><strong>Advanced controls</strong><small>Profit, operations and safeguarded evidence</small></span><b>{profitControl.openPriorityCount ? `${profitControl.openPriorityCount} to review` : marginControl.costCoverage.state === 'complete' ? 'Costs reviewed' : 'Review available'}</b></summary>
       <div className="shop-today-advanced-stack">
     <section aria-label="Shop cost coverage and margin at risk" className="shop-margin-control" id="shop-cost-coverage">
       <header>
