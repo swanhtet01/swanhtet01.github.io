@@ -157,12 +157,12 @@
   "engine": {
     "loopback_only": true,
     "major": 17,
-    "start_mode": "pg_ctl_restricted_token",
+    "start_mode": "windows_direct_sandbox",
     "tls_active": true,
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:fc13971efb581870ee8b1c8df0da7bd27db01f5ffffbb4732a23cf28002c8933",
+    "digest": "sha256:4fbee3890045465ce7b35fddd821b2acc1531332b44b8915691db88aa734cdd6",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -255,15 +255,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:5cedd15a05ad9c6b2d24dc2d58b66ec48c7004d088bd5316b29c41b8ee3bf3af",
-    "private_snapshot_before": "sha256:5cedd15a05ad9c6b2d24dc2d58b66ec48c7004d088bd5316b29c41b8ee3bf3af",
+    "private_snapshot_after": "sha256:8c822e0242fa9f22876424eeba208f11d280c32a19bf009cbc18758b117035d0",
+    "private_snapshot_before": "sha256:8c822e0242fa9f22876424eeba208f11d280c32a19bf009cbc18758b117035d0",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "3d09e23d5f5cb98a1ddbdba1e39ca8e280cebc6c",
-    "implementation_digest": "sha256:fc13971efb581870ee8b1c8df0da7bd27db01f5ffffbb4732a23cf28002c8933",
-    "tree": "ccbbfbec2bd75d8025ff06de11381cdcb59be38e"
+    "head": "ecad33f9eaeece1b4a73659741f103f2ff22fb8e",
+    "implementation_digest": "sha256:4fbee3890045465ce7b35fddd821b2acc1531332b44b8915691db88aa734cdd6",
+    "tree": "002e7a5290a224bb23085299a8b6832bc887b85f"
   },
   "status": "rehearsed",
   "storage": {
