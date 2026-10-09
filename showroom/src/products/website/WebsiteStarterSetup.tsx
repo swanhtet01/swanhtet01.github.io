@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react'
 
 import {
   websiteStarterBriefIssues,
+  websiteStarterTemplates,
   type WebsiteStarterBrief,
 } from './website-starter'
 import { websiteTradeBrief } from './website-trade-brief'
@@ -62,24 +63,14 @@ export function WebsiteStarterSetup({
   const [opening] = useState(() => openingState(initialTradeId, initialBusinessName))
   const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
   const [attempted, setAttempted] = useState(false)
-  const [offeringRows, setOfferingRows] = useState<{ name: string; details: string }[]>([])
   const starterFormRef = useRef<HTMLFormElement>(null)
   const issues = websiteStarterBriefIssues(brief)
-  if (offeringRows.some((row) => row.name.includes('|'))) issues.push({ field: 'offerings', message: 'Use a name without the | character.' })
   const issueFor = (field: keyof WebsiteStarterBrief) => (
     attempted ? issues.find((issue) => issue.field === field) : undefined
   )
   const businessNameIssue = issueFor('businessName')
-  const audienceIssue = issueFor('audience')
-  const contactIssue = issueFor('contactHref')
   const offerIssue = issueFor('offer')
-  const proofIssue = issueFor('proof')
-  const offeringsIssue = issueFor('offerings')
-
-  function updateOfferings(rows: { name: string; details: string }[]) {
-    setOfferingRows(rows)
-    setBrief((current) => ({ ...current, offerings: rows.map((row) => `${row.name} | ${row.details.replace(/\s+/gu, ' ')}`).join('\n') }))
-  }
+  const contactIssue = issueFor('contactHref')
 
   function updateBrief<Field extends keyof WebsiteStarterBrief>(field: Field, value: WebsiteStarterBrief[Field]) {
     setBrief((current) => ({ ...current, [field]: value }))
@@ -104,8 +95,8 @@ export function WebsiteStarterSetup({
       <header className="website-panel-head">
         <div>
           <span className="website-eyebrow">Sites</span>
-          <h2 id="website-starter-title">Tell us about the business</h2>
-          <p>SuperMega will prepare the pages, wording and navigation.</p>
+          <h2 id="website-starter-title">Start your website</h2>
+          <p>Choose a starting point. Add pages, services and products whenever you need them.</p>
         </div>
         <span className="website-status is-draft">Not published</span>
       </header>
@@ -113,7 +104,18 @@ export function WebsiteStarterSetup({
       <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit} ref={starterFormRef}>
         {opening.detected ? <p className="website-starter-context">We used the business details already saved in Shop. You can change anything below.</p> : null}
 
-        <div className="website-form-grid two-columns website-starter-identity-grid">
+        <div aria-label="Choose a starting point" className="website-template-grid" role="group">
+          {websiteStarterTemplates.map((template) => {
+            const label = template.id === 'business-presence' ? 'Business site'
+              : template.id === 'lead-generation' ? 'Get inquiries'
+                : 'Show products'
+            return <button aria-label={`${label}. ${template.detail}`} aria-pressed={brief.templateId === template.id} className={`website-button website-template-card${brief.templateId === template.id ? ' is-primary' : ' is-secondary'}`} key={template.id} onClick={() => updateBrief('templateId', template.id)} type="button">
+              <strong>{label}</strong><small>{template.detail}</small>
+            </button>
+          })}
+        </div>
+
+        <div className="website-form-grid two-columns website-starter-essentials">
           <label>
             <span>Business name</span>
             <input
@@ -129,37 +131,6 @@ export function WebsiteStarterSetup({
             {businessNameIssue ? <small className="website-field-error" id="website-starter-error-business-name">{businessNameIssue.message}</small> : null}
           </label>
           <label>
-            <span>Main customers</span>
-            <input
-              aria-describedby={audienceIssue ? 'website-starter-error-audience' : undefined}
-              aria-invalid={Boolean(audienceIssue)}
-              maxLength={70}
-              onChange={(event) => updateBrief('audience', event.target.value)}
-              placeholder="e.g. Families in Yangon"
-              required
-              value={brief.audience}
-            />
-            {audienceIssue ? <small className="website-field-error" id="website-starter-error-audience">{audienceIssue.message}</small> : null}
-          </label>
-          <label>
-            <span>Contact link <small>Optional</small></span>
-            <input
-              aria-describedby={contactIssue ? 'website-starter-error-contact' : undefined}
-              aria-invalid={Boolean(contactIssue)}
-              autoCapitalize="none"
-              maxLength={160}
-              onChange={(event) => updateBrief('contactHref', event.target.value)}
-              placeholder="https://m.me/your-business"
-              spellCheck={false}
-              type="url"
-              value={brief.contactHref}
-            />
-            {contactIssue ? <small className="website-field-error" id="website-starter-error-contact">{contactIssue.message}</small> : null}
-          </label>
-        </div>
-
-        <div className="website-form-grid two-columns website-starter-copy-grid">
-          <label>
             <span>What do you sell or provide?</span>
             <textarea
               aria-describedby={offerIssue ? 'website-starter-error-offer' : undefined}
@@ -168,46 +139,29 @@ export function WebsiteStarterSetup({
               onChange={(event) => updateBrief('offer', event.target.value)}
               placeholder="e.g. Fresh everyday groceries with same-day local delivery."
               required
-              rows={3}
+              rows={2}
               value={brief.offer}
             />
             {offerIssue ? <small className="website-field-error" id="website-starter-error-offer">{offerIssue.message}</small> : null}
           </label>
-
-          <label>
-            <span>What should customers know before contacting you?</span>
-            <textarea
-              aria-describedby={proofIssue ? 'website-starter-proof-help website-starter-error-proof' : 'website-starter-proof-help'}
-              aria-invalid={Boolean(proofIssue)}
-              maxLength={360}
-              onChange={(event) => updateBrief('proof', event.target.value)}
-              placeholder="e.g. Details to confirm, useful inquiry information, or a verified business fact."
-              required
-              rows={3}
-              value={brief.proof}
-            />
-            <small id="website-starter-proof-help">Use accurate public details, such as opening hours or service areas.</small>
-            {proofIssue ? <small className="website-field-error" id="website-starter-error-proof">{proofIssue.message}</small> : null}
-          </label>
         </div>
 
-        <details open={offeringsIssue ? true : undefined}>
-          <summary>Menu, services or featured products — optional</summary>
-          <p id="website-offerings-help">Add up to four featured entries using approved public details. They appear on your Services, Catalog or About page. Displaying a price does not collect payment.</p>
-          {offeringRows.map((row, index) => (
-            <fieldset key={index}>
-              <legend>Featured entry {index + 1}</legend>
-              <label><span>Name</span><input maxLength={80} value={row.name} aria-invalid={Boolean(offeringsIssue)} aria-describedby="website-offerings-error" onChange={(event) => updateOfferings(offeringRows.map((item, position) => position === index ? { ...item, name: event.target.value } : item))} /></label>
-              <label><span>Description, price or duration</span><textarea rows={3} maxLength={360} value={row.details} aria-invalid={Boolean(offeringsIssue)} aria-describedby="website-offerings-help website-offerings-error" onChange={(event) => updateOfferings(offeringRows.map((item, position) => position === index ? { ...item, details: event.target.value } : item))} /></label>
-              <button type="button" className="website-button is-secondary" onClick={() => updateOfferings(offeringRows.filter((_, position) => position !== index))}>Remove entry {index + 1}</button>
-            </fieldset>
-          ))}
-          <button type="button" className="website-button is-secondary" disabled={offeringRows.length >= 4} onClick={() => updateOfferings([...offeringRows, { name: '', details: '' }])}>Add featured entry</button>
-          <p className="website-field-error" id="website-offerings-error" role="status">{offeringsIssue ? 'Complete each entry with a name and description, or remove the unfinished entry. Names cannot contain |.' : ''}</p>
-        </details>
+        <label className="website-starter-contact">
+          <span>How can customers reach you? <small>Optional</small></span>
+          <input
+            aria-describedby={contactIssue ? 'website-starter-error-contact' : undefined}
+            aria-invalid={Boolean(contactIssue)}
+            autoComplete="url"
+            maxLength={160}
+            onChange={(event) => updateBrief('contactHref', event.target.value)}
+            placeholder="https://facebook.com/yourpage or https://example.com/contact"
+            value={brief.contactHref}
+          />
+          {contactIssue ? <small className="website-field-error" id="website-starter-error-contact">{contactIssue.message}</small> : null}
+        </label>
 
         <footer className="website-starter-actions">
-          <button className="website-button is-primary" type="submit">Create website</button>
+          <button className="website-button is-primary" type="submit">Create my website</button>
         </footer>
       </form>
     </section>

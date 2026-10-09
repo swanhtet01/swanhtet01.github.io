@@ -2,13 +2,9 @@ import { useState } from 'react'
 
 import {
   createBlankSection,
-  formatTimestamp,
   MAX_WEBSITE_SECTIONS,
-  pageIssues,
   type WebsitePage,
 } from './website-model'
-
-type EditorSection = 'page' | 'hero' | 'sections' | 'seo'
 
 type ContentWorkspaceProps = {
   page: WebsitePage
@@ -27,11 +23,14 @@ export function ContentWorkspace({
   onRequestDelete,
   onUpdatePage,
 }: ContentWorkspaceProps) {
-  const issues = pageIssues(page)
-  const [editorSection, setEditorSection] = useState<EditorSection>('hero')
+  const [editingSection, setEditingSection] = useState<string | null>(null)
 
   function editPage(update: (current: WebsitePage) => WebsitePage) {
     onUpdatePage((current) => ({ ...update(current), stage: 'draft' }))
+  }
+
+  function toggleEditor(sectionId: string) {
+    setEditingSection((current) => current === sectionId ? null : sectionId)
   }
 
   function moveSection(sectionId: string, direction: -1 | 1) {
@@ -46,42 +45,31 @@ export function ContentWorkspace({
     })
   }
 
+  function addSection() {
+    const section = createBlankSection()
+    editPage((current) => ({ ...current, sections: [...current.sections, section] }))
+    setEditingSection(`section:${section.id}`)
+  }
+
   return (
     <section className="website-editor-panel" aria-labelledby="content-editor-title">
       <header className="website-panel-head">
         <div>
           <span className="website-eyebrow">Page content</span>
           <h2 id="content-editor-title">{page.internalName || 'Untitled page'}</h2>
-          <p>{page.stage === 'ready' ? 'Ready for the site-level checks.' : 'Draft changes stay out of the publish set.'}</p>
+          <p>Edit a section when you need to change it.</p>
         </div>
         <span className={'website-status ' + (page.stage === 'ready' ? 'is-ready' : 'is-draft')}>
           {page.stage}
         </span>
       </header>
 
-      <div className="website-editor-scroll" data-editor-section={editorSection}>
-        <div aria-label="Page section to edit" className="website-editor-section-picker" role="tablist">
-          {([
-            ['hero', 'Hero'],
-            ['sections', 'Sections'],
-            ['page', 'Page details'],
-            ['seo', 'Search'],
-          ] as const).map(([section, label]) => (
-            <button
-              aria-selected={editorSection === section}
-              className={editorSection === section ? 'is-active' : ''}
-              key={section}
-              onClick={() => setEditorSection(section)}
-              role="tab"
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <fieldset className="website-fieldset" data-content-section="page">
-          <legend>Page record</legend>
+      <div className="website-editor-scroll website-page-outline">
+        <details className="website-disclosure" data-content-section="page">
+          <summary>
+            <span>Page details</span>
+            <small>{page.slug || 'Set a page address'}</small>
+          </summary>
           <div className="website-form-grid two-columns">
             <label>
               <span>Internal name</span>
@@ -102,218 +90,200 @@ export function ContentWorkspace({
               />
             </label>
           </div>
-        </fieldset>
+        </details>
 
-        <fieldset className="website-fieldset" data-content-section="hero">
-          <legend>Hero</legend>
-          <div className="website-form-grid">
-            <label>
-              <span>Short label above the headline</span>
-              <input
-                maxLength={80}
-                onChange={(event) => editPage((current) => ({
-                  ...current,
-                  hero: { ...current.hero, eyebrow: event.target.value },
-                }))}
-                value={page.hero.eyebrow}
-              />
-            </label>
-            <label>
-              <span>Headline</span>
-              <textarea
-                maxLength={140}
-                onChange={(event) => editPage((current) => ({
-                  ...current,
-                  hero: { ...current.hero, headline: event.target.value },
-                }))}
-                rows={2}
-                value={page.hero.headline}
-              />
-            </label>
-            <label>
-              <span>Summary</span>
-              <textarea
-                maxLength={280}
-                onChange={(event) => editPage((current) => ({
-                  ...current,
-                  hero: { ...current.hero, summary: event.target.value },
-                }))}
-                rows={3}
-                value={page.hero.summary}
-              />
-            </label>
-            <div className="website-form-grid two-columns">
-              <label>
-                <span>Button text</span>
-                <input
-                  maxLength={40}
-                  onChange={(event) => editPage((current) => ({
-                    ...current,
-                    hero: { ...current.hero, ctaLabel: event.target.value },
-                  }))}
-                  value={page.hero.ctaLabel}
-                />
-              </label>
-              <label>
-                <span>Button link</span>
-                <input
-                  autoCapitalize="none"
-                  maxLength={160}
-                  onChange={(event) => editPage((current) => ({
-                    ...current,
-                    hero: { ...current.hero, ctaHref: event.target.value },
-                  }))}
-                  spellCheck={false}
-                  value={page.hero.ctaHref}
-                />
-              </label>
+        <div aria-label="Page sections" className="website-page-card-list">
+          <fieldset className="website-fieldset website-page-card" data-content-section="hero">
+            <legend className="sr-only">Welcome section</legend>
+            <div aria-hidden="true" className="website-page-card-art" data-kind="welcome">
+              <small>{page.hero.eyebrow || 'Welcome'}</small>
+              <strong>{page.hero.headline || 'Add a clear headline'}</strong>
+              <span />
             </div>
-          </div>
-        </fieldset>
-
-        <fieldset className="website-fieldset has-heading-action" data-content-section="sections">
-          <legend>Content sections</legend>
-          <button
-            className="website-text-button website-fieldset-action"
-            disabled={page.sections.length >= MAX_WEBSITE_SECTIONS}
-            onClick={() => editPage((current) => ({
-              ...current,
-              sections: [...current.sections, createBlankSection()],
-            }))}
-            title={page.sections.length >= MAX_WEBSITE_SECTIONS ? 'The four-section page limit is reached' : 'Add a section'}
-            type="button"
-          >
-            + Add section
-          </button>
-          <div className="website-section-list">
-            {page.sections.length ? page.sections.map((section, index) => (
-              <article className="website-section-editor" key={section.id}>
-                <header>
-                  <strong>Section {index + 1}</strong>
-                  <div className="website-inline-actions">
-                    <button
-                      aria-label={'Move section ' + String(index + 1) + ' up'}
-                      disabled={index === 0}
-                      onClick={() => moveSection(section.id, -1)}
-                      type="button"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      aria-label={'Move section ' + String(index + 1) + ' down'}
-                      disabled={index === page.sections.length - 1}
-                      onClick={() => moveSection(section.id, 1)}
-                      type="button"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      aria-label={'Remove section ' + String(index + 1)}
-                      className="is-danger"
-                      onClick={() => editPage((current) => ({
-                        ...current,
-                        sections: current.sections.filter((candidate) => candidate.id !== section.id),
-                      }))}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </header>
-                <div className="website-form-grid">
-                  <label>
-                    <span>Short label above the heading</span>
-                    <input
-                      maxLength={60}
-                      onChange={(event) => editPage((current) => ({
-                        ...current,
-                        sections: current.sections.map((candidate) => candidate.id === section.id
-                          ? { ...candidate, eyebrow: event.target.value }
-                          : candidate),
-                      }))}
-                      value={section.eyebrow}
-                    />
-                  </label>
-                  <label>
-                    <span>Title</span>
-                    <input
-                      maxLength={120}
-                      onChange={(event) => editPage((current) => ({
-                        ...current,
-                        sections: current.sections.map((candidate) => candidate.id === section.id
-                          ? { ...candidate, title: event.target.value }
-                          : candidate),
-                      }))}
-                      value={section.title}
-                    />
-                  </label>
-                  <label>
-                    <span>Body</span>
-                    <textarea
-                      maxLength={360}
-                      onChange={(event) => editPage((current) => ({
-                        ...current,
-                        sections: current.sections.map((candidate) => candidate.id === section.id
-                          ? { ...candidate, body: event.target.value }
-                          : candidate),
-                      }))}
-                      rows={3}
-                      value={section.body}
-                    />
-                  </label>
-                </div>
-              </article>
-            )) : (
-              <div className="website-empty">
-                <p>Add one section before marking this page ready.</p>
+            <div className="website-page-card-copy">
+              <span className="website-eyebrow">Welcome</span>
+              <h3>{page.hero.headline || 'Your main message'}</h3>
+              <p>{page.hero.summary || 'Tell customers what your business offers.'}</p>
+            </div>
+            <button
+              aria-controls="website-welcome-fields"
+              aria-expanded={editingSection === 'welcome'}
+              className="website-button is-secondary is-compact"
+              onClick={() => toggleEditor('welcome')}
+              type="button"
+            >
+              {editingSection === 'welcome' ? 'Done' : 'Edit'}
+            </button>
+            {editingSection === 'welcome' ? <div className="website-page-card-fields" id="website-welcome-fields">
+              <label>
+                <span>Short label</span>
+                <input
+                  maxLength={80}
+                  onChange={(event) => editPage((current) => ({ ...current, hero: { ...current.hero, eyebrow: event.target.value } }))}
+                  value={page.hero.eyebrow}
+                />
+              </label>
+              <label>
+                <span>Headline</span>
+                <textarea
+                  maxLength={140}
+                  onChange={(event) => editPage((current) => ({ ...current, hero: { ...current.hero, headline: event.target.value } }))}
+                  rows={2}
+                  value={page.hero.headline}
+                />
+              </label>
+              <label>
+                <span>Summary</span>
+                <textarea
+                  maxLength={280}
+                  onChange={(event) => editPage((current) => ({ ...current, hero: { ...current.hero, summary: event.target.value } }))}
+                  rows={3}
+                  value={page.hero.summary}
+                />
+              </label>
+              <div className="website-form-grid two-columns">
+                <label>
+                  <span>Button text</span>
+                  <input
+                    maxLength={40}
+                    onChange={(event) => editPage((current) => ({ ...current, hero: { ...current.hero, ctaLabel: event.target.value } }))}
+                    value={page.hero.ctaLabel}
+                  />
+                </label>
+                <label>
+                  <span>Button link</span>
+                  <input
+                    autoCapitalize="none"
+                    maxLength={160}
+                    onChange={(event) => editPage((current) => ({ ...current, hero: { ...current.hero, ctaHref: event.target.value } }))}
+                    spellCheck={false}
+                    value={page.hero.ctaHref}
+                  />
+                </label>
               </div>
-            )}
-          </div>
-        </fieldset>
+            </div> : null}
+          </fieldset>
 
-        <details className="website-disclosure" data-content-section="seo" open>
+          <fieldset className="website-fieldset website-page-sections" data-content-section="sections">
+            <legend className="sr-only">Page sections</legend>
+            <header className="website-page-sections-head">
+              <div><span className="website-eyebrow">On this page</span><strong>{page.sections.length} section{page.sections.length === 1 ? '' : 's'}</strong></div>
+              <button
+                className="website-button is-secondary is-compact"
+                disabled={page.sections.length >= MAX_WEBSITE_SECTIONS}
+                onClick={addSection}
+                title={page.sections.length >= MAX_WEBSITE_SECTIONS ? 'The four-section page limit is reached' : 'Add a section'}
+                type="button"
+              >
+                Add section
+              </button>
+            </header>
+            <div className="website-page-card-list">
+              {page.sections.length ? page.sections.map((section, index) => {
+                const editorId = `section:${section.id}`
+                const fieldsId = `website-section-fields-${section.id}`
+                return <article className="website-page-card website-section-card" data-content-section="section" key={section.id}>
+                  <div aria-hidden="true" className="website-page-card-art" data-kind="section">
+                    <small>{section.eyebrow || `Section ${index + 1}`}</small>
+                    <strong>{section.title || 'Add a section title'}</strong>
+                    <span />
+                  </div>
+                  <div className="website-page-card-copy">
+                    <span className="website-eyebrow">{section.eyebrow || `Section ${index + 1}`}</span>
+                    <h3>{section.title || 'Untitled section'}</h3>
+                    <p>{section.body || 'Add a short description for your customers.'}</p>
+                  </div>
+                  <button
+                    aria-controls={fieldsId}
+                    aria-expanded={editingSection === editorId}
+                    className="website-button is-secondary is-compact"
+                    onClick={() => toggleEditor(editorId)}
+                    type="button"
+                  >
+                    {editingSection === editorId ? 'Done' : 'Edit'}
+                  </button>
+                  {editingSection === editorId ? <div className="website-page-card-fields" id={fieldsId}>
+                    <div className="website-section-order-actions">
+                      <button aria-label={`Move section ${index + 1} up`} disabled={index === 0} onClick={() => moveSection(section.id, -1)} type="button">Move up</button>
+                      <button aria-label={`Move section ${index + 1} down`} disabled={index === page.sections.length - 1} onClick={() => moveSection(section.id, 1)} type="button">Move down</button>
+                      <button
+                        aria-label={`Remove section ${index + 1}`}
+                        className="is-danger"
+                        onClick={() => {
+                          editPage((current) => ({ ...current, sections: current.sections.filter((candidate) => candidate.id !== section.id) }))
+                          setEditingSection(null)
+                        }}
+                        type="button"
+                      >
+                        Remove section
+                      </button>
+                    </div>
+                    <label>
+                      <span>Short label</span>
+                      <input
+                        maxLength={60}
+                        onChange={(event) => editPage((current) => ({
+                          ...current,
+                          sections: current.sections.map((candidate) => candidate.id === section.id ? { ...candidate, eyebrow: event.target.value } : candidate),
+                        }))}
+                        value={section.eyebrow}
+                      />
+                    </label>
+                    <label>
+                      <span>Title</span>
+                      <input
+                        maxLength={120}
+                        onChange={(event) => editPage((current) => ({
+                          ...current,
+                          sections: current.sections.map((candidate) => candidate.id === section.id ? { ...candidate, title: event.target.value } : candidate),
+                        }))}
+                        value={section.title}
+                      />
+                    </label>
+                    <label>
+                      <span>Text</span>
+                      <textarea
+                        maxLength={360}
+                        onChange={(event) => editPage((current) => ({
+                          ...current,
+                          sections: current.sections.map((candidate) => candidate.id === section.id ? { ...candidate, body: event.target.value } : candidate),
+                        }))}
+                        rows={3}
+                        value={section.body}
+                      />
+                    </label>
+                  </div> : null}
+                </article>
+              }) : <div className="website-empty"><p>Add a section for your services, products, or location.</p></div>}
+            </div>
+          </fieldset>
+        </div>
+
+        <details className="website-disclosure" data-content-section="seo">
           <summary>
-            <span>Search metadata</span>
+            <span>Search preview</span>
             <small>{page.seo.title && page.seo.description ? 'Complete' : 'Needs copy'}</small>
           </summary>
           <div className="website-form-grid">
             <label>
-              <span>SEO title</span>
+              <span>Search title</span>
               <input
                 maxLength={70}
-                onChange={(event) => editPage((current) => ({
-                  ...current,
-                  seo: { ...current.seo, title: event.target.value },
-                }))}
+                onChange={(event) => editPage((current) => ({ ...current, seo: { ...current.seo, title: event.target.value } }))}
                 value={page.seo.title}
               />
             </label>
             <label>
-              <span>SEO description</span>
+              <span>Search description</span>
               <textarea
                 maxLength={160}
-                onChange={(event) => editPage((current) => ({
-                  ...current,
-                  seo: { ...current.seo, description: event.target.value },
-                }))}
+                onChange={(event) => editPage((current) => ({ ...current, seo: { ...current.seo, description: event.target.value } }))}
                 rows={3}
                 value={page.seo.description}
               />
             </label>
           </div>
         </details>
-
-        <section className={'website-page-check ' + (issues.length ? 'has-issues' : 'is-complete')} aria-label="Page readiness">
-          <div>
-            <strong>{issues.length ? String(issues.length) + ' page checks remain' : 'Page checks complete'}</strong>
-            <small>Last changed {formatTimestamp(page.updatedAt)}</small>
-          </div>
-          {issues.length ? (
-            <ul>{issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
-          ) : (
-            <p>Content, paths, sections, CTA, and metadata are complete for this page.</p>
-          )}
-        </section>
       </div>
 
       <footer className="website-panel-actions">

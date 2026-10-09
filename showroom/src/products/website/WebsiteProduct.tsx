@@ -79,16 +79,16 @@ const DEFAULT_NOTICE = 'Website ready to edit. Nothing has been published.'
 
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
-    title: 'Pages',
-    copy: 'Build and maintain the pages customers see.',
+    title: 'Edit page',
+    copy: 'Edit the pages your customers visit.',
   },
   inquiries: {
     title: 'Inquiries',
-    copy: 'Capture requests, assign responsibility and record the next decision.',
+    copy: 'Review customer requests and choose the next step.',
   },
   publish: {
-    title: 'Prepare website file',
-    copy: 'Check the pages, record review notes, then download the approved website file.',
+    title: 'Website file',
+    copy: 'Check your site, then download the finished files.',
   },
 }
 
@@ -170,7 +170,7 @@ export function WebsiteProduct() {
   } = useWebsiteWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedView = searchParams.get('view')
-  const [surface, setSurface] = useState<'work' | 'preview'>(() => isUntouchedWebsiteStarter(workspace) ? 'work' : 'preview')
+  const [surface, setSurface] = useState<'work' | 'preview'>('work')
   const [selectedPageId, setSelectedPageId] = useState(workspace.selectedPageId)
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
   const [starterDismissed, setStarterDismissed] = useState(() => !isUntouchedWebsiteStarter(workspace))
@@ -922,6 +922,9 @@ export function WebsiteProduct() {
   // the "N new" badge, and the export -- with every captured inquiry still sitting on disk.
   const websiteLeads = websiteInboxLeads(leadLedger)
   const leadCounts = websiteLeadCounts(leadLedger)
+  const showPageChecks = selectedPageIssues.length > 0 || selectedPage.stage === 'draft'
+  const showInquirySummary = leadCounts.new > 0
+  const showEditorInsights = showPageChecks || showInquirySummary
   const releaseRecordRequired = storageMode === 'managed'
   const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges && contentChecksPass
   const websiteTodayStep = storageIssue || canRepairLocalStorage
@@ -932,12 +935,12 @@ export function WebsiteProduct() {
       ? 'setup'
       : hasUnsavedChanges
         ? 'edit'
-        : localPreviewReady
-          ? 'preview-file'
-        : failingContentChecks.length
-          ? 'checks'
-          : leadCounts.new
-            ? 'inquiries'
+        : leadCounts.new
+          ? 'inquiries'
+          : failingContentChecks.length
+            ? 'checks'
+            : localPreviewReady
+              ? 'preview-file'
             : releaseRecordRequired && !approvalIsCurrent
               ? 'review'
               : releaseRecordRequired && !publishIsCurrent
@@ -948,23 +951,23 @@ export function WebsiteProduct() {
     : pendingRestoredDraft
       ? 'Choose which Website to customize'
     : starterSetupActive
-      ? 'Answer 5 questions'
+    ? 'Complete the short brief'
     : starterAvailable
         ? 'Add business details'
         : hasUnsavedChanges
           ? 'Save or discard edits'
-          : localPreviewReady
-            ? 'Download your website'
-          : failingContentChecks.length
-            ? 'Fix page checks'
-            : leadCounts.new
-              ? 'Review new inquiries'
+          : leadCounts.new
+            ? 'Review new inquiries'
+            : failingContentChecks.length
+              ? 'Fix page checks'
+              : localPreviewReady
+                ? 'Download your website'
               : releaseRecordRequired && !approvalIsCurrent
                 ? 'Final review'
                 : releaseRecordRequired && !publishIsCurrent
                   ? 'Save website file'
                   : releaseRecordRequired
-                    ? 'Review go-live plan'
+                    ? 'Review launch plan'
                     : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
     ? 'Saving or recovery needs attention before Website work can be trusted.'
@@ -973,21 +976,21 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Answer a short brief to prepare client-specific pages.'
       : starterAvailable
-        ? 'Add the business details once. SuperMega will prepare the pages, wording and navigation.'
+      ? 'Name and offer first; details later.'
         : hasUnsavedChanges
           ? 'Save the draft or discard it before review.'
-          : localPreviewReady
-            ? 'Download an HTML file of your saved site. This does not publish it.'
-          : failingContentChecks.length
-            ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before the website file is ready.`
-            : leadCounts.new
-              ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
+          : leadCounts.new
+            ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
+            : failingContentChecks.length
+              ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before the website file is ready.`
+              : localPreviewReady
+                ? 'Download an HTML file of your saved site. This does not publish it.'
               : releaseRecordRequired && !approvalIsCurrent
                 ? 'Final review is required before a website file is saved.'
                 : releaseRecordRequired && !publishIsCurrent
                   ? 'Save a static release file for the approved website.'
-                  : releaseRecordRequired
-                    ? 'Review the go-live checklist. Deployment still happens separately.'
+                : releaseRecordRequired
+                  ? 'Review the launch steps. This screen does not deploy your site.'
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
@@ -997,18 +1000,18 @@ export function WebsiteProduct() {
       ? 'Add business details'
       : hasUnsavedChanges
         ? 'Review edits'
-        : localPreviewReady
-          ? 'Download website file'
-        : failingContentChecks.length
-          ? 'Fix page checks'
         : leadCounts.new
           ? 'Review inquiries'
+          : failingContentChecks.length
+            ? 'Fix page checks'
+            : localPreviewReady
+              ? 'Download website file'
           : releaseRecordRequired && !approvalIsCurrent
             ? 'Review website'
             : releaseRecordRequired && !publishIsCurrent
               ? 'Create site file'
               : releaseRecordRequired
-                ? 'Download or go live'
+                ? 'Review launch plan'
                 : 'Download website'
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'
@@ -1116,16 +1119,20 @@ export function WebsiteProduct() {
       openStarterSetup()
       return
     }
-    if (localPreviewReady) {
-      downloadWebsiteFile()
-      return
-    }
-    if (hasUnsavedChanges || failingContentChecks.length) {
+    if (hasUnsavedChanges) {
       openContentSurface('work')
       return
     }
     if (leadCounts.new) {
       openWorkspaceView('inquiries')
+      return
+    }
+    if (failingContentChecks.length) {
+      openContentSurface('work')
+      return
+    }
+    if (localPreviewReady) {
+      downloadWebsiteFile()
       return
     }
     openWorkspaceView('publish')
@@ -1236,7 +1243,7 @@ export function WebsiteProduct() {
             </div>
           ) : null}
 
-          <header aria-label={view === 'content' ? 'Edit page' : view === 'inquiries' ? 'Manage inquiries' : 'Publish website'} className="website-heading" data-view={view}>
+          <header aria-label={view === 'content' ? 'Edit page' : view === 'inquiries' ? 'Manage inquiries' : 'Website file'} className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
@@ -1258,7 +1265,7 @@ export function WebsiteProduct() {
               title={!canReview ? 'Finish and save every page before preparing the website file' : undefined}
               type="button"
             >
-              Publish
+              Website file
             </button>
           </nav> : null}
 
@@ -1283,7 +1290,7 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {view === 'content' && !starterSetupActive ? <details className="website-status-disclosure" data-editing-routine={editingRoutineStatus} open={!editingRoutineStatus}>
+          {view === 'content' && !starterSetupActive && !editingRoutineStatus ? <details className="website-status-disclosure" data-editing-routine={editingRoutineStatus} open={!editingRoutineStatus}>
             <summary>Site status · {websiteAgentJob}</summary>
             <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
@@ -1512,7 +1519,7 @@ export function WebsiteProduct() {
                     onCreate={startWithBusiness}
                   />
                 ) : (
-                  <div className="website-editor-workbench">
+                  <div className="website-editor-workbench" data-insights={showEditorInsights ? 'true' : 'false'}>
                     <nav aria-label="Website pages" className="website-page-rail">
                       <div className="website-page-rail-head">
                         <span>Pages</span>
@@ -1553,8 +1560,8 @@ export function WebsiteProduct() {
                       page={selectedPage}
                     />
 
-                    <aside className="website-editor-insights">
-                      <section aria-labelledby="website-page-checks-title" className="website-insight-card">
+                    {showEditorInsights ? <aside className="website-editor-insights">
+                      {showPageChecks ? <section aria-labelledby="website-page-checks-title" className="website-insight-card">
                         <header>
                           <div>
                             <span>Page checks</span>
@@ -1573,9 +1580,9 @@ export function WebsiteProduct() {
                             }} type="button">{nextDraftPage ? 'Mark ready & next' : 'Mark page ready'}</button> : null}
                           </>
                         )}
-                      </section>
+                      </section> : null}
 
-                      <section aria-labelledby="website-inquiry-summary-title" className="website-insight-card">
+                      {showInquirySummary ? <section aria-labelledby="website-inquiry-summary-title" className="website-insight-card">
                         <header>
                           <div>
                             <span>Inquiries</span>
@@ -1589,14 +1596,14 @@ export function WebsiteProduct() {
                           <span><strong>{leadCounts.closed}</strong><small>Closed</small></span>
                         </div>
                         <button onClick={() => openWorkspaceView('inquiries')} type="button">Open inquiry workspace</button>
-                      </section>
-                    </aside>
+                      </section> : null}
+                    </aside> : null}
                   </div>
                 )
               ) : null}
 
               {view === 'publish' ? (
-                storageMode !== 'session-only' ? (
+                storageMode === 'managed' ? (
                   <PublishWorkspace
                     approvalIsCurrent={approvalIsCurrent}
                     checks={checks}
@@ -1616,7 +1623,7 @@ export function WebsiteProduct() {
                   <DownloadWorkspace
                     checks={checks}
                     onDownload={downloadWebsiteFile}
-                    retentionLabel="Available in this session"
+                    retentionLabel={storageMode === 'browser-local' ? 'Saved on this device' : 'Available in this session'}
                     workspace={workspace}
                   />
                 )

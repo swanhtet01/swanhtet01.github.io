@@ -124,13 +124,13 @@ export function websiteStarterBriefIssues(brief: WebsiteStarterBrief) {
   if (!isBoundedLine(brief.businessName, 60)) {
     issues.push({ field: 'businessName', message: 'Add a business name of 60 characters or fewer.' })
   }
-  if (!isBoundedLine(brief.audience, 70)) {
+  if (normalizedLine(brief.audience) && !isBoundedLine(brief.audience, 70)) {
     issues.push({ field: 'audience', message: 'Describe the customer in 70 characters or fewer.' })
   }
   if (!isBoundedLine(brief.offer, 140)) {
     issues.push({ field: 'offer', message: 'Describe the main offer in 140 characters or fewer.' })
   }
-  if (!isBoundedLine(brief.proof, 360)) {
+  if (normalizedLine(brief.proof) && !isBoundedLine(brief.proof, 360)) {
     issues.push({ field: 'proof', message: 'Add useful contact guidance or a verified business fact in 360 characters or fewer.' })
   }
   if (contactHref && (contactHref.length > 160 || !isSafeHttpsDestination(contactHref))) {
@@ -184,7 +184,7 @@ export function applyWebsiteStarterBrief(
   const businessName = normalizedLine(brief.businessName)
   const audience = normalizedLine(brief.audience)
   const offer = normalizedLine(brief.offer)
-  const proof = normalizedLine(brief.proof)
+  const proof = normalizedLine(brief.proof) || 'Contact the business for details.'
   const contactHref = normalizedLine(brief.contactHref)
   const offeringSections = (brief.offerings ?? '').split(/\r?\n/u).filter((line) => line.trim()).map((line, index) => {
     const separator = line.indexOf('|')
@@ -215,9 +215,9 @@ export function applyWebsiteStarterBrief(
         stage: 'draft' as const,
         navigation: { label: 'Home', visible: true },
         hero: {
-          eyebrow: `For ${audience}`,
+          eyebrow: `For ${audience || 'customers'}`,
           headline: offer,
-          summary: `${businessName} helps ${audience}.`,
+          summary: audience ? `${businessName} helps ${audience}.` : `${businessName} offers ${offer}.`,
           ctaLabel: `View ${secondaryPage.name.toLowerCase()}`,
           ctaHref: secondaryPage.slug,
         },
