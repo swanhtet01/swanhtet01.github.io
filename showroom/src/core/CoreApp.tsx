@@ -7195,8 +7195,9 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {operatingBoundary}
-    {shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null}
-    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0} closeQueue={shopCloseQueue} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} profitControl={shopProfitControl} recordStatus={shopRecordStatus} /></Suspense>
+    {shopOperatingEligible && (shopShiftRequired || Boolean(activeShift) || openShiftSessions.length > 1)
+      ? <ShopOperatingStrip {...shopOperatingView} /> : null}
+    <Suspense fallback={null}><ShopToday accountingExport={latestAccountingDownload ? { businessDate: latestAccountingDownload.artifact.businessDate, mappingReady: Boolean(latestAccountingDownload.artifact.accountMappingRevision), onDownload: downloadLatestAccountingHandoff, totalMmk: latestAccountingDownload.artifact.totalDebitMmk } : null} catalogReady={commerce.items.length > 0 && (!shopShiftRequired || Boolean(activeShift))} closeQueue={shopCloseQueue} commerce={commerce} key={confirmedLocalShop ? 'confirmed-local' : 'managed-or-unconfirmed'} localBatchFirstUseAllowed={confirmedLocalShop} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextActionLabel={shopNextAction.nextAction} nextDetail={shopAgentReason} nextOwnerGate={shopNextAction.ownerGate} nextTo={shopAgentPath} nextTrack={shopNextAction.track} productImageScope={productImageScope} profitControl={shopProfitControl} recordStatus={shopRecordStatus} /></Suspense>
     {actionGate}
   </div>
 

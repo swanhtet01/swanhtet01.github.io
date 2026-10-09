@@ -29,6 +29,22 @@ const expected = {
   'catalog-showcase': { slug: '/catalog', label: 'Ask about an item', need: 'preferred variant' },
 }
 
+test('short first-use brief produces clean headings without invented business details', () => {
+  const output = applyWebsiteStarterBrief(createInitialWorkspace(), {
+    ...brief,
+    templateId: 'business-presence',
+    audience: '',
+    offer: 'Interior styling for local homes.',
+    proof: '',
+  }, capturedAt)
+  const home = output.pages.find(page => page.slug === '/')
+  assert.equal(home.hero.headline, 'Interior styling for local homes')
+  assert.equal(home.hero.summary, 'Explore what Example Studio offers and how to get in touch.')
+  assert.equal(home.sections[0].body, 'Interior styling for local homes.')
+  assert.doesNotMatch(JSON.stringify(output.pages), /Contact the business for details|homes\.\./)
+  assert.ok(output.pages.every(page => page.stage === 'draft'))
+})
+
 test('business brief stays unsaved until commit and survives reload without release evidence', async () => {
   const values = new Map()
   const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }
@@ -165,17 +181,17 @@ test('operator starter does not prefill an unrelated business contact', () => {
     assert.match(source, new RegExp(`const EMPTY_BRIEF:[\\s\\S]*?${field}: ''`))
   }
   assert.doesNotMatch(source, /https:\/\/m\.me\/mingalarfreshmart/)
-  assert.ok(source.includes('What should customers know before contacting you?'))
-  assert.ok(source.includes('Tell us about the business'))
-  assert.ok(source.includes('SuperMega will prepare the pages, wording and navigation.'))
-  assert.ok(source.includes('Create website'))
+  assert.ok(source.includes('What do you sell or provide?'))
+  assert.ok(source.includes('Start your website'))
+  assert.ok(source.includes('Choose a starting point. Add pages, services and products whenever you need them.'))
+  assert.ok(source.includes('Create my website'))
   assert.ok(!source.includes('Choose business type'))
   assert.ok(!source.includes('View example'))
   assert.ok(!source.includes('onViewSample'))
   assert.ok(!source.includes('type="file"'))
   assert.ok(!source.includes('Preview only.'))
   assert.ok(!source.includes('Website example'))
-  assert.ok(source.includes('Use accurate public details, such as opening hours or service areas.'))
+  assert.ok(source.includes('How can customers reach you? <small>Optional</small>'))
   assert.doesNotMatch(source, /Why should customers trust it\?|same-day neighborhood delivery/)
   assert.match(styles, /\.website-starter-setup input,[\s\S]*?min-height: 2\.75rem;[\s\S]*?font-size: 1rem;/)
   assert.match(styles, /\.website-starter-setup \.website-button \{[\s\S]*?font-size: \.875rem;/)

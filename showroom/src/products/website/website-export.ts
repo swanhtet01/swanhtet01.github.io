@@ -219,7 +219,7 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
   <style>
     :root {
       color-scheme: light;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif;
       font-synthesis: none;
       --accent: #3157d5;
       --accent-strong: #2443a8;
@@ -327,6 +327,7 @@ ${activeSkipStyles}
     h1, h2 { margin: 0; line-height: 1.08; letter-spacing: -0.04em; text-wrap: balance; }
     h1 { max-width: 850px; font-size: clamp(2.35rem, 7vw, 5.6rem); }
     h2 { font-size: clamp(1.45rem, 3vw, 2.2rem); }
+    :lang(my) h1, :lang(my) h2 { line-height: 1.4; letter-spacing: 0; }
     .summary {
       max-width: 720px;
       margin: 24px 0 0;

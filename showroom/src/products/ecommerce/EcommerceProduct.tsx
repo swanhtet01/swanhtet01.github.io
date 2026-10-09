@@ -1,6 +1,5 @@
 import { lazy, Suspense, type ChangeEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { BusinessBrief } from '../AssistedDeliveryScope'
 import { readSessionCart, readSessionCartSnapshot, saveSessionCart } from './cart-session'
 import { deliveryConfirmedForScope, type DeliveryConfirmation } from './managed-request-confirmation'
 import { ecommerceShopIntentPath } from './ecommerce-shop-intent-route'
@@ -286,9 +285,11 @@ function StatusRows({ rows }: { rows: readonly (readonly string[])[] }) {
 
 const CatalogReviewPreparation = lazy(() => import('./CatalogReviewPreparation').then(module => ({ default: module.CatalogReviewPreparation })))
 
-function ecommerceWorkspaceView(search: string): EcommerceWorkspaceView {
+function ecommerceWorkspaceView(search: string, hasSavedStore: boolean): EcommerceWorkspaceView {
   const requested = new URLSearchParams(search).get('view')
-  return requested === 'setup' || requested === 'preview' ? requested : 'orders'
+  return requested === 'setup' || requested === 'preview' || requested === 'orders'
+    ? requested
+    : hasSavedStore ? 'orders' : 'preview'
 }
 
 function managedCatalogSnapshot(state: CommerceState): EcommerceCatalog {
@@ -332,6 +333,7 @@ export function EcommerceProduct() {
   const [storeName, setStoreName] = useState(initialState.storeName)
   const [summary, setSummary] = useState(initialState.summary)
   const [selectedSkus, setSelectedSkus] = useState(initialState.selectedSkus)
+  const [catalogSearch, setCatalogSearch] = useState('')
   const [merchandising, setMerchandising] = useState<CommerceStorefrontMerchandising[] | null>(initialState.merchandising)
   const [device, setDevice] = useState<PreviewDevice>(() => window.matchMedia('(max-width: 760px)').matches ? 'phone' : 'desktop')
   useEffect(() => {
@@ -341,7 +343,7 @@ export function EcommerceProduct() {
     syncDevice()
     return () => viewport.removeEventListener('change', syncDevice)
   }, [])
-  const workspaceView = ecommerceWorkspaceView(location.search)
+  const workspaceView = ecommerceWorkspaceView(location.search, Boolean(savedDraft))
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
     source: '',
@@ -400,9 +402,9 @@ export function EcommerceProduct() {
     if (params.get('workspace') === '1' && params.get('setup') !== '1') return
     params.set('workspace', '1')
     params.delete('setup')
-    params.set('view', ecommerceWorkspaceView(location.search))
+    params.set('view', ecommerceWorkspaceView(location.search, Boolean(savedDraft)))
     navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true })
-  }, [catalogHydrating, location.pathname, location.search, managedIdentity, navigate])
+  }, [catalogHydrating, location.pathname, location.search, managedIdentity, navigate, savedDraft])
 
   useEffect(() => {
     let current = true
@@ -639,6 +641,18 @@ export function EcommerceProduct() {
   const draftStorageBlocked = !managedIdentity
     && (draftReadStatus === 'invalid' || draftReadStatus === 'unavailable')
   const portalViewOnly = Boolean(managedIdentity && !managedCanWrite)
+  const canSaveStorefront = !sampleCatalogPreview
+    && !portalViewOnly
+    && hasUnsavedStorefront
+    && Boolean(previewResult.preview)
+    && Boolean(digest)
+    && !digestError
+    && !catalogHydrating
+    && !selectionReviewRequired
+    && !draftBusy
+    && !draftStorageBlocked
+    && !managedCatalogDigestPending
+    && !managedCatalogDigestError
 
   useEffect(() => {
     let current = true
@@ -1686,18 +1700,11 @@ export function EcommerceProduct() {
   ] as const
   const requestWaitingInLocalMode = customerRequestState === 'waiting_shop_review' && !managedIdentity
   const requestDeliveryVerified = Boolean(managedIdentity && deliveryConfirmedForScope(customerRequestDeliveryConfirmed, buyingScope))
-  const requestWaitingQueueLabel = requestWaitingInLocalMode ? 'Saved locally' : requestDeliveryVerified ? 'Request sent' : 'Delivery unverified'
   const ecommerceWaitingHeadline = requestWaitingInLocalMode ? 'Order request saved' : requestDeliveryVerified ? 'Request sent to Shop' : 'Request saved — verify Shop delivery'
   const ecommerceWaitingSummary = requestWaitingInLocalMode
     ? 'Saved on this device for Shop review. No order, charge, stock, delivery, or customer message changed.'
     : requestDeliveryVerified ? 'No charge or stock change happens until Shop confirms the order.' : 'This device retained the request, but delivery to Company Shop is not verified in this session. Check the request before retrying. No charge or stock change is confirmed.'
   const ecommerceWaitingMetric = requestWaitingInLocalMode ? 'Local receipt' : requestDeliveryVerified ? 'Review waiting' : 'Delivery unverified'
-  const waitingShopReviewReason = requestWaitingInLocalMode
-    ? 'The customer request is retained only in browser-local recovery until the operator opens the Shop review draft.'
-    : requestDeliveryVerified ? 'The customer request is retained in the Company Shop inbox for operator review.' : 'A local recovery record does not prove Company Shop received the request.'
-  const waitingShopReviewGate = requestWaitingInLocalMode
-    ? 'Open the local Shop review draft before claiming Shop has received the request.'
-    : requestDeliveryVerified ? 'The Shop operator confirms stock, promise, payment, and delivery.' : 'Verify or retry the same request before claiming Company Shop delivery.'
   const orderingReadinessStage = importNeeded
     ? 'Import Shop catalog'
     : sampleCatalogPreview
@@ -1795,12 +1802,6 @@ export function EcommerceProduct() {
     })
     setDraftNotice('Ecommerce go-live file downloaded. No product, customer, payment, delivery, stock, Shop, or company account state changed.')
   }
-  const aiDeskRows = [
-    ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
-    ['Merchandise', selectedSkus.length ? `${selectedSkus.length} selected` : 'Pick products'],
-    ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
-    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? requestWaitingQueueLabel : 'No queue'],
-  ] as const
   const aiAgentJob = sampleCatalogPreview
     ? 'Replace sample products'
     : pendingManagedRequests.length
@@ -1818,43 +1819,6 @@ export function EcommerceProduct() {
           : managedIdentity
             ? 'Open store for ordering'
             : 'Open customer ordering'
-  const aiAgentReason = sampleCatalogPreview
-    ? 'Example products cannot accept customer requests. Replace them in Shop, then review and save the customer view.'
-    : pendingManagedRequests.length
-      ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
-    : customerRequestState === 'waiting_shop_review'
-      ? waitingShopReviewReason
-    : ecommerceActiveOrderCount
-      ? `${ecommerceActiveOrderCount} Ecommerce order${ecommerceActiveOrderCount === 1 ? '' : 's'} now use the Shop-owned fulfilment record.`
-    : importNeeded
-      ? 'The order desk needs a real Shop catalog before the store can sell.'
-      : storefrontSetupRequired
-        ? 'Save the customer view before quotes and order review are trusted.'
-        : buyingCart.length
-          ? `${buyingCart.length} cart line${buyingCart.length === 1 ? '' : 's'} ready for quote review.`
-          : managedIdentity
-            ? 'The store is saved and ready for a customer request.'
-            : 'The store is ready for customer orders.'
-  const aiOwnerGate = sampleCatalogPreview
-    ? 'Replace the example products in Shop before opening customer ordering.'
-    : pendingManagedRequests.length
-      ? 'Shop confirms stock, delivery, payment, and customer contact.'
-    : customerRequestState === 'waiting_shop_review'
-      ? waitingShopReviewGate
-    : ecommerceActiveOrderCount
-      ? 'Shop remains authoritative for fulfilment, payment, cancellation, and returns.'
-    : importNeeded
-      ? 'Review the imported catalog before going live.'
-      : storefrontSetupRequired
-        ? 'Save the exact customer view first.'
-      : buyingCart.length
-          ? 'Review the quote before sending to Shop.'
-          : 'Payment and customer messages stay locked.'
-  const aiAgentQueueRows = [
-    ['Next step', aiAgentJob],
-    ['Why', aiAgentReason],
-    ['Review', aiOwnerGate],
-  ] as const
   const orderAutopilotStage = sampleCatalogPreview
     ? 'Replace sample products'
     : importNeeded
@@ -1942,9 +1906,9 @@ export function EcommerceProduct() {
                 ? 'Prepare next order'
                 : 'Open customer ordering'
   const ecommerceTodayMetrics = [
-    ['1. Store', sampleCatalogPreview ? 'Sample' : savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Ready'],
-    ['2. Cart', ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
-    ['3. Shop', actionablePendingManagedRequests.length
+    ['Store', sampleCatalogPreview ? 'Sample' : savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Ready'],
+    ['Cart', ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
+    ['Order follow-up', actionablePendingManagedRequests.length
       ? `${actionablePendingManagedRequests.length} to review`
       : expiredPendingRequestCount
         ? `${expiredPendingRequestCount} expired · requote required`
@@ -1956,6 +1920,16 @@ export function EcommerceProduct() {
           ? `${ecommerceCompletedOrderCount} completed`
           : 'No order yet'],
   ] as const
+  const ecommerceTodayActionOpensStore = !sampleCatalogPreview
+    && !importNeeded
+    && !storefrontSetupRequired
+    && orderImportReview?.status !== 'ready'
+    && orderImportReview?.status !== 'blocked'
+    && !ecommerceAttention
+    && customerRequestState !== 'confirmed'
+    && !(customerRequestState === 'waiting_shop_review' && !ecommerceTodayCartUnits)
+    && !(ecommerceActiveOrderCount && !ecommerceTodayCartUnits)
+    && !ecommerceTodayCartUnits
   const orderDeskRequest = requestInboxNextRequest ?? actionablePendingManagedRequests[0] ?? null
   const orderDeskRequestMinutes = orderDeskRequest
     ? Math.max(0, Math.round((orderOpsNow - Date.parse(orderDeskRequest.createdAt)) / 60_000))
@@ -1983,19 +1957,16 @@ export function EcommerceProduct() {
     ],
   } : null
   function openOrderDeskException(filter: CommerceOrderDeskFilter) {
-    if (filter === 'refund') {
-      navigate('/shop/?tab=orders')
-      return
-    }
-    setRequestInboxFilter(filter)
-    const request = actionablePendingManagedRequests.find((candidate) => filter === 'stock'
+    const request = filter === 'refund' ? null : actionablePendingManagedRequests.find((candidate) => filter === 'stock'
       ? requestHasStockRisk(candidate)
       : filter === 'expiring'
         ? requestIsExpiring(candidate)
         : filter === 'payment'
           ? requestNeedsPaymentReview(candidate)
           : candidate.fulfilment === 'delivery')
-    if (request) navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(request.id)}`)
+    navigate(request
+      ? `/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(request.id)}`
+      : '/shop/?tab=orders')
   }
   function openOrderDeskNext() {
     if (orderDeskRequest) {
@@ -2076,10 +2047,6 @@ export function EcommerceProduct() {
     })
   }, [aiAgentJob, location.pathname, location.search])
 
-  const showAssistedCatalogSetup = !catalogHydrating && !managedIdentity
-    && catalog.source !== 'unavailable' && !draftIssue && !draftBusy
-  const assistedCatalogEntry = showAssistedCatalogSetup
-    && new URLSearchParams(location.search).get('workspace') !== '1'
   const workspaceCopy = workspaceView === 'orders'
     ? {
         title: 'Orders',
@@ -2087,12 +2054,24 @@ export function EcommerceProduct() {
           ? 'Review customer requests and resolve exceptions. Shop confirms orders, stock, delivery and payment.'
           : 'Review customer requests on this device. Requests stay on this device until Shop review.',
       }
-    : workspaceView === 'preview'
-      ? { title: 'Store', copy: 'Browse the customer storefront and prepare one order for Shop confirmation.' }
-      : { title: 'Store setup', copy: 'Choose the catalog, store details, and product presentation customers will see.' }
+    : { title: 'Online store', copy: 'Choose the products customers can order, then review the store they will use.' }
+  const catalogSearchTerm = catalogSearch.trim().toLowerCase()
+  const visibleCatalogItems = catalogSearchTerm
+    ? catalog.items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLowerCase().includes(catalogSearchTerm))
+    : catalog.items
 
-  if ((showAssistedCatalogSetup && new URLSearchParams(location.search).get('setup') === '1') || (assistedCatalogEntry && new URLSearchParams(location.search).get('workspace') !== '1')) {
-    return <BusinessBrief product="ecommerce" />
+  if (!catalogHydrating && sampleCatalogPreview) {
+    return (
+      <div className="workspace-screen ecommerce-product">
+        <header className="ecommerce-heading">
+          <div><span className="core-eyebrow">Commerce</span><h1>Add your products to Shop</h1>
+            <p>Commerce uses the products, prices, and stock you manage in Shop.</p></div>
+        </header>
+        <section className="core-panel" aria-label="Connect the Shop catalog">
+          <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-import">Open Shop inventory</Link>
+        </section>
+      </div>
+    )
   }
 
   if (!catalogHydrating && !managedIdentity && catalog.source === 'shop-local'
@@ -2100,12 +2079,11 @@ export function EcommerceProduct() {
     return (
       <div className="workspace-screen ecommerce-product">
         <header className="ecommerce-heading">
-          <div><span className="core-eyebrow">Commerce</span><h1>Add your products</h1>
-            <p>Your online store uses the same products and prices as Shop.</p></div>
+          <div><span className="core-eyebrow">Commerce</span><h1>Add products in Shop</h1>
+            <p>Your online store uses the same prices and stock.</p></div>
         </header>
-        <section className="core-panel" aria-label="Store catalog setup">
-          <p>Add products individually or upload your catalog to get started.</p>
-          <Link className="core-button primary" to="/shop/?tab=inventory">Add products</Link>
+        <section className="core-panel" aria-label="Open Shop inventory">
+          <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-import">Add products</Link>
         </section>
       </div>
     )
@@ -2127,19 +2105,17 @@ export function EcommerceProduct() {
           <h1 ref={workspaceHeadingRef} tabIndex={-1}>{workspaceCopy.title}</h1>
           <p>{workspaceCopy.copy}</p>
         </div>
-        {workspaceView === 'setup' && showAssistedCatalogSetup && !assistedCatalogEntry ? <a className="core-button secondary" href="/ecommerce/?setup=1">Get catalog help</a> : null}
       </header>
 
-      {!assistedCatalogEntry ? <nav aria-label="Commerce workspace" className="ecommerce-mode-nav" id="ecommerce-workspace-nav">
+      <nav aria-label="Commerce workspace" className="ecommerce-mode-nav" id="ecommerce-workspace-nav">
         <Link aria-current={workspaceView === 'orders' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'orders')}>Orders</Link>
-        <Link aria-current={workspaceView === 'preview' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'preview')}>Store</Link>
-        <Link aria-current={workspaceView === 'setup' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'setup')}>Store setup</Link>
-      </nav> : null}
+        <Link aria-current={workspaceView !== 'orders' ? 'page' : undefined} to={ecommerceWorkspacePath(location.pathname, location.search, 'preview')}>Online store</Link>
+      </nav>
 
       {workspaceView === 'orders' ? <div className="ecommerce-orders-workspace" id="ecommerce-orders-panel">
       <CommerceOrderDesk
         activeOrderCount={ecommerceActiveOrderCount}
-        contextLabel={`${sourceLabel} · Stock, payment, delivery, and the final order stay in Shop.`}
+        contextLabel={`${sourceLabel} · Shop reviews each customer request before it becomes an order.`}
         exceptionCounts={{
           stock: orderOpsStockRiskCount,
           expiring: orderOpsExpiringCount,
@@ -2155,6 +2131,7 @@ export function EcommerceProduct() {
         onPrimaryAction={runOrderAutopilot}
         primaryActionDisabled={catalogHydrating}
         primaryActionLabel={ecommerceTodayAction}
+        primaryActionOpensStore={ecommerceTodayActionOpensStore}
         state={ecommerceTodayState}
         statusRows={ecommerceTodayMetrics}
         summary={ecommerceTodaySummary}
@@ -2164,31 +2141,6 @@ export function EcommerceProduct() {
         <summary><span><strong>Extra order tools</strong></span></summary>
         <p>Prepare and review here. Confirm orders in Shop; send customer messages separately.</p>
         <div className="ecommerce-business-controls-content">
-      <section aria-label="Order workspace" className="ecommerce-ai-desk">
-        <div>
-          <span className="core-eyebrow">Order workspace</span>
-          <h2>{sampleCatalogPreview ? 'Sample storefront is preview-only' : pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : storefrontSetupRequired ? 'Save store before orders' : managedIdentity ? 'Ready to take reviewed orders' : 'Ready to take order requests'}</h2>
-          <p>{sampleCatalogPreview
-            ? 'Example products cannot accept customer requests. Replace them in Shop, then review and save the customer view.'
-            : pendingManagedRequests.length
-              ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
-            : importNeeded
-              ? 'Upload or connect the Shop catalog once. The customer view, quote, and order review use that source.'
-              : storefrontSetupRequired
-                ? 'Save the customer view so the quote, cart, and Shop review all use the same products and prices.'
-                : managedIdentity
-                  ? 'Customers can build a cart; Shop still confirms the accountable order before anything consequential happens.'
-                  : 'Add products to a cart and review the order request. Nothing reaches Shop until confirmation.'}</p>
-        </div>
-        <div className="ecommerce-ai-desk-queue">
-          <StatusRows rows={aiDeskRows} />
-        </div>
-        <div className="ecommerce-ai-agent-queue" aria-label="Ecommerce next step" role="group">
-          <StatusRows rows={aiAgentQueueRows} />
-        </div>
-        <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Open next step</button>
-      </section>
-
       <section aria-label="Import customer orders" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">
         <div>
           <span className="core-eyebrow">Import customer orders</span>
@@ -2389,19 +2341,8 @@ export function EcommerceProduct() {
       {workspaceView !== 'orders' ? <div className="ecommerce-workspace" data-view={workspaceView}>
         <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
           <div className="panel-head">
-            <div><span className="core-eyebrow">1 · Storefront</span><h2 id="ecommerce-setup-title">Choose what customers see</h2></div>
+            <div><span className="core-eyebrow">1 · Storefront</span><h2 id="ecommerce-setup-title">Choose products</h2></div>
             <span className="status-pill bounded">{selectedSkus.length}/8</span>
-          </div>
-
-          <div className="ecommerce-copy-fields">
-            <label>
-              <span>Store name</span>
-              <input disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} />
-            </label>
-            <label>
-              <span>Short description</span>
-              <textarea disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} rows={3} value={summary} />
-            </label>
           </div>
 
           {merchandising ? (
@@ -2421,11 +2362,15 @@ export function EcommerceProduct() {
 
           <div className="ecommerce-catalog-head">
             <strong>Shop products</strong>
-            <small>Select 1–8. Price and availability stay locked.</small>
+            <small>Up to 8. Prices and stock in Shop.</small>
           </div>
+          {catalog.items.length > 8 ? <label>
+            <span className="sr-only">Search Shop products</span>
+            <input onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Name or SKU" type="search" value={catalogSearch} />
+          </label> : null}
           {catalog.error ? <p className="form-notice warning-text">{catalog.error}</p> : null}
           <div className="ecommerce-catalog-list">
-            {catalog.items.map((item) => {
+            {visibleCatalogItems.length ? visibleCatalogItems.map((item) => {
               const selected = selectedSkus.includes(item.sku)
               const presentation = merchandising?.find((entry) => entry.sku === item.sku)
               return (
@@ -2442,7 +2387,18 @@ export function EcommerceProduct() {
                   <i aria-hidden="true">{selected ? '✓' : '+'}</i>
                 </button>
               )
-            })}
+            }) : <p className="form-notice" role="status">No matches.</p>}
+          </div>
+
+          <div className="ecommerce-copy-fields">
+            <label>
+              <span>Store name</span>
+              <input disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} />
+            </label>
+            <label>
+              <span>Description (optional)</span>
+              <textarea disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} rows={3} value={summary} />
+            </label>
           </div>
 
           <div
@@ -2512,17 +2468,7 @@ export function EcommerceProduct() {
               {hasUnsavedFieldChanges ? <button className="core-button secondary" disabled={portalViewOnly || catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button> : null}
               <button
                 className="core-button primary"
-                disabled={portalViewOnly
-                  || !hasUnsavedStorefront
-                  || !previewResult.preview
-                  || !digest
-                  || Boolean(digestError)
-                  || catalogHydrating
-                  || selectionReviewRequired
-                  || draftBusy
-                  || draftStorageBlocked
-                  || managedCatalogDigestPending
-                  || Boolean(managedCatalogDigestError)}
+                disabled={!canSaveStorefront}
                 id="ecommerce-save-storefront"
                 onClick={() => void saveCurrentStorefront()}
                 ref={storefrontSaveRef}
@@ -2543,21 +2489,27 @@ export function EcommerceProduct() {
           {!buyingReady && !catalogHydrating ? (
             <div className="ecommerce-preview-gate">
               <span>
-                <strong>{sampleCatalogPreview ? 'Sample storefront is preview-only' : 'Save this storefront before taking customer requests'}</strong>
+                <strong>{sampleCatalogPreview ? 'Sample storefront is preview-only' : 'Store not saved'}</strong>
                 <small>{sampleCatalogPreview
                   ? 'Example products cannot accept customer requests. Replace them in Shop, then review and save the customer view.'
-                  : 'Review the products, prices, and store details, then save this exact customer view.'}</small>
+                  : canSaveStorefront
+                    ? 'These products and prices come from Shop. Save this store to accept customer requests.'
+                    : 'Review the product selection and prices before saving your store.'}</small>
               </span>
-              <button
-                aria-controls={sampleCatalogPreview ? undefined : 'ecommerce-setup-panel'}
-                className="core-button primary"
-                onClick={sampleCatalogPreview ? () => navigate('/shop/?tab=inventory') : finishStorefrontSetup}
-                type="button"
-              >
-                {sampleCatalogPreview ? 'Replace sample products' : 'Edit store'}
-              </button>
+              <div className="ecommerce-preview-gate-actions">
+                {canSaveStorefront ? <button className="core-button primary" onClick={() => void saveCurrentStorefront()} type="button">Save store</button> : null}
+                <button
+                  aria-controls={sampleCatalogPreview ? undefined : 'ecommerce-setup-panel'}
+                  className={`core-button ${canSaveStorefront ? 'secondary' : 'primary'}`}
+                  onClick={sampleCatalogPreview ? () => navigate('/shop/?tab=inventory') : finishStorefrontSetup}
+                  type="button"
+                >
+                  {sampleCatalogPreview ? 'Replace sample products' : 'Edit store'}
+                </button>
+              </div>
             </div>
           ) : null}
+          {draftNotice ? <p className="ecommerce-save-notice" role="status">{draftNotice}</p> : null}
 
           <div className={`ecommerce-preview-frame is-${device}`}>
             {previewResult.preview ? (

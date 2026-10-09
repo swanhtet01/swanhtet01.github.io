@@ -25,6 +25,7 @@ type CommerceOrderDeskProps = {
   onPrimaryAction: MouseEventHandler<HTMLButtonElement>
   primaryActionDisabled: boolean
   primaryActionLabel: string
+  primaryActionOpensStore: boolean
   state: 'attention' | 'ready' | 'setup'
   statusRows: readonly (readonly string[])[]
   summary: string
@@ -50,24 +51,42 @@ export function CommerceOrderDesk({
   onPrimaryAction,
   primaryActionDisabled,
   primaryActionLabel,
+  primaryActionOpensStore,
   state,
   statusRows,
   summary,
 }: CommerceOrderDeskProps) {
   const openExceptionCount = Object.values(exceptionCounts).reduce((total, count) => total + count, 0)
   const activeExceptions = EXCEPTIONS.filter(({ filter }) => exceptionCounts[filter] > 0)
-  const primaryOpensStore = primaryActionLabel === 'Open customer ordering' || primaryActionLabel === 'Prepare next order'
+  const setupWithoutOrders = state === 'setup' && !nextRequest && activeOrderCount === 0
+  const workItemWithoutExceptions = !openExceptionCount && Boolean(nextRequest || activeOrderCount)
+  const focusedEmptyState = state !== 'attention' && !nextRequest && activeOrderCount === 0 && !openExceptionCount
+
+  if (focusedEmptyState) {
+    return (
+      <section aria-labelledby="commerce-order-desk-title" className="commerce-order-desk commerce-order-focused" data-state={state}>
+        <header className="commerce-order-desk-head">
+          <div>
+            <span className="core-eyebrow">{state === 'setup' ? 'Online store' : 'Online orders'}</span>
+            <h2 id="commerce-order-desk-title">{headline}</h2>
+            <p>{summary}</p>
+          </div>
+          <button className="core-button primary" disabled={primaryActionDisabled} onClick={onPrimaryAction} type="button">{primaryActionLabel}</button>
+        </header>
+      </section>
+    )
+  }
 
   return (
     <section aria-labelledby="commerce-order-desk-title" className="commerce-order-desk" data-state={state}>
       <header className="commerce-order-desk-head">
         <div>
-          <span className="core-eyebrow">Commerce operating desk</span>
+          <span className="core-eyebrow">Online orders</span>
           <h2 id="commerce-order-desk-title">{headline}</h2>
           <p>{summary}</p>
         </div>
         <div className="commerce-order-desk-actions">
-          {!primaryOpensStore ? <button className="core-button secondary" onClick={onOpenStore} type="button">View customer store</button> : null}
+          {!primaryActionOpensStore ? <button className="core-button secondary" onClick={onOpenStore} type="button">View customer store</button> : null}
           <button className="core-button primary" disabled={primaryActionDisabled} onClick={onPrimaryAction} type="button">{primaryActionLabel}</button>
         </div>
       </header>
@@ -100,6 +119,9 @@ export function CommerceOrderDesk({
           </> : openExceptionCount ? <>
             <h3>Resolve the next exception.</h3>
             <p>{openExceptionCount} recorded check{openExceptionCount === 1 ? '' : 's'} need an owner decision before the order flow is clear.</p>
+          </> : state === 'setup' ? <>
+            <h3>Finish your store first.</h3>
+            <p>Customers cannot submit an order yet. Check the customer view, then save the products and prices you want to offer.</p>
           </> : <>
             <h3>Ready for the next customer.</h3>
             <p>The customer store can take an order request. Shop remains in control of stock, payment, and fulfilment.</p>
@@ -108,7 +130,7 @@ export function CommerceOrderDesk({
 
         <aside aria-label="Commerce exceptions" className="commerce-exception-queue">
           <div className="commerce-order-card-head">
-            <div><span className="core-eyebrow">Exceptions</span><h3>{openExceptionCount ? `${openExceptionCount} need attention` : 'Queue clear'}</h3></div>
+            <div><span className="core-eyebrow">Needs attention</span><h3>{openExceptionCount ? `${openExceptionCount} to review` : setupWithoutOrders ? 'No requests yet' : workItemWithoutExceptions ? 'No exception flags' : 'All clear'}</h3></div>
           </div>
           {activeExceptions.length ? <div className="commerce-exception-list">
             {activeExceptions.map(({ filter, label, detail }) => {
@@ -118,9 +140,9 @@ export function CommerceOrderDesk({
                 <b>{count}</b>
               </button>
             })}
-          </div> : <div className="commerce-exception-clear">
-            <span aria-hidden="true">✓</span>
-            <p><strong>No recorded exceptions</strong><small>Stock, payment, quotes, delivery, and refunds are clear.</small></p>
+          </div> : <div className="commerce-exception-clear" data-state={setupWithoutOrders ? 'setup' : 'ready'}>
+            <span aria-hidden="true">{setupWithoutOrders ? '→' : '✓'}</span>
+            <p><strong>{setupWithoutOrders ? 'Complete store setup' : workItemWithoutExceptions ? 'No extra checks' : 'No items need review'}</strong><small>{setupWithoutOrders ? 'Order checks appear here once customers can submit requests.' : nextRequest ? 'Open the request in Shop to confirm the order.' : activeOrderCount ? 'Continue fulfilment in Shop.' : 'Stock, payment, quotes, delivery, and refunds look clear.'}</small></p>
           </div>}
         </aside>
       </div>
