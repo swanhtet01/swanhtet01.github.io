@@ -1326,8 +1326,8 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {view === 'content' && !starterSetupActive && !editingRoutineStatus ? <details className="website-status-disclosure" data-editing-routine={editingRoutineStatus} open={!editingRoutineStatus}>
-            <summary>Site status · {websiteAgentJob}</summary>
+          {view === 'content' && !starterSetupActive && !editingRoutineStatus ? <details className="website-status-disclosure">
+            <summary>Next: {websiteAgentJob} · {readinessSummary}</summary>
             <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
               <span className="core-eyebrow">Next action</span>

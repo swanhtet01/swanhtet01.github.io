@@ -391,16 +391,16 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </article>
 
       <aside className="shop-operations-rail">
-        <article aria-label="Sales insight" className="shop-sales-pulse">
-          <header><span><small>Sales insight</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span><b data-direction={salesPulse.today.count === 0 || salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{salesPulse.today.count ? formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk) : 'Today'}</b></header>
-          {salesPulse.today.count ? <><div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
+        {salesPulse.today.count ? <article aria-label="Sales insight" className="shop-sales-pulse">
+          <header><span><small>Sales insight</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span><b data-direction={salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk)}</b></header>
+          <><div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
             {salesPulse.points.map((point) => <span aria-label={`${point.label}: ${formatMmk(point.grossMmk)}`} key={point.hour}>
               <i aria-hidden="true" style={{ height: `${Math.max(point.grossMmk ? 12 : 2, Math.round((point.grossMmk / maximumPulseMmk) * 100))}%` }} />
               <small>{point.hour % 6 === 0 ? point.label : ''}</small>
             </span>)}
           </div>
-          <p>{salesPulse.today.count} completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} today</p></> : <div className="shop-sales-empty" role="status"><strong>No sales recorded yet</strong><span>Today’s results will appear after your first sale.</span></div>}
-        </article>
+          <p>{salesPulse.today.count} completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} today</p></>
+        </article> : null}
 
         <section aria-label="Recommended next" className="shop-next-focus" data-track={nextTrack.toLowerCase()}>
           <div className="shop-next-focus-copy">
