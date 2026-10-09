@@ -407,10 +407,14 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
 
             {financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount) ? accountingExport ? <button className="shop-task-row shop-finance-task" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">
               <span><strong>Export</strong><small>Accountant CSV · {accountingExport.businessDate} · {accountingExport.mappingReady ? 'Mapped' : 'Unmapped'}</small></span>
-            </button> : taskLink('Close payments', closeQueue.exceptionCount
-                  ? `${closeQueue.exceptionCount} exceptions`
-                : closeQueue.orderCount ? `${closeQueue.orderCount} ready · ${formatMmk(closeQueue.totalMmk)}`
-                  : closeQueue.latestCloseRecorded ? 'Close on file' : 'Nothing to close', closeQueue.actionLabel, closeQueue.target, 'Not reconciled.') : null}
+            </button> : <Link aria-label="Cash and wallet close queue" aria-description="Not reconciled. Expected from completed, reconciled Shop orders. Wallet and bank settlement is not independently confirmed." to={closeQueue.target}>
+              <span><strong>Close payments</strong><small>{closeQueue.paymentMethods.length
+                ? closeQueue.paymentMethods.map((method) => `${method.paymentMethod} ${formatMmk(method.totalMmk)}`).join(' · ')
+                : closeQueue.exceptionCount ? `${closeQueue.exceptionCount} exceptions`
+                  : closeQueue.orderCount ? `${closeQueue.orderCount} ready · ${formatMmk(closeQueue.totalMmk)}`
+                    : closeQueue.latestCloseRecorded ? 'Close on file' : 'Nothing to close'}</small></span>
+              <b>{closeQueue.actionLabel}</b>
+            </Link> : null}
 
           </div>
         </section>
