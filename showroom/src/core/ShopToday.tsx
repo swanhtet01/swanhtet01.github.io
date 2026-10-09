@@ -99,8 +99,14 @@ const yangonDay = new Intl.DateTimeFormat('en-GB', {
   weekday: 'short',
 })
 
+function ShopSummaryIcon({ label }: { label: string }) {
+  if (label === "Today's sales") return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path d="M4 4v16h16M8 15v-3m5 3V8m5 7V5" /></svg>
+  if (label === 'Open orders') return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path d="M6 3.75h8.5L19 8.25v12H6zM14 4v5h5M9 13h7m-7 4h7" /></svg>
+  return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path d="m12 3 9 17H3zM12 9v5m0 3h.01" /></svg>
+}
+
 function formatSalesComparison(deltaBasisPoints: number | null, previousGrossMmk: number) {
-  if (!previousGrossMmk || deltaBasisPoints === null) return 'No retained sales yesterday'
+  if (!previousGrossMmk || deltaBasisPoints === null) return 'No sales yesterday'
   if (deltaBasisPoints === 0) return 'Level with yesterday'
   const percentage = Math.abs(deltaBasisPoints) / 100
   return `${deltaBasisPoints > 0 ? 'Up' : 'Down'} ${percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}% vs yesterday`
@@ -334,6 +340,11 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
   const remainingPriorityCount = profitControl.hiddenPriorityCount + Math.max(0, profitControl.priorities.length - visiblePriorities.length)
   const financeModule = modules.find((module) => module.label === 'Finance controls')
   const attentionPriority = visiblePriorities.find((priority) => priority.id !== 'close_ready')
+  const hasSecondaryWork = recordStatus.badge === 'Paused'
+    || recordStatus.badge === 'Backup advised'
+    || Boolean(financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount))
+    || Boolean(attentionPriority)
+    || remainingPriorityCount > 0
   const maximumPulseMmk = Math.max(1, ...salesPulse.points.map((point) => point.grossMmk))
 
   return <div className="shop-today">
@@ -347,6 +358,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </header>
       <div className="shop-today-metrics" aria-label="Shop summary">
         {summaryMetrics.map((metric, index) => <article data-index={index} data-tone={metric.tone ?? 'ready'} key={metric.label}>
+          <span className="shop-today-metric-icon"><ShopSummaryIcon label={metric.label} /></span>
           <small>{metric.label}</small>
           <strong>{metric.value}</strong>
           <span>{metric.detail}</span>
@@ -379,15 +391,15 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </article>
 
       <aside className="shop-operations-rail">
-        <article aria-label="Sales pulse" className="shop-sales-pulse">
-          <header><span><small>Sales pulse</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span><b data-direction={salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk)}</b></header>
+        <article aria-label="Sales insight" className="shop-sales-pulse">
+          <header><span><small>Sales insight</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span><b data-direction={salesPulse.today.count === 0 || salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{salesPulse.today.count ? formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk) : 'Today'}</b></header>
           {salesPulse.today.count ? <><div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
             {salesPulse.points.map((point) => <span aria-label={`${point.label}: ${formatMmk(point.grossMmk)}`} key={point.hour}>
               <i aria-hidden="true" style={{ height: `${Math.max(point.grossMmk ? 12 : 2, Math.round((point.grossMmk / maximumPulseMmk) * 100))}%` }} />
               <small>{point.hour % 6 === 0 ? point.label : ''}</small>
             </span>)}
           </div>
-          <p>{salesPulse.today.count} retained completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} · samples excluded</p></> : <p>No sales yet today. Your first sale will appear here.</p>}
+          <p>{salesPulse.today.count} completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} today</p></> : <div className="shop-sales-empty" role="status"><strong>No sales recorded yet</strong><span>Today’s results will appear after your first sale.</span></div>}
         </article>
 
         <section aria-label="Recommended next" className="shop-next-focus" data-track={nextTrack.toLowerCase()}>
@@ -400,7 +412,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
             </details>
           </div>
           <div className="shop-today-actions"><Link className="core-button primary shop-decision-action" to={nextTo}>{nextActionLabel}</Link></div>
-        </section>
+          {hasSecondaryWork ? <div className="shop-next-focus-secondary">
 
         {recordStatus.badge === 'Paused' || recordStatus.badge === 'Backup advised' ? <article aria-label="Record safety" className="shop-next-compact">
           <header><span className="core-eyebrow">Records</span><b>{recordStatus.badge}</b></header>
@@ -436,6 +448,8 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
           <span><small>Attention</small><strong>{attentionPriority.title}</strong><small><strong>Next:</strong> {attentionPriority.actionLabel}</small></span><b>{formatShopProfitControlMetric(attentionPriority.metric)}</b>
         </Link> : null}
         {remainingPriorityCount ? <p className="shop-decision-more">{remainingPriorityCount} more lower-priority {remainingPriorityCount === 1 ? 'signal is' : 'signals are'} available in Advanced controls.</p> : null}
+          </div> : null}
+        </section>
       </aside>
     </section>
 
