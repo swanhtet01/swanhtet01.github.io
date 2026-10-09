@@ -25,6 +25,7 @@ import {
   websiteLeadCounts,
   writeWebsiteLeadLedger,
   WEBSITE_LEAD_LEDGER_KEY,
+  type WebsiteLead,
 } from './website-leads'
 import type { WebsiteReleaseState } from './website-release-foundation'
 import {
@@ -154,6 +155,35 @@ function formatRecoveryDate(value: string) {
   return Number.isNaN(timestamp) ? 'Saved recovery' : new Date(timestamp).toLocaleString()
 }
 
+type InquiryDraft = Pick<WebsiteLead, 'owner' | 'decisionNote'>
+
+function InquiryDetail({ lead, draft, onDraft, readOnly, onReview }: {
+  lead: WebsiteLead
+  draft: InquiryDraft
+  onDraft: (draft: InquiryDraft) => void
+  readOnly: boolean
+  onReview: (id: string, status: 'qualified' | 'closed', owner: string, note: string) => Promise<void>
+}) {
+  const { owner, decisionNote: note } = draft
+  const [busy, setBusy] = useState(false)
+  async function review(status: 'qualified' | 'closed') {
+    if (busy || readOnly || owner.trim().length < 2) return
+    setBusy(true)
+    try { await onReview(lead.id, status, owner, note) } finally { setBusy(false) }
+  }
+  return <section aria-label={`Inquiry from ${lead.name}`} className="website-inquiry-detail" aria-busy={busy}>
+    <header><span className="website-inquiry-avatar" aria-hidden="true">{lead.name.slice(0, 1)}</span><div><h3>{lead.name}</h3><p>{lead.contact}</p></div><span className="website-inquiry-state">{lead.status}</span></header>
+    <p className="website-inquiry-date">{formatRecoveryDate(lead.createdAt)} · {lead.sourcePage}</p>
+    <p className="website-inquiry-message">{lead.request}</p>
+    {lead.status !== 'closed' ? <form onSubmit={(event) => { event.preventDefault(); void review('qualified') }}>
+      <label>Assigned to<input disabled={readOnly || busy} maxLength={120} minLength={2} onChange={(event) => onDraft({ ...draft, owner: event.target.value })} placeholder="Name or team" required value={owner} /></label>
+      <label><span>Note <small>optional</small></span><textarea disabled={readOnly || busy} maxLength={500} onChange={(event) => onDraft({ ...draft, decisionNote: event.target.value })} placeholder="Add the next step…" rows={3} value={note} /></label>
+      <div className="website-inquiry-actions"><button className="website-button is-primary" disabled={readOnly || busy || owner.trim().length < 2} type="submit">{busy ? 'Saving…' : lead.status === 'qualified' ? 'Save follow-up' : 'Mark qualified'}</button><button className="website-button is-secondary" disabled={readOnly || busy || owner.trim().length < 2} onClick={() => void review('closed')} type="button">Close inquiry</button></div>
+      <p className="website-inquiry-footnote">Updates your inbox. No message is sent.</p>
+    </form> : <div className="website-inquiry-closed"><strong>Closed by {lead.owner}</strong>{lead.decisionNote ? <p>{lead.decisionNote}</p> : null}</div>}
+  </section>
+}
+
 export function WebsiteProduct() {
   const location = useLocation()
   const {
@@ -232,8 +262,11 @@ export function WebsiteProduct() {
     ? workspace.leadLedger ?? emptyWebsiteLeadLedger()
     : localLeadLedger
   const [leadDraft, setLeadDraft] = useState({ name: '', contact: '', request: '', consentRecorded: false })
-  const [leadOwner, setLeadOwner] = useState('')
-  const [leadDecisionNote, setLeadDecisionNote] = useState('')
+  const [inquiryCaptureOpen, setInquiryCaptureOpen] = useState(false)
+  const [selectedInquiryId, setSelectedInquiryId] = useState('')
+  const [inquiryFilter, setInquiryFilter] = useState<'all' | WebsiteLead['status']>('all')
+  const [inquirySearch, setInquirySearch] = useState('')
+  const [inquiryDrafts, setInquiryDrafts] = useState<Record<string, InquiryDraft>>({})
   const editSessionScope = storageMode === 'managed'
     ? managedActorId ? `managed:${managedActorId}` : ''
     : storageMode
@@ -921,6 +954,10 @@ export function WebsiteProduct() {
   // Filtering these two on workspace.siteName meant one rename in Navigation emptied the inbox,
   // the "N new" badge, and the export -- with every captured inquiry still sitting on disk.
   const websiteLeads = websiteInboxLeads(leadLedger)
+  const matchingInquiries = websiteLeads.filter((lead) => (inquiryFilter === 'all' || lead.status === inquiryFilter)
+    && `${lead.name} ${lead.contact} ${lead.request}`.toLocaleLowerCase().includes(inquirySearch.trim().toLocaleLowerCase()))
+  const selectedInquiry = matchingInquiries.find((lead) => lead.id === selectedInquiryId) ?? matchingInquiries[0]
+  const inquiryDraftKey = JSON.stringify([storageMode, managedWorkspaceId, managedActorId, selectedInquiry?.id])
   const leadCounts = websiteLeadCounts(leadLedger)
   const showPageChecks = selectedPageIssues.length > 0 || selectedPage.stage === 'draft'
   const showInquirySummary = leadCounts.new > 0
@@ -1180,7 +1217,7 @@ export function WebsiteProduct() {
     }
   }
 
-  async function decideLead(leadId: string, status: 'qualified' | 'closed') {
+  async function decideLead(leadId: string, status: 'qualified' | 'closed', leadOwner: string, leadDecisionNote: string) {
     try {
       const next = reviewWebsiteLead(leadLedger, leadId, {
         status,
@@ -1199,15 +1236,14 @@ export function WebsiteProduct() {
           }, reviewed.updatedAt),
         }), { durable: true })
         if (!result.ok) throw new Error(result.error)
-        setLeadDecisionNote('')
         setNotice(status === 'qualified'
           ? 'Inquiry qualified and assigned in this company account. No customer message was sent.'
           : 'Inquiry closed in this company account. No customer message was sent.')
         return
       }
-      if (saveLeadLedger(next, status === 'qualified'
+      saveLeadLedger(next, status === 'qualified'
         ? 'Inquiry qualified and assigned locally. No customer message was sent.'
-        : 'Inquiry closed locally. No customer message was sent.')) setLeadDecisionNote('')
+        : 'Inquiry closed locally. No customer message was sent.')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The Website inquiry decision is invalid.')
     }
@@ -1468,16 +1504,17 @@ export function WebsiteProduct() {
           {view === 'inquiries' ? <section aria-labelledby="website-lead-inbox-title" className="website-inquiry-workspace" id="website-inquiries">
             <header className="website-inquiry-workspace-head">
               <div>
-                <span className="core-eyebrow">Inquiry inbox</span>
                 <h2 id="website-lead-inbox-title" tabIndex={-1}>{leadCounts.new ? `${leadCounts.new} ${leadCounts.new === 1 ? 'request needs' : 'requests need'} review` : 'Customer requests are up to date'}</h2>
-                <p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Contact data stays in this browser.'} Recording a decision does not message the customer or create a Shop order.</p>
+                <p>{storageMode === 'managed' ? 'Saved in your company account.' : 'Saved on this device.'} Review each request and assign the follow-up.</p>
               </div>
-              <div aria-label="Inquiry status" className="website-lead-counts" role="group"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
+              <div className="website-inquiry-actions">
+                {websiteLeads.length ? <a className="website-button is-secondary" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export</a> : null}
+                <button aria-controls="website-inquiry-capture" aria-expanded={inquiryCaptureOpen} className="website-button is-secondary" disabled={portalViewOnly} onClick={() => setInquiryCaptureOpen(!inquiryCaptureOpen)} type="button">{inquiryCaptureOpen ? 'Hide form' : 'Add inquiry'}</button>
+              </div>
             </header>
 
-            <div className="website-inquiry-workspace-grid">
-              <section aria-labelledby="website-inquiry-capture-title" className="website-inquiry-card website-inquiry-capture">
-                <div className="website-inquiry-card-head"><span className="core-eyebrow">New request</span><h3 id="website-inquiry-capture-title">Add an inquiry</h3><p>Use this when a customer contacts the business by phone, message or in person.</p></div>
+              {inquiryCaptureOpen ? <section aria-labelledby="website-inquiry-capture-title" className="website-inquiry-card website-inquiry-capture" id="website-inquiry-capture">
+                <div className="website-inquiry-card-head"><h3 id="website-inquiry-capture-title">Add an inquiry</h3><p>For a request received by phone or in person.</p></div>
                 <form className="website-lead-capture-form" onSubmit={captureInquiry}>
                   <label>Name<input autoComplete="name" disabled={portalViewOnly} maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
                   <label>Phone or email<input autoComplete="email" disabled={portalViewOnly} maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
@@ -1485,22 +1522,18 @@ export function WebsiteProduct() {
                   <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} disabled={portalViewOnly} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
                   <button className="website-button is-primary" disabled={portalViewOnly} type="submit">{portalViewOnly ? 'View only' : 'Add to inbox'}</button>
                 </form>
-              </section>
+              </section> : null}
 
-              <section aria-labelledby="website-inquiry-queue-title" className="website-inquiry-card website-inquiry-queue" id="website-lead-inbox">
-                <div className="website-inquiry-card-head website-inquiry-queue-head">
-                  <div><span className="core-eyebrow">Follow-up queue</span><h3 id="website-inquiry-queue-title">Review and assign</h3><p>Record who owns the next step, then qualify or close the request.</p></div>
-                  {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export</a> : null}
+              <section aria-label="Inquiry inbox" className="website-inbox" id="website-lead-inbox">
+                <div className="website-inbox-toolbar">
+                  <div aria-label="Filter inquiries" className="website-inbox-filters">{(['all', 'new', 'qualified', 'closed'] as const).map((filter) => <button aria-pressed={inquiryFilter === filter} key={filter} onClick={() => setInquiryFilter(filter)} type="button">{filter === 'all' ? 'All' : filter === 'new' ? 'New' : filter === 'qualified' ? 'Qualified' : 'Closed'} <span>{filter === 'all' ? websiteLeads.length : leadCounts[filter]}</span></button>)}</div>
+                  <label><span className="sr-only">Search inquiries</span><input onChange={(event) => setInquirySearch(event.target.value)} placeholder="Search inquiries" type="search" value={inquirySearch} /></label>
                 </div>
-                {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible person<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Name or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing or closure reason" value={leadDecisionNote} /></label></div> : null}
-                <div className="website-lead-list">
-                  {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
-                    <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Responsible: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
-                    {lead.status !== 'closed' ? <div><button className="website-button is-primary is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={portalViewOnly || leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
-                  </article>) : <div className="website-lead-empty"><strong>No inquiries yet</strong><p>Add a request when a customer gets in touch. Nothing is sent automatically.</p></div>}
-                </div>
+                {matchingInquiries.length ? <div className="website-inbox-layout">
+                  <div aria-label="Customer requests" className="website-inbox-list">{matchingInquiries.map((lead) => <button aria-pressed={selectedInquiry?.id === lead.id} key={lead.id} onClick={() => setSelectedInquiryId(lead.id)} type="button"><span><strong>{lead.name}</strong><small className="website-inquiry-state">{lead.status}</small></span><p>{lead.request}</p><small>{formatRecoveryDate(lead.createdAt)}</small></button>)}</div>
+                  {selectedInquiry ? <InquiryDetail key={inquiryDraftKey} lead={selectedInquiry} draft={inquiryDrafts[inquiryDraftKey] ?? selectedInquiry} onDraft={(draft) => setInquiryDrafts((current) => ({ ...current, [inquiryDraftKey]: draft }))} readOnly={portalViewOnly} onReview={decideLead} /> : null}
+                </div> : <div className="website-inbox-empty"><strong>{websiteLeads.length ? 'No matching inquiries' : 'Your inbox is clear'}</strong><p>{websiteLeads.length ? 'Try another name or status.' : 'Requests you record will appear here. Automatic website delivery is not connected yet.'}</p></div>}
               </section>
-            </div>
           </section> : null}
 
           {view !== 'inquiries' ? <div

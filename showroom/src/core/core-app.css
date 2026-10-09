@@ -7,7 +7,7 @@
   /* Form-field boundary: --core-line computes 1.23:1 against white — first-time
      users cannot find a field they cannot see. 3.46:1 boundary, both themes. */
   --core-field-line: rgba(37,48,74, .6);
-  --core-bg: #f6f7fb;
+  --core-bg: #f8f9fc;
   --core-panel: #ffffff;
   --core-panel-raised: #f3f4f8;
   --core-ink: #151521;
@@ -69,10 +69,10 @@
   --core-shadow: 0 .0625rem .125rem rgba(28,26,48,.035), 0 .875rem 2.5rem rgba(28,26,48,.055);
   /* Design phase 1 ramps (2026-08 tribunal): the shared scales every island
      consumes. Rule from here on: no new hex/px literal where a token exists. */
-  --font-size-xs: 0.6875rem;
-  --font-size-sm: 0.75rem;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.8125rem;
   --font-size-md: 0.875rem;
-  --font-size-base: 0.8125rem;
+  --font-size-base: 0.9375rem;
   --font-size-lg: 1rem;
   --font-size-xl: 1.125rem;
   --font-size-display: 0.9375rem;
@@ -205,8 +205,7 @@ details:not([open]) > :not(summary) { display: none; }
 .workspace-screen { width: 100%; max-width: 100%; height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
 .page-heading { min-height: 68px; display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; }
 .page-heading > div:first-child { min-width: 0; }
-.core-eyebrow { display: inline-flex; align-items: center; gap: 7px; color: var(--core-green); font-family: var(--core-mono); font-size: 0.6875rem; font-weight: var(--font-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
-.core-eyebrow::before { width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; content: ""; }
+.core-eyebrow { display: inline-flex; align-items: center; gap: 7px; color: var(--core-muted); font-family: inherit; font-size: .75rem; font-weight: var(--font-weight-semibold); letter-spacing: 0; }
 .page-heading h1 { margin: 5px 0 4px; font-size: clamp(2rem, 3.3vw, 2.875rem); line-height: .98; letter-spacing: -.045em; }
 .page-heading p { max-width: 760px; margin: 0; overflow: hidden; color: var(--core-muted); font-size: 0.875rem; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .heading-actions { flex: 0 0 auto; }
@@ -283,7 +282,7 @@ details:not([open]) > :not(summary) { display: none; }
 .plant-output-backdrop { position: fixed; inset: 0; z-index: 71; display: block; border: 0; background: rgba(0,3,7,.68); opacity: 0; visibility: hidden; pointer-events: none; backdrop-filter: blur(4px); transition: opacity .18s ease, visibility .18s; }
 .plant-output-backdrop.is-open { opacity: 1; visibility: visible; pointer-events: auto; }
 .split-workspace { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(300px,.85fr) minmax(0,1.15fr); gap: 11px; }
-.core-panel { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--core-line); border-radius: var(--core-radius); padding: 18px; background: var(--core-panel); box-shadow: 0 10px 28px rgba(23,27,38,.055); }
+.core-panel { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--core-line); border-radius: var(--core-radius); padding: 18px; background: var(--core-panel); box-shadow: 0 2px 6px rgba(23,27,38,.025); }
 .panel-head { min-height: 35px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
 .panel-head h2, .core-panel > h2 { margin: 4px 0 0; font-size: 1.125rem; line-height: 1.15; letter-spacing: -.025em; }
 .panel-head p { margin: 4px 0 0; color: var(--core-muted); font-size: 0.6875rem; }
