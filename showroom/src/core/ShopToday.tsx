@@ -88,15 +88,6 @@ type ShopBatchFirstUseModuleState =
   }
   | { status: 'error' }
 
-const capabilityGroups = [
-  ['Sell', 'Visual counter, multi-item sales, payment choice, tax snapshot'],
-  ['Orders', 'Omnichannel intake, promise, allocation, fulfilment, returns'],
-  ['Stock', 'Locations, lots, available-to-promise, counts, transfers'],
-  ['Supply', 'Reorder, purchase orders, receiving, discrepancy, suppliers'],
-  ['Customers', 'Credit policy, receivables, service schedule, support'],
-  ['Control', 'Daily close, settlement review, accounting export, audit'],
-] as const
-
 const formatMmk = (value: number) => `${value.toLocaleString('en-US')} MMK`
 
 const yangonDay = new Intl.DateTimeFormat('en-GB', {
@@ -533,11 +524,6 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </div>
     </section>
 
-    <section aria-labelledby="shop-coverage-title" className="shop-today-coverage">
-      <header><span><strong id="shop-coverage-title">System coverage</strong><small>Capabilities working behind this view</small></span><b>6 areas</b></header>
-      <div>{capabilityGroups.map(([label, detail]) => <article key={label}><strong>{label}</strong><small>{detail}</small></article>)}</div>
-      <p>SuperMega keeps consequential changes behind named human review. External payment, customer messaging, delivery, filing, and accounting posting require separately verified connections.</p>
-    </section>
       </div>
     </details>
   </div>

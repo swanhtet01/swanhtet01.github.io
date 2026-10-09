@@ -119,6 +119,9 @@ export default defineConfig(({ command }) => ({
             'ProductOnboardingPage', 'preload-helper', 'router', 'SettingsPage',
             'ShopServiceSchedule', 'shop-planning-models', 'local-client-import',
             'website-leads', 'website-model', 'WorkspaceControlsPage',
+            // The local Batch first-use screen must have a stable filename so
+            // the service-worker release check can prove it is precached.
+            'shop-batch-profit-control-first-use',
           ])
           return named.has(chunk.name) ? `assets/${chunk.name}-[hash].js` : 'assets/[hash].js'
         },
