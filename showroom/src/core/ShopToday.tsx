@@ -275,6 +275,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
         - (Number.isFinite(rightTime) ? rightTime : Number.MAX_SAFE_INTEGER)
     })
     .slice(0, 5), [commerce.orders])
+  const openOrderCount = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled').length
   const visibleProducts = commerce.items.slice(0, 6)
   const [batchFirstUse, setBatchFirstUse] = useState<ShopBatchFirstUseModuleState>({ status: 'idle' })
   const [localBatchProjection, setLocalBatchProjection] = useState<ShopBatchFirstUseProjectionResult | null>(null)
@@ -367,7 +368,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </article>
 
       <article aria-label="Order queue" className="shop-operations-card shop-order-queue-card">
-        <header><span><strong>Order queue</strong></span><b>{activeOrders.length} shown</b></header>
+        <header><span><strong>Order queue</strong></span><b>{openOrderCount} open</b></header>
         <div className="shop-operating-list">
           {activeOrders.length ? activeOrders.map((order) => <Link key={order.id} to="/shop/?tab=orders#shop-order-queue">
             <span><strong>{order.item}</strong><small>{privacySafeQueueCustomer(order.customer)} · {order.quantity} item{order.quantity === 1 ? '' : 's'}</small></span>
@@ -380,13 +381,13 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       <aside className="shop-operations-rail">
         <article aria-label="Sales pulse" className="shop-sales-pulse">
           <header><span><small>Sales pulse</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span><b data-direction={salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk)}</b></header>
-          <div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
+          {salesPulse.today.count ? <><div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
             {salesPulse.points.map((point) => <span aria-label={`${point.label}: ${formatMmk(point.grossMmk)}`} key={point.hour}>
               <i aria-hidden="true" style={{ height: `${Math.max(point.grossMmk ? 12 : 2, Math.round((point.grossMmk / maximumPulseMmk) * 100))}%` }} />
               <small>{point.hour % 6 === 0 ? point.label : ''}</small>
             </span>)}
           </div>
-          <p>{salesPulse.today.count} retained completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} · samples excluded</p>
+          <p>{salesPulse.today.count} retained completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} · samples excluded</p></> : <p>No sales yet today. Your first sale will appear here.</p>}
         </article>
 
         <section aria-label="Recommended next" className="shop-next-focus" data-track={nextTrack.toLowerCase()}>

@@ -2257,9 +2257,9 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-operating-list > a:hover { background: color-mix(in srgb,var(--core-accent) 4%,var(--core-panel)); }
 .shop-operating-list > a > span { min-width: 0; display: grid; gap: .1875rem; }
 .shop-operating-list > a > span:last-child { justify-items: end; text-align: right; }
-.shop-operating-list strong { overflow: hidden; font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
-.shop-operating-list b { font-family: var(--core-mono); font-size: .625rem; white-space: nowrap; }
-.shop-operating-list small { overflow: hidden; color: var(--core-muted); font-size: .5625rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.shop-operating-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-operating-list b { white-space: nowrap; }
+.shop-operating-list small { overflow: hidden; color: var(--core-muted); line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .shop-operating-empty { min-height: 17.5rem; display: grid; place-content: center; gap: .25rem; margin: 0; padding: 1.25rem; color: var(--core-muted); text-align: center; }
 .shop-operating-empty strong { color: var(--core-text); font-size: .8125rem; }
 .shop-operating-empty span { font-size: .625rem; }
@@ -2443,9 +2443,6 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-stock-metrics > div:nth-child(2) { border-right: 0; }
   .shop-stock-metrics > div:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }
   .shop-stock-grid { grid-template-columns: 1fr; }
-  .shop-next-focus { grid-template-columns: 1fr; align-items: stretch; }
-  .shop-today-metrics article:nth-child(2) { border-right: 0; }
-  .shop-today-metrics article:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }
   .shop-operations-board { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .shop-operations-rail { grid-column: 1 / -1; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .shop-operations-rail .shop-sales-pulse { grid-row: span 2; }
@@ -2472,9 +2469,6 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-stock-next-item > span:last-child { grid-column: 2; justify-items: start; }
   .commerce-screen .product-task-tabs { grid-template-columns: repeat(4,minmax(0,1fr)); }
   .shop-today-overview { padding: 1rem; }
-  .shop-next-focus { gap: 1rem; padding: 1rem; }
-  .shop-next-focus h3 { font-size: 1.375rem; }
-  .shop-next-focus-guidance { grid-template-columns: 1fr; }
   .shop-today-heading { align-items: stretch; }
   .shop-today-heading .core-button { align-self: flex-end; }
   .shop-operations-board, .shop-operations-rail { grid-template-columns: 1fr; }
@@ -2484,9 +2478,6 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-operating-empty { min-height: 7rem; }
   .shop-operating-list > a { min-height: 3.75rem; padding-inline: .875rem; }
   .shop-today-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
-  .shop-today-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .shop-today-metrics article { min-height: 5.5rem; padding: .875rem; }
-  .shop-today-metrics strong { font-size: 1.125rem; }
   .shop-today-module-grid { grid-template-columns: 1fr; }
   .shop-today-module-grid > a { min-height: 94px; }
   .shop-margin-control > header { align-items: flex-start; padding: .875rem; }
@@ -3239,9 +3230,8 @@ input, select, textarea,
 .shop-today-overview { gap: 1.25rem; border: 0; padding: 0; background: transparent; box-shadow: none; }
 .shop-today-heading h2 { margin: 0 0 .4rem; font-size: clamp(2.25rem,3.4vw,3.25rem); }
 .shop-today-heading p { font-size: .9rem; }
-.shop-today-metrics { gap: .75rem; border: 0; border-radius: 0; background: transparent; overflow: visible; }
-.shop-today-metrics article,
-.shop-today-metrics article:last-child { min-height: 9rem; border: 1px solid var(--core-line); border-radius: 1rem; padding: 1.25rem 1.4rem; background: var(--core-panel); box-shadow: 0 .75rem 2rem rgba(20,22,40,.035); }
+.shop-today-metrics { gap: .75rem; }
+.shop-today-metrics article { min-height: 9rem; border: 1px solid var(--core-line); border-radius: 1rem; padding: 1.25rem 1.4rem; background: var(--core-panel); box-shadow: 0 .75rem 2rem rgba(20,22,40,.035); }
 .shop-today-metrics article::before { width: 2.6rem; height: 2.6rem; top: 1.2rem; right: 1.2rem; display: grid; place-items: center; background: color-mix(in srgb,var(--core-accent) 10%,var(--core-panel)); color: var(--core-accent); font-size: 1.35rem; font-weight: 700; }
 .shop-today-metrics article[data-index="0"]::before { content: '↗'; }
 .shop-today-metrics article[data-index="1"]::before { content: '□'; }
@@ -3265,8 +3255,7 @@ input, select, textarea,
 .shop-sales-pulse > header > b, .shop-sales-pulse > p { font-size: .75rem; }
 .shop-sales-bars { height: 7.5rem; }
 .shop-sales-bars small { font-size: .625rem; }
-.shop-next-focus { display: grid; grid-template-columns: 1fr; gap: .75rem; border-color: var(--core-line); padding: 1rem; background: var(--core-panel); box-shadow: 0 .75rem 2rem rgba(20,22,40,.035); }
-.shop-next-focus::after { display: none; }
+.shop-next-focus { display: grid; grid-template-columns: 1fr; gap: .75rem; border: 1px solid var(--core-line); border-radius: 1rem; padding: 1rem; background: var(--core-panel); box-shadow: 0 .75rem 2rem rgba(20,22,40,.035); }
 .shop-next-focus h3 { margin: .5rem 0; font-size: 1.125rem; line-height: 1.25; }
 .shop-next-focus-guidance { display: block; color: var(--core-muted); font-size: .75rem; }
 .shop-next-focus-guidance summary { min-height: 2.75rem; align-content: center; cursor: pointer; }
@@ -3274,9 +3263,6 @@ input, select, textarea,
 .shop-next-focus-guidance span { font-size: .6875rem; }
 .shop-next-focus-guidance p { font-size: .75rem; }
 .shop-next-focus .shop-today-actions { margin: 0; }
-@media (max-width: 840px) {
-  .shop-today-metrics article:nth-child(2), .shop-today-metrics article:nth-child(-n+2) { border: 1px solid var(--core-line); }
-}
 @media (max-width: 560px) {
   .shop-today-metrics { grid-template-columns: 1fr; }
   .shop-today-metrics article { min-height: 7.75rem; }
