@@ -16,7 +16,7 @@ from uuid import uuid4
 from tools import rehearse_supermega_postgres17 as pg
 from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal, TrialNotReadyError, TrialPermissionDenied, TrialValidationError
 from supermega_runtime.website_inquiry_store import WebsiteInquiryStore
-from tests.test_website_runtime import _state, _published_state
+from tests.test_website_runtime import _page, _state, _published_state
 
 WORKSPACE = 'rehearsal-product'
 OWNER = TrialPrincipal(WORKSPACE, 'owner-product', 'human')
@@ -24,7 +24,65 @@ ORIGIN = 'https://synthetic.example'
 BODY = {'name': 'မောင်မောင်', 'contact': 'synthetic@example.test', 'message': 'စျေးနှုန်း သိချင်ပါတယ်။', 'consent': True}
 
 
+def _multipage_state():
+    state = _state()
+    state['siteName'] = 'Synthetic Studio'
+    state['pages'] = [_page(), _page('page-services', '/services'),
+                      _page('page-contact', '/contact'), _page('page-draft', '/private-draft')]
+    for page, label in zip(state['pages'], ('Home', 'Services', 'Contact', 'Private draft')):
+        page['internalName'] = label
+        page['navigation']['label'] = label
+        page['hero']['headline'] = f'{label} at Synthetic Studio'
+        page['hero']['summary'] = 'Design and support for small business websites.'
+        page['seo']['title'] = label + ' | Synthetic Studio'
+    state['pages'][0]['hero'].update(ctaLabel='See our services', ctaHref='/services/')
+    state['pages'][1]['hero'].update(ctaLabel='Talk to us', ctaHref='#contact')
+    state['pages'][2]['hero'].update(ctaLabel='', ctaHref='')
+    state['pages'][2]['navigation']['visible'] = False
+    state['pages'][3]['stage'] = 'draft'
+    state['pages'][3]['navigation']['visible'] = False
+    return state
+
+
 class WebsiteInquiryPageTests(unittest.TestCase):
+    def test_approved_navigation_buttons_and_form_have_real_destinations(self):
+        from supermega_runtime.website_public_page import render_website_inquiry_page
+        from supermega_runtime.website_runtime import _website_artifact
+        record = {'channelId': str(uuid4()), 'pageId': 'page-contact',
+                  'artifact': _website_artifact(_multipage_state())}
+        base = '/sites/' + record['channelId']
+        home = render_website_inquiry_page(record).body.decode()
+        self.assertIn(f'href="{base}" aria-current="page">Home</a>', home)
+        self.assertIn(f'class="cta" href="{base}/services">See our services</a>', home)
+        self.assertIn(f'href="{base}/contact#inquiry-form"', home)
+        self.assertNotIn('<form', home)
+        self.assertNotIn('<script', home)
+        self.assertNotIn('Private draft', home)
+        self.assertNotIn('>Contact</a>', home)  # Hidden in navigation, still an approved CTA destination.
+        services = render_website_inquiry_page(record, '/services').body.decode()
+        self.assertIn(f'href="{base}/services" aria-current="page">Services</a>', services)
+        self.assertIn(f'class="cta" href="{base}/contact">Talk to us</a>', services)
+        self.assertNotIn('Home at Synthetic Studio', services)
+        contact = render_website_inquiry_page(record, '/contact').body.decode()
+        self.assertIn('<form', contact)
+        self.assertIn(f'action="/api/public/sites/{record["channelId"]}/inquiries"', contact)
+        self.assertNotIn('class="cta"', contact)
+        for path in ('/private-draft', '/missing', '//services', '/services/extra'):
+            self.assertIsNone(render_website_inquiry_page(record, path), path)
+
+    def test_external_buttons_are_escaped_and_unknown_destinations_are_not_links(self):
+        from supermega_runtime.website_public_page import render_website_inquiry_page
+        from supermega_runtime.website_runtime import _website_artifact
+        record = {'channelId': str(uuid4()), 'pageId': 'page-contact',
+                  'artifact': _website_artifact(_multipage_state())}
+        hero = record['artifact']['pages'][0]['hero']
+        hero.update(ctaLabel='Book <now>', ctaHref='https://booking.example/?a=1&b=2')
+        html = render_website_inquiry_page(record).body.decode()
+        self.assertIn('href="https://booking.example/?a=1&amp;b=2">Book &lt;now&gt;</a>', html)
+        for destination in ('javascript:alert(1)', '//elsewhere.example', '/private-draft', '#missing'):
+            hero['ctaHref'] = destination
+            self.assertNotIn('class="cta"', render_website_inquiry_page(record).body.decode())
+
     def test_form_retry_reuses_identity_and_receipt_controls_success(self):
         from supermega_runtime.website_public_page import _SCRIPT
         # Execute the shipped browser script against controlled DOM/network
@@ -117,13 +175,13 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         self.adapter = WebsiteInquiryStore(PostgresTrialStore(self.runtime_url, reducer=lambda *args: {}, write_enabled=True))
         self.origins = {}
 
-    def channel(self, *, enabled=True, origin=ORIGIN):
+    def channel(self, *, enabled=True, origin=ORIGIN, page_id='page-home', expected_version=1):
         channel = str(uuid4())
         self.origins[channel] = origin
-        result = self.adapter.prepare_channel(OWNER, channel_id=channel, page_id='page-home', expected_version=1, origin=origin)
+        result = self.adapter.prepare_channel(OWNER, channel_id=channel, page_id=page_id, expected_version=expected_version, origin=origin)
         self.assertEqual(result, {'channelId': channel, 'enabled': False})
         if enabled:
-            self.adapter.publish_channel(OWNER, channel_id=channel, expected_version=1, public_origin=origin)
+            self.adapter.publish_channel(OWNER, channel_id=channel, expected_version=expected_version, public_origin=origin)
         return channel
 
     def receive(self, channel, request=None, key='client', **overrides):
@@ -309,6 +367,37 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             self.adapter.publish_channel(OWNER, channel_id=unapproved, expected_version=2, public_origin=ORIGIN)
         self.assertIsNone(self.adapter.public_page(channel_id=unapproved, public_origin=ORIGIN))
+
+    def test_multipage_navigation_keeps_inquiry_attribution_and_withdraws_all_pages(self):
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("update app_private.workspace_state set version=2,state_json=%s::jsonb where workspace_id=%s and surface='website'",
+                               (json.dumps(_published_state(_multipage_state())), WORKSPACE))
+        channel = self.channel(page_id='page-contact', expected_version=2)
+        client = self.client()
+        base = f'/sites/{channel}'
+        for path, title in (('', 'Home'), ('/', 'Home'), ('/services', 'Services'), ('/services/', 'Services'), ('/contact', 'Contact')):
+            response = client.get(base + path)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertIn(f'<title>{title} | Synthetic Studio</title>', response.text)
+            self.assertNotIn('Private draft', response.text)
+            self.assertEqual('<form' in response.text, title == 'Contact')
+            self.assertIn('no-store', response.headers['cache-control'])
+        for path in ('/private-draft', '/missing', '/services/extra'):
+            self.assertEqual(client.get(base + path).status_code, 404)
+        self.assertEqual(client.get(base + '?page_path=contact').status_code, 422)
+        self.assertEqual(self.client(public_origin='https://other.example').get(base + '/contact').status_code, 404)
+        body = {**BODY, 'requestId': str(uuid4())}
+        self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries', json={**body, 'pageId': 'page-home'},
+                                    headers={'Origin': ORIGIN}).status_code, 422)
+        self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries', json=body, headers={'Origin': ORIGIN}).status_code, 200)
+        inquiry = self.adapter.inbox(OWNER)['inquiries'][0]
+        self.assertEqual(inquiry['sourcePage'], '/contact')
+        self.assertEqual(inquiry['message'], BODY['message'])
+        published = self.adapter.public_page(channel_id=channel, public_origin=ORIGIN)
+        self.adapter.unpublish_channel(OWNER, channel_id=channel, artifact_digest=published['artifactDigest'])
+        for path in ('', '/', '/services', '/contact'):
+            self.assertEqual(client.get(base + path).status_code, 404)
+        self.assertEqual(self.adapter.inbox(OWNER)['inquiries'][0], inquiry)
 
     def test_publication_requires_exact_origin_current_source_and_human_access(self):
         channel = self.channel(enabled=False)

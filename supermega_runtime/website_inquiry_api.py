@@ -81,9 +81,11 @@ def create_website_inquiry_router(
         if request.query_params:
             raise _error(422, 'request_invalid')
 
-    async def invoke(operation, *, render=False):
+    async def invoke(operation, *, render=False, page_path='/'):
         try:
             result = await run_in_threadpool(operation)
+            if render and result is not None:
+                result = render_website_inquiry_page(result, page_path)
         except TrialPermissionDenied:
             raise _error(403, 'access_denied') from None
         except TrialNotReadyError:
@@ -107,7 +109,7 @@ def create_website_inquiry_router(
         if render:
             if result is None:
                 raise _error(404, 'form_unavailable')
-            return render_website_inquiry_page(result)
+            return result
         return JSONResponse(result, headers=_HEADERS)
 
     def principal(request):
@@ -163,11 +165,13 @@ def create_website_inquiry_router(
         return await invoke(lambda: store.inbox(actor, before=before))
 
     @router.get('/sites/{channel_id}')
-    async def page(channel_id: str, request: Request):
+    @router.get('/sites/{channel_id}/{page_path:path}')
+    async def page(channel_id: str, request: Request, page_path: str = ''):
         available(request)
         if not publishing_configured:
             raise _error(503, 'website_inquiries_unavailable')
-        return await invoke(lambda: store.public_page(channel_id=channel_id, public_origin=public_origin), render=True)
+        return await invoke(lambda: store.public_page(channel_id=channel_id, public_origin=public_origin),
+                            render=True, page_path='/' + page_path)
 
     @router.post('/api/trial/v1/website-inquiry-channels/{channel_id}/publish')
     async def publish(channel_id: str, request: Request):
