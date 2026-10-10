@@ -94,7 +94,11 @@ check(count(coreApp, '{catalogForm}') === 1
 check(coreApp.includes('placeholder="Search or scan SKU"'), 'shop_counter_keyboard_wedge_placeholder_missing')
 check(coreApp.includes('onKeyDown={addSearchMatch}'), 'shop_counter_keyboard_wedge_handler_missing')
 check(coreApp.includes('label="Scan a barcode with the camera" onDetected={addCameraScan}'), 'shop_counter_camera_handler_missing')
-check(count(coreApp, 'label="Scan the product barcode into the SKU field"') === 2, 'shop_catalog_sku_scan_site_count_changed')
+check(count(coreApp, 'label="Scan the product barcode into the SKU field" onDetected=') === 1
+  && count(coreApp, 'label="Scan a product code into the SKU field" onDetected=') === 1,
+  'shop_catalog_sku_scan_controls_missing_or_duplicated')
+check(coreApp.includes('label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))}'), 'shop_managed_catalog_scan_must_only_fill_sku')
+check(coreApp.includes('label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))}'), 'shop_first_product_scan_must_only_fill_sku')
 check(coreApp.includes('label="Scan the job card to choose this job" onDetected={selectScannedJob}'), 'plant_job_scan_handler_missing')
 check(coreApp.includes('label="Scan the material label into the material field" onDetected={applyScannedMaterialRef}'), 'plant_material_scan_handler_missing')
 
