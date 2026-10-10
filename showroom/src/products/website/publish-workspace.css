@@ -1,18 +1,24 @@
-.website-review{color:#182030;background:#fff;border:1px solid #e5e8f0;border-radius:16px;min-width:0;overflow:hidden;font:15px/1.6 system-ui,'Noto Sans Myanmar',sans-serif}
-.website-review .website-button{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border:1px solid #dce0ea;border-radius:9px;background:#fff;color:#253046;font-weight:600;text-decoration:none}.website-review .website-button.is-primary{background:#5545d8;border-color:#5545d8;color:#fff}.website-review .website-button:hover:not(:disabled){filter:brightness(.97)}
-.website-review-heading{padding:24px;display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid #e5e8f0}
-.website-review h2,.website-review h3,.website-review p{margin:0}.website-review h2{font-size:24px;letter-spacing:-.025em}.website-review h3{font-size:18px}.website-review p{color:#697386}.website-review-heading p{margin-top:4px}
-.website-review-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px}.website-review-canvas{min-width:0;background:#f7f8fb;padding:20px;border-right:1px solid #e5e8f0}
-.website-review-toolbar{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;margin-bottom:16px}.website-review-toolbar nav,.website-review-toolbar [role=group]{display:flex;flex-wrap:wrap;gap:4px;align-self:start;padding:4px;background:#fff;border:1px solid #e5e8f0;border-radius:10px}
-.website-review button{font:inherit;cursor:pointer}.website-review button:disabled{cursor:default;opacity:.55}.website-review-toolbar button{padding:8px 12px;min-height:44px;border:0;border-radius:6px;background:transparent;color:#606b80}.website-review-toolbar button[aria-current],.website-review-toolbar button[aria-pressed=true]{background:#eeebff;color:#5141cf;font-weight:600}
-.website-review-checks{padding:24px;min-width:0}.website-review-check-result{display:flex;gap:12px;align-items:center;padding:20px 0;margin-bottom:12px;border-bottom:1px solid #e5e8f0}.website-review-check-result>span,.website-review-success>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#e1f5ed;color:#187b5d;flex-shrink:0}.website-review-check-result p{font-size:13px}.website-review-check-result.needs-fixes>span{background:#fff2d6;color:#936b0e}
-.website-review fieldset{padding:0;margin:8px 0 20px;border:0}.website-review-confirm{display:flex;align-items:flex-start;gap:12px;padding:12px 0;min-height:44px;cursor:pointer}.website-review-confirm input{margin:3px 0 0;width:19px;height:19px;flex-shrink:0;accent-color:#5545d8}.website-review-confirm span{line-height:1.6}.website-review-name{display:grid;gap:8px;margin:12px 0}.website-review-name input{font:inherit;padding:12px;border:1px solid #d5dbe5;border-radius:8px;width:100%}
-.website-review-save{width:100%;justify-content:center}.website-review .website-button{min-height:44px}.website-review .website-review-caption{font-size:12px;line-height:1.6;margin-top:12px}.website-review-fixes{padding-left:20px;margin:0 0 20px}.website-review-fixes li{margin:12px 0}.website-review-fixes p{font-size:13px}.website-review .website-review-error{margin-bottom:16px;color:#a12a35;background:#fff0f1;border-radius:8px;padding:12px}
-.website-review-empty{padding:60px 24px;text-align:center;background:#fff;border:1px dashed #d5dbe5;border-radius:12px}.website-review-empty p{margin:12px 0 20px}.website-review-success{display:flex;gap:16px;align-items:center;padding:20px 24px;background:#f2faf6;border-bottom:1px solid #d7ebe0}.website-review-success>div{flex:1}.website-review-success p{font-size:14px}
-.website-review-history{padding:18px 24px;border-top:1px solid #e5e8f0}.website-review summary{cursor:pointer;min-height:44px;align-content:center;color:#606b80}.website-review-history-list article{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid #e5e8f0}.website-review-history-list small{display:block;color:#697386}
-.website-review :is(button,input,a,summary):focus-visible{outline:3px solid #9086ef;outline-offset:3px}.website-review .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
-.website-review .website-preview-panel{display:block;min-width:0;overflow:visible;height:auto;max-height:none;border-radius:12px;border:1px solid #e5e8f0;background:#fff}.website-review .website-preview-stage{padding:0;overflow:auto;max-height:700px;display:block}.website-review .website-preview-frame{margin:0 auto;max-width:100%;border:0;border-radius:0;box-shadow:none;min-height:0}.website-review .website-preview-frame.is-tablet{width:768px}.website-review .website-preview-frame.is-mobile{width:390px}.website-review .preview-site-main{padding:24px}.website-review .preview-site-header{padding:20px;flex-wrap:wrap}.website-review .preview-site-header>nav{flex-wrap:wrap}.website-review .preview-hero h1{font-size:clamp(28px,3vw,42px)}
-@media(max-width:1000px){.website-review-layout{grid-template-columns:minmax(0,1fr)}.website-review-canvas{border-right:0;border-bottom:1px solid #e5e8f0}.website-review-checks{padding:24px}.website-review .website-preview-stage{max-height:540px}}
+.website-publish-workspace {
+  --publish-accent: var(--website-green);
+  --publish-accent-soft: var(--website-green-soft);
+  --publish-surface: color-mix(in srgb, var(--website-panel) 94%, var(--website-green) 6%);
+}
+
+.website-review{color:var(--website-ink);background:var(--website-panel);border:1px solid var(--website-line);border-radius:16px;min-width:0;overflow:hidden;font:15px/1.6 system-ui,'Noto Sans Myanmar',sans-serif}
+.website-review .website-button{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border:1px solid var(--website-line-strong);border-radius:9px;background:var(--website-panel);color:var(--website-ink);font-weight:600;text-decoration:none}.website-review .website-button.is-primary{background:var(--website-green);border-color:var(--website-green);color:var(--website-panel)}.website-review .website-button:hover:not(:disabled){filter:brightness(.97)}
+.website-review-heading{padding:24px;display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid var(--website-line)}
+.website-review h2,.website-review h3,.website-review p{margin:0}.website-review h2{font-size:24px;letter-spacing:-.025em}.website-review h3{font-size:18px}.website-review p{color:var(--website-muted)}.website-review-heading p{margin-top:4px}
+.website-review-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px}.website-review-canvas{min-width:0;background:var(--website-bg);padding:20px;border-right:1px solid var(--website-line)}
+.website-review-toolbar{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;margin-bottom:16px}.website-review-toolbar nav,.website-review-toolbar [role=group]{display:flex;flex-wrap:wrap;gap:4px;align-self:start;padding:4px;background:var(--website-panel);border:1px solid var(--website-line);border-radius:10px}
+.website-review button{font:inherit;cursor:pointer}.website-review button:disabled{cursor:default;opacity:.55}.website-review-toolbar button{padding:8px 12px;min-height:44px;border:0;border-radius:6px;background:transparent;color:var(--website-muted)}.website-review-toolbar button[aria-current],.website-review-toolbar button[aria-pressed=true]{background:var(--website-green-soft);color:var(--website-green);font-weight:600}
+.website-review-checks{padding:24px;min-width:0}.website-review-check-result{display:flex;gap:12px;align-items:center;padding:20px 0;margin-bottom:12px;border-bottom:1px solid var(--website-line)}.website-review-check-result>span,.website-review-success>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--core-success-soft);color:var(--core-success);flex-shrink:0}.website-review-check-result p{font-size:13px}.website-review-check-result.needs-fixes>span{background:color-mix(in srgb, var(--website-warn) 12%, var(--website-panel));color:var(--website-warn)}
+.website-review fieldset{padding:0;margin:8px 0 20px;border:0}.website-review-confirm{display:flex;align-items:flex-start;gap:12px;padding:12px 0;min-height:44px;cursor:pointer}.website-review-confirm input{margin:3px 0 0;width:19px;height:19px;flex-shrink:0;accent-color:var(--website-green)}.website-review-confirm span{line-height:1.6}.website-review-name{display:grid;gap:8px;margin:12px 0}.website-review-name input{font:inherit;padding:12px;border:1px solid var(--website-line-strong);border-radius:8px;width:100%}
+.website-review-save{width:100%;justify-content:center}.website-review .website-button{min-height:44px}.website-review .website-review-caption{font-size:12px;line-height:1.6;margin-top:12px}.website-review-fixes{padding-left:20px;margin:0 0 20px}.website-review-fixes li{margin:12px 0}.website-review-fixes p{font-size:13px}.website-review .website-review-error{margin-bottom:16px;color:var(--website-danger);background:color-mix(in srgb, var(--website-danger) 8%, var(--website-panel));border-radius:8px;padding:12px}
+.website-review-empty{padding:60px 24px;text-align:center;background:var(--website-panel);border:1px dashed var(--website-line-strong);border-radius:12px}.website-review-empty p{margin:12px 0 20px}.website-review-success{display:flex;gap:16px;align-items:center;padding:20px 24px;background:color-mix(in srgb, var(--core-success) 5%, var(--website-panel));border-bottom:1px solid color-mix(in srgb, var(--core-success) 15%, var(--website-panel))}.website-review-success>div{flex:1}.website-review-success p{font-size:14px}
+.website-review-history{padding:18px 24px;border-top:1px solid var(--website-line)}.website-review summary{cursor:pointer;min-height:44px;align-content:center;color:var(--website-muted)}.website-review-history-list article{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid var(--website-line)}.website-review-history-list small{display:block;color:var(--website-muted)}
+.website-review :is(button,input,a,summary):focus-visible{outline:3px solid var(--core-focus, var(--website-green));outline-offset:3px}.website-review .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.website-review .website-preview-panel{display:block;min-width:0;overflow:visible;height:auto;max-height:none;border-radius:12px;border:1px solid var(--website-line);background:var(--website-panel)}.website-review .website-preview-stage{padding:0;overflow:auto;max-height:700px;display:block}.website-review .website-preview-frame{margin:0 auto;max-width:100%;border:0;border-radius:0;box-shadow:none;min-height:0}.website-review .website-preview-frame.is-tablet{width:768px}.website-review .website-preview-frame.is-mobile{width:390px}.website-review .preview-site-main{padding:24px}.website-review .preview-site-header{padding:20px;flex-wrap:wrap}.website-review .preview-site-header>nav{flex-wrap:wrap}.website-review .preview-hero h1{font-size:clamp(28px,3vw,42px)}
+@media(max-width:1000px){.website-review-layout{grid-template-columns:minmax(0,1fr)}.website-review-canvas{border-right:0;border-bottom:1px solid var(--website-line)}.website-review-checks{padding:24px}.website-review .website-preview-stage{max-height:540px}}
 @media(max-width:540px){.website-review-heading{padding:18px;align-items:flex-start}.website-review-heading h2{font-size:21px}.website-review-canvas{padding:12px}.website-review-checks{padding:20px}.website-review-success{flex-wrap:wrap;padding:20px}.website-review-toolbar button{padding:8px 10px;font-size:13px}.website-review .preview-site-main{padding:18px}.website-review-history{padding:16px}}
 
 /* Retained advanced release controls. */
@@ -68,13 +74,13 @@
   gap: 8px;
   border-block: 1px solid var(--website-line);
   padding: 8px 14px;
-  background: var(--publish-accent-soft);
+  background: var(--website-green-soft);
   color: var(--website-muted);
   font-size: 0.75rem;
 }
 
 .website-release-boundary strong {
-  color: var(--publish-accent);
+  color: var(--website-green);
 }
 
 .website-release-message {
@@ -150,7 +156,7 @@
   min-height: 18px;
   flex: 0 0 18px;
   padding: 0;
-  accent-color: var(--publish-accent);
+  accent-color: var(--website-green);
 }
 
 .website-release-summary {
@@ -204,7 +210,7 @@
 }
 
 .website-release-action.is-complete {
-  background: var(--publish-accent-soft);
+  background: var(--website-green-soft);
 }
 
 .website-publish-history-disclosure {
