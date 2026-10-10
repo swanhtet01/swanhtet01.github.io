@@ -788,6 +788,7 @@ async function sha256(value: string) {
 
 function parseCsv(input: string) {
   if (byteLength(input) > CLIENT_IMPORT_MAX_BYTES) throw new Error(`Choose a CSV smaller than ${CLIENT_IMPORT_MAX_BYTES / 1024} KB.`)
+  if (input.includes('\uFFFD')) throw new Error('The CSV contains text that could not be decoded as UTF-8. Save it as a UTF-8 CSV and upload it again; no rows were imported.')
   if (input.includes('\0')) throw new Error('The CSV contains a null byte and was rejected.')
   const source = input.startsWith('\uFEFF') ? input.slice(1) : input
   if (!source.trim()) throw new Error('The CSV is empty.')

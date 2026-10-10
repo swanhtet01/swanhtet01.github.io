@@ -2,6 +2,22 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createClientImportPreview } from '../showroom/src/core/client-onboarding.ts'
 
+test('CSV preview blocks text that decoded as a replacement character and keeps Burmese UTF-8 intact', async () => {
+  const prefix = new TextEncoder().encode('sku,name,stock,reorder_at,price\nTEST-1,')
+  const suffix = new TextEncoder().encode(',5,1,1000')
+  const bytes = new Uint8Array(prefix.length + 1 + suffix.length)
+  bytes.set(prefix)
+  bytes[prefix.length] = 0xff
+  bytes.set(suffix, prefix.length + 1)
+  const incorrectlyDecoded = new TextDecoder('utf-8').decode(bytes)
+  assert.ok(incorrectlyDecoded.includes('\uFFFD'))
+  await assert.rejects(createClientImportPreview(incorrectlyDecoded, 'commerce'), /could not be decoded as UTF-8/)
+
+  const burmese = await createClientImportPreview('sku,name,stock,reorder_at,price\nTEA-1,လက်ဖက်ရည်,5,1,1000', 'commerce')
+  assert.equal(burmese.rows[0].status, 'ready')
+  assert.equal(burmese.rows[0].values.name, 'လက်ဖက်ရည်')
+})
+
 test('competing stock aliases cannot silently choose a business quantity', async () => {
   const csv = 'sku,name,stock,quantity,reorder_at,price\nTEST-1,Synthetic item,5,50,1,1000'
   const preview = await createClientImportPreview(csv, 'commerce')
