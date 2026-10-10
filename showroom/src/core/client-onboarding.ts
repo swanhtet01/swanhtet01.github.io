@@ -780,6 +780,13 @@ function byteLength(value: string) {
   return new TextEncoder().encode(value).byteLength
 }
 
+function containsUtf8ReplacementCharacter(value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) === 0xfffd) return true
+  }
+  return false
+}
+
 async function sha256(value: string) {
   if (!globalThis.crypto?.subtle) throw new Error('Secure import fingerprinting is unavailable in this browser.')
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
@@ -788,7 +795,7 @@ async function sha256(value: string) {
 
 function parseCsv(input: string) {
   if (byteLength(input) > CLIENT_IMPORT_MAX_BYTES) throw new Error(`Choose a CSV smaller than ${CLIENT_IMPORT_MAX_BYTES / 1024} KB.`)
-  if (input.includes('\uFFFD')) throw new Error('The CSV contains text that could not be decoded as UTF-8. Save it as a UTF-8 CSV and upload it again; no rows were imported.')
+  if (containsUtf8ReplacementCharacter(input)) throw new Error('The CSV contains text that could not be decoded as UTF-8. Save it as a UTF-8 CSV and upload it again; no rows were imported.')
   if (input.includes('\0')) throw new Error('The CSV contains a null byte and was rejected.')
   const source = input.startsWith('\uFEFF') ? input.slice(1) : input
   if (!source.trim()) throw new Error('The CSV is empty.')
