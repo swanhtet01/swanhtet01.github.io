@@ -11,10 +11,9 @@ const [core, today] = await Promise.all([
 
 test('Shop Today exposes the real reviewed accounting handoff after close', () => {
   assert.match(core, /accountingExport=\{latestAccountingDownload \? \{ businessDate:/)
-  assert.match(today, /aria-label="Accountant handoff ready"/)
   assert.match(today, /data-shop-accounting-export="accounting-csv-v1"/)
-  assert.match(today, /Balanced journal · no external posting/)
-  assert.match(today, /mappingReady \? 'Mapping reviewed' : 'Mapping review needed'/)
+  assert.ok(today.includes("accountingExport.mappingReady ? 'Mapped' : 'Unmapped'"))
+  assert.match(today, /<strong>Export<\/strong>/)
 })
 
 test('accounting CSV bytes are created only when the operator downloads', () => {

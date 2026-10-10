@@ -1,20 +1,12 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import type { CommerceState } from './commerce-workspace'
-import type { ShopBatchProfitControlProjection } from './shop-batch-profit-control'
-import {
-  createShopBatchFirstUseWorkspaceCapability,
-  revokeShopBatchFirstUseWorkspaceCapability,
-  shopBatchFirstUseWorkspaceCapabilityIsCurrent,
-  type ShopBatchFirstUseWorkspaceCapability,
-} from './shop-batch-first-use-workspace-capability'
-import type { ShopBatchFirstUseProjectionResult } from './shop-batch-profit-control-first-use'
-import { SHOP_BATCH_PROFIT_CONTROL_CONTRACT, SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256, projectNoBatchProfitControl, type ShopBatchProfitControlNoBatchProjection } from './shop-batch-profit-control-view'
-import { formatShopCostCoverage, formatShopMarginRate, projectShopCostCoverageAndMarginAtRisk } from './shop-cost-coverage-and-margin-at-risk'
-import { formatShopProfitControlMetric } from './shop-profit-control'
 import type { ShopProfitControlBoard } from './shop-profit-control'
+import type { ShopBatchProfitControlView } from './ShopTodayAdvanced'
 import { projectShopTodaySalesPulse } from './shop-today-sales'
 import { ProductPhoto } from './ProductPhoto'
+
+const ShopTodayAdvancedPanel = lazy(() => import('./ShopTodayAdvanced').then((module) => ({ default: module.ShopTodayAdvanced })))
 
 export type ShopTodayMetric = {
   label: string
@@ -78,19 +70,11 @@ type ShopTodayProps = {
   recordStatus: ShopTodayRecordStatus
 }
 
-export type ShopBatchProfitControlView = ShopBatchProfitControlProjection | ShopBatchProfitControlNoBatchProjection
-
-type ShopBatchFirstUseModuleState =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | {
-    status: 'ready'
-    Component: typeof import('./shop-batch-profit-control-first-use')['ShopBatchProfitControlFirstUse']
-    workspaceCapability: ShopBatchFirstUseWorkspaceCapability
-  }
-  | { status: 'error' }
-
 const formatMmk = (value: number) => `${value.toLocaleString('en-US')} MMK`
+
+function taskLink(title: string, detail: string, action: string, to: string, ownerGate?: string) {
+  return <Link aria-description={ownerGate} to={to}><span><strong>{title}</strong><small>{detail}</small></span><b>{action}</b></Link>
+}
 
 const yangonDay = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -99,8 +83,14 @@ const yangonDay = new Intl.DateTimeFormat('en-GB', {
   weekday: 'short',
 })
 
+function ShopSummaryIcon({ label }: { label: string }) {
+  if (label === "Today's sales") return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path d="M4 4v16h16M8 15v-3m5 3V8m5 7V5" /></svg>
+  if (label === 'Open orders') return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path d="M6 3.75h8.5L19 8.25v12H6zM14 4v5h5M9 13h7m-7 4h7" /></svg>
+  return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path d="m12 3 9 17H3zM12 9v5m0 3h.01" /></svg>
+}
+
 function formatSalesComparison(deltaBasisPoints: number | null, previousGrossMmk: number) {
-  if (!previousGrossMmk || deltaBasisPoints === null) return 'No retained sales yesterday'
+  if (!previousGrossMmk || deltaBasisPoints === null) return 'No sales yesterday'
   if (deltaBasisPoints === 0) return 'Level with yesterday'
   const percentage = Math.abs(deltaBasisPoints) / 100
   return `${deltaBasisPoints > 0 ? 'Up' : 'Down'} ${percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}% vs yesterday`
@@ -117,153 +107,9 @@ function privacySafeQueueCustomer(customer: string) {
   return withoutContactNumber || 'Customer'
 }
 
-const batchStateLabels: Record<ShopBatchProfitControlView['state'], string> = {
-  no_batch: 'No batch selected',
-  collecting_batch_evidence: 'Collecting evidence',
-  review_adjustments: 'Review adjustments',
-  batch_margin_at_risk: 'Margin at risk',
-  batch_controlled: 'Controlled',
-}
-
-const batchReasonLabels: Record<string, string> = {
-  no_batch: 'No batch is selected.',
-  batch_not_closed: 'The batch is not closed.',
-  batch_voided: 'The batch is voided.',
-  completed_sale_value_zero: 'No completed sold value is retained.',
-  synthetic_or_sample_evidence_excluded: 'Synthetic or sample evidence is excluded from operating proof.',
-  retained_sale_evidence_incomplete: 'Completed-sale or payment evidence is incomplete.',
-}
-
-function batchClassificationLabel(classification: ShopBatchProfitControlView['truthBoundary']['classification']) {
-  if (classification === 'synthetic_local_fixture_never_evidence') return 'Synthetic calculation only — never evidence'
-  if (classification === 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof') return 'Retained local operating evidence — not pilot, customer, or commercial proof'
-  return 'No batch evidence selected'
-}
-
-function selectShopBatchProfitControlView(
-  supplied: ShopBatchProfitControlView,
-  localBatchFirstUseAllowed: boolean,
-  localResult: ShopBatchFirstUseProjectionResult | null,
-  currentWorkspaceCapability: ShopBatchFirstUseWorkspaceCapability | null,
-): ShopBatchProfitControlView {
-  return localBatchFirstUseAllowed
-    && supplied.state === 'no_batch'
-    && localResult
-    && shopBatchFirstUseWorkspaceCapabilityIsCurrent(localResult.workspaceCapability, currentWorkspaceCapability)
-    ? localResult.projection
-    : supplied
-}
-
-function batchPriorityLabel(priority: ShopBatchProfitControlProjection['priorities'][number]) {
-  if (priority.itemState === 'zero_sale_produced') return 'Critical cost estimate with no sold value'
-  if (priority.itemState === 'critical_negative_margin') return 'Negative contribution estimate'
-  return 'Below contribution-estimate floor'
-}
-
-export function ShopBatchProfitControlPanel({
-  batchProfitControl = projectNoBatchProfitControl(),
-  panelAriaLabel = 'Shop Batch Profit Control',
-  panelId = 'shop-batch-profit-control',
-}: {
-  batchProfitControl?: ShopBatchProfitControlView
-  panelAriaLabel?: string
-  panelId?: string
-}) {
-  const batchProjectionBound = batchProfitControl.contract === SHOP_BATCH_PROFIT_CONTROL_CONTRACT
-    && batchProfitControl.contractSourceSha256 === SHOP_BATCH_PROFIT_CONTROL_RND_CONTRACT_SHA256
-    && Object.values(batchProfitControl.authority).every((value) => value === false)
-
-  return <section aria-label={panelAriaLabel} className="shop-margin-control shop-batch-profit-control" id={panelId}>
-    <header>
-      <div>
-        <span className="core-eyebrow">Batch Profit Control</span>
-        <h3>Review batch evidence before the next production or delivery decision</h3>
-        <p>{batchProjectionBound ? <>
-          {batchProfitControl.truthBoundary.costLabel}. {batchClassificationLabel(batchProfitControl.truthBoundary.classification)}. {batchProfitControl.truthBoundary.boundary}
-        </> : 'Accepted Batch Profit Control binding did not verify. No evidence, estimate, priority, or authority is inferred.'}</p>
-      </div>
-      <b data-state={batchProjectionBound ? batchProfitControl.state === 'batch_controlled' ? 'controlled' : batchProfitControl.state : 'blocked'}>{batchProjectionBound ? batchStateLabels[batchProfitControl.state] : 'Blocked'}</b>
-    </header>
-    {!batchProjectionBound ? <p className="shop-margin-gaps" role="alert"><strong>Batch projection blocked.</strong> The accepted contract binding or no-write authority boundary did not match.</p> : batchProfitControl.state === 'no_batch' ? <p className="shop-margin-gaps" role="status">
-      <strong>Decision estimates withheld.</strong> No source-owned batch is selected, so contribution, break-even, margin-at-risk estimates, and priorities remain unavailable.
-    </p> : <>
-      <div aria-label="Batch evidence status" className="shop-batch-evidence">
-        <article data-state={batchProfitControl.evidenceStatus.canonicalDigestsComplete && batchProfitControl.evidenceStatus.immutableRevisionLineageComplete ? 'complete' : 'blocked'}>
-          <span>Canonical revision lineage</span><b>{batchProfitControl.evidenceStatus.canonicalDigestsComplete && batchProfitControl.evidenceStatus.immutableRevisionLineageComplete ? 'Complete' : 'Blocked'}</b>
-        </article>
-        <article data-state={batchProfitControl.evidenceStatus.batchSaleAllocationComplete && batchProfitControl.evidenceStatus.crossBatchReuseAbsent ? 'complete' : 'blocked'}>
-          <span>Whole-line batch allocation</span><b>{batchProfitControl.evidenceStatus.batchSaleAllocationComplete && batchProfitControl.evidenceStatus.crossBatchReuseAbsent ? 'Complete' : 'Blocked'}</b>
-        </article>
-        <article data-state={batchProfitControl.evidenceStatus.productionQuantityCostCoverageComplete && batchProfitControl.evidenceStatus.costEstimateBasisUnambiguous ? 'complete' : 'blocked'}>
-          <span>Production-cost estimate coverage</span><b>{batchProfitControl.evidenceStatus.productionQuantityCostCoverageComplete && batchProfitControl.evidenceStatus.costEstimateBasisUnambiguous ? 'Complete' : 'Blocked'}</b>
-        </article>
-        <article data-state={batchProfitControl.evidenceStatus.retainedSalesEvidenceComplete ? 'complete' : 'blocked'}>
-          <span>Retained completed sales</span><b>{batchProfitControl.evidenceStatus.retainedSalesEvidenceComplete ? 'Complete' : 'Excluded or incomplete'}</b>
-        </article>
-        <article data-state={batchProfitControl.evidenceStatus.overheadReviewComplete ? 'complete' : 'blocked'}>
-          <span>Packaging and delivery review</span><b>{batchProfitControl.evidenceStatus.overheadReviewComplete ? 'Complete' : 'Blocked'}</b>
-        </article>
-        <article data-state={batchProfitControl.evidenceStatus.adjustmentLinkageComplete && batchProfitControl.evidenceStatus.reconciliationComplete ? 'complete' : 'blocked'}>
-          <span>Adjustments and unit reconciliation</span><b>{batchProfitControl.evidenceStatus.adjustmentLinkageComplete && batchProfitControl.evidenceStatus.reconciliationComplete ? 'Complete' : 'Blocked'}</b>
-        </article>
-      </div>
-      <p className="shop-batch-identity">
-        <strong>{batchProfitControl.batchIdentity.batchId}</strong> · revision {batchProfitControl.batchIdentity.revision} · {batchProfitControl.batchIdentity.businessDate} · {batchClassificationLabel(batchProfitControl.batchIdentity.classification)}
-      </p>
-      {batchProfitControl.evidenceStatus.withheldReasonCodes.length ? <p className="shop-margin-gaps" role="status">
-        <strong>Operating decision status: {batchProfitControl.evidenceStatus.profitStatus === 'withheld' ? 'withheld' : 'estimate available'}.</strong> {batchProfitControl.evidenceStatus.withheldReasonCodes.map((reason) => batchReasonLabels[reason] ?? reason.replaceAll('_', ' ')).join(' ')}
-      </p> : null}
-      <div className="shop-margin-summary">
-        <article>
-          <small>Completed sold value</small>
-          <strong>{formatMmk(batchProfitControl.totals.totalCompletedSaleValueMmk)}</strong>
-          <span>{batchProfitControl.totals.completedSaleUnits} completed units from {batchProfitControl.totals.producedUnits} produced</span>
-        </article>
-        <article>
-          <small>Total batch cost estimate</small>
-          <strong>{formatMmk(batchProfitControl.totals.totalBatchCostEstimateMmk)}</strong>
-          <span>{formatMmk(batchProfitControl.totals.totalReviewedProductionCostEstimateMmk)} production · {formatMmk(batchProfitControl.totals.totalBatchOverheadMmk)} reviewed overhead</span>
-        </article>
-        <article>
-          <small>Batch contribution estimate</small>
-          <strong>{batchProfitControl.estimatePreview ? formatMmk(batchProfitControl.estimatePreview.batchContributionEstimateMmk) : 'Withheld'}</strong>
-          <span>{batchProfitControl.estimatePreview ? formatShopMarginRate(batchProfitControl.estimatePreview.aggregateContributionEstimateBasisPoints) : 'No decision metric until all evidence gates pass'}</span>
-        </article>
-      </div>
-      <div className="shop-margin-summary">
-        <article>
-          <small>Estimated break-even sold value</small>
-          <strong>{batchProfitControl.estimatePreview ? formatMmk(batchProfitControl.estimatePreview.estimatedBreakEvenSoldValueMmk) : 'Withheld'}</strong>
-          <span>{batchProfitControl.estimatePreview ? `${batchProfitControl.estimatePreview.breakEvenEquivalentCompletedUnits} equivalent completed units` : 'Unknown is never replaced with zero'}</span>
-        </article>
-        <article>
-          <small>Estimated margin at risk</small>
-          <strong>{batchProfitControl.estimatePreview ? formatMmk(batchProfitControl.estimatePreview.estimatedMarginAtRiskMmk) : 'Withheld'}</strong>
-          <span>{batchProfitControl.estimatePreview ? `${formatMmk(batchProfitControl.estimatePreview.remainingToEstimatedBreakEvenMmk)} remains to estimated break-even` : 'No ranking while decision evidence is incomplete'}</span>
-        </article>
-        <article>
-          <small>Batch disposition</small>
-          <strong>{batchProfitControl.totals.leftoverUnits + batchProfitControl.totals.wastedUnits + batchProfitControl.totals.remakeUnits}</strong>
-          <span>{batchProfitControl.totals.leftoverUnits} leftover · {batchProfitControl.totals.wastedUnits} wasted · {batchProfitControl.totals.remakeUnits} remake</span>
-        </article>
-      </div>
-      {batchProfitControl.priorities.length ? <div aria-label="Batch margin-risk priorities" className="shop-batch-priorities">
-        {batchProfitControl.priorities.map((priority, index) => <article data-tone={priority.severity} key={priority.sku}>
-          <header><span>Priority {index + 1} · {batchPriorityLabel(priority)}</span><b>{formatMmk(priority.marginRiskEstimateMmk)} at risk</b></header>
-          <strong>{priority.sku}</strong>
-          <small>{formatMmk(priority.contributionEstimateMmk)} contribution estimate · {priority.contributionEstimateBasisPoints === null ? 'Rate unavailable — no sold value' : formatShopMarginRate(priority.contributionEstimateBasisPoints)}</small>
-          <small>{formatMmk(priority.operationalCostRiskEstimateMmk)} leftover/waste cost estimate · {priority.ownerRole} · {priority.dueLabel}</small>
-          <p><strong>Next:</strong> {priority.actionLabel}. <strong>Closed when:</strong> {priority.closureCondition}</p>
-        </article>)}
-      </div> : batchProfitControl.estimatePreview ? <p className="shop-margin-controlled">No item is below the configured contribution-estimate floor in this validated batch projection.</p> : null}
-    </>}
-    <p className="panel-note">Read-only local projection. It never counts as baseline, pilot, customer, or commercial proof and performs no payment, stock, supplier, accounting, customer, hosted, provider, model, or production action.</p>
-  </section>
-}
-
-export function ShopToday({ accountingExport = null, batchProfitControl = projectNoBatchProfitControl(), catalogReady, closeQueue, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, productImageScope, profitControl, recordStatus }: ShopTodayProps) {
-  const marginControl = useMemo(() => projectShopCostCoverageAndMarginAtRisk(commerce), [commerce])
+export function ShopToday({ accountingExport = null, batchProfitControl, catalogReady, closeQueue, commerce, localBatchFirstUseAllowed, metrics, modules, nextAction, nextActionLabel, nextDetail, nextOwnerGate, nextTo, nextTrack, productImageScope, profitControl, recordStatus }: ShopTodayProps) {
   const [activityAsOf] = useState(() => Date.now())
+  const [advancedControlsLoaded, setAdvancedControlsLoaded] = useState(false)
   const salesPulse = useMemo(() => projectShopTodaySalesPulse(commerce, activityAsOf), [activityAsOf, commerce])
   const activeOrders = useMemo(() => commerce.orders
     .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
@@ -277,63 +123,15 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
     .slice(0, 5), [commerce.orders])
   const openOrderCount = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled').length
   const visibleProducts = commerce.items.slice(0, 6)
-  const [batchFirstUse, setBatchFirstUse] = useState<ShopBatchFirstUseModuleState>({ status: 'idle' })
-  const [localBatchProjection, setLocalBatchProjection] = useState<ShopBatchFirstUseProjectionResult | null>(null)
-  const batchFirstUseAttempt = useRef(0)
-  const currentWorkspaceCapability = batchFirstUse.status === 'ready' ? batchFirstUse.workspaceCapability : null
-  const readCurrentWorkspaceCapability = useCallback(() => (
-    localBatchFirstUseAllowed
-      && shopBatchFirstUseWorkspaceCapabilityIsCurrent(currentWorkspaceCapability, currentWorkspaceCapability)
-      ? currentWorkspaceCapability
-      : null
-  ), [currentWorkspaceCapability, localBatchFirstUseAllowed])
-  useLayoutEffect(() => () => {
-    batchFirstUseAttempt.current += 1
-  }, [])
-  useLayoutEffect(() => {
-    if (batchFirstUse.status !== 'ready') return undefined
-    if (!localBatchFirstUseAllowed) revokeShopBatchFirstUseWorkspaceCapability(batchFirstUse.workspaceCapability)
-    return () => { revokeShopBatchFirstUseWorkspaceCapability(batchFirstUse.workspaceCapability) }
-  }, [batchFirstUse, localBatchFirstUseAllowed])
-  const acceptLocalBatchProjection = useCallback((result: ShopBatchFirstUseProjectionResult | null) => {
-    if (result && (!localBatchFirstUseAllowed
-      || !shopBatchFirstUseWorkspaceCapabilityIsCurrent(result.workspaceCapability, currentWorkspaceCapability))) return
-    setLocalBatchProjection(result)
-  }, [currentWorkspaceCapability, localBatchFirstUseAllowed])
-
-  const openBatchFirstUse = async () => {
-    if (!localBatchFirstUseAllowed) return
-    const attempt = ++batchFirstUseAttempt.current
-    if (batchFirstUse.status === 'ready') revokeShopBatchFirstUseWorkspaceCapability(batchFirstUse.workspaceCapability)
-    setLocalBatchProjection(null)
-    setBatchFirstUse({ status: 'loading' })
-    try {
-      const { ShopBatchProfitControlFirstUse } = await import('./shop-batch-profit-control-first-use')
-      if (attempt === batchFirstUseAttempt.current && localBatchFirstUseAllowed) {
-        const workspaceCapability = createShopBatchFirstUseWorkspaceCapability()
-        setBatchFirstUse({
-          status: 'ready',
-          Component: ShopBatchProfitControlFirstUse,
-          workspaceCapability,
-        })
-      }
-    } catch {
-      if (attempt === batchFirstUseAttempt.current) setBatchFirstUse({ status: 'error' })
-    }
-  }
-
-  const activeBatchProfitControl = selectShopBatchProfitControlView(
-    batchProfitControl,
-    localBatchFirstUseAllowed,
-    localBatchProjection,
-    currentWorkspaceCapability,
-  )
-  const visiblePriorities = profitControl.priorities.slice(0, 2)
   const summaryMetrics = ["Today's sales", 'Open orders', 'Stock alerts']
     .flatMap((label) => metrics.find((metric) => metric.label === label) ?? [])
-  const remainingPriorityCount = profitControl.hiddenPriorityCount + Math.max(0, profitControl.priorities.length - visiblePriorities.length)
   const financeModule = modules.find((module) => module.label === 'Finance controls')
-  const attentionPriority = visiblePriorities.find((priority) => priority.id !== 'close_ready')
+  const primaryTask = (recordStatus.badge === 'Paused' || recordStatus.badge === 'Backup advised') && recordStatus.target && recordStatus.actionLabel
+    ? { title: recordStatus.actionLabel, detail: recordStatus.detail, action: recordStatus.badge, target: recordStatus.target, ownerGate: recordStatus.detail }
+    : { title: nextAction, detail: nextDetail, action: nextActionLabel, target: nextTo, ownerGate: nextOwnerGate }
+  const attentionPriority = recordStatus.badge === 'Paused' || recordStatus.badge === 'Backup advised'
+    ? undefined
+    : profitControl.priorities.find((priority) => priority.id !== 'close_ready')
   const maximumPulseMmk = Math.max(1, ...salesPulse.points.map((point) => point.grossMmk))
 
   return <div className="shop-today">
@@ -347,6 +145,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </header>
       <div className="shop-today-metrics" aria-label="Shop summary">
         {summaryMetrics.map((metric, index) => <article data-index={index} data-tone={metric.tone ?? 'ready'} key={metric.label}>
+          <span className="shop-today-metric-icon"><ShopSummaryIcon label={metric.label} /></span>
           <small>{metric.label}</small>
           <strong>{metric.value}</strong>
           <span>{metric.detail}</span>
@@ -362,9 +161,9 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
             <ProductPhoto className="shop-today-product-photo" fallback={<span aria-hidden="true" className="shop-today-product-fallback">{item.name.trim().slice(0, 1).toUpperCase()}</span>} scope={productImageScope} sku={item.sku} />
             <span><strong>{item.name}</strong><small>{item.onHand} in stock{item.onHand <= item.reorderAt ? ' · reorder' : ''}</small></span>
             <span><b>{formatMmk(item.price)}</b></span>
-          </Link>) : <p className="shop-operating-empty"><strong>No products yet</strong><span>Add a product to start selling.</span></p>}
+          </Link>) : <div className="shop-operating-empty"><strong>No products to sell yet</strong><span>Add one item to start, or import a catalog.</span><Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link><Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Import a CSV <span aria-hidden="true">→</span></Link></div>}
         </div>
-        <footer><Link to="/shop/?tab=inventory">View products <span aria-hidden="true">→</span></Link></footer>
+        {commerce.items.length ? <footer><Link to="/shop/?tab=inventory">View products <span aria-hidden="true">→</span></Link></footer> : null}
       </article>
 
       <article aria-label="Order queue" className="shop-operations-card shop-order-queue-card">
@@ -379,150 +178,45 @@ export function ShopToday({ accountingExport = null, batchProfitControl = projec
       </article>
 
       <aside className="shop-operations-rail">
-        <article aria-label="Sales pulse" className="shop-sales-pulse">
-          <header><span><small>Sales pulse</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span><b data-direction={salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk)}</b></header>
-          {salesPulse.today.count ? <><div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
+        <article aria-label="Sales insight" className="shop-sales-pulse">
+          <header><span><small>Sales insight</small><strong>{formatMmk(salesPulse.today.grossMmk)}</strong></span>{salesPulse.today.count ? <b data-direction={salesPulse.deltaBasisPoints === null ? 'neutral' : salesPulse.deltaBasisPoints >= 0 ? 'up' : 'down'}>{formatSalesComparison(salesPulse.deltaBasisPoints, salesPulse.previous.grossMmk)}</b> : null}</header>
+          {salesPulse.today.count ? <>
+            <div aria-label="Retained completed sales by three-hour Yangon period" className="shop-sales-bars">
             {salesPulse.points.map((point) => <span aria-label={`${point.label}: ${formatMmk(point.grossMmk)}`} key={point.hour}>
               <i aria-hidden="true" style={{ height: `${Math.max(point.grossMmk ? 12 : 2, Math.round((point.grossMmk / maximumPulseMmk) * 100))}%` }} />
               <small>{point.hour % 6 === 0 ? point.label : ''}</small>
             </span>)}
-          </div>
-          <p>{salesPulse.today.count} retained completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} · samples excluded</p></> : <p>No sales yet today. Your first sale will appear here.</p>}
+            </div>
+            <p>{salesPulse.today.count} completed {salesPulse.today.count === 1 ? 'sale' : 'sales'} today</p>
+          </> : <div className="shop-sales-empty"><strong>No sales yet today</strong><span>Completed counter sales will appear here.</span></div>}
         </article>
 
-        <section aria-label="Recommended next" className="shop-next-focus" data-track={nextTrack.toLowerCase()}>
-          <div className="shop-next-focus-copy">
-            <header><span className="core-eyebrow">Quick task</span><b>{nextTrack}</b></header>
-            <h3>{nextAction}</h3>
-            <details className="shop-next-focus-guidance"><summary>Why this matters</summary>
-              <div><span>Why now</span><p>{nextDetail}</p></div>
-              <div><span>Owner check</span><p>{nextOwnerGate}</p></div>
-            </details>
+        <section aria-label="Quick tasks" className="shop-next-focus">
+          <header className="shop-next-focus-copy"><h3>Quick tasks</h3></header>
+          <div className="shop-operating-list shop-task-list">
+            {attentionPriority ? <Link data-priority-id={attentionPriority.id} data-state={profitControl.state} to={attentionPriority.target}>
+              <span><strong>{attentionPriority.title}</strong><small><strong>Next:</strong> {attentionPriority.actionLabel}</small></span>
+            </Link> : taskLink(primaryTask.title, primaryTask.detail, primaryTask.action, primaryTask.target, primaryTask.ownerGate)}
+
+            {financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount) ? accountingExport ? <button className="shop-task-row shop-finance-task" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">
+              <span><strong>Export</strong><small>Accountant CSV · {accountingExport.businessDate} · {accountingExport.mappingReady ? 'Mapped' : 'Unmapped'}</small></span>
+            </button> : <Link aria-label="Cash and wallet close queue" aria-description="Not reconciled. Expected from completed, reconciled Shop orders. Wallet and bank settlement is not independently confirmed." to={closeQueue.target}>
+              <span><strong>Close payments</strong><small>{closeQueue.paymentMethods.length
+                ? closeQueue.paymentMethods.map((method) => `${method.paymentMethod} ${formatMmk(method.totalMmk)}`).join(' · ')
+                : closeQueue.exceptionCount ? `${closeQueue.exceptionCount} exceptions`
+                  : closeQueue.orderCount ? `${closeQueue.orderCount} ready · ${formatMmk(closeQueue.totalMmk)}`
+                    : closeQueue.latestCloseRecorded ? 'Close on file' : 'Nothing to close'}</small></span>
+              <b>{closeQueue.actionLabel}</b>
+            </Link> : null}
+
           </div>
-          <div className="shop-today-actions"><Link className="core-button primary shop-decision-action" to={nextTo}>{nextActionLabel}</Link></div>
         </section>
-
-        {recordStatus.badge === 'Paused' || recordStatus.badge === 'Backup advised' ? <article aria-label="Record safety" className="shop-next-compact">
-          <header><span className="core-eyebrow">Records</span><b>{recordStatus.badge}</b></header>
-          <h3>{recordStatus.label}</h3>
-          <p>{recordStatus.detail}</p>
-          {recordStatus.target && recordStatus.actionLabel ? <div className="shop-today-actions"><Link className="core-button" to={recordStatus.target}>{recordStatus.actionLabel} <span aria-hidden="true">→</span></Link></div> : null}
-        </article> : null}
-
-        {financeModule && (accountingExport || closeQueue.orderCount || closeQueue.exceptionCount) ? accountingExport ? <article aria-label="Accountant handoff ready" className="shop-finance-task shop-accounting-ready" data-tone="ready">
-          <span><small>Accountant handoff</small><strong>Daily close · {accountingExport.businessDate}</strong><em>{accountingExport.mappingReady ? 'Mapping reviewed' : 'Mapping review needed'}</em></span>
-          <span><b>{formatMmk(accountingExport.totalMmk)}</b><small>Balanced journal · no external posting</small></span>
-          <button className="core-button" data-shop-accounting-export="accounting-csv-v1" onClick={accountingExport.onDownload} type="button">Download accountant CSV</button>
-        </article> : <Link aria-label="Cash and wallet close queue" className="shop-finance-task" data-tone={closeQueue.tone} to={closeQueue.target}>
-          <span>
-            <small>Cash + wallets</small>
-            <strong>Cash and wallet close</strong>
-            <em>Shop-record expectation</em>
-            <small>{closeQueue.paymentMethods.length
-              ? closeQueue.paymentMethods.map((method) => `${method.paymentMethod} ${formatMmk(method.totalMmk)}`).join(' · ')
-              : closeQueue.latestCloseRecorded ? 'Latest close recorded' : 'No completed, reconciled orders waiting'}</small>
-            <small>Expected from completed, reconciled Shop orders. Wallet and bank settlement is not independently confirmed.</small>
-          </span>
-          <span>
-            <b>{closeQueue.exceptionCount
-              ? `${closeQueue.exceptionCount} payment ${closeQueue.exceptionCount === 1 ? 'exception' : 'exceptions'}`
-              : closeQueue.orderCount ? formatMmk(closeQueue.totalMmk) : closeQueue.latestCloseRecorded ? 'Close recorded' : 'Queue clear'}</b>
-            <small>{closeQueue.orderCount} {closeQueue.orderCount === 1 ? 'order' : 'orders'} ready</small>
-            <small>{closeQueue.actionLabel} <span aria-hidden="true">→</span></small>
-          </span>
-        </Link> : null}
-
-        {attentionPriority ? <Link className="shop-attention-compact" data-priority-id={attentionPriority.id} data-state={profitControl.state} data-tone={attentionPriority.severity === 'critical' || attentionPriority.severity === 'attention' ? 'attention' : 'ready'} to={attentionPriority.target}>
-          <span><small>Attention</small><strong>{attentionPriority.title}</strong><small><strong>Next:</strong> {attentionPriority.actionLabel}</small></span><b>{formatShopProfitControlMetric(attentionPriority.metric)}</b>
-        </Link> : null}
-        {remainingPriorityCount ? <p className="shop-decision-more">{remainingPriorityCount} more lower-priority {remainingPriorityCount === 1 ? 'signal is' : 'signals are'} available in Advanced controls.</p> : null}
       </aside>
     </section>
 
-    <details aria-label="Advanced Shop controls" className="shop-today-workspaces shop-today-advanced">
-      <summary><span><strong>Advanced controls</strong><small>Profit, operations and safeguarded evidence</small></span><b>{marginControl.costCoverage.state === 'complete' ? 'Costs reviewed' : 'Review available'}</b></summary>
-      <div className="shop-today-advanced-stack">
-    <section aria-label="Shop cost coverage and margin at risk" className="shop-margin-control" id="shop-cost-coverage">
-      <header>
-        <div>
-          <span className="core-eyebrow">Daily profit control</span>
-          <h3>Cost coverage before margin</h3>
-          <p>Retained non-sample completed sales and reviewed retained Shop cost evidence count. This is local operating evidence, not pilot, customer, or commercial proof.</p>
-        </div>
-        <b data-state={marginControl.state}>{marginControl.costCoverage.state === 'complete' ? 'Cost-complete' : marginControl.costCoverage.state === 'no_retained_sales' ? 'Awaiting retained sale' : 'Evidence incomplete'}</b>
-      </header>
-      <div className="shop-margin-summary">
-        <article>
-          <small>Sold-value cost coverage</small>
-          <strong>{formatShopCostCoverage(marginControl.costCoverage.coverageBasisPoints)}</strong>
-          <span>{formatMmk(marginControl.costCoverage.coveredSoldValueMmk)} of {formatMmk(marginControl.costCoverage.soldValueMmk)}</span>
-          <span>Single reviewed unit cost per SKU, allocated by receipt order; conflicts withhold margin.</span>
-        </article>
-        <article>
-          <small>Retained non-sample sales</small>
-          <strong>{marginControl.activity.retainedNonSampleCompletedSales}</strong>
-          <span>{marginControl.activity.openOrders} open · {marginControl.activity.cancelledOrders} cancelled · {marginControl.activity.sampleOrders} sample excluded</span>
-        </article>
-        <article>
-          <small>Aggregate gross profit</small>
-          <strong>{marginControl.profit.grossProfitMmk === null ? 'Withheld' : formatMmk(marginControl.profit.grossProfitMmk)}</strong>
-          <span>{marginControl.profit.marginBasisPoints === null ? marginControl.profit.reason : `${formatShopMarginRate(marginControl.profit.marginBasisPoints)} of completed sold value`}</span>
-        </article>
-      </div>
-      {marginControl.costCoverage.state === 'incomplete' ? <p className="shop-margin-gaps" role="status">
-        Evidence gaps: {marginControl.costCoverage.gaps.missingLineCount} missing · {marginControl.costCoverage.gaps.staleLineCount} stale · {marginControl.costCoverage.gaps.unlinkedLineCount} unlinked · {marginControl.costCoverage.gaps.unreviewedLineCount} unreviewed · {marginControl.costCoverage.gaps.partialLineCount} partial · {marginControl.costCoverage.gaps.costMethodLineCount} cost-method review
-      </p> : null}
-      {marginControl.activity.adjustmentBlockedSales ? <p className="shop-margin-gaps" role="status">{marginControl.activity.adjustmentBlockedSales} completed {marginControl.activity.adjustmentBlockedSales === 1 ? 'sale has' : 'sales have'} return, correction, or refund evidence awaiting exact line-value review.</p> : null}
-      {marginControl.priorities.length ? <div aria-label="Margin at risk priorities" className="shop-margin-priorities">
-        {marginControl.priorities.map((priority) => <Link data-tone={priority.severity} key={priority.id} to={priority.target}>
-          <div>
-            <span>{priority.marginBasisPoints === null ? 'Critical cost with no sold value' : priority.severity === 'critical' ? 'Negative margin' : 'Below margin floor'}</span>
-            <strong>{priority.itemName}</strong>
-            <small>{priority.ownerRole} · {priority.dueLabel}</small>
-          </div>
-          <div>
-            <b>{formatMmk(priority.exposureMmk)} at risk</b>
-            <small>{priority.marginBasisPoints === null ? 'Margin rate unavailable — no sold value' : `${formatShopMarginRate(priority.marginBasisPoints)} margin`}</small>
-          </div>
-          <p><strong>Next:</strong> {priority.actionLabel}. <strong>Closed when:</strong> {priority.closureCondition}</p>
-        </Link>)}
-      </div> : marginControl.profit.status === 'available' ? <p className="shop-margin-controlled">No negative or below-floor margin exposure appears in the complete retained evidence.</p> : null}
-      <p className="panel-note">No payment, stock, supplier, accounting, customer, or hosted write runs from this panel.</p>
-    </section>
-
-    {localBatchFirstUseAllowed ? <section aria-label="Open local Batch Profit Control workflow" className="shop-margin-control shop-batch-first-use-launcher">
-      <header>
-        <div>
-          <span className="core-eyebrow">Real local Batch review</span>
-          <h3>Create one Batch estimate from current retained Shop sales</h3>
-          <p>Open an explicit local workflow to select eligible completed-sale lines, review production-cost estimates and disposition, and save a versioned immutable Batch receipt. Existing Batch records and the current Shop workspace are never overwritten.</p>
-          <button className="core-button" disabled={batchFirstUse.status === 'loading'} onClick={() => { void openBatchFirstUse() }} type="button">
-            {batchFirstUse.status === 'loading' ? 'Opening local Batch review…' : batchFirstUse.status === 'ready' ? 'Reload local Batch workflow' : 'Open local Batch review'}
-          </button>
-        </div>
-        <b>Owner-reviewed local estimate</b>
-      </header>
-      {batchFirstUse.status === 'error' ? <p className="shop-margin-gaps" role="alert">Local Batch workflow failed to load. No estimate was shown or saved and the Shop workspace stayed unchanged.</p> : null}
-      {batchFirstUse.status === 'ready'
-        && shopBatchFirstUseWorkspaceCapabilityIsCurrent(batchFirstUse.workspaceCapability, currentWorkspaceCapability)
-        ? <batchFirstUse.Component commerce={commerce} onProjection={acceptLocalBatchProjection} readCurrentWorkspaceCapability={readCurrentWorkspaceCapability} workspaceCapability={batchFirstUse.workspaceCapability} />
-        : null}
-      <p className="panel-note">Not pilot, customer, commercial, or accounting proof. No payment, stock, supplier, customer, hosted, provider, model, or production write is authorized.</p>
-    </section> : null}
-
-    <ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />
-
-    <section aria-labelledby="shop-operations-title" className="shop-today-advanced-section">
-      <header><span><strong id="shop-operations-title">Operations</strong><small>Customers, finance, channels and purchasing</small></span><b>{modules.length} areas</b></header>
-      <div className="shop-today-module-grid">
-        {modules.map((module) => <Link data-tone={module.tone ?? 'ready'} key={module.label} to={module.to}>
-          <span><strong>{module.label}</strong><small>{module.detail}</small></span>
-          <b>{module.status}</b>
-        </Link>)}
-      </div>
-    </section>
-
-      </div>
+    <details aria-label="Advanced Shop controls" className="shop-today-workspaces shop-today-advanced" onToggle={(event) => { if (event.currentTarget.open) setAdvancedControlsLoaded(true) }}>
+      <summary><span><strong>Advanced controls</strong><small>Costs, trends and operations</small></span><b>{profitControl.openPriorityCount ? profitControl.openPriorityCount + ' priorities' : 'Explore'}</b></summary>
+      {advancedControlsLoaded ? <Suspense fallback={<p aria-live="polite" className="panel-note">Loading advanced controls…</p>}><ShopTodayAdvancedPanel batchProfitControl={batchProfitControl} commerce={commerce} localBatchFirstUseAllowed={localBatchFirstUseAllowed} modules={modules} /></Suspense> : null}
     </details>
   </div>
 }

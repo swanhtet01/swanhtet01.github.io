@@ -308,6 +308,8 @@ check(
 const { readFile } = await import('node:fs/promises')
 const encodedBytes = (text) => new TextEncoder().encode(text).byteLength
 const corePage = await readFile(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+const receiptControls = await readFile(new URL('../showroom/src/core/OrderReceiptActions.tsx', import.meta.url), 'utf8')
+const orderPresentation = await readFile(new URL('../showroom/src/core/shop-order-presentation.ts', import.meta.url), 'utf8')
 
 const acknowledgement = commerceOrderAcknowledgement(state, ORDER_ID)
 check(Boolean(acknowledgement), 'the order this lifecycle completed must produce an acknowledgement, or there is no file to weigh')
@@ -325,8 +327,8 @@ const fromDataUrl = decodeURIComponent(eager.slice(PREFIX.length))
 // orderAcknowledgementFileText would leave a hand-written twin passing while the customer's
 // Burmese name arrived as mojibake. A Blob of a string is its UTF-8, so what this returns is
 // the byte sequence that lands on her disk.
-const declaration = corePage.match(/\nfunction orderAcknowledgementFileText\(artifact: CommerceOrderAcknowledgement\) \{\r?\n([\s\S]*?)\r?\n\}/)
-check(Boolean(declaration), 'orderAcknowledgementFileText is gone from CoreApp.tsx, so what the download writes can no longer be weighed here')
+const declaration = orderPresentation.match(/\nexport function orderAcknowledgementFileText\(artifact: CommerceOrderAcknowledgement\) \{\r?\n([\s\S]*?)\r?\n\}/)
+check(Boolean(declaration), 'orderAcknowledgementFileText is gone from shop-order-presentation.ts, so what the download writes can no longer be weighed here')
 const fromBlob = new Function('artifact', 'commerceOrderAcknowledgementText', declaration[1])(acknowledgement, commerceOrderAcknowledgementText)
 check(fromBlob === fromDataUrl, 'the acknowledgement file changed content when its download stopped being eager')
 check(encodedBytes(fromBlob) === encodedBytes(fromDataUrl), 'the acknowledgement file changed size when its download stopped being eager')
@@ -359,12 +361,45 @@ check(
   /export function downloadBlob\(filename: string, blob: Blob\) \{[\s\S]*?URL\.revokeObjectURL\(url\)/.test(helper),
   'the shared download helper no longer revokes what it mints -- an object URL never released pins its whole buffer for the life of the page',
 )
-const actionsStart = corePage.indexOf('function OrderReceiptActions(')
-const actions = actionsStart < 0 ? '' : corePage.slice(actionsStart, corePage.indexOf('function OrderList(', actionsStart))
+const actionsStart = receiptControls.indexOf('export function OrderReceiptActions(')
+const actions = actionsStart < 0 ? '' : receiptControls.slice(actionsStart)
 check(
   actions.includes('downloadBlob(acknowledgement.filename, new Blob([orderAcknowledgementFileText(acknowledgement.artifact)]'),
   'the acknowledgement download no longer mints its file as a Blob on the click',
 )
 check(!actions.includes('URL.createObjectURL('), 'the acknowledgement download mints its own object URL again instead of handing off to the helper that revokes')
+
+// Render the deferred history against the completed order from this lifecycle, not a hand-built twin.
+const [{ createServer }, react, { renderToStaticMarkup }] = await Promise.all([
+  import(pathToFileURL(requireFromShowroom.resolve('vite')).href),
+  import(pathToFileURL(requireFromShowroom.resolve('react')).href),
+  import(pathToFileURL(requireFromShowroom.resolve('react-dom/server')).href),
+])
+const vite = await createServer({
+  appType: 'custom', configFile: 'showroom/vite.config.ts', configLoader: 'runner',
+  logLevel: 'silent', root: 'showroom', server: { hmr: false, middlewareMode: true },
+})
+try {
+  const { ClosedOrderHistory } = await vite.ssrLoadModule('/src/core/ShopOrderHistory.tsx')
+  const completedOrder = state.orders.find(order => order.id === ORDER_ID)
+  const before = JSON.stringify(completedOrder)
+  const props = {
+    orders: [completedOrder], disabled: true, canCorrect: () => true, canReturn: () => true,
+    acknowledgementDownloads: { get: () => ({ artifact: acknowledgement, filename: 'order.txt' }) },
+    correctionCalculation: null, correctionDraft: null, returnDraft: null, returnLocationPreview: null,
+    loyaltyPoints: null, supportDraft: null, supportReopenDraft: null, supportServiceDraft: null,
+    supportResolutionDraft: null, supportWorkloadDownload: null,
+  }
+  const html = renderToStaticMarkup(react.createElement(ClosedOrderHistory, props))
+  check(html.includes('data-order-receipt="view"'), 'deferred history must still render the saved-order receipt action')
+  check(html.includes('data-order-acknowledgement="local-download"'), 'deferred history must keep acknowledgement download available')
+  check(/<button[^>]*disabled=""[^>]*>Record return<\/button>/.test(html), 'return mutation must stay disabled when the workspace is read-only')
+  check(/<button[^>]*disabled=""[^>]*>Correct invoice<\/button>/.test(html), 'correction mutation must stay disabled when the workspace is read-only')
+  const writable = renderToStaticMarkup(react.createElement(ClosedOrderHistory, { ...props, disabled: false }))
+  check(!/<button[^>]*disabled=""[^>]*>(?:Record return|Correct invoice)<\/button>/.test(writable), 'authorized history actions must remain available')
+  check(JSON.stringify(completedOrder) === before, 'rendering history must not change the saved order')
+} finally {
+  await vite.close()
+}
 
 console.log(`order lifecycle journey contract: ${checks} checks passed`)

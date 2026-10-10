@@ -376,7 +376,8 @@ try { appRuntimeEvidence = JSON.parse(appRuntimeBundle.stdout) } catch { /* Miss
 requireContract('actual app entrypoint imports from isolated source with pinned dependencies',
   appRuntimeBundle.status === 0 && appRuntimeEvidence?.ok === true
   && appRuntimeEvidence.evidence === 'isolated_source_cold_import'
-  && appRuntimeEvidence.requiredRoutes === 8 && appRuntimeEvidence.dependencyPins === 9
+  && appRuntimeEvidence.requiredRoutes === 10 && appRuntimeEvidence.dependencyPins === 10
+  && appRuntimeEvidence.publishingRoutes === 10
   && appRuntimeEvidence.providerPackage === false && appRuntimeEvidence.hostedAcceptance === false)
 if (appRuntimeBundle.status !== 0) console.error('Isolated app runtime probe failed; run tools/test_app_runtime_bundle.py for details.')
 
@@ -397,7 +398,7 @@ requireContract('checked build produces a fresh artifact exactly once before ver
   && canonicalVerifySteps.filter((step) => step === 'npm run app:build').length === 1
   && canonicalVerifySteps.indexOf('node tools/verify_app_build.mjs') > 0)
 requireContract('CI verifies exact-source unauthenticated access gates across app entry routes',
-  ciWorkflow.includes('timeout-minutes: 15')
+  ciWorkflow.includes('timeout-minutes: 20')
   && ciWorkflow.includes("SUPERMEGA_CI_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
   && ciWorkflow.includes("ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}")
   && ciWorkflow.includes('Verify exact source checkout')
@@ -435,15 +436,16 @@ requireContract('coordinated release avoids redundant local app install',
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
 requireContract('canonical SPA routes use one filesystem-first fallback behind the header floor',
-  config.routes?.length === 4
-  && config.routes[0]?.src === '/(.*)' && config.routes[0]?.continue === true && !config.routes[0]?.dest
-  && config.routes[1]?.src === '/api/(.*)' && config.routes[1]?.dest === '/api/app.py'
-  && config.routes[2]?.handle === 'filesystem'
-  && config.routes[3]?.src === '/(.*)' && config.routes[3]?.dest === '/index.html')
+  config.routes?.length === 5
+  && config.routes[0]?.src === '/sites/(.*)' && config.routes[0]?.dest === '/api/app.py'
+  && config.routes[1]?.src === '/(.*)' && config.routes[1]?.continue === true && !config.routes[1]?.dest
+  && config.routes[2]?.src === '/api/(.*)' && config.routes[2]?.dest === '/api/app.py'
+  && config.routes[3]?.handle === 'filesystem'
+  && config.routes[4]?.src === '/(.*)' && config.routes[4]?.dest === '/index.html')
 // The app keeps a client's catalog, orders, and evidence in browser storage. It
 // shipped with no response headers at all while the kernel already had a full
 // set, so it was framable and ran under no content policy.
-const appSecurityHeaders = config.routes?.[0]?.headers || {}
+const appSecurityHeaders = config.routes?.[1]?.headers || {}
 const appPolicy = String(appSecurityHeaders['Content-Security-Policy'] || '')
 requireContract('app is served with a security header floor',
   appSecurityHeaders['X-Frame-Options'] === 'DENY'
@@ -483,7 +485,7 @@ requireContract('app shell carries the same policy for hosts that cannot set hea
   && !appShellPolicy.includes('frame-ancestors'))
 requireContract('app shell carries no inline script the policy would refuse',
   ![...appShell.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].some((match) => match[1].trim().length))
-requireContract('canonical API function', config.routes?.[1]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
+requireContract('canonical API function', config.routes?.[2]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('Python dependencies and entrypoint probe trigger app review',
@@ -502,6 +504,13 @@ requireContract('all API tests trigger review and execute before manual release'
   allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'tests/**'"))
   && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
 requireContract('runtime package changes trigger non-mutating review', allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes("- 'supermega_runtime/**'")))
+requireContract('Sites database CI runs real opt-in tests without accepting skips',
+  ciWorkflow.includes("SUPERMEGA_TEST_POSTGRES: '1'")
+  && ciWorkflow.includes("SUPERMEGA_RUN_WEBSITE_INQUIRY_SQL: '1'")
+  && ciWorkflow.includes("SUPERMEGA_TRIAL_SCHEMA_VERSION: '13'")
+  && ciWorkflow.includes('SUPERMEGA_TEST_POSTGRES_BIN: /usr/lib/postgresql/17/bin')
+  && ciWorkflow.includes('python tools/verify_sites_database.py --require-supported-python')
+  && ciWorkflow.includes('python tools/test_packaged_app_import.py'))
 requireContract('database activation controls trigger non-mutating review',
   allPullRequests(ciWorkflow) && [appWorkflow].every((source) => source.includes('tools/validate_supermega_database_url.py') && source.includes('tools/activate_supermega_database.ps1')))
 requireContract('rehearsal packet changes trigger both reviews and keep operator files ignored',

@@ -4961,6 +4961,9 @@ class PostgresTrialStore:
                 ),
                 field_name="reduced state",
             )
+            if surface_value == "website":
+                from .website_media_references import require_website_media_receipts
+                require_website_media_receipts(cursor, normalized.workspace_id, next_state)
             next_version = current_version + 1
             if row:
                 cursor.execute(

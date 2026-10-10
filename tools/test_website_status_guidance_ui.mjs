@@ -61,13 +61,13 @@ test('local file readiness waits for actual page checks and keeps one visible pr
   assert.doesNotMatch(source, /website-heading-publish-action/)
   assert.ok(source.includes("localPreviewReady ? 'Ready to download' : 'After review'"))
   assert.ok(source.includes('need attention before the website file is ready.'))
-  assert.match(css, /\.website-status-disclosure \{ order: 2; \}/)
+  assert.match(css, /\.website-today \{\s*order: 1;/)
   assert.match(css, /\.website-action-bar \{\s*order: 3;/)
-  assert.match(css, /\.website-workspace-grid\.view-publish \{ order: 4; \}/)
+  assert.match(css, /\.website-workspace-grid,\s*\.website-workspace-grid\.view-publish \{\s*order: 4;/)
 })
 
 test('manual inquiry capture is independent of website publishing readiness', () => {
-  assert.ok(source.includes('Use this when a customer contacts the business by phone, message or in person.'))
+  assert.ok(source.includes('For a request received by phone or in person.'))
   assert.ok(source.includes('disabled={portalViewOnly} type="submit">{portalViewOnly ? \'View only\' : \'Add to inbox\'}'))
   assert.doesNotMatch(source, /readyBuyerCtaPages/)
   assert.doesNotMatch(source, /Add a ready page with a contact action before capturing inquiries/)

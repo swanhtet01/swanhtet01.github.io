@@ -3,10 +3,10 @@ import { readFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import test from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
-import { verifyWebsiteReviewMigrationCatalog } from './verify_website_review_migration_catalog.mjs'
+import { verifyWebsitePublishingMigrationCatalog } from './verify_website_review_migration_catalog.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const verify = db => verifyWebsiteReviewMigrationCatalog(db, (name, ok) => assert.ok(ok, name))
+const verify = db => verifyWebsitePublishingMigrationCatalog(db, (name, ok) => assert.ok(ok, name))
 
 test('complete migration chain and adversarial private catalog changes', async t => {
   const db = new PGlite()
@@ -30,6 +30,14 @@ test('complete migration chain and adversarial private catalog changes', async t
       } finally { await db.exec('rollback') }
     })
     const mutations = [
+      ['inquiry forced RLS removed', 'alter table app_private.website_inbox no force row level security'],
+      ['inquiry browser grant', 'grant select on app_private.website_inbox to authenticated'],
+      ['inquiry direct update grant', 'grant update on app_private.website_inbox to supermega_trial_backend'],
+      ['inquiry cross-tenant policy', 'alter policy website_inquiry_actions_read on app_private.website_inquiry_actions using (true)'],
+      ['inquiry revision constraint weakened', 'alter table app_private.website_inbox alter column revision drop not null'],
+      ['inquiry state index removed', 'drop index app_private.website_inbox_status_received_idx'],
+      ['publication origin uniqueness removed', 'drop index app_private.website_inquiry_channels_active_origin_idx'],
+      ['inquiry action privilege altered', 'alter function app_private.change_website_inquiry(uuid,uuid,uuid,bigint,text,text) security invoker'],
       ['acceptance forced RLS removed', 'alter table app_private.website_customer_acceptances no force row level security'],
       ['acceptance browser grant', 'grant select on app_private.website_customer_acceptances to authenticated'],
       ['acceptance cross-tenant policy', 'alter policy website_acceptance_read on app_private.website_customer_acceptances using (true)'],

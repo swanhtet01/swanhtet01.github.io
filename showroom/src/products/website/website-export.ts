@@ -1,3 +1,7 @@
+import { WEBSITE_PUBLIC_CSS } from './website-presentation.ts'
+import { websiteDocumentLanguage } from './website-language.ts'
+import { websiteContactPage } from './website-contact-page.ts'
+import { isWebsiteImage, type WebsiteImage } from './website-media.ts'
 import { type WebsiteArtifact } from './website-model.ts'
 
 export const WEBSITE_HTML_MIME_TYPE = 'text/html;charset=utf-8' as const
@@ -118,7 +122,13 @@ export function validateWebsiteArtifactForExport(artifact: WebsiteArtifact): Web
     if (!page.sections.length) {
       issues.push({ path: `${path}.sections`, message: 'Add at least one content section.' })
     }
+    if (page.hero.image !== undefined && !isWebsiteImage(page.hero.image)) {
+      issues.push({ path: `${path}.hero.image`, message: 'Use a public HTTPS image and its description.' })
+    }
     page.sections.forEach((section, sectionIndex) => {
+      if (section.image !== undefined && !isWebsiteImage(section.image)) {
+        issues.push({ path: `${path}.sections[${sectionIndex}].image`, message: 'Use a public HTTPS image and its description.' })
+      }
       if (!section.title.trim()) {
         issues.push({ path: `${path}.sections[${sectionIndex}].title`, message: 'Add a section title.' })
       }
@@ -137,7 +147,7 @@ export function validateWebsiteArtifactForExport(artifact: WebsiteArtifact): Web
   return issues
 }
 
-export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
+export function buildWebsiteHtml(artifact: WebsiteArtifact, privateImages: ReadonlyMap<string, string> = new Map()): string {
   const issues = validateWebsiteArtifactForExport(artifact)
   if (issues.length) {
     throw new Error(`Website artifact is not exportable: ${issues.map((issue) => `${issue.path}: ${issue.message}`).join(' ')}`)
@@ -152,11 +162,16 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
   }
 
   const siteName = cleanText(artifact.siteName)
+  const inquiryPage = websiteContactPage(artifact.pages) ?? homePage
+  const inquiryTarget = targets.find(target => target.slug === inquiryPage.slug) ?? homeTarget
   const skipLinks = targets.map((target) => (
     `  <a class="skip-link" data-home="${target.slug === '/'}" data-page="${target.anchor}" href="#${target.anchor}">Skip to content</a>`
   )).join('\n')
   const activeSkipStyles = targets.map((target) => (
     `      body:has(.site-page[id="${target.anchor}"]:target) .skip-link[data-page="${target.anchor}"] { display: block; }`
+  )).join('\n')
+  const activeNavStyles = targets.map(target => (
+    `  body:has(.site-page[id="${target.anchor}"]:target) .site-nav a[href="#${target.anchor}"] { background: #eeedff; color: #4338ca; }`
   )).join('\n')
   const navigation = artifact.pages
     .map((page, index) => ({ page, target: targets[index] }))
@@ -168,46 +183,17 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
     ))
     .join('\n')
   const pages = artifact.pages
-    .map((page, index) => renderPage(page, targets[index] as PageTarget, targets))
+    .map((page, index) => renderPage(page, targets[index] as PageTarget, targets, privateImages, page.id === inquiryPage.id, siteName))
     .join('\n')
 
-  // WCAG 3.1.1 (Level A) requires the page's human language to be programmatically
-  // determinable. "und" is syntactically valid BCP 47 but means "undetermined", which
-  // defeats the point: a screen reader cannot choose a voice, search engines cannot target
-  // the language, and browsers will not offer to translate. This file is the artifact the
-  // customer actually publishes, so it has to declare a real language.
-  //
-  // The workspace stores no locale, so infer it from the content being published rather
-  // than inventing a setting. Any Myanmar-script character means Burmese, otherwise
-  // English — right for a Myanmar product, and a mixed page resolves to Burmese, which is
-  // the correct call when that is the script a reader needs a voice for.
-  // Decided by which script actually dominates the readable text, not by whether Myanmar
-  // appears at all. Presence alone flipped an otherwise English page to Burmese as soon as
-  // one Burmese word showed up in the shop's name — telling a screen reader to pronounce
-  // the whole document with the wrong voice, which is worse than the "und" this replaced.
-  // Markup is stripped first: the tags and attributes are Latin and would swamp the count.
-  //
-  // A document-level guess is inherently approximate. The precise answer for a genuinely
-  // bilingual page is lang on the individual elements, which needs the editor to record
-  // which language each block is in — worth doing when a customer actually mixes scripts.
-  // Style and script CONTENTS survive a naive tag strip and are pure Latin, so they would
-  // swamp the count: measured on one export, 3,003 of 3,768 "Latin letters" were CSS. The
-  // rendered pages do not currently carry a <style> block, but relying on that is luck
-  // rather than design, so both are removed before anything is counted.
-  const readableText = `${siteName} ${pages}`
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
-  const myanmarLetters = (readableText.match(/[က-႟ꩠ-ꩿꧠ-꧿]/g) ?? []).length
-  const latinLetters = (readableText.match(/[A-Za-z]/g) ?? []).length
-  const documentLanguage = myanmarLetters > latinLetters ? 'my' : 'en'
+  const documentLanguage = websiteDocumentLanguage(siteName, artifact.pages)
 
   return `<!doctype html>
 <html lang="${documentLanguage}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="color-scheme" content="light">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="index,follow">
@@ -217,200 +203,24 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
   <meta property="og:title" content="${escapeHtml(cleanText(homePage.seo.title))}">
   <meta property="og:description" content="${escapeHtml(cleanText(homePage.seo.description))}">
   <style>
-    :root {
-      color-scheme: light;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif;
-      font-synthesis: none;
-      --accent: #3157d5;
-      --accent-strong: #2443a8;
-      --background: #f4f6fa;
-      --border: #d9deea;
-      --ink: #151923;
-      --muted: #5d6575;
-      --surface: #ffffff;
-    }
-    * { box-sizing: border-box; }
-    html { background: var(--background); scroll-behavior: smooth; }
-    body { margin: 0; min-width: 280px; background: var(--background); color: var(--ink); line-height: 1.6; }
-    a { color: inherit; }
-    a:focus-visible { border-radius: 8px; outline: 3px solid #90a7f1; outline-offset: 3px; }
-    .skip-link {
-      display: none;
-      position: fixed;
-      z-index: 20;
-      top: 12px;
-      left: 12px;
-      padding: 10px 14px;
-      border-radius: 10px;
-      background: var(--ink);
-      color: #ffffff;
-      transform: translateY(-160%);
-    }
-    .skip-link[data-home="true"] { display: block; }
-    .skip-link:focus { transform: translateY(0); }
-    .site-header {
-      position: sticky;
-      z-index: 10;
-      top: 0;
-      border-bottom: 1px solid rgba(217, 222, 234, 0.9);
-      background: rgba(255, 255, 255, 0.94);
-      backdrop-filter: blur(16px);
-    }
-    .site-header-inner, .site-main, .site-footer {
-      width: min(1120px, calc(100% - 40px));
-      margin-inline: auto;
-    }
-    .site-header-inner {
-      display: flex;
-      min-height: 72px;
-      align-items: center;
-      justify-content: space-between;
-      gap: 24px;
-    }
-    .site-name {
-      display: inline-flex;
-      min-height: 44px;
-      align-items: center;
-      font-size: 1.05rem;
-      font-weight: 780;
-      letter-spacing: -0.02em;
-      text-decoration: none;
-    }
-    .site-nav { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
-    .site-nav a {
-      display: inline-flex;
-      min-height: 44px;
-      align-items: center;
-      padding: 8px 12px;
-      border-radius: 10px;
-      color: var(--muted);
-      font-weight: 650;
-      text-decoration: none;
-    }
-    .site-nav a:hover { background: var(--background); color: var(--ink); }
-    .site-main { padding-block: clamp(32px, 6vw, 72px); }
-    .site-page {
-      overflow: hidden;
-      border: 1px solid var(--border);
-      border-radius: 28px;
-      background: var(--surface);
-      box-shadow: 0 24px 70px rgba(28, 37, 61, 0.08);
-      scroll-margin-top: 96px;
-    }
-    .site-page + .site-page { margin-top: 32px; }
-    @supports selector(main:has(.site-page:target)) {
-      .skip-link[data-home="true"] { display: none; }
-      body:not(:has(.site-page:target)) .skip-link[data-home="true"] { display: block; }
+${WEBSITE_PUBLIC_CSS}
+/* Navigation for a portable, script-free single-file website. */
+.sm-site .site-page + .site-page { margin-top: 32px; }
+.sm-site .skip-link { display: none; }
+.sm-site .skip-link[data-home="true"] { display: block; }
+@supports selector(main:has(.site-page:target)) {
+  .sm-site .skip-link[data-home="true"] { display: none; }
+  body:not(:has(.site-page:target)) .skip-link[data-home="true"] { display: block; }
 ${activeSkipStyles}
-      .site-page { display: none; }
-      .site-page:target { display: block; }
-      .site-main:not(:has(.site-page:target)) .site-page[data-home="true"] { display: block; }
-    }
-    .hero {
-      display: grid;
-      min-height: min(620px, 72vh);
-      align-content: center;
-      justify-items: start;
-      padding: clamp(40px, 8vw, 104px);
-      background:
-        radial-gradient(circle at 90% 10%, rgba(49, 87, 213, 0.14), transparent 34%),
-        linear-gradient(145deg, #ffffff 20%, #f6f8ff 100%);
-    }
-    .eyebrow {
-      margin: 0 0 14px;
-      color: var(--accent);
-      font-size: 0.78rem;
-      font-weight: 800;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-    h1, h2 { margin: 0; line-height: 1.08; letter-spacing: -0.04em; text-wrap: balance; }
-    h1 { max-width: 850px; font-size: clamp(2.35rem, 7vw, 5.6rem); }
-    h2 { font-size: clamp(1.45rem, 3vw, 2.2rem); }
-    :lang(my) h1, :lang(my) h2 { line-height: 1.4; letter-spacing: 0; }
-    .summary {
-      max-width: 720px;
-      margin: 24px 0 0;
-      color: var(--muted);
-      font-size: clamp(1.05rem, 2vw, 1.3rem);
-      white-space: pre-line;
-    }
-    .cta {
-      display: inline-flex;
-      min-height: 48px;
-      align-items: center;
-      gap: 10px;
-      margin-top: 32px;
-      padding: 12px 18px;
-      border-radius: 12px;
-      background: var(--accent);
-      color: #ffffff;
-      font-weight: 760;
-      text-decoration: none;
-    }
-    .cta:hover { background: var(--accent-strong); }
-    .section-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 20px;
-      padding: clamp(24px, 5vw, 64px);
-      border-top: 1px solid var(--border);
-    }
-    .content-section {
-      min-width: 0;
-      padding: clamp(24px, 4vw, 40px);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      background: #fbfcff;
-    }
-    .content-section p:last-child {
-      margin: 18px 0 0;
-      color: var(--muted);
-      white-space: pre-line;
-    }
-    .site-footer {
-      display: flex;
-      min-height: 92px;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-    .visually-hidden {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
-    @media (max-width: 720px) {
-      .site-header { position: static; }
-      .site-header-inner { display: block; padding-block: 10px 12px; }
-      .site-nav { justify-content: flex-start; overflow-x: auto; padding-bottom: 2px; }
-      .site-header-inner, .site-main, .site-footer { width: min(100% - 24px, 1120px); }
-      .site-main { padding-block: 20px; }
-      .site-page { border-radius: 20px; }
-      .hero { min-height: auto; padding: 44px 22px 52px; }
-      .summary { margin-top: 18px; }
-      .cta { width: 100%; justify-content: center; }
-      .section-grid { grid-template-columns: 1fr; padding: 16px; }
-      .content-section { padding: 24px 20px; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      html { scroll-behavior: auto; }
-    }
-    @media print {
-      .site-header, .skip-link { display: none; }
-      .site-main { width: 100%; padding: 0; }
-      .site-page { display: block !important; break-after: page; box-shadow: none; }
-    }
+${activeNavStyles}
+  body:not(:has(.site-page:target)) .site-nav a[href="#${homeTarget.anchor}"] { background: #eeedff; color: #4338ca; }
+  .sm-site .site-page { display: none; }
+  .sm-site .site-page:target { display: block; }
+  .sm-site .site-main:not(:has(.site-page:target)) .site-page[data-home="true"] { display: block; }
+}
   </style>
 </head>
-<body>
+<body class="sm-site">
 ${skipLinks}
   <header class="site-header">
     <div class="site-header-inner">
@@ -424,18 +234,19 @@ ${navigation}
 ${pages}
   </main>
   <footer class="site-footer">
-    <strong>${escapeHtml(siteName)}</strong>
+    <span>${escapeHtml(siteName)}</span>
+    <a href="#${inquiryTarget.anchor}">Contact us</a>
   </footer>
 </body>
 </html>
 `
 }
 
-export function createWebsiteHtmlDownload(artifact: WebsiteArtifact): WebsiteHtmlDownload {
+export function createWebsiteHtmlDownload(artifact: WebsiteArtifact, privateImages?: ReadonlyMap<string, string>): WebsiteHtmlDownload {
   return {
     filename: sanitizeWebsiteFilename(artifact.siteName),
     mimeType: WEBSITE_HTML_MIME_TYPE,
-    content: buildWebsiteHtml(artifact),
+    content: buildWebsiteHtml(artifact, privateImages),
   }
 }
 
@@ -443,6 +254,9 @@ function renderPage(
   page: WebsiteArtifact['pages'][number],
   target: PageTarget,
   targets: PageTarget[],
+  privateImages: ReadonlyMap<string, string>,
+  isInquiryPage: boolean,
+  siteName: string,
 ) {
   const eyebrow = cleanText(page.hero.eyebrow)
   const destination = resolveSafeDestination(page.hero.ctaHref, targets)
@@ -452,9 +266,11 @@ function renderPage(
   const sections = page.sections.map((section, sectionIndex) => {
     const headingId = `${target.anchor}-section-${sectionIndex + 1}`
     const sectionEyebrow = cleanText(section.eyebrow)
-    return `      <section class="content-section" aria-labelledby="${headingId}">
+    return `      <section class="content-section${section.image ? ' has-image' : ''}" aria-labelledby="${headingId}">
+${renderImage(section.image, privateImages)}
+<div class="section-copy">
 ${sectionEyebrow ? `        <p class="eyebrow">${escapeHtml(sectionEyebrow)}</p>\n` : ''}        <h2 id="${headingId}">${escapeHtml(cleanText(section.title))}</h2>
-        <p>${escapeHtml(cleanText(section.body))}</p>
+        <p>${escapeHtml(cleanText(section.body))}</p></div>
       </section>`
   }).join('\n')
 
@@ -462,6 +278,7 @@ ${sectionEyebrow ? `        <p class="eyebrow">${escapeHtml(sectionEyebrow)}</p>
       <meta itemprop="name" content="${escapeHtml(cleanText(page.seo.title))}">
       <meta itemprop="description" content="${escapeHtml(cleanText(page.seo.description))}">
       <section class="hero" aria-labelledby="${target.anchor}-title">
+${renderImage(page.hero.image, privateImages, true)}
 ${eyebrow ? `        <p class="eyebrow">${escapeHtml(eyebrow)}</p>\n` : ''}        <h1 id="${target.anchor}-title">${escapeHtml(cleanText(page.hero.headline))}</h1>
         <p class="summary">${escapeHtml(cleanText(page.hero.summary))}</p>
 ${cta}
@@ -469,7 +286,19 @@ ${cta}
       <div class="section-grid">
 ${sections}
       </div>
+${isInquiryPage ? `<section class="inquiry-section"><h2>Get in touch</h2><form class="inquiry-form" aria-label="Offline contact form">
+<fieldset disabled><label>Name<input autocomplete="name" maxlength="80"></label><label>Email or phone<input autocomplete="email" maxlength="120"></label><label>Message<textarea rows="4" maxlength="500"></textarea></label><label class="consent"><input type="checkbox"><span>I agree to share these details with ${escapeHtml(siteName)} so they can respond.</span></label></fieldset>
+<button type="button" disabled>Send message</button><p class="inquiry-status">Downloaded copy. Publish through Sites to receive messages in your inbox.</p></form></section>` : ''}
     </article>`
+}
+
+function renderImage(image: WebsiteImage | undefined, privateImages: ReadonlyMap<string, string>, priority = false) {
+  if (!image) return ''
+  const src = 'src' in image ? image.src : privateImages.get(image.assetId)
+  if (!src || ('assetId' in image && !/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/.test(src))) {
+    throw new Error('A saved photo could not be included. Sign in to its workspace and try again.')
+  }
+  return `        <img class="content-image" src="${escapeHtml(src)}" alt="${escapeHtml(image.alt)}" loading="${priority ? 'eager' : 'lazy'}" decoding="async" referrerpolicy="no-referrer">`
 }
 
 function renderCta(label: string, destination: SafeDestination) {

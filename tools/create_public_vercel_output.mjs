@@ -453,7 +453,6 @@ const sharedStyle = `
   .story-link:hover, .story-link:focus-visible {text-decoration:underline;text-underline-offset:4px}
   .story-link span {font-size:14px;transition:transform .18s ease}
   .story-link:hover span, .story-link:focus-visible span {transform:translateX(3px)}
-  .platform-image img[width="940"] {max-width:940px}
   .platform-note {padding:36px 0 80px;max-width:700px;font-size:24px;line-height:1.5;letter-spacing:-.025em}
   .product-cards {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:0 0 76px}
   .product-card-compact {min-width:0;display:flex;flex-direction:column;padding:14px;border:1px solid var(--line-strong);border-radius:24px;background:var(--panel-solid);box-shadow:0 18px 60px rgba(28,26,48,.06)}
@@ -615,14 +614,17 @@ function interfaceDisclosure(image) {
  assert(typeof capturedAt === 'string', `interface_capture_date_missing:${image}`)
  return `App capture · synthetic example records · captured ${capturedAt}`
 }
+function productGallery(id,label,eagerFirst=false) {
+ const item=stories[id]
+ const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${eagerFirst && index === 0 ? 'eager' : 'lazy'}"${eagerFirst && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
+ if (item.screens.length === 1) return `<div class="platform-gallery" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
+ return `<div class="platform-gallery" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
+}
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
  assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
- const gallery=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
- const galleryHtml=item.screens.length === 1
-  ? `<div class="platform-gallery" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${gallery}</div></div>`
-  : `<div class="platform-gallery" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${gallery}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
+ const galleryHtml=productGallery(id,label,standalone)
   return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}${galleryHtml}<ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
 function productCard(id) {

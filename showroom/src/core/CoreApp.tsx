@@ -1,3 +1,5 @@
+import { OrderCalculationNote, OrderReceiptActions } from './OrderReceiptActions'
+import { type CommerceReturnDraft, type CommerceSupportResolutionDraft, type CommerceSupportOpenDraft, type CommerceSupportReopenDraft, type CommerceSupportServiceDraft, type CommerceCorrectionDraft, type OrderAcknowledgementLookup, useMinuteClock, commerceOrderReturnLines, commerceOrderDisplayReference, fulfilmentLabel, formatMoney, formatTaxRate, formatCommerceCalculation, localDateTimeInputValue, orderAcknowledgementDownload } from './shop-order-presentation'
 import { spaCounterFields } from './shop-spa-counter-fields'
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
@@ -13,7 +15,7 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
+import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
 import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
 import { type ManagedIdentity } from './managed-trial'
@@ -22,6 +24,7 @@ import { downloadBlob } from './download-file'
 import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
 import { applyStockCountScan } from './shop-stock-count-scan'
+const ClosedOrderHistory = lazy(() => import('./ShopOrderHistory').then((module) => ({ default: module.ClosedOrderHistory })))
 const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
 const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
@@ -95,7 +98,6 @@ import {
   commerceOrderCalculation,
   commerceOrderAcknowledgement,
   commerceOrderAcknowledgementReader,
-  commerceOrderAcknowledgementText,
   commerceOrderCorrectionExpectation,
   commerceOrderAdjustedTotal,
   commerceOrderReturnExpectation,
@@ -103,10 +105,7 @@ import {
   commerceOrderSupportReopenExpectation,
   commerceOrderSupportResolveExpectation,
   commerceOrderSupportServiceExpectation,
-  commerceSupportCaseUrgency,
   commerceSupportCheckpointState,
-  commerceSupportQueue,
-  commerceSupportSlaSummary,
   commerceSupportServiceState,
   commerceSupportWorkloadCsv,
   commerceSupportWorkloadExport,
@@ -170,8 +169,6 @@ import {
   type CommerceActionProof,
   type CommerceMerchantProfileInput,
   type CommerceCloseSettlementInputLine,
-  type CommerceCorrectionKind,
-  type CommerceCorrectionReasonCode,
   type CommerceItem,
   type CommerceItemUpdate,
   type CommerceOrder,
@@ -180,8 +177,6 @@ import {
   type CommerceState,
   type CommercePurchaseOrderDiscrepancyCode,
   type CommerceSupplierReturnClaim,
-  type CommerceReturnDisposition,
-  type CommerceSupportResolutionOutcome,
   type CommerceSupportPriority,
   type CommerceSupportServiceEventKind,
   type CommerceStockMovement,
@@ -451,55 +446,7 @@ type CatalogItemEditDraft = {
   reorderAt: string
 }
 
-type CommerceReturnDraft = {
-  orderId: string
-  sku: string
-  quantity: string
-  disposition: CommerceReturnDisposition
-  sourceIntent?: EcommerceReturnIntent
-}
-
-type CommerceSupportResolutionDraft = {
-  orderId: string
-  caseId: string
-  outcome: CommerceSupportResolutionOutcome
-  note: string
-}
-
-type CommerceSupportOpenDraft = {
-  intent: EcommerceSupportIntent
-  priority: CommerceSupportPriority
-  owner: string
-  dueAt: string
-}
-
-type CommerceSupportReopenDraft = {
-  orderId: string
-  caseId: string
-  sourceResolutionActionId: string
-  priority: CommerceSupportPriority
-  owner: string
-  dueAt: string
-  note: string
-}
-
-type CommerceSupportServiceDraft = {
-  orderId: string
-  caseId: string
-  kind: CommerceSupportServiceEventKind
-  owner: string
-  priority: CommerceSupportPriority
-  dueAt: string
-  note: string
-}
-
 const commerceSupportPriorityOrder: CommerceSupportPriority[] = ['urgent', 'high', 'normal', 'low']
-const commerceSupportServiceActionLabels: Record<CommerceSupportServiceEventKind, string> = {
-  reassigned: 'Reassign case',
-  escalated: 'Escalate case',
-  acknowledged: 'Acknowledge case',
-  first_response_ready: 'First response ready',
-}
 
 type ProductId = 'commerce' | 'production'
 
@@ -706,11 +653,6 @@ function normalizePlantJobView(value: PlantJobView): PlantJobView {
 
 const wrappedIssueDetail = { overflow: 'visible', overflowWrap: 'anywhere', textOverflow: 'clip', whiteSpace: 'normal' } as const
 
-function localDateTimeInputValue(value: Date) {
-  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000)
-  return local.toISOString().slice(0, 16)
-}
-
 function defaultIssueDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 4 * 60 * 60 * 1000))
 }
@@ -795,15 +737,6 @@ function plantJobImportDate(value: string) {
   return Number.isNaN(parsed.getTime()) ? '' : localDateTimeInputValue(parsed)
 }
 
-function useMinuteClock() {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60_000)
-    return () => window.clearInterval(timer)
-  }, [])
-  return now
-}
-
 function commerceOrderPromiseTime(order: CommerceOrder) {
   if (!order.promisedAt) return Number.POSITIVE_INFINITY
   const promisedAt = Date.parse(order.promisedAt)
@@ -845,12 +778,6 @@ function formatIssueDue(value: string) {
 
 function uid(prefix: string) {
   return `${prefix}-${commandUuid()}`.toUpperCase()
-}
-
-function commerceOrderDisplayReference(orderId: string) {
-  const canonical = orderId.trim().toUpperCase()
-  const match = /^ORD-([A-F0-9]{8})(?:-[A-F0-9-]+)?$/.exec(canonical)
-  return match ? `#${match[1]}` : canonical
 }
 
 // Ecommerce requests and after-purchase intents are named PREFIX-<uuid>, and several
@@ -897,39 +824,6 @@ function OperationsDialogHeader({ eyebrow, titleId, title, closeLabel, onClose, 
   return <div className="panel-head"><div><span className="core-eyebrow">{eyebrow}</span><h2 id={titleId}>{title}</h2></div><button aria-label={closeLabel} className="text-link" onClick={onClose} style={largeCloseTarget ? { minHeight: 44, minWidth: 44 } : undefined} type="button">Close</button></div>
 }
 
-function formatMoney(value: number) {
-  return `${new Intl.NumberFormat('en-US').format(value)} MMK`
-}
-
-type CommerceCorrectionDraft = {
-  orderId: string
-  kind: CommerceCorrectionKind
-  reasonCode: CommerceCorrectionReasonCode
-  listedAmountMmk: string
-  sourceIntent?: EcommerceCorrectionIntent
-  /**
-   * Present when this draft is a POINTS REDEMPTION (S3 PR2): the credit
-   * correction stays the money authority, and a redemption row keyed by the
-   * same actionId records the points spent (shop-loyalty.ts module header).
-   * kind/reasonCode are locked to credit/other; listedAmountMmk IS the points
-   * (1 point = 1 MMK before tax).
-   */
-  loyalty?: { customer: string }
-}
-
-function formatTaxRate(rateBasisPoints: number) {
-  return `${(rateBasisPoints / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`
-}
-
-function formatCommerceCalculation(calculation: NonNullable<CommerceOrder['calculation']>) {
-  if (!('taxCode' in calculation)) {
-    return `Subtotal ${formatMoney(calculation.subtotalMmk)} · Tax not configured · Total ${formatMoney(calculation.totalMmk)}`
-  }
-  const treatment = calculation.taxMode === 'inclusive' ? 'included' : 'added'
-  const jurisdiction = calculation.taxJurisdictionCode ? ` · ${calculation.taxJurisdictionCode}` : ''
-  return `Net ${formatMoney(calculation.subtotalMmk)} · Tax ${calculation.taxCode}${jurisdiction} ${formatTaxRate(calculation.taxRateBasisPoints)} ${treatment} ${formatMoney(calculation.taxMmk)} · Total ${formatMoney(calculation.totalMmk)}`
-}
-
 function taxConfigurationDraft(configuration: CommerceTaxConfiguration | null): TaxConfigurationDraft {
   return {
     code: configuration?.code ?? '',
@@ -961,12 +855,6 @@ function parseTaxRateBasisPoints(value: string) {
   return Number.isSafeInteger(basisPoints) && basisPoints <= 10_000 ? basisPoints : null
 }
 
-function fulfilmentLabel(value: string | undefined) {
-  if (value === 'pickup') return 'Pickup'
-  if (value === 'delivery') return 'Delivery'
-  return value ?? ''
-}
-
 function shopOrderPrimaryActionLabel(order: CommerceOrder) {
   if (order.refundStatus === 'due') return 'Record settled refund'
   if (order.paymentStatus === 'pending' && order.channel === 'Walk-in' && order.fulfilment === 'pickup') return 'Paid & handed over'
@@ -975,14 +863,6 @@ function shopOrderPrimaryActionLabel(order: CommerceOrder) {
   if (order.status === 'preparing') return order.fulfilment === 'delivery' ? 'Mark packed for delivery' : order.fulfilment === 'pickup' ? 'Ready for pickup' : 'Mark ready'
   if (order.status === 'ready') return order.fulfilment === 'delivery' ? 'Record delivered' : order.fulfilment === 'pickup' ? 'Record picked up' : 'Complete handoff'
   return 'Review order'
-}
-
-function commerceOrderReturnLines(order: CommerceOrder) {
-  return order.lines?.map((line) => ({
-    sku: line.sku,
-    name: line.variant ? `${line.name} · ${line.variant}` : line.name,
-    quantity: line.quantity,
-  })) ?? (order.itemSku ? [{ sku: order.itemSku, name: order.item, quantity: order.quantity }] : [])
 }
 
 // The record validators speak to engineers: 'orders[3].completion is outside the order
@@ -1495,7 +1375,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           })}
         </div></> : <Empty>{items.length
           ? bi('No matching item. Search by name or SKU.')
-          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Bring existing products</Link> or add one item before the first sale.</>}</Empty>}
+          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-create">Add a product</Link> or <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">import a CSV</Link>.</>}</Empty>}
       </section>
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
@@ -1657,8 +1537,6 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-const SHOP_CATALOG_IMPORT_STEPS = ['Choose CSV', 'Match columns', 'Fix row issues', 'Confirm once', 'Open Counter'] as const
-
 function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
   confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
@@ -1767,7 +1645,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [quantity, setQuantity] = useState(1)
   const [extraOrderLines, setExtraOrderLines] = useState<Array<{ sku: string; quantity: number }>>([])
   const [customer, setCustomer] = useState('')
-  const [channel, setChannel] = useState('Messenger')
+  const [channel, setChannel] = useState('Phone')
   const [payment, setPayment] = useState('')
   const [fulfilment, setFulfilment] = useState<'' | 'pickup' | 'delivery'>('')
   const [fulfilmentReference, setFulfilmentReference] = useState('')
@@ -1852,7 +1730,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     : {} as Partial<EcommerceShopNavigationIntents>
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [managedTemplateDraft, setManagedTemplateDraft] = useState({ reviewed: false, reason: '', evidenceReference: '' })
-  const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+  const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
@@ -1948,7 +1826,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const currentShippingPolicy = commerceCurrentShippingPolicy(commerce, shippingPolicyDraft.zoneCode)
   const currentPaymentPolicy = commerceCurrentPaymentPolicy(commerce, paymentPolicyDraft.adapter)
   const orderDraftHasMeaningfulFields = Boolean(customer.trim()
-    || channel !== 'Messenger'
+    || channel !== 'Phone'
     || payment
     || fulfilment
     || fulfilmentReference.trim()
@@ -2044,15 +1922,15 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     status: activeShift ? 'Shift open' : openShiftSessions.length > 1 ? 'Choose a shift' : 'No active shift',
     detail: activeShift
       ? `Open since ${formatTime(activeShift.opening.capturedAt)}`
-      : openShiftSessions.length > 1
-        ? 'Select one shift.'
+        : openShiftSessions.length > 1
+          ? 'Select one shift.'
         : legacyOperatingOrders.length
-          ? 'Close current work.'
+          ? 'Review orders first.'
           : 'Start before selling.',
     actionLabel: shopOperatingEligible
       ? operatingActivated
         ? activeShift || openShiftSessions.length > 1 ? undefined : 'Open shift'
-        : legacyOperatingOrders.length ? 'Finish current work' : 'Start Shop day'
+        : legacyOperatingOrders.length ? 'Review orders' : 'Start Shop day'
       : undefined,
     disabled: !commerceCanWrite || Boolean(pendingAction),
     onAction: reviewShopOperatingSession,
@@ -2564,6 +2442,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         history?.querySelector('summary')?.focus({ preventScroll: true })
         return
       }
+      if (commerceLocation.hash === '#shop-catalog-create') {
+        setCatalogCreateOpen(true)
+        const target = document.getElementById('shop-catalog-create')
+        target?.scrollIntoView({ block: 'center' })
+        window.requestAnimationFrame(() => target?.querySelector<HTMLInputElement>('input[name="product-name"]')?.focus({ preventScroll: true }))
+        return
+      }
       if (commerceLocation.hash === '#shop-catalog-import') {
         const target = document.getElementById('shop-catalog-import')
         target?.scrollIntoView({ block: 'start' })
@@ -2589,7 +2474,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         setQuantity(1)
         setExtraOrderLines([])
         setCustomer('')
-        setChannel('Messenger')
+        setChannel('Phone')
         setPayment('')
         setFulfilment('')
         setFulfilmentReference('')
@@ -3542,14 +3427,17 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [catalogImportOpen, setCatalogImportOpen] = useState(false)
   const catalogIsEmpty = commerce.items.length === 0
   const catalogImportRequested = commerceLocation.hash === '#shop-catalog-import'
-  const catalogImportVisible = catalogIsEmpty || catalogImportOpen || catalogImportRequested
+  const catalogImportVisible = catalogImportOpen || catalogImportRequested
   function toggleCatalogImport() {
     if (catalogImportRequested) navigate('/shop/?tab=inventory', { replace: true })
     setCatalogImportOpen((open) => catalogImportRequested ? false : !open)
   }
-  const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
-    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Bring your existing products into Shop' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Check the mapping and any row issues, confirm once, then open Counter.' : 'Review a CSV before adding products in bulk.'}</p></div>
-    {catalogIsEmpty ? <div aria-label="Import to first sale" className="catalog-onboarding-status">{SHOP_CATALOG_IMPORT_STEPS.map((step, index) => <span key={step}><small>Step {index + 1}</small><strong>{step}</strong></span>)}</div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Bring existing products'}</button>}
+  const shopCatalogOnboarding = <section aria-label="Shop catalog setup" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
+    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Add one product or import a list' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Start with one item and its current stock. Import a spreadsheet when you are ready.' : 'Review a CSV before adding products in bulk.'}</p></div>
+    {catalogIsEmpty ? <div className="form-actions">
+      <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
+      <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>
+    </div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>}
     {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
   </section>
   function runShopAutopilot() {
@@ -3597,7 +3485,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     setQuantity(1)
     setExtraOrderLines([])
     setCustomer('')
-    setChannel('Messenger')
+    setChannel('Phone')
     setPayment('')
     setFulfilment('')
     setFulfilmentReference('')
@@ -3817,16 +3705,17 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   function queueCatalogItem(event: FormEvent) {
     event.preventDefault()
-    const itemSku = itemDraft.sku.trim().toUpperCase()
+    const suppliedSku = itemDraft.sku.trim().toUpperCase()
+    const itemSku = suppliedSku || `SM-${commandUuid().slice(0, 8).toUpperCase()}`
     const name = itemDraft.name.trim()
     const onHand = Number(itemDraft.onHand)
-    const reorderAt = Number(itemDraft.reorderAt)
+    const reorderAt = Number(itemDraft.reorderAt || '0')
     const price = Number(itemDraft.price)
-    if (!itemSku || !name
+    if (!name
       || !Number.isSafeInteger(onHand) || onHand < 0
       || !Number.isSafeInteger(reorderAt) || reorderAt < 0
       || !Number.isSafeInteger(price) || price < 1) {
-      setNotice('Enter a SKU, item name, non-negative opening and reorder quantities, and a whole-MMK price.')
+      setNotice('Enter the item name, current stock, and a whole-MMK price.')
       return
     }
     if (commerce.items.some((item) => item.sku === itemSku)) {
@@ -3834,6 +3723,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       return
     }
     const item: CommerceItem = { sku: itemSku, name, onHand, reorderAt, price }
+    const isFirstProduct = commerce.items.length === 0
     queueAction({
       kind: 'catalog_item_create',
       subjectId: item.sku,
@@ -3843,8 +3733,9 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.item.created', action.commandId, proof, (current) => registerCommerceItem(current, item, proof))
-        setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+        setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
         setSku(item.sku)
+        if (isFirstProduct) navigate('/shop/?tab=counter')
       },
     })
   }
@@ -4096,7 +3987,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     if (!shopOperatingEligible || !commerceCanWrite || pendingAction) return
     if (!operatingActivated && legacyOperatingOrders.length) {
       navigate('/shop/?tab=orders#shop-close-controls')
-      setNotice('Close current work before starting a shift.')
+      setNotice('Close orders before starting a shift.')
       return
     }
     if (openShiftSessions.length) return
@@ -7212,7 +7103,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2><p className="order-source-note">Website and Commerce requests appear automatically. Messenger and Viber are not connected yet.</p></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'Record phone or walk-in'}</button> : null}</div></div>
       <dl className="order-queue-summary" aria-label="Order status"><div><dt>Need action</dt><dd>{actionOrders.length}</dd></div><div><dt>In fulfilment</dt><dd>{openOrders.length}</dd></div><div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div></dl>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
@@ -7356,7 +7247,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setResumedOrderDraft(null)
       setOrderDraftConflict(false)
     }} ref={orderComposerRef}>
-      <div className="order-composer-head"><div><span className="core-eyebrow">New order</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>Add an order</h2><p>Add order details. Review the order before saving.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close new order" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
+      <div className="order-composer-head"><div><span className="core-eyebrow">{preparedEcommerceDraft ? 'Incoming online order' : preparedChannelDraft ? 'Incoming message order' : 'Manual order'}</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft || preparedChannelDraft ? 'Review order' : 'Record phone or walk-in order'}</h2><p>{preparedEcommerceDraft ? 'Check stock, delivery and payment before confirming.' : preparedChannelDraft ? 'Review each detail against its source before confirming.' : 'Website and Commerce requests appear in the queue automatically.'}</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close new order" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
       {orderDraftActive && !preparedChannelDraft && !preparedEcommerceDraft && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftConflict
@@ -7425,9 +7316,9 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           })}
           <button className="core-button compact" disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
           {!preparedEcommerceDraft ? <details className="order-options" id="commerce-order-options" ref={orderOptionsRef}>
-            <summary><span>Channel and payment</span><small>{channel === 'Website' ? productDisplayName('website') : channel === 'Ecommerce' ? productDisplayName('ecommerce') : channel} · {payment || 'Choose payment'}</small></summary>
+            <summary><span>Order source and payment</span><small>{channel === 'Website' ? productDisplayName('website') : channel === 'Ecommerce' ? productDisplayName('ecommerce') : channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
-              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}><option>Messenger</option><option>Viber</option><option>Phone</option><option value="Website">Sites</option><option value="Ecommerce">Commerce</option><option>Walk-in</option></select></label>
+              {preparedChannelDraft ? <label>Received from<input aria-readonly="true" disabled readOnly value={preparedChannelDraft.channel ?? 'Connected message channel'} /></label> : <label>Order received by<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}>{!['Phone', 'Walk-in'].includes(channel) ? <option value={channel}>{channel} · saved draft</option> : null}<option value="Phone">Phone</option><option value="Walk-in">Walk-in</option></select></label>}
               <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>AYA Pay</option><option>MMQR</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
           </details> : null}
@@ -7439,6 +7330,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         </div>
       </>
     </dialog>
+  <Suspense fallback={<p className="form-notice" role="status">Loading order history…</p>}>
   <ClosedOrderHistory
     canCorrect={canCorrectOrder}
     canReturn={canReturnOrder}
@@ -7499,6 +7391,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     supportResolutionDraft={supportResolutionDraft}
     supportWorkloadDownload={supportWorkloadDownload}
   />
+  </Suspense>
   <details className="core-panel today-more order-daily-controls" id="shop-payment-review" open={Boolean(paymentReview.length)}>
     <summary><span>Pricing and credit policies</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
     <div className="today-more-content">
@@ -7936,14 +7829,14 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
       {commerce.items.length ? shopCatalogOnboarding : null}
-      <details className="compact-disclosure catalog-disclosure" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
-        <summary>Add catalog item</summary>
+      <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
+        <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
-          <div className="form-row"><label>SKU<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan the product barcode into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input disabled={commerceControlsDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
-          <div className="form-row"><label>Opening stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
-          <label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
-          <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review catalog item</button></div>
-          <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
+          <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
+          <div className="form-row"><label>Current stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Low-stock alert (optional)<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} step="1" type="number" value={itemDraft.reorderAt} /></label></div>
+          <label>Product code or barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} name="product-code" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Scan or type if you have one" value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label>
+          <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review and add product</button></div>
+          <p className="panel-copy">Leave the code blank and Shop will create one. You can change the stock alert later.</p>
         </form>
       </details>
       <p className="form-notice" aria-live="polite">{commerceStorageError || 'Catalog values, counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.'}</p>
@@ -7989,76 +7882,12 @@ function ReceivablesAging({ aging, disabled, onRecordContact }: {
   </details>
 }
 
-function OrderCalculationNote({ order }: { order: CommerceOrder }) {
-  if (!order.calculation) return <small data-order-calculation-note="true" data-order-calculation-status="legacy">Recorded total {formatMoney(order.total)} · Tax status not recorded</small>
-  return <small data-order-calculation-note="true" data-order-calculation-status={'taxCode' in order.calculation ? 'configured' : 'not-configured'}>{formatCommerceCalculation(order.calculation)}</small>
-}
-
-// The bytes of the acknowledgement file, and nothing else. Kept as its own function so the
-// artifact can be weighed without a DOM: this string IS the file the customer is handed, so a
-// test that pins this pins what she gets.
-//
-// The U+FEFF byte-order mark is load-bearing and must stay. This file is opened by whatever
-// the customer has -- Notepad, a spreadsheet, a phone viewer -- and without the mark a Burmese
-// customer or product name comes back as mojibake. It is the opposite call from the workspace
-// backup on the settings page, which must NOT carry one because loadBackupFile JSON.parses it
-// back and a BOM is not JSON. Nothing reads this file back in.
-function orderAcknowledgementFileText(artifact: CommerceOrderAcknowledgement) {
-  return `\uFEFF${commerceOrderAcknowledgementText(artifact)}`
-}
-
 // The bytes of the daily close CSV, on the same terms: this string IS the file, and it carries
 // the same U+FEFF every other CSV in this app carries so a spreadsheet opens Burmese product
 // and customer names as UTF-8 rather than mojibake.
 function closeExportFileText(artifact: CommerceDailyCloseExport) {
   return `\uFEFF${commerceDailyCloseCsv(artifact)}`
 }
-
-// One row's receipt controls, built when that row asks for them.
-//
-// #538 took the FILE off this path: each of these used to carry a percent-encoded data: URL,
-// 1,852,602 bytes of them alive for the life of the page at the workspace ceiling, rebuilt on
-// every sale for a file at most one order is ever downloaded from. The artifact stayed,
-// because `Boolean(acknowledgement)` decides whether an order shows any secondary actions at
-// all and "View receipt" hands it straight to the dialog -- and it cost 53.9 ms EACH, which
-// that PR filed as the larger bug rather than smuggling into its own change.
-//
-// This is that bug. The 53.9 ms was validateCommerceState re-checking the whole workspace once
-// per order; the state is now validated once by the caller, and `read` is bound to it. Nothing
-// about the document changed -- see the three properties pinned in
-// tools/test_commerce_order_integrity.mjs.
-function orderAcknowledgementDownload(read: (orderId: string) => CommerceOrderAcknowledgement | null, orderId: string) {
-  const artifact = read(orderId)
-  if (!artifact) return null
-  const safeOrderId = artifact.orderId.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'order'
-  return {
-    artifact,
-    filename: `supermega-${safeOrderId}-acknowledgement.txt`,
-  }
-}
-
-type OrderAcknowledgementDownload = NonNullable<ReturnType<typeof orderAcknowledgementDownload>>
-
-// The two receipt controls an order carries, in one place. The active order list and the
-// archive below it rendered a byte-identical copy of this pair each; they are the two controls
-// that must agree about what a receipt IS, so keeping two copies in step was a standing
-// invitation to drift. A fragment, so the rendered DOM is exactly what it was.
-function OrderReceiptActions({ acknowledgement, onViewReceipt }: {
-  acknowledgement: OrderAcknowledgementDownload | undefined
-  onViewReceipt: (artifact: CommerceOrderAcknowledgement) => void
-}) {
-  if (!acknowledgement) return null
-  return <>
-    <button className="text-link" data-order-receipt="view" onClick={() => onViewReceipt(acknowledgement.artifact)} type="button">View order record</button>
-    <button className="text-link subtle" data-order-acknowledgement="local-download" onClick={() => downloadBlob(acknowledgement.filename, new Blob([orderAcknowledgementFileText(acknowledgement.artifact)], { type: 'text/plain;charset=utf-8' }))} type="button">Download acknowledgement</button>
-  </>
-}
-
-// Asked, not enumerated. The order list and the archive each render a handful of rows and ask
-// this for those rows only; nothing else is ever built. It carries a `get` so the two call
-// sites read as they always did, but it is a lookup and not a collection -- there is no set of
-// downloads standing by behind it, which is the whole point.
-type OrderAcknowledgementLookup = { get: (orderId: string) => OrderAcknowledgementDownload | undefined }
 
 // One validation of this workspace, then a document per row that asks for one. A workspace this
 // device cannot validate answers nothing for every order, which is exactly what the per-order
@@ -8165,299 +7994,6 @@ function OrderList({
       </div>
     </article>
   })}</div>
-}
-
-function ClosedOrderHistory({
-  acknowledgementDownloads,
-  canCorrect,
-  canReturn,
-  correctionCalculation,
-  correctionDraft,
-  disabled,
-  onCancelCorrection,
-  onCancelReturn,
-  loyaltyPoints,
-  onChangeCorrection,
-  onChangeReturn,
-  onOpenCorrection,
-  onOpenRedemption,
-  onOpenReturn,
-  onReviewCorrection,
-  onReviewReturn,
-  onReviewSupportOpen,
-  onReviewSupportReopen,
-  onReviewSupportService,
-  onReviewSupportResolution,
-  onOpenSupportService,
-  onOpenSupportResolution,
-  onOpenSupportReopen,
-  onCancelSupportOpen,
-  onCancelSupportReopen,
-  onCancelSupportResolution,
-  onCancelSupportService,
-  onChangeSupportOpen,
-  onChangeSupportReopen,
-  onChangeSupportService,
-  onChangeSupportResolution,
-  onCorrectionEditor,
-  onCorrectionTrigger,
-  onReturnEditor,
-  onReturnTrigger,
-  onViewReceipt,
-  orders,
-  returnDraft,
-  returnLocationPreview,
-  supportDraft,
-  supportReopenDraft,
-  supportServiceDraft,
-  supportResolutionDraft,
-  supportWorkloadDownload,
-}: {
-  acknowledgementDownloads: OrderAcknowledgementLookup
-  canCorrect: (orderId: string) => boolean
-  canReturn: (orderId: string) => boolean
-  correctionCalculation: ReturnType<typeof commerceCorrectionCalculation>
-  correctionDraft: CommerceCorrectionDraft | null
-  disabled: boolean
-  onCancelCorrection: () => void
-  onCancelReturn: () => void
-  loyaltyPoints: ReadonlyMap<string, number> | null
-  onChangeCorrection: (patch: Partial<CommerceCorrectionDraft>) => void
-  onChangeReturn: (patch: Partial<CommerceReturnDraft>) => void
-  onOpenCorrection: (orderId: string) => void
-  onOpenRedemption: (orderId: string) => void
-  onOpenReturn: (orderId: string) => void
-  onReviewCorrection: (event: FormEvent) => void
-  onReviewReturn: (event: FormEvent) => void
-  onReviewSupportOpen: (event: FormEvent) => void
-  onReviewSupportReopen: (event: FormEvent) => void
-  onReviewSupportService: (event: FormEvent) => void
-  onReviewSupportResolution: (event: FormEvent) => void
-  onOpenSupportService: (orderId: string, caseId: string, kind: CommerceSupportServiceEventKind) => void
-  onOpenSupportResolution: (orderId: string, caseId: string) => void
-  onOpenSupportReopen: (orderId: string, caseId: string) => void
-  onCancelSupportOpen: () => void
-  onCancelSupportReopen: () => void
-  onCancelSupportResolution: () => void
-  onCancelSupportService: () => void
-  onChangeSupportOpen: (patch: Partial<Omit<CommerceSupportOpenDraft, 'intent'>>) => void
-  onChangeSupportReopen: (patch: Partial<CommerceSupportReopenDraft>) => void
-  onChangeSupportService: (patch: Partial<CommerceSupportServiceDraft>) => void
-  onChangeSupportResolution: (patch: Partial<CommerceSupportResolutionDraft>) => void
-  onCorrectionEditor: (node: HTMLFormElement | null) => void
-  onCorrectionTrigger: (orderId: string, node: HTMLButtonElement | null) => void
-  onReturnEditor: (node: HTMLFormElement | null) => void
-  onReturnTrigger: (orderId: string, node: HTMLButtonElement | null) => void
-  onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
-  orders: CommerceOrder[]
-  returnDraft: CommerceReturnDraft | null
-  returnLocationPreview: string
-  supportDraft: CommerceSupportOpenDraft | null
-  supportReopenDraft: CommerceSupportReopenDraft | null
-  supportServiceDraft: CommerceSupportServiceDraft | null
-  supportResolutionDraft: CommerceSupportResolutionDraft | null
-  supportWorkloadDownload: {
-    filename: string
-    href: string
-    artifact: ReturnType<typeof commerceSupportWorkloadExport>
-  } | null
-}) {
-  const [page, setPage] = useState(0)
-  const supportClock = useMinuteClock()
-  const pageSize = 8
-  if (!orders.length) return null
-  const pageCount = Math.ceil(orders.length / pageSize)
-  const returnOrderIndex = returnDraft ? orders.findIndex((order) => order.id === returnDraft.orderId) : -1
-  const correctionOrderIndex = correctionDraft ? orders.findIndex((order) => order.id === correctionDraft.orderId) : -1
-  const supportOrderId = supportDraft?.intent.orderId ?? supportReopenDraft?.orderId ?? supportServiceDraft?.orderId ?? supportResolutionDraft?.orderId
-  const supportOrderIndex = supportOrderId ? orders.findIndex((order) => order.id === supportOrderId) : -1
-  const focusedOrderIndex = returnOrderIndex >= 0 ? returnOrderIndex : correctionOrderIndex >= 0 ? correctionOrderIndex : supportOrderIndex
-  const currentPage = focusedOrderIndex >= 0 ? Math.floor(focusedOrderIndex / pageSize) : Math.min(page, pageCount - 1)
-  const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-  const supportWorkQueue = commerceSupportQueue(orders, supportClock)
-  const supportSla = commerceSupportSlaSummary(orders, supportClock)
-  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) || undefined}>
-    <summary><span>Completed and cancelled orders</span><small>{supportWorkQueue.length ? `${supportSla.openCases} help open · ${supportSla.overdueCases} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
-    {supportWorkloadDownload ? <section aria-label="Support workload export" className="order-return-records" data-support-workload="privacy-minimal">
-      <div><strong>Support workload record</strong><small>{supportWorkloadDownload.artifact.summary.totalCases} cases · {supportWorkloadDownload.artifact.summary.reopenedCases} repeat contacts · {supportWorkloadDownload.artifact.summary.responseTargetMisses} target misses</small></div>
-      <div><small>Case and order references, aging, ownership, lifecycle, and service counts only. Customer names, contact details, descriptions, notes, and evidence text are excluded.</small><a className="text-link" download={supportWorkloadDownload.filename} href={supportWorkloadDownload.href}>Download workload CSV</a></div>
-    </section> : null}
-    {supportWorkQueue.length ? <section aria-label="Open support queue" className="order-return-records" data-support-queue="ordered">
-      <div><strong>Support queue · next work first</strong><small>Overdue, priority, due time, request time</small></div>
-      <div data-support-sla="bounded"><strong>Service level</strong><small>{supportSla.awaitingAcknowledgement} awaiting acknowledgement · {supportSla.awaitingFirstResponse} awaiting first response · {supportSla.firstResponseReady} response ready · {supportSla.responseTargetMisses} target missed</small></div>
-      {supportWorkQueue.slice(0, 6).map((row) => <div data-support-urgency={row.urgency} key={`queue-${row.supportCase.caseId}`}>
-        <strong>{row.urgency === 'overdue' ? 'OVERDUE · ' : ''}{row.customer} · {row.supportCase.category.replaceAll('_', ' ')}</strong>
-        <small>{row.service ? `${row.service.priority} · ${row.service.owner} · due ${formatTime(row.service.dueAt)}` : 'Legacy untriaged case'} · {row.supportCase.caseId}</small>
-        {row.service ? <button className="text-link" disabled={disabled || Boolean(supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || returnDraft || correctionDraft)} onClick={() => row.checkpoints.acknowledged
-          ? row.checkpoints.firstResponseReady
-            ? onOpenSupportResolution(row.orderId, row.supportCase.caseId)
-            : onOpenSupportService(row.orderId, row.supportCase.caseId, 'first_response_ready')
-          : onOpenSupportService(row.orderId, row.supportCase.caseId, 'acknowledged')} type="button">{row.checkpoints.acknowledged ? row.checkpoints.firstResponseReady ? 'Resolve case' : 'Response ready' : 'Acknowledge'}</button> : null}
-      </div>)}
-      {supportWorkQueue.length > 6 ? <small>{supportWorkQueue.length - 6} more open cases remain in the order archive.</small> : null}
-    </section> : null}
-    <div className="order-archive-list">{visibleOrders.map((order) => {
-      const lines = commerceOrderReturnLines(order).map((line) => {
-        const returned = (order.returns ?? [])
-          .filter((record) => record.sku === line.sku)
-          .reduce((sum, record) => sum + record.quantity, 0)
-        return { ...line, returned, remaining: line.quantity - returned }
-      })
-      const availableLines = lines.filter((line) => line.remaining > 0)
-      const draftedLine = returnDraft?.orderId === order.id
-        ? availableLines.find((line) => line.sku === returnDraft.sku)
-        : undefined
-      const activeReturnDraft = draftedLine && returnDraft?.orderId === order.id ? returnDraft : null
-      const editing = activeReturnDraft !== null
-      const activeCorrectionDraft = correctionDraft?.orderId === order.id ? correctionDraft : null
-      const correcting = activeCorrectionDraft !== null
-      const activeSupportDraft = supportDraft?.intent.orderId === order.id ? supportDraft : null
-      const activeSupportReopen = supportReopenDraft?.orderId === order.id ? supportReopenDraft : null
-      const activeSupportService = supportServiceDraft?.orderId === order.id ? supportServiceDraft : null
-      const activeSupportResolution = supportResolutionDraft?.orderId === order.id ? supportResolutionDraft : null
-      const selectedLine = draftedLine ?? availableLines[0]
-      const returnable = canReturn(order.id)
-      const correctable = canCorrect(order.id)
-      // S3 PR2: the redemption affordance appears only while points are on
-      // (loyaltyPoints is null otherwise) for a named customer with a positive
-      // balance, on an order corrections can still reach.
-      const redeeming = Boolean(activeCorrectionDraft?.loyalty)
-      const loyaltyBalance = shopLoyaltyDisplayPoints(loyaltyPoints?.get(order.customer.trim()) ?? 0)
-      const redeemable = correctable && order.customer.trim() !== 'Guest' && loyaltyBalance > 0
-      const adjustedTotal = commerceOrderAdjustedTotal(order) ?? order.total
-      const acknowledgement = acknowledgementDownloads.get(order.id)
-      return <article className={editing || correcting ? 'is-returning' : undefined} key={order.id}>
-      <div className="order-archive-main">
-        <strong>{order.customer} · {order.lines
-          ? order.lines.length === 1
-            ? `${order.lines[0].name} × ${order.quantity}`
-            : `${order.lines.length} items · ${order.quantity} units`
-          : `${order.item} × ${order.quantity}`}</strong>
-        {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
-        <OrderCalculationNote order={order} />
-        <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
-        {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
-        {order.status === 'completed' && order.completion ? <small role="note">Completed by {order.completion.actor} · {formatTime(order.completion.capturedAt)} · evidence {order.completion.evidenceReference}</small> : null}
-        {order.status === 'completed' && !order.completion ? <small role="note">Return unavailable: this older order has no attributable completion proof.</small> : null}
-        {order.status === 'completed' && order.completion && availableLines.length > 0 && !returnable ? <small role="note">Return unavailable: the sold quantity cannot be matched to an attributable stock reservation.</small> : null}
-      </div>
-      <div className="order-archive-actions">
-        <b>{formatMoney(adjustedTotal)}</b>
-        {adjustedTotal !== order.total ? <small>original {formatMoney(order.total)}</small> : null}
-        <OrderReceiptActions acknowledgement={acknowledgement} onViewReceipt={onViewReceipt} />
-        {order.status === 'completed' && (returnable || editing) ? <button
-          aria-expanded={editing}
-          className="text-link"
-          disabled={disabled || correcting}
-          onClick={() => editing ? onCancelReturn() : onOpenReturn(order.id)}
-          ref={(node) => { onReturnTrigger(order.id, node) }}
-          type="button"
-        >{editing ? 'Close return' : 'Record return'}</button> : null}
-        {order.status === 'completed' && ((correctable && !redeeming) || (correcting && !redeeming)) ? <button
-          aria-expanded={correcting && !redeeming}
-          className="text-link"
-          disabled={disabled || editing}
-          onClick={() => correcting ? onCancelCorrection() : onOpenCorrection(order.id)}
-          ref={(node) => { onCorrectionTrigger(order.id, node) }}
-          type="button"
-        >{correcting && !redeeming ? 'Close correction' : 'Correct invoice'}</button> : null}
-        {order.status === 'completed' && (redeemable || redeeming) ? <button
-          aria-expanded={redeeming}
-          className="text-link"
-          disabled={disabled || editing || (correcting && !redeeming)}
-          onClick={() => redeeming ? onCancelCorrection() : onOpenRedemption(order.id)}
-          ref={redeeming ? (node) => { onCorrectionTrigger(order.id, node) } : undefined}
-          type="button"
-        >{redeeming ? 'Close redemption' : `Redeem points · ${loyaltyBalance.toLocaleString()}`}</button> : null}
-      </div>
-      {order.returns?.length ? <div className="order-return-records" role="list">
-        {order.returns.map((record) => <div key={record.actionId} role="listitem">
-          <strong>{record.quantity} {record.sku} returned · {record.disposition === 'restock' ? 'restocked' : 'not restocked'}</strong>
-          <small>{record.actor} · {formatTime(record.createdAt)} · evidence {record.evidenceReference}</small>
-        </div>)}
-      </div> : null}
-      {order.supportCases?.length ? <div className="order-return-records" role="list">
-        {order.supportCases.map((supportCase) => {
-          const urgency = commerceSupportCaseUrgency(supportCase, supportClock)
-          const service = commerceSupportServiceState(supportCase)
-          const checkpoints = commerceSupportCheckpointState(supportCase)
-          const serviceEvents = [...(supportCase.followUpServiceEvents ?? []), ...(supportCase.serviceEvents ?? [])]
-          const finalResolution = supportCase.followUpResolution ?? supportCase.resolution
-          return <div data-support-urgency={urgency} key={supportCase.caseId} role="listitem">
-            <strong>{urgency === 'overdue' ? 'OVERDUE · ' : ''}{supportCase.status === 'resolved' ? 'Resolved help case' : 'Open help case'} · {supportCase.category.replaceAll('_', ' ')}</strong>
-            <small>{supportCase.caseId} · requested {formatTime(supportCase.customerRequestedAt)} · opened by {supportCase.opening.actor}</small>
-            {service
-              ? <small>{service.priority} priority · owner {service.owner} · {urgency === 'overdue' ? 'overdue since' : 'due'} {formatTime(service.dueAt)}</small>
-              : <small>Legacy case · priority, owner, and due time were not recorded</small>}
-            <small>{supportCase.customerDescription}</small>
-            {supportCase.reopen ? <small>Follow-up opened by {supportCase.reopen.proof.actor} · {formatTime(supportCase.reopen.proof.capturedAt)} · linked to resolution {supportCase.reopen.sourceResolutionActionId} · {supportCase.reopen.note}</small> : null}
-            {supportCase.reopen && supportCase.resolution ? <small>Original resolution retained · {supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note}</small> : null}
-            {checkpoints.acknowledged ? <small>Acknowledged by {checkpoints.acknowledged.proof.actor} · {formatTime(checkpoints.acknowledged.proof.capturedAt)}{checkpoints.firstResponseReady ? ` · first response ready ${formatTime(checkpoints.firstResponseReady.proof.capturedAt)}` : ' · first response pending'}</small> : service ? <small>Acknowledgement pending</small> : null}
-            {serviceEvents.length ? <details className="compact-disclosure"><summary><span>Service history</span><small>{serviceEvents.length} {serviceEvents.length === 1 ? 'event' : 'events'}</small></summary><div className="boundary-list">{serviceEvents.map((serviceEvent) => <div key={serviceEvent.proof.actionId}><strong>{serviceEvent.kind.replaceAll('_', ' ')} · {serviceEvent.priority} · {serviceEvent.owner}</strong><small>{formatTime(serviceEvent.proof.capturedAt)} · due {formatTime(serviceEvent.dueAt)} · {serviceEvent.note}</small></div>)}</div></details> : null}
-            {supportCase.status === 'resolved' && finalResolution ? <><small>{finalResolution.outcome.replaceAll('_', ' ')} · {finalResolution.note} · {finalResolution.proof.actor}</small>{!supportCase.reopen ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportReopen(order.id, supportCase.caseId)} type="button">Reopen case</button> : null}</> : service ? <div className="form-actions">{!checkpoints.acknowledged ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')} type="button">Acknowledge</button> : !checkpoints.firstResponseReady ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')} type="button">Response ready</button> : <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}<button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'reassigned')} type="button">Reassign</button><button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'escalated')} type="button">Escalate</button></div> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve legacy case</button>}
-            <small>No external message or refund performed</small>
-          </div>
-        })}
-      </div> : null}
-      {order.corrections?.length ? <div className="order-return-records" role="list">
-        {order.corrections.map((record) => <div key={record.documentId} role="listitem">
-          <strong>{record.kind} note · {formatMoney(record.calculation.totalMmk)} · balance {formatMoney(record.balanceAfterMmk)}</strong>
-          <small>{record.reasonCode.replaceAll('_', ' ')} · {record.actor} · {formatTime(record.createdAt)} · evidence {record.evidenceReference}</small>
-          <small>Review required · no external posting performed</small>
-        </div>)}
-      </div> : null}
-      {activeReturnDraft && selectedLine ? <form aria-label={`Return items from ${order.id}`} className="order-return-editor" onSubmit={onReviewReturn} ref={onReturnEditor}>
-        <div className="order-return-copy"><span className="core-eyebrow">Return</span><strong>{order.id}</strong><small>{activeReturnDraft.sourceIntent ? `Prepared from customer request ${activeReturnDraft.sourceIntent.id}. Confirm what Shop actually received.` : 'Record received goods only.'} Payment and order totals do not change.</small></div>
-        <label>Item<select disabled={disabled || availableLines.length === 1} onChange={(event) => onChangeReturn({ sku: event.target.value, quantity: '1' })} value={selectedLine.sku}>{availableLines.map((line) => <option key={line.sku} value={line.sku}>{line.name} · {line.remaining} left</option>)}</select></label>
-        <label>Quantity<input disabled={disabled} id="order-return-quantity" max={selectedLine.remaining} min="1" onChange={(event) => onChangeReturn({ quantity: event.target.value })} required step="1" type="number" value={activeReturnDraft.quantity} /></label>
-        <label>Stock result<select disabled={disabled} onChange={(event) => onChangeReturn({ disposition: event.target.value as CommerceReturnDisposition })} value={activeReturnDraft.disposition}><option value="restock">Sellable · add to stock</option><option value="not_restocked">Not sellable · stock unchanged</option></select></label>
-        {activeReturnDraft.disposition === 'restock' && returnLocationPreview ? <small role="note">Restock to {returnLocationPreview}</small> : null}
-        <div className="form-actions"><button className={coreUi.q} disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
-      </form> : null}
-      {activeSupportDraft ? <form aria-label={`Open support case for ${order.id}`} className="order-return-editor" onSubmit={onReviewSupportOpen}>
-        <div className="order-return-copy"><span className="core-eyebrow">Customer help</span><strong>{activeSupportDraft.intent.category.replaceAll('_', ' ')}</strong><small>{activeSupportDraft.intent.description}</small><small>Assign service responsibility before opening. This does not send a message or start a refund.</small></div>
-        <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportOpen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportDraft.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} maxLength={120} onChange={(event) => onChangeSupportOpen({ owner: event.target.value })} required value={activeSupportDraft.owner} /></label></div>
-        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportOpen({ dueAt: event.target.value })} required type={coreUi.d} value={activeSupportDraft.dueAt} /></label>
-        <div className="form-actions"><button className={coreUi.q} disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
-      </form> : null}
-      {activeSupportReopen ? <form aria-label={`Reopen support case ${activeSupportReopen.caseId}`} className="order-return-editor" onSubmit={onReviewSupportReopen}>
-        <div className="order-return-copy"><span className="core-eyebrow">Follow-up</span><strong>{activeSupportReopen.caseId}</strong><small>Retain resolution {activeSupportReopen.sourceResolutionActionId} and start one linked service cycle. This does not send a message or start a refund.</small></div>
-        <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportReopen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportReopen.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} id={`support-reopen-${activeSupportReopen.caseId}`} maxLength={120} onChange={(event) => onChangeSupportReopen({ owner: event.target.value })} required value={activeSupportReopen.owner} /></label></div>
-        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportReopen({ dueAt: event.target.value })} required type={coreUi.d} value={activeSupportReopen.dueAt} /></label>
-        <label>Follow-up reason<textarea disabled={disabled} maxLength={300} onChange={(event) => onChangeSupportReopen({ note: event.target.value })} required rows={2} value={activeSupportReopen.note} /></label>
-        <div className="form-actions"><button className={coreUi.q} disabled={disabled} type="submit">Review follow-up</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportReopen} type="button">Cancel</button></div>
-      </form> : null}
-      {activeSupportService ? <form aria-label={`${commerceSupportServiceActionLabels[activeSupportService.kind]} ${activeSupportService.caseId}`} className="order-return-editor" onSubmit={onReviewSupportService}>
-        <div className="order-return-copy"><span className="core-eyebrow">{commerceSupportServiceActionLabels[activeSupportService.kind]}</span><strong>{activeSupportService.caseId}</strong><small>{activeSupportService.kind === 'reassigned' ? 'Change only the accountable owner. Priority and due time stay immutable.' : activeSupportService.kind === 'escalated' ? 'Keep the owner and raise priority or bring a future due time forward.' : activeSupportService.kind === 'acknowledged' ? 'Record that the accountable owner accepted this case internally.' : 'Record that a first response is ready for independent delivery.'} No message, refund, or payment action runs.</small></div>
-        {activeSupportService.kind === 'reassigned' ? <label>New owner<input disabled={disabled} id={`support-service-${activeSupportService.caseId}`} maxLength={120} onChange={(event) => onChangeSupportService({ owner: event.target.value })} required value={activeSupportService.owner} /></label> : activeSupportService.kind === 'escalated' ? <><div className="form-row"><label>Owner<input disabled value={activeSupportService.owner} /></label><label>Priority<select disabled={disabled} id={`support-service-${activeSupportService.caseId}`} onChange={(event) => onChangeSupportService({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportService.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label></div><label>Earlier due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportService({ dueAt: event.target.value })} required type={coreUi.d} value={activeSupportService.dueAt} /></label></> : <small role="note">{activeSupportService.priority} priority · owner {activeSupportService.owner} · target {formatTime(new Date(activeSupportService.dueAt).toISOString())}</small>}
-        <label>{activeSupportService.kind === 'first_response_ready' ? 'Response preparation note' : activeSupportService.kind === 'acknowledged' ? 'Acknowledgement note' : 'Reason'}<textarea disabled={disabled} id={activeSupportService.kind === 'acknowledged' || activeSupportService.kind === 'first_response_ready' ? `support-service-${activeSupportService.caseId}` : undefined} maxLength={300} onChange={(event) => onChangeSupportService({ note: event.target.value })} required rows={2} value={activeSupportService.note} /></label>
-        <div className="form-actions"><button className={coreUi.q} disabled={disabled} type="submit">Review {activeSupportService.kind === 'acknowledged' ? 'acknowledgement' : activeSupportService.kind === 'first_response_ready' ? 'response readiness' : 'service change'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportService} type="button">Cancel</button></div>
-      </form> : null}
-      {activeSupportResolution ? <form aria-label={`Resolve support case ${activeSupportResolution.caseId}`} className="order-return-editor" onSubmit={onReviewSupportResolution}>
-        <div className="order-return-copy"><span className="core-eyebrow">Resolve help case</span><strong>{activeSupportResolution.caseId}</strong><small>Record the reviewed outcome only. External communication and financial action remain separate.</small></div>
-        <label>Outcome<select disabled={disabled} onChange={(event) => onChangeSupportResolution({ outcome: event.target.value as CommerceSupportResolutionOutcome })} value={activeSupportResolution.outcome}><option value="information_provided">Information provided</option><option value="replacement_review_required">Replacement review required</option><option value="refund_review_required">Refund review required</option><option value="no_action">No action</option></select></label>
-        <label>Resolution note<textarea disabled={disabled} id={`support-resolution-${activeSupportResolution.caseId}`} maxLength={300} onChange={(event) => onChangeSupportResolution({ note: event.target.value })} required rows={2} value={activeSupportResolution.note} /></label>
-        <div className="form-actions"><button className={coreUi.q} disabled={disabled} type="submit">Review resolution</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
-      </form> : null}
-      {activeCorrectionDraft ? <form aria-label={activeCorrectionDraft.loyalty ? `Redeem points on ${order.id}` : `Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
-        <div className="order-return-copy"><span className="core-eyebrow">{activeCorrectionDraft.loyalty ? 'Redeem points' : 'Correction note'}</span><strong>{order.id}</strong><small>{activeCorrectionDraft.loyalty ? `${activeCorrectionDraft.loyalty.customer} holds ${loyaltyBalance.toLocaleString()} points. Points are redeemed as a credit note on this order — 1 point = 1 MMK.` : activeCorrectionDraft.sourceIntent ? `Prepared from customer request ${activeCorrectionDraft.sourceIntent.id}. Recheck the calculation; request details stay locked.` : 'The original invoice stays unchanged.'} This records review evidence; it does not post externally.</small></div>
-        {activeCorrectionDraft.loyalty
-          ? <small role="note">Credit note · reason “other” — locked for points redemption</small>
-          : <>
-            <label>Type<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ kind: event.target.value as CommerceCorrectionKind })} value={activeCorrectionDraft.kind}><option value="credit">Credit · reduce balance</option><option value="debit">Debit · increase balance</option></select></label>
-            <label>Reason<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ reasonCode: event.target.value as CommerceCorrectionReasonCode })} value={activeCorrectionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
-          </>}
-        <label>{activeCorrectionDraft.loyalty ? 'Points to redeem' : 'Amount before tax'}<input disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} id="order-correction-amount" inputMode="numeric" max={activeCorrectionDraft.loyalty ? loyaltyBalance : undefined} min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
-        {correctionCalculation ? <small role="note">Tax {formatMoney(correctionCalculation.taxMmk)} · note total {formatMoney(correctionCalculation.totalMmk)} · same tax snapshot as the original invoice</small> : null}
-        <div className="form-actions"><button className={coreUi.q} disabled={disabled || !correctionCalculation} type="submit">{activeCorrectionDraft.loyalty ? 'Review redemption' : 'Review correction'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
-      </form> : null}
-    </article>})}</div>
-    {pageCount > 1 ? <nav aria-label="Closed order pages" className="order-archive-pagination">
-      <button className="text-link" disabled={currentPage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} type="button">Previous</button>
-      <span>Page {currentPage + 1} of {pageCount}</span>
-      <button className="text-link" disabled={currentPage === pageCount - 1} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))} type="button">Next</button>
-    </nav> : null}
-  </details>
 }
 
 function StockMovementHistory({ actionHistory, movements }: { actionHistory: ReactNode; movements: CommerceStockMovement[] }) {
