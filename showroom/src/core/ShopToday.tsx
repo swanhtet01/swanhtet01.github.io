@@ -4,6 +4,7 @@ import type { CommerceState } from './commerce-workspace'
 import type { ShopProfitControlBoard } from './shop-profit-control'
 import type { ShopBatchProfitControlView } from './ShopTodayAdvanced'
 import { projectShopTodaySalesPulse } from './shop-today-sales'
+import { prioritizeShopTodayProducts } from './shop-today-priority'
 import { ProductPhoto } from './ProductPhoto'
 
 const ShopTodayAdvancedPanel = lazy(() => import('./ShopTodayAdvanced').then((module) => ({ default: module.ShopTodayAdvanced })))
@@ -122,7 +123,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
     })
     .slice(0, 5), [commerce.orders])
   const openOrderCount = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled').length
-  const visibleProducts = commerce.items.slice(0, 6)
+  const visibleProducts = prioritizeShopTodayProducts(commerce.items).slice(0, 6)
   const summaryMetrics = ["Today's sales", 'Open orders', 'Stock alerts']
     .flatMap((label) => metrics.find((metric) => metric.label === label) ?? [])
   const financeModule = modules.find((module) => module.label === 'Finance controls')
