@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import test from 'node:test'
 
@@ -9,6 +9,7 @@ import {
   REPAIR_RECEIPT_CONTRACT,
   buildRecoveryPlan,
   contentDigest,
+  historicalRecoveryMigrationNames,
   selectRecoveryAction,
   validatePreviewRepairReceipt,
   validatePreviewRepairReceiptShape,
@@ -31,7 +32,18 @@ test('migration content digests are stable across Windows and Linux line endings
   assert.equal(contentDigest(Buffer.from('select 1;\r\n')), contentDigest('select 1;\n'))
 })
 
-test('builds a read-only repair decision for the current acceptance branch', async () => {
+test('historical recovery excludes later Sites work but rejects unrecognized candidate drift', async () => {
+  const names = (await readdir(resolve(root, 'supabase/migrations'))).filter(name => name.endsWith('.sql')).sort()
+  const historical = historicalRecoveryMigrationNames(names)
+  assert.equal(historical.length, 24)
+  assert.equal(historical.at(-1), '20260930010000_app_rls_initplan_optimization.sql')
+  assert.ok(historical.every(name => !name.startsWith('20261010')))
+  assert.throws(() => historicalRecoveryMigrationNames(names.slice(0, -1)), /inventory_mismatch/)
+  assert.throws(() => historicalRecoveryMigrationNames([...names, '20261012000000_unknown.sql']), /inventory_mismatch/)
+  assert.throws(() => historicalRecoveryMigrationNames([...names].reverse()), /inventory_mismatch/)
+})
+
+test('replays the read-only repair decision for the recorded acceptance branch', async () => {
   const plan = await buildRecoveryPlan(readback)
   assert.equal(plan.contract, RECOVERY_PLAN_CONTRACT)
   assert.equal(plan.providerReadback.contract, PROVIDER_READBACK_CONTRACT)

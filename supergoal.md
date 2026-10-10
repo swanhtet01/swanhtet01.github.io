@@ -1,6 +1,6 @@
 # SuperMega Supergoal
 
-Version: 1.4.11
+Version: 1.4.12
 Owner: Swan Htet, Founder
 Maintainer: CTO, sole integration writer
 Updated: 2026-10-10
@@ -8,13 +8,13 @@ Status: ACTIVE — implementation and acceptance in progress; not production-rea
 
 ## Current checkpoint
 
-Source baseline: `245a1ea4e8e5cf4199e8af7e413f53d8eff5c71f`, branch `redesign/product-workspace-clarity-20261009`, checkout `product-polish-20261010`, [draft PR #648](https://github.com/swanhtet01/swanhtet01.github.io/pull/648). This CTO lane owns the selected #647 backend integration; its separate PR must not be merged blindly. The CEO checkout and its independent Supergoal lineage remain separate.
+Source baseline for this slice: `7b70298a386fd3757aee8942af892838e67fe40a`, branch `redesign/product-workspace-clarity-20261009`, checkout `product-polish-20261010`, [draft PR #648](https://github.com/swanhtet01/swanhtet01.github.io/pull/648). This CTO lane owns the selected #647 backend integration; its separate PR must not be merged blindly. The CEO checkout and its independent Supergoal lineage remain separate.
 
-**Current task:** the whole-database v13 contract now includes the Sites publishing and inquiry schema; checkpoint the repair and verify exact-source CI. The baseline push failed App CI; security and guarded workflow checks passed. New checks cover three tables, six functions, four policies and twelve indexes, with explicit source-derived expectations. Restore inventory now includes inquiry action history. Local validation: 940 canonical tests passed, 135 opt-in cases skipped; all 29 full-catalog tests and migration guards passed. Earlier catalog stages remain verified separately. Exact-head remote CI is still required; the receipt records its result.
+**Current task:** verify the compact Sites editor and repair the next exact-source CI failure. App CI run `38055197650` at `7b70298a` reached step 20/669, then failed the stale rehearsal-packet inventory. The candidate packet now pins all 27 migrations; the October 2 recovery receipt retains its historical 24-file chain and explicitly proves no current acceptance. All 16 packet/recovery tests pass locally, including omitted/unknown/reordered inventory rejection. Earlier catalog repairs cover three tables, six functions, four policies and twelve indexes; restore inventory includes inquiry action history. Remote CI must pass the new source before release review.
 
 **One design and delivery board:** [Product operating principles — execution board](docs/product-operating-principles.md#execution-board--10-october). It contains the observed problems, sequence, next Sites layout choice and acceptance card. Use it instead of maintaining competing redesign lists. Detailed previous checkpoints remain in Git history and the linked evidence directories.
 
-**Next visual change:** compact Sites section previews, persistent page navigation and a small checks rail, following the founder's reference. The actual local capture still gives its first section too much height. Compare two layouts, then inspect the real authenticated desktop and phone flow. Backend test success does not resolve this visual gap.
+**Design implemented locally:** Sites now has compact section rows, persistent desktop page navigation and a smaller checks rail. Three summaries fit above y=755 at 1280×900. Phone editing focuses one section, removes duplicate preview content and returns keyboard focus through Back. Actual-component checks passed text editing, draft retention across page switches, Save/reopen, reorder, remove/undo, add, Burmese text and photo save/reopen; desktop, tablet and phone show no horizontal overflow. Evidence is synthetic/in-memory, not hosted Auth or Storage. Full local lint exceeded the 2 GiB Node ceiling; changed-component lint and build checks are tracked separately, and full Linux CI remains required. Keep one heavy job at a time and user applications open.
 
 **Delivery order:** integration repair → Sites editor hierarchy → managed Sites template/photo/save/preview/publish/inquiry/follow-up/withdraw journey → automatic Commerce intake and fulfilment → Shop sale/barcode/receipt/daily close → real public galleries, ordinary contact form and easy onboarding → capability-backed offers, support and internal operations. Work one coherent slice at a time. Hosted failures and access isolation outrank decoration.
 

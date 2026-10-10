@@ -31,13 +31,19 @@ export function ContentWorkspace({
   const fieldsRef = useRef<HTMLDivElement>(null)
   const addSectionRef = useRef<HTMLButtonElement>(null)
   const focusAddSection = useRef(false)
+  const editTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const restoreEditFocus = useRef(false)
 
   useEffect(() => {
     if (focusAddSection.current) {
       addSectionRef.current?.focus()
       focusAddSection.current = false
     }
-    if (!editingSection) return
+    if (!editingSection) {
+      if (restoreEditFocus.current) editTriggerRef.current?.focus()
+      restoreEditFocus.current = false
+      return
+    }
     const field = fieldsRef.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>('[data-editor-start]')
     field?.focus()
   }, [editingSection, page.sections.length])
@@ -46,8 +52,15 @@ export function ContentWorkspace({
     onUpdatePage((current) => ({ ...update(current), stage: 'draft' }))
   }
 
-  function toggleEditor(sectionId: string) {
-    setEditingSection((current) => current === sectionId ? null : sectionId)
+  function closeEditor() {
+    restoreEditFocus.current = true
+    setEditingSection(null)
+  }
+
+  function toggleEditor(sectionId: string, trigger: HTMLButtonElement) {
+    editTriggerRef.current = trigger
+    if (editingSection === sectionId) closeEditor()
+    else setEditingSection(sectionId)
   }
 
   function moveSection(sectionId: string, direction: -1 | 1) {
@@ -65,6 +78,7 @@ export function ContentWorkspace({
   function addSection() {
     if (page.sections.length >= MAX_WEBSITE_SECTIONS) return
     const section = createBlankSection()
+    editTriggerRef.current = addSectionRef.current
     editPage((current) => ({ ...current, sections: [...current.sections, section] }))
     setEditingSection(`section:${section.id}`)
   }
@@ -91,22 +105,21 @@ export function ContentWorkspace({
   }
 
   return (
-    <section className="website-editor-panel" aria-labelledby="content-editor-title">
+    <section className="website-editor-panel" aria-labelledby="content-editor-title" data-editing={Boolean(editingSection)}>
       <header className="website-panel-head">
         <div>
-          <span className="website-eyebrow">Page content</span>
           <h2 id="content-editor-title">{page.internalName || 'Untitled page'}</h2>
-          <p>Edit a section when you need to change it.</p>
         </div>
         <span className={'website-status ' + (page.stage === 'ready' ? 'is-ready' : 'is-draft')}>
           {page.stage}
         </span>
       </header>
 
-      <div className="website-editor-scroll website-page-outline">
+      <div className="website-editor-scroll website-page-outline" data-editing-section={editingSection ?? ''}>
+        {editingSection ? <button className="website-button is-secondary website-back-to-sections" onClick={closeEditor} type="button">Back to sections</button> : null}
 
         <div aria-label="Page sections" className="website-page-card-list">
-          <fieldset className="website-fieldset website-page-card" data-content-section="hero" data-has-image={Boolean(page.hero.image)}>
+          <fieldset className="website-fieldset website-page-card" data-content-section="hero" data-has-image={Boolean(page.hero.image)} data-editing={editingSection === 'welcome'}>
             <legend className="sr-only">Welcome section</legend>
             <WebsiteImage image={page.hero.image} priority />
             <div className="website-page-card-copy">
@@ -117,8 +130,10 @@ export function ContentWorkspace({
             <button
               aria-controls="website-welcome-fields"
               aria-expanded={editingSection === 'welcome'}
+              aria-label={editingSection === 'welcome' ? 'Done editing welcome' : 'Edit welcome'}
               className="website-button is-secondary is-compact"
-              onClick={() => toggleEditor('welcome')}
+              onClick={(event) => toggleEditor('welcome', event.currentTarget)}
+              ref={(node) => { if (editingSection === 'welcome' && node) editTriggerRef.current = node }}
               type="button"
             >
               {editingSection === 'welcome' ? 'Done' : 'Edit'}
@@ -203,7 +218,7 @@ export function ContentWorkspace({
               {page.sections.length ? page.sections.map((section, index) => {
                 const editorId = `section:${section.id}`
                 const fieldsId = `website-section-fields-${section.id}`
-                return <article className="website-page-card website-section-card" data-content-section="section" data-has-image={Boolean(section.image)} key={section.id}>
+                return <article className="website-page-card website-section-card" data-content-section="section" data-has-image={Boolean(section.image)} data-editing={editingSection === editorId} key={section.id}>
                   <WebsiteImage image={section.image} />
                   <div className="website-page-card-copy">
                     <span className="website-eyebrow">{section.eyebrow || `Section ${index + 1}`}</span>
@@ -213,8 +228,10 @@ export function ContentWorkspace({
                   <button
                     aria-controls={fieldsId}
                     aria-expanded={editingSection === editorId}
+                    aria-label={`${editingSection === editorId ? 'Done editing' : 'Edit'} ${section.title || `section ${index + 1}`}`}
                     className="website-button is-secondary is-compact"
-                    onClick={() => toggleEditor(editorId)}
+                    onClick={(event) => toggleEditor(editorId, event.currentTarget)}
+                    ref={(node) => { if (editingSection === editorId && node) editTriggerRef.current = node }}
                     type="button"
                   >
                     {editingSection === editorId ? 'Done' : 'Edit'}

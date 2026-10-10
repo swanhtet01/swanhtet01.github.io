@@ -40,7 +40,7 @@ Customer acceptance is a separate gate. Observe Burmese-speaking users doing set
 
 ## Execution board — 10 October
 
-CTO is the sole integration writer. Starting source: `245a1ea4e8e5cf4199e8af7e413f53d8eff5c71f`, draft PR #648. This board orders work; it does not report unperformed research or make the candidate production-ready. Keep one implementation slice in progress. The founder's reference images are the visual baseline; old screenshots are evidence of complaints, not proof of today's hosted state.
+CTO is the sole integration writer. Current slice starts from `7b70298a386fd3757aee8942af892838e67fe40a`, draft PR #648. This board orders work; it does not report unperformed research or make the candidate production-ready. Keep one implementation slice in progress. The founder's reference images are the visual baseline; old screenshots are evidence of complaints, not proof of today's hosted state.
 
 ### What the evidence says
 
@@ -49,7 +49,7 @@ CTO is the sole integration writer. Starting source: `245a1ea4e8e5cf4199e8af7e41
 | Founder feedback across Shop, Sites and Commerce | Too many controls, technical language and steps obscure the useful task | Task-specific navigation, one selected record, contextual actions; administration lives in Settings | Observe unassisted Burmese-speaking operators; no interviews have been conducted in this slice |
 | Actual local Sites capture, `.tmp/sites-private-editor-review-20261010/editor-overview.png` | The large first content card pushes later sections below the fold; the reference exposes multiple sections and page context together | Compact section rows with consistent thumbnails, title and short summary; persistent page navigation and a small checks rail | Re-capture the full authenticated shell at the same viewport; the capture uses a synthetic component harness |
 | Local Sites renderer/inbox checks | Editing, rendering and follow-up now work locally, but the managed journey is unproved | Preserve the working transitions while simplifying their presentation | Founder login, real storage, publish, received inquiry, follow-up and withdrawal on one source-bound preview |
-| Exact-head App CI at `245a1ea4` | The whole-database contract does not yet include the three publishing/follow-up tables | Reconcile explicit catalog expectations and adversarial tests without relaxing isolation | Passing canonical Linux CI on the corrected commit |
+| Exact-head App CI at `7b70298a` | Catalog/encoding repairs passed their earlier stages; step 20 found a stale rehearsal inventory | Bind all 27 current migrations; replay the historical 24-file recovery receipt separately, with unknown/omitted migrations still rejected | Passing canonical Linux CI on the corrected commit |
 | Public-site feedback | Small or repeated imagery and long copy do not explain the product convincingly | A short product selector with legible, distinct real screens and a normal contact form | Audit the current live site; verify every gallery control and actual contact delivery |
 
 ### Ordered outcomes
@@ -57,7 +57,7 @@ CTO is the sole integration writer. Starting source: `245a1ea4e8e5cf4199e8af7e41
 | Order | Deliverable | Completion condition |
 | --- | --- | --- |
 | Now | Repair exact-source integration checks and retain a reviewable candidate | Whole-database contract, migrations, RLS/privilege drift checks and Linux CI agree; no skipped test is called a pass |
-| Next | Sites editor matching the reference hierarchy | Page navigation, at least three ordinary section summaries in the desktop content area, one Edit per row, clear save state, Preview/Publish at the top; phone focuses on one edit with reliable Back behavior |
+| Local pass; hosted next | Sites editor matching the reference hierarchy | Page navigation, at least three ordinary section summaries in the desktop content area, one Edit per row, clear save state, Preview/Publish at the top; phone focuses on one edit with reliable Back behavior |
 | Then | Complete managed Sites journey | A founder can start from a template, edit text/photo, save/reopen, preview, publish and handle an automatically received inquiry without encountering technical configuration forms |
 | Then | Commerce fulfilment | A storefront order arrives automatically once, shows items/customer/payment/delivery clearly, and advances through valid next actions; provider connection setup is separate from order handling |
 | Then | Shop daily work | Today exposes truthful metrics, product/order rows and actionable exceptions; counter search/scan, payment, receipt, return and daily close reconcile after reload |
@@ -66,11 +66,15 @@ CTO is the sole integration writer. Starting source: `245a1ea4e8e5cf4199e8af7e41
 
 Infrastructure and R&D take work only when they remove a measured obstacle to these outcomes. Keep a single queue and local workers off when idle. More frameworks, dashboards and agent processes are not acceptance criteria.
 
-### The next Sites design decision
+### Sites design decision and local result
 
-Compare two actual layouts before changing the shell: (A) compact section list with a focused editing panel, and (B) an always-open form beside a full page preview. Choose A as the starting hypothesis because the founder reference emphasizes scanning content and opening one edit; B risks recreating today's long, dense form. Keep preview one action away and preserve unsaved drafts. Retain validation and revision checks behind clear outcomes such as Saved, Saving and Could not save; keep raw release evidence in administration.
+Two alternatives were considered: (A) compact section rows with editing opened in place, and (B) an always-open form beside a full page preview. A was implemented because the reference emphasizes scanning content and opening one edit; B would preserve the long form and compete for phone space. This is a design hypothesis, not an A/B or customer study. Preview remains one action away and unsaved drafts remain intact. Retain validation and revision checks behind clear outcomes such as Saved, Saving and Could not save; keep raw release evidence in administration.
 
 Use the existing white/indigo tokens. Give headings, body text, labels and metadata distinct consistent sizes; avoid tiny uppercase operational labels. Use equal thumbnail proportions and align row actions. A photo must illustrate the customer's content; synthetic test images are not marketing assets. On desktop, the checks rail helps finish the page without competing with its content. On phone, collapse supporting checks into a plainly labeled status and keep the current task visible. Avoid nested accordions and duplicate navigation.
+
+Local evaluation on 10 October used the actual `WebsiteProduct` and `ContentWorkspace` in isolated in-memory fixtures at 1280, 768 and 390 pixels. Desktop page navigation and checks now flank compact section rows. Three summaries fit above y=755 at 1280×900. Phone editing hides other sections and repeated preview content; Back restores focus to the edited row. Text edit, page-switch draft retention, Save/reopen, section reorder, remove/undo, adding a section, Burmese text and photo save/reopen passed. A mobile grid-placement defect found during inspection was fixed and rechecked: the thumbnail is 72×54 with 232 pixels of adjacent text at 390px. No horizontal overflow or observed console warnings/errors. Evidence: `.tmp/sites-layout-review-20261010/`.
+
+These checks do not establish managed persistence, authenticated-shell fidelity, hosted publishing, customer acceptance or low-bandwidth performance. Keep the next sequence explicit: finish exact-source CI → exercise the full managed Sites journey → address actual failures → move to automatic Commerce intake and Shop daily work → refresh public screenshots from accepted routes. Do not expand the feature inventory to compensate for an unproved primary task.
 
 ### Acceptance card for every slice
 
