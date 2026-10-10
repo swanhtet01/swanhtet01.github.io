@@ -45,7 +45,7 @@ PRODUCTS = ("commerce", "production", "website", "ecommerce")
 TABLES = (
     "approval_requests", "billing_entitlements", "billing_events", "billing_invoices",
     "ecommerce_customer_decisions", "ecommerce_customer_reviews", "self_serve_attempt_budgets", "trial_schema_meta",
-    "website_customer_acceptances", "website_customer_feedback", "website_customer_reviews", "website_inbox", "website_inquiry_channels", "workspace_access_controls",
+    "website_customer_acceptances", "website_customer_feedback", "website_customer_reviews", "website_inbox", "website_inquiry_actions", "website_inquiry_channels", "workspace_access_controls",
     "workspace_events", "workspace_memberships", "workspace_state",
 )
 CHECKS = (

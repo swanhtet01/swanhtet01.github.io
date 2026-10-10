@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 import { PGlite } from '@electric-sql/pglite'
 import { verifySelfServeAttemptBudget } from './verify_self_serve_attempt_budget.mjs'
-import { verifyWebsiteReviewMigrationCatalog, verifyCatalogEntitlementMutations, verifyCatalogStorageMutations } from './verify_website_review_migration_catalog.mjs'
+import { verifyWebsiteReviewMigrationCatalog, verifyWebsitePublishingMigrationCatalog, verifyCatalogEntitlementMutations, verifyCatalogStorageMutations } from './verify_website_review_migration_catalog.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const migrationDirectory = resolve(root, 'supabase', 'migrations')
@@ -39,11 +39,15 @@ const expectedMigrations = [
   '20260924231714_ecommerce_customer_decisions.sql',
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
+  '20261010063000_website_publishing_and_inquiries.sql',
+  '20261010070000_website_published_hero_media.sql',
+  '20261010120857_website_inquiry_followup.sql',
 ]
 // Verify the original private catalog before all Website-review extensions, then
 // verify the complete extended catalog. Adding an extension must not shift the
 // baseline boundary and accidentally skip an earlier policy check.
 const websiteReviewStart = expectedMigrations.indexOf('20260915184728_website_customer_review_storage.sql')
+const websitePublishingStart = expectedMigrations.indexOf('20261010063000_website_publishing_and_inquiries.sql')
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
     command: 'ALL',
@@ -885,10 +889,12 @@ requireCheck(
 )
 
 await verifySelfServeAttemptBudget(database, requireCheck)
-await applyMigrations(database, expectedMigrations.slice(websiteReviewStart))
+await applyMigrations(database, expectedMigrations.slice(websiteReviewStart, websitePublishingStart))
 await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
 await verifyCatalogEntitlementMutations(database, requireCheck)
 await verifyCatalogStorageMutations(database, requireCheck)
+await applyMigrations(database, expectedMigrations.slice(websitePublishingStart))
+await verifyWebsitePublishingMigrationCatalog(database, requireCheck)
 
 const unsafeRoleDatabase = new PGlite()
 await unsafeRoleDatabase.waitReady

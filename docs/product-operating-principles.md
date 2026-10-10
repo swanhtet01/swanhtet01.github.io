@@ -38,6 +38,54 @@ Visual acceptance means a clear heading, readable primary content, aligned surfa
 
 Customer acceptance is a separate gate. Observe Burmese-speaking users doing setup, a sale, order follow-up, site editing and inquiry handling without coaching. Record completion, time, errors and requests for help. Initial hypotheses: the next action is identifiable within ten seconds, routine repeat tasks require no technical configuration, and a prepared first sale needs no more than thirty seconds. These are targets to test, not current performance claims. Do not assign a flattering overall score that hides a failed transaction or access boundary. Defer A/B testing until a stable flow and enough real usage make comparison meaningful.
 
+## Execution board — 10 October
+
+CTO is the sole integration writer. Starting source: `245a1ea4e8e5cf4199e8af7e413f53d8eff5c71f`, draft PR #648. This board orders work; it does not report unperformed research or make the candidate production-ready. Keep one implementation slice in progress. The founder's reference images are the visual baseline; old screenshots are evidence of complaints, not proof of today's hosted state.
+
+### What the evidence says
+
+| Evidence | Observed friction | Design response | Validation still needed |
+| --- | --- | --- | --- |
+| Founder feedback across Shop, Sites and Commerce | Too many controls, technical language and steps obscure the useful task | Task-specific navigation, one selected record, contextual actions; administration lives in Settings | Observe unassisted Burmese-speaking operators; no interviews have been conducted in this slice |
+| Actual local Sites capture, `.tmp/sites-private-editor-review-20261010/editor-overview.png` | The large first content card pushes later sections below the fold; the reference exposes multiple sections and page context together | Compact section rows with consistent thumbnails, title and short summary; persistent page navigation and a small checks rail | Re-capture the full authenticated shell at the same viewport; the capture uses a synthetic component harness |
+| Local Sites renderer/inbox checks | Editing, rendering and follow-up now work locally, but the managed journey is unproved | Preserve the working transitions while simplifying their presentation | Founder login, real storage, publish, received inquiry, follow-up and withdrawal on one source-bound preview |
+| Exact-head App CI at `245a1ea4` | The whole-database contract does not yet include the three publishing/follow-up tables | Reconcile explicit catalog expectations and adversarial tests without relaxing isolation | Passing canonical Linux CI on the corrected commit |
+| Public-site feedback | Small or repeated imagery and long copy do not explain the product convincingly | A short product selector with legible, distinct real screens and a normal contact form | Audit the current live site; verify every gallery control and actual contact delivery |
+
+### Ordered outcomes
+
+| Order | Deliverable | Completion condition |
+| --- | --- | --- |
+| Now | Repair exact-source integration checks and retain a reviewable candidate | Whole-database contract, migrations, RLS/privilege drift checks and Linux CI agree; no skipped test is called a pass |
+| Next | Sites editor matching the reference hierarchy | Page navigation, at least three ordinary section summaries in the desktop content area, one Edit per row, clear save state, Preview/Publish at the top; phone focuses on one edit with reliable Back behavior |
+| Then | Complete managed Sites journey | A founder can start from a template, edit text/photo, save/reopen, preview, publish and handle an automatically received inquiry without encountering technical configuration forms |
+| Then | Commerce fulfilment | A storefront order arrives automatically once, shows items/customer/payment/delivery clearly, and advances through valid next actions; provider connection setup is separate from order handling |
+| Then | Shop daily work | Today exposes truthful metrics, product/order rows and actionable exceptions; counter search/scan, payment, receipt, return and daily close reconcile after reload |
+| Then | Public website and onboarding | Current product captures, concise understandable offer, normal Name/Email/Company/Message form, working login and first-use setup; no mockup presented as shipped software |
+| Before selling | Offer, support and operational readiness | One complete supported offer, capability-backed upgrade boundaries, recovery/support ownership and observed customer completion; prices follow measured costs |
+
+Infrastructure and R&D take work only when they remove a measured obstacle to these outcomes. Keep a single queue and local workers off when idle. More frameworks, dashboards and agent processes are not acceptance criteria.
+
+### The next Sites design decision
+
+Compare two actual layouts before changing the shell: (A) compact section list with a focused editing panel, and (B) an always-open form beside a full page preview. Choose A as the starting hypothesis because the founder reference emphasizes scanning content and opening one edit; B risks recreating today's long, dense form. Keep preview one action away and preserve unsaved drafts. Retain validation and revision checks behind clear outcomes such as Saved, Saving and Could not save; keep raw release evidence in administration.
+
+Use the existing white/indigo tokens. Give headings, body text, labels and metadata distinct consistent sizes; avoid tiny uppercase operational labels. Use equal thumbnail proportions and align row actions. A photo must illustrate the customer's content; synthetic test images are not marketing assets. On desktop, the checks rail helps finish the page without competing with its content. On phone, collapse supporting checks into a plainly labeled status and keep the current task visible. Avoid nested accordions and duplicate navigation.
+
+### Acceptance card for every slice
+
+Record these together with the source commit and route. A failure stays visible; do not average it into an overall score.
+
+- **Task:** a single sentence describing what the user finishes, with before/after decisions and clicks measured from the real interface.
+- **Visual:** compare the same viewport and realistic state to the accepted reference; readable hierarchy, consistent rows, no clipped controls, no accidental horizontal scroll and no misleading metrics.
+- **Interaction:** mouse, keyboard and phone work; focus is visible; loading prevents duplicates; errors preserve input and explain the next useful action.
+- **Reliability:** save/reload, interruption, retry and concurrent change behave correctly; data and permissions remain scoped to the correct workspace.
+- **Language:** plain task labels, Myanmar text rendering, MMK and Yangon time where relevant; Burmese comprehension is a separate observed test, not inferred from successful text rendering.
+- **Customer:** test a small invited cohort on setup and each primary task without coaching. Record completion, errors, time and help required. Recruitment/contact requires the established owner authority. Status is NOT RUN until observed.
+- **Release:** current exact-source CI, supported runtime and hosted acceptance; marketing screenshots are captured only after the corresponding product is accepted.
+
+Run the cycle as observe → define → compare two options → implement one → test → revise. Defer A/B experiments until a stable, instrumented task has enough real usage. Keep only events needed to measure task completion; do not capture customer message bodies or private form contents for analytics.
+
 ## Architecture decisions
 
 - Keep customer hosting and data separate from the internal agent worker. An offline worker must not stop customer login, orders or record access.
