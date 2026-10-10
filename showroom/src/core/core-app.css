@@ -2224,6 +2224,11 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-operating-strip { grid-template-columns: minmax(0,1.5fr) repeat(2,1fr); }
 .shop-operating-status { flex-wrap: wrap; }
 .shop-operating-status > span { display: grid; gap: .125rem; }
+.shop-catalog-panel .shop-operating-strip { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.shop-catalog-panel .shop-operating-strip > span { display: grid; align-content: center; justify-content: stretch; gap: .1875rem; padding-inline: .5rem; }
+.shop-catalog-panel .shop-operating-strip small { line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
+.shop-catalog-panel .shop-operating-strip strong { min-width: 0; font-size: .75rem; line-height: 1.25; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+.shop-catalog-panel .shop-operating-strip .core-button { min-height: 1.75rem; padding: .25rem .375rem; white-space: normal; }
 .shop-shift-choices { width: 100%; flex: 1 1 100%; grid-template-columns: repeat(auto-fit,minmax(8rem,1fr)); }
 .shop-payment-options .shop-shift-choice { text-align: left; }
 .shop-today { display: grid; gap: 1rem; }
