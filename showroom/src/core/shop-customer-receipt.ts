@@ -37,3 +37,42 @@ export function shopCustomerReceiptText(ack: CommerceOrderAcknowledgement, profi
   ]
   return lines.filter((line, index) => line || (index > 0 && lines[index - 1] !== '')).join('\n')
 }
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** Standalone browser-print document for the customer copy; no internal evidence is added. */
+export function shopCustomerReceiptDocument(ack: CommerceOrderAcknowledgement, profile: CommerceMerchantProfile) {
+  const title = escapeHtml(ack.orderId)
+  const receipt = escapeHtml(shopCustomerReceiptText(ack, profile))
+  return `<!doctype html>
+<html lang="my">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sales receipt ${title}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Noto Sans Myanmar', 'Myanmar Text', system-ui, sans-serif; font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 80mm; margin: 4mm auto; padding: 0 2mm; font-variant-numeric: tabular-nums; }
+    @media print {
+      @page { margin: 3mm 0; }
+      body { max-width: none; margin: 0; padding: 0 4mm; font-size: 0.7rem; line-height: 1.35; }
+    }
+    @media print and (max-width: 65mm) {
+      body { padding: 0 5mm; font-size: 0.6rem; }
+    }
+    @media print and (min-width: 90mm) {
+      @page { margin: 1cm; }
+      body { margin: 0.5rem; padding: 1rem 2rem; font-size: 0.9rem; line-height: 1.5; }
+    }
+  </style>
+</head>
+<body>${receipt}</body>
+</html>`
+}

@@ -4,7 +4,7 @@ import { type CommerceMerchantProfile, type CommerceMerchantProfileInput, type C
 import { bi } from './i18n-actions'
 import { PaymentQrButton } from './PaymentQr'
 import { copyOrderRecordText } from './copy-order-record'
-import { shopCustomerReceiptText } from './shop-customer-receipt'
+import { shopCustomerReceiptDocument } from './shop-customer-receipt'
 
 function formatReceiptDate(iso: string) {
   try {
@@ -21,29 +21,17 @@ function mmk(amount: number) {
   return `${amount.toLocaleString()} MMK`
 }
 
-// G1 SCOPE BOUNDARY, stated because "Burmese receipt printing" is the competitor
-// claim this batch answers and only half of it is answered here. The DIALOG above is
-// wired for bilingual labels; the PRINTED document below is deliberately not, and it
-// is not an oversight or a size decision.
-//
-// What this prints is commerceOrderAcknowledgementText(ack) — the order
-// ACKNOWLEDGEMENT ARTIFACT, not a shop's customer slip. Its field names are the
-// record's own vocabulary and it carries the confirmation action id, the calculation
-// evidence and the document digest; verify_app_release_live.mjs pins several of its
-// lines in the built chunk, and the same text is what Copy text puts on the clipboard
-// for a support thread. Translating an evidence document's field names is a different
-// decision from translating a button, with a different reviewer and a different
-// failure mode, so it stays one language and the printed document declares that
-// language honestly on its root element below.
-//
-// The customer-facing Burmese slip a Loyverse user is comparing against is a separate
-// artifact this app does not have yet: it needs the shop's own name and address, no
-// evidence identifiers, and a layout decision about Burmese numerals (the register
-// note in i18n-actions.ts prefers them; MMK amounts here are Arabic). That is roadmap
-// work with its own planning pass, not a wrapper around this function.
-// G2 print geometry. A counter receipt is printed on a continuous thermal ROLL,
-// not a sheet, so the printed document carries a roll layout by default and a
-// sheet layout only when the print service reports sheet-sized media. Before
+// Customer print and internal evidence are separate artifacts. The customer copy
+// is built from the immutable order acknowledgement plus the saved merchant profile;
+// it includes Burmese/English business details and omits command IDs and evidence
+// metadata. "Print order record" and "Copy text" retain the internal acknowledgement
+// vocabulary for support. CSS adapts to reported print-media width; a real printer
+// and Burmese operator test are still required before claiming device support.
+// G2 print geometry for the internal order record. The customer document uses
+// the same width thresholds in its own stylesheet; the measurements below refer
+// to RECEIPT_PRINT_STYLES only. A counter receipt is printed on a continuous
+// thermal ROLL, not a sheet, so it uses a roll layout by default and a sheet
+// layout only when the print service reports sheet-sized media. Before
 // this, it emitted `@page { margin: 1cm }` and 2rem of body padding on every
 // path: measured on an 80mm roll, a 38.9mm text column, 49% of the paper, 16
 // monospace characters wide, running a one-page receipt to 417mm of roll.
@@ -166,6 +154,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
   const [profileDraft, setProfileDraft] = useState<CommerceMerchantProfileInput>({ nameMyanmar: '', nameEnglish: '', phone: '', addressMyanmar: '', addressEnglish: '' })
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState('')
+  const [printNotice, setPrintNotice] = useState('')
 
   function openMerchantProfileSetup() {
     setProfileDraft(merchantProfile
@@ -209,14 +198,28 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
 
   function printCustomerReceipt() {
     if (!ack || !merchantProfile) return
-    const receipt = shopCustomerReceiptText(ack, merchantProfile)
-    const escaped = receipt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const url = URL.createObjectURL(new Blob([`<!doctype html><html lang="my"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sales receipt</title><style>body{font:14px/1.45 ui-monospace,monospace;white-space:pre-wrap;max-width:72mm;margin:4mm auto;padding:0 2mm}@media print{body{margin:0;max-width:none}}</style></head><body>${escaped}</body></html>`], { type: 'text/html' }))
-    const win = window.open(url, '_blank')
-    if (win) {
-      win.addEventListener('load', () => win.print())
-      setTimeout(() => URL.revokeObjectURL(url), 10000)
-    } else URL.revokeObjectURL(url)
+    setPrintNotice('')
+    try {
+      const win = window.open('', '_blank')
+      if (!win) {
+        setPrintNotice('Printing was blocked. Allow pop-ups for this site, then try again.')
+        return
+      }
+      win.addEventListener('load', () => {
+        try {
+          win.focus()
+          win.print()
+          setPrintNotice('Print dialog opened. Choose a printer or Save as PDF.')
+        } catch {
+          setPrintNotice('The browser could not open its print dialog. Use the browser menu to print this receipt.')
+        }
+      }, { once: true })
+      win.document.open()
+      win.document.write(shopCustomerReceiptDocument(ack, merchantProfile))
+      win.document.close()
+    } catch {
+      setPrintNotice('The receipt could not be opened. Try the browser menu to print it.')
+    }
   }
 
   const [copyResult, setCopyResult] = useState<{ record: CommerceOrderAcknowledgement; notice: string } | null>(null)
@@ -285,6 +288,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
         </div> : null}
         <p className="receipt-dialog-notice">{ack.notice}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{copyResult?.record === ack ? copyResult.notice : ''}</p>
+        <p className="receipt-dialog-notice" aria-live="polite" role="status">{printNotice}</p>
         <div className="receipt-dialog-actions">
           {merchantProfile ? <button className="core-button compact" onClick={printCustomerReceipt} type="button">Print customer receipt</button> : <button className="core-button compact" onClick={openMerchantProfileSetup} type="button">Set up customer receipt</button>}
           <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
