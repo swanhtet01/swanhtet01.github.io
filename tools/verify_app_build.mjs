@@ -5939,6 +5939,8 @@ if (rootPackage.scripts?.['client:rehearse:plan'] !== 'node tools/prepare_client
   || !clientPreparationToolSource.includes("return 'partial'")
   || !clientPreparationToolSource.includes('browserWritesPerformed: false')
   || !clientPreparationToolSource.includes('externalWritesPerformed: false')) fail('client_demo_rehearsal_plan_contract_missing')
+const catalogTemplateActionIndex = clientOnboardingUiSource.indexOf('>Download CSV template</button>')
+const catalogFieldListIndex = clientOnboardingUiSource.indexOf('<details className="catalog-import-help">')
 if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !productSetupSource.includes("website: requireProductContract('website')")
   || !productSetupSource.includes("ecommerce: requireProductContract('ecommerce')")
@@ -5950,7 +5952,10 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('downloadChecklist')
   || !clientOnboardingUiSource.includes('clientImportChecklist(product, workflowTemplateId, templateContext)')
   || !clientOnboardingUiSource.includes('aria-label={`${productName} data checklist`')
-  || !clientOnboardingUiSource.includes('Need a template?')
+  || !clientOnboardingUiSource.includes('<summary><span>Field list</span><small>View required columns and examples</small></summary>')
+  || catalogTemplateActionIndex < 0
+  || catalogFieldListIndex < 0
+  || catalogTemplateActionIndex > catalogFieldListIndex
   || !clientOnboardingUiSource.includes('acceptedHeaders.join')
   || clientOnboardingUiSource.includes('previewSample()')
   || !clientOnboardingUiSource.includes('clientImportTemplate(product, workflowTemplateId, templateContext)')

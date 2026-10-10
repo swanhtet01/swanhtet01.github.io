@@ -894,13 +894,16 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <p>Choose your CSV, check the matched columns, and review any corrections.</p>
           </div>
           <div className="catalog-import-file-actions">
-            <label htmlFor={`client-import-${product}`}>Choose your CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
+            <div className="catalog-import-template-actions">
+              <label htmlFor={`client-import-${product}`}>Choose your CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
+              <button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download CSV template</button>
+            </div>
           </div>
         </div>
         <details className="catalog-import-help">
-          <summary><span>Need a template?</span><small>Download the CSV and field guide</small></summary>
+          <summary><span>Field list</span><small>View required columns and examples</small></summary>
           <div className="catalog-import-help-body">
-            <div className="catalog-import-template-actions"><button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download CSV template</button><button className="core-button" disabled={state.busy} onClick={downloadChecklist} type="button">Download field guide</button></div>
+            <div className="catalog-import-template-actions"><button className="core-button" disabled={state.busy} onClick={downloadChecklist} type="button">Download field guide</button></div>
             <div aria-label={`${productName} data checklist`} className="catalog-import-checklist">
               <div><strong>{object.label}</strong><small>Up to {object.maximumRows} rows per reviewed import. {object.activationBoundary}</small></div>
               <div className="catalog-import-checklist-grid">
