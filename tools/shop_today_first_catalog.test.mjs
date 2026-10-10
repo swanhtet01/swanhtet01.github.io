@@ -9,10 +9,21 @@ const [core, today] = await Promise.all([
   readFile(resolve(root, 'showroom', 'src', 'core', 'ShopToday.tsx'), 'utf8'),
 ])
 
-test('an empty Shop catalog links directly to its first-use setup', () => {
-  assert.match(today, /No products yet[\s\S]*?to="\/shop\/\?tab=today#shop-catalog-import"[\s\S]*?Set up your catalog/)
+test('an empty Shop dashboard offers a direct first-product path and a separate CSV import', () => {
+  assert.match(today, /No products to sell yet[\s\S]*?to="\/shop\/\?tab=inventory#shop-catalog-create"[\s\S]*?Add first product[\s\S]*?to="\/shop\/\?tab=inventory#shop-catalog-import"[\s\S]*?Import a CSV/)
+  assert.match(core, /id="shop-catalog-create"/)
+  assert.match(core, /commerceLocation\.hash === '#shop-catalog-create'[\s\S]*?setCatalogCreateOpen\(true\)/)
+})
+
+test('first product setup keeps required data minimal and continues to Counter after review', () => {
+  assert.match(core, /name="product-name"[\s\S]*?required value=\{itemDraft\.name\}/)
+  assert.match(core, /Current stock[\s\S]*?required step="1" type="number" value=\{itemDraft\.onHand\}/)
+  assert.match(core, /Price \(MMK\)[\s\S]*?required step="1" type="number" value=\{itemDraft\.price\}/)
+  assert.match(core, /const itemSku = suppliedSku \|\| `SM-\$\{commandUuid\(\)\.slice\(0, 8\)/)
+  assert.match(core, /if \(isFirstProduct\) navigate\('\/shop\/\?tab=counter'\)/)
+  assert.doesNotMatch(core, /name="product-code"[^>]*required/)
   assert.match(core, /id="shop-catalog-import"/)
-  assert.match(core, /Bring your existing products into Shop/)
+  assert.match(core, /Import a CSV/)
 })
 
 test('the empty catalog state does not show a duplicate generic products link', () => {

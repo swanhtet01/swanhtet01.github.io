@@ -1375,7 +1375,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           })}
         </div></> : <Empty>{items.length
           ? bi('No matching item. Search by name or SKU.')
-          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Bring existing products</Link> or add one item before the first sale.</>}</Empty>}
+          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-create">Add a product</Link> or <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">import a CSV</Link>.</>}</Empty>}
       </section>
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
@@ -1537,8 +1537,6 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-const SHOP_CATALOG_IMPORT_STEPS = ['Choose CSV', 'Match columns', 'Fix row issues', 'Confirm once', 'Open Counter'] as const
-
 function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
   confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
@@ -1647,7 +1645,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [quantity, setQuantity] = useState(1)
   const [extraOrderLines, setExtraOrderLines] = useState<Array<{ sku: string; quantity: number }>>([])
   const [customer, setCustomer] = useState('')
-  const [channel, setChannel] = useState('Messenger')
+  const [channel, setChannel] = useState('Phone')
   const [payment, setPayment] = useState('')
   const [fulfilment, setFulfilment] = useState<'' | 'pickup' | 'delivery'>('')
   const [fulfilmentReference, setFulfilmentReference] = useState('')
@@ -1732,7 +1730,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     : {} as Partial<EcommerceShopNavigationIntents>
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
   const [managedTemplateDraft, setManagedTemplateDraft] = useState({ reviewed: false, reason: '', evidenceReference: '' })
-  const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+  const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
@@ -1828,7 +1826,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const currentShippingPolicy = commerceCurrentShippingPolicy(commerce, shippingPolicyDraft.zoneCode)
   const currentPaymentPolicy = commerceCurrentPaymentPolicy(commerce, paymentPolicyDraft.adapter)
   const orderDraftHasMeaningfulFields = Boolean(customer.trim()
-    || channel !== 'Messenger'
+    || channel !== 'Phone'
     || payment
     || fulfilment
     || fulfilmentReference.trim()
@@ -2444,6 +2442,13 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         history?.querySelector('summary')?.focus({ preventScroll: true })
         return
       }
+      if (commerceLocation.hash === '#shop-catalog-create') {
+        setCatalogCreateOpen(true)
+        const target = document.getElementById('shop-catalog-create')
+        target?.scrollIntoView({ block: 'center' })
+        window.requestAnimationFrame(() => target?.querySelector<HTMLInputElement>('input[name="product-name"]')?.focus({ preventScroll: true }))
+        return
+      }
       if (commerceLocation.hash === '#shop-catalog-import') {
         const target = document.getElementById('shop-catalog-import')
         target?.scrollIntoView({ block: 'start' })
@@ -2469,7 +2474,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         setQuantity(1)
         setExtraOrderLines([])
         setCustomer('')
-        setChannel('Messenger')
+        setChannel('Phone')
         setPayment('')
         setFulfilment('')
         setFulfilmentReference('')
@@ -3422,14 +3427,17 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [catalogImportOpen, setCatalogImportOpen] = useState(false)
   const catalogIsEmpty = commerce.items.length === 0
   const catalogImportRequested = commerceLocation.hash === '#shop-catalog-import'
-  const catalogImportVisible = catalogIsEmpty || catalogImportOpen || catalogImportRequested
+  const catalogImportVisible = catalogImportOpen || catalogImportRequested
   function toggleCatalogImport() {
     if (catalogImportRequested) navigate('/shop/?tab=inventory', { replace: true })
     setCatalogImportOpen((open) => catalogImportRequested ? false : !open)
   }
-  const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
-    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Bring your existing products into Shop' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Check the mapping and any row issues, confirm once, then open Counter.' : 'Review a CSV before adding products in bulk.'}</p></div>
-    {catalogIsEmpty ? <div aria-label="Import to first sale" className="catalog-onboarding-status">{SHOP_CATALOG_IMPORT_STEPS.map((step, index) => <span key={step}><small>Step {index + 1}</small><strong>{step}</strong></span>)}</div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Bring existing products'}</button>}
+  const shopCatalogOnboarding = <section aria-label="Shop catalog setup" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
+    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Add one product or import a list' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Start with one item and its current stock. Import a spreadsheet when you are ready.' : 'Review a CSV before adding products in bulk.'}</p></div>
+    {catalogIsEmpty ? <div className="form-actions">
+      <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
+      <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>
+    </div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>}
     {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
   </section>
   function runShopAutopilot() {
@@ -3477,7 +3485,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     setQuantity(1)
     setExtraOrderLines([])
     setCustomer('')
-    setChannel('Messenger')
+    setChannel('Phone')
     setPayment('')
     setFulfilment('')
     setFulfilmentReference('')
@@ -3697,16 +3705,17 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   function queueCatalogItem(event: FormEvent) {
     event.preventDefault()
-    const itemSku = itemDraft.sku.trim().toUpperCase()
+    const suppliedSku = itemDraft.sku.trim().toUpperCase()
+    const itemSku = suppliedSku || `SM-${commandUuid().slice(0, 8).toUpperCase()}`
     const name = itemDraft.name.trim()
     const onHand = Number(itemDraft.onHand)
-    const reorderAt = Number(itemDraft.reorderAt)
+    const reorderAt = Number(itemDraft.reorderAt || '0')
     const price = Number(itemDraft.price)
-    if (!itemSku || !name
+    if (!name
       || !Number.isSafeInteger(onHand) || onHand < 0
       || !Number.isSafeInteger(reorderAt) || reorderAt < 0
       || !Number.isSafeInteger(price) || price < 1) {
-      setNotice('Enter a SKU, item name, non-negative opening and reorder quantities, and a whole-MMK price.')
+      setNotice('Enter the item name, current stock, and a whole-MMK price.')
       return
     }
     if (commerce.items.some((item) => item.sku === itemSku)) {
@@ -3714,6 +3723,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       return
     }
     const item: CommerceItem = { sku: itemSku, name, onHand, reorderAt, price }
+    const isFirstProduct = commerce.items.length === 0
     queueAction({
       kind: 'catalog_item_create',
       subjectId: item.sku,
@@ -3723,8 +3733,9 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.item.created', action.commandId, proof, (current) => registerCommerceItem(current, item, proof))
-        setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
+        setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
         setSku(item.sku)
+        if (isFirstProduct) navigate('/shop/?tab=counter')
       },
     })
   }
@@ -7092,7 +7103,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>Keep every order moving.</h2><p className="order-source-note">Website and Commerce requests appear automatically. Messenger and Viber are not connected yet.</p></div><div className="order-queue-actions">{!orderDraftRecoveryVisible ? <button className={coreUi.q} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'Record phone or walk-in'}</button> : null}</div></div>
       <dl className="order-queue-summary" aria-label="Order status"><div><dt>Need action</dt><dd>{actionOrders.length}</dd></div><div><dt>In fulfilment</dt><dd>{openOrders.length}</dd></div><div><dt>Payment pending</dt><dd>{pendingPaymentOrders.length}</dd></div></dl>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
@@ -7236,7 +7247,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setResumedOrderDraft(null)
       setOrderDraftConflict(false)
     }} ref={orderComposerRef}>
-      <div className="order-composer-head"><div><span className="core-eyebrow">New order</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>Add an order</h2><p>Add order details. Review the order before saving.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close new order" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
+      <div className="order-composer-head"><div><span className="core-eyebrow">{preparedEcommerceDraft ? 'Incoming online order' : preparedChannelDraft ? 'Incoming message order' : 'Manual order'}</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft || preparedChannelDraft ? 'Review order' : 'Record phone or walk-in order'}</h2><p>{preparedEcommerceDraft ? 'Check stock, delivery and payment before confirming.' : preparedChannelDraft ? 'Review each detail against its source before confirming.' : 'Website and Commerce requests appear in the queue automatically.'}</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close new order" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
       {orderDraftActive && !preparedChannelDraft && !preparedEcommerceDraft && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftConflict
@@ -7305,9 +7316,9 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           })}
           <button className="core-button compact" disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
           {!preparedEcommerceDraft ? <details className="order-options" id="commerce-order-options" ref={orderOptionsRef}>
-            <summary><span>Channel and payment</span><small>{channel === 'Website' ? productDisplayName('website') : channel === 'Ecommerce' ? productDisplayName('ecommerce') : channel} · {payment || 'Choose payment'}</small></summary>
+            <summary><span>Order source and payment</span><small>{channel === 'Website' ? productDisplayName('website') : channel === 'Ecommerce' ? productDisplayName('ecommerce') : channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
-              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}><option>Messenger</option><option>Viber</option><option>Phone</option><option value="Website">Sites</option><option value="Ecommerce">Commerce</option><option>Walk-in</option></select></label>
+              {preparedChannelDraft ? <label>Received from<input aria-readonly="true" disabled readOnly value={preparedChannelDraft.channel ?? 'Connected message channel'} /></label> : <label>Order received by<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}>{!['Phone', 'Walk-in'].includes(channel) ? <option value={channel}>{channel} · saved draft</option> : null}<option value="Phone">Phone</option><option value="Walk-in">Walk-in</option></select></label>}
               <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>AYA Pay</option><option>MMQR</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
           </details> : null}
@@ -7818,14 +7829,14 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
       {commerce.items.length ? shopCatalogOnboarding : null}
-      <details className="compact-disclosure catalog-disclosure" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
-        <summary>Add catalog item</summary>
+      <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
+        <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
-          <div className="form-row"><label>SKU<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan the product barcode into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Item name<input disabled={commerceControlsDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
-          <div className="form-row"><label>Opening stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
-          <label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
-          <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review catalog item</button></div>
-          <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
+          <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
+          <div className="form-row"><label>Current stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Low-stock alert (optional)<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} step="1" type="number" value={itemDraft.reorderAt} /></label></div>
+          <label>Product code or barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} name="product-code" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Scan or type if you have one" value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label>
+          <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review and add product</button></div>
+          <p className="panel-copy">Leave the code blank and Shop will create one. You can change the stock alert later.</p>
         </form>
       </details>
       <p className="form-notice" aria-live="polite">{commerceStorageError || 'Catalog values, counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.'}</p>
