@@ -45,8 +45,8 @@ const batchReasonLabels: Record<string, string> = {
 }
 
 function batchClassificationLabel(classification: ShopBatchProfitControlView['truthBoundary']['classification']) {
-  if (classification === 'synthetic_local_fixture_never_evidence') return 'Synthetic calculation only â€” never evidence'
-  if (classification === 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof') return 'Retained local operating evidence â€” not pilot, customer, or commercial proof'
+  if (classification === 'synthetic_local_fixture_never_evidence') return 'Synthetic calculation only — never evidence'
+  if (classification === 'retained_non_sample_local_operating_evidence_not_pilot_customer_or_commercial_proof') return 'Retained local operating evidence — not pilot, customer, or commercial proof'
   return 'No batch evidence selected'
 }
 
@@ -118,7 +118,7 @@ export function ShopBatchProfitControlPanel({
         </article>
       </div>
       <p className="shop-batch-identity">
-        <strong>{batchProfitControl.batchIdentity.batchId}</strong> Â· revision {batchProfitControl.batchIdentity.revision} Â· {batchProfitControl.batchIdentity.businessDate} Â· {batchClassificationLabel(batchProfitControl.batchIdentity.classification)}
+        <strong>{batchProfitControl.batchIdentity.batchId}</strong> · revision {batchProfitControl.batchIdentity.revision} · {batchProfitControl.batchIdentity.businessDate} · {batchClassificationLabel(batchProfitControl.batchIdentity.classification)}
       </p>
       {batchProfitControl.evidenceStatus.withheldReasonCodes.length ? <p className="shop-margin-gaps" role="status">
         <strong>Operating decision status: {batchProfitControl.evidenceStatus.profitStatus === 'withheld' ? 'withheld' : 'estimate available'}.</strong> {batchProfitControl.evidenceStatus.withheldReasonCodes.map((reason) => batchReasonLabels[reason] ?? reason.replaceAll('_', ' ')).join(' ')}
@@ -132,7 +132,7 @@ export function ShopBatchProfitControlPanel({
         <article>
           <small>Total batch cost estimate</small>
           <strong>{formatMmk(batchProfitControl.totals.totalBatchCostEstimateMmk)}</strong>
-          <span>{formatMmk(batchProfitControl.totals.totalReviewedProductionCostEstimateMmk)} production Â· {formatMmk(batchProfitControl.totals.totalBatchOverheadMmk)} reviewed overhead</span>
+          <span>{formatMmk(batchProfitControl.totals.totalReviewedProductionCostEstimateMmk)} production · {formatMmk(batchProfitControl.totals.totalBatchOverheadMmk)} reviewed overhead</span>
         </article>
         <article>
           <small>Batch contribution estimate</small>
@@ -154,15 +154,15 @@ export function ShopBatchProfitControlPanel({
         <article>
           <small>Batch disposition</small>
           <strong>{batchProfitControl.totals.leftoverUnits + batchProfitControl.totals.wastedUnits + batchProfitControl.totals.remakeUnits}</strong>
-          <span>{batchProfitControl.totals.leftoverUnits} leftover Â· {batchProfitControl.totals.wastedUnits} wasted Â· {batchProfitControl.totals.remakeUnits} remake</span>
+          <span>{batchProfitControl.totals.leftoverUnits} leftover · {batchProfitControl.totals.wastedUnits} wasted · {batchProfitControl.totals.remakeUnits} remake</span>
         </article>
       </div>
       {batchProfitControl.priorities.length ? <div aria-label="Batch margin-risk priorities" className="shop-batch-priorities">
         {batchProfitControl.priorities.map((priority, index) => <article data-tone={priority.severity} key={priority.sku}>
-          <header><span>Priority {index + 1} Â· {batchPriorityLabel(priority)}</span><b>{formatMmk(priority.marginRiskEstimateMmk)} at risk</b></header>
+          <header><span>Priority {index + 1} · {batchPriorityLabel(priority)}</span><b>{formatMmk(priority.marginRiskEstimateMmk)} at risk</b></header>
           <strong>{priority.sku}</strong>
-          <small>{formatMmk(priority.contributionEstimateMmk)} contribution estimate Â· {priority.contributionEstimateBasisPoints === null ? 'Rate unavailable â€” no sold value' : formatShopMarginRate(priority.contributionEstimateBasisPoints)}</small>
-          <small>{formatMmk(priority.operationalCostRiskEstimateMmk)} leftover/waste cost estimate Â· {priority.ownerRole} Â· {priority.dueLabel}</small>
+          <small>{formatMmk(priority.contributionEstimateMmk)} contribution estimate · {priority.contributionEstimateBasisPoints === null ? 'Rate unavailable — no sold value' : formatShopMarginRate(priority.contributionEstimateBasisPoints)}</small>
+          <small>{formatMmk(priority.operationalCostRiskEstimateMmk)} leftover/waste cost estimate · {priority.ownerRole} · {priority.dueLabel}</small>
           <p><strong>Next:</strong> {priority.actionLabel}. <strong>Closed when:</strong> {priority.closureCondition}</p>
         </article>)}
       </div> : batchProfitControl.estimatePreview ? <p className="shop-margin-controlled">No item is below the configured contribution-estimate floor in this validated batch projection.</p> : null}
@@ -251,7 +251,7 @@ export function ShopTodayAdvanced({ batchProfitControl = projectNoBatchProfitCon
         <article>
           <small>Retained non-sample sales</small>
           <strong>{marginControl.activity.retainedNonSampleCompletedSales}</strong>
-          <span>{marginControl.activity.openOrders} open Â· {marginControl.activity.cancelledOrders} cancelled Â· {marginControl.activity.sampleOrders} sample excluded</span>
+          <span>{marginControl.activity.openOrders} open · {marginControl.activity.cancelledOrders} cancelled · {marginControl.activity.sampleOrders} sample excluded</span>
         </article>
         <article>
           <small>Aggregate gross profit</small>
@@ -260,7 +260,7 @@ export function ShopTodayAdvanced({ batchProfitControl = projectNoBatchProfitCon
         </article>
       </div>
       {marginControl.costCoverage.state === 'incomplete' ? <p className="shop-margin-gaps" role="status">
-        Evidence gaps: {marginControl.costCoverage.gaps.missingLineCount} missing Â· {marginControl.costCoverage.gaps.staleLineCount} stale Â· {marginControl.costCoverage.gaps.unlinkedLineCount} unlinked Â· {marginControl.costCoverage.gaps.unreviewedLineCount} unreviewed Â· {marginControl.costCoverage.gaps.partialLineCount} partial Â· {marginControl.costCoverage.gaps.costMethodLineCount} cost-method review
+        Evidence gaps: {marginControl.costCoverage.gaps.missingLineCount} missing · {marginControl.costCoverage.gaps.staleLineCount} stale · {marginControl.costCoverage.gaps.unlinkedLineCount} unlinked · {marginControl.costCoverage.gaps.unreviewedLineCount} unreviewed · {marginControl.costCoverage.gaps.partialLineCount} partial · {marginControl.costCoverage.gaps.costMethodLineCount} cost-method review
       </p> : null}
       {marginControl.activity.adjustmentBlockedSales ? <p className="shop-margin-gaps" role="status">{marginControl.activity.adjustmentBlockedSales} completed {marginControl.activity.adjustmentBlockedSales === 1 ? 'sale has' : 'sales have'} return, correction, or refund evidence awaiting exact line-value review.</p> : null}
       {marginControl.priorities.length ? <div aria-label="Margin at risk priorities" className="shop-margin-priorities">
@@ -268,11 +268,11 @@ export function ShopTodayAdvanced({ batchProfitControl = projectNoBatchProfitCon
           <div>
             <span>{priority.marginBasisPoints === null ? 'Critical cost with no sold value' : priority.severity === 'critical' ? 'Negative margin' : 'Below margin floor'}</span>
             <strong>{priority.itemName}</strong>
-            <small>{priority.ownerRole} Â· {priority.dueLabel}</small>
+            <small>{priority.ownerRole} · {priority.dueLabel}</small>
           </div>
           <div>
             <b>{formatMmk(priority.exposureMmk)} at risk</b>
-            <small>{priority.marginBasisPoints === null ? 'Margin rate unavailable â€” no sold value' : `${formatShopMarginRate(priority.marginBasisPoints)} margin`}</small>
+            <small>{priority.marginBasisPoints === null ? 'Margin rate unavailable — no sold value' : `${formatShopMarginRate(priority.marginBasisPoints)} margin`}</small>
           </div>
           <p><strong>Next:</strong> {priority.actionLabel}. <strong>Closed when:</strong> {priority.closureCondition}</p>
         </Link>)}
@@ -287,7 +287,7 @@ export function ShopTodayAdvanced({ batchProfitControl = projectNoBatchProfitCon
           <h3>Create one Batch estimate from current retained Shop sales</h3>
           <p>Open an explicit local workflow to select eligible completed-sale lines, review production-cost estimates and disposition, and save a versioned immutable Batch receipt. Existing Batch records and the current Shop workspace are never overwritten.</p>
           <button className="core-button" disabled={batchFirstUse.status === 'loading'} onClick={() => { void openBatchFirstUse() }} type="button">
-            {batchFirstUse.status === 'loading' ? 'Opening local Batch reviewâ€¦' : batchFirstUse.status === 'ready' ? 'Reload local Batch workflow' : 'Open local Batch review'}
+            {batchFirstUse.status === 'loading' ? 'Opening local Batch review…' : batchFirstUse.status === 'ready' ? 'Reload local Batch workflow' : 'Open local Batch review'}
           </button>
         </div>
         <b>Owner-reviewed local estimate</b>
