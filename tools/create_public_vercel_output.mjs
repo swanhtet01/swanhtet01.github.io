@@ -576,7 +576,7 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['actual-shop-today.png','Shop operating view showing fulfilment priorities, stock alerts and money awaiting collection','Today and priorities'],['actual-shop-sell.png','Shop counter showing product search, a live sale and local payment choices','Counter and payment'],['actual-shop-orders.png','Shop order queue showing payment handoff, the next action and queue health','Orders and fulfilment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
+ shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['actual-shop-today.png','Shop operating view showing fulfilment priorities, stock alerts and money awaiting collection','Today and priorities'],['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale','Counter catalog and sale setup'],['actual-shop-orders.png','Shop order queue showing payment handoff, the next action and queue health','Orders and fulfilment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
  website: {title:'Publish clearly. Capture every inquiry.', body:'Manage pages, readiness checks and customer inquiries without assembling a separate toolchain.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Take the order through delivery.', body:'Connect the catalog, customer request, payment review and fulfilment follow-through. Your team confirms each order and payment. Arrange delivery with your customer.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Customer request and Shop review',1280,900]], proof:[['Record','Catalog, customer and order'],['Action','Confirm, pack and dispatch'],['Result','One traceable fulfilment flow']]},
 }
@@ -598,9 +598,9 @@ const productOutcomes = {
  ],
 }
 const interfaceCaptureDates = {
- 'actual-shop-today.png': '2 Oct 2026',
- 'actual-shop-sell.png': '2 Oct 2026',
- 'actual-shop-orders.png': '2 Oct 2026',
+ 'actual-shop-today.png': '11 Oct 2026',
+ 'actual-shop-sell.png': '11 Oct 2026',
+ 'actual-shop-orders.png': '11 Oct 2026',
  'actual-shop-stock.png': '2 Oct 2026',
  'actual-sites-editor.png': '4 Oct 2026',
  'actual-sites-inquiries.png': '4 Oct 2026',

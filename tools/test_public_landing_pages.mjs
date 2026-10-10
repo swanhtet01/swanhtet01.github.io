@@ -76,9 +76,9 @@ const productScreens = {
   ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
 }
 const interfaceCaptureDates = {
-  'actual-shop-today.png': '2 Oct 2026',
-  'actual-shop-sell.png': '2 Oct 2026',
-  'actual-shop-orders.png': '2 Oct 2026',
+  'actual-shop-today.png': '11 Oct 2026',
+  'actual-shop-sell.png': '11 Oct 2026',
+  'actual-shop-orders.png': '11 Oct 2026',
   'actual-shop-stock.png': '2 Oct 2026',
   'actual-sites-editor.png': '4 Oct 2026',
   'actual-sites-inquiries.png': '4 Oct 2026',
@@ -142,6 +142,10 @@ for (const page of landingPages) {
   check(carousel === html.includes('<script src="/platform-carousel.js" defer></script>'), `landing_gallery_script:${page.route}`)
   check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
+  if (page.productId === 'shop') {
+    check(html.includes('alt="Shop counter with searchable products, visible stock levels, and Add controls for a new sale"'), 'landing_shop_counter_capture_matches_sale_ready_state')
+    check(html.includes(`Shop &middot; Counter catalog and sale setup &middot; ${interfaceDisclosure('actual-shop-sell.png')}`), 'landing_shop_counter_capture_scope_truthful')
+  }
   if (page.productId === 'ecommerce') {
     check(html.includes('alt="Commerce catalog showing available products, local pricing and customer ordering"'), 'landing_commerce_catalog_capture_description')
     check(html.includes(`Commerce &middot; Store catalog and availability &middot; ${interfaceDisclosure('actual-commerce-catalog.png')}`), 'landing_commerce_catalog_capture_scope_truthful')
