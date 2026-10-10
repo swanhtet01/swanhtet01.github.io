@@ -38,6 +38,32 @@ test('catalog comparison names changed fields without changing either item', asy
   assert.deepEqual(commerceCatalogImportDifferences(existing, { ...existing, price: 1200, onHand: 6 }), ['onHand', 'price'])
 })
 
+test('reviewed Shop import flags stale stock and duplicate SKUs before any write', async () => {
+  const { commerceCatalogImportDifferences, createEmptyCommerce, importCommerceCatalog } = await import('../showroom/src/core/commerce-workspace.ts')
+  const existing = { sku: 'CHECK-1', name: 'Existing item', onHand: 5, reorderAt: 1, price: 1000 }
+  const stale = await createClientImportPreview(
+    'sku,item_name,opening_stock,reorder_at,price_mmk\nCHECK-1,Existing item,4,1,1000\n',
+    'commerce',
+  )
+  const staleItem = { sku: stale.rows[0].values.sku, name: stale.rows[0].values.name, onHand: Number(stale.rows[0].values.onHand), reorderAt: Number(stale.rows[0].values.reorderAt), price: Number(stale.rows[0].values.price) }
+  assert.deepEqual(commerceCatalogImportDifferences(existing, staleItem), ['onHand'])
+
+  const duplicates = await createClientImportPreview(
+    'sku,item_name,opening_stock,reorder_at,price_mmk\nDUP-1,First,1,0,100\nDUP-1,Second,2,1,200\n',
+    'commerce',
+  )
+  assert.equal(duplicates.totals.duplicates, 2)
+  assert.equal(duplicates.readyForStaging, false)
+  assert.ok(duplicates.rows.every(row => row.status === 'duplicate'))
+
+  const context = { sourceDigest: `sha256:${'b'.repeat(64)}`, capturedAt: '2026-09-27T00:00:00.000Z', actor: 'Synthetic tester' }
+  const seeded = importCommerceCatalog(createEmptyCommerce(), { ...context, items: [existing] })
+  assert.ok(seeded)
+  const before = JSON.stringify(seeded.state)
+  assert.equal(importCommerceCatalog(seeded.state, { ...context, items: [{ ...existing, onHand: 4 }] }), null)
+  assert.equal(JSON.stringify(seeded.state), before)
+})
+
 test('catalog import rejects a mixed conflicting batch without mutating existing state', async () => {
   const { createEmptyCommerce, importCommerceCatalog } = await import('../showroom/src/core/commerce-workspace.ts')
   const item = { sku: 'CHECK-1', name: 'Existing item', onHand: 5, reorderAt: 1, price: 1000 }
