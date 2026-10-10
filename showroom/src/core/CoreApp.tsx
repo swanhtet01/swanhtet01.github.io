@@ -23,6 +23,7 @@ import { recordBehaviorSignal } from './behavior-trail'
 import { downloadBlob } from './download-file'
 import { emitMetric } from '../analytics/metrics-collector'
 import { BarcodeScanButton } from './BarcodeScanButton'
+import { prepareManagedFirstCatalog } from './shop-managed-first-catalog'
 import { applyStockCountScan } from './shop-stock-count-scan'
 const ClosedOrderHistory = lazy(() => import('./ShopOrderHistory').then((module) => ({ default: module.ClosedOrderHistory })))
 const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
@@ -1728,7 +1729,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     && recoveredEcommerceIntent.id === requestedEcommerceIntent.id
     ? recoveredEcommerceIntent.intents
     : {} as Partial<EcommerceShopNavigationIntents>
-  const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
+  const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '0', price: '', reason: '', evidenceReference: '' })
   const [managedTemplateDraft, setManagedTemplateDraft] = useState({ reviewed: false, reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
@@ -3045,33 +3046,28 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   async function initializeManagedCatalog(event: FormEvent) {
     event.preventDefault()
     if (!managedIdentity) return
-    const skuValue = catalogDraft.sku.trim().toUpperCase()
-    const name = catalogDraft.name.trim()
-    const onHand = Number(catalogDraft.onHand)
-    const reorderAt = Number(catalogDraft.reorderAt)
-    const price = Number(catalogDraft.price)
-    const reason = catalogDraft.reason.trim()
-    const evidenceReference = catalogDraft.evidenceReference.trim()
-    if (!skuValue || !name || !reason || !evidenceReference || ![onHand, reorderAt, price].every(Number.isSafeInteger) || onHand < 0 || reorderAt < 0 || price < 1) {
-      setCatalogError('Enter a valid item, whole-number stock boundaries, price, reason, and evidence reference.')
+    const prepared = prepareManagedFirstCatalog(catalogDraft, () => commandUuid())
+    if (!prepared.ok) {
+      setCatalogError(prepared.error)
       return
     }
+    const { product } = prepared
     const proof: CommerceActionProof = {
       actionId: uid('ACT'),
       capturedAt: new Date().toISOString(),
       actor: managedIdentity.userId,
-      reason,
-      evidenceReference,
+      reason: prepared.reason,
+      evidenceReference: prepared.evidenceReference,
     }
     setCatalogBusy(true)
     setCatalogError('')
     try {
       await mutateCommerce('commerce.workspace.initialized', commandUuid(), proof, (current) => current.items.length || current.orders.length || current.movements.length || current.closes.length || commerceWebsiteIntakes(current).length ? null : validateCommerceState({
         ...current,
-        items: [{ sku: skuValue, name, onHand, reorderAt, price }],
-        catalogBaselines: [createCommerceCatalogBaseline({ sku: skuValue, price, reorderAt }, proof)],
+        items: [product],
+        catalogBaselines: [createCommerceCatalogBaseline({ sku: product.sku, price: product.price, reorderAt: product.reorderAt }, proof)],
       }))
-      setNotice(`Managed catalog initialized with ${skuValue}.`)
+      setNotice(`Managed catalog initialized with ${product.sku}.`)
     } catch (error) {
       setCatalogError(error instanceof Error ? error.message : 'The managed catalog was not initialized.')
     } finally {
@@ -3128,13 +3124,14 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     if (unprovisioned) {
       const catalogForm = <form className="core-form compact-form shop-first-product-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
         <fieldset><legend>Product</legend>
-        <div className="form-row"><label>Barcode or product code<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Product name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label></div>
+        <div className="form-row"><label>Barcode or product code (optional)<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="Leave blank for an assigned code" value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Product name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label></div>
         <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
         </fieldset>
         <fieldset><legend>Opening stock</legend>
-        <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Low-stock alert at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
-        <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
-        <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet, stocktake, or source record" required value={catalogDraft.evidenceReference} /></label>
+        <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Low-stock alert at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
+        <label>Opening balance note (optional)<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="Add a note about the opening count" value={catalogDraft.reason} /></label>
+        <label>Evidence reference (optional)<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet or source record, if available" value={catalogDraft.evidenceReference} /></label>
+        <small>Blank notes are recorded as owner-entered and not independently verified.</small>
         </fieldset>
         <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Saving…' : 'Add product'}</button></div>
         <p className="form-notice" role="status">{catalogError || commerceStorageError || ''}</p>
