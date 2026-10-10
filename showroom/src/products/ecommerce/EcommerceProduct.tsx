@@ -2356,7 +2356,7 @@ export function EcommerceProduct() {
           </div>
           <div className="ecommerce-catalog-head">
             <strong>Products</strong>
-            <small>{selectedSkus.length} of 8 selected</small>
+            <small>{selectedSkus.length} selected · up to 8</small>
           </div>
           {catalog.items.length > 8 ? <label>
             <span className="sr-only">Search Shop products</span>

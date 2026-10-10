@@ -30,8 +30,13 @@ test('base counter quantity controls support tablet touch without a phone breakp
   assert.doesNotMatch(app, /Parked tickets \(\{parked\.length\}\) · this device/)
   const desktopCounterRule = css.match(/@media \(max-width: 1700px\) and \(min-width: 841px\) \{([\s\S]*?)\n\}/)?.[1]
   assert.match(desktopCounterRule, /\.shop-counter-module > \.shop-counter-surface \{ height: clamp\(520px,calc\(100svh - 220px\),680px\); min-height: 520px; flex: 0 0 auto;/)
-  assert.match(desktopCounterRule, /\.shop-counter-grid \{ height: 100%; grid-template-rows: minmax\(0,1fr\) auto; \}/)
-  assert.match(desktopCounterRule, /\.shop-catalog-panel, \.shop-current-sale \{ min-height: 0; overflow-y: auto; \}/)
+  assert.match(desktopCounterRule, /\.shop-counter-grid \{ grid-template-columns: minmax\(19rem, 1fr\) minmax\(21rem, 1\.12fr\) minmax\(15rem, \.78fr\); gap: \.75rem; \}/)
+  assert.match(desktopCounterRule, /\.shop-counter-grid \{ height: 100%; grid-template-rows: minmax\(0,1fr\); \}/)
+  assert.match(desktopCounterRule, /\.shop-catalog-panel, \.shop-current-sale, \.shop-counter-followup \{ min-height: 0; overflow-y: auto; \}/)
+  assert.doesNotMatch(desktopCounterRule, /\.shop-counter-followup \{ grid-column:/)
+  const compactDesktopRule = css.match(/@media \(max-width: 1200px\) and \(min-width: 841px\) \{([\s\S]*?)\n\}/)?.[1]
+  assert.match(compactDesktopRule, /\.shop-counter-grid \{ grid-template-columns: minmax\(20rem, \.94fr\) minmax\(24rem, 1\.06fr\); grid-template-rows: minmax\(0,1fr\) auto; \}/)
+  assert.match(compactDesktopRule, /\.shop-counter-followup \{ grid-column: 1 \/ -1;/)
   const tabletRule = css.match(/@media \(max-width: 1080px\) and \(min-width: 841px\) \{([\s\S]*?)\n\}/)?.[1]
   assert.match(tabletRule, /\.shop-counter-column-head \{ display: none; \}/)
   assert.match(app, /const CASHIER_COMPLETE_MY = confirmedBurmese\('Complete'\)/)

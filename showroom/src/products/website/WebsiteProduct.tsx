@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -10,11 +10,15 @@ import {
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
+import { requireReviewedSource, type ReviewEvidenceInput, type ReviewApprovalInput } from './website-review'
 import { SitePreview } from './SitePreview'
+import { websiteContactPage } from './website-contact-page'
 import { WebsiteReviewInbox } from './WebsiteReviewInbox'
 import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
-import { createWebsiteHtmlDownload } from './website-export'
+import { createWebsiteMediaDownload } from './website-media-export'
+import { createWebsiteMediaClient } from './website-media-client'
+import { WebsiteMediaContext } from './WebsiteMediaContext'
 import { websiteDraftDifference } from './website-draft-difference'
 import {
   captureWebsiteLead,
@@ -58,7 +62,7 @@ import {
   websiteEditSessionMatches,
   websiteEditSessionStorageKey,
   workspaceFingerprint,
-  type EvidenceKind,
+  type WebsiteSourceRef,
   type PreviewDevice,
   type ReadinessCheck,
   type WebsiteEditSession,
@@ -68,6 +72,8 @@ import {
   type WebsiteWorkspaceUpdate,
 } from './website-model'
 import './website-product.css'
+
+const HostedWebsite = lazy(() => import('./HostedWebsite'))
 
 type WebsiteView = 'content' | 'inquiries' | 'publish'
 
@@ -88,8 +94,8 @@ const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
     copy: 'Review customer requests and choose the next step.',
   },
   publish: {
-    title: 'Website file',
-    copy: 'Check your site, then download the finished files.',
+    title: 'Publish website',
+    copy: 'Review your pages and put your website online.',
   },
 }
 
@@ -198,6 +204,13 @@ export function WebsiteProduct() {
     managedWorkspaceId,
     canWrite,
   } = useWebsiteWorkspace()
+  const mediaClient = useMemo(() => storageMode === 'managed' && managedActorId && managedWorkspaceId
+    ? createWebsiteMediaClient({ userId: managedActorId, workspaceId: managedWorkspaceId, email: '' }, canWrite) : null,
+  [storageMode, managedActorId, managedWorkspaceId, canWrite])
+  const [imageEditing, setImageEditing] = useState(false)
+  const mediaContext = useMemo(() => ({ client: mediaClient, onEditingChange: setImageEditing }), [mediaClient])
+  const exportController = useRef<AbortController | null>(null)
+  useEffect(() => () => { exportController.current?.abort(); exportController.current = null }, [mediaClient])
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedView = searchParams.get('view')
   const [surface, setSurface] = useState<'work' | 'preview'>('work')
@@ -287,6 +300,7 @@ export function WebsiteProduct() {
   const publish = getCurrentPublish(workspace)
   const approvalIsCurrent = Boolean(approval)
   const publishIsCurrent = Boolean(publish)
+  const inquiryPageId = websiteContactPage(workspace.pages.filter(page => page.stage === 'ready'))?.id ?? ''
   const starterAvailable = !hasUnsavedChanges && isUntouchedWebsiteStarter(editorWorkspace)
   const portalViewOnly = storageMode === 'managed' && !canWrite
   const workingSampleTemplate = workspace.workingSample
@@ -609,6 +623,7 @@ export function WebsiteProduct() {
   }
 
   async function saveDraft() {
+    if (imageEditing) { setNotice('Use or cancel the image before saving the page.'); return }
     const retained = editSessionRef.current
     if (!retained || retained.scope !== editSessionScope) return
     if (!websiteEditSessionMatches(retained.session, workspace)) {
@@ -852,56 +867,64 @@ export function WebsiteProduct() {
     if (staged) setNotice('Navigation order changed in the website draft.')
   }
 
-  async function addEvidence(input: {
-    kind: EvidenceKind
-    finding: string
-    reference: string
-    verifiedBy: string
-  }) {
+  async function addEvidence(input: ReviewEvidenceInput) {
     if (!requireSavedWorkspace('recording release evidence')) return false
     const actionId = createId('evidence')
     const capturedAt = new Date().toISOString()
     const result = await commitWorkspace(
-      (current) => recordWebsiteEvidence(current, { ...input, actionId, capturedAt }),
+      (current) => {
+        requireReviewedSource(current, input.source)
+        return recordWebsiteEvidence(current, { ...input, actionId, capturedAt })
+      },
       'Verified evidence was saved and confirmed for the current content revision.',
       true,
     )
     return result.ok && result.changed
   }
 
-  async function approveCurrentRevision(input: { reviewer: string; note: string }) {
+  async function approveCurrentRevision(input: ReviewApprovalInput) {
     if (!requireSavedWorkspace('approving a revision')) return false
     const actionId = createId('approval')
     const capturedAt = new Date().toISOString()
     const result = await commitWorkspace(
-      (current) => approveWebsiteRevision(current, { ...input, actionId, capturedAt }),
+      (current) => {
+        requireReviewedSource(current, input.source)
+        return approveWebsiteRevision(current, { ...input, actionId, capturedAt })
+      },
       'Evidence-bound human approval was saved and confirmed for this content revision.',
       true,
     )
-    return result.ok && result.changed
+    return result.ok
   }
 
-  async function recordLocalPublish() {
-    if (!requireSavedWorkspace('recording a site file')) return
-    if (!approvalIsCurrent || publishIsCurrent) return
-    await commitWorkspace(
-      (current) => recordWebsiteSnapshot(current, {
-        actionId: createId('local-snapshot'),
-        capturedAt: new Date().toISOString(),
-      }),
+  async function recordLocalPublish(source: WebsiteSourceRef) {
+    if (!requireSavedWorkspace('recording a site file')) return false
+    const actionId = createId('local-snapshot')
+    const capturedAt = new Date().toISOString()
+    const result = await commitWorkspace(
+      (current) => {
+        requireReviewedSource(current, source)
+        return recordWebsiteSnapshot(current, { actionId, capturedAt })
+      },
       'Approved website file saved. Nothing was deployed.',
       true,
     )
+    return result.ok
   }
 
-  function downloadPublishedSite(recordId: string) {
+  async function downloadPublishedSite(recordId: string) {
+    if (exportController.current) return
     const record = workspace.localPublishes.find((entry) => entry.id === recordId)
     if (!record?.artifact) {
       setNotice('This older site record has no retained file. Approve the current revision and create a new site file.')
       return
     }
+    const controller = new AbortController()
+    exportController.current = controller
+    setNotice('Preparing website photos…')
     try {
-      const download = createWebsiteHtmlDownload(record.artifact)
+      const download = await createWebsiteMediaDownload(record.artifact, mediaClient, controller.signal)
+      controller.signal.throwIfAborted()
       const url = URL.createObjectURL(new Blob([download.content], { type: download.mimeType }))
       const link = document.createElement('a')
       link.href = url
@@ -913,14 +936,20 @@ export function WebsiteProduct() {
       window.setTimeout(() => URL.revokeObjectURL(url), 5_000)
       setNotice(`${download.filename} downloaded. No site or domain was changed.`)
     } catch (error) {
+      if (controller.signal.aborted) return
       setNotice('The retained site file failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
-    }
+    } finally { if (exportController.current === controller) exportController.current = null }
   }
 
-  function downloadWebsiteFile() {
+  async function downloadWebsiteFile() {
+    if (exportController.current || imageEditing) return
     if (!requireSavedWorkspace('downloading the Website')) return
+    const controller = new AbortController()
+    exportController.current = controller
+    setNotice('Preparing website photos…')
     try {
-      const download = createWebsiteHtmlDownload(createWebsitePreviewArtifact(workspace))
+      const download = await createWebsiteMediaDownload(createWebsitePreviewArtifact(workspace), mediaClient, controller.signal)
+      controller.signal.throwIfAborted()
       const url = URL.createObjectURL(new Blob([download.content], { type: download.mimeType }))
       const link = document.createElement('a')
       link.href = url
@@ -943,8 +972,9 @@ export function WebsiteProduct() {
       }
       setNotice(`${download.filename} downloaded. It is a standalone website file; no site or domain was deployed.`)
     } catch (error) {
+      if (controller.signal.aborted) return
       setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
-    }
+    } finally { if (exportController.current === controller) exportController.current = null }
   }
 
   const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
@@ -1250,7 +1280,7 @@ export function WebsiteProduct() {
   }
 
   return (
-    <div className="website-product">
+    <WebsiteMediaContext.Provider value={mediaContext}><div className="website-product">
       <div className="website-shell">
         <div id="website-workspace" className="website-main">
           {noticePriority !== 'routine' ? (
@@ -1284,26 +1314,25 @@ export function WebsiteProduct() {
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
             </div>
+            {!starterSetupActive ? <nav aria-label="Sites workspace" className="website-mode-nav">
+              <button aria-current={view === 'content' ? 'page' : undefined} onClick={() => openWorkspaceView('content')} type="button">Pages</button>
+              <button aria-current={view === 'inquiries' ? 'page' : undefined} onClick={() => openWorkspaceView('inquiries')} type="button">
+                Inquiries{storageMode !== 'managed' && leadCounts.new ? <span>{leadCounts.new}</span> : null}
+              </button>
+              <button
+                aria-current={view === 'publish' ? 'page' : undefined}
+                disabled={!canReview}
+                onClick={() => openWorkspaceView('publish')}
+                title={!canReview ? 'Finish and save every page before preparing the website file' : undefined}
+                type="button"
+              >
+                Website file
+              </button>
+            </nav> : null}
             {view === 'publish' ? (
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
           </header>
-
-          {!starterSetupActive ? <nav aria-label="Sites workspace" className="website-mode-nav">
-            <button aria-current={view === 'content' ? 'page' : undefined} onClick={() => openWorkspaceView('content')} type="button">Pages</button>
-            <button aria-current={view === 'inquiries' ? 'page' : undefined} onClick={() => openWorkspaceView('inquiries')} type="button">
-              Inquiries{leadCounts.new ? <span>{leadCounts.new}</span> : null}
-            </button>
-            <button
-              aria-current={view === 'publish' ? 'page' : undefined}
-              disabled={!canReview}
-              onClick={() => openWorkspaceView('publish')}
-              title={!canReview ? 'Finish and save every page before preparing the website file' : undefined}
-              type="button"
-            >
-              Website file
-            </button>
-          </nav> : null}
 
           {pendingRestoredDraft ? (
             <section aria-labelledby="website-restored-draft-title" className="website-restored-draft-choice">
@@ -1325,42 +1354,6 @@ export function WebsiteProduct() {
               </div>
             </section>
           ) : null}
-
-          {view === 'content' && !starterSetupActive && !editingRoutineStatus ? <details className="website-status-disclosure">
-            <summary>Next: {websiteAgentJob} · {readinessSummary}</summary>
-            <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
-            <div className="website-today-priority">
-              <span className="core-eyebrow">Next action</span>
-              <h2 id="website-today-title">{websiteAgentJob}</h2>
-              <p>{websiteAgentReason}</p>
-              <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
-              <small className="website-today-context">{websiteTodayContext}</small>
-            </div>
-            <div className="website-today-signals">
-              <ol aria-label="Website workflow" className="website-workflow-rail">
-                {websiteWorkflowSteps.map((step, index) => (
-                  <li aria-current={step.state === 'current' ? 'step' : undefined} data-state={step.state} key={step.id}>
-                    <span aria-hidden="true">{step.state === 'complete' ? '✓' : index + 1}</span>
-                    <div><small>{step.label}</small><strong>{step.detail}</strong></div>
-                  </li>
-                ))}
-              </ol>
-              <details className="website-today-checks">
-                <summary>Review site checks · {readinessSummary}</summary>
-                {hasUnsavedChanges ? (
-                  <p className="website-check-guidance">Save or discard your draft before checking the saved website. These checks do not approve or publish it.</p>
-                ) : failingContentChecks.length > 0 ? (
-                  <div className="website-check-guidance">
-                    <h3>Needs attention</h3>
-                    <ul>
-                      {failingContentChecks.map((check) => <li key={check.id}><strong>{check.label}</strong><p>{check.detail}</p></li>)}
-                    </ul>
-                  </div>
-                ) : null}
-              </details>
-            </div>
-          </section>
-          </details> : null}
 
           {view === 'content' && !starterSetupActive ? (
             <section
@@ -1481,9 +1474,9 @@ export function WebsiteProduct() {
                     </button>
                     <button
                       className="website-button is-primary"
-                      disabled={editConflict || savingDraft}
+                      disabled={editConflict || savingDraft || imageEditing}
                       onClick={() => void saveDraft()}
-                      title={editConflict ? 'Discard this draft and review the newer saved version' : 'Save all draft changes as one revision'}
+                      title={imageEditing ? 'Use or cancel the image first' : editConflict ? 'Discard this draft and review the newer saved version' : 'Save all draft changes as one revision'}
                       type="button"
                     >
                       {savingDraft ? 'Saving…' : 'Save'}
@@ -1501,10 +1494,13 @@ export function WebsiteProduct() {
 
           {view === 'content' && storageMode === 'managed' && canWrite && managedWorkspaceId && managedActorId
             ? <WebsiteReviewInbox key={`${managedWorkspaceId}:${managedActorId}`} workspaceId={managedWorkspaceId} actorId={managedActorId} /> : null}
-          {view === 'inquiries' ? <section aria-labelledby="website-lead-inbox-title" className="website-inquiry-workspace" id="website-inquiries">
+          {view === 'inquiries' ? <>
+            {storageMode === 'managed' && managedWorkspaceId && managedActorId ? <Suspense fallback={<p role="status">Loading customer inquiries…</p>}><HostedWebsite key={`${managedWorkspaceId}:${managedActorId}:inbox`} workspaceId={managedWorkspaceId} actorId={managedActorId} view="inbox" snapshotId="" pageId="" canWrite={canWrite} /></Suspense> : null}
+            <details className="website-status-disclosure" open={storageMode !== 'managed' ? true : undefined}><summary>Phone and in-person requests</summary>
+            <section aria-labelledby="website-lead-inbox-title" className="website-inquiry-workspace" id="website-inquiries">
             <header className="website-inquiry-workspace-head">
               <div>
-                <h2 id="website-lead-inbox-title" tabIndex={-1}>{leadCounts.new ? `${leadCounts.new} ${leadCounts.new === 1 ? 'request needs' : 'requests need'} review` : 'Customer requests are up to date'}</h2>
+                <h2 id="website-lead-inbox-title" tabIndex={-1}>{leadCounts.new ? `${leadCounts.new} ${leadCounts.new === 1 ? 'request needs' : 'requests need'} review` : 'No phone or in-person requests'}</h2>
                 <p>{storageMode === 'managed' ? 'Saved in your company account.' : 'Saved on this device.'} Review each request and assign the follow-up.</p>
               </div>
               <div className="website-inquiry-actions">
@@ -1532,9 +1528,9 @@ export function WebsiteProduct() {
                 {matchingInquiries.length ? <div className="website-inbox-layout">
                   <div aria-label="Customer requests" className="website-inbox-list">{matchingInquiries.map((lead) => <button aria-pressed={selectedInquiry?.id === lead.id} key={lead.id} onClick={() => setSelectedInquiryId(lead.id)} type="button"><span><strong>{lead.name}</strong><small className="website-inquiry-state">{lead.status}</small></span><p>{lead.request}</p><small>{formatRecoveryDate(lead.createdAt)}</small></button>)}</div>
                   {selectedInquiry ? <InquiryDetail key={inquiryDraftKey} lead={selectedInquiry} draft={inquiryDrafts[inquiryDraftKey] ?? selectedInquiry} onDraft={(draft) => setInquiryDrafts((current) => ({ ...current, [inquiryDraftKey]: draft }))} readOnly={portalViewOnly} onReview={decideLead} /> : null}
-                </div> : <div className="website-inbox-empty"><strong>{websiteLeads.length ? 'No matching inquiries' : 'Your inbox is clear'}</strong><p>{websiteLeads.length ? 'Try another name or status.' : 'Requests you record will appear here. Automatic website delivery is not connected yet.'}</p></div>}
+                </div> : <div className="website-inbox-empty"><strong>{websiteLeads.length ? 'No matching inquiries' : 'Your inbox is clear'}</strong><p>{websiteLeads.length ? 'Try another name or status.' : 'Requests received by phone or in person appear here after you add them.'}</p></div>}
               </section>
-          </section> : null}
+          </section></details></> : null}
 
           {view !== 'inquiries' ? <div
             aria-label={view === 'content' ? 'Edit' : 'Publish'}
@@ -1570,6 +1566,7 @@ export function WebsiteProduct() {
                         {editorWorkspace.pages.map((page) => (
                           <li key={page.id}>
                             <button
+                              aria-label={`${page.internalName || 'Untitled page'} ${page.slug || 'No path'} ${page.stage}`}
                               aria-current={page.id === selectedPage.id ? 'page' : undefined}
                               className={page.id === selectedPage.id ? 'is-active' : ''}
                               onClick={() => selectPage(page.id)}
@@ -1585,7 +1582,7 @@ export function WebsiteProduct() {
                     </nav>
 
                     <ContentWorkspace
-                      key={selectedPage.id}
+                      key={`${mediaClient?.scopeKey ?? 'local'}:${canWrite}:${selectedPage.id}`}
                       canDuplicate={editorWorkspace.pages.length < MAX_WEBSITE_PAGES}
                       deleteArmed={deleteCandidateId === selectedPage.id}
                       onDuplicate={copySelectedPage}
@@ -1619,7 +1616,7 @@ export function WebsiteProduct() {
                       {showInquirySummary ? <section aria-labelledby="website-inquiry-summary-title" className="website-insight-card">
                         <header>
                           <div>
-                            <span>Inquiries</span>
+                            <span>{storageMode === 'managed' ? 'Phone and in-person requests' : 'Inquiries'}</span>
                             <strong id="website-inquiry-summary-title">{leadCounts.new ? `${leadCounts.new} new` : 'Inbox clear'}</strong>
                           </div>
                           <b>{websiteLeads.length}</b>
@@ -1637,8 +1634,11 @@ export function WebsiteProduct() {
               ) : null}
 
               {view === 'publish' ? (
-                storageMode === 'managed' ? (
+                storageMode === 'managed' ? (<>
+                  <Suspense fallback={<p role="status">Checking website hosting…</p>}><HostedWebsite key={`${managedWorkspaceId}:${managedActorId}:publish`} workspaceId={managedWorkspaceId} actorId={managedActorId} view="publish" snapshotId={publish?.id ?? ''} pageId={inquiryPageId} canWrite={canWrite} /></Suspense>
+                  <details className="website-status-disclosure" open={!publishIsCurrent ? true : undefined}><summary>Site review and saved versions</summary>
                   <PublishWorkspace
+                    canWrite={canWrite}
                     approvalIsCurrent={approvalIsCurrent}
                     checks={checks}
                     currentPublishId={publish?.id ?? ''}
@@ -1646,13 +1646,14 @@ export function WebsiteProduct() {
                     managedActorId={managedActorId}
                     managedReleaseRecords={storageMode === 'managed' ? workspace.releaseRecords ?? [] : undefined}
                     onAddEvidence={addEvidence}
+                    onEdit={() => openWorkspaceView('content')}
                     onApprove={approveCurrentRevision}
                     onDownloadPublish={downloadPublishedSite}
                     onRecordPublish={recordLocalPublish}
                     onSaveManagedRelease={storageMode === 'managed' ? saveManagedRelease : undefined}
                     publishIsCurrent={publishIsCurrent}
                     workspace={workspace}
-                  />
+                  /></details></>
                 ) : (
                   <DownloadWorkspace
                     checks={checks}
@@ -1667,6 +1668,7 @@ export function WebsiteProduct() {
             <div className="website-preview-surface">
 
               <SitePreview
+                inquiryPageId={inquiryPageId}
                 device={device}
                 onSelectPage={selectPage}
                 page={selectedPage}
@@ -1676,8 +1678,44 @@ export function WebsiteProduct() {
             </div>
           </div> : null}
 
+          {view === 'content' && !starterSetupActive && !editingRoutineStatus ? <details className="website-status-disclosure">
+            <summary>Next: {websiteAgentJob} · {readinessSummary}</summary>
+            <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
+            <div className="website-today-priority">
+              <span className="core-eyebrow">Next action</span>
+              <h2 id="website-today-title">{websiteAgentJob}</h2>
+              <p>{websiteAgentReason}</p>
+              <button className="website-button is-primary is-compact" disabled={portalViewOnly} onClick={runWebsiteAutopilot} title={portalViewOnly ? 'Website operator access is required' : undefined} type="button">{portalViewOnly ? 'View only' : websiteAgentActionLabel}</button>
+              <small className="website-today-context">{websiteTodayContext}</small>
+            </div>
+            <div className="website-today-signals">
+              <ol aria-label="Website workflow" className="website-workflow-rail">
+                {websiteWorkflowSteps.map((step, index) => (
+                  <li aria-current={step.state === 'current' ? 'step' : undefined} data-state={step.state} key={step.id}>
+                    <span aria-hidden="true">{step.state === 'complete' ? '✓' : index + 1}</span>
+                    <div><small>{step.label}</small><strong>{step.detail}</strong></div>
+                  </li>
+                ))}
+              </ol>
+              <details className="website-today-checks">
+                <summary>Review site checks · {readinessSummary}</summary>
+                {hasUnsavedChanges ? (
+                  <p className="website-check-guidance">Save or discard your draft before checking the saved website. These checks do not approve or publish it.</p>
+                ) : failingContentChecks.length > 0 ? (
+                  <div className="website-check-guidance">
+                    <h3>Needs attention</h3>
+                    <ul>
+                      {failingContentChecks.map((check) => <li key={check.id}><strong>{check.label}</strong><p>{check.detail}</p></li>)}
+                    </ul>
+                  </div>
+                ) : null}
+              </details>
+            </div>
+          </section>
+          </details> : null}
+
         </div>
       </div>
-    </div>
+    </div></WebsiteMediaContext.Provider>
   )
 }

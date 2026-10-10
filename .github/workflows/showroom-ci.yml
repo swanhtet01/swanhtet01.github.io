@@ -22,7 +22,7 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'Same-repository PR uses push checks' || 'SuperMega App CI' }}
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       SUPERMEGA_CI_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -70,6 +70,20 @@ jobs:
         env:
           SUPERMEGA_TEST_DISPOSABLE_PG17: '1'
         run: python -m unittest tests.test_self_serve_durable_budget -v
+
+      - name: Verify Sites photos publishing and follow-up on disposable PostgreSQL
+        env:
+          SUPERMEGA_TEST_POSTGRES: '1'
+          SUPERMEGA_RUN_WEBSITE_INQUIRY_SQL: '1'
+          SUPERMEGA_TRIAL_SCHEMA_VERSION: '13'
+          SUPERMEGA_TEST_POSTGRES_BIN: /usr/lib/postgresql/17/bin
+          OTEL_SDK_DISABLED: 'true'
+        run: python tools/verify_sites_database.py --require-supported-python --receipt .tmp/sites-database-ci.json
+
+      - name: Verify source runtime and packaged import guards
+        run: |
+          python tools/test_app_runtime_bundle.py
+          python tools/test_packaged_app_import.py
 
       - name: Install migration verifier
         run: npm ci --ignore-scripts

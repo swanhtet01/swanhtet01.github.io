@@ -29,6 +29,8 @@ test('app Vercel generator emits zero crons and a bounded Python function', asyn
     assert.equal(config.functions['api/app.py'].maxDuration, 60)
     assert.deepEqual(config.crons, [])
     assert.equal(config.git.deploymentEnabled, false)
+    assert.deepEqual(config.routes[0], { src: '/sites/(.*)', dest: '/api/app.py' })
+    assert.equal(config.routes[1].continue, true)
     assert.equal(project.projectName, 'megaos')
   } finally {
     await rm(workspace, { recursive: true, force: true })

@@ -1026,6 +1026,9 @@ def create_trial_router(
 
     router = APIRouter(prefix=TRIAL_API_PREFIX, tags=["private-trial"])
 
+    from .website_media_routes import mount_website_media_routes
+    mount_website_media_routes(router, store=store, resolve_principal=resolve_principal)
+
     async def ecommerce_review_request(request: Request, operation: Callable, *, body_limit: int | None = None) -> JSONResponse:
         # Private prepared content and feedback never enter a shared HTTP cache.
         headers = {"Cache-Control": "private, no-store", "Pragma": "no-cache"}

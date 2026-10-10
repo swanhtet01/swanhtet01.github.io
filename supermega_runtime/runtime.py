@@ -1281,6 +1281,8 @@ def create_app() -> FastAPI:
             send_welcome_email=send_self_serve_welcome_email,
         )
     )
+    from .website_publishing_routes import mount_website_publishing_routes
+    mount_website_publishing_routes(app, store=store, resolve_principal=resolve_trial_principal)
     app.include_router(cloud_runtime_router)
     return app
 

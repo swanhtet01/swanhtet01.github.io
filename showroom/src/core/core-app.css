@@ -2244,25 +2244,25 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-operations-board { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(18rem,.78fr); align-items: start; gap: .875rem; }
 .shop-operations-card, .shop-sales-pulse, .shop-next-compact, .shop-finance-task, .shop-attention-compact { min-width: 0; border: 1px solid var(--core-line); border-radius: 1rem; background: var(--core-panel); box-shadow: 0 .75rem 2rem rgba(20,22,40,.035); overflow: hidden; }
 .shop-operations-card { display: grid; grid-template-rows: auto minmax(17.5rem,1fr) auto; }
-.shop-operations-card > header, .shop-sales-pulse > header, .shop-next-compact > header { min-height: 4.5rem; display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-bottom: 1px solid var(--core-line); padding: .875rem 1rem; }
+.shop-operations-card > header, .shop-sales-pulse > header, .shop-next-compact > header { min-height: 4.75rem; display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-bottom: 1px solid var(--core-line); padding: 1rem 1.125rem; }
 .shop-operations-card > header > span, .shop-sales-pulse > header > span { min-width: 0; display: grid; gap: .1875rem; }
-.shop-operations-card > header small, .shop-sales-pulse > header small { color: var(--core-accent); font-family: var(--core-mono); font-size: .5rem; font-weight: var(--font-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
-.shop-operations-card > header strong { font-size: 1rem; }
-.shop-operations-card > header > b, .shop-next-compact > header > b { flex: 0 0 auto; border-radius: var(--radius-pill); padding: .3125rem .5rem; background: var(--core-soft); color: var(--core-muted); font-family: var(--core-mono); font-size: .5625rem; }
+.shop-operations-card > header small, .shop-sales-pulse > header small { color: var(--core-accent); font-family: var(--core-mono); font-size: .625rem; font-weight: var(--font-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
+.shop-operations-card > header strong { font-size: 1.125rem; }
+.shop-operations-card > header > b, .shop-next-compact > header > b { flex: 0 0 auto; border-radius: var(--radius-pill); padding: .3125rem .5rem; background: var(--core-soft); color: var(--core-muted); font-family: var(--core-mono); font-size: .625rem; }
 .shop-operations-card > header > b[data-tone="attention"] { background: color-mix(in srgb,var(--core-warning) 12%,var(--core-panel)); color: var(--core-warning); }
 .shop-operating-list { min-width: 0; display: grid; align-content: start; }
-.shop-operating-list > a { min-width: 0; min-height: 3.5rem; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: .75rem; border-bottom: 1px solid var(--core-line); padding: .625rem 1rem; color: var(--core-text); text-decoration: none; transition: background .16s ease; }
+.shop-operating-list > a { min-width: 0; min-height: 3.75rem; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: .75rem; border-bottom: 1px solid var(--core-line); padding: .75rem 1.125rem; color: var(--core-text); text-decoration: none; transition: background .16s ease; }
 .shop-operating-list > a:hover { background: color-mix(in srgb,var(--core-accent) 4%,var(--core-panel)); }
 .shop-operating-list > a > span { min-width: 0; display: grid; gap: .1875rem; }
 .shop-operating-list > a > span:last-child { justify-items: end; text-align: right; }
 .shop-operating-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shop-operating-list b { white-space: nowrap; }
-.shop-operating-list small { overflow: hidden; color: var(--core-muted); line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.shop-operating-list small { overflow: hidden; color: var(--core-muted); font-size: .75rem; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .shop-operating-empty { min-height: 17.5rem; display: grid; place-content: center; gap: .25rem; margin: 0; padding: 1.25rem; color: var(--core-muted); text-align: center; }
 .shop-operating-empty strong { color: var(--core-text); font-size: .8125rem; }
-.shop-operating-empty span { font-size: .625rem; }
+.shop-operating-empty span { font-size: .75rem; }
 .shop-operations-card > footer { min-height: 3.25rem; display: flex; align-items: center; border-top: 1px solid var(--core-line); padding: .625rem 1rem; }
-.shop-operations-card > footer a { width: 100%; min-height: 2.75rem; display: flex; align-items: center; justify-content: space-between; color: var(--core-accent); font-size: .6875rem; font-weight: var(--font-weight-bold); text-decoration: none; }
+.shop-operations-card > footer a { width: 100%; min-height: 2.75rem; display: flex; align-items: center; justify-content: space-between; color: var(--core-accent); font-size: .8125rem; font-weight: var(--font-weight-bold); text-decoration: none; }
 .shop-operations-rail { min-width: 0; display: grid; gap: .75rem; }
 .shop-sales-pulse { padding-bottom: .75rem; }
 .shop-sales-pulse > header { border-bottom: 0; padding-bottom: .375rem; }
@@ -2273,22 +2273,22 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .shop-sales-bars { height: 6.5rem; display: grid; grid-template-columns: repeat(8,minmax(0,1fr)); align-items: end; gap: .25rem; padding: .5rem 1rem 0; }
 .shop-sales-bars > span { height: 100%; display: grid; grid-template-rows: minmax(0,1fr) 1rem; align-items: end; gap: .25rem; }
 .shop-sales-bars i { min-height: .125rem; display: block; border-radius: .25rem .25rem .125rem .125rem; background: linear-gradient(180deg,color-mix(in srgb,var(--core-accent) 72%,white),var(--core-accent)); opacity: .9; }
-.shop-sales-bars small { min-width: 0; color: var(--core-muted); font-family: var(--core-mono); font-size: .4375rem; text-align: center; }
-.shop-sales-pulse > p { margin: .375rem 1rem 0; color: var(--core-muted); font-size: .5625rem; }
+.shop-sales-bars small { min-width: 0; color: var(--core-muted); font-family: var(--core-mono); font-size: .625rem; text-align: center; }
+.shop-sales-pulse > p { margin: .375rem 1rem 0; color: var(--core-muted); font-size: .75rem; }
 .shop-record-status-counter { width: min(34rem,100%); margin-top: .625rem; width: auto; margin: 0; border: 0; border-radius: 0; padding: 0 0 0 .75rem; background: none; box-shadow: none; }
 .shop-next-compact { padding: 1rem; background: linear-gradient(145deg,color-mix(in srgb,var(--core-panel) 95%,var(--core-accent) 5%),var(--core-panel) 64%); }
 .shop-next-compact > header { min-height: auto; border-bottom: 0; padding: 0; }
 .shop-next-compact h3 { margin: .75rem 0 .5rem; font-size: 1.125rem; line-height: 1.15; letter-spacing: -.03em; }
-.shop-next-compact > p { margin: 0 0 .625rem; color: var(--core-muted); font-size: .6875rem; line-height: 1.45; }
-.shop-next-compact > small { display: block; color: var(--core-muted); font-size: .5625rem; line-height: 1.45; }
+.shop-next-compact > p { margin: 0 0 .625rem; color: var(--core-muted); font-size: .8125rem; line-height: 1.5; }
+.shop-next-compact > small { display: block; color: var(--core-muted); font-size: .6875rem; line-height: 1.5; }
 .shop-next-compact .shop-today-actions { margin-top: .875rem; }
 .shop-finance-task, .shop-attention-compact { min-height: 4.75rem; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: .75rem; padding: .75rem 1rem; color: var(--core-text); text-decoration: none; transition: border-color .16s ease, transform .16s ease; }
 .shop-finance-task:hover, .shop-attention-compact:hover { border-color: color-mix(in srgb,var(--core-accent) 48%,var(--core-line)); transform: translateY(-1px); }
 .shop-finance-task > span, .shop-attention-compact > span { min-width: 0; display: grid; gap: .1875rem; }
 .shop-finance-task > span:nth-of-type(2) { justify-items: end; text-align: right; }
-.shop-finance-task small, .shop-attention-compact small { color: var(--core-muted); font-size: .5rem; line-height: 1.35; }
-.shop-finance-task strong, .shop-attention-compact strong { font-size: .75rem; }
-.shop-finance-task em { color: var(--core-accent); font-family: var(--core-mono); font-size: .4375rem; font-style: normal; letter-spacing: .05em; text-transform: uppercase; }
+.shop-finance-task small, .shop-attention-compact small { color: var(--core-muted); font-size: .6875rem; line-height: 1.4; }
+.shop-finance-task strong, .shop-attention-compact strong { font-size: .875rem; }
+.shop-finance-task em { color: var(--core-accent); font-family: var(--core-mono); font-size: .5625rem; font-style: normal; letter-spacing: .05em; text-transform: uppercase; }
 .shop-finance-task b, .shop-attention-compact b { color: var(--core-accent); font-family: var(--core-mono); font-size: .5625rem; white-space: nowrap; }
 .shop-finance-task[data-tone="attention"] b, .shop-attention-compact[data-tone="attention"] b { color: var(--core-warning); }
 .shop-accounting-ready { background: linear-gradient(145deg,color-mix(in srgb,var(--core-panel) 94%,var(--core-accent) 6%),var(--core-panel) 64%); }
@@ -3116,14 +3116,17 @@ input, select, textarea,
 .shop-counter-stock-note > a { width: fit-content; color: var(--core-accent); font-size: .75rem; font-weight: 700; text-decoration: none; }
 .shop-counter-stock-note > a:hover, .shop-counter-stock-note > a:focus-visible { text-decoration: underline; text-underline-offset: .2rem; }
 
-/* The product rail reduces the workspace by roughly 13rem. Collapse the
-   follow-up rail on ordinary laptop and desktop widths so product names and
-   the active transaction remain readable. The three-column command surface
-   returns only when the viewport can carry all three without compression. */
+/* Keep catalog, current sale and next actions together on desktop. Reduce the
+   minimum panel widths on laptop, then move follow-up below the work area when
+   three readable columns no longer fit. */
 @media (max-width: 1700px) and (min-width: 841px) {
-  .shop-counter-grid { grid-template-columns: minmax(24rem, .94fr) minmax(29rem, 1.06fr); }
+  .shop-counter-grid { grid-template-columns: minmax(19rem, 1fr) minmax(21rem, 1.12fr) minmax(15rem, .78fr); gap: .75rem; }
   .shop-counter-module > .shop-counter-surface { height: clamp(520px,calc(100svh - 220px),680px); min-height: 520px; flex: 0 0 auto; overflow: visible; }
-  .shop-counter-grid { height: 100%; grid-template-rows: minmax(0,1fr) auto; }
+  .shop-counter-grid { height: 100%; grid-template-rows: minmax(0,1fr); }
+  .shop-catalog-panel, .shop-current-sale, .shop-counter-followup { min-height: 0; overflow-y: auto; }
+}
+@media (max-width: 1200px) and (min-width: 841px) {
+  .shop-counter-grid { grid-template-columns: minmax(20rem, .94fr) minmax(24rem, 1.06fr); grid-template-rows: minmax(0,1fr) auto; }
   .shop-catalog-panel, .shop-current-sale { min-height: 0; overflow-y: auto; }
   .shop-counter-followup { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(12rem,.8fr) minmax(18rem,1.2fr); align-items: start; overflow: visible; }
   .shop-counter-followup > header { border: 0; padding: 0; }

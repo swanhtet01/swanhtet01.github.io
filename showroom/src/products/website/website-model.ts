@@ -1,3 +1,4 @@
+import { isWebsiteImage, withWebsiteImage, type WebsiteImage } from './website-media.ts'
 import { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY } from '../product-storage-keys.ts'
 import type { WebsiteReleaseState } from './website-release-foundation'
 import {
@@ -67,6 +68,7 @@ export type WorkspaceView = 'content' | 'navigation' | 'publish'
 export type PageStage = 'draft' | 'ready'
 
 export type PageSection = {
+  image?: WebsiteImage
   id: string
   eyebrow: string
   title: string
@@ -83,6 +85,7 @@ export type WebsitePage = {
     visible: boolean
   }
   hero: {
+    image?: WebsiteImage
     eyebrow: string
     headline: string
     summary: string
@@ -594,7 +597,8 @@ export function duplicatePage(page: WebsitePage, sequence: number): WebsitePage 
     slug: '/copy-' + sequence,
     stage: 'draft',
     navigation: { ...page.navigation, label: page.navigation.label + ' copy', visible: false },
-    sections: page.sections.map((section) => ({ ...section, id: createId('section') })),
+    hero: withWebsiteImage(page.hero, page.hero.image),
+    sections: page.sections.map((section) => ({ ...withWebsiteImage(section, section.image), id: createId('section') })),
     updatedAt: now(),
   }
 }
@@ -769,8 +773,8 @@ function createWebsiteArtifactFromPages(workspace: WebsiteWorkspace, pages: Webs
         id: page.id,
         slug: normalizeSlug(page.slug),
         navigation: { ...page.navigation },
-        hero: { ...page.hero },
-        sections: page.sections.map((section) => ({ ...section })),
+        hero: withWebsiteImage(page.hero, page.hero.image),
+        sections: page.sections.map((section) => withWebsiteImage(section, section.image)),
         seo: { ...page.seo },
       })),
   }
@@ -1629,7 +1633,7 @@ function isLegacyWorkspace(value: unknown): value is LegacyWebsiteWorkspace {
 function isWebsitePage(value: unknown): value is WebsitePage {
   if (!isRecord(value) || !hasExactKeys(value, ['id', 'internalName', 'slug', 'stage', 'navigation', 'hero', 'sections', 'seo', 'updatedAt'])) return false
   if (!isRecord(value.navigation) || !hasExactKeys(value.navigation, ['label', 'visible'])) return false
-  if (!isRecord(value.hero) || !hasExactKeys(value.hero, ['eyebrow', 'headline', 'summary', 'ctaLabel', 'ctaHref'])) return false
+  if (!isRecord(value.hero) || !hasImageKeys(value.hero, ['eyebrow', 'headline', 'summary', 'ctaLabel', 'ctaHref'])) return false
   if (!isRecord(value.seo) || !hasExactKeys(value.seo, ['title', 'description'])) return false
   return isText(value.id, 80)
     && isText(value.internalName, 60, true)
@@ -1652,7 +1656,7 @@ function isWebsitePage(value: unknown): value is WebsitePage {
 
 function isPageSection(value: unknown): value is PageSection {
   return isRecord(value)
-    && hasExactKeys(value, ['id', 'eyebrow', 'title', 'body'])
+    && hasImageKeys(value, ['id', 'eyebrow', 'title', 'body'])
     && isText(value.id, 80)
     && isText(value.eyebrow, 60, true)
     && isText(value.title, 120, true)
@@ -1763,7 +1767,7 @@ function isWebsiteArtifact(value: unknown): value is WebsiteArtifact {
 function isWebsiteArtifactPage(value: unknown): value is WebsiteArtifactPage {
   if (!isRecord(value) || !hasExactKeys(value, ['id', 'slug', 'navigation', 'hero', 'sections', 'seo'])) return false
   if (!isRecord(value.navigation) || !hasExactKeys(value.navigation, ['label', 'visible'])) return false
-  if (!isRecord(value.hero) || !hasExactKeys(value.hero, ['eyebrow', 'headline', 'summary', 'ctaLabel', 'ctaHref'])) return false
+  if (!isRecord(value.hero) || !hasImageKeys(value.hero, ['eyebrow', 'headline', 'summary', 'ctaLabel', 'ctaHref'])) return false
   if (!isRecord(value.seo) || !hasExactKeys(value.seo, ['title', 'description'])) return false
   const hasCtaLabel = typeof value.hero.ctaLabel === 'string' && Boolean(value.hero.ctaLabel.trim())
   const hasCtaHref = typeof value.hero.ctaHref === 'string' && Boolean(value.hero.ctaHref.trim())
@@ -1922,6 +1926,11 @@ function sameStringSet(left: string[], right: string[]) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasImageKeys(value: Record<string, unknown>, keys: string[]) {
+  return hasExactKeys(value, Object.hasOwn(value, 'image') ? [...keys, 'image'] : keys)
+    && (!Object.hasOwn(value, 'image') || isWebsiteImage(value.image))
 }
 
 function hasExactKeys(value: Record<string, unknown>, keys: string[]) {

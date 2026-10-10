@@ -1,6 +1,6 @@
 # SuperMega product and operating principles
 
-Status: maintained decision guide, updated 9 October 2026. Current execution state and authority live in `../supergoal.md`; this document does not authorize spending or deployment.
+Status: maintained decision guide, updated 10 October 2026. Current execution state and authority live in `../supergoal.md`; this document does not authorize spending or deployment.
 
 ## Product promise
 
@@ -8,12 +8,35 @@ Help a business complete real work with fewer steps and reliable records. Sell t
 
 ## Design decisions
 
-- Use the established white, graphite and cobalt system. No public theme selector or promotional demo/trial detours.
+- Use the accepted reference direction: white surfaces, dark readable text, restrained indigo accents, subtle borders and consistent spacing. Reuse shared tokens rather than starting a new palette in each product. No public theme selector or promotional demo/trial detours.
 - Public pages explain Shop, Sites and Commerce with real product screenshots, concrete capabilities and one clear next action. Login stays easy to find.
 - Screenshots must come from the implemented product. Illustrative data must be identified; never imply invented customers or sales are real.
 - Each working screen has a primary task. Put secondary controls in context and advanced controls behind disclosure. Preserve keyboard access, focus visibility, readable contrast and mobile touch targets.
 - Collect business facts, not implementation decisions. Preserve inputs after failures and distinguish a draft, a submitted request and a durable saved record.
 - Before a substantial redesign, create a visual concept, compare alternatives, implement the selected direction and compare real screenshots at matching viewport/state. Review error and empty states as well as the happy path.
+
+## Design-thinking delivery contract
+
+Start with Burmese-speaking owners and operators of small retail and service businesses. Do not try to make every industry and enterprise workflow equally prominent. Templates may change business vocabulary and starting content; they must keep the same navigation, saved-record rules and interaction patterns.
+
+| Product | Primary customer job | Interface direction | Proof required |
+| --- | --- | --- | --- |
+| Shop | Sell an item and know what needs attention next | Today summary with separate readable metrics, product/order tables and contextual tasks; focused counter with search/scan and one checkout action | Sale, stock, payment record, customer receipt and daily close reconcile after reload; keyboard/touch and actual barcode/printer checks |
+| Sites | Turn business details into a useful website and answer incoming interest | Page navigation, visible section previews, one edit action per section, Preview/Publish; compact inquiry list with a focused message pane | Details → photo → save → review → publish → received inquiry → accountable follow-up → withdrawal, with managed persistence |
+| Commerce | Receive an online order and get it fulfilled | Reuse the Shop catalog; customer storefront and operator fulfilment are distinct views; one selected order with its next action | A real storefront submission arrives once in the right workspace, survives retry/reload, and reaches packing/completion with truthful payment state |
+| Public website | Understand the offer and contact us | Short outcome-led pages; distinct current screen captures in a consistent gallery; ordinary Name, Email, Company and Message fields | Gallery controls change the screen; images stay legible on phone; contact submission delivers; claims match accepted capability |
+
+Work each slice through five decisions:
+
+1. **Observe:** capture the current route, task and friction. Mark founder feedback, our observation and a customer test separately; never invent interviews.
+2. **Define:** write one problem sentence and a baseline such as extra decisions, a failed save, an unreadable screen or a missing next action.
+3. **Choose:** compare two small layouts or interaction paths against the supplied references; prefer the one that removes unnecessary work. Reuse established components.
+4. **Build:** implement the real state transition and recovery, then its visual presentation. A persuasive screenshot cannot substitute for a working transition.
+5. **Evaluate:** inspect desktop and phone, keyboard/touch, empty/busy/error/read-only states, persistence and relevant isolation. Record PASS, FAIL, BLOCKED or NOT RUN. Revise the observed failure before expanding scope.
+
+Visual acceptance means a clear heading, readable primary content, aligned surfaces, one dominant action per task, visible focus, no accidental horizontal scrolling, appropriate touch targets and no misleading empty-state metrics. Match the reference's hierarchy, not its invented records. Use lists/tables for repeated records; show exceptional controls when relevant. On a phone, a list-to-detail flow should not force the user past a full list every time they act on one item.
+
+Customer acceptance is a separate gate. Observe Burmese-speaking users doing setup, a sale, order follow-up, site editing and inquiry handling without coaching. Record completion, time, errors and requests for help. Initial hypotheses: the next action is identifiable within ten seconds, routine repeat tasks require no technical configuration, and a prepared first sale needs no more than thirty seconds. These are targets to test, not current performance claims. Do not assign a flattering overall score that hides a failed transaction or access boundary. Defer A/B testing until a stable flow and enough real usage make comparison meaningful.
 
 ## Architecture decisions
 

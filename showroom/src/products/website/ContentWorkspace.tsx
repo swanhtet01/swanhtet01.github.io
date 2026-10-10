@@ -1,3 +1,6 @@
+import { WebsiteImage } from './WebsiteImage'
+import { WebsiteImageEditor } from './WebsiteImageEditor'
+import { withWebsiteImage } from './website-media'
 import { useEffect, useRef, useState } from 'react'
 
 import {
@@ -101,36 +104,11 @@ export function ContentWorkspace({
       </header>
 
       <div className="website-editor-scroll website-page-outline">
-        <details className="website-disclosure" data-content-section="page">
-          <summary>
-            <span>Page details</span>
-            <small>{page.slug || 'Set a page address'}</small>
-          </summary>
-          <div className="website-form-grid two-columns">
-            <label>
-              <span>Internal name</span>
-              <input
-                maxLength={60}
-                onChange={(event) => editPage((current) => ({ ...current, internalName: event.target.value }))}
-                value={page.internalName}
-              />
-            </label>
-            <label>
-              <span>Path</span>
-              <input
-                autoCapitalize="none"
-                maxLength={100}
-                onChange={(event) => editPage((current) => ({ ...current, slug: event.target.value }))}
-                spellCheck={false}
-                value={page.slug}
-              />
-            </label>
-          </div>
-        </details>
 
         <div aria-label="Page sections" className="website-page-card-list">
-          <fieldset className="website-fieldset website-page-card" data-content-section="hero">
+          <fieldset className="website-fieldset website-page-card" data-content-section="hero" data-has-image={Boolean(page.hero.image)}>
             <legend className="sr-only">Welcome section</legend>
+            <WebsiteImage image={page.hero.image} priority />
             <div className="website-page-card-copy">
               <span className="website-eyebrow">Welcome</span>
               <h3>{page.hero.headline || 'Your main message'}</h3>
@@ -146,6 +124,7 @@ export function ContentWorkspace({
               {editingSection === 'welcome' ? 'Done' : 'Edit'}
             </button>
             {editingSection === 'welcome' ? <div className="website-page-card-fields" id="website-welcome-fields" ref={fieldsRef}>
+              <WebsiteImageEditor image={page.hero.image} onChange={image => editPage(current => ({ ...current, hero: withWebsiteImage(current.hero, image) }))} />
               <label>
                 <span>Short label</span>
                 <input
@@ -224,7 +203,8 @@ export function ContentWorkspace({
               {page.sections.length ? page.sections.map((section, index) => {
                 const editorId = `section:${section.id}`
                 const fieldsId = `website-section-fields-${section.id}`
-                return <article className="website-page-card website-section-card" data-content-section="section" key={section.id}>
+                return <article className="website-page-card website-section-card" data-content-section="section" data-has-image={Boolean(section.image)} key={section.id}>
+                  <WebsiteImage image={section.image} />
                   <div className="website-page-card-copy">
                     <span className="website-eyebrow">{section.eyebrow || `Section ${index + 1}`}</span>
                     <h3>{section.title || 'Untitled section'}</h3>
@@ -240,6 +220,7 @@ export function ContentWorkspace({
                     {editingSection === editorId ? 'Done' : 'Edit'}
                   </button>
                   {editingSection === editorId ? <div className="website-page-card-fields" id={fieldsId} ref={fieldsRef}>
+                    <WebsiteImageEditor image={section.image} onChange={image => editPage(current => ({ ...current, sections: current.sections.map(candidate => candidate.id === section.id ? withWebsiteImage(candidate, image) : candidate) }))} />
                     <div className="website-section-order-actions">
                       <button aria-label={`Move section ${index + 1} up`} disabled={index === 0} onClick={() => moveSection(section.id, -1)} type="button">Move up</button>
                       <button aria-label={`Move section ${index + 1} down`} disabled={index === page.sections.length - 1} onClick={() => moveSection(section.id, 1)} type="button">Move down</button>
@@ -293,6 +274,33 @@ export function ContentWorkspace({
             </div>
           </fieldset>
         </div>
+
+        <details className="website-disclosure" data-content-section="page">
+          <summary>
+            <span>Page details</span>
+            <small>{page.slug || 'Set a page address'}</small>
+          </summary>
+          <div className="website-form-grid two-columns">
+            <label>
+              <span>Internal name</span>
+              <input
+                maxLength={60}
+                onChange={(event) => editPage((current) => ({ ...current, internalName: event.target.value }))}
+                value={page.internalName}
+              />
+            </label>
+            <label>
+              <span>Path</span>
+              <input
+                autoCapitalize="none"
+                maxLength={100}
+                onChange={(event) => editPage((current) => ({ ...current, slug: event.target.value }))}
+                spellCheck={false}
+                value={page.slug}
+              />
+            </label>
+          </div>
+        </details>
 
         <details className="website-disclosure" data-content-section="seo">
           <summary>

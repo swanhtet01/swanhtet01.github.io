@@ -290,6 +290,10 @@ const managedEcommerceBuyingLifecycleSource = await readFile(resolve(root, 'supe
 const shopOperatingFlowSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-operating-flow.ts'), 'utf8')
 const shopOperatingFlowUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOperatingFlow.tsx'), 'utf8')
 const shopTodayUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopToday.tsx'), 'utf8')
+const shopOrderHistorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOrderHistory.tsx'), 'utf8')
+const orderReceiptActionsSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'OrderReceiptActions.tsx'), 'utf8')
+const shopOrderPresentationSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-order-presentation.ts'), 'utf8')
+const shopTodayAdvancedUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopTodayAdvanced.tsx'), 'utf8')
 const shopTodaySalesSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-today-sales.ts'), 'utf8')
 const shopNextActionSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-next-action.ts'), 'utf8')
 const shopServiceScheduleSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts'), 'utf8')
@@ -310,7 +314,7 @@ if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intak
   || !coreSource.includes("stockConflict ? ` · ${stockConflict.sku} needs stock review` : ''")
   || !commerceSource.includes('export function commerceStockConflict')
   || !coreSource.includes('id="shop-order-queue"')
-  || !coreSource.includes('id="shop-order-history"')
+  || !shopOrderHistorySource.includes('id="shop-order-history"')
   || !coreSource.includes('id="shop-close-controls"')
   || !coreCssSource.includes('.shop-flow-stages')) fail('shop_operating_flow_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopOperatingFlowSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_operating_flow_side_effect_added')
@@ -332,7 +336,10 @@ if (!shopTodayUiSource.includes('aria-label="Shop operating view"')
   || !shopTodayUiSource.includes('accountingExport.mappingReady ? \'Mapped\' : \'Unmapped\'')
   || !shopTodayUiSource.includes('closeQueue: ShopTodayCloseQueue')
   || !shopTodayUiSource.includes('aria-label="Advanced Shop controls"')
-  || !shopTodayUiSource.includes('className="shop-today-advanced-stack"')
+  || !shopTodayAdvancedUiSource.includes('className="shop-today-advanced-stack"')
+  || !shopTodayUiSource.includes("lazy(() => import('./ShopTodayAdvanced')")
+  || !shopTodayUiSource.includes('onToggle={(event) => { if (event.currentTarget.open) setAdvancedControlsLoaded(true) }}')
+  || !shopTodayUiSource.includes('{advancedControlsLoaded ? <Suspense')
   || !shopTodayUiSource.includes('nextActionLabel: string')
   || !shopTodayUiSource.includes('nextOwnerGate: string')
   || !shopTodayUiSource.includes("nextTrack: 'Review' | 'Orders' | 'Inventory' | 'Counter'")
@@ -342,8 +349,8 @@ if (!shopTodayUiSource.includes('aria-label="Shop operating view"')
   || !coreSource.includes('closeReadyMmk: reconciledValue')
   || !coreSource.includes("target: paymentReview.length ? '/shop/?tab=orders#shop-payment-review' : '/shop/?tab=orders#shop-close-controls'")
   || !coreSource.includes('id="shop-payment-review" open={Boolean(paymentReview.length)}')
-  || !shopTodayUiSource.includes('localBatchFirstUseAllowed ? <section aria-label="Open local Batch Profit Control workflow"')
-  || !shopTodayUiSource.includes('<ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />')
+  || !shopTodayAdvancedUiSource.includes('localBatchFirstUseAllowed ? <section aria-label="Open local Batch Profit Control workflow"')
+  || !shopTodayAdvancedUiSource.includes('<ShopBatchProfitControlPanel batchProfitControl={activeBatchProfitControl} />')
   || !shopTodayUiSource.includes('aria-label="Quick tasks"')
   || !shopTodayUiSource.includes('className="shop-operating-list shop-task-list"')
   || !shopTodayUiSource.includes('taskLink(primaryTask.title, primaryTask.detail, primaryTask.action, primaryTask.target, primaryTask.ownerGate)')
@@ -351,9 +358,9 @@ if (!shopTodayUiSource.includes('aria-label="Shop operating view"')
   || !shopTodayUiSource.includes('<h2 id="shop-today-title">Today</h2>')
   || shopTodayUiSource.includes('>Open task</Link>')
   || !shopTodayUiSource.includes('<b>{action}</b>')
-  || !shopTodayUiSource.includes('id="shop-operations-title">Operations</strong>')
-  || !shopTodayUiSource.includes('Customers, finance, channels and purchasing')
-  || !shopTodayUiSource.includes('{modules.length} areas')
+  || !shopTodayAdvancedUiSource.includes('id="shop-operations-title">Operations</strong>')
+  || !shopTodayAdvancedUiSource.includes('Customers, finance, channels and purchasing')
+  || !shopTodayAdvancedUiSource.includes('{modules.length} areas')
   // Today shows live work and the next action, not a static capability brochure.
   || shopTodayUiSource.includes('capabilityGroups')
   || !commerceTabsSource.includes("export type CommerceTab = 'today' | 'counter' | 'orders' | 'inventory'")
@@ -406,11 +413,21 @@ if (websiteSource.includes("{websiteTodayState !== 'ready' ? <section")
   || !websiteSource.includes("'Download website'")
   || !websiteSource.includes('Your reviewed site is ready to download. Nothing is deployed here.')
   || !websiteSource.includes('Open Website view to check the page on the screen you use every day.')) fail('website_ready_state_repeats_completed_next_action')
+const websitePresentationSource = await readFile(resolve(root, 'showroom/src/products/website/website-presentation.css'), 'utf8')
+const presentationBindingCheck = spawnSync(process.execPath, [resolve(root, 'tools/sync_website_presentation.mjs')], { encoding: 'utf8', timeout: 10000 })
+if (presentationBindingCheck.status !== 0) fail('website_presentation_bindings_stale')
+const publishingClientCheck = spawnSync(process.execPath, [resolve(root, 'tools/test_website_publishing_client.mjs')], { encoding: 'utf8', timeout: 30000 })
+if (publishingClientCheck.status !== 0) {
+  process.stderr.write(publishingClientCheck.stdout || '')
+  process.stderr.write(publishingClientCheck.stderr || '')
+  fail('website_publishing_client_contract_failed')
+}
 if (websiteSource.includes('Preview options')
   || websiteSource.includes('aria-label="Responsive preview size"')
   || websiteSource.includes('previewDevices.map')
   || !websiteSource.includes("const mobileQuery = window.matchMedia('(max-width: 720px)')")
-  || !websiteExportSource.includes('@media (max-width: 720px)')
+  || !websiteExportSource.includes('${WEBSITE_PUBLIC_CSS}')
+  || !websitePresentationSource.includes('@container (max-width: 600px)')
   || !websiteSource.includes("const tabletQuery = window.matchMedia('(max-width: 1024px)')")
   || !websiteSource.includes("mobileQuery.addEventListener('change', syncPreviewDevice)")
   || !websiteSource.includes("tabletQuery.addEventListener('change', syncPreviewDevice)")
@@ -521,7 +538,7 @@ if (!websiteReleaseSource.includes("supermega.website.release_foundation.v1")
 if (['fetch(', 'XMLHttpRequest', 'process.env', 'import.meta.env', 'vercel.com/api', 'api.vercel.com'].some((marker) => websiteReleaseSource.includes(marker))) fail('website_release_foundation_crossed_provider_boundary')
 if (!publishSource.includes("lazy(() => import('./WebsiteReleaseFoundation'))")
   || !publishSource.includes('<WebsiteReleaseFoundation')
-  || !publishSource.includes('website-publish-history-disclosure')
+  || !publishSource.includes('website-review-history')
   || !websiteReleaseUiSource.includes('Record release review')
   || !websiteReleaseUiSource.includes('Prepare rollout plan')
   || !websiteReleaseUiSource.includes('Download release record')
@@ -727,9 +744,6 @@ else {
   else {
     // The operations route artifact, by the same chunk name this file already pins below.
     if (!precache.some((url) => /^\/assets\/core-app-[^/]+\.js$/.test(url))) fail('service_worker_precache_omits_operations_route')
-    if (!precache.some((url) => /^\/assets\/shop-batch-profit-control-first-use-[^/]+\.js$/.test(url))) {
-      fail('service_worker_precache_omits_shop_batch_first_use')
-    }
     // Everything the built document loads, so the shell the worker falls back to can boot.
     for (const asset of rootPageSource.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)) {
       if (!precache.includes(asset[1])) fail(`service_worker_precache_omits_shell_asset:${asset[1]}`)
@@ -809,6 +823,9 @@ else {
 if (await exists(resolve(dist, '.vite', 'manifest.json'))) fail('vite_manifest_shipped_in_artifact')
 
 const files = await walk(dist)
+if (files.some((path) => /shop-batch-profit-control-first-use-[^/]+\.js$/.test(path))) {
+  fail('production_bundle_ships_local_batch_rnd_workflow')
+}
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
 for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Local workspace', 'Name your workspace', 'Request managed activation', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
@@ -1157,7 +1174,7 @@ if (!ecommerceSource.includes('const orderOpsRows = [')
   || ecommerceSource.includes('Managed store activation packet')
   || ecommerceSource.includes('Download activation packet')
   || !ecommerceSource.includes("['Catalog', importNeeded ? 'Needed' : `${selectedSkus.length} sellable`]")
-  || !ecommerceSource.includes('<small>{selectedSkus.length} of 8 selected</small>')
+  || !ecommerceSource.includes('<small>{selectedSkus.length} selected · up to 8</small>')
   || ecommerceSource.includes("['Merchandise', selectedSkus.length ? `${selectedSkus.length} live` : 'Pick products']")
   || !ecommerceSource.includes("['Store', sampleCatalogPreview ? 'Sample blocked' : buyingReady ? 'Saved check' : 'Save required']")
   || !ecommerceSource.includes("['Checkout', buyingReady ? 'Quote controlled' : 'Locked']")
@@ -2768,7 +2785,7 @@ if (!websiteSource.includes('aria-label="Website status"')
   || !websiteCssSource.includes('.website-today-context')
   || !websiteCssSource.includes('.website-today-signals')
   || websiteSource.includes('website-heading-publish-action')
-  || !websiteCssSource.includes('.website-status-disclosure { order: 2; }')
+  || !websiteCssSource.includes('.website-status-disclosure { order: 5; }')
   || !/\.website-action-bar\s*\{\s*order:\s*3;/.test(websiteCssSource)
   || !/\.website-workspace-grid,\s*\.website-workspace-grid\.view-publish\s*\{\s*order:\s*4;/.test(websiteCssSource)
   || !/\.website-today\s*\{\s*order:\s*1;/.test(websiteCssSource)
@@ -2792,9 +2809,9 @@ const websiteWorkspaceSurfaceIndex = websiteSource.indexOf('id="website-active-p
 if (websiteTodaySurfaceIndex < 0
   || websiteInquiryWorkspaceIndex < 0
   || websiteWorkspaceSurfaceIndex < 0
-  || websiteTodaySurfaceIndex > websiteWorkspaceSurfaceIndex
-  || websiteTodaySurfaceIndex > websiteInquiryWorkspaceIndex
-  || websiteSource.includes("websiteTodayState !== 'ready' ? <section aria-labelledby=\"website-today-title\"")) fail('website_demo_first_hierarchy_missing')
+  || websiteTodaySurfaceIndex < websiteWorkspaceSurfaceIndex
+  || websiteTodaySurfaceIndex < websiteInquiryWorkspaceIndex
+  || websiteSource.includes("websiteTodayState !== 'ready' ? <section aria-labelledby=\"website-today-title\"")) fail('website_content_first_hierarchy_missing')
 if (!coreSource.includes('See today’s next job and key numbers.')
   || !shopNextActionSource.includes('need fulfilment or payment review.')
   || coreSource.includes('const shopAgentRows = [')
@@ -4270,13 +4287,12 @@ const unlintedShowroomSourceTargets = requiredShowroomLintTargets
 if (unlintedShowroomSourceTargets.length) {
   fail(`prototype_sources_not_linted:${unlintedShowroomSourceTargets.join('|')}`)
 }
-if (!websiteSource.includes('Nothing has been deployed.')
-  || !websiteSource.includes('Nothing was deployed.')
-  || websiteSource.includes('Approved site file saved and confirmed. No deployment occurred.')
-  || !publishSource.includes('Stored in this browser.')
-  || publishSource.includes('Stored on this device, not verified by a managed service.')
-  || !publishSource.includes('No deployment, domain, payment, stock, message, or order change happens here.')
-  || !publishSource.includes('It does not deploy or change a domain.')) fail('website_deployment_boundary_missing')
+// Review remains a saved-version operation; the hosting client owns publication.
+if (!publishSource.includes('Your live site stays as it is until you publish.')
+  || !publishSource.includes('saveReviewedWebsite')
+  || !websiteSource.includes('requireReviewedSource(current, input.source)')
+  || !websiteSource.includes('requireReviewedSource(current, source)')
+  || ['fetch(', 'XMLHttpRequest', 'api.vercel.com'].some(marker => publishSource.includes(marker))) fail('website_deployment_boundary_missing')
 if (!websiteSource.includes('starterSetupActive')
   || websiteSource.includes('Customize demo')
   || websiteSource.includes('Request Website setup')
@@ -4445,9 +4461,9 @@ if (!websiteExportSource.includes('buildWebsiteHtml')
   || ['fetch(', 'localStorage', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteExportSource.includes(marker))
   || !websiteSource.includes('downloadPublishedSite')
   || (websiteSource.match(/window\.setTimeout\(\(\) => URL\.revokeObjectURL\(url\), 5_000\)/g) ?? []).length < 3
-  || !publishSource.includes('Download site')) fail('website_static_artifact_export_missing_or_side_effectful')
-if (!sitePreviewSource.includes("ctaHref.startsWith('https://')") || !sitePreviewSource.includes("ctaHref.startsWith('#')") || !sitePreviewSource.includes('aria-disabled="true"')) fail('website_preview_destination_guard_missing')
-if (!sitePreviewSource.includes('role="document"') || !/\.preview-hero > \.preview-cta\s*\{\s*min-height:\s*44px;/s.test(websiteCssSource)) fail('website_preview_accessibility_boundary_missing')
+  || !publishSource.includes('Download copy')) fail('website_static_artifact_export_missing_or_side_effectful')
+if (!sitePreviewSource.includes("url.protocol === 'https:'") || !sitePreviewSource.includes('!url.username && !url.password') || !sitePreviewSource.includes("ctaHref.startsWith('#')") || !sitePreviewSource.includes('aria-disabled="true"')) fail('website_preview_destination_guard_missing')
+if (!sitePreviewSource.includes('role="document"') || !websitePresentationSource.includes('min-height: 48px') || !sitePreviewSource.includes("import './website-presentation.css'")) fail('website_preview_accessibility_boundary_missing')
 if (!websiteWorkspaceSource.includes("addEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes("removeEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes('mutateWebsiteWorkspace(update, current.revision, current.contentRevision') || websiteWorkspaceSource.includes('localStorage.setItem(WEBSITE_STORAGE_KEY, JSON.stringify(workspace))')) fail('website_confirmed_write_or_cross_tab_refresh_missing')
 if (!websiteSource.includes('Recovery settings')
   || !websiteSource.includes('href="/settings/#controls"')
@@ -4570,7 +4586,7 @@ if (!websiteSource.includes("storageMode === 'managed' ? canReview && !portalVie
   || !/if \(localPreviewReady\) \{\s*downloadWebsiteFile\(\)\s*return\s*\}/.test(websiteSource)
   || !websiteSource.includes('onClick={runWebsiteAutopilot}')
   || !websiteSource.includes("if (!requireSavedWorkspace('downloading the Website')) return")
-  || !websiteSource.includes('createWebsiteHtmlDownload(createWebsitePreviewArtifact(workspace))')
+  || !websiteSource.includes('await createWebsiteMediaDownload(createWebsitePreviewArtifact(workspace), mediaClient, controller.signal)')
   || !websiteSource.includes('no site or domain was deployed')
   || !websiteSource.includes('Downloading does not deploy a site, connect a domain, or send customer data.')
   || !websiteCssSource.includes('.website-download-body')
@@ -4633,7 +4649,7 @@ if (!websiteSource.includes('createWebsiteEditSession(workspace)')
   || !websiteSource.includes('Unsaved changes')
   || !websiteSource.includes('function saveDraft()')
   || !websiteSource.includes('function discardDraft()')
-  || !websiteSource.includes('disabled={editConflict || savingDraft}')
+  || !websiteSource.includes('disabled={editConflict || savingDraft || imageEditing}')
   || !websiteModelSource.includes('updateWebsiteEditSession')
   || !websiteModelSource.includes('websiteEditSessionMatches')
   || !websiteModelSource.includes('sameReleaseHistory')
@@ -4650,42 +4666,18 @@ if (!contentSource.includes('aria-label="Page sections"')
   || !contentSource.includes('aria-expanded={editingSection === editorId}')
   || !contentSource.includes("onUpdatePage((current) => ({ ...update(current), stage: 'draft' }))")
   || !websiteCssSource.includes('.website-page-card-list')) fail('website_content_focus_contract_missing')
-if (!publishSource.includes("type PublishStep = 'checks' | 'evidence' | 'approval' | 'snapshot'")
-  || !publishSource.includes('Website file checklist')
-  || !publishSource.includes('Check and download the site')
-  || !publishSource.includes('Company account record')
-  || !publishSource.includes('This device only')
-  || !publishSource.includes('Add review notes')
-  || !publishSource.includes('Final review')
-  || !publishSource.includes('Save final review')
-  || publishSource.includes('Safe publish workflow')
-  || publishSource.includes('Managed workspace record')
-  || publishSource.includes('Device-local record')
-  || publishSource.includes('Record review evidence')
-  || publishSource.includes('Human approval')
-  || publishSource.includes('Human reviewer')
-  || publishSource.includes('Current revision approved')
-  || !publishSource.includes("{ id: 'checks', label: 'Checks' }")
-  || !publishSource.includes("{ id: 'evidence', label: 'Evidence' }")
-  || !publishSource.includes("{ id: 'approval', label: 'Review' }")
-  || publishSource.includes("{ id: 'approval', label: 'Approval' }")
-  || !publishSource.includes("{ id: 'snapshot', label: 'Site file' }")
-  || !publishSource.includes('aria-current={activeStep === step.id')
-  || !publishSource.includes("activeStep === 'checks'")
-  || !publishSource.includes("activeStep === 'evidence'")
-  || !publishSource.includes("activeStep === 'approval'")
-  || !publishSource.includes("activeStep === 'snapshot'")
-  || !publishSource.includes('function localEvidenceSuggestion(kind: EvidenceKind, workspace: WebsiteWorkspace)')
-  || !publishSource.includes('const firstMissingEvidenceKind = evidenceRequirements.find')
-  || !publishSource.includes("setEvidenceVerifier] = useState(managedActorId ? '' : 'Website owner')")
-  || !publishSource.includes("setReviewer] = useState(managedActorId ? '' : 'Website owner')")
-  || !publishSource.includes('function chooseEvidenceKind(kind: EvidenceKind)')
-  || !publishSource.includes("setActiveStep('approval')")
-  || !publishSource.includes("setActiveStep('snapshot')")
-  || !publishCssSource.includes('grid-template-columns: repeat(4, minmax(0, 1fr))')
-  || !publishCssSource.includes('grid-template-columns: repeat(2, minmax(0, 1fr))')
-  || !publishCssSource.includes('font-size: 1rem')) fail('website_publish_task_flow_missing') // P3.6b lockstep: was 'font-size: 16px'; the px->rem batch converts every publish font-size and this pin moves with it (16px = 1rem at the 16px root)
-if (!publishSource.includes('Create site file')
+// Guided review replaces four internal evidence forms. Behavioral tests exercise
+// source binding, duplicate suppression, partial failures and actual transitions.
+if (!publishSource.includes('Review your website')
+  || !publishSource.includes('Save reviewed version')
+  || !publishSource.includes('<SitePreview')
+  || !publishSource.includes('allConfirmed')
+  || !publishSource.includes('saveInFlight.current')
+  || !publishSource.includes('props.canWrite')
+  || !publishSource.includes('role="alert"')
+  || !publishCssSource.includes('.website-review-layout')
+  || !publishCssSource.includes('@media(max-width:540px)')) fail('website_publish_task_flow_missing')
+if (!publishSource.includes('Save reviewed version')
   || publishSource.includes('Optional Shop handoff')
   || ecommerceBuyingUiSource.includes("['Shop handoff', quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs review' : 'Locked']")
   || ecommerceBuyingUiSource.includes('Review a new total before Shop handoff.')
@@ -4750,7 +4742,7 @@ if (!metricsCollectorSource.includes('writeStoredMetrics(SESSION_EVENTS)')
 if (!coreSource.includes("emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })")
   || !coreSource.includes("emitMetric({ product: 'shop', capability: 'shop-daily-close', action: 'shift.close.confirmed', ts: Date.now() })")) fail('pilot_business_metric_emission_missing')
 if (!coreSource.includes("lazy(() => import('./ReceiptDialog')")
-  || !coreSource.includes("data-order-receipt=\"view\"")
+  || !orderReceiptActionsSource.includes("data-order-receipt=\"view\"")
   || !coreSource.includes('onViewReceipt={setReceiptAck}')
   || !coreSource.includes('<ReceiptDialog ack={activeReceiptAck}')
   || !coreSource.includes("setCounterReceiptOrderId(order.id)")) fail('customer_receipt_ui_missing')
@@ -4758,9 +4750,9 @@ if (!coreSource.includes("lazy(() => import('./ReceiptDialog')")
 // `commerce` -- 1,852,602 bytes rebuilt and retained on every sale at the workspace ceiling.
 // Pinned STRICTER than the href it replaced: the file function is named, the click handler is
 // required, and the eager form is forbidden outright so it cannot come back the way it came.
-if (!coreSource.includes('function orderAcknowledgementFileText(artifact: CommerceOrderAcknowledgement)')
-  || !coreSource.includes('function OrderReceiptActions(')
-  || !coreSource.includes('downloadBlob(acknowledgement.filename, new Blob([orderAcknowledgementFileText(acknowledgement.artifact)]')
+if (!shopOrderPresentationSource.includes('function orderAcknowledgementFileText(artifact: CommerceOrderAcknowledgement)')
+  || !orderReceiptActionsSource.includes('function OrderReceiptActions(')
+  || !orderReceiptActionsSource.includes('downloadBlob(acknowledgement.filename, new Blob([orderAcknowledgementFileText(acknowledgement.artifact)]')
   || coreSource.includes('data:text/plain')
   || coreSource.includes('href={acknowledgement.href}')) fail('order_acknowledgement_download_eager_again')
 if (!coreSource.includes('aria-label="Counter context"')
@@ -4871,7 +4863,7 @@ const orderQueueIndex = ordersTabContract.indexOf('id="shop-order-queue"')
 const orderListIndex = ordersTabContract.indexOf('<OrderList')
 const orderWorkflowIndex = ordersTabContract.indexOf('className="core-panel today-more order-workflow-controls"')
 const serviceScheduleIndex = ordersTabContract.indexOf('<ShopServiceSchedule')
-const orderListContract = coreSource.slice(coreSource.indexOf('function OrderList'), coreSource.indexOf('function ClosedOrderHistory'))
+const orderListContract = coreSource.slice(coreSource.indexOf('function OrderList'), coreSource.indexOf('function StockMovementHistory'))
 if (ordersTabStart < 0
   || ordersTabEnd < 0
   || orderQueueIndex < 0
@@ -4911,7 +4903,7 @@ if (!coreSource.includes('id="commerce-manual-order-form"')
   || !commerceSource.includes('promisedAt?: string')
   || !managedCommerceRuntime.includes('"fulfilmentReference"')
   || !managedCommerceRuntime.includes('"promisedAt"')
-  || !coreSource.includes('function ClosedOrderHistory')
+  || !shopOrderHistorySource.includes('function ClosedOrderHistory')
   || !coreSource.includes('orders={actionOrders}')
   || !coreSource.includes('orders={closedOrders}')
   || !coreSource.includes('onReviewReturn={reviewOrderReturn}')
@@ -5032,8 +5024,8 @@ if (!commerceSource.includes('owner?: string')
   || !managedTrialStoreRuntime.includes('event_type == "commerce.website_intake.converted"')) fail('commerce_order_owner_contract_missing')
 if (!commerceSource.includes("CommerceOrderPromiseUrgency = 'late' | 'due_soon' | 'scheduled' | 'unrecorded'")
   || !commerceSource.includes('export function commerceOrderPromiseUrgency')
-  || !coreSource.includes('function useMinuteClock()')
-  || !coreSource.includes('window.setInterval(() => setNow(Date.now()), 60_000)')
+  || !shopOrderPresentationSource.includes('function useMinuteClock()')
+  || !shopOrderPresentationSource.includes('window.setInterval(() => setNow(Date.now()), 60_000)')
   || !coreSource.includes('window.clearInterval(timer)')
   || !coreSource.includes("promiseUrgency === 'late'")
   || !coreSource.includes('>due soon</span>')
@@ -5099,17 +5091,17 @@ if (!commerceSource.includes('export type CommerceOrderSupportCase')
   || !commerceSource.includes('externalMessageSent: false')
   || !commerceSource.includes('refundStarted: false')
   || !commerceSource.includes("export type CommerceSupportPriority = 'urgent' | 'high' | 'normal' | 'low'")
-  || !coreSource.includes('Assign service responsibility before opening.')
-  || !coreSource.includes('data-support-urgency={urgency}')
-  || !coreSource.includes('data-support-sla="bounded"')
-  || !coreSource.includes('data-support-workload="privacy-minimal"')
-  || !coreSource.includes('Download workload CSV')
-  || !coreSource.includes('Support queue · next work first')
+  || !shopOrderHistorySource.includes('Assign service responsibility before opening.')
+  || !shopOrderHistorySource.includes('data-support-urgency={urgency}')
+  || !shopOrderHistorySource.includes('data-support-sla="bounded"')
+  || !shopOrderHistorySource.includes('data-support-workload="privacy-minimal"')
+  || !shopOrderHistorySource.includes('Download workload CSV')
+  || !shopOrderHistorySource.includes('Support queue · next work first')
   || !coreSource.includes('First response ready for independent delivery')
-  || !coreSource.includes("onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')")
-  || !coreSource.includes("onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')")
-  || !coreSource.includes('Reopen case')
-  || !coreSource.includes('Review follow-up')
+  || !shopOrderHistorySource.includes("onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')")
+  || !shopOrderHistorySource.includes("onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')")
+  || !shopOrderHistorySource.includes('Reopen case')
+  || !shopOrderHistorySource.includes('Review follow-up')
   || !coreSource.includes('Choose one accountable owner and a future due time for this support case.')
   || !managedCommerceRuntime.includes('def _validate_support_case_opened')
   || !managedCommerceRuntime.includes('def _validate_support_case_reopened')
@@ -5155,8 +5147,8 @@ if (!coreSource.includes('Record a refund already completed with the external pa
   || !coreSource.includes("order.refundStatus === 'due' && !settleRefundIsPrimary ? <button")
   || !coreSource.includes('onSettleRefund(order.id)')
   || !coreSource.includes('Record settled refund')
-  || !coreSource.includes("order.refundStatus === 'settled' && order.refundSettledAt")
-  || !coreSource.includes('evidence {order.refundEvidenceReference}')
+  || !shopOrderHistorySource.includes("order.refundStatus === 'settled' && order.refundSettledAt")
+  || !shopOrderHistorySource.includes('evidence {order.refundEvidenceReference}')
   || coreSource.includes('this trial does not send or settle refunds.')) fail('commerce_refund_settlement_ui_not_honest')
 if (!coreSource.includes("'commerce.refund.settled'")
   || !coreSource.includes('settleCommerceRefund(current, orderId, commerceActionProof(action))')
@@ -5167,11 +5159,12 @@ if (!coreSource.includes('Payment follow-up')
   || !coreSource.includes("'commerce.collection_action.recorded'")
   || !commerceSource.includes('export function commerceReceivablesAging')
   || !commerceSource.includes('export function recordCommerceCollectionAction')) fail('commerce_receivables_aging_ui_contract_missing')
-if (!coreSource.includes('data-order-calculation-note="true"')
-  || !coreSource.includes('Recorded total {formatMoney(order.total)} · Tax status not recorded')
+if (!orderReceiptActionsSource.includes('data-order-calculation-note="true"')
+  || !orderReceiptActionsSource.includes('Recorded total {formatMoney(order.total)} · Tax status not recorded')
   || !coreSource.includes('formatCommerceCalculation(calculationReview)')
-  || !coreSource.includes("data-order-calculation-status={'taxCode' in order.calculation ? 'configured' : 'not-configured'}")
-  || (coreSource.match(/<OrderCalculationNote order=\{order\} \/>/g) || []).length !== 2) fail('commerce_order_calculation_visibility_missing_or_bloated')
+  || !orderReceiptActionsSource.includes("data-order-calculation-status={'taxCode' in order.calculation ? 'configured' : 'not-configured'}")
+  || (coreSource.match(/<OrderCalculationNote order=\{order\} \/>/g) || []).length !== 1
+  || (shopOrderHistorySource.match(/<OrderCalculationNote order=\{order\} \/>/g) || []).length !== 1) fail('commerce_order_calculation_visibility_missing_or_bloated')
 if (!coreSource.includes('data-tax-configuration="versioned"')
   || !coreSource.includes("kind: 'tax_configuration'")
   || !coreSource.includes("'commerce.tax_configuration.saved'")
@@ -5197,10 +5190,10 @@ if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !managedCommerceRuntime.includes('def commerce_daily_close_csv(')) fail('commerce_daily_close_export_missing_or_unsafe')
 if (!coreSource.includes("'commerce.order.correction_recorded'")
   || !coreSource.includes("kind: 'order_correction'")
-  || !coreSource.includes('Correct invoice')
-  || !coreSource.includes('The original invoice stays unchanged.')
-  || !coreSource.includes('same tax snapshot as the original invoice')
-  || !coreSource.includes('no external posting performed')) fail('commerce_order_correction_ui_or_gate_missing')
+  || !shopOrderHistorySource.includes('Correct invoice')
+  || !shopOrderHistorySource.includes('The original invoice stays unchanged.')
+  || !shopOrderHistorySource.includes('same tax snapshot as the original invoice')
+  || !shopOrderHistorySource.includes('no external posting performed')) fail('commerce_order_correction_ui_or_gate_missing')
 if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !coreSource.includes('Download accounting CSV')
   || !coreSource.includes('data-account-mapping="versioned"')
@@ -5257,11 +5250,11 @@ if (!coreSource.includes('data-payment-policy="versioned"')
   || !managedCommerceRuntime.includes('command evidence must match the saved payment policy proof.')) fail('commerce_payment_policy_setup_ui_or_managed_boundary_missing')
 if (!coreSource.includes("'commerce.order.return_recorded'")
   || !coreSource.includes("kind: 'order_return'")
-  || !coreSource.includes('Record return')
-  || !coreSource.includes('Sellable · add to stock')
-  || !coreSource.includes('Restock to {returnLocationPreview}')
+  || !shopOrderHistorySource.includes('Record return')
+  || !shopOrderHistorySource.includes('Sellable · add to stock')
+  || !shopOrderHistorySource.includes('Restock to {returnLocationPreview}')
   || !coreSource.includes('payment and order total unchanged')
-  || !coreSource.includes('Return unavailable: this older order has no attributable completion proof.')
+  || !shopOrderHistorySource.includes('Return unavailable: this older order has no attributable completion proof.')
   || !commerceSource.includes('returnShopInventoryOrder(current.inventoryFoundation')
   || !commerceSource.includes('locationAllocations: ShopInventoryOrderReturnAllocation[] | null')
   || !shopInventorySource.includes("kind: 'order_return'")
@@ -5269,8 +5262,8 @@ if (!coreSource.includes("'commerce.order.return_recorded'")
   || !shopInventoryPythonSource.includes('order return allocations do not match deterministic fulfilled locations')
   || !managedCommerceRuntime.includes('append exactly one order return location command')
   || !managedTrialStoreRuntime.includes('kind="order_return"')
-  || !coreSource.includes('Math.ceil(orders.length / pageSize)')
-  || !coreSource.includes('aria-label="Closed order pages"')) fail('commerce_order_return_ui_or_gate_missing')
+  || !shopOrderHistorySource.includes('Math.ceil(orders.length / pageSize)')
+  || !shopOrderHistorySource.includes('aria-label="Closed order pages"')) fail('commerce_order_return_ui_or_gate_missing')
 if (!workspaceRuntimeSource.includes("mode: 'managed-unprovisioned'") || !coreSource.includes('initializeManagedCatalog(formEvent)') || !coreSource.includes("catalogBusy ? 'Saving…' : 'Add product'") || !coreSource.includes('Opening balance reason') || !workspaceRuntimeSource.includes('result.version !== current.version + 1') || !workspaceRuntimeSource.includes('validateCommerceState(result.state)') || !workspaceRuntimeSource.includes("error.code === 'trial_version_conflict'") || !workspaceRuntimeSource.includes('class ShopReviewRequiredError') || !coreSource.includes('error instanceof ShopReviewRequiredError') || !workspaceRuntimeSource.includes('const latest = loadCommerceWorkspace()') || !workspaceRuntimeSource.includes('latest record is loaded for fresh review') || !coreSource.includes('managedIdentity ? null : <ActionHistory')) fail('managed_commerce_ui_not_fail_closed')
 if (!coreSource.includes('initializeManagedTemplateCatalog')
   || !coreSource.includes('shopBusinessTemplateCommerceItems(managedTemplateId)')
@@ -6500,7 +6493,7 @@ if (!shopCounterContract.includes('<h2>Products</h2>')
   || !shopCounterContract.includes("{unitCount ? <button aria-controls=\"shop-current-sale\"")
   || !coreSource.includes("presentation: 'counter'")
   || !coreSource.includes("channel: 'Walk-in'")
-  || !coreSource.includes('function commerceOrderDisplayReference(orderId: string)')
+  || !shopOrderPresentationSource.includes('function commerceOrderDisplayReference(orderId: string)')
   || !coreSource.includes('function commerceOrderTargetId(orderId: string)')
   || !coreSource.includes('const displayReference = commerceOrderDisplayReference(order.id)')
   || !coreSource.includes('subjectId: order.id')
@@ -6533,9 +6526,9 @@ if (!shopCounterContract.includes('<h2>Products</h2>')
   || coreSource.includes("Sale ${commerceOrderDisplayReference(pendingAction.subjectId)} complete. Stock updated. Receipt saved.")
   || coreSource.includes("`${record.id} applied and added to the action history.`")
   || !coreSource.includes("returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''")
-  || !coreSource.includes('const correctionOrderIndex = correctionDraft ? orders.findIndex')
-  || !coreSource.includes('returnOrderIndex >= 0 ? returnOrderIndex : correctionOrderIndex >= 0 ? correctionOrderIndex : supportOrderIndex')
-  || !coreSource.includes('open={Boolean(returnDraft || correctionDraft || supportDraft')
+  || !shopOrderHistorySource.includes('const correctionOrderIndex = correctionDraft ? orders.findIndex')
+  || !shopOrderHistorySource.includes('returnOrderIndex >= 0 ? returnOrderIndex : correctionOrderIndex >= 0 ? correctionOrderIndex : supportOrderIndex')
+  || !shopOrderHistorySource.includes('open={Boolean(returnDraft || correctionDraft || supportDraft')
   || !coreSource.includes("const paymentDueAt = paymentTermsDays === 0\n      ? undefined")
   || !coreSource.includes("...(paymentDueAt ? { paymentDueAt } : {})")
   || !coreSource.includes("paymentDueAt ? formatIssueDue(paymentDueAt) : 'at handoff'")
@@ -6740,7 +6733,7 @@ if (!shopLoyaltySource.includes("export const SHOP_LOYALTY_REDEMPTION_ACTION_ID_
   || !coreSource.includes("{ orderId, kind: 'credit', reasonCode: 'other', listedAmountMmk: '', loyalty: { customer } }")
   || !coreSource.includes('actionIdPrefix: SHOP_LOYALTY_REDEMPTION_ACTION_ID_PREFIX')
   || !coreSource.includes('if (loyaltyRedemption && !shopLoyaltyRedemptionAllowed(')
-  || !coreSource.includes('Redeem points · ')
+  || !shopOrderHistorySource.includes('Redeem points · ')
   || !coreSource.includes('loyalty={receiptLoyalty}')
   || !receiptDialogSource.includes('Points balance')
   // G1 counter slice: the receipt dialog's own labels go through bi(), while the
@@ -21073,15 +21066,10 @@ if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
 // THE SHOP ROUTE'S COMPRESSED WIRE COST -- what a till pays to open, measured the
 // way the CDN actually serves it.
 //
-// WHICH CLOSURE: first paint, not "every tab visited". First paint is the only number
-// every Shop owner unconditionally pays -- nobody rings up a sale without downloading
-// all of it -- and it is the one the owner feels on a metered phone before the app can
-// take money. "Every tab visited" is paid by nobody in particular: it folds in tabs many
-// shops never open, and below core-app it cannot be split from Plant at all (the same
-// chunk serves /shop and /plant, chosen by a runtime prop), so a "Shop" number built
-// from it would quietly bill the shop for Plant. Bytes deferred into a lazy tab are
-// genuinely cheaper and are meant to read as cheaper here; the demoted total above is
-// what still covers them.
+// WHICH CLOSURE: default Shop first task, not "every tab visited". Include the shell,
+// Shop route, and the ShopToday component CoreApp selects for its default `today` tab.
+// Other Shop tabs and controls that load only after the owner opens Advanced controls
+// remain deferred. Shared chunks are counted once even when both closures use them.
 //
 // GZIP OR BROTLI: brotli, at quality 3, because that is what app.supermega.dev returns.
 // Verified against the live edge rather than assumed -- fetch one asset three ways:
@@ -21096,23 +21084,11 @@ if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
 // what almost every client negotiates and the worse of the two outcomes. Guarding it
 // covers the gzip-only client too.
 //
-// HOW THE CLOSURE IS COMPUTED: from the bundler's own dependency manifest, never a
-// chunk list. Vite emits __vite__mapDeps into the entry chunk -- the exact asset set the
-// browser fetches for each dynamic import. The walk is: the document, every <script src>
-// and stylesheet it links, the static-import closure of the module entry, and the
-// mapDeps list whose HEAD entry is the operations route chunk. Only one name appears
-// here, `core-app`, and it is not incidental: it is a named manualChunks target in
-// showroom/vite.config.ts and is already pinned twice in this file
-// (product_operations_eagerly_loaded_on_home, operations_route_artifact_missing). Every
-// other member is discovered. A new chunk the route starts pulling is covered the day it
-// lands; that is the decay this repo keeps finding, closed by construction.
-//
-// It also corrects a boundary drawn by hand: the mapDeps list puts website-model and
-// website-leads on the Shop route (core-app -> capability-tiers -> website-model). A
-// hand-picked "Shop chunks" list would have missed 13.6 KB the till really downloads.
-// Re-checked what the #519 measurement excluded, and it still holds: PlantOrderFoundation
-// and ecommerce-buying-lifecycle are reached only by core-app's OWN dynamic imports, so
-// they sit outside first paint, as do all six Shop tab chunks.
+// HOW THE CLOSURE IS COMPUTED: from Vite's dependency manifests, never a hand-picked
+// chunk list. The document entry maps to the Shop route group; CoreApp's map then maps
+// the named ShopToday export to the exact default-tab asset group. Static imports and
+// shared assets are deduplicated. This keeps the first-use metric aligned with the
+// screen a logged-in cashier actually sees while leaving other lazy tabs deferred.
 //
 // MEASURED 2026-08-21 on origin/main f3cacb09, fresh `npm run app:build` (the ROOT one;
 // `npm --prefix showroom run build` skips app:release:write and fails the precache seal):
@@ -21196,6 +21172,7 @@ if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
 // workspace) and deliberately LEFT rather than changed for consistency.
 let shopRouteWireBytes = 0
 let shopRouteAssetCount = 0
+let shopTodayMappedAssetCount = 0
 const CDN_BROTLI_QUALITY = 3
 const compressedWireBytes = async (path) => {
   const buffer = await readRawFile(path)
@@ -21228,6 +21205,13 @@ const bundlerRouteAssets = (source, table, routePattern) => {
   }
   return [...reached]
 }
+const bundlerNamedComponentAssets = (source, table, exportName) => {
+  const pattern = new RegExp(`__vite__mapDeps\\(\\[([0-9,]+)\\]\\)\\)\\.then\\(([A-Za-z_$][\\w$]*)=>\\(\\{default:\\2\\.${exportName}\\}\\)\\)`)
+  const match = source.match(pattern)
+  if (!match) return []
+  return match[1].split(',').map((index) => Number.parseInt(index, 10))
+    .map((index) => table[index]).filter((asset) => typeof asset === 'string')
+}
 // Self-test the three parsers against a fixture shaped like real minified output, because
 // a walk that silently matches nothing would pass this guard vacuously rather than fail
 // it. The floor further down is the second half of the same defence.
@@ -21236,6 +21220,7 @@ const bundlerRouteAssets = (source, table, routePattern) => {
     + 'import{x}from"./shared-B2.js";import"./bare-D4.js";\n'
     + 'const a=V.lazy(()=>St(()=>import("./core-app-A1.js").then(i=>i.O),__vite__mapDeps([0,1])));'
     + 'const b=V.lazy(()=>St(()=>import("./other-C3.js"),__vite__mapDeps([2,1])));'
+    + 'const c=V.lazy(()=>St(()=>import("./other-C3.js"),__vite__mapDeps([2,1])).then(i=>({default:i.ShopToday})));'
   const table = bundlerDependencyTable(fixture)
   const specifiers = staticImportSpecifiers(fixture)
   if (specifiers.join(',') !== 'shared-B2.js,bare-D4.js') fail(`wire_cost_static_import_parser_wrong:${specifiers.join(',')}`)
@@ -21244,6 +21229,12 @@ const bundlerRouteAssets = (source, table, routePattern) => {
     // The route's own dep list, and nothing another route's import pulls.
     const routed = bundlerRouteAssets(fixture, table, /^assets\/core-app-[^/]+\.js$/).sort().join(',')
     if (routed !== 'assets/core-app-A1.js,assets/shared-B2.js') fail(`wire_cost_route_asset_parser_wrong:${routed}`)
+    const defaultComponent = bundlerNamedComponentAssets(fixture, table, 'ShopToday').sort().join(',')
+    if (defaultComponent !== 'assets/other-C3.js,assets/shared-B2.js') fail(`wire_cost_named_component_parser_wrong:${defaultComponent}`)
+    const renamed = fixture.replaceAll('i=>({default:i.ShopToday})', 'module$1=>({default:module$1.ShopToday})')
+    if (bundlerNamedComponentAssets(renamed, table, 'ShopToday').sort().join(',') !== defaultComponent) fail('wire_cost_named_component_parser_depends_on_minified_identifier')
+    const mismatched = fixture.replace('default:i.ShopToday', 'default:other.ShopToday')
+    if (bundlerNamedComponentAssets(mismatched, table, 'ShopToday').length) fail('wire_cost_named_component_parser_accepts_mismatched_binding')
     // ...and it really can come back empty, which is why the closure is floored below.
     if (bundlerRouteAssets(fixture, table, /^assets\/no-such-chunk-[^/]+\.js$/).length !== 0) fail('wire_cost_route_asset_parser_overmatches')
   }
@@ -21285,7 +21276,27 @@ else {
   await visitDocumentAsset(moduleEntryAsset)
   const routeAssets = bundlerRouteAssets(routeEntrySource, routeDependencyTable, /^assets\/core-app-[^/]+\.js$/)
   if (!routeAssets.length) fail('shop_route_operations_chunk_unreachable')
-  const shopRouteClosure = [...new Set(['index.html', ...documentScripts, ...documentStyles, ...documentGraph, ...routeAssets])]
+  const routeChunk = routeAssets.find((asset) => /^assets\/core-app-[^/]+\.js$/.test(asset))
+  let shopTodayAssets = []
+  let orderHistoryAssets = []
+  if (!routeChunk) fail('shop_route_operations_chunk_missing')
+  else {
+    const routeChunkSource = await readFile(resolve(dist, routeChunk), 'utf8')
+    const routeChunkTable = bundlerDependencyTable(routeChunkSource)
+    if (!routeChunkTable) fail('shop_default_task_dependency_table_missing')
+    else {
+      shopTodayAssets = bundlerNamedComponentAssets(routeChunkSource, routeChunkTable, 'ShopToday')
+      if (!shopTodayAssets.length) fail('shop_default_today_task_unreachable')
+      orderHistoryAssets = bundlerNamedComponentAssets(routeChunkSource, routeChunkTable, 'ClosedOrderHistory')
+      if (!orderHistoryAssets.length) fail('shop_order_history_lazy_chunk_unreachable')
+    }
+  }
+  const shopRouteClosure = [...new Set(['index.html', ...documentScripts, ...documentStyles, ...documentGraph, ...routeAssets, ...shopTodayAssets])]
+  if (orderHistoryAssets.length) {
+    if (shopRouteClosure.includes(orderHistoryAssets[0])) fail('shop_default_task_eagerly_loads_order_history')
+    const sealedWorker = await readFile(resolve(dist, 'sw.js'), 'utf8')
+    if (!sealedWorker.includes(`"/${orderHistoryAssets[0]}"`)) fail('shop_order_history_missing_from_offline_precache')
+  }
   if (shopRouteClosure.some((path) => /^assets\/(?:website-model|website-leads)-[^/]+\.js$/.test(path))) {
     fail('shop_route_eagerly_loads_website_compatibility')
   }
@@ -21295,6 +21306,7 @@ else {
   if (missingClosureAssets.length) fail(`shop_route_closure_asset_missing:${missingClosureAssets.join('|')}`)
   else {
     shopRouteAssetCount = shopRouteClosure.length
+    shopTodayMappedAssetCount = shopTodayAssets.length
     shopRouteWireBytes = (await Promise.all(shopRouteClosure.map((path) => (
       compressedWireBytes(resolve(dist, path))
     )))).reduce((total, size) => total + size, 0)
@@ -21845,4 +21857,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: customerTrackLabels.length, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, managedGuidedOnboardingCopyRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes, shopRouteAssetCount, shopRouteWireBytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: customerTrackLabels.length, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, managedGuidedOnboardingCopyRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, deviceImageStoreRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes, shopRouteAssetCount, shopTodayMappedAssetCount, shopRouteWireBytes }, null, 2))
