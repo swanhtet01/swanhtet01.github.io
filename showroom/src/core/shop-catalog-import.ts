@@ -6,6 +6,7 @@ import {
   createClientImportPreview,
   type ClientImportIssue,
   type ClientImportMapping,
+  type ClientImportPreview,
 } from './client-onboarding.ts'
 
 export const SHOP_CATALOG_IMPORT_SCHEMA = 'supermega.shop.catalog_import.v1' as const
@@ -177,6 +178,21 @@ function classifyAgainstCatalog(rows: ShopCatalogImportRow[], existingCatalog: C
   }
 }
 
+export function classifyShopCatalogImportRows(
+  preview: ClientImportPreview,
+  existingCatalog: CommerceItem[],
+): ShopCatalogImportRow[] {
+  const rows: ShopCatalogImportRow[] = preview.rows.map((row) => ({
+    rowNumber: row.rowNumber,
+    status: row.status,
+    source: row.source,
+    item: row.status === 'invalid' ? null : itemFromValues(row.values),
+    issues: row.issues.map(shopIssue),
+  }))
+  classifyAgainstCatalog(rows, existingCatalog)
+  return rows
+}
+
 function totalsFor(rows: ShopCatalogImportRow[]) {
   return {
     rows: rows.length,
@@ -202,14 +218,7 @@ export async function createShopCatalogImportPreview(
     sourceName,
     'social-commerce',
   )
-  const rows: ShopCatalogImportRow[] = shared.rows.map((row) => ({
-    rowNumber: row.rowNumber,
-    status: row.status,
-    source: row.source,
-    item: row.status === 'invalid' ? null : itemFromValues(row.values),
-    issues: row.issues.map(shopIssue),
-  }))
-  classifyAgainstCatalog(rows, existingCatalog)
+  const rows = classifyShopCatalogImportRows(shared, existingCatalog)
   const catalogSignature = shopCatalogImportCatalogSignature(existingCatalog)
   const catalogDigest = await sha256(catalogSignature)
   const previewDigest = await sha256(JSON.stringify({

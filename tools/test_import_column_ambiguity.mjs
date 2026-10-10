@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createClientImportPreview } from '../showroom/src/core/client-onboarding.ts'
+import { classifyShopCatalogImportRows, SHOP_CATALOG_IMPORT_MAX_ROWS } from '../showroom/src/core/shop-catalog-import.ts'
 
 test('CSV preview blocks text that decoded as a replacement character and keeps Burmese UTF-8 intact', async () => {
   const prefix = new TextEncoder().encode('sku,name,stock,reorder_at,price\nTEST-1,')
@@ -33,6 +34,31 @@ test('one stock alias still maps automatically', async () => {
   const preview = await createClientImportPreview('sku,name,stock,reorder_at,price\nTEST-1,Synthetic item,5,1,1000', 'commerce')
   assert.equal(preview.mapping.onHand, 'stock')
   assert.equal(preview.rows[0].status, 'ready')
+})
+
+test('local Shop import preview blocks rows beyond the catalog capacity', async () => {
+  const preview = await createClientImportPreview(
+    'sku,name,stock,reorder_at,price\nNEW-1,New tea,1,0,1000\nNEW-2,New coffee,2,1,2000',
+    'commerce',
+  )
+  const fullCatalog = Array.from({ length: SHOP_CATALOG_IMPORT_MAX_ROWS }, (_, index) => ({
+    sku: `EXISTING-${index + 1}`,
+    name: `Existing item ${index + 1}`,
+    onHand: 1,
+    reorderAt: 0,
+    price: 100,
+  }))
+  const rows = classifyShopCatalogImportRows(preview, fullCatalog)
+
+  assert.equal(rows.length, 2)
+  assert.ok(rows.every(row => row.status === 'invalid'))
+  assert.ok(rows.every(row => row.issues.some(issue => issue.code === 'catalog_capacity')))
+
+  const { readFile } = await import('node:fs/promises')
+  const source = await readFile(new URL('../showroom/src/core/ClientDataOnboarding.tsx', import.meta.url), 'utf8')
+  assert.match(source, /classifyShopCatalogImportRows\(preview, catalog\.state\.items\)/)
+  assert.match(source, /localActivationAvailable && !catalogHasBlockingIssues && importContextReady && targetImportReady/)
+  assert.match(source, /Remove excess new rows and upload the file again/)
 })
 
 test('canonical field wins over aliases regardless of column order', async () => {
