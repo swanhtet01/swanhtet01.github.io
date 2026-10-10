@@ -3,6 +3,14 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import test from 'node:test'
 import { prepareManagedFirstCatalog } from '../showroom/src/core/shop-managed-first-catalog.ts'
+import {
+  advanceCommerceOrder,
+  createCommerceCatalogBaseline,
+  createEmptyCommerce,
+  reconcileCommercePayment,
+  reserveCommerceOrder,
+  validateCommerceState,
+} from '../showroom/src/core/commerce-workspace.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const [core, today] = await Promise.all([
@@ -82,6 +90,75 @@ test('managed first-product setup preserves supplied codes and rejects missing o
     assert.equal(prepareManagedFirstCatalog(invalid, () => 'abcdef12').ok, false)
   }
   assert.equal(prepareManagedFirstCatalog({ ...base, sku: '' }, () => 'short').ok, false)
+})
+
+test('a managed first product can complete a counter sale and leave a receipt-ready order with reduced stock', () => {
+  const actor = 'synthetic-managed-owner'
+  const prepared = prepareManagedFirstCatalog({
+    sku: '', name: 'Tea', onHand: '12', reorderAt: '2', price: '2500', reason: '', evidenceReference: '',
+  }, () => 'abcdef12-0000-4000-8000-000000000000')
+  assert.equal(prepared.ok, true)
+  if (!prepared.ok) return
+
+  const setupProof = {
+    actionId: 'SYNTHETIC-SETUP',
+    capturedAt: '2026-10-11T06:00:00.000Z',
+    actor,
+    reason: prepared.reason,
+    evidenceReference: prepared.evidenceReference,
+  }
+  let state = validateCommerceState({
+    ...createEmptyCommerce(),
+    items: [prepared.product],
+    catalogBaselines: [createCommerceCatalogBaseline({ sku: prepared.product.sku, price: prepared.product.price, reorderAt: prepared.product.reorderAt }, setupProof)],
+  })
+  const orderId = 'ORD-SYNTHETIC-1'
+  const order = {
+    id: orderId,
+    owner: actor,
+    createdAt: '2026-10-11T06:01:00.000Z',
+    customer: 'Guest',
+    channel: 'Walk-in',
+    item: prepared.product.name,
+    itemSku: prepared.product.sku,
+    quantity: 1,
+    payment: 'Cash',
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    fulfilment: 'pickup',
+    fulfilmentReference: `Counter ${orderId}`,
+    promisedAt: '2026-10-11T06:31:00.000Z',
+    lines: [{ sku: prepared.product.sku, name: prepared.product.name, quantity: 1, unitPriceMmk: prepared.product.price }],
+    total: prepared.product.price,
+    status: 'confirmed',
+  }
+  const reviewProof = {
+    actionId: 'SYNTHETIC-COUNTER-REVIEW',
+    capturedAt: '2026-10-11T06:02:00.000Z',
+    actor,
+    reason: 'Cash received and the customer took the order.',
+    evidenceReference: `Counter order ${orderId}`,
+  }
+
+  state = reserveCommerceOrder(state, order, reviewProof)
+  assert.ok(state)
+  state = reconcileCommercePayment(state, orderId, { ...reviewProof, actionId: 'SYNTHETIC-COUNTER-PAYMENT', capturedAt: '2026-10-11T06:03:00.000Z' })
+  assert.ok(state)
+  for (const [index, expectedStatus] of ['confirmed', 'preparing', 'ready'].entries()) {
+    state = advanceCommerceOrder(state, orderId, expectedStatus, {
+      ...reviewProof,
+      actionId: `SYNTHETIC-COUNTER-ADVANCE-${expectedStatus.toUpperCase()}`,
+      capturedAt: `2026-10-11T06:0${4 + index}:00.000Z`,
+    }, 'managed-server')
+    assert.ok(state)
+  }
+
+  const completed = state.orders.find((candidate) => candidate.id === orderId)
+  assert.equal(completed.status, 'completed')
+  assert.equal(completed.paymentStatus, 'reconciled')
+  assert.equal(completed.total, 2500)
+  assert.equal(state.items.find((item) => item.sku === prepared.product.sku).onHand, 11)
+  assert.match(core, /if \(completesSale\) \{\s*setReceiptAck\(null\)\s*setCounterReceiptOrderId\(order\.id\)/)
 })
 
 test('the empty catalog state does not show a duplicate generic products link', () => {
