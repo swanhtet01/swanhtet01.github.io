@@ -1,5 +1,5 @@
 import { OrderCalculationNote, OrderReceiptActions } from './OrderReceiptActions'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { commerceCorrectionCalculation, commerceSupportWorkloadExport, commerceSupportQueue, commerceSupportSlaSummary, commerceOrderAdjustedTotal, commerceSupportCaseUrgency, commerceSupportServiceState, commerceSupportCheckpointState, type CommerceSupportServiceEventKind, type CommerceOrderAcknowledgement, type CommerceOrder, type CommerceReturnDisposition, type CommerceSupportPriority, type CommerceSupportResolutionOutcome, type CommerceCorrectionKind, type CommerceCorrectionReasonCode } from './commerce-workspace'
 import { formatTime } from './team-work'
 import { shopLoyaltyDisplayPoints } from './shop-loyalty'
@@ -110,10 +110,44 @@ export function ClosedOrderHistory({
     artifact: ReturnType<typeof commerceSupportWorkloadExport>
   } | null
 }) {
-  // Requested editors can first mount after this lazy module resolves. Autofocus on the
-  // edited field preserves keyboard entry even if the parent animation frame has passed.
   const [page, setPage] = useState(0)
   const supportClock = useMinuteClock()
+  const returnFocusKey = returnDraft && orders.some((order) => order.id === returnDraft.orderId)
+    ? `${returnDraft.orderId}:${returnDraft.sku}`
+    : null
+  const correctionFocusKey = correctionDraft && orders.some((order) => order.id === correctionDraft.orderId)
+    ? `${correctionDraft.orderId}:${correctionDraft.loyalty ? 'loyalty' : 'adjustment'}`
+    : null
+  const returnEditorRef = useRef<HTMLFormElement | null>(null)
+  const correctionEditorRef = useRef<HTMLFormElement | null>(null)
+
+  // Parent handlers usually focus on the next frame. These editors can mount later
+  // when this lazy-loaded module resolves, so focus again after the form is available.
+  useEffect(() => {
+    if (!returnFocusKey) return
+    const frame = window.requestAnimationFrame(() => {
+      returnEditorRef.current?.querySelector<HTMLInputElement>('#order-return-quantity')?.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [returnFocusKey])
+
+  useEffect(() => {
+    if (!correctionFocusKey) return
+    const frame = window.requestAnimationFrame(() => {
+      correctionEditorRef.current?.querySelector<HTMLInputElement>('#order-correction-amount')?.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [correctionFocusKey])
+
+  const bindReturnEditor = (node: HTMLFormElement | null) => {
+    returnEditorRef.current = node
+    onReturnEditor(node)
+  }
+  const bindCorrectionEditor = (node: HTMLFormElement | null) => {
+    correctionEditorRef.current = node
+    onCorrectionEditor(node)
+  }
+
   const pageSize = 8
   if (!orders.length) return null
   const pageCount = Math.ceil(orders.length / pageSize)
@@ -256,7 +290,7 @@ export function ClosedOrderHistory({
           <small>Review required · no external posting performed</small>
         </div>)}
       </div> : null}
-      {activeReturnDraft && selectedLine ? <form aria-label={`Return items from ${order.id}`} className="order-return-editor" onSubmit={onReviewReturn} ref={onReturnEditor}>
+      {activeReturnDraft && selectedLine ? <form aria-label={`Return items from ${order.id}`} className="order-return-editor" onSubmit={onReviewReturn} ref={bindReturnEditor}>
         <div className="order-return-copy"><span className="core-eyebrow">Return</span><strong>{order.id}</strong><small>{activeReturnDraft.sourceIntent ? `Prepared from customer request ${activeReturnDraft.sourceIntent.id}. Confirm what Shop actually received.` : 'Record received goods only.'} Payment and order totals do not change.</small></div>
         <label>Item<select disabled={disabled || availableLines.length === 1} onChange={(event) => onChangeReturn({ sku: event.target.value, quantity: '1' })} value={selectedLine.sku}>{availableLines.map((line) => <option key={line.sku} value={line.sku}>{line.name} · {line.remaining} left</option>)}</select></label>
         <label>Quantity<input disabled={disabled} id="order-return-quantity" max={selectedLine.remaining} min="1" onChange={(event) => onChangeReturn({ quantity: event.target.value })} required step="1" type="number" value={activeReturnDraft.quantity} /></label>
@@ -289,7 +323,7 @@ export function ClosedOrderHistory({
         <label>Resolution note<textarea disabled={disabled} id={`support-resolution-${activeSupportResolution.caseId}`} maxLength={300} onChange={(event) => onChangeSupportResolution({ note: event.target.value })} required rows={2} value={activeSupportResolution.note} /></label>
         <div className="form-actions"><button className={coreUi.q} disabled={disabled} type="submit">Review resolution</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
       </form> : null}
-      {activeCorrectionDraft ? <form aria-label={activeCorrectionDraft.loyalty ? `Redeem points on ${order.id}` : `Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
+      {activeCorrectionDraft ? <form aria-label={activeCorrectionDraft.loyalty ? `Redeem points on ${order.id}` : `Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={bindCorrectionEditor}>
         <div className="order-return-copy"><span className="core-eyebrow">{activeCorrectionDraft.loyalty ? 'Redeem points' : 'Correction note'}</span><strong>{order.id}</strong><small>{activeCorrectionDraft.loyalty ? `${activeCorrectionDraft.loyalty.customer} holds ${loyaltyBalance.toLocaleString()} points. Points are redeemed as a credit note on this order — 1 point = 1 MMK.` : activeCorrectionDraft.sourceIntent ? `Prepared from customer request ${activeCorrectionDraft.sourceIntent.id}. Recheck the calculation; request details stay locked.` : 'The original invoice stays unchanged.'} This records review evidence; it does not post externally.</small></div>
         {activeCorrectionDraft.loyalty
           ? <small role="note">Credit note · reason “other” — locked for points redemption</small>
