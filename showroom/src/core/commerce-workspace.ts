@@ -7068,9 +7068,12 @@ export function commerceCatalogImportReview(existing: CommerceItem, incoming: Co
     reorderAt: 'reorder level',
     price: 'price',
   }
-  const details = differences.map((field) => field === 'onHand'
-    ? `stock (Shop has ${existing.onHand} on hand; file says ${incoming.onHand})`
-    : labels[field])
+  const details = differences.map((field) => {
+    if (field === 'onHand') return `stock (Shop has ${existing.onHand} on hand; file says ${incoming.onHand})`
+    const currentValue = JSON.stringify(existing[field]) ?? '—'
+    const incomingValue = JSON.stringify(comparable[field]) ?? '—'
+    return `${labels[field]} (Shop: ${currentValue}; file: ${incomingValue})`
+  })
   return {
     conflict: differences.length > 0,
     message: differences.length

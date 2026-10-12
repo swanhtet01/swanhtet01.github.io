@@ -61,6 +61,18 @@ test('Shop review preserves an omitted variant and reports the exact stock discr
   assert.equal(review.conflict, true)
   assert.match(review.message, /Shop has 12 on hand; file says 9/)
   assert.doesNotMatch(review.message, /variant/)
+  const changed = commerceCatalogImportReview(existing, {
+    ...existing,
+    name: 'Green tea',
+    variant: 'Small',
+    reorderAt: 5,
+    price: 2100,
+  })
+  assert.equal(changed.conflict, true)
+  assert.match(changed.message, /name \(Shop: "မြန်မာ လက်ဖက်ရည်"; file: "Green tea"\)/)
+  assert.match(changed.message, /variant \(Shop: "Large"; file: "Small"\)/)
+  assert.match(changed.message, /reorder level \(Shop: 3; file: 5\)/)
+  assert.match(changed.message, /price \(Shop: 1800; file: 2100\)/)
   const unchanged = commerceCatalogImportReview(existing, { ...existing, variant: undefined })
   assert.equal(unchanged.conflict, false)
   assert.match(unchanged.message, /saved variant is preserved/)
