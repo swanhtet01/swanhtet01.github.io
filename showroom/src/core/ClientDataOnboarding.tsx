@@ -14,7 +14,7 @@ import {
   type ClientSolutionId,
 } from './client-onboarding'
 import { activateLocalStagingPackage } from './local-client-import'
-import { commerceCatalogImportDifferences, readCommerceWorkspace } from './commerce-workspace'
+import { commerceCatalogImportReview, readCommerceWorkspace } from './commerce-workspace'
 import {
   ManagedTrialError,
   applyManagedClientImport,
@@ -499,15 +499,10 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           if (row.status !== 'ready') continue
           const existing = catalog.state.items.find((item) => item.sku === row.values.sku)
           if (!existing) continue
-          const differences = commerceCatalogImportDifferences(existing, {
+          catalogReview[row.rowNumber] = commerceCatalogImportReview(existing, {
             sku: row.values.sku, name: row.values.name,
             onHand: Number(row.values.onHand), reorderAt: Number(row.values.reorderAt), price: Number(row.values.price),
           })
-          const labels = { name: 'name', variant: 'variant', onHand: 'stock', reorderAt: 'reorder level', price: 'price' }
-          catalogReview[row.rowNumber] = {
-            conflict: differences.length > 0,
-            message: differences.length ? `Already exists with different ${differences.map((field) => labels[field]).join(', ')}. Update the existing product separately.` : 'Already current. No change needed.',
-          }
         }
       }
       setState({ ...emptyImportState(), sourceName, sourceText, preview, catalogReview })

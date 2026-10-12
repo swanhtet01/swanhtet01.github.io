@@ -47,6 +47,77 @@ test('catalog differences and stock count mismatches show independent review rea
   ])
   assert.match(preview.rows[0].issues[1].message, /item name, reorder level, price/)
 })
+
+test('Shop review preserves an omitted variant and reports the exact stock discrepancy', async () => {
+  const { commerceCatalogImportReview } = await import('../showroom/src/core/commerce-workspace.ts')
+  const existing = { sku: 'CAFE-1', name: 'Myanmar tea', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
+  const review = commerceCatalogImportReview(existing, {
+    sku: existing.sku,
+    name: existing.name,
+    onHand: 9,
+    reorderAt: existing.reorderAt,
+    price: existing.price,
+  })
+  assert.equal(review.conflict, true)
+  assert.match(review.message, /Shop has 12 on hand; file says 9/)
+  assert.doesNotMatch(review.message, /variant/)
+  const unchanged = commerceCatalogImportReview(existing, { ...existing, variant: undefined })
+  assert.equal(unchanged.conflict, false)
+  assert.match(unchanged.message, /saved variant is preserved/)
+})
+
+test('local Shop import replay preserves an existing variant when the CSV has no variant column', async () => {
+  const [{ createClientImportPreview, buildClientImportStagingPackage }, commerce, importer] = await Promise.all([
+    import('../showroom/src/core/client-onboarding.ts'),
+    import('../showroom/src/core/commerce-workspace.ts'),
+    import('../showroom/src/core/local-client-import.ts'),
+  ])
+  const sourceDigest = `sha256:${'a'.repeat(64)}`
+  const existing = { sku: 'CAFE-1', name: 'Myanmar tea', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
+  const seed = commerce.importCommerceCatalog(commerce.createEmptyCommerce(), {
+    items: [existing],
+    sourceDigest,
+    capturedAt: '2026-10-13T00:00:00.000Z',
+    actor: 'Synthetic reviewer',
+  })
+  assert.ok(seed)
+
+  const storageValues = new Map([[commerce.COMMERCE_KEY, JSON.stringify(seed.state)]])
+  const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  try {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key) => storageValues.get(key) ?? null,
+        setItem: (key, value) => storageValues.set(key, value),
+        removeItem: (key) => storageValues.delete(key),
+      },
+    })
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { locks: { request: async (_name, _options, callback) => callback() } },
+    })
+    const preview = await createClientImportPreview(
+      'sku,item_name,opening_stock,reorder_at,price_mmk\nCAFE-1,Myanmar tea,12,3,1800',
+      'commerce',
+    )
+    const stagingPackage = buildClientImportStagingPackage(preview, {
+      workflowTemplateId: preview.workflowTemplateId,
+      workspace: 'Synthetic cafe',
+      owner: 'Synthetic reviewer',
+    })
+    const result = await importer.activateLocalStagingPackage(stagingPackage)
+    assert.equal(result.created, 0)
+    assert.equal(result.alreadyPresent, 1)
+    assert.equal(JSON.parse(storageValues.get(commerce.COMMERCE_KEY)).items[0].variant, 'Large')
+  } finally {
+    if (storageDescriptor) Object.defineProperty(globalThis, 'localStorage', storageDescriptor)
+    else delete globalThis.localStorage
+    if (navigatorDescriptor) Object.defineProperty(globalThis, 'navigator', navigatorDescriptor)
+    else delete globalThis.navigator
+  }
+})
 test('model cannot resolve competing quantity columns', async () => {
   const source = csv.replace('stock,reorder_at', 'stock,quantity,reorder_at').replace(',5,1,', ',5,50,1,')
   assert.equal((await reviewCatalogMappingProposal(source, [], await proposalFor(source))).reason, 'human_choice_required')

@@ -7057,6 +7057,30 @@ export function commerceCatalogImportDifferences(existing: CommerceItem, incomin
   return commerceCatalogImportFields.filter((field) => existing[field] !== incoming[field])
 }
 
+export function commerceCatalogImportReview(existing: CommerceItem, incoming: CommerceItem) {
+  const preserveExistingVariant = !incoming.variant && Boolean(existing.variant)
+  const comparable = preserveExistingVariant ? { ...incoming, variant: existing.variant } : incoming
+  const differences = commerceCatalogImportDifferences(existing, comparable)
+  const labels: Record<(typeof commerceCatalogImportFields)[number], string> = {
+    name: 'name',
+    variant: 'variant',
+    onHand: 'stock',
+    reorderAt: 'reorder level',
+    price: 'price',
+  }
+  const details = differences.map((field) => field === 'onHand'
+    ? `stock (Shop has ${existing.onHand} on hand; file says ${incoming.onHand})`
+    : labels[field])
+  return {
+    conflict: differences.length > 0,
+    message: differences.length
+      ? `Already exists with different ${details.join(', ')}. Update the existing product separately.`
+      : preserveExistingVariant
+        ? 'Already current. The saved variant is preserved because this file does not provide one.'
+        : 'Already current. No change needed.',
+  }
+}
+
 export function importCommerceCatalog(stateValue: CommerceState, input: {
   items: CommerceItem[]
   sourceDigest: string
