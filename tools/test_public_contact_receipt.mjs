@@ -19,7 +19,7 @@ assert.ok(script, 'actual generated contact script exists')
 test('contact form stays concise and does not make customers classify the request', () => {
   assert.match(page, /Tell us what you need\./)
   assert.match(page, /Send us a message in English or Burmese/)
-  assert.match(formHtml, /We’ll reply by email/)
+  assert.match(formHtml, /Your reference number confirms receipt/)
   assert.match(formHtml, /<label>Email \/ <span lang="my">အီးမေးလ်<\/span><input name="email"/)
   assert.match(formHtml, /Company \(optional\)/)
   assert.match(formHtml, /Message \/ <span lang="my">မက်ဆေ့ချ်<\/span>/)
@@ -57,7 +57,7 @@ function harness(responses, search = '', hash = '') {
     document: { querySelector: selector => {
       if (selector === '[data-contact-form]') return form
       if (['[data-contact-heading]', '[data-contact-lede]'].includes(selector)) {
-        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Tell us what you need.' : 'Send us a message in English or Burmese. We’ll reply by email.' })
+        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Tell us what you need.' : 'Send us a message in English or Burmese. Your reference number confirms receipt.' })
         return headings.get(selector)
       }
       return null
@@ -190,10 +190,10 @@ test('three service-first doors retain product identity through uncertain delive
     assert.equal(state.calls[1].body, state.calls[0].body)
     assert.equal(state.calls[1].headers['x-idempotency-key'], state.calls[0].headers['x-idempotency-key'])
     assert.match(state.fields.get('[data-form-status]').textContent, /Message received: LEAD-0123456789ABCDEF/)
-    assert.match(state.fields.get('[data-form-status]').textContent, /We’ll follow up by email/ )
+    assert.match(state.fields.get('[data-form-status]').textContent, /Keep this reference if you need to follow up/ )
     assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /Next: review of scope/)
     assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /account created|payment received|website published/i)
-    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /No action is needed now|will .*reply|email (sent|delivered)/i)
+    assert.doesNotMatch(state.fields.get('[data-form-status]').textContent, /No action is needed now|will .*reply|email/i)
     assert.equal(state.resets(), 1)
   }
 })

@@ -7,7 +7,12 @@ import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 
 const require = createRequire(import.meta.url)
-const handlerPath = resolve('.vercel', 'output', 'functions', 'api', 'contact-submissions.js.func', 'index.js')
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve('.tmp', 'supermega-public-output-' + isolatedOutputId)
+  : resolve('.vercel', 'output')
+const handlerPath = resolve(outputDir, 'functions', 'api', 'contact-submissions.js.func', 'index.js')
 const loadHandler = ({ fresh = false } = {}) => {
   const resolvedPath = require.resolve(handlerPath)
   if (fresh) delete require.cache[resolvedPath]

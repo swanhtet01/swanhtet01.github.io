@@ -226,10 +226,10 @@ for (const token of ['Site measurement', 'seven public page paths', 'removes que
 }
 
 const contact = readStatic('contact/index.html')
-for (const token of ['Request received:', 'Keep this reference.', 'Next: review of scope, price and timing.']) {
+for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'Your reference number confirms receipt.']) {
   check(contact.includes(token), `contact_confirmed_receipt_guidance:${token}`)
 }
-for (const token of ['No action is needed now.', 'SuperMega will review your brief and reply with one scoped next step.']) {
+for (const token of ['No action is needed now.', 'SuperMega will review your brief and reply with one scoped next step.', 'We’ll reply by email', 'We’ll follow up by email']) {
   check(!contact.includes(token), `contact_no_unproven_delivery_promise:${token}`)
 }
 
