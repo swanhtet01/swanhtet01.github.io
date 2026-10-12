@@ -57,7 +57,7 @@ test('local Shop import preview blocks rows beyond the catalog capacity', async 
   const { readFile } = await import('node:fs/promises')
   const source = await readFile(new URL('../showroom/src/core/ClientDataOnboarding.tsx', import.meta.url), 'utf8')
   assert.match(source, /classifyShopCatalogImportRows\(preview, catalog\.state\.items\)/)
-  assert.match(source, /localActivationAvailable && !catalogHasBlockingIssues && importContextReady && targetImportReady/)
+  assert.match(source, /localActivationAvailable && !catalogHasBlockingIssues && catalogReadyRowCount > 0 && importContextReady && targetImportReady && !localAppliedIsCurrent/)
   assert.match(source, /Remove excess new rows and upload the file again/)
 })
 
