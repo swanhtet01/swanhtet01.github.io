@@ -17,6 +17,7 @@ const outputDir = isolatedOutputId
   : resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
+const shopGalleryProvenance = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'shop-gallery-provenance.json'), 'utf8'))
 const activeIds = activeProductContracts(manifest).map(product => product.id)
 const discoverablePages = manifest.pages.filter(page => !page.productId || activeIds.includes(page.productId))
 const config = JSON.parse(readFileSync(resolve(outputDir, 'config.json'), 'utf8'))
@@ -76,9 +77,6 @@ const productScreens = {
   ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
 }
 const interfaceCaptureDates = {
-  'actual-shop-today.png': '11 Oct 2026',
-  'actual-shop-sell.png': '11 Oct 2026',
-  'actual-shop-orders.png': '11 Oct 2026',
   'actual-shop-stock.png': '2 Oct 2026',
   'actual-sites-editor.png': '4 Oct 2026',
   'actual-sites-inquiries.png': '4 Oct 2026',
@@ -87,7 +85,9 @@ const interfaceCaptureDates = {
   'actual-commerce-catalog.png': '2 Oct 2026',
   'actual-commerce-order-request.png': '4 Oct 2026',
 }
-const interfaceDisclosure = (image) => `App capture · synthetic example records · captured ${interfaceCaptureDates[image]}`
+const interfaceDisclosure = (image) => shopGalleryProvenance.assets.includes(image)
+  ? 'Illustrative Shop app view · synthetic example records'
+  : `App capture · synthetic example records · captured ${interfaceCaptureDates[image]}`
 check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
@@ -144,7 +144,8 @@ for (const page of landingPages) {
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
   if (page.productId === 'shop') {
     check(html.includes('alt="Shop counter with searchable products, visible stock levels, and Add controls for a new sale"'), 'landing_shop_counter_capture_matches_sale_ready_state')
-    check(html.includes(`Shop &middot; Counter catalog and sale setup &middot; ${interfaceDisclosure('actual-shop-sell.png')}`), 'landing_shop_counter_capture_scope_truthful')
+    check(html.includes(`Shop &middot; Counter catalog and sale setup &middot; ${interfaceDisclosure('actual-shop-sell.png')}`), 'landing_shop_counter_sample_disclosure')
+    check(!html.includes('captured 11 Oct 2026'), 'landing_shop_capture_date_not_claimed')
   }
   if (page.productId === 'ecommerce') {
     check(html.includes('alt="Commerce catalog showing available products, local pricing and customer ordering"'), 'landing_commerce_catalog_capture_description')

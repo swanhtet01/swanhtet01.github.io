@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "supermega.shop-gallery-provenance.v1",
+  "status": "illustrative_only",
+  "records": "synthetic",
+  "captureSourceCommit": null,
+  "capturedAt": null,
+  "assets": [
+    "actual-shop-today.png",
+    "actual-shop-sell.png",
+    "actual-shop-orders.png"
+  ]
+}

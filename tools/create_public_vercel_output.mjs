@@ -35,6 +35,17 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+const shopGalleryProvenance = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'shop-gallery-provenance.json'), 'utf8'))
+const shopGalleryAssetNames = ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png']
+assert(shopGalleryProvenance.schemaVersion === 'supermega.shop-gallery-provenance.v1', 'shop_gallery_provenance_schema_unsupported')
+assert(shopGalleryProvenance.status === 'illustrative_only' && shopGalleryProvenance.records === 'synthetic', 'shop_gallery_provenance_status_invalid')
+assert(shopGalleryProvenance.captureSourceCommit === null && shopGalleryProvenance.capturedAt === null, 'illustrative_shop_gallery_must_not_claim_capture_provenance')
+assert(shopGalleryProvenance.assets?.join(',') === shopGalleryAssetNames.join(','), 'shop_gallery_asset_set_changed')
+const shopGalleryAssetEvidence = await Promise.all(shopGalleryAssetNames.map(async (file) => {
+  const bytes = await readFile(resolve(root, 'tools', 'public-assets', file))
+  return { file, sha256: createHash('sha256').update(bytes).digest('hex') }
+}))
+
 assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
 assert(manifest.brand?.version && manifest.contextVersion && manifest.catalogVersion, 'site_manifest_versions_missing')
 assert(manifest.customerProducts?.map((product) => product.id).join(',') === 'shop,plant,website,ecommerce', 'site_manifest_customer_product_order_changed')
@@ -101,6 +112,14 @@ const release = {
   contextVersion: manifest.contextVersion,
   catalogVersion: manifest.catalogVersion,
   generatedAt: new Date().toISOString(),
+  shopGalleryEvidence: {
+    schemaVersion: shopGalleryProvenance.schemaVersion,
+    status: shopGalleryProvenance.status,
+    records: shopGalleryProvenance.records,
+    captureSourceCommit: shopGalleryProvenance.captureSourceCommit,
+    capturedAt: shopGalleryProvenance.capturedAt,
+    assets: shopGalleryAssetEvidence,
+  },
 }
 
 const previewAppBinding = parsePreviewAppBinding(
@@ -598,9 +617,6 @@ const productOutcomes = {
  ],
 }
 const interfaceCaptureDates = {
- 'actual-shop-today.png': '11 Oct 2026',
- 'actual-shop-sell.png': '11 Oct 2026',
- 'actual-shop-orders.png': '11 Oct 2026',
  'actual-shop-stock.png': '2 Oct 2026',
  'actual-sites-editor.png': '4 Oct 2026',
  'actual-sites-inquiries.png': '4 Oct 2026',
@@ -610,6 +626,7 @@ const interfaceCaptureDates = {
  'actual-commerce-order-request.png': '4 Oct 2026',
 }
 function interfaceDisclosure(image) {
+ if (shopGalleryProvenance.assets.includes(image)) return 'Illustrative Shop app view · synthetic example records'
  const capturedAt=interfaceCaptureDates[image]
  assert(typeof capturedAt === 'string', `interface_capture_date_missing:${image}`)
  return `App capture · synthetic example records · captured ${capturedAt}`

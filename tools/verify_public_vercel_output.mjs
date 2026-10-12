@@ -409,6 +409,24 @@ for (const [key, value] of Object.entries({
 }
 if (!/^(?:[0-9a-f]{40}|preview-[a-z0-9-]{8,64}|unknown)$/.test(release.commit)) fail('release_commit_invalid', { commit: release.commit })
 if (!/^\d{4}-\d{2}-\d{2}T/.test(release.generatedAt)) fail('release_timestamp_invalid')
+const shopGalleryEvidence = release.shopGalleryEvidence
+const shopGalleryFiles = ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png']
+if (shopGalleryEvidence?.schemaVersion !== 'supermega.shop-gallery-provenance.v1'
+  || shopGalleryEvidence.status !== 'illustrative_only'
+  || shopGalleryEvidence.records !== 'synthetic'
+  || shopGalleryEvidence.captureSourceCommit !== null
+  || shopGalleryEvidence.capturedAt !== null
+  || shopGalleryEvidence.assets?.map((asset) => asset.file).join(',') !== shopGalleryFiles.join(',')) {
+  fail('shop_gallery_provenance_drift')
+}
+for (const asset of shopGalleryEvidence.assets) {
+  const path = resolve(staticDir, 'images', asset.file)
+  requireFile(path, `images/${asset.file}`)
+  const actualSha256 = createHash('sha256').update(readFileSync(path)).digest('hex')
+  if (!/^[0-9a-f]{64}$/.test(asset.sha256) || actualSha256 !== asset.sha256) {
+    fail('shop_gallery_asset_digest_mismatch', { file: asset.file })
+  }
+}
 
 const sitemap = readStatic('sitemap.xml')
 for (const page of manifest.pages) {
