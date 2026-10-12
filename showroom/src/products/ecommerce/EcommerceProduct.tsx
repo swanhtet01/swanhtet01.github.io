@@ -2396,8 +2396,8 @@ export function EcommerceProduct() {
               <input disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} />
             </label>
             <label>
-              <span>Description (optional)</span>
-              <textarea disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} rows={3} value={summary} />
+              <span>Description (required)</span>
+              <textarea disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={180} required onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} rows={3} value={summary} />
             </label>
           </div>
 
