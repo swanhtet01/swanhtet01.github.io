@@ -1,4 +1,4 @@
-import { managedPortalEntryPath, managedAccountRequestUrl } from '../showroom/src/core/account-routes.ts'
+import { managedAccountPath, managedPortalEntryPath } from '../showroom/src/core/account-routes.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -10,6 +10,7 @@ import { activeProductContracts } from '../showroom/src/core/product-visibility.
 
 const root = process.cwd()
 const manifestSource = readFileSync(resolve(root, 'site-manifest.json'), 'utf8')
+const coreShellSource = readFileSync(resolve(root, 'showroom', 'src', 'core', 'CoreShell.tsx'), 'utf8')
 const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
 if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
 const outputDir = isolatedOutputId
@@ -35,6 +36,19 @@ function check(condition, label) {
 
 function countOccurrences(source, token) {
   return source.split(token).length - 1
+}
+
+check(coreShellSource.includes("return managedAccountPath('/login', product)"), 'product_login_uses_shared_safe_route')
+for (const [intent, slug] of [
+  ['commerce', 'shop'],
+  ['shop', 'shop'],
+  ['production', 'plant'],
+  ['plant', 'plant'],
+  ['website', 'website'],
+  ['ecommerce', 'ecommerce'],
+]) {
+  check(managedAccountPath('/login', intent) === `/login?product=${slug}`, `product_login_route:${intent}`)
+  check(managedPortalEntryPath(slug) === `/${slug}/`, `product_login_completion_route:${slug}`)
 }
 
 const landingPages = manifest.pages.filter((page) => page.productId)
@@ -165,7 +179,16 @@ for (const page of landingPages) {
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
   }
-  check(!html.includes(`href="${product.appRoute}"`), `landing_no_direct_app_route:${page.route}`)
+  const expectedAppTarget = activeIds.includes(product.id) && product.status === 'available-in-app'
+    ? product.primaryCta?.url || product.appRoute
+    : null
+  if (expectedAppTarget) {
+    const expectedAppLabel = product.primaryCta?.label || `Open ${product.name}`
+    check(html.includes('class="home-contact product-action"'), `landing_available_product_action:${page.route}`)
+    check(html.includes(`href="${expectedAppTarget}">${expectedAppLabel}</a>`), `landing_available_product_destination:${page.route}`)
+  } else {
+    check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(html), `landing_unavailable_product_has_no_app_action:${page.route}`)
+  }
   check(html.includes('href="/contact/">Contact</a>') && html.includes('href="/privacy/">Privacy</a>'), `landing_footer_parity:${page.route}`)
   check(html.includes('aria-label="SuperMega home"'), `landing_home_navigation:${page.route}`)
 }
@@ -270,10 +293,18 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
   check(!body.includes('Current Shop') && !body.includes('Current Sites') && !body.includes('Current Commerce'), `capture_not_claimed_current:${route}`)
   check(!body.includes('Illustrative interface and records.'), `illustrative_mockups_absent:${route}`)
-  for (const forbidden of ['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
+  for (const forbidden of ['Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
     check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
   }
-  check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(body), `no_app_detours:${route}`)
+  const routeManifestProduct = routeProduct ? manifest.customerProducts.find(product => product.id === routeProduct) : null
+  const expectedAppTarget = routeManifestProduct?.status === 'available-in-app'
+    ? routeManifestProduct.primaryCta?.url || routeManifestProduct.appRoute
+    : null
+  const directAppLinks = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
+    .map(match => match[1])
+    .filter(target => target !== 'https://app.supermega.dev/login')
+  check(directAppLinks.length === Number(Boolean(expectedAppTarget)), `app_actions_match_release_state:${route}`)
+  if (expectedAppTarget) check(directAppLinks.includes(expectedAppTarget), `app_action_uses_manifest_destination:${route}`)
 }
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
 for (const id of activeIds) {

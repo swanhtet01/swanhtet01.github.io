@@ -656,12 +656,20 @@ const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePa
  content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Run in-store sales, your website and online orders from one clear platform.</p></section><div class="product-cards" id="products">${['shop','website','ecommerce'].map(id => productCard(id)).join('')}</div><section class="home-contact" aria-labelledby="home-contact-title"><div><h2 id="home-contact-title">Not sure where to start?</h2><p>Tell us how your business works today. We’ll help you choose the right product.</p></div><a class="button" href="/contact/">Contact SuperMega</a></section></main>`,
 })
 
+function productAction(product) {
+ if (product.status !== 'available-in-app') return ''
+ const target = product.primaryCta?.url || product.appRoute
+ assert(typeof target === 'string' && new URL(target).origin === 'https://app.supermega.dev', `product_action_target_invalid:${product.id}`)
+ const label = product.primaryCta?.label || `Open ${product.name}`
+ return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Ready to use ${escapeHtml(product.name)}?</h2><p>Open your SuperMega workspace to continue.</p></div><a class="button" href="${escapeHtml(target)}">${escapeHtml(label)}</a></section>`
+}
+
 function productLandingHtml(product,page) {
  const description=page.description||product.description
  const storyBody=escapeHtml(stories[product.id].body)
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
  schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>${stories[product.id].screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`})
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}${productAction(product)}<p class="platform-note">Part of the SuperMega platform.</p></main>${stories[product.id].screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`})
 }
 
 const contactScript = `<script>(function(){
