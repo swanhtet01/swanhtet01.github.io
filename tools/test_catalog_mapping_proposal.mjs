@@ -50,7 +50,7 @@ test('catalog differences and stock count mismatches show independent review rea
 
 test('Shop review preserves an omitted variant and reports the exact stock discrepancy', async () => {
   const { commerceCatalogImportReview } = await import('../showroom/src/core/commerce-workspace.ts')
-  const existing = { sku: 'CAFE-1', name: 'Myanmar tea', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
+  const existing = { sku: 'CAFE-1', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
   const review = commerceCatalogImportReview(existing, {
     sku: existing.sku,
     name: existing.name,
@@ -66,14 +66,14 @@ test('Shop review preserves an omitted variant and reports the exact stock discr
   assert.match(unchanged.message, /saved variant is preserved/)
 })
 
-test('local Shop import replay preserves an existing variant when the CSV has no variant column', async () => {
+test('local Shop replay preserves Burmese names and variants and blocks a conflicting same-SKU rename', async () => {
   const [{ createClientImportPreview, buildClientImportStagingPackage }, commerce, importer] = await Promise.all([
     import('../showroom/src/core/client-onboarding.ts'),
     import('../showroom/src/core/commerce-workspace.ts'),
     import('../showroom/src/core/local-client-import.ts'),
   ])
   const sourceDigest = `sha256:${'a'.repeat(64)}`
-  const existing = { sku: 'CAFE-1', name: 'Myanmar tea', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
+  const existing = { sku: 'CAFE-1', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
   const seed = commerce.importCommerceCatalog(commerce.createEmptyCommerce(), {
     items: [existing],
     sourceDigest,
@@ -99,9 +99,10 @@ test('local Shop import replay preserves an existing variant when the CSV has no
       value: { locks: { request: async (_name, _options, callback) => callback() } },
     })
     const preview = await createClientImportPreview(
-      'sku,item_name,opening_stock,reorder_at,price_mmk\nCAFE-1,Myanmar tea,12,3,1800',
+      'sku,item_name,opening_stock,reorder_at,price_mmk\nCAFE-1,မြန်မာ လက်ဖက်ရည်,12,3,1800',
       'commerce',
     )
+    assert.equal(preview.rows[0].values.name, 'မြန်မာ လက်ဖက်ရည်')
     const stagingPackage = buildClientImportStagingPackage(preview, {
       workflowTemplateId: preview.workflowTemplateId,
       workspace: 'Synthetic cafe',
@@ -110,7 +111,22 @@ test('local Shop import replay preserves an existing variant when the CSV has no
     const result = await importer.activateLocalStagingPackage(stagingPackage)
     assert.equal(result.created, 0)
     assert.equal(result.alreadyPresent, 1)
-    assert.equal(JSON.parse(storageValues.get(commerce.COMMERCE_KEY)).items[0].variant, 'Large')
+    const savedItem = JSON.parse(storageValues.get(commerce.COMMERCE_KEY)).items[0]
+    assert.equal(savedItem.name, 'မြန်မာ လက်ဖက်ရည်')
+    assert.equal(savedItem.variant, 'Large')
+
+    const beforeConflict = storageValues.get(commerce.COMMERCE_KEY)
+    const conflictPreview = await createClientImportPreview(
+      'sku,item_name,opening_stock,reorder_at,price_mmk\nCAFE-1,မြန်မာ လက်ဖက်ရည် အသစ်,12,3,1800',
+      'commerce',
+    )
+    const conflictPackage = buildClientImportStagingPackage(conflictPreview, {
+      workflowTemplateId: conflictPreview.workflowTemplateId,
+      workspace: 'Synthetic cafe',
+      owner: 'Synthetic reviewer',
+    })
+    await assert.rejects(() => importer.activateLocalStagingPackage(conflictPackage), /Nothing was written/)
+    assert.equal(storageValues.get(commerce.COMMERCE_KEY), beforeConflict)
   } finally {
     if (storageDescriptor) Object.defineProperty(globalThis, 'localStorage', storageDescriptor)
     else delete globalThis.localStorage
