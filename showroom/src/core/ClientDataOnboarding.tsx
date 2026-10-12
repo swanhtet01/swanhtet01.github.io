@@ -15,7 +15,11 @@ import {
 } from './client-onboarding'
 import { activateLocalStagingPackage } from './local-client-import'
 import { readCommerceWorkspace } from './commerce-workspace'
-import { classifyShopCatalogImportRows, SHOP_CATALOG_IMPORT_MAX_ROWS } from './shop-catalog-import'
+import {
+  classifyShopCatalogImportRows,
+  SHOP_CATALOG_IMPORT_MAX_ROWS,
+  summarizeShopCatalogImportReview,
+} from './shop-catalog-import'
 import {
   ManagedTrialError,
   applyManagedClientImport,
@@ -326,13 +330,26 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const catalogHasConflicts = !managedIdentity && Object.values(state.catalogReview).some((row) => row.kind === 'conflict')
   const catalogHasCapacityIssues = !managedIdentity && Object.values(state.catalogReview).some((row) => row.kind === 'capacity')
   const catalogHasBlockingIssues = catalogHasConflicts || catalogHasCapacityIssues
-  const catalogBlockingRowCount = Object.values(state.catalogReview).filter(catalogReviewBlocksImport).length
-  const catalogReadyRowCount = Math.max(0, (state.preview?.totals.ready ?? 0) - catalogBlockingRowCount)
+  const catalogReviewSummary = summarizeShopCatalogImportReview(
+    state.preview?.totals.ready ?? 0,
+    !managedIdentity && product === 'commerce' ? Object.values(state.catalogReview) : [],
+  )
+  const catalogBlockingRowCount = catalogReviewSummary.blockingRowCount
+  const catalogUnchangedRowCount = catalogReviewSummary.unchangedRowCount
+  const catalogReadyRowCount = catalogReviewSummary.readyRowCount
+  const catalogAlreadyCurrentOnly = Boolean(
+    !managedIdentity
+    && product === 'commerce'
+    && state.preview?.readyForStaging
+    && catalogReviewSummary.unchangedOnly
+    && !catalogHasBlockingIssues,
+  )
   const catalogIssueRowCount = (state.preview?.totals.issueRows ?? 0) + catalogBlockingRowCount
   const targetImportReady = Boolean(state.preview?.readyForStaging && !catalogHasBlockingIssues)
   const canApplyLocalImport = Boolean(
     localActivationAvailable
     && targetImportReady
+    && catalogReadyRowCount > 0
     && importContextReady
     && state.applyConfirmed
     && !state.applying
@@ -346,6 +363,8 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     ? 'Resolve the existing SKU conflicts below before importing.'
     : catalogHasCapacityIssues
     ? `Remove excess new rows to fit the ${SHOP_CATALOG_IMPORT_MAX_ROWS}-item Shop catalog limit.`
+    : catalogAlreadyCurrentOnly
+    ? 'Everything in this file already matches your Shop catalog.'
     : state.preview
       ? mappingNeedsReview
         ? 'Choose the missing required columns. Rows stay read-only until the mapping is clean.'
@@ -1055,8 +1074,10 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.preflighting || state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.preflighting ? 'Running final check...' : state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
           </> : null}
-          {localActivationAvailable && !catalogHasBlockingIssues && importContextReady && targetImportReady && !localAppliedIsCurrent ? <>
-            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {catalogReadyRowCount} {localRecordLabel} and approve adding them to my local {productName} workspace in this browser.</span></label>
+          {localActivationAvailable && !catalogHasBlockingIssues && catalogReadyRowCount > 0 && importContextReady && targetImportReady && !localAppliedIsCurrent ? <>
+            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>{catalogUnchangedRowCount
+              ? `I reviewed ${catalogReadyRowCount} new ${localRecordLabel}; ${catalogUnchangedRowCount} exact matches will stay unchanged. Approve adding only the new items to my local ${productName} workspace in this browser.`
+              : `I reviewed all ${catalogReadyRowCount} ${localRecordLabel} and approve adding them to my local ${productName} workspace in this browser.`}</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyLocalImport} onClick={() => void activateLocalImport()} type="button">{state.applying ? `Adding ${productName.toLowerCase()} records...` : `Add ${catalogReadyRowCount} ${localActionLabel}`}</button></div>
           </> : null}
           <div className="catalog-import-footer">

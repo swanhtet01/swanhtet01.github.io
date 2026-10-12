@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import type { CommerceState } from './commerce-workspace'
 import type { ShopProfitControlBoard } from './shop-profit-control'
 import type { ShopBatchProfitControlView } from './ShopTodayAdvanced'
+import { bi } from './i18n-actions'
 import { projectShopTodaySalesPulse } from './shop-today-sales'
 import { prioritizeShopTodayProducts } from './shop-today-priority'
 import { ProductPhoto } from './ProductPhoto'
@@ -162,7 +163,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
             <ProductPhoto className="shop-today-product-photo" fallback={<span aria-hidden="true" className="shop-today-product-fallback">{item.name.trim().slice(0, 1).toUpperCase()}</span>} scope={productImageScope} sku={item.sku} />
             <span><strong>{item.name}</strong><small>{item.onHand} in stock{item.onHand <= item.reorderAt ? ' · reorder' : ''}</small></span>
             <span><b>{formatMmk(item.price)}</b></span>
-          </Link>) : <div className="shop-operating-empty"><strong>No products to sell yet</strong><span>Add one item to start, or import a catalog.</span><Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link><Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Import a CSV <span aria-hidden="true">→</span></Link></div>}
+          </Link>) : <div className="shop-operating-empty"><strong>{bi('No products to sell yet')}</strong><span>{bi('Add one item to start, or import a catalog.')}</span><Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">{bi('Add first product')}</Link><Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">{bi('Import a CSV')} <span aria-hidden="true">→</span></Link></div>}
         </div>
         {commerce.items.length ? <footer><Link to="/shop/?tab=inventory">View products <span aria-hidden="true">→</span></Link></footer> : null}
       </article>

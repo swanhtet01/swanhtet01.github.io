@@ -40,6 +40,23 @@ export type ShopCatalogImportRow = {
   issues: ShopCatalogImportIssue[]
 }
 
+export type ShopCatalogImportReviewKind = 'new' | 'possible_match' | 'conflict' | 'unchanged' | 'capacity'
+
+export function summarizeShopCatalogImportReview(
+  readyRows: number,
+  reviewRows: readonly { kind: ShopCatalogImportReviewKind }[],
+) {
+  const blockingRowCount = reviewRows.filter((row) => row.kind === 'conflict' || row.kind === 'capacity').length
+  const unchangedRowCount = reviewRows.filter((row) => row.kind === 'unchanged').length
+  const readyRowCount = Math.max(0, readyRows - blockingRowCount - unchangedRowCount)
+  return {
+    readyRowCount,
+    unchangedRowCount,
+    blockingRowCount,
+    unchangedOnly: readyRows > 0 && readyRowCount === 0 && unchangedRowCount > 0 && blockingRowCount === 0,
+  }
+}
+
 export type ShopCatalogImportPreview = {
   schema: typeof SHOP_CATALOG_IMPORT_SCHEMA
   sourceName: string

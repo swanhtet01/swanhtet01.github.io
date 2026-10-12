@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import test from 'node:test'
 import { prepareManagedFirstCatalog } from '../showroom/src/core/shop-managed-first-catalog.ts'
+import { confirmedBurmese } from '../showroom/src/core/i18n-actions.ts'
+import { summarizeShopCatalogImportReview } from '../showroom/src/core/shop-catalog-import.ts'
 import {
   advanceCommerceOrder,
   createCommerceCatalogBaseline,
@@ -13,15 +15,61 @@ import {
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const root = resolve(import.meta.dirname, '..')
-const [core, today] = await Promise.all([
+const [core, today, onboarding] = await Promise.all([
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'ShopToday.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'core', 'ClientDataOnboarding.tsx'), 'utf8'),
 ])
 
 test('an empty Shop dashboard offers a direct first-product path and a separate CSV import', () => {
-  assert.match(today, /No products to sell yet[\s\S]*?to="\/shop\/\?tab=inventory#shop-catalog-create"[\s\S]*?Add first product[\s\S]*?to="\/shop\/\?tab=inventory#shop-catalog-import"[\s\S]*?Import a CSV/)
+  assert.ok(today.includes("bi('No products to sell yet')"))
+  assert.ok(today.includes("bi('Add one item to start, or import a catalog.')"))
+  assert.ok(today.includes("bi('Add first product')"))
+  assert.ok(today.includes("bi('Import a CSV')"))
+  assert.match(today, /to="\/shop\/\?tab=inventory#shop-catalog-create"[\s\S]*?to="\/shop\/\?tab=inventory#shop-catalog-import"/)
   assert.match(core, /id="shop-catalog-create"/)
   assert.match(core, /commerceLocation\.hash === '#shop-catalog-create'[\s\S]*?setCatalogCreateOpen\(true\)/)
+})
+
+test('approved Burmese Shop empty-state copy renders beside the English labels', () => {
+  const approved = new Map([
+    ['No products to sell yet', 'ရောင်းရန်ပစ္စည်း မရှိသေးပါ'],
+    ['Add one item to start, or import a catalog.', 'စတင်ရန် ပစ္စည်းတစ်ခု ထည့်ပါ၊ သို့မဟုတ် စာရင်းကို တင်သွင်းပါ။'],
+    ['Add first product', 'ပထမဆုံးပစ္စည်း ထည့်ရန်'],
+    ['Import a CSV', 'CSV ဖိုင် တင်သွင်းရန်'],
+  ])
+  for (const [english, burmese] of approved) assert.equal(confirmedBurmese(english), burmese)
+})
+
+test('catalog import keeps unchanged items out of the write and disables a no-op import', () => {
+  const mixed = summarizeShopCatalogImportReview(3, [
+    { kind: 'new' },
+    { kind: 'unchanged' },
+    { kind: 'possible_match' },
+  ])
+  assert.equal(mixed.readyRowCount, 2)
+  assert.equal(mixed.unchangedRowCount, 1)
+  assert.equal(mixed.blockingRowCount, 0)
+  assert.equal(mixed.unchangedOnly, false)
+
+  const unchangedOnly = summarizeShopCatalogImportReview(2, [
+    { kind: 'unchanged' },
+    { kind: 'unchanged' },
+  ])
+  assert.equal(unchangedOnly.readyRowCount, 0)
+  assert.equal(unchangedOnly.unchangedRowCount, 2)
+  assert.equal(unchangedOnly.unchangedOnly, true)
+
+  const conflict = summarizeShopCatalogImportReview(2, [
+    { kind: 'new' },
+    { kind: 'conflict' },
+  ])
+  assert.equal(conflict.blockingRowCount, 1)
+  assert.equal(conflict.unchangedOnly, false)
+
+  assert.match(onboarding, /&& catalogReadyRowCount > 0\s*&& importContextReady/)
+  assert.match(onboarding, /Everything in this file already matches your Shop catalog\./)
+  assert.match(onboarding, /exact matches will stay unchanged\. Approve adding only the new items/)
 })
 
 test('first product setup keeps required data minimal and continues to Counter after review', () => {
