@@ -313,7 +313,11 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     && !state.applying
     && !appliedIsCurrent,
   )
-  const catalogHasConflicts = !managedIdentity && Object.values(state.catalogReview).some((row) => row.conflict)
+  const catalogConflictCount = !managedIdentity
+    ? Object.values(state.catalogReview).filter((row) => row.conflict).length
+    : 0
+  const catalogHasConflicts = catalogConflictCount > 0
+  const catalogReadyRowCount = state.preview?.rows.filter((row) => row.status === 'ready' && !state.catalogReview[row.rowNumber]?.conflict).length ?? 0
   const canApplyLocalImport = Boolean(
     localActivationAvailable
     && !catalogHasConflicts
@@ -968,7 +972,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           </details>
 
           {state.preview.fileIssues.length ? <ul className="catalog-import-file-issues">{state.preview.fileIssues.map((issue) => <li key={`${issue.code}-${issue.field}`}>{issue.message}</li>)}</ul> : null}
-          {catalogHasConflicts ? <p className="form-error" role="alert">Some SKUs already exist with different values. No products will be imported until these conflicts are resolved.</p> : null}
+          {catalogHasConflicts ? <p className="form-error" role="alert">{catalogConflictCount} existing SKU conflict{catalogConflictCount === 1 ? '' : 's'} block this import. {catalogReadyRowCount > 0 ? `${catalogReadyRowCount} other row${catalogReadyRowCount === 1 ? '' : 's'} passed checks, but ` : ''}No products will be imported until the conflicts are resolved.</p> : null}
           <details className="catalog-import-row-review" open={state.preview.totals.issueRows > 0 || catalogHasConflicts || undefined}>
             <summary><span>Review rows</span><small>{catalogHasConflicts ? 'Existing products need review' : state.preview.totals.issueRows ? `${state.preview.totals.issueRows} need attention` : 'All rows passed'}</small></summary>
             <div className="catalog-import-table" role="table" aria-label={`${object.label} import preview`}>
