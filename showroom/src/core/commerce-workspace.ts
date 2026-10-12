@@ -7084,6 +7084,28 @@ export function commerceCatalogImportReview(existing: CommerceItem, incoming: Co
   }
 }
 
+export function commerceCatalogImportPreviewReview(
+  existingItems: CommerceItem[],
+  rows: Array<{ rowNumber: number; status: string; values: Record<string, string> }>,
+): Record<number, { conflict: boolean; message: string }> {
+  const existingBySku = new Map(existingItems.map((item) => [item.sku, item]))
+  const review: Record<number, { conflict: boolean; message: string }> = {}
+  for (const row of rows) {
+    if (row.status !== 'ready') continue
+    const existing = existingBySku.get(row.values.sku)
+    if (!existing) continue
+    review[row.rowNumber] = commerceCatalogImportReview(existing, {
+      sku: row.values.sku,
+      name: row.values.name,
+      variant: row.values.variant,
+      onHand: Number(row.values.onHand),
+      reorderAt: Number(row.values.reorderAt),
+      price: Number(row.values.price),
+    })
+  }
+  return review
+}
+
 export function importCommerceCatalog(stateValue: CommerceState, input: {
   items: CommerceItem[]
   sourceDigest: string

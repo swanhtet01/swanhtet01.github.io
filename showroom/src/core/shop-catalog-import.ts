@@ -136,6 +136,7 @@ function itemFromValues(values: Record<string, string>): CommerceItem {
   return {
     sku: values.sku,
     name: values.name,
+    ...(values.variant ? { variant: values.variant } : {}),
     onHand: Number(values.onHand),
     reorderAt: Number(values.reorderAt),
     price: Number(values.price),
@@ -145,6 +146,7 @@ function itemFromValues(values: Record<string, string>): CommerceItem {
 function sameImportedValues(existing: CommerceItem, item: CommerceItem) {
   return existing.sku === item.sku
     && existing.name === item.name
+    && existing.variant === (item.variant || existing.variant)
     && existing.onHand === item.onHand
     && existing.reorderAt === item.reorderAt
     && existing.price === item.price
@@ -162,6 +164,7 @@ function existingCatalogConflictIssues(existing: CommerceItem, item: CommerceIte
 
   const changedCatalogFields = [
     existing.name !== item.name ? 'item name' : '',
+    item.variant && existing.variant !== item.variant ? 'variant' : '',
     existing.reorderAt !== item.reorderAt ? 'reorder level' : '',
     existing.price !== item.price ? 'price' : '',
   ].filter(Boolean)
@@ -220,13 +223,13 @@ export async function createShopCatalogImportPreview(
   selectedMapping?: ShopCatalogImportMapping,
   sourceName = 'catalog.csv',
 ): Promise<ShopCatalogImportPreview> {
-  const shared = await createClientImportPreview(
-    csvText,
-    'commerce',
-    selectedMapping as ClientImportMapping | undefined,
-    sourceName,
-    'social-commerce',
-  )
+  const detected = await createClientImportPreview(csvText, 'commerce', undefined, sourceName, 'social-commerce')
+  const selectedWithDetectedVariant = selectedMapping
+    ? { ...selectedMapping, variant: detected.mapping.variant }
+    : undefined
+  const shared = selectedMapping
+    ? await createClientImportPreview(csvText, 'commerce', selectedWithDetectedVariant as ClientImportMapping, sourceName, 'social-commerce')
+    : detected
   const rows: ShopCatalogImportRow[] = shared.rows.map((row) => ({
     rowNumber: row.rowNumber,
     status: row.status,
@@ -250,7 +253,13 @@ export async function createShopCatalogImportPreview(
     catalogDigest,
     catalogSignature,
     headers: shared.headers,
-    mapping: shared.mapping as ShopCatalogImportMapping,
+    mapping: {
+      sku: shared.mapping.sku,
+      name: shared.mapping.name,
+      onHand: shared.mapping.onHand,
+      reorderAt: shared.mapping.reorderAt,
+      price: shared.mapping.price,
+    },
     suggestions: shared.suggestions.map((suggestion) => ({
       ...suggestion,
       field: suggestion.field as ShopCatalogImportField,

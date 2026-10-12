@@ -14,7 +14,7 @@ import {
   type ClientSolutionId,
 } from './client-onboarding'
 import { activateLocalStagingPackage } from './local-client-import'
-import { commerceCatalogImportReview, readCommerceWorkspace } from './commerce-workspace'
+import { commerceCatalogImportPreviewReview, readCommerceWorkspace } from './commerce-workspace'
 import {
   ManagedTrialError,
   applyManagedClientImport,
@@ -495,19 +495,11 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     try {
       const preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
       if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
-      const catalogReview: ImportState['catalogReview'] = {}
+      let catalogReview: ImportState['catalogReview'] = {}
       if (expectedProduct === 'commerce' && !managedIdentityRef.current) {
         const catalog = readCommerceWorkspace()
         if (catalog.error) throw new Error(catalog.error)
-        for (const row of preview.rows) {
-          if (row.status !== 'ready') continue
-          const existing = catalog.state.items.find((item) => item.sku === row.values.sku)
-          if (!existing) continue
-          catalogReview[row.rowNumber] = commerceCatalogImportReview(existing, {
-            sku: row.values.sku, name: row.values.name,
-            onHand: Number(row.values.onHand), reorderAt: Number(row.values.reorderAt), price: Number(row.values.price),
-          })
-        }
+        catalogReview = commerceCatalogImportPreviewReview(catalog.state.items, preview.rows)
       }
       setState({ ...emptyImportState(), sourceName, sourceText, preview, catalogReview })
       if (!mapping) window.requestAnimationFrame(() => previewRef.current?.focus())

@@ -78,6 +78,38 @@ test('Shop review preserves an omitted variant and reports the exact stock discr
   assert.match(unchanged.message, /saved variant is preserved/)
 })
 
+test('Shop import preview blocks a mapped variant change for an existing SKU', async () => {
+  const [{ createClientImportPreview }, { commerceCatalogImportPreviewReview }] = await Promise.all([
+    import('../showroom/src/core/client-onboarding.ts'),
+    import('../showroom/src/core/commerce-workspace.ts'),
+  ])
+  const existing = { sku: 'CAFE-1', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
+  const preview = await createClientImportPreview(
+    'sku,item_name,variant,opening_stock,reorder_at,price_mmk\nCAFE-1,မြန်မာ လက်ဖက်ရည်,Small,12,3,1800',
+    'commerce',
+  )
+  const review = commerceCatalogImportPreviewReview([existing], preview.rows)
+  assert.equal(preview.rows[0].status, 'ready')
+  assert.equal(preview.rows[0].values.variant, 'Small')
+  assert.equal(review[preview.rows[0].rowNumber].conflict, true)
+  assert.match(review[preview.rows[0].rowNumber].message, /variant \(Shop: "Large"; file: "Small"\)/)
+})
+
+test('standalone Shop catalog import preserves optional variants and blocks a changed existing variant', async () => {
+  const existing = { sku: 'CAFE-1', name: 'Myanmar tea', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
+  const source = 'sku,item_name,variant,opening_stock,reorder_at,price_mmk\nCAFE-1,Myanmar tea,Small,12,3,1800'
+  const preview = await createShopCatalogImportPreview(source, [existing])
+  assert.equal(preview.rows[0].status, 'conflict')
+  assert.deepEqual(preview.rows[0].issues.map(({ code, field }) => ({ code, field })), [
+    { code: 'existing_sku_conflict', field: 'sku' },
+  ])
+  assert.match(preview.rows[0].issues[0].message, /variant/)
+  assert.equal((await reviewCatalogMappingProposal(source, [existing], {
+    sourceDigest: preview.sourceDigest,
+    mapping: preview.mapping,
+  })).reason, 'import_validation_failed')
+})
+
 test('local Shop replay preserves Burmese names and variants and blocks a conflicting same-SKU rename', async () => {
   const [{ createClientImportPreview, buildClientImportStagingPackage }, commerce, importer] = await Promise.all([
     import('../showroom/src/core/client-onboarding.ts'),
@@ -126,6 +158,21 @@ test('local Shop replay preserves Burmese names and variants and blocks a confli
     const savedItem = JSON.parse(storageValues.get(commerce.COMMERCE_KEY)).items[0]
     assert.equal(savedItem.name, 'မြန်မာ လက်ဖက်ရည်')
     assert.equal(savedItem.variant, 'Large')
+
+    const variantPreview = await createClientImportPreview(
+      'sku,item_name,variant,opening_stock,reorder_at,price_mmk\nCAFE-2,လက်ဖက်စိမ်း,Small,8,2,2200',
+      'commerce',
+    )
+    assert.equal(variantPreview.rows[0].status, 'ready')
+    const variantPackage = buildClientImportStagingPackage(variantPreview, {
+      workflowTemplateId: variantPreview.workflowTemplateId,
+      workspace: 'Synthetic cafe',
+      owner: 'Synthetic reviewer',
+    })
+    const variantResult = await importer.activateLocalStagingPackage(variantPackage)
+    assert.equal(variantResult.created, 1)
+    const savedVariant = JSON.parse(storageValues.get(commerce.COMMERCE_KEY)).items.find((item) => item.sku === 'CAFE-2')
+    assert.equal(savedVariant.variant, 'Small')
 
     const beforeConflict = storageValues.get(commerce.COMMERCE_KEY)
     const conflictPreview = await createClientImportPreview(
