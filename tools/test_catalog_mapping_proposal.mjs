@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createShopCatalogImportPreview } from '../showroom/src/core/shop-catalog-import.ts'
+import { createShopCatalogImportPreview, shopCatalogImportErrorsCsv } from '../showroom/src/core/shop-catalog-import.ts'
 import { reviewCatalogMappingProposal } from '../showroom/src/core/catalog-mapping-proposal.ts'
 
 const csv = 'sku,name,stock,reorder_at,amount\nSYN-1,Synthetic item,5,1,1200'
@@ -18,6 +18,34 @@ test('stale source and added values are rejected', async () => {
   const p = await proposalFor()
   assert.equal((await reviewCatalogMappingProposal(csv.replace('1200', '1300'), [], p)).reason, 'source_changed')
   assert.equal((await reviewCatalogMappingProposal(csv, [], { ...p, values: { price: 1 } })).reason, 'unexpected_proposal_field')
+})
+
+test('existing stock count mismatches are explicit and remain blocked before import', async () => {
+  const existing = [{ sku: 'SYN-1', name: 'Synthetic item', onHand: 3, reorderAt: 1, price: 1200 }]
+  const proposal = await proposalFor()
+  const preview = await createShopCatalogImportPreview(csv, existing, proposal.mapping)
+  assert.equal(preview.rows[0].status, 'conflict')
+  assert.equal(preview.totals.ready, 0)
+  assert.equal(preview.totals.conflicts, 1)
+  assert.deepEqual(preview.rows[0].issues.map(({ code, field }) => ({ code, field })), [
+    { code: 'existing_stock_count_mismatch', field: 'onHand' },
+  ])
+  assert.match(preview.rows[0].issues[0].message, /currently has 3 on hand; this file says 5/)
+  const repairCsv = shopCatalogImportErrorsCsv(preview)
+  assert.match(repairCsv, /existing_stock_count_mismatch/)
+  assert.match(repairCsv, /currently has 3 on hand; this file says 5/)
+  assert.equal((await reviewCatalogMappingProposal(csv, existing, proposal)).reason, 'import_validation_failed')
+})
+
+test('catalog differences and stock count mismatches show independent review reasons', async () => {
+  const existing = [{ sku: 'SYN-1', name: 'Older name', onHand: 3, reorderAt: 0, price: 900 }]
+  const preview = await createShopCatalogImportPreview(csv, existing, (await proposalFor()).mapping)
+  assert.equal(preview.rows[0].status, 'conflict')
+  assert.deepEqual(preview.rows[0].issues.map(({ code, field }) => ({ code, field })), [
+    { code: 'existing_stock_count_mismatch', field: 'onHand' },
+    { code: 'existing_sku_conflict', field: 'sku' },
+  ])
+  assert.match(preview.rows[0].issues[1].message, /item name, reorder level, price/)
 })
 test('model cannot resolve competing quantity columns', async () => {
   const source = csv.replace('stock,reorder_at', 'stock,quantity,reorder_at').replace(',5,1,', ',5,50,1,')

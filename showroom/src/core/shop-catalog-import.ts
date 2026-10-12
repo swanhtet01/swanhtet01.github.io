@@ -150,6 +150,31 @@ function sameImportedValues(existing: CommerceItem, item: CommerceItem) {
     && existing.price === item.price
 }
 
+function existingCatalogConflictIssues(existing: CommerceItem, item: CommerceItem): ShopCatalogImportIssue[] {
+  const issues: ShopCatalogImportIssue[] = []
+  if (existing.onHand !== item.onHand) {
+    issues.push({
+      code: 'existing_stock_count_mismatch',
+      field: 'onHand',
+      message: `${item.sku}: Shop currently has ${existing.onHand} on hand; this file says ${item.onHand}. Catalog import does not update existing stock. Reconcile the count in Shop first.`,
+    })
+  }
+
+  const changedCatalogFields = [
+    existing.name !== item.name ? 'item name' : '',
+    existing.reorderAt !== item.reorderAt ? 'reorder level' : '',
+    existing.price !== item.price ? 'price' : '',
+  ].filter(Boolean)
+  if (changedCatalogFields.length) {
+    issues.push({
+      code: 'existing_sku_conflict',
+      field: 'sku',
+      message: `${item.sku} already exists with different ${changedCatalogFields.join(', ')}. Catalog import does not replace existing items.`,
+    })
+  }
+  return issues
+}
+
 function classifyAgainstCatalog(rows: ShopCatalogImportRow[], existingCatalog: CommerceItem[]) {
   const existingBySku = new Map(existingCatalog.map((item) => [item.sku, item]))
   for (const row of rows) {
@@ -161,7 +186,7 @@ function classifyAgainstCatalog(rows: ShopCatalogImportRow[], existingCatalog: C
       row.issues.push({ code: 'already_exists', field: 'sku', message: `${row.item.sku} already has these exact catalog values.` })
     } else {
       row.status = 'conflict'
-      row.issues.push({ code: 'existing_sku_conflict', field: 'sku', message: `${row.item.sku} already exists with different catalog values.` })
+      row.issues.push(...existingCatalogConflictIssues(existing, row.item))
     }
   }
 
