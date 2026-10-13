@@ -76,6 +76,13 @@ test('Shop review preserves an omitted variant and reports the exact stock discr
   const unchanged = commerceCatalogImportReview(existing, { ...existing, variant: undefined })
   assert.equal(unchanged.conflict, false)
   assert.match(unchanged.message, /saved variant is preserved/)
+  const blank = commerceCatalogImportReview(existing, { ...existing, variant: '' })
+  assert.equal(blank.conflict, false)
+  assert.match(blank.message, /saved variant is preserved/)
+  const noVariant = { sku: 'CAFE-2', name: 'Green tea', onHand: 8, reorderAt: 2, price: 1500 }
+  const blankWithoutSavedVariant = commerceCatalogImportReview(noVariant, { ...noVariant, variant: '' })
+  assert.equal(blankWithoutSavedVariant.conflict, false)
+  assert.match(blankWithoutSavedVariant.message, /Already current/)
 })
 
 test('Shop catalog preview detects a variant change without widening the shared onboarding contract', async () => {
@@ -120,6 +127,20 @@ test('Shop variant columns must be unambiguous and safe', async () => {
   assert.equal(unsafe.rows[0].status, 'invalid')
   assert.equal(unsafe.rows[0].item, null)
   assert.equal(unsafe.rows[0].issues[0].field, 'variant')
+})
+
+test('Shop detects common English and Burmese color variant headers', async () => {
+  const { createShopCatalogImportPreview } = await import('../showroom/src/core/shop-catalog-import.ts')
+  const english = await createShopCatalogImportPreview(
+    'sku,item_name,color,opening_stock,reorder_at,price_mmk\nCAFE-1,Tea,Red,12,3,1800',
+    [],
+  )
+  const burmese = await createShopCatalogImportPreview(
+    'sku,item_name,အရောင်,opening_stock,reorder_at,price_mmk\nCAFE-1,Tea,အနီ,12,3,1800',
+    [],
+  )
+  assert.equal(english.rows[0].item.variant, 'Red')
+  assert.equal(burmese.rows[0].item.variant, 'အနီ')
 })
 
 test('Shop preview retains detected option values for row-by-row review', async () => {

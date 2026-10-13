@@ -69,7 +69,7 @@ export type ShopCatalogImportPreview = {
 
 const formulaPrefix = /^[=+\-@]/
 const shopFieldSet = new Set<string>(shopCatalogImportFields)
-const shopVariantAliases = new Set(['variant', 'product_variant', 'size', 'flavor', 'option', 'အမျိုးအစား'].map(normalizeClientImportHeader))
+const shopVariantAliases = new Set(['variant', 'product_variant', 'size', 'product_size', 'flavor', 'option', 'color', 'colour', 'product_color', 'product_colour', 'အမျိုးအစား', 'အရောင်', 'အရွယ်အစား'].map(normalizeClientImportHeader))
 const shopVariantField: ClientImportField = { id: 'variant', label: 'Variant', required: false, kind: 'text', aliases: [], maximum: 120 }
 
 function shopVariantHeader(headers: string[]) {
@@ -198,9 +198,12 @@ function existingCatalogConflictIssues(existing: CommerceItem, item: CommerceIte
 }
 
 export function commerceCatalogImportReview(existing: CommerceItem, incoming: CommerceItem) {
-  const preserveExistingVariant = !incoming.variant && Boolean(existing.variant)
-  const comparable = preserveExistingVariant ? { ...incoming, variant: existing.variant } : incoming
-  const differences = commerceCatalogImportDifferences(existing, comparable)
+  const existingVariant = existing.variant?.trim() || undefined
+  const incomingVariant = incoming.variant?.trim() ? incoming.variant : undefined
+  const preserveExistingVariant = !incomingVariant && Boolean(existingVariant)
+  const current = { ...existing, variant: existingVariant }
+  const comparable = { ...incoming, variant: incomingVariant ?? existingVariant }
+  const differences = commerceCatalogImportDifferences(current, comparable)
   const labels: Record<(typeof shopCatalogImportFields)[number] | 'variant', string> = {
     sku: 'SKU',
     name: 'name',
@@ -211,7 +214,7 @@ export function commerceCatalogImportReview(existing: CommerceItem, incoming: Co
   }
   const details = differences.map((field) => {
     if (field === 'onHand') return `stock (Shop has ${existing.onHand} on hand; file says ${incoming.onHand})`
-    const currentValue = JSON.stringify(existing[field]) ?? '—'
+    const currentValue = JSON.stringify(current[field]) ?? '—'
     const incomingValue = JSON.stringify(comparable[field]) ?? '—'
     return `${labels[field]} (Shop: ${currentValue}; file: ${incomingValue})`
   })

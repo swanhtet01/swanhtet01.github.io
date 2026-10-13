@@ -1000,8 +1000,18 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           <details className="catalog-import-row-review" open={state.preview.rows.length > 12 || state.preview.totals.issueRows > 0 || catalogHasConflicts || undefined}>
             <summary><span>Review rows</span><small>{catalogHasConflicts ? 'Existing products need review' : state.preview.totals.issueRows ? `${state.preview.totals.issueRows} need attention` : 'All rows passed'}</small></summary>
             <div className="catalog-import-table" role="table" aria-label={`${object.label} import preview`}>
-              <div className="catalog-import-row catalog-import-head" role="row"><span>Row</span><span>Key</span><span>Status</span><span>{variantHeader ? 'Details and variant' : 'What to fix'}</span></div>
-              {visibleRows.map((row) => <div className="catalog-import-row" data-result={row.status} key={row.rowNumber} role="row"><span>{row.rowNumber}</span><strong>{row.key || '-'}</strong><span>{state.catalogReview[row.rowNumber]?.conflict ? 'Conflict' : state.catalogReview[row.rowNumber] ? 'Unchanged' : rowStatusLabels[row.status] ?? row.status}</span><small>{row.issues.map((issue) => issue.message).join(' / ') || state.catalogReview[row.rowNumber]?.message || 'Mapped and checked'}{variantHeader ? <><br />Variant: {row.values.variant || '(blank)'}</> : null}</small></div>)}
+              <div className="catalog-import-row catalog-import-head" role="row"><span role="columnheader">Row</span><span role="columnheader">Key</span><span role="columnheader">Status</span><span role="columnheader">{variantHeader ? 'Imported values, variant, and checks' : 'Imported values and checks'}</span></div>
+              {visibleRows.map((row) => {
+                const importedValues = state.preview!.fields
+                  .filter((field) => Boolean(state.preview!.mapping[field.id]) && field.id !== 'variant')
+                  .map((field) => `${field.label}: ${row.values[field.id] ?? '—'}`)
+                if (variantHeader) importedValues.push(`Variant: ${row.values.variant || '(blank)'}`)
+                const rowNotes = [
+                  ...row.issues.map((issue) => issue.message),
+                  state.catalogReview[row.rowNumber]?.message ?? '',
+                ].filter(Boolean)
+                return <div className="catalog-import-row" data-result={row.status} key={row.rowNumber} role="row"><span role="cell">{row.rowNumber}</span><strong role="cell">{row.key || '-'}</strong><span role="cell">{state.catalogReview[row.rowNumber]?.conflict ? 'Conflict' : state.catalogReview[row.rowNumber] ? 'Unchanged' : rowStatusLabels[row.status] ?? row.status}</span><small role="cell">{[...importedValues, ...rowNotes].join(' · ') || 'Mapped and checked'}</small></div>
+              })}
             </div>
             {state.preview.rows.length > 12 ? <>
               <p className="panel-copy">Showing {visibleRows.length} of {state.preview.rows.length} import rows.</p>
