@@ -763,14 +763,8 @@ export function EcommerceProduct() {
       setOrderImportReview(buildOrderImportReview(orderImportText))
       setOrderImportNotice('Order import batch reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.')
     } catch (error) {
-      setOrderImportReview({
-        status: 'blocked',
-        totalRows: 0,
-        readyRows: 0,
-        blockedRows: 0,
-        summary: error instanceof Error ? error.message : 'Order CSV could not be reviewed locally.',
-      })
-      setOrderImportNotice('Order import batch rejected locally. No Shop or customer action ran.')
+      setOrderImportReview(null)
+      setOrderImportNotice(`Order import batch rejected locally: ${error instanceof Error ? error.message : 'Order CSV could not be reviewed locally.'} No Shop or customer action ran.`)
     }
   }
 
@@ -804,14 +798,8 @@ export function EcommerceProduct() {
       setOrderImportNotice(`Uploaded ${file.name} and reviewed it locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.`)
     } catch (error) {
       setOrderImportText('')
-      setOrderImportReview({
-        status: 'blocked',
-        totalRows: 0,
-        readyRows: 0,
-        blockedRows: 0,
-        summary: error instanceof Error ? error.message : 'Uploaded order CSV could not be reviewed locally.',
-      })
-      setOrderImportNotice('Uploaded order CSV was rejected locally. No Shop or customer action ran.')
+      setOrderImportReview(null)
+      setOrderImportNotice(`Uploaded order CSV was rejected locally: ${error instanceof Error ? error.message : 'Uploaded order CSV could not be reviewed locally.'} No Shop or customer action ran.`)
     }
   }
 
@@ -2141,7 +2129,7 @@ export function EcommerceProduct() {
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
           </div>
-          <details className="ecommerce-order-import-workspace" open={orderImportText || orderImportReview ? true : undefined}>
+          <details className="ecommerce-order-import-workspace" open={orderImportText || orderImportReview || orderImportNotice ? true : undefined}>
             <summary><span>Review an order batch</span><small>Upload CSV or paste channel orders only when needed.</small></summary>
             <div aria-label="Order batch review workspace" className="ecommerce-order-import-workspace-body">
               <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">

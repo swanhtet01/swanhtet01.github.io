@@ -1001,10 +1001,10 @@ if (!ecommerceSource.includes('const orderOpsRows = [')
   || !ecommerceSource.includes('Download Ecommerce order import review packet')
   || !ecommerceSource.includes('Order import template downloaded. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.')
   || !ecommerceSource.includes('Order import batch reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.')
-  || !ecommerceSource.includes('Order import batch rejected locally. No Shop or customer action ran.')
+  || !ecommerceSource.includes('Order import batch rejected locally: ${error instanceof Error ? error.message')
   || !ecommerceSource.includes('Uploaded ${file.name} and reviewed it locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.')
   || !ecommerceSource.includes('Order CSV is too large. Upload at most 180 KB or split the file into 50-row batches. No Shop or customer action ran.')
-  || !ecommerceSource.includes('Uploaded order CSV was rejected locally. No Shop or customer action ran.')
+  || !ecommerceSource.includes('Uploaded order CSV was rejected locally: ${error instanceof Error ? error.message')
   || !ecommerceSource.includes('Order import review file downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or go-live action ran.')
   || ecommerceSource.includes('Order import review packet downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or managed activation ran.')
   || !ecommerceSource.includes('aria-label="Import customer orders"')
@@ -11191,6 +11191,31 @@ async function verifyManagedClientImportRuntime() {
       generatedAt: '2026-07-29T01:01:00.000Z',
       reviewPacket: orderReviewPacket,
     })
+    assert(orderQueuePacket.readiness.status === 'ready_for_support' && orderQueuePacket.sourceReview.readyRows === 2, 'valid_ecommerce_order_queue_not_ready_for_support')
+    const rejectedCsvReview = {
+      ...orderReviewPacket,
+      review: {
+        status: 'blocked',
+        totalRows: 0,
+        readyRows: 0,
+        blockedRows: 0,
+        summary: 'Missing columns: customer_reference.',
+      },
+      sourceCsv: 'wrong_header\nDaw Mya\n',
+    }
+    rejects(() => orderPacketModel.buildEcommerceOrderImportReviewPacket(rejectedCsvReview), 'rejected_ecommerce_order_csv_exported_as_review_packet')
+    rejects(() => orderPacketModel.validateEcommerceOrderImportReviewPacket({
+      ...rejectedCsvReview,
+      review: { ...rejectedCsvReview.review, status: 'ready' },
+    }), 'empty_ecommerce_order_review_marked_ready')
+    rejects(() => orderPacketModel.validateEcommerceOrderImportReviewPacket({
+      ...orderReviewPacket,
+      review: { ...orderReviewPacket.review, status: 'blocked' },
+    }), 'blocked_ecommerce_order_review_without_blocked_rows_accepted')
+    rejects(() => orderPacketModel.validateEcommerceOrderQueueReadinessPacket({
+      ...orderQueuePacket,
+      sourceReview: { ...orderQueuePacket.sourceReview, totalRows: 0, readyRows: 0, blockedRows: 0 },
+    }), 'empty_ecommerce_order_queue_marked_ready_for_support')
     const orderQueueValidation = managedTrial.buildManagedEcommerceOrderQueueValidation(orderQueuePacket, identity)
     assert(orderQueueValidation.contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'
       && orderQueueValidation.status === 'ready_for_owner_review'
@@ -11330,7 +11355,23 @@ async function verifyManagedClientImportRuntime() {
       generatedAt: '2026-07-29T01:02:00.000Z',
       reviewPacket: blockedOrderReviewPacket,
     })
+    assert(blockedOrderQueuePacket.readiness.status === 'blocked_for_repair', 'blocked_ecommerce_order_queue_marked_ready_for_support')
     assert(managedTrial.buildManagedEcommerceOrderQueueValidation(blockedOrderQueuePacket, identity).status === 'blocked', 'managed_ecommerce_order_queue_blocked_packet_marked_ready')
+    const allBlockedOrderReviewPacket = orderPacketModel.buildEcommerceOrderImportReviewPacket({
+      ...orderReviewPacket,
+      review: {
+        status: 'blocked',
+        totalRows: 1,
+        readyRows: 0,
+        blockedRows: 1,
+        summary: '1 row needs repair.',
+      },
+      sourceCsv: 'customer_reference,channel,sku,quantity,fulfilment,payment,source_message\nDaw Mya,viber,UNKNOWN,1,delivery,manual_review,Viber retained\n',
+    })
+    assert(orderPacketModel.buildEcommerceOrderQueueReadinessPacket({
+      generatedAt: '2026-07-29T01:02:00.000Z',
+      reviewPacket: allBlockedOrderReviewPacket,
+    }).readiness.status === 'blocked_for_repair', 'all_blocked_ecommerce_order_queue_rejected')
     for (const [label, changed] of [
       ['workspace', { ...orderQueueValidation, workspace_id: 'workspace-other' }],
       ['writes', { ...orderQueueValidation, external_writes_performed: true }],

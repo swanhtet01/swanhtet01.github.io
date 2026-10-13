@@ -163,8 +163,14 @@ export function validateEcommerceOrderImportReviewPacket(value: unknown): Ecomme
   if (Number(value.review.readyRows) + Number(value.review.blockedRows) !== Number(value.review.totalRows)) {
     throw new Error('Ecommerce order review packet row counts do not reconcile.')
   }
-  if (value.review.status === 'ready' && Number(value.review.blockedRows) !== 0) {
-    throw new Error('Ready Ecommerce order review packets cannot include blocked rows.')
+  if (Number(value.review.totalRows) === 0) {
+    throw new Error('Ecommerce order review packets must include an order row.')
+  }
+  if (value.review.status === 'ready' && (Number(value.review.readyRows) === 0 || Number(value.review.blockedRows) !== 0)) {
+    throw new Error('Ready Ecommerce order review packets must include ready rows and no blocked rows.')
+  }
+  if (value.review.status === 'blocked' && Number(value.review.blockedRows) === 0) {
+    throw new Error('Blocked Ecommerce order review packets must include blocked rows.')
   }
   if (value.operatingMode === 'managed_trial' && value.catalog.source !== 'managed-shop') {
     throw new Error('Managed Ecommerce order review packets must come from a managed Shop catalog.')
@@ -215,8 +221,11 @@ export function validateEcommerceOrderQueueReadinessPacket(value: unknown): Ecom
   if (Number(value.sourceReview.readyRows) + Number(value.sourceReview.blockedRows) !== Number(value.sourceReview.totalRows)) {
     throw new Error('Ecommerce order queue readiness packet row counts do not reconcile.')
   }
-  if (value.readiness.status === 'ready_for_support' && Number(value.sourceReview.blockedRows) !== 0) {
-    throw new Error('Ready Ecommerce order queue packets cannot include blocked rows.')
+  if (Number(value.sourceReview.totalRows) === 0) {
+    throw new Error('Ecommerce order queue readiness packets must include an order row.')
+  }
+  if (value.readiness.status === 'ready_for_support' && (Number(value.sourceReview.readyRows) === 0 || Number(value.sourceReview.blockedRows) !== 0)) {
+    throw new Error('Ready Ecommerce order queue packets must include ready rows and no blocked rows.')
   }
   if (value.readiness.status === 'blocked_for_repair' && Number(value.sourceReview.blockedRows) === 0) {
     throw new Error('Blocked Ecommerce order queue packets must include blocked rows.')
@@ -227,6 +236,7 @@ export function validateEcommerceOrderQueueReadinessPacket(value: unknown): Ecom
 export function buildEcommerceOrderQueueReadinessPacket(input: { generatedAt: string; reviewPacket: EcommerceOrderImportReviewPacket }): EcommerceOrderQueueReadinessPacket {
   const reviewPacket = validateEcommerceOrderImportReviewPacket(input.reviewPacket)
   const blockedRows = reviewPacket.review.blockedRows
+  const readyForSupport = reviewPacket.review.status === 'ready' && reviewPacket.review.readyRows > 0 && blockedRows === 0
   return validateEcommerceOrderQueueReadinessPacket({
     schema: ECOMMERCE_ORDER_QUEUE_READINESS_PACKET_SCHEMA,
     version: 1,
@@ -244,10 +254,10 @@ export function buildEcommerceOrderQueueReadinessPacket(input: { generatedAt: st
       blockedRows,
     },
     readiness: {
-      status: blockedRows ? 'blocked_for_repair' : 'ready_for_support',
-      nextAction: blockedRows
-        ? 'Repair blocked order rows before support prepares a managed Shop queue.'
-        : 'Support can compare this packet with the managed Shop catalog before queue import approval.',
+      status: readyForSupport ? 'ready_for_support' : 'blocked_for_repair',
+      nextAction: readyForSupport
+        ? 'Support can compare this packet with the managed Shop catalog before queue import approval.'
+        : 'Repair blocked order rows before support prepares a managed Shop queue.',
     },
     requiredControls: [...ecommerceOrderQueueReadinessRequiredControls],
     forbiddenUntilReady: [...ecommerceOrderQueueReadinessForbiddenActions],
