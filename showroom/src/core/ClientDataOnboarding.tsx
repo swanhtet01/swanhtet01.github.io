@@ -505,13 +505,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
       if (expectedProduct === 'commerce') {
         const shopPreview = await addShopVariantColumnToClientImportPreview(preview)
-        if (managedIdentityRef.current) {
-          if (shopPreview.preview.rows.some((row) => Boolean(row.values.variant))) {
-            throw new Error('Shop variants are not accepted by the company-account import contract yet. Remove the variant column before checking this company import.')
-          }
-        } else {
-          preview = shopPreview.preview
-        }
+        preview = shopPreview.preview
       }
       const catalogReview: ImportState['catalogReview'] = {}
       if (expectedProduct === 'commerce' && !managedIdentityRef.current) {

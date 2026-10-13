@@ -56,6 +56,7 @@ class ClientImportObjectSpec:
     target_surface: str
     required_capability: str
     maximum_rows: int = CLIENT_IMPORT_MAX_ROWS
+    optional_extensions: tuple[ClientImportFieldSpec, ...] = ()
 
 
 CLIENT_IMPORT_OBJECTS: dict[str, ClientImportObjectSpec] = {
@@ -70,6 +71,9 @@ CLIENT_IMPORT_OBJECTS: dict[str, ClientImportObjectSpec] = {
             ClientImportFieldSpec("onHand", "integer", minimum=0),
             ClientImportFieldSpec("reorderAt", "integer", minimum=0),
             ClientImportFieldSpec("price", "integer", minimum=1),
+        ),
+        optional_extensions=(
+            ClientImportFieldSpec("variant", "text", required=False, maximum=120),
         ),
     ),
     "production": ClientImportObjectSpec(
@@ -412,11 +416,19 @@ def validate_client_import_staging_package(
     if not _DIGEST.fullmatch(source_digest) or not _DIGEST.fullmatch(preview_digest):
         raise _fail("Package source digests must use SHA-256.")
 
-    field_ids = tuple(field.identifier for field in spec.fields)
-    mapping_raw = _exact_object(package["mapping"], "package.mapping", field_ids)
+    mapping_candidate = package["mapping"]
+    if not isinstance(mapping_candidate, Mapping):
+        raise _fail("package.mapping must be an object.")
+    extension_fields = tuple(
+        field for field in spec.optional_extensions
+        if field.identifier in mapping_candidate
+    )
+    fields = (*spec.fields, *extension_fields)
+    field_ids = tuple(field.identifier for field in fields)
+    mapping_raw = _exact_object(mapping_candidate, "package.mapping", field_ids)
     mapping: dict[str, str] = {}
     selected_headers: list[str] = []
-    for field in spec.fields:
+    for field in fields:
         header = _text(
             mapping_raw[field.identifier],
             f"package.mapping.{field.identifier}",
@@ -450,7 +462,7 @@ def validate_client_import_staging_package(
 
         values_raw = _exact_object(row["values"], f"{row_path}.values", field_ids)
         values: dict[str, str] = {}
-        for field in spec.fields:
+        for field in fields:
             field_value = _field_value(
                 values_raw[field.identifier],
                 field,
