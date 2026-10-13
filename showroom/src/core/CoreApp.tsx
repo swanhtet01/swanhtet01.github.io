@@ -26,6 +26,7 @@ import { BarcodeScanButton } from './BarcodeScanButton'
 import { prepareManagedFirstCatalog } from './shop-managed-first-catalog'
 import { applyStockCountScan } from './shop-stock-count-scan'
 const ClosedOrderHistory = lazy(() => import('./ShopOrderHistory').then((module) => ({ default: module.ClosedOrderHistory })))
+const ShopProductPhotoControl = lazy(() => import('./ShopProductPhotoControl').then((module) => ({ default: module.ShopProductPhotoControl })))
 const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
 const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
@@ -64,7 +65,7 @@ import {
 import { getStorageDurability, measureCommerceHeadroom, subscribeStorageDurability } from './storage-durability'
 import { managedAccountPath } from './account-routes'
 import { formatTime } from './team-work'
-import { ProductPhoto, ShopProductPhotoControl } from './ProductPhoto'
+import { ProductPhoto } from './ProductPhoto'
 import { PaymentQrButton } from './PaymentQr'
 import { paymentQrScopeForWorkspace } from './payment-qr-store'
 import { productImageScopeForWorkspace } from './product-image-store'
@@ -7080,7 +7081,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       ? item.onHand === item.reorderAt ? 'At reorder level' : `${item.reorderAt - item.onHand} below reorder`
       : null
     return <div className="data-row" data-receiving={editing || catalogEditing} data-stock-attention={stockNeedsAttention ? 'true' : 'false'} role="row" key={item.sku}>
-      <span role="rowheader"><ShopProductPhotoControl disabled={commerceControlsDisabled} name={item.name} scope={productImageScope} sku={item.sku} /><span className="stock-row-copy"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span></span>
+      <span role="rowheader"><Suspense fallback={null}><ShopProductPhotoControl disabled={commerceControlsDisabled} name={item.name} scope={productImageScope} sku={item.sku} /></Suspense><span className="stock-row-copy"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span></span>
       <span className={stockNeedsAttention ? 'warning-text' : ''} role="cell">{item.onHand}</span>
       <span role="cell">{item.reorderAt}</span>
       <span role="cell">{formatMoney(item.price)}</span>
@@ -7692,7 +7693,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         </section>
         <aside aria-labelledby="shop-stock-next-title" className="shop-stock-next-action" data-action={stockNextActionKind}>
           <header><span><span className="core-eyebrow">Next stock action</span><h3 id="shop-stock-next-title">{stockNextActionTitle}</h3></span><b>{stockNextTrack}</b></header>
-          {stockNextItem ? <div className="shop-stock-next-item"><ShopProductPhotoControl disabled={commerceControlsDisabled} name={stockNextItem.name} scope={productImageScope} sku={stockNextItem.sku} /><span><strong>{stockNextItem.name}</strong><small>{stockNextItem.sku}{stockNextDemand?.projectedDaysOfCover === null || stockNextDemand?.projectedDaysOfCover === undefined ? '' : ` · ${stockNextDemand.projectedDaysOfCover}d projected cover`}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>available</small></span></div> : null}
+          {stockNextItem ? <div className="shop-stock-next-item"><Suspense fallback={null}><ShopProductPhotoControl disabled={commerceControlsDisabled} name={stockNextItem.name} scope={productImageScope} sku={stockNextItem.sku} /></Suspense><span><strong>{stockNextItem.name}</strong><small>{stockNextItem.sku}{stockNextDemand?.projectedDaysOfCover === null || stockNextDemand?.projectedDaysOfCover === undefined ? '' : ` · ${stockNextDemand.projectedDaysOfCover}d projected cover`}</small></span><span><strong>{stockNextItem.onHand.toLocaleString()}</strong><small>available</small></span></div> : null}
           <div className="shop-stock-next-guidance"><div><span>Why now</span><p>{stockNextReason}</p></div><div><span>Owner check</span><p>{stockNextOwnerCheck}</p></div></div>
           <footer><small>Record → recommendation → owner check → action → closure</small>{stockNextActionKind === 'catalog'
             ? <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-import">Add products</Link>

@@ -49,7 +49,7 @@ const REQUIRED_SOURCE_MARKERS = [
     markers: ['Device-local merchant payment QR store', 'No network call of any kind happens here', 'deleteAllPaymentQrData'],
   },
   {
-    path: 'showroom/src/core/ProductPhoto.tsx',
+    path: 'showroom/src/core/ShopProductPhotoControl.tsx',
     markers: ['ShopProductPhotoControl', 'product-image-store.ts', 'putProductImage'],
   },
   {
