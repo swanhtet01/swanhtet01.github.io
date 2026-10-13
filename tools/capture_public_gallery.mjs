@@ -105,9 +105,12 @@ async function capture(cdp, sessionId, output, name, expectedTexts) {
 async function main() {
   const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true })
   const showroomTree = spawnSync('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })
-  const showroomChanges = spawnSync('git', ['status', '--porcelain', '--', 'showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })
-  if (head.status !== 0 || showroomTree.status !== 0 || showroomChanges.status !== 0 || showroomChanges.stdout.trim())
-    throw new Error('clean_product_source_commit_required')
+  const captureChanges = spawnSync('git', ['status', '--porcelain', '--', 'showroom',
+    'tools/capture_public_gallery.mjs', 'tools/build_shop_browser_fixture.mjs',
+    'tools/build_product_clarity_fixture.mjs', 'tools/verify_app_entry_rendered.mjs',
+    'tools/public-assets/noto-sans-myanmar.woff2'], { cwd: root, encoding: 'utf8', windowsHide: true })
+  if (head.status !== 0 || showroomTree.status !== 0 || captureChanges.status !== 0 || captureChanges.stdout.trim())
+    throw new Error('clean_capture_source_commit_required')
   buildFixture('build_shop_browser_fixture.mjs', ['--today'])
   buildFixture('build_product_clarity_fixture.mjs', ['--gallery'])
   await mkdir(outputRoot, { recursive: true })
