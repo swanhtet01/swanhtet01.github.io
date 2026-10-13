@@ -626,7 +626,8 @@ def create_commerce_public_router(*, store: CommercePublicStorefront, enabled: b
     @router.get('/api/trial/v1/commerce-publications')
     async def publications(request: Request):
         available(request)
-        return await invoke(lambda: store.publications(principal(request)))
+        actor = principal(request)
+        return await invoke(lambda: store.publications(actor))
 
     @router.post('/api/trial/v1/commerce-publications')
     async def publish(request: Request):
@@ -651,12 +652,14 @@ def create_commerce_public_router(*, store: CommercePublicStorefront, enabled: b
         if not configured or set(request.query_params) - {'after'} or len(request.query_params.getlist('after')) > 1:
             raise _error(422 if configured else 503, 'request_invalid' if configured else 'commerce_public_unavailable')
         after = request.query_params.get('after')
-        return await invoke(lambda: store.inbox(principal(request), after=after))
+        actor = principal(request)
+        return await invoke(lambda: store.inbox(actor, after=after))
 
     @router.get('/api/trial/v1/commerce-public-inbox/shop/{shop_request_id}/contact')
     async def shop_contact(shop_request_id: str, request: Request):
         available(request)
-        return await invoke(lambda: store.shop_contact(principal(request),
+        actor = principal(request)
+        return await invoke(lambda: store.shop_contact(actor,
                                                         shop_request_id=shop_request_id))
 
     @router.post('/api/trial/v1/commerce-public-inbox/{handle}/{request_id}/claim')
