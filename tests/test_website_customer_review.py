@@ -8,7 +8,7 @@ import unittest
 from supermega_runtime.trial_store import TrialPrincipal, TrialReadiness, TrialValidationError
 from supermega_runtime.website_customer_review import (
     build_customer_acceptance, build_customer_change_request, customer_review_projection,
-    prepare_customer_review,
+    prepare_customer_review, _preview,
 )
 from tests.test_website_runtime import _state
 
@@ -103,6 +103,9 @@ class CustomerReviewTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(TrialValidationError, "private_media_unavailable"):
             self.prepare()
+        revision, preview = _preview(self.state, allow_private_media=True)
+        self.assertEqual(revision, self.state["contentRevision"])
+        self.assertEqual(preview["pages"][0]["hero"]["image"]["assetId"], "a" * 64 + ".webp")
 
     def test_stored_preview_cannot_add_private_fields(self):
         self.review["preview"]["leadLedger"] = {"private": "do not disclose"}
