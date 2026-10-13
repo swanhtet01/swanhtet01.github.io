@@ -26,10 +26,17 @@ import {
 import {
   currentManagedIdentity,
   loadManagedBootstrap,
+  loadManagedCommercePublicInbox,
+  loadManagedCommercePublications,
   managedBootstrapHasCapability,
   ManagedTrialError,
+  publishManagedCommerceStorefront,
+  revokeManagedCommerceStorefront,
+  claimManagedCommercePublicRequest,
   requireManagedSurfaceState,
   saveManagedCommerceCommand,
+  type ManagedCommercePublicPublication,
+  type ManagedCommercePublicRequest,
   type ManagedIdentity,
   type ManagedStateRecord,
 } from '../../core/managed-trial'
@@ -315,6 +322,15 @@ export function EcommerceProduct() {
   const [managedCanWrite, setManagedCanWrite] = useState(false)
   const [managedCanDeliverReviews, setManagedCanDeliverReviews] = useState(false)
   const [managedInbox, setManagedInbox] = useState<ManagedInboxContext | null>(null)
+  const [publicPublication, setPublicPublication] = useState<ManagedCommercePublicPublication | null>(null)
+  const [publicRequests, setPublicRequests] = useState<ManagedCommercePublicRequest[]>([])
+  const [publicNextCursor, setPublicNextCursor] = useState<string | null | undefined>(undefined)
+  const [publicVisibleCount, setPublicVisibleCount] = useState(5)
+  const [publicPageBusy, setPublicPageBusy] = useState(false)
+  const [publicStatus, setPublicStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  const [publicBusy, setPublicBusy] = useState(false)
+  const [publicNotice, setPublicNotice] = useState('')
+  const [publicReviewId, setPublicReviewId] = useState('')
   const [savedDraft, setSavedDraft] = useState<SavedStorefrontState | null>(null)
   const [draftReadStatus, setDraftReadStatus] = useState<StorefrontDraftReadResult['status']>('empty')
   const [draftIssue, setDraftIssue] = useState('')
@@ -335,6 +351,119 @@ export function EcommerceProduct() {
     return () => viewport.removeEventListener('change', syncDevice)
   }, [])
   const workspaceView = ecommerceWorkspaceView(location.search, Boolean(savedDraft))
+  useEffect(() => {
+    if (!managedIdentity || !managedCanWrite) {
+      setPublicPublication(null)
+      setPublicRequests([])
+      setPublicNextCursor(undefined)
+      setPublicStatus('unavailable')
+      return
+    }
+    const identity = managedIdentity
+    let active = true
+    let inFlight = false
+    async function refresh() {
+      if (inFlight || document.visibilityState === 'hidden') return
+      inFlight = true
+      try {
+        const publications = await loadManagedCommercePublications(identity)
+        const inbox = await loadManagedCommercePublicInbox(identity)
+        if (!active) return
+        setPublicPublication(publications.publications.find((item) => item.enabled) ?? null)
+        setPublicRequests((current) => {
+          const byId = new Map(current.map((item) => [`${item.handle}:${item.requestId}`, item]))
+          for (const item of inbox.requests) byId.set(`${item.handle}:${item.requestId}`, item)
+          return [...byId.values()].sort((left, right) => right.receivedAt.localeCompare(left.receivedAt))
+        })
+        setPublicNextCursor((current) => current === undefined ? inbox.nextCursor : current)
+        setPublicStatus('ready')
+      } catch {
+        if (active) setPublicStatus('unavailable')
+      } finally {
+        inFlight = false
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => { if (workspaceView === 'orders') void refresh() }, 20_000)
+    const onFocus = () => { void refresh() }
+    window.addEventListener('focus', onFocus)
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', onFocus) }
+  }, [managedIdentity, managedCanWrite, workspaceView])
+
+  async function publishPublicStore() {
+    if (!managedIdentity || !managedInbox || publicBusy || !buyingReady) return
+    setPublicBusy(true)
+    setPublicNotice('')
+    try {
+      const result = await publishManagedCommerceStorefront(managedIdentity, managedInbox.version)
+      if (!result.enabled || !result.handle || !result.previewDigest) throw new Error('The store was not published.')
+      const publications = await loadManagedCommercePublications(managedIdentity)
+      setPublicPublication(publications.publications.find((item) => item.enabled) ?? null)
+      setPublicStatus('ready')
+      setPublicNotice('Your customer store is ready to share.')
+    } catch (error) {
+      setPublicNotice(error instanceof Error ? error.message : 'The store could not be published. Nothing changed.')
+    } finally { setPublicBusy(false) }
+  }
+
+  async function revokePublicStore() {
+    if (!managedIdentity || !publicPublication || publicBusy) return
+    setPublicBusy(true)
+    setPublicNotice('')
+    try {
+      await revokeManagedCommerceStorefront(managedIdentity, publicPublication.handle, publicPublication.previewDigest)
+      setPublicPublication(null)
+      setPublicNotice('The customer store is closed to new requests.')
+    } catch (error) {
+      setPublicNotice(error instanceof Error ? error.message : 'The store could not be closed.')
+    } finally { setPublicBusy(false) }
+  }
+
+  async function bringPublicRequestToShop(entry: ManagedCommercePublicRequest) {
+    if (!managedIdentity || publicBusy) return
+    setPublicBusy(true)
+    setPublicNotice('')
+    setPublicReviewId('')
+    try {
+      const result = await claimManagedCommercePublicRequest(managedIdentity, entry.handle, entry.requestId)
+      if (result.status !== 'in_shop' || !result.shopRequestId) throw new Error('Shop did not confirm this request.')
+      setPublicRequests((current) => current.map((item) => item.requestId === entry.requestId && item.handle === entry.handle
+        ? { ...item, status: 'in_shop', shopRequestId: result.shopRequestId } : item))
+      const bootstrap = await loadManagedBootstrap(managedIdentity)
+      const view = resolveManagedStorefront(managedIdentity, requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'))
+      if (view) setManagedInbox(view.inbox)
+      if (result.priceChanged) {
+        setPublicReviewId(result.shopRequestId)
+        setPublicNotice('The current Shop price differs from the customer request. Confirm the new total with the customer before completing the order.')
+      } else {
+        navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(result.shopRequestId)}`)
+      }
+    } catch (error) {
+      setPublicNotice(error instanceof Error ? error.message : 'Shop did not receive this request. Try again.')
+    } finally { setPublicBusy(false) }
+  }
+
+  async function showMorePublicRequests() {
+    const loadedNew = publicRequests.filter((item) => item.status === 'new').length
+    if (loadedNew > publicVisibleCount) {
+      setPublicVisibleCount((count) => count + 20)
+      return
+    }
+    if (!managedIdentity || !publicNextCursor || publicPageBusy) return
+    setPublicPageBusy(true)
+    try {
+      const page = await loadManagedCommercePublicInbox(managedIdentity, publicNextCursor)
+      setPublicRequests((current) => {
+        const byId = new Map(current.map((item) => [`${item.handle}:${item.requestId}`, item]))
+        for (const item of page.requests) byId.set(`${item.handle}:${item.requestId}`, item)
+        return [...byId.values()].sort((left, right) => right.receivedAt.localeCompare(left.receivedAt))
+      })
+      setPublicNextCursor(page.nextCursor)
+      setPublicVisibleCount((count) => count + 20)
+    } catch (error) {
+      setPublicNotice(error instanceof Error ? error.message : 'Older requests could not be loaded.')
+    } finally { setPublicPageBusy(false) }
+  }
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
     source: '',
@@ -2038,6 +2167,8 @@ export function EcommerceProduct() {
   const visibleCatalogItems = catalogSearchTerm
     ? catalog.items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLowerCase().includes(catalogSearchTerm))
     : catalog.items
+  const newPublicRequests = publicRequests.filter((entry) => entry.status === 'new')
+  const publicStoreIsCurrent = Boolean(publicPublication?.enabled && publicPublication.previewDigest === digest)
 
   if (!catalogHydrating && sampleCatalogPreview) {
     return (
@@ -2115,6 +2246,21 @@ export function EcommerceProduct() {
         statusRows={ecommerceTodayMetrics}
         summary={ecommerceTodaySummary}
       />
+
+      {publicStatus === 'ready' && managedCanWrite ? <section aria-label="Incoming online requests" className="ecommerce-public-intake">
+        <div className="ecommerce-public-intake-head">
+          <div><h2>Incoming online requests</h2><p>Requests from your customer store arrive here automatically.</p></div>
+          <strong>{newPublicRequests.length} new in loaded requests</strong>
+        </div>
+        {newPublicRequests.length ? <div className="ecommerce-public-intake-list">
+          {newPublicRequests.slice(0, publicVisibleCount).map((entry) => <div className="ecommerce-public-intake-row" key={`${entry.handle}:${entry.requestId}`}>
+            <div><strong>{entry.request.customerReference}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small><small>Phone: {entry.request.customerProfile?.phone || 'Not available'}</small></div>
+            <button className="core-button secondary" disabled={publicBusy} onClick={() => void bringPublicRequestToShop(entry)} type="button">Review in Shop</button>
+          </div>)}
+        </div> : <p className="ecommerce-public-intake-empty">{publicNextCursor ? 'No new requests in the latest page. Check older requests below.' : 'New requests will appear here after a customer sends one.'}</p>}
+        {newPublicRequests.length > publicVisibleCount || publicNextCursor ? <button className="text-link ecommerce-public-more" disabled={publicPageBusy} onClick={() => void showMorePublicRequests()} type="button">{publicPageBusy ? 'Loading…' : 'Show more requests'}</button> : null}
+        {publicNotice ? <p aria-live="polite" className="ecommerce-public-notice">{publicNotice} {publicReviewId ? <Link to={`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(publicReviewId)}`}>Open in Shop</Link> : null}</p> : null}
+      </section> : null}
 
       <details className="ecommerce-business-controls">
         <summary><span><strong>Extra order tools</strong></span></summary>
@@ -2481,6 +2627,19 @@ export function EcommerceProduct() {
             </div>
           ) : null}
           {draftNotice ? <p className="ecommerce-save-notice" role="status">{draftNotice}</p> : null}
+
+          {workspaceView !== 'setup' && managedIdentity && managedCanWrite && publicStatus === 'ready' ? <div className="ecommerce-public-sharing">
+            <div>
+              <h3>{publicStoreIsCurrent ? 'Your customer store is live' : publicPublication ? 'Store changes are not live yet' : 'Share your store with customers'}</h3>
+              <p>{publicStoreIsCurrent ? 'Customers can browse and send requests from this link.' : 'Publish the saved store when you are ready to receive customer requests.'}</p>
+              {publicPublication ? <a href={`/store/${encodeURIComponent(publicPublication.handle)}`} rel="noopener noreferrer" target="_blank">Open customer store ↗</a> : null}
+            </div>
+            <div className="ecommerce-public-sharing-actions">
+              {!publicStoreIsCurrent ? <button className="core-button primary" disabled={!buyingReady || publicBusy || !managedInbox} onClick={() => void publishPublicStore()} type="button">{publicBusy ? 'Working…' : publicPublication ? 'Publish changes' : 'Publish store'}</button> : null}
+              {publicPublication ? <button className="core-button secondary" disabled={publicBusy} onClick={() => void revokePublicStore()} type="button">Close store</button> : null}
+            </div>
+            {publicNotice ? <p aria-live="polite" className="ecommerce-public-notice">{publicNotice}</p> : null}
+          </div> : null}
 
           <div className={`ecommerce-preview-frame is-${device}`}>
             {previewResult.preview ? (

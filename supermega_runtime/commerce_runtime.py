@@ -11274,9 +11274,10 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
     _require_website_intakes_unchanged(current, next_state)
     current_requests = _storefront_requests(current)
     next_requests = _storefront_requests(next_state)
-    if len(next_requests) != len(current_requests) + 1 or next_requests[1:] != current_requests:
+    expected_existing = _storefront_requests_after_completed_order(current)
+    if len(next_requests) != len(expected_existing) + 1 or next_requests[1:] != expected_existing:
         raise TrialValidationError(
-            "commerce.storefront_request.received must prepend exactly one Ecommerce request."
+            "commerce.storefront_request.received must prepend one request and retain the active queue."
         )
     request = next_requests[0]
     lines = (
@@ -11334,6 +11335,22 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
         )
 
 
+def _storefront_requests_after_completed_order(current: Mapping[str, Any]) -> list[Any]:
+    """Free one queue slot only after an attributable Shop order exists.
+
+    The immutable command journal and the order remain the historical record;
+    unreviewed requests never disappear to make room for newer traffic.
+    """
+    requests = list(_storefront_requests(current))
+    if len(requests) < _MAX_STOREFRONT_REQUESTS:
+        return requests
+    converted = {order.get("sourceRecordId") for order in current["orders"]}
+    for index in range(len(requests) - 1, -1, -1):
+        if requests[index]["id"] in converted:
+            return requests[:index] + requests[index + 1:]
+    raise TrialValidationError("commerce_public_claim_queue_full")
+
+
 def create_commerce_storefront_request_from_intent(
     current_value: Mapping[str, Any],
     intent_value: Mapping[str, Any],
@@ -11370,7 +11387,7 @@ def create_commerce_storefront_request_from_intent(
     return validate_commerce_state(
         {
             **current,
-            "storefrontRequests": [request, *_storefront_requests(current)],
+            "storefrontRequests": [request, *_storefront_requests_after_completed_order(current)],
         }
     )
 

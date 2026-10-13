@@ -1283,6 +1283,8 @@ def create_app() -> FastAPI:
     )
     from .website_publishing_routes import mount_website_publishing_routes
     mount_website_publishing_routes(app, store=store, resolve_principal=resolve_trial_principal)
+    from .commerce_public_storefront import mount_commerce_public_routes
+    mount_commerce_public_routes(app, store=store, resolve_principal=resolve_trial_principal)
     app.include_router(cloud_runtime_router)
     return app
 

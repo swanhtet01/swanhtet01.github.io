@@ -2122,3 +2122,41 @@
 .ecommerce-product .storefront-hero h3 { line-height: 1.3; }
 .ecommerce-product .storefront-hero p { margin-top: .75rem; font-size: .875rem; }
 .ecommerce-product .storefront-preview > footer { background: transparent; color: var(--core-muted); font-size: .75rem; line-height: 1.5; }
+
+.ecommerce-public-intake,
+.ecommerce-public-sharing {
+  border: 1px solid var(--core-line);
+  border-radius: var(--radius-lg);
+  background: var(--core-panel);
+  padding: clamp(1rem, 2vw, 1.5rem);
+}
+.ecommerce-public-intake { margin-block: 1rem; }
+.ecommerce-public-intake-head,
+.ecommerce-public-intake-row,
+.ecommerce-public-sharing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.ecommerce-public-intake h2,
+.ecommerce-public-sharing h3 { margin: 0; font-size: 1.125rem; line-height: 1.3; }
+.ecommerce-public-intake p,
+.ecommerce-public-sharing p { margin: .35rem 0 0; color: var(--core-muted); font-size: .875rem; line-height: 1.5; }
+.ecommerce-public-intake-head > strong { white-space: nowrap; color: var(--core-accent); font-size: .875rem; }
+.ecommerce-public-intake-list { margin-top: 1rem; border-top: 1px solid var(--core-line); }
+.ecommerce-public-intake-row { padding-block: .875rem; border-bottom: 1px solid var(--core-line); }
+.ecommerce-public-intake-row > div { display: grid; gap: .2rem; min-width: 0; }
+.ecommerce-public-intake-row strong { font-size: .9375rem; }
+.ecommerce-public-intake-row small { color: var(--core-muted); overflow-wrap: anywhere; }
+.ecommerce-public-intake-empty { padding-top: .5rem; }
+.ecommerce-public-more { margin-top: .75rem; }
+.ecommerce-public-sharing { margin-bottom: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.ecommerce-public-sharing > div:first-child { min-width: min(100%, 18rem); flex: 1; }
+.ecommerce-public-sharing a { display: inline-block; margin-top: .5rem; overflow-wrap: anywhere; }
+.ecommerce-public-sharing-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.ecommerce-public-notice { width: 100%; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .ecommerce-public-intake-row { align-items: flex-start; flex-direction: column; }
+  .ecommerce-public-intake-row .core-button { width: 100%; }
+}

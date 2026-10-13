@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { managedAccountPath } from './core/account-routes'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router'
 
 import {
   CoreLayout,
@@ -10,6 +10,7 @@ import {
 const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceCustomerReview = lazy(() => import('./products/ecommerce/EcommerceCustomerReview'))
+const PublicStorefrontPage = lazy(() => import('./products/ecommerce/PublicStorefrontPage'))
 const WebsiteCustomerReview = lazy(() => import('./products/website/WebsiteCustomerReview'))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 const SettingsPage = lazy(() => import('./core/SettingsPage').then((module) => ({ default: module.SettingsPage })))
@@ -30,6 +31,11 @@ function AccountEntryRedirect() {
 
 function ProductLoading({ name }: { name: string }) {
   return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>{name}</p></div>
+}
+
+function PublicStorefrontEntry() {
+  const { handle } = useParams()
+  return <Suspense fallback={<ProductLoading name="Store" />}><PublicStorefrontPage key={handle} /></Suspense>
 }
 
 function setupProductFromQuery(value: string | null) {
@@ -66,6 +72,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="ecommerce/review/:reviewId" element={<Suspense fallback={<ProductLoading name="Catalog review" />}><EcommerceCustomerReview /></Suspense>} />
+        <Route path="store/:handle" element={<PublicStorefrontEntry />} />
         <Route path="website/review/:reviewId" element={<Suspense fallback={<ProductLoading name="Website review" />}><WebsiteCustomerReview /></Suspense>} />
         <Route element={<CoreLayout />}>
           <Route element={<ProductHomeEntry />} index />
