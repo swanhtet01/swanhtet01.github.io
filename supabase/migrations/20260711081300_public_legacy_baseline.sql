@@ -143,6 +143,145 @@ begin
 end
 $constraints$;
 
+-- Reconstruct the 85 standalone public indexes that existed in production on
+-- 2026-10-14 but are absent from its recorded migration statements. The DDL
+-- below was read from pg_get_indexdef and rehearsed on disposable PostgreSQL
+-- 17 with the 27-table baseline. It matches production's 114-index catalog
+-- fingerprint; existing indexes are never replaced on a populated project.
+
+-- assets
+CREATE INDEX IF NOT EXISTS idx_assets_org_id ON public.assets USING btree (org_id);
+
+-- enterprise_agent_runs
+CREATE UNIQUE INDEX IF NOT EXISTS ix_enterprise_agent_runs_idempotency_key ON public.enterprise_agent_runs USING btree (idempotency_key);
+CREATE INDEX IF NOT EXISTS ix_enterprise_agent_runs_job_type ON public.enterprise_agent_runs USING btree (job_type);
+CREATE INDEX IF NOT EXISTS ix_enterprise_agent_runs_status ON public.enterprise_agent_runs USING btree (status);
+CREATE INDEX IF NOT EXISTS ix_enterprise_agent_runs_workspace_id ON public.enterprise_agent_runs USING btree (workspace_id);
+
+-- enterprise_audit_events
+CREATE INDEX IF NOT EXISTS ix_enterprise_audit_events_event_type ON public.enterprise_audit_events USING btree (event_type);
+CREATE INDEX IF NOT EXISTS ix_enterprise_audit_events_workspace_id ON public.enterprise_audit_events USING btree (workspace_id);
+
+-- enterprise_connector_events
+CREATE INDEX IF NOT EXISTS ix_enterprise_connector_events_connector_id ON public.enterprise_connector_events USING btree (connector_id);
+CREATE INDEX IF NOT EXISTS ix_enterprise_connector_events_created_at ON public.enterprise_connector_events USING btree (created_at);
+CREATE INDEX IF NOT EXISTS ix_enterprise_connector_events_kind ON public.enterprise_connector_events USING btree (kind);
+CREATE INDEX IF NOT EXISTS ix_enterprise_connector_events_severity ON public.enterprise_connector_events USING btree (severity);
+CREATE INDEX IF NOT EXISTS ix_enterprise_connector_events_workspace_id ON public.enterprise_connector_events USING btree (workspace_id);
+
+-- enterprise_knowledge_chunks
+CREATE INDEX IF NOT EXISTS ix_enterprise_knowledge_chunks_chunk_type ON public.enterprise_knowledge_chunks USING btree (chunk_type);
+CREATE INDEX IF NOT EXISTS ix_enterprise_knowledge_chunks_record_id ON public.enterprise_knowledge_chunks USING btree (record_id);
+CREATE INDEX IF NOT EXISTS ix_enterprise_knowledge_chunks_route ON public.enterprise_knowledge_chunks USING btree (route);
+CREATE INDEX IF NOT EXISTS ix_enterprise_knowledge_chunks_source ON public.enterprise_knowledge_chunks USING btree (source);
+CREATE INDEX IF NOT EXISTS ix_enterprise_knowledge_chunks_synced_at ON public.enterprise_knowledge_chunks USING btree (synced_at);
+CREATE INDEX IF NOT EXISTS ix_enterprise_knowledge_chunks_workspace_id ON public.enterprise_knowledge_chunks USING btree (workspace_id);
+
+-- enterprise_knowledge_embeddings
+CREATE INDEX IF NOT EXISTS idx_enterprise_knowledge_embeddings_hnsw ON public.enterprise_knowledge_embeddings USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_enterprise_knowledge_embeddings_route ON public.enterprise_knowledge_embeddings USING btree (workspace_id, route);
+CREATE INDEX IF NOT EXISTS idx_enterprise_knowledge_embeddings_workspace ON public.enterprise_knowledge_embeddings USING btree (workspace_id, embedding_model);
+
+-- enterprise_lead_activities
+CREATE INDEX IF NOT EXISTS ix_enterprise_lead_activities_lead_id ON public.enterprise_lead_activities USING btree (lead_id);
+CREATE INDEX IF NOT EXISTS ix_enterprise_lead_activities_workspace_id ON public.enterprise_lead_activities USING btree (workspace_id);
+
+-- enterprise_lead_hunt_profiles
+CREATE INDEX IF NOT EXISTS ix_enterprise_lead_hunt_profiles_workspace_id ON public.enterprise_lead_hunt_profiles USING btree (workspace_id);
+
+-- enterprise_leads
+CREATE INDEX IF NOT EXISTS ix_enterprise_leads_workspace_id ON public.enterprise_leads USING btree (workspace_id);
+
+-- enterprise_memberships
+CREATE INDEX IF NOT EXISTS ix_enterprise_memberships_username ON public.enterprise_memberships USING btree (username);
+CREATE INDEX IF NOT EXISTS ix_enterprise_memberships_workspace_id ON public.enterprise_memberships USING btree (workspace_id);
+
+-- enterprise_metric_records
+CREATE INDEX IF NOT EXISTS ix_enterprise_metric_records_captured_at ON public.enterprise_metric_records USING btree (captured_at);
+CREATE INDEX IF NOT EXISTS ix_enterprise_metric_records_metric_group ON public.enterprise_metric_records USING btree (metric_group);
+CREATE INDEX IF NOT EXISTS ix_enterprise_metric_records_status ON public.enterprise_metric_records USING btree (status);
+CREATE INDEX IF NOT EXISTS ix_enterprise_metric_records_workspace_id ON public.enterprise_metric_records USING btree (workspace_id);
+
+-- enterprise_sessions
+CREATE INDEX IF NOT EXISTS ix_enterprise_sessions_username ON public.enterprise_sessions USING btree (username);
+CREATE INDEX IF NOT EXISTS ix_enterprise_sessions_workspace_id ON public.enterprise_sessions USING btree (workspace_id);
+
+-- enterprise_source_change_events
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_change_type ON public.enterprise_source_change_events USING btree (change_type);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_current_signature ON public.enterprise_source_change_events USING btree (current_signature);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_department ON public.enterprise_source_change_events USING btree (department);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_detected_at ON public.enterprise_source_change_events USING btree (detected_at);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_domain ON public.enterprise_source_change_events USING btree (domain);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_kpi_readiness ON public.enterprise_source_change_events USING btree (kpi_readiness);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_owning_route ON public.enterprise_source_change_events USING btree (owning_route);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_path ON public.enterprise_source_change_events USING btree (path);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_plant ON public.enterprise_source_change_events USING btree (plant);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_previous_signature ON public.enterprise_source_change_events USING btree (previous_signature);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_rag_readiness ON public.enterprise_source_change_events USING btree (rag_readiness);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_source_item_id ON public.enterprise_source_change_events USING btree (source_item_id);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_source_record_id ON public.enterprise_source_change_events USING btree (source_record_id);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_source_system ON public.enterprise_source_change_events USING btree (source_system);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_title ON public.enterprise_source_change_events USING btree (title);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_change_events_workspace_id ON public.enterprise_source_change_events USING btree (workspace_id);
+
+-- enterprise_source_records
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_department ON public.enterprise_source_records USING btree (department);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_domain ON public.enterprise_source_records USING btree (domain);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_file_kind ON public.enterprise_source_records USING btree (file_kind);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_kpi_readiness ON public.enterprise_source_records USING btree (kpi_readiness);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_modified_time ON public.enterprise_source_records USING btree (modified_time);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_organized_path ON public.enterprise_source_records USING btree (organized_path);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_owning_route ON public.enterprise_source_records USING btree (owning_route);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_path ON public.enterprise_source_records USING btree (path);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_plant ON public.enterprise_source_records USING btree (plant);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_rag_readiness ON public.enterprise_source_records USING btree (rag_readiness);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_risk_level ON public.enterprise_source_records USING btree (risk_level);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_source_item_id ON public.enterprise_source_records USING btree (source_item_id);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_source_mode ON public.enterprise_source_records USING btree (source_mode);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_source_root_id ON public.enterprise_source_records USING btree (source_root_id);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_source_system ON public.enterprise_source_records USING btree (source_system);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_synced_at ON public.enterprise_source_records USING btree (synced_at);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_title ON public.enterprise_source_records USING btree (title);
+CREATE INDEX IF NOT EXISTS ix_enterprise_source_records_workspace_id ON public.enterprise_source_records USING btree (workspace_id);
+
+-- enterprise_workspace_domains
+CREATE INDEX IF NOT EXISTS ix_enterprise_workspace_domains_hostname ON public.enterprise_workspace_domains USING btree (hostname);
+CREATE INDEX IF NOT EXISTS ix_enterprise_workspace_domains_scope ON public.enterprise_workspace_domains USING btree (scope);
+CREATE INDEX IF NOT EXISTS ix_enterprise_workspace_domains_workspace_id ON public.enterprise_workspace_domains USING btree (workspace_id);
+
+-- enterprise_workspace_modules
+CREATE INDEX IF NOT EXISTS ix_enterprise_workspace_modules_module_id ON public.enterprise_workspace_modules USING btree (module_id);
+CREATE INDEX IF NOT EXISTS ix_enterprise_workspace_modules_workspace_id ON public.enterprise_workspace_modules USING btree (workspace_id);
+
+-- enterprise_workspace_tasks
+CREATE INDEX IF NOT EXISTS ix_enterprise_workspace_tasks_workspace_id ON public.enterprise_workspace_tasks USING btree (workspace_id);
+
+-- enterprise_workspaces
+CREATE UNIQUE INDEX IF NOT EXISTS ix_enterprise_workspaces_slug ON public.enterprise_workspaces USING btree (slug);
+
+-- iot_telemetry
+CREATE INDEX IF NOT EXISTS idx_iot_telemetry_asset_time ON public.iot_telemetry USING btree (asset_id, "timestamp" DESC);
+
+-- production_ledger
+CREATE INDEX IF NOT EXISTS idx_production_ledger_asset_time ON public.production_ledger USING btree (asset_id, "timestamp" DESC);
+
+-- supermega_campaign_clicks
+CREATE INDEX IF NOT EXISTS supermega_campaign_clicks_campaign_idx ON public.supermega_campaign_clicks USING btree (campaign, clicked_at DESC);
+
+-- supermega_leads
+CREATE INDEX IF NOT EXISTS supermega_leads_campaign_idx ON public.supermega_leads USING btree (utm_campaign);
+CREATE INDEX IF NOT EXISTS supermega_leads_stage_score_idx ON public.supermega_leads USING btree (lead_stage, lead_score DESC);
+CREATE INDEX IF NOT EXISTS supermega_leads_submitted_at_idx ON public.supermega_leads USING btree (submitted_at DESC);
+
+-- supermega_sales_runs
+CREATE INDEX IF NOT EXISTS supermega_sales_runs_campaign_idx ON public.supermega_sales_runs USING btree (campaign, generated_at DESC);
+CREATE INDEX IF NOT EXISTS supermega_sales_runs_generated_at_idx ON public.supermega_sales_runs USING btree (generated_at DESC);
+
+-- wcm_incidents
+CREATE INDEX IF NOT EXISTS idx_wcm_incidents_asset_time ON public.wcm_incidents USING btree (asset_id, "timestamp" DESC);
+CREATE INDEX IF NOT EXISTS idx_wcm_incidents_org_time ON public.wcm_incidents USING btree (org_id, "timestamp" DESC);
+CREATE INDEX IF NOT EXISTS idx_wcm_incidents_pillar ON public.wcm_incidents USING btree (wcm_pillar);
+
 -- Match production: RLS on, no policies, so every row is denied to anon and
 -- authenticated by default. Driven off the catalog rather than a second hardcoded
 -- list, so it cannot drift from the tables created above. ALTER ... ENABLE is
