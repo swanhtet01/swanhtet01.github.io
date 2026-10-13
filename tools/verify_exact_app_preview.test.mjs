@@ -530,7 +530,7 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   assert.deepEqual(publicExpectedText, [
     'Run the business.',
     'Without the busywork.',
-    'Shop. Sites. Commerce. One connected operating system.',
+    'Run in-store sales, your website and online orders from one clear platform.',
     'Login',
   ])
   assert.deepEqual(
@@ -545,7 +545,7 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   )
   for (const binding of [
     '<h1>Run the business.<br>Without the busywork.</h1>',
-    '<p class="lede">Sales, stock, a working website and customer orders—one platform, built to stay in step.</p>',
+    '<p class="lede">Run in-store sales, your website and online orders from one clear platform.</p>',
     'href="https://app.supermega.dev/login">Login</a>',
   ]) {
     assert.throws(
