@@ -1,11 +1,55 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { addShopVariantColumnToClientImportPreview, createShopCatalogImportPreview, shopCatalogImportErrorsCsv } from '../showroom/src/core/shop-catalog-import.ts'
+import {
+  clientImportPreviewIdentityKey,
+  isClientImportPreviewRequestCurrent,
+  shouldClearClientImportPreviewOnIdentityChange,
+} from '../showroom/src/core/client-import-preview-identity.ts'
 import { buildClientImportStagingPackage, createClientImportPreview } from '../showroom/src/core/client-onboarding.ts'
 import { assertManagedShopImportState } from '../showroom/src/core/managed-trial.ts'
 import { reviewCatalogMappingProposal } from '../showroom/src/core/catalog-mapping-proposal.ts'
 
 const csv = 'sku,name,stock,reorder_at,amount\nSYN-1,Synthetic item,5,1,1200'
+const identityA = clientImportPreviewIdentityKey({ userId: 'synthetic-user-a', workspaceId: 'synthetic-workspace-a' })
+const identityB = clientImportPreviewIdentityKey({ userId: 'synthetic-user-b', workspaceId: 'synthetic-workspace-b' })
+
+test('late preview completion is rejected after the authenticated company changes', async () => {
+  let currentIdentityKey = identityA
+  let finishRead
+  const pendingRead = new Promise((resolve) => { finishRead = resolve })
+  const previewIsCurrent = pendingRead.then(() => isClientImportPreviewRequestCurrent({
+    requestId: 7,
+    currentRequestId: 7,
+    expectedProduct: 'commerce',
+    currentProduct: 'commerce',
+    expectedWorkflowTemplateId: 'retail-wholesale',
+    currentWorkflowTemplateId: 'retail-wholesale',
+    expectedIdentityKey: identityA,
+    currentIdentityKey,
+  }))
+  currentIdentityKey = identityB
+  finishRead()
+  assert.equal(await previewIsCurrent, false)
+  assert.equal(shouldClearClientImportPreviewOnIdentityChange(identityA, identityB), true)
+  assert.equal(shouldClearClientImportPreviewOnIdentityChange(identityA, ''), true)
+})
+
+test('signed-out CSV selection stays usable for the first sign-in and same identity', () => {
+  assert.equal(isClientImportPreviewRequestCurrent({
+    requestId: 3,
+    currentRequestId: 3,
+    expectedProduct: 'commerce',
+    currentProduct: 'commerce',
+    expectedWorkflowTemplateId: 'retail-wholesale',
+    currentWorkflowTemplateId: 'retail-wholesale',
+    expectedIdentityKey: '',
+    currentIdentityKey: identityA,
+  }), true)
+  assert.equal(shouldClearClientImportPreviewOnIdentityChange('', identityA), false)
+  assert.equal(shouldClearClientImportPreviewOnIdentityChange(identityA, identityA), false)
+})
+
 test('company Shop onboarding stages and verifies a detected variant', async () => {
   const source = [
     'sku,item_name,opening_stock,reorder_at,price_mmk,color',

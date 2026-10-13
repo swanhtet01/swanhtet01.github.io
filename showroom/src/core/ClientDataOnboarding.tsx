@@ -38,6 +38,12 @@ import {
   type ManagedIdentity,
 } from './managed-trial'
 import { createShopServiceSchedule, type ShopIndustryPackId } from './shop-service-scheduling'
+import {
+  clientImportPreviewIdentityKey,
+  clientImportPreviewIdentityMatches,
+  isClientImportPreviewRequestCurrent,
+  shouldClearClientImportPreviewOnIdentityChange,
+} from './client-import-preview-identity'
 import type { PlantIndustryPackId } from './plant-industry-packs'
 import { PlantEquipmentOnboarding } from './PlantEquipmentOnboarding'
 
@@ -200,6 +206,8 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const shopIndustryPackIdRef = useRef(shopIndustryPackId)
   const plantIndustryPackIdRef = useRef(plantIndustryPackId)
   const managedIdentityRef = useRef(managedIdentity)
+  const managedIdentityKey = clientImportPreviewIdentityKey(managedIdentity)
+  const previousManagedIdentityKeyRef = useRef(managedIdentityKey)
   const previewRef = useRef<HTMLDivElement>(null)
   const onProgressRef = useRef(onProgress)
   productRef.current = product
@@ -500,8 +508,15 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
 
   useEffect(() => {
     validationRequestRef.current += 1
+    const previousManagedIdentityKey = previousManagedIdentityKeyRef.current
+    previousManagedIdentityKeyRef.current = managedIdentityKey
+    if (shouldClearClientImportPreviewOnIdentityChange(previousManagedIdentityKey, managedIdentityKey)) {
+      requestRef.current += 1
+      setState(emptyImportState())
+      return
+    }
     setState((current) => ({ ...current, validating: false, preflighting: false, applying: false, applyConfirmed: false, applied: null, localApplied: null, validation: null, error: '' }))
-  }, [managedIdentity?.userId, managedIdentity?.workspaceId, owner, workspace])
+  }, [managedIdentityKey, owner, workspace])
 
   async function runPreview(
     sourceName: string,
@@ -509,16 +524,29 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     mapping?: ClientImportMapping,
     expectedProduct = product,
     expectedWorkflowTemplateId = workflowTemplateId,
+    expectedManagedIdentityKey = clientImportPreviewIdentityKey(managedIdentity),
   ) {
-    if (productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
+    if (productRef.current !== expectedProduct
+      || workflowTemplateRef.current !== expectedWorkflowTemplateId
+      || !clientImportPreviewIdentityMatches(expectedManagedIdentityKey, clientImportPreviewIdentityKey(managedIdentityRef.current))) return
     const requestId = requestRef.current + 1
     requestRef.current = requestId
+    const requestIsCurrent = () => isClientImportPreviewRequestCurrent({
+      requestId,
+      currentRequestId: requestRef.current,
+      expectedProduct,
+      currentProduct: productRef.current,
+      expectedWorkflowTemplateId,
+      currentWorkflowTemplateId: workflowTemplateRef.current,
+      expectedIdentityKey: expectedManagedIdentityKey,
+      currentIdentityKey: clientImportPreviewIdentityKey(managedIdentityRef.current),
+    })
     validationRequestRef.current += 1
     setShowAllRows(false)
     setState((current) => ({ ...current, sourceName, sourceText, preview: null, catalogReview: {}, busy: true, validating: false, preflighting: false, applying: false, validation: null, error: '' }))
     try {
       let preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
+      if (!requestIsCurrent()) return
       if (expectedProduct === 'commerce') {
         const selectedVariantHeader = mapping && Object.prototype.hasOwnProperty.call(mapping, 'variant')
           ? mapping.variant ?? ''
@@ -526,6 +554,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         const shopPreview = await addShopVariantColumnToClientImportPreview(preview, selectedVariantHeader)
         preview = shopPreview.preview
       }
+      if (!requestIsCurrent()) return
       const catalogReview: ImportState['catalogReview'] = {}
       if (expectedProduct === 'commerce' && !managedIdentityRef.current) {
         const catalog = readCommerceWorkspace()
@@ -547,7 +576,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       setState({ ...emptyImportState(), sourceName, sourceText, preview, catalogReview })
       if (!mapping) window.requestAnimationFrame(() => previewRef.current?.focus())
     } catch (error) {
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
+      if (!requestIsCurrent()) return
       setState((current) => ({ ...current, busy: false, error: error instanceof Error ? error.message : 'The CSV could not be previewed.' }))
     }
   }
@@ -556,8 +585,19 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     if (!file) return
     const expectedProduct = product
     const expectedWorkflowTemplateId = workflowTemplateId
+    const expectedManagedIdentityKey = clientImportPreviewIdentityKey(managedIdentity)
     const requestId = requestRef.current + 1
     requestRef.current = requestId
+    const requestIsCurrent = () => isClientImportPreviewRequestCurrent({
+      requestId,
+      currentRequestId: requestRef.current,
+      expectedProduct,
+      currentProduct: productRef.current,
+      expectedWorkflowTemplateId,
+      currentWorkflowTemplateId: workflowTemplateRef.current,
+      expectedIdentityKey: expectedManagedIdentityKey,
+      currentIdentityKey: clientImportPreviewIdentityKey(managedIdentityRef.current),
+    })
     if (!file.name.toLocaleLowerCase('en-US').endsWith('.csv') && file.type !== 'text/csv') {
       setState({ ...emptyImportState(), sourceName: file.name, error: 'Choose a CSV file, not an Excel workbook or another format.' })
       return
@@ -570,10 +610,10 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     setState({ ...emptyImportState(), sourceName: file.name, busy: true })
     try {
       const sourceText = await file.text()
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
-      await runPreview(file.name, sourceText, undefined, expectedProduct, expectedWorkflowTemplateId)
+      if (!requestIsCurrent()) return
+      await runPreview(file.name, sourceText, undefined, expectedProduct, expectedWorkflowTemplateId, expectedManagedIdentityKey)
     } catch {
-      if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
+      if (!requestIsCurrent()) return
       setState({ ...emptyImportState(), sourceName: file.name, error: 'The browser could not read this CSV.' })
     }
   }
