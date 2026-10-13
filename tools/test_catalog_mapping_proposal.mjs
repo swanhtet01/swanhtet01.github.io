@@ -236,8 +236,22 @@ test('Shop variant mapping can be changed or excluded before staging', async () 
   )
   const unresolved = await addShopVariantColumnToClientImportPreview(ambiguous)
   assert.equal(unresolved.variantHeader, '')
+  assert.equal(unresolved.variantChoiceRequired, true)
+  assert.equal(unresolved.preview.readyForStaging, false)
+  assert.equal(Object.prototype.hasOwnProperty.call(unresolved.preview.mapping, 'variant'), false)
+  assert.equal(unresolved.preview.fileIssues[0].code, 'variant_choice_required')
+  assert.match(unresolved.preview.fileIssues[0].message, /option, size/)
+  const changedOtherColumn = await createClientImportPreview(
+    'sku,item_name,option,size,opening_stock,reorder_at,price_mmk\nCAFE-2,Tea,Standard,Large,12,3,1800',
+    'commerce',
+    { ...ambiguous.mapping, name: 'item_name' },
+  )
+  const stillUnresolved = await addShopVariantColumnToClientImportPreview(changedOtherColumn)
+  assert.equal(stillUnresolved.variantChoiceRequired, true)
+  assert.equal(stillUnresolved.preview.readyForStaging, false)
   const selected = await addShopVariantColumnToClientImportPreview(ambiguous, 'size')
   assert.equal(selected.variantHeader, 'size')
+  assert.equal(selected.variantChoiceRequired, false)
   assert.equal(selected.preview.rows[0].values.variant, 'Large')
   const selectedStage = buildClientImportStagingPackage(selected.preview, {
     workflowTemplateId: selected.preview.workflowTemplateId,
@@ -246,6 +260,10 @@ test('Shop variant mapping can be changed or excluded before staging', async () 
   })
   assert.equal(selectedStage.mapping.variant, 'size')
   assert.equal(selectedStage.rows[0].values.variant, 'Large')
+  const explicitlyOmitted = await addShopVariantColumnToClientImportPreview(ambiguous, '')
+  assert.equal(explicitlyOmitted.variantChoiceRequired, false)
+  assert.equal(explicitlyOmitted.preview.mapping.variant, '')
+  assert.equal(explicitlyOmitted.preview.readyForStaging, true)
 })
 
 test('local Shop replay preserves variants from the Shop-only preview extension', async () => {

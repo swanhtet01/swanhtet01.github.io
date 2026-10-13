@@ -253,10 +253,20 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const visibleRows = showAllRows ? importReviewRows : importReviewRows.slice(0, 12)
   const allRowsVisible = !state.preview || state.preview.rows.length <= 12 || showAllRows
   const variantHeader = product === 'commerce' ? state.preview?.mapping.variant ?? '' : ''
+  const variantChoiceRequired = product === 'commerce' && Boolean(state.preview?.fileIssues.some((issue) => issue.code === 'variant_choice_required'))
+  const variantMappingNeedsReview = product === 'commerce' && Boolean(state.preview?.fileIssues.some((issue) => issue.field === 'variant'))
   const matchedFieldCount = state.preview
     ? state.preview.fields.filter((field) => Boolean(state.preview?.mapping[field.id])).length
     : 0
-  const mappingNeedsReview = Boolean(state.preview?.fields.some((field) => field.required && !state.preview?.mapping[field.id]))
+  const mappingNeedsReview = Boolean(state.preview?.fields.some((field) => field.required && !state.preview?.mapping[field.id])) || variantMappingNeedsReview
+  const getUnusedVariantOptionValue = (base: string) => {
+    let value = base
+    while (state.preview?.headers.includes(value)) value += '_'
+    return value
+  }
+  const variantChoicePlaceholderValue = getUnusedVariantOptionValue('__supermega_variant_choice_required__')
+  const variantOmitValue = getUnusedVariantOptionValue('__supermega_variant_do_not_import__')
+  const variantSelectValue = variantChoiceRequired ? variantChoicePlaceholderValue : variantHeader || variantOmitValue
   const importContextReady = Boolean(workspace.trim() && owner.trim())
   const managedActivation = product === 'commerce'
     ? {
@@ -342,7 +352,9 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     ? 'Resolve the existing SKU conflicts below before importing.'
     : state.preview
       ? mappingNeedsReview
-        ? 'Choose the missing required columns. Rows stay read-only until the mapping is clean.'
+        ? variantMappingNeedsReview
+          ? 'Choose a Shop variant column or explicitly choose “Do not import”. The file stays locked until the choice is clear.'
+          : 'Choose the missing required columns. Rows stay read-only until the mapping is clean.'
         : state.preview.readyForStaging
           ? managedIdentity
             ? 'The file is clean. Check it with the company account, then confirm the final import.'
@@ -363,7 +375,11 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const importRepairMessage = state.preview
     ? state.preview.readyForStaging
       ? 'Clean enough to prepare. SuperMega will still ask before anything is written.'
-      : missingRequiredColumns
+      : variantMappingNeedsReview && missingRequiredColumns
+        ? 'Choose or omit the Shop variant column and match the missing required columns.'
+        : variantMappingNeedsReview
+          ? 'Choose one Shop variant column or explicitly choose “Do not import” to continue.'
+        : missingRequiredColumns
         ? 'Match the required columns first; then row-level fixes become reliable.'
         : state.preview.totals.duplicates
           ? 'Remove or rename duplicate keys so every imported record has one owner.'
@@ -403,7 +419,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               ? 'Checking company'
               : state.preview
                 ? mappingNeedsReview
-                  ? 'Match required columns'
+                  ? variantMappingNeedsReview ? 'Review column choices' : 'Match required columns'
                   : state.preview.totals.duplicates
                     ? 'Fix duplicate keys'
                     : state.preview.totals.issueRows
@@ -456,7 +472,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             ? 'The clean file can be checked against the company account before anything changes.'
             : 'Free mode can export the package for support review without sending data from the browser.'
           : state.preview
-            ? 'Setup stays locked until required columns, row issues, and duplicate keys are clear.'
+          ? 'Setup stays locked until required columns, any Shop variant choice, row issues, and duplicate keys are clear.'
             : 'Choose your CSV to prepare your import.'
   const activationHandoffRows = [
     ['Package', state.preview ? `${state.preview.totals.ready}/${state.preview.totals.rows} ready` : 'Waiting'],
@@ -989,7 +1005,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                 const basis = suggestion?.header === selected ? suggestion.basis : selected ? 'reviewed' : field.required ? 'required' : 'optional'
                 return <label key={field.id}>{field.label}{field.required ? ' *' : ''}<select onChange={(event) => remap(field.id, event.target.value)} value={selected}><option value="">{field.required ? 'Choose column' : 'Do not import'}</option>{state.preview?.headers.map((header) => <option key={header}>{header}</option>)}</select><small>{mappingBasisLabels[basis] ?? basis}</small></label>
               })}
-              {product === 'commerce' ? <label>Variant (optional)<select onChange={(event) => remap('variant', event.target.value)} value={variantHeader}><option value="">Do not import</option>{state.preview.headers.map((header) => <option key={header}>{header}</option>)}</select><small>{variantHeader ? 'Review the selected values in every row below.' : 'No variant column will be imported.'}</small></label> : null}
+              {product === 'commerce' ? <label>Variant (optional)<select onChange={(event) => remap('variant', event.target.value === variantOmitValue ? '' : event.target.value)} value={variantSelectValue}><option disabled value={variantChoicePlaceholderValue}>Choose a variant column</option><option value={variantOmitValue}>Do not import</option>{state.preview.headers.map((header) => <option key={header}>{header}</option>)}</select><small>{variantChoiceRequired ? 'Choose one of the detected columns or explicitly choose “Do not import”.' : variantHeader ? 'Review the selected values in every row below.' : 'No variant column will be imported.'}</small></label> : null}
             </fieldset>
           </details>
 
@@ -1026,7 +1042,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyLocalImport} onClick={() => void activateLocalImport()} type="button">{state.applying ? `Adding ${productName.toLowerCase()} records...` : `Add ${state.preview.totals.ready} ${localActionLabel}`}</button></div>
           </> : null}
           <div className="catalog-import-footer">
-            <div><strong>{localAppliedIsCurrent && state.localApplied ? `${state.localApplied.created} ${localRecordLabel} added; ${state.localApplied.alreadyPresent} already current.` : appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? 'Validated for this company.' : state.preview.readyForStaging && !importContextReady ? 'Add company and owner above.' : catalogHasConflicts ? 'Resolve existing SKU conflicts first.' : state.preview.readyForStaging ? localActivationAvailable ? `Ready to add to your local ${productName} workspace.` : 'Data check passed.' : 'Fix the highlighted rows first.'}</strong><small>{localAppliedIsCurrent
+            <div><strong>{localAppliedIsCurrent && state.localApplied ? `${state.localApplied.created} ${localRecordLabel} added; ${state.localApplied.alreadyPresent} already current.` : appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? 'Validated for this company.' : state.preview.readyForStaging && !importContextReady ? 'Add company and owner above.' : catalogHasConflicts ? 'Resolve existing SKU conflicts first.' : state.preview.readyForStaging ? localActivationAvailable ? `Ready to add to your local ${productName} workspace.` : 'Data check passed.' : variantMappingNeedsReview ? 'Review the Shop variant choice first.' : mappingNeedsReview ? 'Choose the missing required columns first.' : 'Fix the highlighted rows first.'}</strong><small>{localAppliedIsCurrent
               ? `Open ${productName} to use the imported ${localUseLabel}.`
               : appliedIsCurrent && state.applied
               ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.${state.applied.shopPack ? ` ${state.applied.shopPack.id} pack revision ${state.applied.shopPack.version} is ready.` : ''}${state.applied.plantPack ? ` ${state.applied.plantPack.id} Plant setup is ready.` : ''}`
@@ -1035,7 +1051,9 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               : catalogHasConflicts
                 ? 'Update the existing products separately, or remove conflicting rows from the CSV.'
               : mappingNeedsReview
-                ? 'Choose the required columns above.'
+                ? variantMappingNeedsReview
+                  ? 'Choose one Shop variant column or explicitly choose “Do not import” above.'
+                  : 'Choose the required columns above.'
               : !state.preview.readyForStaging
                 ? 'Correct the CSV and upload it again.'
               : !importContextReady

@@ -256,6 +256,8 @@ export function commerceCatalogImportReview(existing: CommerceItem, incoming: Co
 }
 
 export async function addShopVariantColumnToClientImportPreview(preview: ClientImportPreview, selectedVariantHeader?: string) {
+  const variantCandidates = shopVariantCandidates(preview.headers)
+  const variantChoiceRequired = selectedVariantHeader === undefined && variantCandidates.length > 1
   const variantHeader = selectedVariantHeader === undefined
     ? suggestedShopVariantHeader(preview.headers)
     : selectedVariantHeader
@@ -265,6 +267,9 @@ export async function addShopVariantColumnToClientImportPreview(preview: ClientI
     : undefined
   const mappingIssue: ClientImportIssue | null = reusedHeader
     ? { code: 'mapping_reused_header', field: 'variant', message: `${variantHeader} cannot supply more than one target field.` }
+    : null
+  const choiceIssue: ClientImportIssue | null = variantChoiceRequired
+    ? { code: 'variant_choice_required', field: 'variant', message: `Multiple possible variant columns were found: ${variantCandidates.join(', ')}. Choose one or explicitly select “Do not import”.` }
     : null
   const rows = preview.rows.map((row) => {
     const variant = variantHeader ? row.source[variantHeader] ?? '' : ''
@@ -281,8 +286,15 @@ export async function addShopVariantColumnToClientImportPreview(preview: ClientI
       issues,
     }
   })
-  const mapping = { ...preview.mapping, variant: variantHeader }
-  const fileIssues = mappingIssue ? [...preview.fileIssues, mappingIssue] : preview.fileIssues
+  const mapping = {
+    ...preview.mapping,
+    ...(variantChoiceRequired ? {} : { variant: variantHeader }),
+  }
+  const fileIssues = [
+    ...preview.fileIssues,
+    ...(mappingIssue ? [mappingIssue] : []),
+    ...(choiceIssue ? [choiceIssue] : []),
+  ]
   const totals = {
     ...preview.totals,
     ready: rows.filter((row) => row.status === 'ready').length,
@@ -297,9 +309,11 @@ export async function addShopVariantColumnToClientImportPreview(preview: ClientI
     workflowTemplateId: preview.workflowTemplateId,
     sourceDigest: preview.sourceDigest,
     mapping,
+    variantCandidates: variantChoiceRequired ? variantCandidates : [],
   }))
   return {
     variantHeader,
+    variantChoiceRequired,
     preview: {
       ...preview,
       mapping,
