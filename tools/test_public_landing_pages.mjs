@@ -26,6 +26,7 @@ const readStatic = (path) => readFileSync(resolve(staticDir, path), 'utf8')
 const publicObservabilitySource = readStatic('vercel-insights.js')
 const publicCarouselSource = readStatic('platform-carousel.js')
 const publicGeneratorSource = readFileSync(resolve(root, 'tools/create_public_vercel_output.mjs'), 'utf8')
+const publicGalleryCaptureSource = readFileSync(resolve(root, 'tools/capture_public_gallery.mjs'), 'utf8')
 const skipLinkTouchTargetCss = '.skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }'
 
 let checks = 0
@@ -62,6 +63,11 @@ for (const route of ['/website/', '/ecommerce/']) {
   check(!/\b(preview|trial|demo)\b/i.test(description), `manifest_description_no_preview_funnel:${route}`)
 }
 check(publicCarouselSource.includes('data-gallery-previous') && publicCarouselSource.includes('data-gallery-next') && publicCarouselSource.includes('prefers-reduced-motion'), 'public_carousel_runtime_controls_and_motion')
+const captureSourceGuard = publicGalleryCaptureSource.indexOf("const showroomChanges = spawnSync('git', ['status', '--porcelain', '--', 'showroom']")
+const captureFixtureBuild = publicGalleryCaptureSource.indexOf("buildFixture('build_shop_browser_fixture.mjs'")
+check(captureSourceGuard >= 0 && publicGalleryCaptureSource.includes('showroomChanges.stdout.trim()')
+  && publicGalleryCaptureSource.includes('clean_product_source_commit_required')
+  && captureSourceGuard < captureFixtureBuild, 'gallery_capture_requires_clean_product_source')
 check(countOccurrences(publicGeneratorSource, skipLinkTouchTargetCss) === 1, 'landing_skip_link_touch_target_source_contract')
 check(publicGeneratorSource.includes('--blue: #5b4ee8;') && publicGeneratorSource.includes('background:#f1f0fb;border:1px solid #dedbf4;'), 'landing_indigo_visual_system_source_contract')
 check(!publicGeneratorSource.includes('#edf4f0') && !publicGeneratorSource.includes('#dce8e1'), 'landing_legacy_green_frames_removed')
