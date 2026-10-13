@@ -6,6 +6,7 @@ export const STOREFRONT_DRAFT_KEY_PREFIX = 'supermega.ecommerce.storefront_draft
 export const LEGACY_STOREFRONT_DRAFT_KEY_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
 export const LOCAL_STOREFRONT_DRAFT_SCOPE = 'local'
 const STOREFRONT_DRAFT_LOCK_PREFIX = 'supermega:ecommerce:storefront-draft:'
+const STOREFRONT_SUMMARY_MAX_LENGTH = 180
 
 export type StorefrontDraftInput = {
   storeName: string
@@ -69,6 +70,19 @@ function canonicalText(value: unknown, field: string, maximum: number) {
   return value
 }
 
+export function storefrontSummaryValidationMessage(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return 'Add a short description before saving your store.'
+  }
+  if (value !== value.trim()) {
+    return 'Remove spaces at the beginning or end of the description.'
+  }
+  if (value.length > STOREFRONT_SUMMARY_MAX_LENGTH) {
+    return `Keep the description to ${STOREFRONT_SUMMARY_MAX_LENGTH} characters or fewer.`
+  }
+  return ''
+}
+
 function canonicalBlankableText(value: unknown, field: string, maximum: number) {
   if (typeof value !== 'string' || value !== value.trim() || value.length > maximum) {
     throw new Error(`${field} must be canonical text of at most ${maximum} characters or empty.`)
@@ -102,7 +116,7 @@ function canonicalTimestamp(value: unknown) {
 
 function canonicalFields(value: Omit<StorefrontDraftInput, 'sourcePreviewDigest'>) {
   const storeName = canonicalText(value.storeName, 'Store name', 60)
-  const summary = canonicalText(value.summary, 'Store summary', 180)
+  const summary = canonicalText(value.summary, 'Store summary', STOREFRONT_SUMMARY_MAX_LENGTH)
   if (!Array.isArray(value.selectedSkus) || value.selectedSkus.length < 1 || value.selectedSkus.length > 8) {
     throw new Error('Choose between 1 and 8 Shop items before saving.')
   }

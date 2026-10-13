@@ -2974,6 +2974,17 @@ function memoryStorageAdapter(initial = new Map()) {
 
 const noopLocks = { request: async (_name, _options, callback) => callback() }
 
+test('storefront summary validation explains why a description cannot be saved', async () => {
+  const { storefrontSummaryValidationMessage } = await import(
+    '../showroom/src/products/ecommerce/storefront-draft.ts'
+  )
+  assert.match(storefrontSummaryValidationMessage(''), /add a short description/i)
+  assert.match(storefrontSummaryValidationMessage('   '), /add a short description/i)
+  assert.match(storefrontSummaryValidationMessage(' description '), /remove spaces/i)
+  assert.match(storefrontSummaryValidationMessage('x'.repeat(181)), /180 characters/i)
+  assert.equal(storefrontSummaryValidationMessage('Fresh tea and pastries.'), '')
+})
+
 test('a bakery Ecommerce storefront reads trade-specific copy, not the generic workflow wording', async () => {
   const state = bakeryWorkspace()
   const { adapter } = memoryStorageAdapter(new Map([[COMMERCE_KEY, JSON.stringify(state)]]))
