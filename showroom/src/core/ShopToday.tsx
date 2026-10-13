@@ -151,8 +151,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
           <small>{metric.label}</small>
           <strong>{metric.value}</strong>
           <span>{metric.detail}</span>
-          {index === 1 ? <Link aria-label="Review open orders" className="shop-today-metric-target" to="/shop/?tab=orders#shop-order-queue" /> : null}
-          {index === 2 ? <Link aria-label="Review stock alerts" className="shop-today-metric-target" to="/shop/?tab=inventory#shop-stock-attention-title" /> : null}
+          {index > 0 ? <Link aria-label={`Review ${metric.label.toLowerCase()}`} className="shop-today-metric-target" to={index === 1 ? '/shop/?tab=orders#shop-order-queue' : '/shop/?tab=inventory#shop-stock-attention-title'} /> : null}
         </article>)}
       </div>
     </section>
@@ -162,7 +161,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
         <header><span><strong>Products</strong></span><b>{commerce.items.length} total</b></header>
         {visibleProducts.length ? <div aria-hidden="true" className="shop-product-columns"><span>Product</span><span>Stock</span><span>Price</span></div> : null}
         <div className="shop-operating-list shop-product-list">
-          {visibleProducts.length ? visibleProducts.map((item) => <Link aria-label={`${item.name}, ${item.onHand} in stock${item.onHand <= item.reorderAt ? ', reorder needed' : ''}, ${formatMmk(item.price)}`} data-low-stock={item.onHand <= item.reorderAt} key={item.sku} to="/shop/?tab=inventory">
+          {visibleProducts.length ? visibleProducts.map((item) => <Link aria-label={`${item.name}: ${item.onHand} in stock, ${formatMmk(item.price)}`} data-low-stock={item.onHand <= item.reorderAt} key={item.sku} to="/shop/?tab=inventory">
             <span className="shop-product-identity"><ProductPhoto className="shop-today-product-photo" fallback={<span aria-hidden="true" className="shop-today-product-fallback">{item.name.trim().slice(0, 1).toUpperCase()}</span>} scope={productImageScope} sku={item.sku} /><span><strong>{item.name}</strong><small>{item.onHand} in stock{item.onHand <= item.reorderAt ? ' · reorder' : ''}</small></span></span>
             <span className="shop-product-stock">{item.onHand}</span>
             <span className="shop-product-price"><b>{formatMmk(item.price)}</b></span>
