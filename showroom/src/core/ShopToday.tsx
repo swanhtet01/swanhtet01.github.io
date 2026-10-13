@@ -151,6 +151,8 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
           <small>{metric.label}</small>
           <strong>{metric.value}</strong>
           <span>{metric.detail}</span>
+          {index === 1 ? <Link aria-label="Review open orders" className="shop-today-metric-target" to="/shop/?tab=orders#shop-order-queue" /> : null}
+          {index === 2 ? <Link aria-label="Review stock alerts" className="shop-today-metric-target" to="/shop/?tab=inventory#shop-stock-attention-title" /> : null}
         </article>)}
       </div>
     </section>
@@ -158,11 +160,12 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
     <section aria-label="Shop operating view" className="shop-operations-board" data-track={nextTrack.toLowerCase()}>
       <article aria-label="Product list" className="shop-operations-card shop-stock-watch-card">
         <header><span><strong>Products</strong></span><b>{commerce.items.length} total</b></header>
+        {visibleProducts.length ? <div aria-hidden="true" className="shop-product-columns"><span>Product</span><span>Stock</span><span>Price</span></div> : null}
         <div className="shop-operating-list shop-product-list">
-          {visibleProducts.length ? visibleProducts.map((item) => <Link data-low-stock={item.onHand <= item.reorderAt} key={item.sku} to="/shop/?tab=inventory">
-            <ProductPhoto className="shop-today-product-photo" fallback={<span aria-hidden="true" className="shop-today-product-fallback">{item.name.trim().slice(0, 1).toUpperCase()}</span>} scope={productImageScope} sku={item.sku} />
-            <span><strong>{item.name}</strong><small>{item.onHand} in stock{item.onHand <= item.reorderAt ? ' · reorder' : ''}</small></span>
-            <span><b>{formatMmk(item.price)}</b></span>
+          {visibleProducts.length ? visibleProducts.map((item) => <Link aria-label={`${item.name}, ${item.onHand} in stock${item.onHand <= item.reorderAt ? ', reorder needed' : ''}, ${formatMmk(item.price)}`} data-low-stock={item.onHand <= item.reorderAt} key={item.sku} to="/shop/?tab=inventory">
+            <span className="shop-product-identity"><ProductPhoto className="shop-today-product-photo" fallback={<span aria-hidden="true" className="shop-today-product-fallback">{item.name.trim().slice(0, 1).toUpperCase()}</span>} scope={productImageScope} sku={item.sku} /><span><strong>{item.name}</strong><small>{item.onHand} in stock{item.onHand <= item.reorderAt ? ' · reorder' : ''}</small></span></span>
+            <span className="shop-product-stock">{item.onHand}</span>
+            <span className="shop-product-price"><b>{formatMmk(item.price)}</b></span>
           </Link>) : <div className="shop-operating-empty"><strong>{bi('No products to sell yet')}</strong><span>{bi('Add one item to start, or import a catalog.')}</span><Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">{bi('Add first product')}</Link><Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">{bi('Import a CSV')} <span aria-hidden="true">→</span></Link></div>}
         </div>
         {commerce.items.length ? <footer><Link to="/shop/?tab=inventory">View products <span aria-hidden="true">→</span></Link></footer> : null}
