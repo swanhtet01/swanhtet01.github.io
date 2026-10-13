@@ -1148,7 +1148,7 @@ function ShopOperatingStrip({ actionLabel, choice, detail, disabled, onAction, o
   </section>
 }
 
-function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds, stockLocationCount }: {
+function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = null, initialCustomer, initialQuery, items, lowStockCount, loyaltyPoints, onReview, openOrderCount, operatorLabel, operatingContext, paymentQrScope, persistLocalDraft, productImageScope, recordStatus, recordedOrderIds }: {
   canCompleteInOneReview: boolean
   disabled: boolean
   draftStorageScope?: CounterTicketStorageScope | null
@@ -1166,7 +1166,6 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   productImageScope: string
   recordStatus: ShopRecordStatus
   recordedOrderIds: string[]
-  stockLocationCount: number
 }) {
   const [tickets] = useState(() => {
     if (!persistLocalDraft) return createCounterTicketSession(null, null, initialCustomer)
@@ -1330,7 +1329,6 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
             <nav aria-label="Counter context" className="shop-counter-summary">
               {openOrderCount > 0 ? <Link to="/shop/?tab=orders">{openOrderCount} open orders</Link> : null}
               {lowStockCount > 0 ? <Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link> : null}
-              <Link to="/shop/?tab=inventory">{stockLocationCount > 0 ? `${stockLocationCount} stock ${stockLocationCount === 1 ? 'location' : 'locations'}` : 'Simple stock'}</Link>
               <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
             </nav>
           </div>
@@ -1434,23 +1432,8 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
           {payment !== 'Cash' ? <PaymentQrButton amountDue={formatMoney(total)} method={payment} scope={paymentQrScope} settingsHint /> : null}
           {canCompleteInOneReview ? <label className="shop-open-order-choice"><input checked={outcome === 'open_order'} onChange={(event) => setOutcome(event.target.checked ? 'open_order' : 'paid_handoff')} type="checkbox" /><span><strong>Keep as open order</strong><small>Use for pay-later or later handoff. Otherwise this sale completes now.</small></span></label> : null}
         </div>
-        <div className="shop-counter-outcomes" aria-label="Sale review summary"><article><small>Payment method</small><strong>{payment}</strong></article><article><small>After review</small><strong>{effectiveOutcome === 'paid_handoff' ? 'Complete at counter' : 'Continue in Orders'}</strong></article></div>
+        {cartLowStockLines.length ? <div className="shop-cart-stock-risk" role="status"><strong>Stock needs attention after this sale</strong><span>{cartLowStockLines.length} {cartLowStockLines.length === 1 ? 'item reaches its' : 'items reach their'} reorder level. <Link to="/shop/?tab=inventory">Review stock</Link></span></div> : null}
         <footer><div><span>{bi('Total')}</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled || recoveryPaused || catalogChanged} onClick={reviewSale} type="button">{disabled ? bi('Sales paused') : effectiveOutcome === 'paid_handoff' ? <span className="cashier-action-label"><span>Review &amp; complete sale</span>{CASHIER_COMPLETE_MY ? <small lang="my">{CASHIER_COMPLETE_MY}</small> : null}</span> : bi('Review order')}<span aria-hidden="true">→</span></button></footer></> : null}
-      </aside>
-      <aside aria-label="Sale follow-up" className="shop-counter-followup">
-        <header>
-          <h2>Sale follow-up</h2>
-          <span className="shop-counter-followup-status" data-ready={unitCount > 0 && payment ? 'true' : 'false'}>{unitCount ? payment ? 'Ready to review' : 'Choose payment' : 'Waiting for items'}</span>
-        </header>
-        <ol className="shop-counter-steps">
-          <li data-complete={unitCount > 0 ? 'true' : 'false'}><span>1</span><div><strong>Build the sale</strong><small>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'} · ${formatMoney(total)}` : 'Choose or scan products'}</small></div></li>
-          <li data-complete={unitCount > 0 && Boolean(payment) ? 'true' : 'false'}><span>2</span><div><strong>Confirm payment</strong><small>{unitCount ? payment ? `${payment} selected` : 'Choose a method' : 'Available after items are added'}</small></div></li>
-          <li data-complete="false"><span>3</span><div><strong>Record the result</strong><small>{effectiveOutcome === 'paid_handoff' ? 'Review once to complete the sale and open its record' : 'Review once, then finish payment and handoff in Orders'}</small></div></li>
-        </ol>
-        <section className="shop-counter-stock-note" data-risk={cartLowStockLines.length ? 'true' : 'false'}>
-          <div><span aria-hidden="true">{cartLowStockLines.length ? '!' : '✓'}</span><div><strong>{cartLowStockLines.length ? 'Stock needs attention' : 'Stock check'}</strong><p>{cartLowStockLines.length ? `${cartLowStockLines.length} ${cartLowStockLines.length === 1 ? 'line reaches' : 'lines reach'} the reorder level after this sale.` : unitCount ? 'No cart line reaches its reorder level after review.' : lowStockCount ? `${lowStockCount} ${lowStockCount === 1 ? 'item needs' : 'items need'} attention in Stock.` : 'No item is currently below its reorder level.'}</p></div></div>
-          <Link to="/shop/?tab=inventory">Review stock</Link>
-        </section>
       </aside>
     </div>
     {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>{bi('Current sale')}</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
@@ -7130,7 +7113,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {counterBoundary}
     {shopCatalogSetupNotice}
-    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} stockLocationCount={managedInventoryProjection?.locations.length ?? 0} />
+    <ShopCounter key={counterDraftContext.key} persistLocalDraft={counterDraftContext.persistLocalDraft} canCompleteInOneReview={confirmedLocalShop || Boolean(managedIdentity)} disabled={commerceControlsDisabled || (!confirmedLocalShop && !managedIdentity) || (shopShiftRequired && !activeShift)} draftStorageScope={counterDraftContext.storageScope} initialCustomer={shopCounterCustomer} initialQuery={shopCounterSearch} items={commerce.items} lowStockCount={lowStock.length} loyaltyPoints={shopLoyaltyPoints} onReview={reviewCounterSale} openOrderCount={openOrders.length} operatorLabel={managedIdentity?.email || readLastOperator()} operatingContext={shopOperatingEligible && shopShiftRequired ? <ShopOperatingStrip {...shopOperatingView} /> : null} paymentQrScope={paymentQrScope} productImageScope={productImageScope} recordStatus={shopRecordStatus} recordedOrderIds={commerce.orders.map(order => order.id)} />
     <Suspense fallback={null}><ReceiptDialog ack={activeReceiptAck} disabled={commerceControlsDisabled} loyalty={receiptLoyalty} merchantProfile={commerce.merchantProfile} onSaveMerchantProfile={saveCustomerReceiptProfile} onClose={() => { setReceiptAck(null); setCounterReceiptOrderId('') }} paymentQrScope={paymentQrScope} /></Suspense>
     {actionGate}
   </div>
