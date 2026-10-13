@@ -26,6 +26,7 @@ create table app_private.commerce_public_requests (
   request_id uuid not null,
   workspace_id text not null,
   request_json jsonb not null check (jsonb_typeof(request_json) = 'object'),
+  contact_json jsonb not null check (jsonb_typeof(contact_json) = 'object'),
   input_fingerprint text not null check (input_fingerprint ~ '^[0-9a-f]{64}$'),
   client_key text not null check (client_key ~ '^[0-9a-f]{64}$'),
   received_at timestamptz not null default clock_timestamp(),
@@ -128,6 +129,7 @@ $$;
 -- stock, sends a message, or creates a payment.
 create function app_private.receive_commerce_public_request(
   p_handle uuid, p_request uuid, p_fingerprint text, p_request_json jsonb,
+  p_contact_json jsonb,
   p_client_key text
 ) returns jsonb language plpgsql security definer
 set search_path = pg_catalog, app_private as $$
@@ -138,7 +140,18 @@ begin
   if p_request is null or p_fingerprint !~ '^[0-9a-f]{64}$'
     or p_client_key !~ '^[0-9a-f]{64}$'
     or jsonb_typeof(p_request_json) is distinct from 'object'
-    or p_request_json->>'id' is distinct from 'ECR-' || upper(p_request::text) then
+    or p_request_json->>'id' is distinct from 'ECR-' || upper(p_request::text)
+    or p_request_json->>'customerReference' is distinct from
+      'Web request ' || upper(substr(p_request::text, 1, 8))
+    or p_request_json ? 'customerProfile' or p_request_json ? 'deliveryAddress'
+    or p_request_json->'quote' ? 'customerProfile'
+    or p_request_json->'quote' ? 'deliveryAddress'
+    or jsonb_typeof(p_contact_json) is distinct from 'object'
+    or not (p_contact_json ? 'name' and p_contact_json ? 'phone' and p_contact_json ? 'address')
+    or p_contact_json - 'name' - 'phone' - 'address' <> '{}'::jsonb
+    or jsonb_typeof(p_contact_json->'name') is distinct from 'string'
+    or jsonb_typeof(p_contact_json->'phone') is distinct from 'string'
+    or octet_length(p_contact_json::text) > 1200 then
     raise exception 'commerce_public_invalid' using errcode = '22023';
   end if;
   select * into binding from app_private.commerce_public_storefronts
@@ -171,8 +184,9 @@ begin
     raise exception 'commerce_public_capacity' using errcode = 'P0001';
   end if;
   insert into app_private.commerce_public_requests(
-    handle, request_id, workspace_id, request_json, input_fingerprint, client_key, received_at)
-    values (p_handle, p_request, binding.workspace_id, p_request_json,
+    handle, request_id, workspace_id, request_json, contact_json,
+    input_fingerprint, client_key, received_at)
+    values (p_handle, p_request, binding.workspace_id, p_request_json, p_contact_json,
       p_fingerprint, p_client_key, stamp);
   return jsonb_build_object('status', 'received', 'requestId', p_request, 'duplicate', false);
 end;
@@ -334,7 +348,8 @@ begin
     for update skip locked limit p_limit
   )
   update app_private.commerce_public_requests item
-    set request_json = '{}'::jsonb, input_fingerprint = repeat('0', 64),
+    set request_json = '{}'::jsonb, contact_json = '{}'::jsonb,
+        input_fingerprint = repeat('0', 64),
         client_key = repeat('0', 64),
         redacted_at = clock_timestamp()
     from due where item.handle = due.handle and item.request_id = due.request_id;
@@ -346,7 +361,7 @@ end;
 $$;
 
 revoke all on function app_private.read_commerce_public_source(uuid),
-  app_private.receive_commerce_public_request(uuid,uuid,text,jsonb,text),
+  app_private.receive_commerce_public_request(uuid,uuid,text,jsonb,jsonb,text),
   app_private.replay_commerce_public_request(uuid,uuid,text),
   app_private.reserve_commerce_public_request(text,uuid,uuid),
   app_private.complete_commerce_public_request_claim(text,uuid,uuid),
@@ -355,7 +370,7 @@ revoke all on function app_private.read_commerce_public_source(uuid),
   app_private.redact_closed_commerce_public_requests(uuid,integer)
   from public, anon, authenticated, service_role;
 grant execute on function app_private.read_commerce_public_source(uuid),
-  app_private.receive_commerce_public_request(uuid,uuid,text,jsonb,text),
+  app_private.receive_commerce_public_request(uuid,uuid,text,jsonb,jsonb,text),
   app_private.replay_commerce_public_request(uuid,uuid,text),
   app_private.reserve_commerce_public_request(text,uuid,uuid),
   app_private.complete_commerce_public_request_claim(text,uuid,uuid),

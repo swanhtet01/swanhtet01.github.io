@@ -340,28 +340,32 @@ class CommercePublicStorefront:
                 pim = build_ecommerce_pim_projection(
                     scope=f"ecommerce:{source['workspaceId']}",
                     source_preview_digest=source['previewDigest'], items=pim_items)
-                address = intent['address']
+                # Contact remains in the private intake row. Shop commands and
+                # their full-state event results must never contain buyer PII.
+                contact = {'name': intent['name'], 'phone': intent['phone'],
+                           'address': intent['address']}
                 quote = build_ecommerce_checkout_quote(
-                    pim=pim, cart=intent['lines'], customer_reference=intent['name'],
+                    pim=pim, cart=intent['lines'],
+                    customer_reference=f"Web request {request_id[:8].upper()}",
                     fulfilment=intent['fulfilment'], payment_adapter=(
                         'cash_on_delivery' if intent['fulfilment'] == 'delivery' else 'pay_on_pickup'),
                     promotion_code=None, idempotency_key=key, quoted_at=quoted_at,
-                    expires_at=expires_at,
-                    customer_profile_input={'name': intent['name'], 'phone': intent['phone'], 'previous': None},
-                    delivery_address_input=({**address, 'previous': None} if address else None))
+                    expires_at=expires_at, customer_profile_input=None,
+                    delivery_address_input=None)
                 order_request = build_ecommerce_order_request(
                     quote, source_storefront_revision=source['sourceRevision'],
                     source_storefront_action_id=source['sourceActionId'])
-                cursor.execute('select app_private.receive_commerce_public_request(%s,%s,%s,%s::jsonb,%s) as receipt',
+                cursor.execute('select app_private.receive_commerce_public_request(%s,%s,%s,%s::jsonb,%s::jsonb,%s) as receipt',
                                (handle, request_id, fingerprint,
-                                json.dumps(order_request, ensure_ascii=False), client_key))
+                                json.dumps(order_request, ensure_ascii=False),
+                                json.dumps(contact, ensure_ascii=False), client_key))
                 return cursor.fetchone()['receipt']
 
     def inbox(self, principal: TrialPrincipal, *, after: str | None = None) -> dict[str, Any]:
         cursor_key = _parse_page_cursor(after) if after is not None else None
         with self.store._guarded_cursor(principal, write=False, capability='commerce.write') as (cursor, _):
             _require_public_schema(cursor)
-            cursor.execute("""select handle,request_id,request_json,received_at,status
+            cursor.execute("""select handle,request_id,request_json,contact_json,received_at,status
                 from app_private.commerce_public_requests where workspace_id=%s
                 and status <> 'closed'
                 and (%s::timestamptz is null or (received_at,handle,request_id) < (%s::timestamptz,%s::uuid,%s::uuid))
@@ -379,6 +383,7 @@ class CommercePublicStorefront:
                 if order.get('sourceRecordId')} if state else set()
             return {'requests': [{'handle': str(row['handle']), 'requestId': str(row['request_id']),
                 'request': row['request_json'],
+                'contact': row['contact_json'],
                 'shopRequestId': _shop_request_id(str(row['handle']), str(row['request_id'])),
                 'status': ('in_shop' if row['status'] == 'in_shop'
                     or _shop_request_id(str(row['handle']), str(row['request_id'])) in retained
@@ -430,8 +435,6 @@ class CommercePublicStorefront:
                 scope=f'ecommerce:{principal.workspace_id}',
                 source_preview_digest=commerce_storefront_preview_digest(state),
                 items=pim_items)
-            profile = original['customerProfile']
-            address = original.get('deliveryAddress')
             quote = build_ecommerce_checkout_quote(
                 pim=pim, cart=[{'sku': item['sku'], 'quantity': item['quantity']}
                                for item in original['lines']],
@@ -440,10 +443,7 @@ class CommercePublicStorefront:
                 payment_adapter=('cash_on_delivery' if original['fulfilment'] == 'delivery' else 'pay_on_pickup'),
                 promotion_code=None, idempotency_key='ECI-' + suffix,
                 quoted_at=quoted_at, expires_at=expires_at,
-                customer_profile_input={'name': profile['name'], 'phone': profile['phone'], 'previous': None},
-                delivery_address_input=({'line1': address['line1'], 'township': address['township'],
-                    'city': address['city'], 'instructions': address['instructions'], 'previous': None}
-                    if address else None))
+                customer_profile_input=None, delivery_address_input=None)
             request = build_ecommerce_order_request(
                 quote, source_storefront_revision=configuration['revision'],
                 source_storefront_action_id=configuration['saved']['actionId'])

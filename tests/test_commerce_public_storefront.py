@@ -216,13 +216,30 @@ class CommercePublicSqlTests(unittest.TestCase):
         inbox = self.adapter.inbox(self.owner)['requests']
         self.assertEqual(len(inbox), 1)
         self.assertEqual(inbox[0]['request']['totalMmk'], 200)
-        self.assertEqual(inbox[0]['request']['customerProfile']['phone'], body['phone'])
+        self.assertEqual(inbox[0]['contact']['phone'], body['phone'])
+        self.assertEqual(inbox[0]['contact']['name'], body['name'])
+        self.assertNotIn('customerProfile', inbox[0]['request'])
         self.assertEqual(inbox[0]['status'], 'new')
         claim = self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
         self.assertEqual(claim['status'], 'in_shop')
         self.assertFalse(claim['priceChanged'])
         self.assertEqual(self.adapter.claim(self.owner, handle=handle, request_id=body['requestId']), claim)
         self.assertEqual(self.adapter.inbox(self.owner)['requests'][0]['status'], 'in_shop')
+        with self.pg._connect(self.admin_url) as connection:
+            private = connection.execute("""select request_json,contact_json
+                from app_private.commerce_public_requests where handle=%s and request_id=%s""",
+                (handle, body['requestId'])).fetchone()
+            journal = connection.execute("""select payload_json,result_json from app_private.workspace_events
+                where workspace_id=%s and event_type='commerce.storefront_request.received'""",
+                (self.workspace_id,)).fetchone()
+            state = connection.execute("""select state_json from app_private.workspace_state
+                where workspace_id=%s and surface='commerce'""",
+                (self.workspace_id,)).fetchone()[0]
+        self.assertEqual(private[1]['phone'], body['phone'])
+        for persisted in (private[0], journal[0], journal[1], state):
+            contents = self.json.dumps(persisted, ensure_ascii=False)
+            self.assertNotIn(body['name'], contents)
+            self.assertNotIn(body['phone'], contents)
         conflict = {**body, 'lines': [{'sku': 'SKU-1', 'quantity': 3}]}
         with self.assertRaises(Exception):
             self.adapter.receive(handle=handle, body=conflict, client_key='a' * 64)
@@ -277,16 +294,17 @@ class CommercePublicSqlTests(unittest.TestCase):
         self.assertEqual(self.adapter.redact_due(run_id=run_id, limit=5), 1)
         self.assertEqual(self.adapter.redaction_due_count(cap=5), 0)
         with self.pg._connect(self.admin_url) as connection:
-            row = connection.execute("""select request_json,client_key,input_fingerprint,
+            row = connection.execute("""select request_json,contact_json,client_key,input_fingerprint,
                 close_reason,closed_by,redacted_at from app_private.commerce_public_requests
                 where handle=%s and request_id=%s""", (handle, body['requestId'])).fetchone()
             receipts = connection.execute("""select count(*) from app_private.commerce_public_redaction_runs
                 where run_id=%s""", (run_id,)).fetchone()[0]
         self.assertEqual(row[0], {})
-        self.assertEqual(row[1], '0' * 64)
+        self.assertEqual(row[1], {})
         self.assertEqual(row[2], '0' * 64)
-        self.assertEqual((row[3], row[4]), ('customer_withdrew', self.owner.actor_id))
-        self.assertIsNotNone(row[5])
+        self.assertEqual(row[3], '0' * 64)
+        self.assertEqual((row[4], row[5]), ('customer_withdrew', self.owner.actor_id))
+        self.assertIsNotNone(row[6])
         self.assertEqual(receipts, 1)
 
     def test_claimed_request_cannot_be_closed_as_unconverted_intake(self):
@@ -303,14 +321,41 @@ class CommercePublicSqlTests(unittest.TestCase):
                 where handle=%s and request_id=%s""", (handle, body['requestId'])).fetchone()[0]
         self.assertEqual(status, 'in_shop')
 
+    def test_delivery_contact_stays_private_when_shop_receives_request(self):
+        publication = self.adapter.publish(self.owner, expected_version=1)
+        handle = publication['handle']
+        body = {**_body(), 'name': 'Synthetic Buyer Z', 'phone': '09 777 888 999',
+                'fulfilment': 'delivery',
+                'address': {'line1': 'Synthetic Private Lane 17', 'township': 'Kamayut',
+                            'city': 'Yangon', 'instructions': 'Blue gate'}}
+        self.adapter.receive(handle=handle, body=body, client_key='c' * 64)
+        self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
+        with self.pg._connect(self.admin_url) as connection:
+            row = connection.execute("""select request_json,contact_json
+                from app_private.commerce_public_requests where handle=%s and request_id=%s""",
+                (handle, body['requestId'])).fetchone()
+            events = connection.execute("""select payload_json,result_json from app_private.workspace_events
+                where workspace_id=%s and surface='commerce'""",
+                (self.workspace_id,)).fetchall()
+            state = connection.execute("""select state_json from app_private.workspace_state
+                where workspace_id=%s and surface='commerce'""",
+                (self.workspace_id,)).fetchone()[0]
+        self.assertEqual(row[1]['address']['line1'], body['address']['line1'])
+        self.assertNotIn('customerProfile', row[0])
+        self.assertNotIn('deliveryAddress', row[0])
+        for persisted in (row[0], state, *(part for event in events for part in event)):
+            contents = self.json.dumps(persisted, ensure_ascii=False)
+            for private in (body['name'], body['phone'], body['address']['line1']):
+                self.assertNotIn(private, contents)
+
     def test_inbox_keyset_pages_past_fifty_requests(self):
         publication = self.adapter.publish(self.owner, expected_version=1)
         handle = publication['handle']
         with self.pg._connect(self.admin_url) as connection:
             for number in range(51):
                 connection.execute("""insert into app_private.commerce_public_requests
-                    (handle,request_id,workspace_id,request_json,input_fingerprint,client_key,received_at)
-                    values(%s,%s,%s,'{}'::jsonb,%s,%s,now() - (%s * interval '1 second'))""",
+                    (handle,request_id,workspace_id,request_json,contact_json,input_fingerprint,client_key,received_at)
+                    values(%s,%s,%s,'{}'::jsonb,'{}'::jsonb,%s,%s,now() - (%s * interval '1 second'))""",
                     (handle, str(uuid4()), self.workspace_id, 'a' * 64, 'b' * 64, number))
         first = self.adapter.inbox(self.owner)
         self.assertEqual(len(first['requests']), 50)

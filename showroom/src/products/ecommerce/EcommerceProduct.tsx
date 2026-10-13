@@ -2287,7 +2287,7 @@ export function EcommerceProduct() {
         </div>
         {newPublicRequests.length ? <div className="ecommerce-public-intake-list">
           {newPublicRequests.slice(0, publicVisibleCount).map((entry) => <div className="ecommerce-public-intake-row" key={`${entry.handle}:${entry.requestId}`}>
-            <div><strong>{entry.request.customerReference}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small><small>Phone: {entry.request.customerProfile?.phone || 'Not available'}</small></div>
+            <div><strong>{entry.contact.name}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small><small>{entry.contact.phone}{entry.contact.address ? ` · ${entry.contact.address.line1}, ${entry.contact.address.township}, ${entry.contact.address.city}` : ''}</small></div>
             <div>
               <button className="core-button secondary" disabled={publicBusy} onClick={() => void bringPublicRequestToShop(entry)} type="button">{entry.status === 'reviewing' ? 'Retry Shop review' : 'Review in Shop'}</button>
               {entry.status === 'new' ? <button className="text-link" disabled={publicBusy} onClick={() => {

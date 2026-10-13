@@ -14,13 +14,17 @@ export type ManagedCommercePublicRequest = {
   shopRequestId: string
   status: 'new' | 'reviewing' | 'in_shop'
   receivedAt: string
+  contact: {
+    name: string
+    phone: string
+    address: null | { line1: string; township: string; city: string; instructions: string | null }
+  }
   request: {
     id: string
     customerReference: string
     fulfilment: 'pickup' | 'delivery'
     totalMmk: number
     lines: Array<{ sku: string; name: string; quantity: number }>
-    customerProfile?: { phone: string }
   }
 }
 
