@@ -265,7 +265,7 @@ export function WebsiteProduct() {
   const [repairing, setRepairing] = useState(false)
   const [repairArchiveKey, setRepairArchiveKey] = useState('')
   const [recoveryArchives, setRecoveryArchives] = useState<WebsiteRecoveryArchiveSummary[]>(() => (
-    typeof window === 'undefined' ? [] : listWebsiteRecoveryArchives(window.localStorage)
+    storageMode === 'managed' || typeof window === 'undefined' ? [] : listWebsiteRecoveryArchives(window.localStorage)
   ))
   const [recoveryDeleteCandidate, setRecoveryDeleteCandidate] = useState('')
   const [headingFocusRequest, setHeadingFocusRequest] = useState(0)
@@ -309,7 +309,7 @@ export function WebsiteProduct() {
   const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
   const [localLeadLedger, setLocalLeadLedger] = useState(() => {
-    if (typeof window === 'undefined') return emptyWebsiteLeadLedger()
+    if (storageMode === 'managed' || typeof window === 'undefined') return emptyWebsiteLeadLedger()
     try { return readWebsiteLeadLedger(window.localStorage) } catch { return emptyWebsiteLeadLedger() }
   })
   const leadLedger = storageMode === 'managed'
@@ -474,7 +474,7 @@ export function WebsiteProduct() {
   }, [canOpenReview, requestedView, searchParams, setSearchParams])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (storageMode === 'managed' || typeof window === 'undefined') return
     function refreshLeadLedgerFromStorage(event: StorageEvent) {
       if (event.storageArea !== window.localStorage || event.key !== WEBSITE_LEAD_LEDGER_KEY) return
       try {
@@ -485,7 +485,7 @@ export function WebsiteProduct() {
     }
     window.addEventListener('storage', refreshLeadLedgerFromStorage)
     return () => window.removeEventListener('storage', refreshLeadLedgerFromStorage)
-  }, [])
+  }, [storageMode])
 
   useEffect(() => {
     if (headingFocusRequest > 0) headingRef.current?.focus()
@@ -512,6 +512,7 @@ export function WebsiteProduct() {
   }
 
   function refreshRecoveryArchives() {
+    if (storageMode === 'managed') return
     setRecoveryArchives(listWebsiteRecoveryArchives(window.localStorage))
   }
 
@@ -1207,13 +1208,14 @@ export function WebsiteProduct() {
     controls: { localOnly: true, externalWritesPerformed: false, humanReviewRequired: true },
   }, null, 2))}`
   useEffect(() => {
+    if (storageMode === 'managed' && (!managedActorId || !managedWorkspaceId)) return
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_seen',
       product: 'website',
       route: location.pathname + location.search,
       detail: websiteAgentJob,
     })
-  }, [location.pathname, location.search, websiteAgentJob])
+  }, [location.pathname, location.search, websiteAgentJob, storageMode, managedActorId, managedWorkspaceId])
 
   function runWebsiteAutopilot() {
     recordBehaviorSignal(window.localStorage, {
@@ -1466,7 +1468,7 @@ export function WebsiteProduct() {
                         onUpdatePage={updatePage}
                         workspace={editorWorkspace}
                       />
-                      {recoveryArchives.length ? (
+                      {storageMode !== 'managed' && recoveryArchives.length ? (
                         <details className="website-recovery-manager">
                           <summary>Recovery archives <span>{recoveryArchives.length}</span></summary>
                           <div className="website-recovery-list">
