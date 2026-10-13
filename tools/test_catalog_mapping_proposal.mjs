@@ -150,7 +150,14 @@ test('standalone Shop catalog import preserves optional variants and blocks a ch
 test('Shop variant columns must be unambiguous and safe', async () => {
   const { createShopCatalogImportPreview } = await import('../showroom/src/core/shop-catalog-import.ts')
   const ambiguous = 'sku,item_name,variant,size,opening_stock,reorder_at,price_mmk\nCAFE-1,Tea,Large,Small,12,3,1800'
-  await assert.rejects(() => createShopCatalogImportPreview(ambiguous, []), /one variant column/)
+  await assert.rejects(() => createShopCatalogImportPreview(ambiguous, []), /Choose one variant column.*variant, size/)
+  const selected = await createShopCatalogImportPreview(ambiguous, [], undefined, 'catalog.csv', 'size')
+  assert.equal(selected.variantHeader, 'size')
+  assert.equal(selected.rows[0].item.variant, 'Small')
+  const optedOut = await createShopCatalogImportPreview(ambiguous, [], undefined, 'catalog.csv', '')
+  assert.equal(optedOut.variantHeader, '')
+  assert.equal(optedOut.rows[0].item.variant, undefined)
+  assert.equal(optedOut.rows[0].status, 'ready')
   const unsafe = await createShopCatalogImportPreview(
     'sku,item_name,size,opening_stock,reorder_at,price_mmk\nCAFE-1,Tea,=1+1,12,3,1800',
     [],
@@ -158,6 +165,17 @@ test('Shop variant columns must be unambiguous and safe', async () => {
   assert.equal(unsafe.rows[0].status, 'invalid')
   assert.equal(unsafe.rows[0].item, null)
   assert.equal(unsafe.rows[0].issues[0].field, 'variant')
+})
+
+test('model mapping review returns a human choice requirement for ambiguous variant columns', async () => {
+  const source = 'sku,item_name,variant,size,opening_stock,reorder_at,price_mmk\nCAFE-1,Tea,Large,Small,12,3,1800'
+  const selected = await createShopCatalogImportPreview(source, [], undefined, 'catalog.csv', 'size')
+  const result = await reviewCatalogMappingProposal(source, [], {
+    sourceDigest: selected.sourceDigest,
+    mapping: selected.mapping,
+  })
+  assert.equal(result.reason, 'human_choice_required')
+  assert.equal(result.importAuthorized, undefined)
 })
 
 test('Shop detects common English and Burmese color variant headers', async () => {
@@ -185,6 +203,49 @@ test('Shop preview retains detected option values for row-by-row review', async 
   assert.equal(variantHeader, 'option')
   assert.equal(preview.mapping.variant, 'option')
   assert.equal(preview.rows[0].values.variant, 'Large')
+})
+
+test('Shop variant mapping can be changed or excluded before staging', async () => {
+  const [{ createClientImportPreview }, { addShopVariantColumnToClientImportPreview }] = await Promise.all([
+    import('../showroom/src/core/client-onboarding.ts'),
+    import('../showroom/src/core/shop-catalog-import.ts'),
+  ])
+  const source = 'sku,item_name,option,opening_stock,reorder_at,price_mmk\nCAFE-1,Tea,Large,12,3,1800'
+  const base = await createClientImportPreview(source, 'commerce')
+  const detected = await addShopVariantColumnToClientImportPreview(base)
+  assert.equal(detected.variantHeader, 'option')
+  assert.equal(detected.preview.rows[0].values.variant, 'Large')
+  const omitted = await addShopVariantColumnToClientImportPreview(base, '')
+  assert.equal(omitted.preview.mapping.variant, '')
+  assert.equal(omitted.preview.rows[0].values.variant, '')
+  assert.equal(omitted.preview.readyForStaging, true)
+  const omittedStage = buildClientImportStagingPackage(omitted.preview, {
+    workflowTemplateId: omitted.preview.workflowTemplateId,
+    workspace: 'Synthetic QA Cafe',
+    owner: 'Synthetic QA Owner',
+  })
+  assert.equal(omittedStage.mapping.variant, '')
+  assert.equal(omittedStage.rows[0].values.variant, '')
+  const duplicate = await addShopVariantColumnToClientImportPreview(base, 'item_name')
+  assert.equal(duplicate.preview.readyForStaging, false)
+  assert.equal(duplicate.preview.rows[0].status, 'invalid')
+
+  const ambiguous = await createClientImportPreview(
+    'sku,item_name,option,size,opening_stock,reorder_at,price_mmk\nCAFE-2,Tea,Standard,Large,12,3,1800',
+    'commerce',
+  )
+  const unresolved = await addShopVariantColumnToClientImportPreview(ambiguous)
+  assert.equal(unresolved.variantHeader, '')
+  const selected = await addShopVariantColumnToClientImportPreview(ambiguous, 'size')
+  assert.equal(selected.variantHeader, 'size')
+  assert.equal(selected.preview.rows[0].values.variant, 'Large')
+  const selectedStage = buildClientImportStagingPackage(selected.preview, {
+    workflowTemplateId: selected.preview.workflowTemplateId,
+    workspace: 'Synthetic QA Cafe',
+    owner: 'Synthetic QA Owner',
+  })
+  assert.equal(selectedStage.mapping.variant, 'size')
+  assert.equal(selectedStage.rows[0].values.variant, 'Large')
 })
 
 test('local Shop replay preserves variants from the Shop-only preview extension', async () => {

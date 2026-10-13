@@ -504,7 +504,10 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       let preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
       if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
       if (expectedProduct === 'commerce') {
-        const shopPreview = await addShopVariantColumnToClientImportPreview(preview)
+        const selectedVariantHeader = mapping && Object.prototype.hasOwnProperty.call(mapping, 'variant')
+          ? mapping.variant ?? ''
+          : undefined
+        const shopPreview = await addShopVariantColumnToClientImportPreview(preview, selectedVariantHeader)
         preview = shopPreview.preview
       }
       const catalogReview: ImportState['catalogReview'] = {}
@@ -986,6 +989,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                 const basis = suggestion?.header === selected ? suggestion.basis : selected ? 'reviewed' : field.required ? 'required' : 'optional'
                 return <label key={field.id}>{field.label}{field.required ? ' *' : ''}<select onChange={(event) => remap(field.id, event.target.value)} value={selected}><option value="">{field.required ? 'Choose column' : 'Do not import'}</option>{state.preview?.headers.map((header) => <option key={header}>{header}</option>)}</select><small>{mappingBasisLabels[basis] ?? basis}</small></label>
               })}
+              {product === 'commerce' ? <label>Variant (optional)<select onChange={(event) => remap('variant', event.target.value)} value={variantHeader}><option value="">Do not import</option>{state.preview.headers.map((header) => <option key={header}>{header}</option>)}</select><small>{variantHeader ? 'Review the selected values in every row below.' : 'No variant column will be imported.'}</small></label> : null}
             </fieldset>
           </details>
 

@@ -52,6 +52,7 @@ export type ShopCatalogImportPreview = {
   catalogDigest: string
   catalogSignature: string
   headers: string[]
+  variantHeader: string
   mapping: ShopCatalogImportMapping
   suggestions: ShopCatalogImportSuggestion[]
   fileIssues: ShopCatalogImportIssue[]
@@ -72,10 +73,36 @@ const shopFieldSet = new Set<string>(shopCatalogImportFields)
 const shopVariantAliases = new Set(['variant', 'product_variant', 'size', 'product_size', 'flavor', 'option', 'color', 'colour', 'product_color', 'product_colour', 'အမျိုးအစား', 'အရောင်', 'အရွယ်အစား'].map(normalizeClientImportHeader))
 const shopVariantField: ClientImportField = { id: 'variant', label: 'Variant', required: false, kind: 'text', aliases: [], maximum: 120 }
 
-function shopVariantHeader(headers: string[]) {
-  const candidates = headers.filter((header) => shopVariantAliases.has(normalizeClientImportHeader(header)))
-  if (candidates.length > 1) throw new Error('Use one variant column per file.')
+function shopVariantCandidates(headers: string[]) {
+  return headers.filter((header) => shopVariantAliases.has(normalizeClientImportHeader(header)))
+}
+
+export class ShopCatalogImportVariantChoiceRequiredError extends Error {
+  readonly code = 'human_choice_required'
+  readonly candidates: string[]
+
+  constructor(candidates: string[]) {
+    super(`Choose one variant column from this file: ${candidates.join(', ')}.`)
+    this.name = 'ShopCatalogImportVariantChoiceRequiredError'
+    this.candidates = candidates
+  }
+}
+
+function shopVariantHeader(headers: string[], selectedVariantHeader?: string) {
+  const candidates = shopVariantCandidates(headers)
+  if (selectedVariantHeader !== undefined) {
+    if (selectedVariantHeader && !headers.includes(selectedVariantHeader)) {
+      throw new Error('Choose a variant column from this file.')
+    }
+    return selectedVariantHeader
+  }
+  if (candidates.length > 1) throw new ShopCatalogImportVariantChoiceRequiredError(candidates)
   return candidates[0] ?? ''
+}
+
+function suggestedShopVariantHeader(headers: string[]) {
+  const candidates = headers.filter((header) => shopVariantAliases.has(normalizeClientImportHeader(header)))
+  return candidates.length === 1 ? candidates[0] : ''
 }
 
 function shopVariantIssue(value: string): ShopCatalogImportIssue | null {
@@ -228,20 +255,34 @@ export function commerceCatalogImportReview(existing: CommerceItem, incoming: Co
   }
 }
 
-export async function addShopVariantColumnToClientImportPreview(preview: ClientImportPreview) {
-  const variantHeader = shopVariantHeader(preview.headers)
-  if (!variantHeader) return { preview, variantHeader }
+export async function addShopVariantColumnToClientImportPreview(preview: ClientImportPreview, selectedVariantHeader?: string) {
+  const variantHeader = selectedVariantHeader === undefined
+    ? suggestedShopVariantHeader(preview.headers)
+    : selectedVariantHeader
+  if (variantHeader && !preview.headers.includes(variantHeader)) throw new Error('Choose a variant column from this file.')
+  const reusedHeader = variantHeader
+    ? Object.entries(preview.mapping).find(([field, header]) => field !== 'variant' && header === variantHeader)
+    : undefined
+  const mappingIssue: ClientImportIssue | null = reusedHeader
+    ? { code: 'mapping_reused_header', field: 'variant', message: `${variantHeader} cannot supply more than one target field.` }
+    : null
   const rows = preview.rows.map((row) => {
-    const variant = row.source[variantHeader] ?? ''
-    const issue = shopVariantIssue(variant)
+    const variant = variantHeader ? row.source[variantHeader] ?? '' : ''
+    const valueIssue = variantHeader ? shopVariantIssue(variant) : null
+    const issues = [
+      ...row.issues,
+      ...(valueIssue ? [valueIssue as ClientImportIssue] : []),
+      ...(mappingIssue ? [mappingIssue] : []),
+    ]
     return {
       ...row,
-      status: issue ? 'invalid' as const : row.status,
+      status: valueIssue || mappingIssue ? 'invalid' as const : row.status,
       values: { ...row.values, variant },
-      issues: issue ? [...row.issues, issue as ClientImportIssue] : row.issues,
+      issues,
     }
   })
   const mapping = { ...preview.mapping, variant: variantHeader }
+  const fileIssues = mappingIssue ? [...preview.fileIssues, mappingIssue] : preview.fileIssues
   const totals = {
     ...preview.totals,
     ready: rows.filter((row) => row.status === 'ready').length,
@@ -262,10 +303,11 @@ export async function addShopVariantColumnToClientImportPreview(preview: ClientI
     preview: {
       ...preview,
       mapping,
+      fileIssues,
       rows,
       totals,
       previewDigest,
-      readyForStaging: preview.fileIssues.length === 0 && rows.length > 0 && totals.ready === rows.length,
+      readyForStaging: fileIssues.length === 0 && rows.length > 0 && totals.ready === rows.length,
     },
   }
 }
@@ -314,22 +356,29 @@ export async function createShopCatalogImportPreview(
   existingCatalog: CommerceItem[],
   selectedMapping?: ShopCatalogImportMapping,
   sourceName = 'catalog.csv',
+  selectedVariantHeader?: string,
 ): Promise<ShopCatalogImportPreview> {
   const detected = await createClientImportPreview(csvText, 'commerce', undefined, sourceName, 'social-commerce')
-  const variantHeader = shopVariantHeader(detected.headers)
+  const variantHeader = shopVariantHeader(detected.headers, selectedVariantHeader)
   const shared = selectedMapping
     ? await createClientImportPreview(csvText, 'commerce', selectedMapping as ClientImportMapping, sourceName, 'social-commerce')
     : detected
+  const reusedHeader = variantHeader
+    ? Object.entries(shared.mapping).find(([, header]) => header === variantHeader)
+    : undefined
+  const mappingIssue: ShopCatalogImportIssue | null = reusedHeader
+    ? { code: 'mapping_reused_header', field: 'variant', message: `${variantHeader} cannot supply more than one target field.` }
+    : null
   const rows: ShopCatalogImportRow[] = shared.rows.map((row) => {
     const variant = variantHeader ? row.source[variantHeader] ?? '' : ''
     const variantIssue = shopVariantIssue(variant)
-    const status = variantIssue && row.status !== 'invalid' ? 'invalid' : row.status
+    const status = (variantIssue || mappingIssue) && row.status !== 'invalid' ? 'invalid' : row.status
     return {
       rowNumber: row.rowNumber,
       status,
       source: row.source,
       item: status === 'invalid' ? null : itemFromValues({ ...row.values, ...(variant ? { variant } : {}) }),
-      issues: [...row.issues.map(shopIssue), ...(variantIssue ? [variantIssue] : [])],
+      issues: [...row.issues.map(shopIssue), ...(variantIssue ? [variantIssue] : []), ...(mappingIssue ? [mappingIssue] : [])],
     }
   })
   classifyAgainstCatalog(rows, existingCatalog)
@@ -349,6 +398,7 @@ export async function createShopCatalogImportPreview(
     catalogDigest,
     catalogSignature,
     headers: shared.headers,
+    variantHeader,
     mapping: {
       sku: shared.mapping.sku,
       name: shared.mapping.name,
@@ -360,7 +410,7 @@ export async function createShopCatalogImportPreview(
       ...suggestion,
       field: suggestion.field as ShopCatalogImportField,
     })),
-    fileIssues: shared.fileIssues.map(shopIssue),
+    fileIssues: [...shared.fileIssues.map(shopIssue), ...(mappingIssue ? [mappingIssue] : [])],
     rows,
     totals: totalsFor(rows),
   }

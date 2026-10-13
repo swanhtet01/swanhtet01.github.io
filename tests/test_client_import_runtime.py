@@ -966,6 +966,20 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(len(self.store._events), 1)
 
     def test_reviewed_shop_import_preserves_optional_variant(self) -> None:
+        omitted_variant = _package("commerce", "retail-wholesale")
+        omitted_variant["mapping"]["variant"] = ""
+        omitted_variant["rows"][0]["values"]["variant"] = ""
+        omitted_variant = _resign(omitted_variant)
+        omitted_review = self.client.post(
+            "/api/trial/v1/imports/validate",
+            headers=self._headers(),
+            json=omitted_variant,
+        )
+        self.assertEqual(omitted_review.status_code, 200, omitted_review.text)
+        self.assertEqual(omitted_review.json()["validation"]["status"], "valid")
+        self.assertEqual(omitted_review.json()["validation"]["row_count"], 1)
+        self.assertFalse(omitted_review.json()["validation"]["activation"]["external_writes_performed"])
+
         package = _package("commerce", "retail-wholesale")
         package["mapping"]["variant"] = "product_variant"
         package["rows"][0]["values"]["variant"] = "Large"
