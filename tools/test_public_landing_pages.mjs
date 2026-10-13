@@ -179,16 +179,14 @@ for (const page of landingPages) {
   for (const unsupportedClaim of ['AI may help prepare drafts', 'AI assisted', 'Ranked next actions', 'approved AI context']) {
     check(!html.includes(unsupportedClaim), `landing_unverified_ai_offer_absent:${page.route}:${unsupportedClaim}`)
   }
-  const expectedAppTarget = activeIds.includes(product.id) && product.status === 'available-in-app'
-    ? product.primaryCta?.url || product.appRoute
+  const expectedContactTarget = activeIds.includes(product.id) && product.status === 'available-in-app'
+    ? `/contact/?product=${product.id}`
     : null
-  if (expectedAppTarget) {
-    const expectedAppLabel = product.primaryCta?.label || `Open ${product.name}`
+  if (expectedContactTarget) {
     check(html.includes('class="home-contact product-action"'), `landing_available_product_action:${page.route}`)
-    check(html.includes(`href="${expectedAppTarget}">${expectedAppLabel}</a>`), `landing_available_product_destination:${page.route}`)
-  } else {
-    check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(html), `landing_unavailable_product_has_no_app_action:${page.route}`)
+    check(html.includes(`href="${expectedContactTarget}">Contact SuperMega</a>`), `landing_available_product_destination:${page.route}`)
   }
+  check(!/href="https:\/\/app\.supermega\.dev\/(?!login")/.test(html), `landing_product_has_no_direct_app_action:${page.route}`)
   check(html.includes('href="/contact/">Contact</a>') && html.includes('href="/privacy/">Privacy</a>'), `landing_footer_parity:${page.route}`)
   check(html.includes('aria-label="SuperMega home"'), `landing_home_navigation:${page.route}`)
 }
@@ -249,7 +247,7 @@ for (const token of ['Site measurement', 'seven public page paths', 'removes que
 }
 
 const contact = readStatic('contact/index.html')
-for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'Your reference number confirms receipt.']) {
+for (const token of ['Message received:', 'Keep this reference if you need to follow up.', 'English and Burmese are both welcome.']) {
   check(contact.includes(token), `contact_confirmed_receipt_guidance:${token}`)
 }
 for (const token of ['No action is needed now.', 'SuperMega will review your brief and reply with one scoped next step.', 'We’ll reply by email', 'We’ll follow up by email']) {
@@ -297,14 +295,14 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
     check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
   }
   const routeManifestProduct = routeProduct ? manifest.customerProducts.find(product => product.id === routeProduct) : null
-  const expectedAppTarget = routeManifestProduct?.status === 'available-in-app'
-    ? routeManifestProduct.primaryCta?.url || routeManifestProduct.appRoute
+  const expectedContactTarget = routeManifestProduct?.status === 'available-in-app'
+    ? `/contact/?product=${routeManifestProduct.id}`
     : null
   const directAppLinks = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
     .map(match => match[1])
     .filter(target => target !== 'https://app.supermega.dev/login')
-  check(directAppLinks.length === Number(Boolean(expectedAppTarget)), `app_actions_match_release_state:${route}`)
-  if (expectedAppTarget) check(directAppLinks.includes(expectedAppTarget), `app_action_uses_manifest_destination:${route}`)
+  check(directAppLinks.length === 0, `app_actions_match_release_state:${route}`)
+  if (expectedContactTarget) check(body.includes(`href="${expectedContactTarget}">Contact SuperMega</a>`), `product_contact_action_matches_release_state:${route}`)
 }
 for (const id of activeIds) check(home.includes(`id="${id}"`), `home_product_story:${id}`)
 for (const id of activeIds) {

@@ -332,18 +332,18 @@ if (home.includes('Commerce and Production carry real records and actions.')) fa
 for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
   const routeProduct = publicProducts.find(product => route === `/${product.id}/`) || null
-  const appActionTarget = routeProduct?.status === 'available-in-app'
-    ? routeProduct.primaryCta?.url || routeProduct.appRoute
+  const contactActionTarget = routeProduct?.status === 'available-in-app'
+    ? `/contact/?product=${routeProduct.id}`
     : null
-  const expectedLinks = route === '/' ? 7 + publicProducts.length : 6 + Number(Boolean(appActionTarget))
+  const expectedLinks = route === '/' ? 7 + publicProducts.length : 6 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
   if (!body.includes('class="platform-image"') || !(route === '/' ? body.includes('class="product-card-flow"') : body.includes('class="feature-line"'))) fail('product_visual_missing', { route })
   const directAppTargets = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
     .map(match => match[1])
     .filter(target => target !== 'https://app.supermega.dev/login')
-  if (directAppTargets.length !== Number(Boolean(appActionTarget))) fail('product_action_release_state_drift', { route, expected: appActionTarget ? 1 : 0, actual: directAppTargets.length })
-  if (appActionTarget && directAppTargets[0] !== appActionTarget) fail('product_action_destination_drift', { route, expected: appActionTarget, actual: directAppTargets[0] })
+  if (directAppTargets.length !== 0) fail('product_action_release_state_drift', { route, expected: 0, actual: directAppTargets.length })
+  if (contactActionTarget && !body.includes(`href="${contactActionTarget}">Contact SuperMega</a>`)) fail('product_action_destination_drift', { route, expected: contactActionTarget })
   for (const token of ['Request assisted setup', 'Open Ecommerce', 'Open Website', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
     if (body.includes(token)) fail('retired_acquisition_surface', { route, token })
   }
@@ -371,9 +371,9 @@ for (const token of [
   'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
   'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
   'name="idempotency_key"', 'name="proof_contract"', 'name="proof_digest"', 'class="contact-honeypot"',
-  'x-idempotency-key', 'Tell us what you need.', 'Send us a message in English or Burmese.',
-  'placeholder="Tell us what you need."', 'Company (optional)', '>Send message</button>',
-  'Message received:', 'Keep this reference if you need to follow up.', 'Your reference number confirms receipt.',
+  'x-idempotency-key', 'Tell us what you need.', 'English and Burmese are both welcome.',
+  'placeholder="Share a few details about your request."', 'Company (optional)', '>Send message</button>',
+  'Message received:', 'Keep this reference if you need to follow up.',
   "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",
 ]) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })

@@ -127,7 +127,13 @@ test('generated public home and contact offer only active products', async () =>
     const fullPage = await html(product.id+'/index.html')
     assert.equal((fullPage.match(/href="https:\/\/app\.supermega\.dev\/login"/g) ?? []).length, 1)
     assert.match(page, /class="platform-image"/)
-    assert.doesNotMatch(page, /Request assisted setup|Open Shop|Open Ecommerce|Open Website/)
+    assert.doesNotMatch(page, /Request assisted setup/)
+    if (product.status === 'available-in-app') {
+      assert.match(page, /class="home-contact product-action"/)
+      assert.ok(page.includes(`href="/contact/?product=${product.id}"`))
+    } else {
+      assert.doesNotMatch(page, /class="home-contact product-action"/)
+    }
     assert.doesNotMatch(page, /product=plant|href="\/plant\//)
   }
 })

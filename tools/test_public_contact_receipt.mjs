@@ -18,12 +18,12 @@ assert.ok(script, 'actual generated contact script exists')
 
 test('contact form stays concise and does not make customers classify the request', () => {
   assert.match(page, /Tell us what you need\./)
-  assert.match(page, /Send us a message in English or Burmese/)
-  assert.match(formHtml, /Your reference number confirms receipt/)
+  assert.match(page, /English and Burmese are both welcome/)
+  assert.doesNotMatch(formHtml, /Your reference number confirms receipt/)
   assert.match(formHtml, /<label>Email \/ <span lang="my">အီးမေးလ်<\/span><input name="email"/)
   assert.match(formHtml, /Company \(optional\)/)
   assert.match(formHtml, /Message \/ <span lang="my">မက်ဆေ့ချ်<\/span>/)
-  assert.match(formHtml, /placeholder="Tell us what you need\."/)
+  assert.match(formHtml, /placeholder="Share a few details about your request\."/)
   assert.match(formHtml, /<input type="hidden" name="product" value="guide"/)
   assert.doesNotMatch(page, /<select\b|trial-proof-summary|Attached request details|What to include|Readiness|Behavior|Decisions|Reply email|What would you like us to prepare\?|Do not paste|Brief tips|Your brief|request summary/)
   assert.match(formHtml, /<input type="hidden" name="template" maxlength="120"/)
@@ -45,7 +45,7 @@ function harness(responses, search = '', hash = '') {
   let timerId = 0
   const form = {
     querySelector(selector) {
-      if (!fields.has(selector)) fields.set(selector, { open: true, value: selector === '[name="product"]' ? 'guide' : '', placeholder: selector === '[name="goal"]' ? 'Tell us what you need.' : '', selectedOptions: [], addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
+      if (!fields.has(selector)) fields.set(selector, { open: true, value: selector === '[name="product"]' ? 'guide' : '', placeholder: selector === '[name="goal"]' ? 'Share a few details about your request.' : '', selectedOptions: [], addEventListener(name, callback) { events.set(selector + ':' + name, callback) } })
       return fields.get(selector)
     },
     addEventListener(name, callback) { if (name === 'submit') handler = callback; else events.set('form:' + name, callback) },
@@ -57,7 +57,7 @@ function harness(responses, search = '', hash = '') {
     document: { querySelector: selector => {
       if (selector === '[data-contact-form]') return form
       if (['[data-contact-heading]', '[data-contact-lede]'].includes(selector)) {
-        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Tell us what you need.' : 'Send us a message in English or Burmese. Your reference number confirms receipt.' })
+        if (!headings.has(selector)) headings.set(selector, { textContent: selector === '[data-contact-heading]' ? 'Tell us what you need.' : 'Tell us about your business or question. English and Burmese are both welcome.' })
         return headings.get(selector)
       }
       return null
@@ -133,14 +133,14 @@ test('one clear message prompt stays consistent across product links', () => {
   for (const product of ['website', 'ecommerce', 'shop', 'guide']) {
     const state = harness([], '?product=' + product)
     const goal = state.fields.get('[name="goal"]')
-    assert.equal(goal.placeholder, 'Tell us what you need.')
+    assert.equal(goal.placeholder, 'Share a few details about your request.')
     assert.doesNotMatch(goal.placeholder, /Do not paste/)
     goal.value = 'Keep my own brief exactly as written'
     state.changeProduct('website')
     assert.equal(goal.value, 'Keep my own brief exactly as written')
-    assert.equal(goal.placeholder, 'Tell us what you need.')
+    assert.equal(goal.placeholder, 'Share a few details about your request.')
     state.changeProduct('unknown')
-    assert.equal(goal.placeholder, 'Tell us what you need.')
+    assert.equal(goal.placeholder, 'Share a few details about your request.')
     assert.equal(state.calls.length, 0)
   }
 })
@@ -273,11 +273,11 @@ test('valid generated receipt confirms and clears the brief', async () => {
 
 test('confirmed reset refreshes guidance and clears attached-summary fields for the next brief', async () => {
   const state = harness([{ body: receipt }], '?product=ecommerce')
-  assert.equal(state.fields.get('[name="goal"]').placeholder, 'Tell us what you need.')
+  assert.equal(state.fields.get('[name="goal"]').placeholder, 'Share a few details about your request.')
   state.fields.set('[name="proof_digest"]', { value: 'synthetic-old-summary' })
   await state.submit()
   assert.equal(state.resets(), 1)
-  assert.equal(state.fields.get('[name="goal"]').placeholder, 'Tell us what you need.')
+  assert.equal(state.fields.get('[name="goal"]').placeholder, 'Share a few details about your request.')
   assert.equal(state.fields.get('[name="proof_digest"]').value, '')
   assert.equal(state.calls.length, 1)
 })

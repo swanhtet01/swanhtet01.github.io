@@ -272,8 +272,9 @@ const sharedStyle = `
   .contact-page .contact-layout { display: block; }
   .contact-page .contact-form { width:100%; padding: 30px; gap: 22px; border-color: #e1dfed; border-radius: 22px; box-shadow: 0 24px 70px rgba(28,26,48,.07); }
   .contact-page .field-grid { gap: 22px 16px; }
-  .contact-page .field-grid label { gap: 9px; color: var(--ink); font-size: 13px; font-weight: 650; }
-  .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { min-height: 52px; border-color: #dedce9; border-radius: 12px; background: #fff; font-size: 15px; }
+  .contact-page .field-grid label { display: block; color: var(--ink); font-size: 13px; font-weight: 650; }
+  .contact-page .field-grid label span[lang="my"] { color: var(--muted); font-weight: 500; }
+  .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { display: block; margin-top: 9px; min-height: 52px; border-color: #dedce9; border-radius: 12px; background: #fff; font-size: 15px; }
   .contact-page .field-grid textarea { min-height: 136px; line-height: 1.55; }
   .contact-page .contact-form .button { min-height: 52px; justify-self: start; padding-inline: 26px; }
   .contact-page .contact-copy summary { cursor: pointer; min-height: 44px; align-content: center; color: var(--muted); }
@@ -658,10 +659,7 @@ const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePa
 
 function productAction(product) {
  if (product.status !== 'available-in-app') return ''
- const target = product.primaryCta?.url || product.appRoute
- assert(typeof target === 'string' && new URL(target).origin === 'https://app.supermega.dev', `product_action_target_invalid:${product.id}`)
- const label = product.primaryCta?.label || `Open ${product.name}`
- return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Ready to use ${escapeHtml(product.name)}?</h2><p>Open your SuperMega workspace to continue.</p></div><a class="button" href="${escapeHtml(target)}">${escapeHtml(label)}</a></section>`
+ return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Need help with ${escapeHtml(product.name)}?</h2><p>Tell us what your business needs.</p></div><a class="button" href="/contact/?product=${escapeHtml(product.id)}">Contact SuperMega</a></section>`
 }
 
 function productLandingHtml(product,page) {
@@ -714,7 +712,7 @@ const contactScript = `<script>(function(){
   if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
-    if(lede)lede.textContent='Send us a message in English or Burmese. Your reference number confirms receipt.';
+    if(lede)lede.textContent='Tell us about your business or question. English and Burmese are both welcome.';
     if(proof)status.textContent='Helpful context attached. Nothing has been sent.';
     else if(proofResult.attempted)status.textContent='Attached context could not be verified and was left out.';
     history.replaceState(null,'',location.pathname+location.search);
@@ -752,7 +750,7 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what you need.</h1><p class="lede" data-contact-lede>Send us a message in English or Burmese. Your reference number confirms receipt.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name / <span lang="my">အမည်</span><input name="name" autocomplete="name" required maxlength="120" /></label><label>Email / <span lang="my">အီးမေးလ်</span><input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional) / <span lang="my">လုပ်ငန်းအမည်</span><input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message / <span lang="my">မက်ဆေ့ချ်</span><textarea name="goal" required maxlength="4000" placeholder="Tell us what you need."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-note">Your reference number confirms receipt / <span lang="my">ကိုးကားနံပါတ်သည် သင့်မက်ဆေ့ချ်ကို လက်ခံရရှိကြောင်း အတည်ပြုပါသည်။</span></p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what you need.</h1><p class="lede" data-contact-lede>Tell us about your business or question. English and Burmese are both welcome.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name / <span lang="my">အမည်</span><input name="name" autocomplete="name" required maxlength="120" /></label><label>Email / <span lang="my">အီးမေးလ်</span><input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional) / <span lang="my">လုပ်ငန်းအမည်</span><input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message / <span lang="my">မက်ဆေ့ချ်</span><textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({
