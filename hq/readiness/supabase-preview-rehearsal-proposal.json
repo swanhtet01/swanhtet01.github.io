@@ -4,8 +4,8 @@
   "repository": "swanhtet01/swanhtet01.github.io",
   "mode": "owner_approval_required",
   "state": "prepared-not-executed",
-  "generatedAt": "2026-08-25T00:00:00.000Z",
-  "purpose": "Prepare the exact Supabase preview rehearsal gate without creating a branch, reading production rows, copying production data, or approving managed activation.",
+  "generatedAt": "2026-10-14T00:00:00.000Z",
+  "purpose": "Record the source-bound Supabase preview rehearsal plan and its blocked production-history replay prerequisite without creating a branch, reading production rows, copying production data, or approving managed activation.",
   "productionBaseline": {
     "projectRef": "zvtzwcimpvvtkowflhda",
     "classification": "protected-production",
@@ -59,12 +59,12 @@
     "privateMigrationCount": 26,
     "publicBaseline": "20260711081300_public_legacy_baseline.sql",
     "finalMigration": "20261010120857_website_inquiry_followup.sql",
-    "chainDigest": "sha256:be549b30dccdff6fa438fe32581532f89b0a8fe29014ba9ce4ea595c62e49629",
+    "chainDigest": "sha256:8d4ffa4d901849ea406861fcc63f78a9600d524e0898606327139c38394ae59c",
     "migrations": [
       {
         "name": "20260711081300_public_legacy_baseline.sql",
         "path": "supabase/migrations/20260711081300_public_legacy_baseline.sql",
-        "digest": "sha256:40e54bfd6a31cf7d3f70de87cac34a4587f38412d7aa89ad27f77f33c1b3d72e"
+        "digest": "sha256:3de413eedcac9dfade90a25b0759e7b7708cf9e773128a881c30e00f2211dd7c"
       },
       {
         "name": "20260722004500_private_trial_backend_role_preflight.sql",
@@ -206,6 +206,16 @@
     "productionApplyAllowed": false
   },
   "gates": {
+    "productionMigrationReplay": {
+      "status": "blocked",
+      "evidenceClassification": "historical-provider-observation",
+      "observedAt": "2026-10-14",
+      "reason": "public-baseline-not-recorded-before-first-rls-migration",
+      "firstRecordedVersion": "20260711081400",
+      "currentProviderStateRevalidated": false,
+      "newPreviewCreationAllowed": false,
+      "recoveryRequiresSeparateOwnerApproval": true
+    },
     "previewRehearsal": {
       "status": "blocked-until-executed",
       "proofComplete": false,
@@ -222,6 +232,7 @@
   },
   "requiredEvidence": [
     "preview-branch-status-and-migration-list",
+    "production-history-replayable-public-baseline-before-first-rls",
     "clean-empty-data-less-branch-confirmed",
     "source-controlled-migration-chain-applied-through-v13",
     "durable-attempt-budget-restart-concurrency-and-restored-limit-proof",
@@ -277,7 +288,7 @@
     "customerContactAllowed": false,
     "paymentOrStockActionAllowed": false
   },
-  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:be549b30dccdff6fa438fe32581532f89b0a8fe29014ba9ce4ea595c62e49629 on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:8d4ffa4d901849ea406861fcc63f78a9600d524e0898606327139c38394ae59c on a clean empty maximum-24-hour non-production preview branch only, after separate approval and proof that production migration history can replay the public baseline before its first RLS migration, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
   "sourceReceipts": [
     {
       "path": "package.json",
@@ -285,7 +296,7 @@
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:e1b4062bdcc5bd18e8cb0229387f349c77fad2d251d141ec04b28f3c73bb8f1b"
+      "digest": "sha256:acaf8b1d9a140c2b1f91d12d6343ef676d5bfbe58ca038493a00192c2ea1638d"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
@@ -316,5 +327,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:a6839c3ef0936df76d9100dc69ecb453baf30c26e86e0685d2b3ab3b93b519dc"
+  "digest": "sha256:f02ce69b31a811e8c237f11e18e1bd81c13dc3a0da62383309eca8043254c19a"
 }

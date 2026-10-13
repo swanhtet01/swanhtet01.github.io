@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
-import { dirname, relative, resolve, sep } from 'node:path'
+import { createHash } from 'node:crypto'
+import { readFile, readdir } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validateRehearsalMigrationNames } from './prepare_supabase_rehearsal_packet.mjs'
 
@@ -14,7 +14,6 @@ export const PROVIDER_READBACK_CONTRACT = 'supermega.supabase-provider-readback.
 export const REPAIR_RECEIPT_CONTRACT = 'supermega.supabase-preview-repair-receipt.v1'
 
 const root = resolve(import.meta.dirname, '..')
-const providerReadbackPath = resolve(root, 'hq', 'readiness', 'supabase-provider-readback-20261001.json')
 const outputPath = resolve(root, 'hq', 'readiness', 'supabase-preview-recovery-plan.json')
 const receiptPath = resolve(root, 'hq', 'readiness', 'supabase-preview-repair-receipt-20261002.json')
 const migrationDirectory = resolve(root, 'supabase', 'migrations')
@@ -303,15 +302,13 @@ export async function buildRecoveryPlan(readback) {
   return validateRecoveryPlanShape({ ...body, digest: digestJson(body) })
 }
 
-async function currentPlan() {
-  const readback = JSON.parse(await readFile(providerReadbackPath, 'utf8'))
-  return buildRecoveryPlan(readback)
-}
-
 export async function validateRecoveryPlan(plan) {
   const actual = validateRecoveryPlanShape(plan)
-  const expected = await currentPlan()
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  // This is an October 2 receipt-bound historical packet. A later source
+  // migration change must not rewrite it or promote it to a current plan.
+  const receipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+  if (receipt.sourcePlan?.digest !== actual.digest
+    || receipt.sourcePlan?.integrationBaseCommit !== actual.integrationBaseCommit) {
     fail('supabase_preview_recovery_plan_stale')
   }
   return actual
@@ -389,30 +386,33 @@ export function validatePreviewRepairReceiptShape(receipt, plan) {
   return receipt
 }
 
-export async function validatePreviewRepairReceipt(receipt, plan) {
+export async function validatePreviewRepairReceipt(receipt, plan, options = {}) {
   const actual = validatePreviewRepairReceiptShape(receipt, plan)
-  const source = await sourceMigrationChain()
+  const sourceDirectory = options.migrationDirectory ?? migrationDirectory
   for (const applied of actual.appliedMigrations) {
-    const migration = source.migrations.find((entry) => entry.path === applied.sourcePath)
-    if (!migration || migration.digest !== applied.sourceDigest) {
+    const prefix = 'supabase/migrations/'
+    const name = applied.sourcePath.startsWith(prefix)
+      ? applied.sourcePath.slice(prefix.length)
+      : ''
+    if (!/^\d{14}_[^/\\]+\.sql$/.test(name)
+      || normalizeMigrationName(name) !== applied.name) {
+      fail('supabase_preview_repair_receipt_source_digest')
+    }
+    let content
+    try {
+      content = await readFile(resolve(sourceDirectory, name))
+    } catch {
+      fail('supabase_preview_repair_receipt_source_digest')
+    }
+    if (contentDigest(content) !== applied.sourceDigest) {
       fail('supabase_preview_repair_receipt_source_digest')
     }
   }
   return actual
 }
 
-async function writeCurrentPlan() {
-  const plan = await currentPlan()
-  await mkdir(dirname(outputPath), { recursive: true })
-  const staged = resolve(dirname(outputPath), `.supabase-preview-recovery-plan.${randomUUID()}.tmp`)
-  await writeFile(staged, `${JSON.stringify(plan, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
-  await rename(staged, outputPath)
-  return plan
-}
-
 async function runSelfTest() {
-  const readback = JSON.parse(await readFile(providerReadbackPath, 'utf8'))
-  const plan = await buildRecoveryPlan(readback)
+  const plan = await validateRecoveryPlan(JSON.parse(await readFile(outputPath, 'utf8')))
   return {
     ok: plan.decision.action === 'repair'
       && plan.decision.missingMigrations.length === 2
@@ -454,15 +454,7 @@ async function main() {
     }))
     return
   }
-  const plan = await writeCurrentPlan()
-  console.log(JSON.stringify({
-    ok: true,
-    contract: plan.contract,
-    output: relative(root, outputPath).split(sep).join('/'),
-    action: plan.decision.action,
-    missingMigrationCount: plan.decision.missingMigrations.length,
-    authorized: plan.execution.authorized,
-  }))
+  fail('supabase_preview_recovery_historical_plan_regeneration_disabled')
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

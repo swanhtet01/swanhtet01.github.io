@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFile, readdir } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import test from 'node:test'
 
@@ -107,11 +109,24 @@ test('rejects write authority, credentials, altered migration scope, and stale p
   )
 })
 
-test('the generated plan verifies byte-for-byte against current source and readback', async () => {
+test('the historical plan stays bound to its original receipt after source migrations change', async () => {
   const plan = JSON.parse(await readFile(planPath, 'utf8'))
   const validated = await validateRecoveryPlan(plan)
   assert.equal(validated.decision.action, 'repair')
   assert.equal(validated.execution.authorized, false)
+  assert.equal(validated.integrationBaseCommit, readback.sourceCommit)
+})
+
+test('the CLI refuses to regenerate and overwrite the historical repair packet', async () => {
+  const before = await readFile(planPath, 'utf8')
+  const attempted = spawnSync(process.execPath, ['tools/prepare_supabase_preview_recovery_plan.mjs'], {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: 15000,
+  })
+  assert.notEqual(attempted.status, 0)
+  assert.match(attempted.stderr, /supabase_preview_recovery_historical_plan_regeneration_disabled/)
+  assert.equal(await readFile(planPath, 'utf8'), before)
 })
 
 test('the repair receipt binds the exact source migrations and retained provider limitation', async () => {
@@ -123,6 +138,28 @@ test('the repair receipt binds the exact source migrations and retained provider
   assert.equal(validated.appliedMigrations.length, 2)
   assert.equal(validated.postconditions.migrationCount, 23)
   assert.equal(validated.acceptance.providerBranchStatusReconciled, false)
+})
+
+test('historical receipt verification ignores later migrations outside its bound source files', async () => {
+  const plan = JSON.parse(await readFile(planPath, 'utf8'))
+  const receipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+  const sourceDirectory = await mkdtemp(resolve(tmpdir(), 'supermega-preview-receipt-'))
+  try {
+    for (const applied of receipt.appliedMigrations) {
+      const name = applied.sourcePath.slice('supabase/migrations/'.length)
+      await writeFile(
+        resolve(sourceDirectory, name),
+        await readFile(resolve(root, applied.sourcePath)),
+      )
+    }
+    await writeFile(resolve(sourceDirectory, '20261014000000_later_sites_migration.sql'), 'select 1;\n')
+    const validated = await validatePreviewRepairReceipt(receipt, plan, {
+      migrationDirectory: sourceDirectory,
+    })
+    assert.equal(validated.appliedMigrations.length, 2)
+  } finally {
+    await rm(sourceDirectory, { recursive: true, force: true })
+  }
 })
 
 test('the repair receipt rejects migration drift and unsafe control claims', async () => {
