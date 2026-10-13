@@ -58,7 +58,7 @@ export function BarcodeScannerDialog({ label, onDetected, onClose }: {
     let timer: number | undefined
     let detecting = false
 
-    async function start() {
+    async function start(activeVideo: HTMLVideoElement) {
       const Detector = window.BarcodeDetector
       if (typeof Detector !== 'function' || !navigator.mediaDevices?.getUserMedia) {
         setError(scanUnavailableMessage())
@@ -82,18 +82,18 @@ export function BarcodeScannerDialog({ label, onDetected, onClose }: {
         stream = null
         return
       }
-      video.srcObject = stream
+      activeVideo.srcObject = stream
       try {
-        await video.play()
+        await activeVideo.play()
       } catch {
         // Autoplay refusal. The stream stays attached, so frames still reach detect()
         // once the browser lets the element run; the interval below tolerates a video
         // that has not produced data yet.
       }
       timer = window.setInterval(() => {
-        if (detecting || cancelled || video.readyState < 2) return
+        if (detecting || cancelled || activeVideo.readyState < 2) return
         detecting = true
-        detector.detect(video)
+        detector.detect(activeVideo)
           .then((barcodes) => {
             if (cancelled) return
             const value = barcodes.map((barcode) => barcode.rawValue.trim()).find(Boolean)
@@ -113,7 +113,7 @@ export function BarcodeScannerDialog({ label, onDetected, onClose }: {
       }, DETECT_INTERVAL_MS)
     }
 
-    void start()
+    void start(video)
 
     return () => {
       // Releasing the camera is mandatory: this runs on cancel, on successful detection,

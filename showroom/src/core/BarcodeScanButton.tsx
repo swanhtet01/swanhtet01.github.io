@@ -1,6 +1,22 @@
-import { lazy, Suspense, useState } from 'react'
+import { Component, lazy, Suspense, useState, type ReactNode } from 'react'
 
 const BarcodeScannerDialog = lazy(() => import('./BarcodeScannerDialog').then((module) => ({ default: module.BarcodeScannerDialog })))
+
+class BarcodeScannerErrorBoundary extends Component<{ children: ReactNode; onDismiss: () => void }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  render() {
+    if (this.state.failed) return <div className="barcode-scan-hint" role="alert">
+      Camera scanner could not load. Type the code manually.
+      <button className="core-button compact" onClick={this.props.onDismiss} type="button">Close scanner</button>
+    </div>
+    return this.props.children
+  }
+}
 
 export function BarcodeScanButton({ disabled, label, onDetected }: {
   disabled?: boolean
@@ -27,10 +43,12 @@ export function BarcodeScanButton({ disabled, label, onDetected }: {
         <path d="M7 8v8M10.5 8v8M14 8v8M17 8v8" />
       </svg>
     </button>
-    {open ? <Suspense fallback={<span className="barcode-scan-hint" role="status">
-      Opening camera scanner… <button className="core-button compact" onClick={() => setOpen(false)} type="button">Cancel</button>
-    </span>}>
-      <BarcodeScannerDialog label={label} onClose={() => setOpen(false)} onDetected={onDetected} />
-    </Suspense> : null}
+    {open ? <BarcodeScannerErrorBoundary onDismiss={() => setOpen(false)}>
+      <Suspense fallback={<span className="barcode-scan-hint" role="status">
+        Opening camera scanner… <button className="core-button compact" onClick={() => setOpen(false)} type="button">Cancel</button>
+      </span>}>
+        <BarcodeScannerDialog label={label} onClose={() => setOpen(false)} onDetected={onDetected} />
+      </Suspense>
+    </BarcodeScannerErrorBoundary> : null}
   </>
 }

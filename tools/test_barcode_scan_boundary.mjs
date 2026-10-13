@@ -60,10 +60,14 @@ function importLines(source) {
 }
 
 const componentImports = importLines(component)
-check(componentImports.length === 1 && componentImports[0] === "import { lazy, Suspense, useState } from 'react'", 'barcode_component_dependency_boundary_changed')
+check(componentImports.length === 1 && componentImports[0] === "import { Component, lazy, Suspense, useState, type ReactNode } from 'react'", 'barcode_component_dependency_boundary_changed')
 check(scannerDialog.includes("import { useEffect, useRef, useState } from 'react'"), 'barcode_scanner_dialog_dependency_boundary_changed')
 check(component.includes("lazy(() => import('./BarcodeScannerDialog')"), 'barcode_scanner_must_split_into_on_demand_chunk')
-check(component.includes('{open ? <Suspense') && component.includes('onClick={() => setOpen(true)}'), 'barcode_scanner_chunk_must_load_after_user_action')
+check(component.includes('{open ? <BarcodeScannerErrorBoundary') && component.includes('onClick={() => setOpen(true)}')
+  && component.includes('<Suspense fallback='), 'barcode_scanner_chunk_must_load_after_user_action')
+check(component.includes('class BarcodeScannerErrorBoundary extends Component')
+  && component.includes('static getDerivedStateFromError()')
+  && component.includes('Camera scanner could not load. Type the code manually.'), 'barcode_lazy_chunk_failure_must_preserve_manual_entry')
 check(component.includes('Opening camera scanner…') && component.includes('role="status"'), 'barcode_lazy_load_status_missing')
 check(component.includes('onClose={() => setOpen(false)}'), 'barcode_dialog_must_close_its_lazy_boundary')
 check(scannerDialog.includes('interface Window { BarcodeDetector?: BarcodeDetectorConstructor }'), 'barcode_detector_window_contract_missing')
@@ -71,9 +75,10 @@ check(scannerDialog.includes('const DETECT_INTERVAL_MS = 400'), 'barcode_detect_
 check(component.includes("typeof window === 'undefined' || typeof window.BarcodeDetector !== 'function') return null"), 'barcode_unsupported_browser_must_render_nothing')
 check(scannerDialog.includes("!navigator.mediaDevices?.getUserMedia"), 'barcode_get_user_media_feature_detect_missing')
 check(scannerDialog.includes("getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' } } })"), 'barcode_camera_constraints_changed')
+check(scannerDialog.includes('async function start(activeVideo: HTMLVideoElement)') && scannerDialog.includes('void start(video)'), 'barcode_camera_element_must_be_non_null_before_async_start')
 const permissionsPolicy = vercel.routes?.find((route) => route.src === '/(.*)')?.headers?.['Permissions-Policy'] ?? ''
 check(permissionsPolicy === 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()', 'barcode_camera_blocked_by_deployment_policy')
-check(scannerDialog.includes('if (detecting || cancelled || video.readyState < 2) return'), 'barcode_in_flight_or_not_ready_guard_missing')
+check(scannerDialog.includes('if (detecting || cancelled || activeVideo.readyState < 2) return'), 'barcode_in_flight_or_not_ready_guard_missing')
 check(scannerDialog.includes('barcodes.map((barcode) => barcode.rawValue.trim()).find(Boolean)'), 'barcode_raw_value_trim_missing')
 check(scannerDialog.includes('onDetectedRef.current(value)') && scannerDialog.includes('onCloseRef.current()'), 'barcode_detected_value_must_close_dialog')
 check(scannerDialog.includes('stream?.getTracks().forEach((track) => track.stop())'), 'barcode_stream_cleanup_missing')
