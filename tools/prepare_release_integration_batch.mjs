@@ -153,7 +153,7 @@ export const APP_SHELL_REQUIREMENTS = [
   },
   {
     id: 'upstream-action-reachability', authority: 'upstream', file: 'showroom/src/core/core-app.css', tokens: [
-      '.shop-counter-module > .shop-counter-surface { min-height: 520px; flex: 0 0 clamp(520px,calc(100svh - 220px),680px); overflow: hidden; }',
+      '.shop-counter-module > .shop-counter-surface { min-height: 0; flex: 0 0 auto; overflow: visible; }',
       '.operations-screen:not(.commerce-screen) .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }',
       '.production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; grid-template-columns: minmax(0,1fr); }',
     ],
