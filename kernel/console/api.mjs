@@ -112,7 +112,22 @@ function operatorAiBudgetStatus(usage, window, capUnits) {
 const ok = (json) => ({ status: 200, json })
 const bad = (status, reason) => ({ status, json: { ok: false, reason } })
 
+const isValidLeadTimestamp = (value) => {
+  if (typeof value !== 'string' || value.length > 40) return false
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/i.exec(value)
+  if (!match) return false
+  const [year, month, day] = match.slice(1, 4).map(Number)
+  if (month < 1 || month > 12) return false
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  return day >= 1 && day <= daysInMonth[month - 1] && Number.isFinite(Date.parse(value))
+}
+
 export async function createLead(body = {}, { insertLead = store.insertLead } = {}) {
+  const createdAt = body.created_at ? String(body.created_at) : undefined
+  if (createdAt !== undefined && !isValidLeadTimestamp(createdAt)) {
+    return bad(400, 'invalid_created_at')
+  }
   try {
     const lead = await insertLead({
       id:      String(body.id || '').slice(0, 80) || undefined,
@@ -124,7 +139,7 @@ export async function createLead(body = {}, { insertLead = store.insertLead } = 
       message: String(body.message || '').slice(0, 4000),
       score:   body.score != null ? Number(body.score) : undefined,
       stage:   body.stage ? String(body.stage).slice(0, 40) : undefined,
-      created_at: body.created_at ? String(body.created_at) : undefined,
+      created_at: createdAt,
     })
     return ok({ ok: true, lead })
   } catch {

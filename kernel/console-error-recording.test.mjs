@@ -401,3 +401,32 @@ test('lead intake returns a bounded retryable response when durable storage fail
   })
   assert.doesNotMatch(JSON.stringify(result), /Private customer|private@example|database host|credential/i)
 })
+
+test('lead intake rejects invalid timestamps before storage and preserves valid RFC 3339 timestamps', async () => {
+  const { createLead } = await import(`./console/api.mjs?lead-created-at-validation=${Date.now()}-${Math.random()}`)
+  for (const created_at of ['not-a-timestamp', '2026-02-31T00:00:00.000Z', '2026-01-01T00:00:00+99:99']) {
+    let insertCalled = false
+    const result = await createLead({ created_at }, {
+      insertLead: async () => {
+        insertCalled = true
+        return { created_at }
+      },
+    })
+    assert.deepEqual(result, {
+      status: 400,
+      json: { ok: false, reason: 'invalid_created_at' },
+    })
+    assert.equal(insertCalled, false)
+  }
+
+  const created_at = '2026-08-02T00:00:00.000Z'
+  let insertedLead
+  const result = await createLead({ created_at }, {
+    insertLead: async (lead) => {
+      insertedLead = lead
+      return lead
+    },
+  })
+  assert.equal(result.status, 200)
+  assert.equal(insertedLead.created_at, created_at)
+})
