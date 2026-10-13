@@ -122,6 +122,19 @@ test('Shop variant columns must be unambiguous and safe', async () => {
   assert.equal(unsafe.rows[0].issues[0].field, 'variant')
 })
 
+test('Shop preview retains detected option values for row-by-row review', async () => {
+  const [{ createClientImportPreview }, { addShopVariantColumnToClientImportPreview }] = await Promise.all([
+    import('../showroom/src/core/client-onboarding.ts'),
+    import('../showroom/src/core/shop-catalog-import.ts'),
+  ])
+  const source = 'sku,item_name,option,opening_stock,reorder_at,price_mmk\nCAFE-1,Tea,Large,12,3,1800'
+  const basePreview = await createClientImportPreview(source, 'commerce')
+  const { preview, variantHeader } = await addShopVariantColumnToClientImportPreview(basePreview)
+  assert.equal(variantHeader, 'option')
+  assert.equal(preview.mapping.variant, 'option')
+  assert.equal(preview.rows[0].values.variant, 'Large')
+})
+
 test('local Shop replay preserves variants from the Shop-only preview extension', async () => {
   const [{ createClientImportPreview, buildClientImportStagingPackage }, commerce, importer, shopImport] = await Promise.all([
     import('../showroom/src/core/client-onboarding.ts'),

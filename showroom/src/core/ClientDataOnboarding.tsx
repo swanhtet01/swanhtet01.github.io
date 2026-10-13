@@ -211,6 +211,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   managedIdentityRef.current = managedIdentity
   onProgressRef.current = onProgress
   const [state, setState] = useState<ImportState>(emptyImportState)
+  const [showAllRows, setShowAllRows] = useState(false)
   const currentValidationContext = validationContextKey(
     product,
     workflowTemplateId,
@@ -243,12 +244,15 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const localUseLabel = product === 'commerce' ? 'catalog in a real sale' : product === 'production' ? 'jobs in production control' : product === 'website' ? 'page drafts in the Website editor' : 'reviewed merchandising in the customer storefront'
   const localOpenPath = product === 'commerce' ? '/shop/?tab=counter' : product === 'production' ? '/plant/?tab=production' : product === 'website' ? '/website/' : '/ecommerce/'
   const localOpenLabel = product === 'commerce' ? 'Open Shop counter' : `Open ${productName}`
-  const visibleRows = state.preview
+  const importReviewRows = state.preview
     ? [
         ...state.preview.rows.filter((row) => row.status !== 'ready' || state.catalogReview[row.rowNumber]?.conflict),
         ...state.preview.rows.filter((row) => row.status === 'ready' && !state.catalogReview[row.rowNumber]?.conflict),
-      ].slice(0, 12)
+      ]
     : []
+  const visibleRows = showAllRows ? importReviewRows : importReviewRows.slice(0, 12)
+  const allRowsVisible = !state.preview || state.preview.rows.length <= 12 || showAllRows
+  const variantHeader = product === 'commerce' ? state.preview?.mapping.variant ?? '' : ''
   const matchedFieldCount = state.preview
     ? state.preview.fields.filter((field) => Boolean(state.preview?.mapping[field.id])).length
     : 0
@@ -303,13 +307,14 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             failure: 'The Ecommerce display details were not applied. The checked import is still available.',
           }
         : null
-  const canPrepareImport = Boolean(state.preview?.readyForStaging && importContextReady && !state.busy && !state.validating && !state.preflighting && !state.applying)
+  const canPrepareImport = Boolean(state.preview?.readyForStaging && allRowsVisible && importContextReady && !state.busy && !state.validating && !state.preflighting && !state.applying)
   const canApplyManagedImport = Boolean(
     managedActivation
     && managedIdentity
     && validationIsCurrent
     && state.validation?.receipt.activation.atomic_adapter_ready
     && state.applyConfirmed
+    && allRowsVisible
     && !state.preflighting
     && !state.applying
     && !appliedIsCurrent,
@@ -325,6 +330,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     && state.preview?.readyForStaging
     && importContextReady
     && state.applyConfirmed
+    && allRowsVisible
     && !state.applying
     && !localAppliedIsCurrent,
   )
@@ -492,6 +498,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const requestId = requestRef.current + 1
     requestRef.current = requestId
     validationRequestRef.current += 1
+    setShowAllRows(false)
     setState((current) => ({ ...current, sourceName, sourceText, preview: null, catalogReview: {}, busy: true, validating: false, preflighting: false, applying: false, validation: null, error: '' }))
     try {
       let preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
@@ -566,6 +573,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   function clearPreview() {
     requestRef.current += 1
     validationRequestRef.current += 1
+    setShowAllRows(false)
     setState(emptyImportState())
   }
 
@@ -989,20 +997,24 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
 
           {state.preview.fileIssues.length ? <ul className="catalog-import-file-issues">{state.preview.fileIssues.map((issue) => <li key={`${issue.code}-${issue.field}`}>{issue.message}</li>)}</ul> : null}
           {catalogHasConflicts ? <p className="form-error" role="alert">{catalogConflictCount} existing SKU conflict{catalogConflictCount === 1 ? '' : 's'} block this import. {catalogReadyRowCount > 0 ? `${catalogReadyRowCount} other row${catalogReadyRowCount === 1 ? '' : 's'} passed checks, but ` : ''}No products will be imported until the conflicts are resolved.</p> : null}
-          <details className="catalog-import-row-review" open={state.preview.totals.issueRows > 0 || catalogHasConflicts || undefined}>
+          <details className="catalog-import-row-review" open={state.preview.rows.length > 12 || state.preview.totals.issueRows > 0 || catalogHasConflicts || undefined}>
             <summary><span>Review rows</span><small>{catalogHasConflicts ? 'Existing products need review' : state.preview.totals.issueRows ? `${state.preview.totals.issueRows} need attention` : 'All rows passed'}</small></summary>
             <div className="catalog-import-table" role="table" aria-label={`${object.label} import preview`}>
-              <div className="catalog-import-row catalog-import-head" role="row"><span>Row</span><span>Key</span><span>Status</span><span>What to fix</span></div>
-              {visibleRows.map((row) => <div className="catalog-import-row" data-result={row.status} key={row.rowNumber} role="row"><span>{row.rowNumber}</span><strong>{row.key || '-'}</strong><span>{state.catalogReview[row.rowNumber]?.conflict ? 'Conflict' : state.catalogReview[row.rowNumber] ? 'Unchanged' : rowStatusLabels[row.status] ?? row.status}</span><small>{row.issues.map((issue) => issue.message).join(' / ') || state.catalogReview[row.rowNumber]?.message || 'Mapped and checked'}</small></div>)}
+              <div className="catalog-import-row catalog-import-head" role="row"><span>Row</span><span>Key</span><span>Status</span><span>{variantHeader ? 'Details and variant' : 'What to fix'}</span></div>
+              {visibleRows.map((row) => <div className="catalog-import-row" data-result={row.status} key={row.rowNumber} role="row"><span>{row.rowNumber}</span><strong>{row.key || '-'}</strong><span>{state.catalogReview[row.rowNumber]?.conflict ? 'Conflict' : state.catalogReview[row.rowNumber] ? 'Unchanged' : rowStatusLabels[row.status] ?? row.status}</span><small>{row.issues.map((issue) => issue.message).join(' / ') || state.catalogReview[row.rowNumber]?.message || 'Mapped and checked'}{variantHeader ? <><br />Variant: {row.values.variant || '(blank)'}</> : null}</small></div>)}
             </div>
-            {state.preview.rows.length > visibleRows.length ? <p className="panel-copy">Showing {visibleRows.length} of {state.preview.rows.length} checked rows.</p> : null}
+            {state.preview.rows.length > 12 ? <>
+              <p className="panel-copy">Showing {visibleRows.length} of {state.preview.rows.length} import rows.</p>
+              <button className="core-button" onClick={() => setShowAllRows((current) => !current)} type="button">{showAllRows ? 'Show first 12 rows' : `Show all ${state.preview.rows.length} rows`}</button>
+            </> : null}
+            {!allRowsVisible ? <p className="form-notice" role="status">Show all {state.preview.rows.length} rows before preparing or approving this import.</p> : null}
           </details>
           {validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation && !appliedIsCurrent ? <>
-            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.preflighting || state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
+            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.preflighting || state.applying || !allRowsVisible} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.preflighting ? 'Running final check...' : state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
           </> : null}
           {localActivationAvailable && !catalogHasConflicts && importContextReady && state.preview.readyForStaging && !localAppliedIsCurrent ? <>
-            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.preview.totals.ready} {localRecordLabel} and approve adding them to my local {productName} workspace in this browser.</span></label>
+            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying || !allRowsVisible} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.preview.totals.ready} {localRecordLabel} and approve adding them to my local {productName} workspace in this browser.</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyLocalImport} onClick={() => void activateLocalImport()} type="button">{state.applying ? `Adding ${productName.toLowerCase()} records...` : `Add ${state.preview.totals.ready} ${localActionLabel}`}</button></div>
           </> : null}
           <div className="catalog-import-footer">
