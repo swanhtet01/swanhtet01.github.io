@@ -149,9 +149,13 @@ class CommercePublicSqlTests(unittest.TestCase):
         pg._create_auth_session_fixture(cls.admin_url)
         pg._apply_migrations(postgres_bin=cls.bin, admin_password=password, admin_database_url=cls.admin_url,
             port=port, environment=cls.environment, migrations=pg.CURRENT_MIGRATIONS)
-        pg._apply_migrations(postgres_bin=cls.bin, admin_password=password, admin_database_url=cls.admin_url,
-            port=port, environment=cls.environment,
-            migrations=('20261013090000_commerce_public_storefront_intake.sql',))
+        pg._require_success([
+            str(pg._binary(cls.bin, 'psql')), '--host', '127.0.0.1', '--port', str(port),
+            '--username', 'postgres', '--dbname', pg.DATABASE_NAME, '--no-password',
+            '--set', 'ON_ERROR_STOP=1', '--file',
+            str(pg.ROOT / 'supabase' / 'rehearsal' / '20261013090000_commerce_public_storefront_intake.sql'),
+        ], environment={**cls.environment, 'PGPASSWORD': password},
+            failure_code='commerce_public_rehearsal_migration_failed', timeout=120)
         pg._provision_runtime(cls.admin_url, runtime_password)
         pg._seed_rehearsal_data(cls.admin_url)
         cls.workspace_id = 'rehearsal-product'
