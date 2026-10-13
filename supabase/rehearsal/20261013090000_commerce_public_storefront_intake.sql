@@ -300,6 +300,7 @@ set search_path = pg_catalog, app_private as $$
 declare item app_private.commerce_public_requests%rowtype;
   actor text;
   shop_state jsonb;
+  closure_at timestamptz;
 begin
   actor := current_setting('app.actor_id', true);
   if p_workspace is distinct from current_setting('app.workspace_id', true)
@@ -330,6 +331,15 @@ begin
     -- an arbitrary caller cannot silently erase an actionable request.
     select state_json into shop_state from app_private.workspace_state
       where workspace_id = p_workspace and surface = 'commerce' for share;
+    select event.created_at into closure_at from app_private.workspace_events event
+      where event.workspace_id = p_workspace
+        and event.surface = 'commerce'
+        and event.event_type = 'commerce.storefront_request.closed'
+        and event.actor_id = actor and event.actor_kind = 'human'
+        and event.payload_json #>> '{evidence,reason}' = p_reason
+        and event.payload_json #>> '{evidence,evidenceReference}' =
+            'ECOMMERCE-CLOSE:' || item.shop_request_id || ':' || p_reason
+      order by event.created_at desc limit 1;
     if shop_state is null
       or exists (select 1 from jsonb_array_elements(
           coalesce(shop_state->'storefrontRequests', '[]'::jsonb)) request
@@ -337,14 +347,7 @@ begin
       or exists (select 1 from jsonb_array_elements(
           coalesce(shop_state->'orders', '[]'::jsonb)) shop_order
           where shop_order->>'sourceRecordId' = item.shop_request_id)
-      or not exists (select 1 from app_private.workspace_events event
-          where event.workspace_id = p_workspace
-            and event.surface = 'commerce'
-            and event.event_type = 'commerce.storefront_request.closed'
-            and event.actor_id = actor and event.actor_kind = 'human'
-            and event.payload_json #>> '{evidence,reason}' = p_reason
-            and event.payload_json #>> '{evidence,evidenceReference}' =
-                'ECOMMERCE-CLOSE:' || item.shop_request_id || ':' || p_reason) then
+      or closure_at is null then
       raise exception 'commerce_public_close_state' using errcode = 'P0001';
     end if;
   elsif item.status <> 'received' then
@@ -352,7 +355,7 @@ begin
   end if;
   update app_private.commerce_public_requests
     set status = 'closed', close_reason = p_reason, closed_by = actor,
-        closed_at = clock_timestamp()
+        closed_at = coalesce(closure_at, clock_timestamp())
     where workspace_id = p_workspace and handle = p_handle and request_id = p_request;
   return jsonb_build_object('status', 'closed', 'duplicate', false);
 end;

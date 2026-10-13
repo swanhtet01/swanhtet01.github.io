@@ -409,6 +409,13 @@ class CommercePublicSqlTests(unittest.TestCase):
         result = self.adapter.close(self.owner, handle=handle,
                                     request_id=body['requestId'], reason=reason)
         self.assertEqual((result['status'], result['duplicate']), ('closed', False))
+        with self.pg._connect(self.admin_url) as connection:
+            closed_at = connection.execute("""select closed_at from app_private.commerce_public_requests
+                where handle=%s and request_id=%s""", (handle, body['requestId'])).fetchone()[0]
+            event_at = connection.execute("""select created_at from app_private.workspace_events
+                where workspace_id=%s and event_type='commerce.storefront_request.closed'""",
+                (self.workspace_id,)).fetchone()[0]
+        self.assertEqual(closed_at, event_at)
         self.assertTrue(self.adapter.close(self.owner, handle=handle,
             request_id=body['requestId'], reason=reason)['duplicate'])
 
