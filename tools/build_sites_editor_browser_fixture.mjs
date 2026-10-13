@@ -1,6 +1,6 @@
 // Component-level QA only. Real editor/model, synthetic in-memory records, no provider access.
 import { createRequire } from 'node:module'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -8,19 +8,42 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const out = resolve(root, '.tmp/qa-sites-editor')
 const { build } = createRequire(resolve(root, 'showroom/package.json'))('esbuild')
 mkdirSync(out, { recursive: true })
+for (const [source, target] of [
+  ['sites-studio-sample.jpg', 'qa-photo-hero.jpg'],
+  ['sites-studio-materials.jpg', 'qa-photo-materials.jpg'],
+  ['sites-studio-entrance.jpg', 'qa-photo-entrance.jpg'],
+]) copyFileSync(resolve(root, 'tools/qa-assets', source), resolve(out, target))
 await build({
   stdin: { resolveDir: resolve(root, 'showroom'), loader: 'tsx', contents: `
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
 import {ContentWorkspace} from './src/products/website/ContentWorkspace';
 import {SitePreview} from './src/products/website/SitePreview';
+import {WebsiteMediaContext} from './src/products/website/WebsiteMediaContext';
 import {createInitialWorkspace,createWebsiteEditSession,updateWebsiteEditSession,commitWebsiteEditSession,restoreWorkspace} from './src/products/website/website-model';
 import {applyWebsiteStarterBrief} from './src/products/website/website-starter';
 import './src/core/core-app.css';import './src/products/website/website-product.css';
-window.fetch=async()=>{throw Error('Synthetic fixture network denied')};
-let saved=JSON.stringify(applyWebsiteStarterBrief(createInitialWorkspace(),{
+const nativeFetch=window.fetch.bind(window);
+window.fetch=(input,init)=>{const url=new URL(typeof input==='string'?input:input.url,location.href);
+  if(url.origin===location.origin && ['qa-photo-hero.jpg','qa-photo-materials.jpg','qa-photo-entrance.jpg'].some(file=>url.pathname.endsWith('/'+file)))return nativeFetch(input,init);
+  throw Error('Synthetic fixture network denied')};
+// Fixture-only IDs and JPEG bytes test layout and in-memory reopen, not managed media validation.
+const photoAssets={
+  ['a'.repeat(64)+'.webp']:'qa-photo-hero.jpg',
+  ['b'.repeat(64)+'.webp']:'qa-photo-materials.jpg',
+  ['c'.repeat(64)+'.webp']:'qa-photo-entrance.jpg',
+};
+const qaMediaClient={scopeKey:'synthetic-photo-qa',load:async(id,signal)=>{
+  const file=photoAssets[id];if(!file)throw Error('Unknown synthetic photo');
+  const response=await fetch(file,{signal});if(!response.ok)throw Error('Synthetic photo unavailable');
+  return response.blob();},assertCurrent:async()=>{}};
+const fixtureWorkspace=applyWebsiteStarterBrief(createInitialWorkspace(),{
   templateId:'lead-generation',businessName:'Example Studio',offer:'Local design services',
   audience:'',proof:'',contactHref:''
-},'2026-10-09T00:00:00.000Z'));
+},'2026-10-09T00:00:00.000Z');
+fixtureWorkspace.pages[0].hero.image={assetId:'a'.repeat(64)+'.webp',alt:'Illustrative creative studio worktable',decorative:false};
+fixtureWorkspace.pages[0].sections[0].image={assetId:'b'.repeat(64)+'.webp',alt:'Illustrative studio materials shelf',decorative:false};
+fixtureWorkspace.pages[0].sections[1].image={assetId:'c'.repeat(64)+'.webp',alt:'Illustrative studio entrance',decorative:false};
+let saved=JSON.stringify(fixtureWorkspace);
 function App(){
   const [base,setBase]=useState(()=>restoreWorkspace(JSON.parse(saved))!);
   const [session,setSession]=useState(()=>createWebsiteEditSession(base));
@@ -45,16 +68,16 @@ function App(){
       <button onClick={reopen}>Reopen synthetic saved content</button>
     </nav>
     <output role='status'>{notice}</output>
-    <div className='qa-editor'>
+    <WebsiteMediaContext.Provider value={{client:qaMediaClient}}><div className='qa-editor'>
       <ContentWorkspace key={selected+':'+generation} page={page} canDuplicate={false} deleteArmed={false}
         onDuplicate={()=>{}} onRequestDelete={()=>{}} onUpdatePage={update}/>
       <SitePreview device='desktop' page={page} pages={session.workspace.pages} siteName={session.workspace.siteName} onSelectPage={setSelected}/>
-    </div>
+    </div></WebsiteMediaContext.Provider>
   </main>
 }
 createRoot(document.getElementById('root')).render(<App/>);
 ` },
-  bundle: true, jsx: 'automatic', format: 'esm',
+  bundle: true, jsx: 'automatic', format: 'esm', external: ['/fonts/noto-sans-myanmar.woff2'],
   define: { 'import.meta.env': '{}', 'process.env.NODE_ENV': '"development"' },
   outfile: resolve(out, 'fixture.js'),
 })
@@ -68,5 +91,5 @@ body{margin:0;font:16px/1.5 system-ui}.qa-sites{height:auto;min-height:100dvh;pa
 .qa-editor>.website-editor-panel{height:auto}.qa-editor .website-editor-scroll{overflow:visible;padding:1rem}
 @media(max-width:900px){.qa-editor{grid-template-columns:minmax(0,1fr)}.qa-sites{padding:.75rem}}
 `)
-writeFileSync(resolve(out, 'index.html'), `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'; img-src 'none'; form-action 'none'; base-uri 'none'; style-src 'self' 'unsafe-inline'"><title>Synthetic Sites editor QA</title><link rel="stylesheet" href="fixture.css"><link rel="stylesheet" href="qa.css"><div id="root"></div><script type="module" src="fixture.js"></script></html>`)
+writeFileSync(resolve(out, 'index.html'), `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src blob:; form-action 'none'; base-uri 'none'; style-src 'self' 'unsafe-inline'"><title>Synthetic Sites editor QA</title><link rel="stylesheet" href="fixture.css"><link rel="stylesheet" href="qa.css"><div id="root"></div><script type="module" src="fixture.js"></script></html>`)
 console.log(JSON.stringify({ output: out, evidence: 'component-synthetic-only', providers: false, externalRequests: false }))
