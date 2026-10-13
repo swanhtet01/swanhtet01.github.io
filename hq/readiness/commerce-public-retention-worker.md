@@ -5,7 +5,9 @@ The public buyer route remains disabled. The intake SQL is still in
 `supabase/rehearsal`, not the production migration chain.
 
 `tools/run_commerce_public_retention.py` performs one bounded run against the
-dedicated runtime role. Check mode is read-only. Apply mode first repairs a
+dedicated runtime role. Check mode is read-only and counts both contact due for
+redaction and human Shop closes stranded before the private transition. Apply
+mode first repairs a
 private request only when a matching human Shop close event already exists,
 then redacts due closed requests. The database retains per-run receipts, so a
 retry with the same UUID v4 replays the counts. It never sends a customer
@@ -37,9 +39,9 @@ python tools/run_commerce_public_retention.py --expected-target preview --limit 
 python tools/run_commerce_public_retention.py --expected-target preview --apply --run-id <stable-uuid-v4> --limit 100
 ```
 
-Exit `0` means the checked redaction-due queue is clear; check mode does not
-count stranded Shop closes. Exit `2` means contact is due after the
-check or bounded apply, or a reconciliation batch hit its cap; page the
+Exit `0` means both checked queues are clear. Exit `2` means contact is due,
+a proven human Shop close still needs reconciliation, or a reconciliation
+batch hit its cap; page the
 operator and run another measured batch.
 Exit `1` means configuration was refused or a database acknowledgement is
 uncertain. An apply failure must be retried with the **same** run ID after
