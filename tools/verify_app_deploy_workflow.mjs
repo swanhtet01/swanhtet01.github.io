@@ -74,6 +74,12 @@ requireContract('app CI executes real disposable PostgreSQL signup budget tests'
   budgetSqlStep.includes("SUPERMEGA_TEST_DISPOSABLE_PG17: '1'")
   && budgetSqlStep.includes('run: python -m unittest tests.test_self_serve_durable_budget -v')
   && !/^        (?:if|continue-on-error):/m.test(budgetSqlStep))
+const commerceSqlStep = ciWorkflow.split('      - name: Verify Commerce public retention on disposable PostgreSQL\n')[1]?.split('      - name:')[0] || ''
+requireContract('app CI executes real disposable PostgreSQL Commerce retention tests',
+  commerceSqlStep.includes("SUPERMEGA_RUN_COMMERCE_PUBLIC_SQL: '1'")
+  && commerceSqlStep.includes("SUPERMEGA_TRIAL_SCHEMA_VERSION: '13'")
+  && commerceSqlStep.includes('run: python -m unittest tests.test_commerce_public_storefront tests.test_commerce_public_retention_runner -v')
+  && !/^        (?:if|continue-on-error):/m.test(commerceSqlStep))
 const appCiName = "    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'Same-repository PR uses push checks' || 'SuperMega App CI' }}"
 const appCiCondition = "    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}"
 const appCiHeader = ciWorkflow.split('  validate:\n')[1]?.split('    steps:\n')[0] || ''

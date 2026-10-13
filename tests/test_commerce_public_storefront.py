@@ -287,11 +287,13 @@ class CommercePublicSqlTests(unittest.TestCase):
                 has_function_privilege('anon','app_private.close_commerce_public_request(text,uuid,uuid,text)','EXECUTE'),
                 has_function_privilege('service_role','app_private.inspect_commerce_public_request(text,uuid,uuid)','EXECUTE'),
                 has_function_privilege('service_role','app_private.reconcile_commerce_public_closes(uuid,integer)','EXECUTE'),
+                has_function_privilege('anon','app_private.commerce_public_reconciliation_due_count(integer)','EXECUTE'),
+                has_function_privilege('service_role','app_private.commerce_public_reconciliation_due_count(integer)','EXECUTE'),
                 has_function_privilege('authenticated','app_private.redact_closed_commerce_public_requests(uuid,integer)','EXECUTE'),
                 has_function_privilege('service_role','app_private.commerce_public_redaction_due_count(integer)','EXECUTE'),
                 has_table_privilege('service_role','app_private.commerce_public_redaction_runs','SELECT'),
                 has_table_privilege('service_role','app_private.commerce_public_reconciliation_runs','SELECT')""").fetchone()
-        self.assertEqual(row, (False,) * 10)
+        self.assertEqual(row, (False,) * 12)
 
     def test_unclaimed_close_and_thirty_day_redaction_leave_an_opaque_tombstone(self):
         publication = self.adapter.publish(self.owner, expected_version=1)
@@ -447,7 +449,10 @@ class CommercePublicSqlTests(unittest.TestCase):
                     'actor': self.owner.actor_id, 'reason': 'no_response',
                     'evidenceReference': f'ECOMMERCE-CLOSE:{shop_id}:no_response'}})
         run_id = str(uuid4())
+        self.assertEqual(self.adapter.reconciliation_due_count(cap=1), 1)
+        self.assertEqual(self.adapter.redaction_due_count(cap=1), 0)
         self.assertEqual(self.adapter.reconcile_closes(run_id=run_id, limit=1), 1)
+        self.assertEqual(self.adapter.reconciliation_due_count(cap=1), 0)
         self.assertEqual(self.adapter.reconcile_closes(run_id=run_id, limit=1), 1)
         self.assertEqual(self.adapter.reconcile_closes(run_id=str(uuid4()), limit=1), 0)
         with self.pg._connect(self.admin_url) as connection:
@@ -464,6 +469,59 @@ class CommercePublicSqlTests(unittest.TestCase):
         self.assertEqual(by_id[closed['requestId']],
             ('closed', 'no_response', self.owner.actor_id, event_at))
         self.assertEqual(receipts, 1)
+
+    def test_reconciliation_limit_skips_an_older_requeued_request(self):
+        from datetime import datetime, timezone
+        handle = self.adapter.publish(self.owner, expected_version=1)['handle']
+
+        def close_shop_request(shop_id):
+            with self.pg._connect(self.admin_url) as connection:
+                version = connection.execute("""select version from app_private.workspace_state
+                    where workspace_id=%s and surface='commerce'""", (self.workspace_id,)).fetchone()[0]
+            self.adapter.store.apply_command(self.owner, command_id=uuid4(),
+                surface='commerce', event_type='commerce.storefront_request.closed',
+                expected_version=version, payload={
+                    'intent': {'requestId': shop_id, 'reason': 'no_response'},
+                    'evidence': {'actionId': 'ACT-' + str(uuid4()).upper(),
+                        'capturedAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                        'actor': self.owner.actor_id, 'reason': 'no_response',
+                        'evidenceReference': f'ECOMMERCE-CLOSE:{shop_id}:no_response'}})
+
+        old = _body()
+        self.adapter.receive(handle=handle, body=old, client_key='a' * 64)
+        old_shop_id = self.adapter.claim(self.owner, handle=handle, request_id=old['requestId'])['shopRequestId']
+        with self.pg._connect(self.admin_url) as connection:
+            queued = connection.execute("""select state_json->'storefrontRequests'
+                from app_private.workspace_state where workspace_id=%s and surface='commerce'""",
+                (self.workspace_id,)).fetchone()[0]
+        old_queue_item = next(item for item in queued if item['id'] == old_shop_id)
+        close_shop_request(old_shop_id)
+        # Simulate inconsistent Shop state: this request is actionable again,
+        # despite the older close event. It must not starve a valid close.
+        with self.pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.workspace_state
+                set version=version+1,
+                    state_json=jsonb_set(state_json,'{storefrontRequests}',
+                    coalesce(state_json->'storefrontRequests','[]'::jsonb) || %s::jsonb)
+                where workspace_id=%s and surface='commerce'""",
+                (self.json.dumps([old_queue_item]), self.workspace_id))
+
+        valid = _body()
+        self.adapter.receive(handle=handle, body=valid, client_key='b' * 64)
+        valid_shop_id = self.adapter.claim(self.owner, handle=handle,
+                                           request_id=valid['requestId'])['shopRequestId']
+        close_shop_request(valid_shop_id)
+        with self.pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.commerce_public_requests
+                set received_at=received_at - interval '1 day'
+                where request_id=%s""", (old['requestId'],))
+        self.assertEqual(self.adapter.reconcile_closes(run_id=str(uuid4()), limit=1), 1)
+        with self.pg._connect(self.admin_url) as connection:
+            rows = connection.execute("""select request_id,status from app_private.commerce_public_requests
+                where handle=%s""", (handle,)).fetchall()
+        statuses = {str(request_id): status for request_id, status in rows}
+        self.assertEqual(statuses[old['requestId']], 'in_shop')
+        self.assertEqual(statuses[valid['requestId']], 'closed')
 
     def test_delivery_contact_stays_private_when_shop_receives_request(self):
         publication = self.adapter.publish(self.owner, expected_version=1)

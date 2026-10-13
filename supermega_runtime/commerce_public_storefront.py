@@ -126,9 +126,10 @@ def _require_public_schema(cursor: Any) -> None:
            'close_commerce_public_request',
            'reconcile_commerce_public_closes',
            'redact_closed_commerce_public_requests',
+           'commerce_public_reconciliation_due_count',
            'commerce_public_redaction_due_count')""")
     functions = cursor.fetchall()
-    if (len(functions) != 10 or any(not row['prosecdef']
+    if (len(functions) != 11 or any(not row['prosecdef']
             or 'search_path=pg_catalog, app_private' not in (row['proconfig'] or [])
             or row['anon_exec'] or row['auth_exec'] or row['service_exec'] for row in functions)):
         raise TrialNotReadyError(('commerce_public_schema_unverified',))
@@ -577,6 +578,20 @@ class CommercePublicStorefront:
                                (run, limit))
                 return int(cursor.fetchone()['count'])
 
+    def reconciliation_due_count(self, *, cap: int = 100) -> int:
+        """Count stranded human Shop closes without exposing request data."""
+        if not 1 <= cap <= 500:
+            raise TrialValidationError('commerce_public_invalid')
+        with self.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                self.store._assert_runtime_role(cursor)
+                self.store._assert_schema(cursor)
+                _require_public_schema(cursor)
+                cursor.execute("set local statement_timeout='10s'")
+                cursor.execute('select app_private.commerce_public_reconciliation_due_count(%s) as count',
+                               (cap,))
+                return int(cursor.fetchone()['count'])
+
     def redaction_due_count(self, *, cap: int = 100) -> int:
         """Return a bounded dry-run count without exposing customer data."""
         if not 1 <= cap <= 500:
@@ -586,6 +601,7 @@ class CommercePublicStorefront:
                 self.store._assert_runtime_role(cursor)
                 self.store._assert_schema(cursor)
                 _require_public_schema(cursor)
+                cursor.execute("set local statement_timeout='10s'")
                 cursor.execute('select app_private.commerce_public_redaction_due_count(%s) as count',
                                (cap,))
                 return int(cursor.fetchone()['count'])

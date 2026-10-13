@@ -398,6 +398,8 @@ begin
   if found then return prior; end if;
   for item in
     select request.* from app_private.commerce_public_requests request
+    join app_private.workspace_state shop
+      on shop.workspace_id = request.workspace_id and shop.surface = 'commerce'
     where request.status in ('in_review', 'in_shop')
       and exists (select 1 from app_private.workspace_events event
         where event.workspace_id = request.workspace_id
@@ -407,6 +409,12 @@ begin
           and event.payload_json #>> '{evidence,evidenceReference}' =
               'ECOMMERCE-CLOSE:' || request.shop_request_id || ':' ||
               (event.payload_json #>> '{evidence,reason}'))
+      and not exists (select 1 from jsonb_array_elements(
+          coalesce(shop.state_json->'storefrontRequests', '[]'::jsonb)) queued
+          where queued->>'id' = request.shop_request_id)
+      and not exists (select 1 from jsonb_array_elements(
+          coalesce(shop.state_json->'orders', '[]'::jsonb)) shop_order
+          where shop_order->>'sourceRecordId' = request.shop_request_id)
     order by request.received_at, request.handle, request.request_id
     limit p_limit for update of request skip locked
   loop
@@ -446,6 +454,42 @@ begin
   insert into app_private.commerce_public_reconciliation_runs(run_id, reconciled_count, max_rows)
     values (p_run, changed, p_limit);
   return changed;
+end;
+$$;
+
+-- The read-only worker check must also see human Shop closes whose private
+-- request transition was interrupted; otherwise it can report a clear queue
+-- before the 30-day clock has even been recorded.
+create function app_private.commerce_public_reconciliation_due_count(p_cap integer)
+returns integer language plpgsql security definer
+set search_path = pg_catalog, app_private as $$
+declare due_count integer;
+begin
+  if p_cap not between 1 and 500 then
+    raise exception 'commerce_public_invalid' using errcode = '22023';
+  end if;
+  select count(*) into due_count from (
+    select 1 from app_private.commerce_public_requests request
+    join app_private.workspace_state shop
+      on shop.workspace_id = request.workspace_id and shop.surface = 'commerce'
+    where request.status in ('in_review', 'in_shop')
+      and exists (select 1 from app_private.workspace_events event
+        where event.workspace_id = request.workspace_id
+          and event.surface = 'commerce'
+          and event.event_type = 'commerce.storefront_request.closed'
+          and event.actor_kind = 'human'
+          and event.payload_json #>> '{evidence,evidenceReference}' =
+              'ECOMMERCE-CLOSE:' || request.shop_request_id || ':' ||
+              (event.payload_json #>> '{evidence,reason}'))
+      and not exists (select 1 from jsonb_array_elements(
+          coalesce(shop.state_json->'storefrontRequests', '[]'::jsonb)) queued
+          where queued->>'id' = request.shop_request_id)
+      and not exists (select 1 from jsonb_array_elements(
+          coalesce(shop.state_json->'orders', '[]'::jsonb)) shop_order
+          where shop_order->>'sourceRecordId' = request.shop_request_id)
+    limit p_cap
+  ) due;
+  return due_count;
 end;
 $$;
 
@@ -511,6 +555,7 @@ revoke all on function app_private.read_commerce_public_source(uuid),
   app_private.inspect_commerce_public_request(text,uuid,uuid),
   app_private.close_commerce_public_request(text,uuid,uuid,text),
   app_private.reconcile_commerce_public_closes(uuid,integer),
+  app_private.commerce_public_reconciliation_due_count(integer),
   app_private.commerce_public_redaction_due_count(integer),
   app_private.redact_closed_commerce_public_requests(uuid,integer)
   from public, anon, authenticated, service_role;
@@ -522,6 +567,7 @@ grant execute on function app_private.read_commerce_public_source(uuid),
   app_private.inspect_commerce_public_request(text,uuid,uuid),
   app_private.close_commerce_public_request(text,uuid,uuid,text),
   app_private.reconcile_commerce_public_closes(uuid,integer),
+  app_private.commerce_public_reconciliation_due_count(integer),
   app_private.commerce_public_redaction_due_count(integer),
   app_private.redact_closed_commerce_public_requests(uuid,integer)
   to supermega_trial_backend;
