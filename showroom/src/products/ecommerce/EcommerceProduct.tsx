@@ -328,6 +328,8 @@ export function EcommerceProduct() {
   const [publicVisibleCount, setPublicVisibleCount] = useState(5)
   const [publicPageBusy, setPublicPageBusy] = useState(false)
   const [publicStatus, setPublicStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  const [publicDataIdentity, setPublicDataIdentity] = useState('')
+  const publicDataIdentityRef = useRef('')
   const [publicBusy, setPublicBusy] = useState(false)
   const [publicNotice, setPublicNotice] = useState('')
   const [publicReviewId, setPublicReviewId] = useState('')
@@ -351,15 +353,11 @@ export function EcommerceProduct() {
     return () => viewport.removeEventListener('change', syncDevice)
   }, [])
   const workspaceView = ecommerceWorkspaceView(location.search, Boolean(savedDraft))
+  const publicIdentityKey = managedIdentity ? `${managedIdentity.workspaceId}:${managedIdentity.userId}` : ''
   useEffect(() => {
-    if (!managedIdentity || !managedCanWrite) {
-      setPublicPublication(null)
-      setPublicRequests([])
-      setPublicNextCursor(undefined)
-      setPublicStatus('unavailable')
-      return
-    }
+    if (!managedIdentity || !managedCanWrite) return
     const identity = managedIdentity
+    const identityKey = `${identity.workspaceId}:${identity.userId}`
     let active = true
     let inFlight = false
     async function refresh() {
@@ -369,13 +367,17 @@ export function EcommerceProduct() {
         const publications = await loadManagedCommercePublications(identity)
         const inbox = await loadManagedCommercePublicInbox(identity)
         if (!active) return
+        const sameIdentity = publicDataIdentityRef.current === identityKey
         setPublicPublication(publications.publications.find((item) => item.enabled) ?? null)
         setPublicRequests((current) => {
-          const byId = new Map(current.map((item) => [`${item.handle}:${item.requestId}`, item]))
+          const byId = new Map((sameIdentity ? current : []).map((item) => [`${item.handle}:${item.requestId}`, item]))
           for (const item of inbox.requests) byId.set(`${item.handle}:${item.requestId}`, item)
           return [...byId.values()].sort((left, right) => right.receivedAt.localeCompare(left.receivedAt))
         })
-        setPublicNextCursor((current) => current === undefined ? inbox.nextCursor : current)
+        setPublicNextCursor((current) => !sameIdentity || current === undefined ? inbox.nextCursor : current)
+        if (!sameIdentity) setPublicVisibleCount(5)
+        publicDataIdentityRef.current = identityKey
+        setPublicDataIdentity(identityKey)
         setPublicStatus('ready')
       } catch {
         if (active) setPublicStatus('unavailable')
@@ -1188,7 +1190,7 @@ export function EcommerceProduct() {
       workspace?.scrollIntoView({ block: 'start' })
       workspace?.focus({ preventScroll: true })
     })
-  }, [buyingReady, buyingCart, cartSessionReady])
+  }, [buyingReady, buyingCart, cartSessionReady, setBuyingCart])
 
   function prepareQuoteRecovery(event: ReactMouseEvent<HTMLButtonElement>) {
     const actionNow = Math.round(globalThis.performance.timeOrigin + event.timeStamp)
@@ -2247,7 +2249,7 @@ export function EcommerceProduct() {
         summary={ecommerceTodaySummary}
       />
 
-      {publicStatus === 'ready' && managedCanWrite ? <section aria-label="Incoming online requests" className="ecommerce-public-intake">
+      {publicStatus === 'ready' && managedCanWrite && publicDataIdentity === publicIdentityKey ? <section aria-label="Incoming online requests" className="ecommerce-public-intake">
         <div className="ecommerce-public-intake-head">
           <div><h2>Incoming online requests</h2><p>Requests from your customer store arrive here automatically.</p></div>
           <strong>{newPublicRequests.length} new in loaded requests</strong>
@@ -2628,7 +2630,7 @@ export function EcommerceProduct() {
           ) : null}
           {draftNotice ? <p className="ecommerce-save-notice" role="status">{draftNotice}</p> : null}
 
-          {workspaceView !== 'setup' && managedIdentity && managedCanWrite && publicStatus === 'ready' ? <div className="ecommerce-public-sharing">
+          {workspaceView !== 'setup' && managedIdentity && managedCanWrite && publicStatus === 'ready' && publicDataIdentity === publicIdentityKey ? <div className="ecommerce-public-sharing">
             <div>
               <h3>{publicStoreIsCurrent ? 'Your customer store is live' : publicPublication ? 'Store changes are not live yet' : 'Share your store with customers'}</h3>
               <p>{publicStoreIsCurrent ? 'Customers can browse and send requests from this link.' : 'Publish the saved store when you are ready to receive customer requests.'}</p>
