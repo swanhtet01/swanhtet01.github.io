@@ -21148,12 +21148,15 @@ const myanmarFontPath = resolve(dist, 'fonts', 'noto-sans-myanmar.woff2')
 const myanmarLicensePath = resolve(dist, 'fonts', 'noto-sans-myanmar-OFL.txt')
 const myanmarFont = await exists(myanmarFontPath) ? await readRawFile(myanmarFontPath) : null
 const myanmarLicense = await exists(myanmarLicensePath) ? await readRawFile(myanmarLicensePath) : null
+const sourceMyanmarLicense = await readRawFile(resolve(root, 'tools', 'public-assets', 'noto-sans-myanmar-OFL.txt'))
 if (!myanmarFont || myanmarFont.length !== 153_980
   || createHash('sha256').update(myanmarFont).digest('hex') !== 'c1453c361ea1802114444e939196d1113c7a56b3647f2961114d913d51276fd1') {
   fail('myanmar_font_asset_missing_or_changed')
 }
-if (!myanmarLicense || myanmarLicense.length !== 4_474
-  || createHash('sha256').update(myanmarLicense).digest('hex') !== '13c5146bc08e879c4f8fa30b27f0eed13164ab13974e21e048da3623ed6098d1') {
+// Git's LF checkout and Windows CRLF checkout differ in raw size. The dist copy
+// must match its local source byte-for-byte; bind the text to one LF-normalized digest.
+if (!myanmarLicense || myanmarLicense.length > 5_000 || !myanmarLicense.equals(sourceMyanmarLicense)
+  || createHash('sha256').update(sourceMyanmarLicense.toString('utf8').replace(/\r\n?/g, '\n')).digest('hex') !== '2d7975c18ae25af40957362606d19048d6cd06fa6776aaa86188666e147f630d') {
   fail('myanmar_font_license_missing_or_changed')
 }
 const myanmarAssetBytes = (myanmarFont?.length ?? 0) + (myanmarLicense?.length ?? 0)
