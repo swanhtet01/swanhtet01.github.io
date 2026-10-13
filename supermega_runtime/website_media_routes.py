@@ -9,6 +9,7 @@ from .trial_store import PostgresTrialStore
 from .website_media import IMAGE_TYPES, MAX_UPLOAD_BYTES, prepare_photo, validate_asset_id
 from .website_media_storage import MediaStorageConfig, SupabasePrivateMediaStorage
 from .website_media_store import WebsiteMediaStore
+from .website_customer_review_store import WebsiteCustomerReviewStore
 
 PRIVATE_HEADERS = {"Cache-Control": "private, no-store", "Pragma": "no-cache",
                    "X-Content-Type-Options": "nosniff", "Vary": "Authorization, X-Supermega-Workspace-Id"}
@@ -75,6 +76,31 @@ def mount_website_media_routes(router, *, store, resolve_principal):
                 "Content-Disposition": 'inline; filename="website-photo.webp"',
                 "Content-Security-Policy": "default-src 'none'; sandbox",
                 "X-Content-SHA256": receipt["sha256"]})
+        except HTTPException as exc:
+            exc.headers = {**(exc.headers or {}), **PRIVATE_HEADERS}
+            raise
+
+    @router.get("/website-reviews/{review_id}/media/{asset_id}")
+    async def read_review_photo(review_id: str, asset_id: str, request: Request):
+        try:
+            if request.query_params:
+                raise _error(422, "website_media_request_invalid")
+            actor = await run_in_threadpool(_resolve_principal, request, resolve_principal)
+            if actor.actor_kind != "human":
+                raise _error(403, "website_review_human_required")
+            ready = await run_in_threadpool(_readiness, store, actor)
+            _require_read_ready(ready)
+            if not isinstance(store, PostgresTrialStore):
+                raise _error(503, "website_review_storage_unavailable")
+            config = MediaStorageConfig.from_environment()
+            if not config.ready:
+                raise _error(503, "website_media_storage_unavailable")
+            adapter = WebsiteCustomerReviewStore(store, SupabasePrivateMediaStorage(config))
+            data, digest = await run_in_threadpool(_invoke, lambda: adapter.read_photo(actor, review_id, asset_id))
+            return Response(data, media_type="image/webp", headers={**PRIVATE_HEADERS,
+                "Content-Disposition": 'inline; filename="website-review-photo.webp"',
+                "Content-Security-Policy": "default-src 'none'; sandbox",
+                "X-Content-SHA256": digest})
         except HTTPException as exc:
             exc.headers = {**(exc.headers or {}), **PRIVATE_HEADERS}
             raise

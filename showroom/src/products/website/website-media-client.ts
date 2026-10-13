@@ -111,3 +111,45 @@ export function createWebsiteMediaClient(identity: ManagedIdentity, canWrite: bo
     },
   }
 }
+
+export function createWebsiteReviewMediaClient(identity: ManagedIdentity, reviewId: string): WebsiteMediaClient {
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(reviewId)) {
+    throw new Error('This review link is invalid.')
+  }
+  const assertCurrent = async () => { await sessionForRequest(identity) }
+  return {
+    scopeKey: `${identity.userId}:${identity.workspaceId}:${reviewId}`,
+    assertCurrent,
+    async load(assetId, signal) {
+      if (!isWebsiteAssetId(assetId)) throw new Error('This photo reference is invalid.')
+      const controller = new AbortController()
+      const abort = () => controller.abort()
+      signal.addEventListener('abort', abort, { once: true })
+      if (signal.aborted) abort()
+      const timer = setTimeout(abort, 20_000)
+      try {
+        const { session, workspaceId } = await sessionForRequest(identity)
+        const response = await fetch(`/api/trial/v1/website-reviews/${reviewId}/media/${assetId}`, {
+          method: 'GET', signal: controller.signal, cache: 'no-store', credentials: 'omit', redirect: 'error',
+          headers: { authorization: `Bearer ${session.access_token}`, 'x-supermega-workspace-id': workspaceId,
+            accept: 'image/webp' },
+        })
+        if (!response.ok) {
+          await response.body?.cancel()
+          throw new Error(response.status === 401 || response.status === 403
+            ? 'This review photo is no longer available to your account.' : 'This review photo could not be loaded.')
+        }
+        if ((response.headers.get('content-type') ?? '').split(';')[0].trim() !== 'image/webp'
+          || response.headers.get('x-content-sha256') !== assetId.slice(0, 64)) {
+          await response.body?.cancel()
+          throw new Error('The review photo could not be verified.')
+        }
+        const bytes = await boundedBody(response, MAX_PHOTO_BYTES)
+        await verifyPhotoBytes(assetId, bytes)
+        await assertCurrent()
+        controller.signal.throwIfAborted()
+        return new Blob([bytes], { type: 'image/webp' })
+      } finally { clearTimeout(timer); signal.removeEventListener('abort', abort) }
+    },
+  }
+}

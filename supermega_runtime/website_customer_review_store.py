@@ -9,16 +9,66 @@ against that same invalidation lock. No membership or publishing is granted.
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import timedelta
+from hashlib import sha256
 import json
 from typing import Any, Mapping
 
 from .trial_store import PostgresTrialStore, TrialPrincipal, TrialPermissionDenied, TrialValidationError, TrialNotReadyError
 from .website_customer_review import _digest, _text, _uuid, _time, _preview
+from .website_media import MAX_ASSET_BYTES, validate_asset_id
+from .website_media_storage import MediaStorageConfig, SupabasePrivateMediaStorage
+from .website_media_store import WebsiteMediaStore
 
 
 class WebsiteCustomerReviewStore:
-    def __init__(self, store: PostgresTrialStore):
+    def __init__(self, store: PostgresTrialStore, media_storage: Any = None):
         self.store = store
+        self.media_storage = media_storage
+
+    def _storage(self):
+        if self.media_storage is not None:
+            return self.media_storage
+        config = MediaStorageConfig.from_environment()
+        if not config.ready:
+            raise TrialNotReadyError(("website_media_storage_unavailable",))
+        return SupabasePrivateMediaStorage(config)
+
+    @staticmethod
+    def _asset_ids(preview: Mapping[str, Any]) -> set[str]:
+        try:
+            blocks = (block for page in preview["pages"] for block in (page["hero"], *page["sections"]))
+            return {validate_asset_id(block["image"]["assetId"]) for block in blocks
+                    if isinstance(block.get("image"), Mapping) and "assetId" in block["image"]}
+        except (KeyError, TypeError, AttributeError) as exc:
+            raise TrialValidationError("website_review_snapshot_corrupt") from exc
+
+    @staticmethod
+    def _checked_receipt(cursor: Any, workspace_id: str, asset_id: str) -> dict[str, Any]:
+        receipt = WebsiteMediaStore._receipt(cursor, workspace_id, asset_id)
+        if (not isinstance(receipt, dict) or set(receipt) !=
+                {"assetId", "sha256", "contentType", "bytes", "width", "height", "visibility"}
+                or receipt["assetId"] != asset_id or receipt["sha256"] != asset_id[:-5]
+                or receipt["contentType"] != "image/webp" or receipt["visibility"] != "private"
+                or type(receipt["bytes"]) is not int or not 0 < receipt["bytes"] <= MAX_ASSET_BYTES
+                or type(receipt["width"]) is not int or not 0 < receipt["width"] <= 2048
+                or type(receipt["height"]) is not int or not 0 < receipt["height"] <= 2048):
+            raise TrialNotReadyError(("website_review_photo_unavailable",))
+        return receipt
+
+    def _verify_media(self, cursor: Any, actor: TrialPrincipal, preview: Mapping[str, Any]) -> None:
+        asset_ids = self._asset_ids(preview)
+        if not asset_ids:
+            return
+        storage = self._storage()
+        for asset_id in sorted(asset_ids):
+            receipt = self._checked_receipt(cursor, actor.workspace_id, asset_id)
+            data = storage.get(actor.workspace_id, asset_id)
+            if len(data) != receipt["bytes"] or sha256(data).hexdigest() != receipt["sha256"]:
+                raise TrialNotReadyError(("website_review_photo_unavailable",))
+        self.store._assert_active_identity_session(cursor, actor)
+        if ("website.write" not in self.store._load_membership(cursor, actor)
+                or "website" not in (self.store._product_entitlements(cursor, actor.workspace_id) or ())):
+            raise TrialPermissionDenied("website.write")
 
     @contextmanager
     def _transaction(self, principal: TrialPrincipal, *, write: bool, capability: str, lock_source: bool = False,
@@ -109,7 +159,8 @@ class WebsiteCustomerReviewStore:
                 raise TrialValidationError("website_review_source_missing")
             if not 1 <= source["version"] <= 9_007_199_254_740_991:
                 raise TrialValidationError("website_review_source_stale")
-            revision, preview = _preview(source["state_json"])
+            revision, preview = _preview(source["state_json"], allow_private_media=True)
+            self._verify_media(cursor, actor, preview)
             result = {"status": "saved_source_preview", "sourceVersion": source["version"],
                       "contentRevision": revision, "preview": deepcopy(preview), "previewDigest": _digest(preview),
                       "readAt": source["read_at"].isoformat(), "reviewCreated": False,
@@ -188,7 +239,8 @@ class WebsiteCustomerReviewStore:
             cursor.execute("select app_private.website_review_recipient_ready(%s) as ready", (recipient,))
             if (cursor.fetchone() or {}).get("ready") is not True:
                 raise TrialPermissionDenied("website.review")
-            revision, preview = _preview(source["state_json"])
+            revision, preview = _preview(source["state_json"], allow_private_media=True)
+            self._verify_media(cursor, actor, preview)
             digest = _digest(preview)
             cursor.execute("""select recipient_actor_id,prepared_by,source_version,preview_digest,expires_at,status
                 from app_private.website_customer_reviews where workspace_id=%s and review_id=%s""", (actor.workspace_id, review_id))
@@ -254,6 +306,30 @@ class WebsiteCustomerReviewStore:
                       "expiresAt": row["expires_at"].isoformat(), "status": "prepared_preview",
                       "publicationAuthorized": False}
         return result
+
+    def read_photo(self, principal: TrialPrincipal, review_id: str, asset_id: str) -> tuple[bytes, str]:
+        """Read only an asset in the assigned, current review; never grant website.read."""
+        asset_id = validate_asset_id(asset_id)
+        with self._transaction(principal, write=False, capability="website.review") as (cursor, actor):
+            row = self._assignment(cursor, actor, review_id)
+            # The review guard binds this snapshot to source on insert; the
+            # source trigger marks it stale on edit. A reviewer cannot SELECT
+            # workspace_state, and the shared advisory lock serializes both.
+            if asset_id not in self._asset_ids(row["preview"]):
+                raise TrialPermissionDenied("website.review")
+            # Preparation proved a committed receipt and matching object under
+            # website.write. Reviewers cannot SELECT the event ledger by RLS.
+            data = self._storage().get(actor.workspace_id, asset_id)
+            if not 0 < len(data) <= MAX_ASSET_BYTES or sha256(data).hexdigest() != asset_id[:-5]:
+                raise TrialNotReadyError(("website_review_photo_unavailable",))
+            # The storage read is external to PostgreSQL; a session or staff
+            # grant can change while it runs even though source edits share our lock.
+            self.store._assert_active_identity_session(cursor, actor)
+            if ("website.review" not in self.store._load_membership(cursor, actor)
+                    or "website" not in (self.store._product_entitlements(cursor, actor.workspace_id) or ())):
+                raise TrialPermissionDenied("website.review")
+            self._assignment(cursor, actor, review_id)
+        return data, asset_id[:-5]
 
     def feedback(self, principal: TrialPrincipal, review_id: str, *, after: str | None = None) -> dict[str, Any]:
         """Staff-only retained feedback. Reading never revives or approves a review.

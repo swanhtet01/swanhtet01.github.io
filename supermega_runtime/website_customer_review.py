@@ -81,14 +81,14 @@ def _access(principal: TrialPrincipal, readiness: TrialReadiness, capability: st
     return actor
 
 
-def _preview(state: Mapping[str, Any]) -> tuple[int, dict[str, Any]]:
+def _preview(state: Mapping[str, Any], *, allow_private_media: bool = False) -> tuple[int, dict[str, Any]]:
     validated = validate_website_state(state)
     artifact = _website_artifact(validated)
     if not artifact["pages"]:
         _fail("no_prepared_pages")
     for page in artifact["pages"]:
         for block in (page["hero"], *page["sections"]):
-            if "image" in block and "assetId" in block["image"]:
+            if not allow_private_media and "image" in block and "assetId" in block["image"]:
                 _fail("private_media_unavailable")
     # Explicit public projection, never bootstrap, lead ledger or internal proofs.
     return validated["contentRevision"], {"siteName": artifact["siteName"], "pages": artifact["pages"]}

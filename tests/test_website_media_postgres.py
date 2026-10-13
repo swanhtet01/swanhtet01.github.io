@@ -28,6 +28,7 @@ from supermega_runtime.trial_store import (
 )
 from supermega_runtime.website_media import prepare_photo
 from supermega_runtime.website_media_store import MEDIA_EVENT, WebsiteMediaStore
+from supermega_runtime.website_customer_review_store import WebsiteCustomerReviewStore
 from supermega_runtime.website_runtime import reduce_website_state
 from tests.test_website_runtime import _command, _state
 from tools import rehearse_supermega_postgres17 as pg
@@ -204,6 +205,47 @@ class LocalWebsiteDatabaseCase(unittest.TestCase):
         self.fail("The second upload did not wait on the real PostgreSQL advisory lock.")
 
 class WebsiteMediaPostgresTests(LocalWebsiteDatabaseCase):
+    def test_review_scoped_photo_does_not_grant_workspace_media_read(self):
+        self.media.put(self.owner, self.photo)
+        self._apply(self._state_with_photo())
+        reviewer = self._principal(self.owner.workspace_id, viewer=True)
+        self._sql("""update app_private.workspace_memberships set capabilities=array['website.review']
+            where workspace_id=%s and actor_id=%s""", (reviewer.workspace_id, reviewer.actor_id))
+        reviews = WebsiteCustomerReviewStore(self.store, self.storage)
+        review_id = str(uuid4())
+        reviews.prepare(self.owner, review_id=review_id, recipient_actor_id=reviewer.actor_id,
+                        expected_version=1, expires_at=(datetime.now(timezone.utc) + timedelta(days=1)).isoformat())
+        self.assertEqual(reviews.preview(reviewer, review_id)["preview"]["pages"][0]["sections"][0]
+                         ["image"]["assetId"], self.photo.asset_id)
+        self.assertEqual(reviews.read_photo(reviewer, review_id, self.photo.asset_id),
+                         (self.photo.data, self.photo.asset_id[:-5]))
+        with self.assertRaises(TrialPermissionDenied):
+            self.media.get(reviewer, self.photo.asset_id)
+        with self.assertRaises(TrialPermissionDenied):
+            reviews.read_photo(reviewer, str(uuid4()), self.photo.asset_id)
+        unreferenced = self._photo("#245a8a")
+        self.media.put(self.owner, unreferenced)
+        with self.assertRaises(TrialPermissionDenied):
+            reviews.read_photo(reviewer, review_id, unreferenced.asset_id)
+        other = self._principal(viewer=True)
+        self._sql("""update app_private.workspace_memberships set capabilities=array['website.review']
+            where workspace_id=%s and actor_id=%s""", (other.workspace_id, other.actor_id))
+        with self.assertRaises(TrialPermissionDenied):
+            reviews.read_photo(other, review_id, self.photo.asset_id)
+        reviews.revoke(self.owner, review_id)
+        with self.assertRaises(TrialPermissionDenied):
+            reviews.read_photo(reviewer, review_id, self.photo.asset_id)
+        stale_review_id = str(uuid4())
+        reviews.prepare(self.owner, review_id=stale_review_id, recipient_actor_id=reviewer.actor_id,
+                        expected_version=1, expires_at=(datetime.now(timezone.utc) + timedelta(days=1)).isoformat())
+        edited = self._state_with_photo()
+        edited["revision"] = 1
+        edited["contentRevision"] = 1
+        edited["pages"][0]["sections"][0]["title"] = "Updated service"
+        self._apply(edited, version=1)
+        with self.assertRaises(TrialPermissionDenied):
+            reviews.read_photo(reviewer, stale_review_id, self.photo.asset_id)
+
     def test_upload_save_reload_and_command_replay(self):
         self.assertEqual(self.media.put(self.owner, self.photo), self.photo.receipt())
         state, command_id = self._state_with_photo(), str(uuid4())
