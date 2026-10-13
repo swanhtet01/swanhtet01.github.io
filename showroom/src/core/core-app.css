@@ -1757,7 +1757,7 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
   .shop-product-shell .product-task-tabs { display: none; }
   .orders-module, .orders-module.has-return-draft { height: auto; min-height: 100%; overflow: visible; scrollbar-gutter: auto; }
   .shop-counter-module { overflow-y: auto; scrollbar-gutter: stable; }
-  .shop-counter-module > .shop-counter-surface { min-height: 520px; flex: 0 0 clamp(520px,calc(100svh - 220px),680px); overflow: hidden; }
+  .shop-counter-module > .shop-counter-surface { min-height: 0; flex: 0 0 auto; overflow: visible; }
   .operations-screen:not(.commerce-screen) .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }
   .commerce-screen[data-active-tab="today"] .workspace-view,
   .commerce-screen[data-active-tab="orders"] .workspace-view,
@@ -3064,7 +3064,6 @@ input, select, textarea,
 
 /* Keep the cashier's two active tasks side by side. Orders and low-stock work
    remain reachable from the catalog; the redundant third step rail is gone. */
-.shop-counter-surface { flex: none; }
 .shop-counter-grid { height: auto; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 1rem; align-items: start; }
 .shop-catalog-panel, .shop-current-sale { box-shadow: 0 .875rem 2.25rem rgba(20, 22, 40, .045); }
 .shop-catalog-panel { overflow: visible; padding: 1.25rem; }
