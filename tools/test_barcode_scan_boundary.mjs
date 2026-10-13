@@ -104,6 +104,28 @@ check(coreApp.includes('label="Scan the material label into the material field" 
 
 const addSearchMatch = functionBody(coreApp, 'addSearchMatch')
 const addCameraScan = functionBody(coreApp, 'addCameraScan')
+const addScannedValue = new Function('items', 'addItem', 'setQuery', 'setScanFeedback', 'value', functionBody(coreApp, 'addScannedValue'))
+function runCounterScan(items, value) {
+  const added = []
+  const queries = []
+  const feedback = []
+  const matched = addScannedValue(items, (item) => added.push(item.sku), (query) => queries.push(query), (message) => feedback.push(message), value)
+  return { matched, added, queries, feedback }
+}
+const counterItems = [
+  { sku: 'MUG-10', name: 'Ceramic Mug', onHand: 4 },
+  { sku: 'LAMP-02', name: 'Desk Lamp', onHand: 0 },
+]
+const exactCounterScan = runCounterScan(counterItems, ' mug-10 ')
+check(exactCounterScan.matched && exactCounterScan.added.join() === 'MUG-10' && exactCounterScan.queries.join() === '' && exactCounterScan.feedback.join() === '', 'exact_case_insensitive_counter_scan_must_add_one_item_and_clear_search')
+for (const value of ['MUG', 'UG-10', 'Ceramic Mug', 'MUG-1', 'UNKNOWN']) {
+  const miss = runCounterScan(counterItems, value)
+  check(!miss.matched && miss.added.length === 0 && miss.queries.length === 0 && miss.feedback[0]?.includes('exact SKU'), `counter_scan_must_not_auto_add_fuzzy_or_unknown_match:${value}`)
+}
+const outOfStockCounterScan = runCounterScan(counterItems, 'LAMP-02')
+check(!outOfStockCounterScan.matched && outOfStockCounterScan.added.length === 0, 'out_of_stock_counter_scan_must_not_add_item')
+const ambiguousCounterScan = runCounterScan([{ sku: 'MUG-10', onHand: 4 }, { sku: 'mug-10', onHand: 4 }], 'MUG-10')
+check(!ambiguousCounterScan.matched && ambiguousCounterScan.added.length === 0, 'duplicate_counter_skus_must_fail_closed')
 const selectScannedJob = functionBody(coreApp, 'selectScannedJob')
 const applyScannedMaterialRef = functionBody(coreApp, 'applyScannedMaterialRef')
 const selectStockCountBarcode = functionBody(coreApp, 'selectStockCountBarcode')

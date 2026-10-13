@@ -1188,6 +1188,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   const setPayment = (value: string) => updateBasket({ payment: value })
   const setOutcome = (value: CounterBasket['outcome']) => updateBasket({ outcome: value })
   const [query, setQuery] = useState(initialQuery)
+  const [scanFeedback, setScanFeedback] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
   const salePanelRef = useRef<HTMLElement>(null)
   const saleSearchRef = useRef<HTMLInputElement>(null)
@@ -1251,18 +1252,22 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   function addScannedValue(value: string) {
     const normalizedQuery = value.trim().toLocaleLowerCase()
     if (!normalizedQuery) return false
-    const visibleItems = items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
-    const exactSku = visibleItems.find((item) => item.sku.toLocaleLowerCase() === normalizedQuery)
-    const match = exactSku ?? (visibleItems.length === 1 ? visibleItems[0] : null)
-    if (!match || match.onHand < 1) return false
+    const matches = items.filter((item) => item.sku.toLocaleLowerCase() === normalizedQuery)
+    const match = matches.length === 1 ? matches[0] : null
+    if (!match || match.onHand < 1) {
+      setScanFeedback('Enter adds an in-stock item by exact SKU. Choose a product below or check its code.')
+      return false
+    }
     addItem(match)
     setQuery('')
+    setScanFeedback('')
     return true
   }
 
   function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter' || !normalizedQuery) return
-    if (addScannedValue(query)) event.preventDefault()
+    event.preventDefault()
+    addScannedValue(query)
   }
 
   function addCameraScan(value: string) {
@@ -1323,7 +1328,8 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setScanFeedback('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
+          {scanFeedback ? <p className="form-notice" role="status">{scanFeedback}</p> : null}
         </header>
         {/* The tile is named by REFERENCE, not by aria-label. An aria-label on a
             button replaces its whole subtree in the accessibility tree, so the
