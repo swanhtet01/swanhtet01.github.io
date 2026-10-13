@@ -105,11 +105,14 @@ check(coreApp.includes('label="Scan the material label into the material field" 
 const addSearchMatch = functionBody(coreApp, 'addSearchMatch')
 const addCameraScan = functionBody(coreApp, 'addCameraScan')
 const addScannedValue = new Function('items', 'addItem', 'setQuery', 'setScanFeedback', 'value', functionBody(coreApp, 'addScannedValue'))
+const addCounterItem = new Function('tickets', 'setCart', 'setScanFeedback', 'item', functionBody(coreApp, 'addItem'))
+check(functionBody(coreApp, 'updateBasket').includes('return tickets.dispatch(')
+  && functionBody(coreApp, 'setCart').includes('return updateBasket('), 'counter_save_rejection_must_reach_scan_handler')
 function runCounterScan(items, value) {
   const added = []
   const queries = []
   const feedback = []
-  const matched = addScannedValue(items, (item) => added.push(item.sku), (query) => queries.push(query), (message) => feedback.push(message), value)
+  const matched = addScannedValue(items, (item) => { added.push(item.sku); feedback.push(''); return true }, (query) => queries.push(query), (message) => feedback.push(message), value)
   return { matched, added, queries, feedback }
 }
 const counterItems = [
@@ -126,6 +129,31 @@ const outOfStockCounterScan = runCounterScan(counterItems, 'LAMP-02')
 check(!outOfStockCounterScan.matched && outOfStockCounterScan.added.length === 0, 'out_of_stock_counter_scan_must_not_add_item')
 const ambiguousCounterScan = runCounterScan([{ sku: 'MUG-10', onHand: 4 }, { sku: 'mug-10', onHand: 4 }], 'MUG-10')
 check(!ambiguousCounterScan.matched && ambiguousCounterScan.added.length === 0, 'duplicate_counter_skus_must_fail_closed')
+function runRealCounterScan(initialQuantity, saveAccepted = true) {
+  let cart = initialQuantity ? { 'MUG-10': initialQuantity } : {}
+  const queries = []
+  const feedback = []
+  const tickets = { getSnapshot: () => ({ state: { cart } }) }
+  const setCart = (value) => {
+    if (!saveAccepted) return false
+    cart = typeof value === 'function' ? value(cart) : value
+    return true
+  }
+  const scan = (value) => addScannedValue(counterItems,
+    (item) => addCounterItem(tickets, setCart, (message) => feedback.push(message), item),
+    (query) => queries.push(query), (message) => feedback.push(message), value)
+  return { scan, cart: () => cart, queries, feedback }
+}
+const cappedCounter = runRealCounterScan(3)
+check(cappedCounter.scan('MUG-10') && cappedCounter.cart()['MUG-10'] === 4, 'scan_must_add_last_available_item')
+check(!cappedCounter.scan('MUG-10') && cappedCounter.cart()['MUG-10'] === 4
+  && cappedCounter.queries.length === 1 && cappedCounter.feedback.at(-1)?.includes('Stock limit'),
+  'scan_at_stock_cap_must_not_clear_code_or_report_success')
+const refusedCounter = runRealCounterScan(0, false)
+check(!refusedCounter.scan('MUG-10') && !refusedCounter.cart()['MUG-10']
+  && refusedCounter.queries.length === 0 && refusedCounter.feedback.at(-1)?.includes('saving paused'),
+  'rejected_counter_save_must_not_look_like_added_item')
+check(coreApp.includes('disabled={item.onHand < 1 || quantity >= item.onHand}'), 'product_tile_must_disable_at_sale_stock_cap')
 const selectScannedJob = functionBody(coreApp, 'selectScannedJob')
 const applyScannedMaterialRef = functionBody(coreApp, 'applyScannedMaterialRef')
 const selectStockCountBarcode = functionBody(coreApp, 'selectStockCountBarcode')
