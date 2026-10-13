@@ -391,6 +391,7 @@ const expectedHumanCommerceEvents = [
   'commerce.stock.received',
   'commerce.storefront.configuration.saved',
   'commerce.storefront.merchandising.imported',
+  'commerce.storefront_request.closed',
   'commerce.supplier_credit.recorded',
   'commerce.supplier_invoice.payable_ready',
   'commerce.supplier_invoice.recorded',

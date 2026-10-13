@@ -453,7 +453,7 @@ export function EcommerceProduct() {
   }
 
   async function closePublicRequest(entry: ManagedCommercePublicRequest) {
-    if (!managedIdentity || publicBusy || !publicCloseReason || entry.status !== 'new') return
+    if (!managedIdentity || publicBusy || !publicCloseReason || entry.status === 'reviewing') return
     setPublicBusy(true)
     setPublicNotice('')
     try {
@@ -471,8 +471,7 @@ export function EcommerceProduct() {
   }
 
   async function showMorePublicRequests() {
-    const loadedNew = publicRequests.filter((item) => item.status === 'new' || item.status === 'reviewing').length
-    if (loadedNew > publicVisibleCount) {
+    if (publicRequests.length > publicVisibleCount) {
       setPublicVisibleCount((count) => count + 20)
       return
     }
@@ -2200,7 +2199,7 @@ export function EcommerceProduct() {
   const visibleCatalogItems = catalogSearchTerm
     ? catalog.items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLowerCase().includes(catalogSearchTerm))
     : catalog.items
-  const newPublicRequests = publicRequests.filter((entry) => entry.status === 'new' || entry.status === 'reviewing')
+  const openPublicRequests = publicRequests
   const publicStoreIsCurrent = Boolean(publicPublication?.enabled && publicPublication.previewDigest === digest)
 
   if (!catalogHydrating && sampleCatalogPreview) {
@@ -2283,18 +2282,20 @@ export function EcommerceProduct() {
       {publicStatus === 'ready' && managedCanWrite && publicDataIdentity === publicIdentityKey ? <section aria-label="Incoming online requests" className="ecommerce-public-intake">
         <div className="ecommerce-public-intake-head">
           <div><h2>Incoming online requests</h2><p>Requests from your customer store arrive here automatically.</p></div>
-          <strong>{newPublicRequests.length} to review</strong>
+          <strong>{openPublicRequests.length} open</strong>
         </div>
-        {newPublicRequests.length ? <div className="ecommerce-public-intake-list">
-          {newPublicRequests.slice(0, publicVisibleCount).map((entry) => <div className="ecommerce-public-intake-row" key={`${entry.handle}:${entry.requestId}`}>
+        {openPublicRequests.length ? <div className="ecommerce-public-intake-list">
+          {openPublicRequests.slice(0, publicVisibleCount).map((entry) => <div className="ecommerce-public-intake-row" key={`${entry.handle}:${entry.requestId}`}>
             <div><strong>{entry.contact.name}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small><small>{entry.contact.phone}{entry.contact.address ? ` · ${entry.contact.address.line1}, ${entry.contact.address.township}, ${entry.contact.address.city}` : ''}</small></div>
             <div>
-              <button className="core-button secondary" disabled={publicBusy} onClick={() => void bringPublicRequestToShop(entry)} type="button">{entry.status === 'reviewing' ? 'Retry Shop review' : 'Review in Shop'}</button>
-              {entry.status === 'new' ? <button className="text-link" disabled={publicBusy} onClick={() => {
+              {entry.status === 'in_shop'
+                ? <Link className="core-button secondary" to={`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(entry.shopRequestId)}`}>Open in Shop</Link>
+                : <button className="core-button secondary" disabled={publicBusy} onClick={() => void bringPublicRequestToShop(entry)} type="button">{entry.status === 'reviewing' ? 'Retry Shop review' : 'Review in Shop'}</button>}
+              {entry.status !== 'reviewing' ? <button className="text-link" disabled={publicBusy} onClick={() => {
                 setPublicClosingId(`${entry.handle}:${entry.requestId}`)
                 setPublicCloseReason('')
               }} type="button">Close request</button> : null}
-              {publicClosingId === `${entry.handle}:${entry.requestId}` && entry.status === 'new' ? <fieldset>
+              {publicClosingId === `${entry.handle}:${entry.requestId}` && entry.status !== 'reviewing' ? <fieldset>
                 <legend>Why close this request?</legend>
                 {([
                   ['customer_withdrew', 'Customer withdrew'],
@@ -2309,7 +2310,7 @@ export function EcommerceProduct() {
             </div>
           </div>)}
         </div> : <p className="ecommerce-public-intake-empty">{publicNextCursor ? 'No new requests in the latest page. Check older requests below.' : 'New requests will appear here after a customer sends one.'}</p>}
-        {newPublicRequests.length > publicVisibleCount || publicNextCursor ? <button className="text-link ecommerce-public-more" disabled={publicPageBusy} onClick={() => void showMorePublicRequests()} type="button">{publicPageBusy ? 'Loading…' : 'Show more requests'}</button> : null}
+        {openPublicRequests.length > publicVisibleCount || publicNextCursor ? <button className="text-link ecommerce-public-more" disabled={publicPageBusy} onClick={() => void showMorePublicRequests()} type="button">{publicPageBusy ? 'Loading…' : 'Show more requests'}</button> : null}
         {publicNotice ? <p aria-live="polite" className="ecommerce-public-notice">{publicNotice} {publicReviewId ? <Link to={`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(publicReviewId)}`}>Open in Shop</Link> : null}</p> : null}
       </section> : null}
 

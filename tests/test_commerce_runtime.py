@@ -12,6 +12,7 @@ from uuid import uuid4
 from supermega_runtime.commerce_runtime import (
     COMMERCE_EVENTS,
     COMMERCE_HUMAN_EVENTS,
+    _validate_storefront_request_closed,
     commerce_catalog_baseline_digest,
     commerce_catalog_digest,
     commerce_accounting_handoff,
@@ -3537,6 +3538,7 @@ class CommerceRuntimeTests(unittest.TestCase):
             source_revision=operator_configuration["revision"],  # type: ignore[index]
             source_action_id=operator_configuration["saved"]["actionId"],  # type: ignore[index]
         )
+        request["customerReference"] = "Web request 12345678"
         state = deepcopy(configured_states[operator.workspace_id])
         state["storefrontRequests"] = [request]
         command_id = STOREFRONT_REQUEST_UUID
@@ -3635,6 +3637,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.storefront.configuration.saved",
                     "commerce.merchant_profile.saved",
                     "commerce.storefront.merchandising.imported",
+                    "commerce.storefront_request.closed",
                     "commerce.tax_configuration.saved",
                     "commerce.account_mapping.saved",
                     "commerce.customer_credit_policy.saved",
@@ -3656,6 +3659,45 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn("commerce.payment_policy.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.initialized", COMMERCE_EVENTS)
         self.assertIn("commerce.service_schedule.saved", COMMERCE_EVENTS)
+
+        close_evidence = action_evidence(
+            "ACT-STOREFRONT-CLOSE", actor=operator.actor_id,
+            reason="no_response",
+            evidence_reference=f"ECOMMERCE-CLOSE:{request['id']}:no_response",
+        )
+        close_id = str(uuid4())
+        close_payload = {"intent": {"requestId": request["id"], "reason": "no_response"},
+                         "evidence": close_evidence}
+        store.provision_membership(
+            workspace_id=operator.workspace_id, actor_id="Service actor",
+            actor_kind="service", capabilities=("commerce.write",),
+        )
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                TrialPrincipal(operator.workspace_id, "Service actor", "service"),
+                command_id=close_id, surface="commerce",
+                event_type="commerce.storefront_request.closed",
+                expected_version=3, payload=close_payload,
+            )
+        closed = store.apply_command(
+            operator, command_id=close_id, surface="commerce",
+            event_type="commerce.storefront_request.closed",
+            expected_version=3, payload=close_payload,
+        )
+        self.assertEqual(closed.state["storefrontRequests"], [])
+        self.assertTrue(store.apply_command(
+            operator, command_id=close_id, surface="commerce",
+            event_type="commerce.storefront_request.closed",
+            expected_version=3, payload=close_payload,
+        ).idempotent_replay)
+        with self.assertRaises(TrialValidationError):
+            apply_event(first.state, "commerce.storefront_request.closed",
+                {**first.state, "storefrontRequests": [], "items": []}, close_evidence)
+        with self.assertRaises(TrialValidationError):
+            _validate_storefront_request_closed(
+                {**first.state, "orders": [{"sourceRecordId": request["id"]}]},
+                {**first.state, "orders": [{"sourceRecordId": request["id"]}],
+                 "storefrontRequests": []})
 
     def test_website_intake_creation_records_no_order_or_stock_movement(self) -> None:
         current = catalog_state()
