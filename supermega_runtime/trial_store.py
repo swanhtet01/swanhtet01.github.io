@@ -245,6 +245,7 @@ APPROVAL_REQUEST_CAPABILITY = "approvals.request"
 APPROVAL_DECIDE_CAPABILITY = "approvals.decide"
 DECISION_PACKET_CONTRACT = "decision_packet.v1"
 MAX_JSON_BYTES = 64 * 1024
+MAX_WEBSITE_JSON_BYTES = 1024 * 1024
 
 # Self-serve tenant provisioning (SELF-SERVE-ONBOARDING-SPEC.md step D).
 # The claim alphabet mirrors the client generator in
@@ -3132,7 +3133,13 @@ def _normalize_expected_related_versions(
     return normalized
 
 
-def _json_object(value: Mapping[str, Any], *, field_name: str) -> JsonObject:
+def _json_limit_for_surface(surface: str) -> int:
+    return MAX_WEBSITE_JSON_BYTES if surface == "website" else MAX_JSON_BYTES
+
+
+def _json_object(
+    value: Mapping[str, Any], *, field_name: str, max_bytes: int = MAX_JSON_BYTES
+) -> JsonObject:
     if not isinstance(value, Mapping):
         raise TrialValidationError(f"{field_name} must be a JSON object.")
     try:
@@ -3145,8 +3152,8 @@ def _json_object(value: Mapping[str, Any], *, field_name: str) -> JsonObject:
         )
     except (TypeError, ValueError) as exc:
         raise TrialValidationError(f"{field_name} must contain valid JSON values.") from exc
-    if len(encoded.encode("utf-8")) > MAX_JSON_BYTES:
-        raise TrialValidationError(f"{field_name} exceeds {MAX_JSON_BYTES} bytes.")
+    if len(encoded.encode("utf-8")) > max_bytes:
+        raise TrialValidationError(f"{field_name} exceeds {max_bytes} bytes.")
     return json.loads(encoded)
 
 
@@ -3269,8 +3276,12 @@ def _decision_evidence_refs(packet: Mapping[str, Any], evidence_refs: Sequence[s
     return evidence
 
 
-def _canonical_fingerprint(kind: str, payload: Mapping[str, Any]) -> str:
-    normalized = _json_object(payload, field_name="fingerprint payload")
+def _canonical_fingerprint(
+    kind: str, payload: Mapping[str, Any], *, max_bytes: int = MAX_JSON_BYTES
+) -> str:
+    normalized = _json_object(
+        payload, field_name="fingerprint payload", max_bytes=max_bytes
+    )
     encoded = json.dumps(
         {"kind": kind, "payload": normalized},
         sort_keys=True,
@@ -4745,7 +4756,9 @@ class PostgresTrialStore:
             workspace_id=str(row["workspace_id"]),
             surface=str(row["surface"]),
             version=int(row["version"]),
-            state=_json_object(state, field_name="state"),
+            state=_json_object(
+                state, field_name="state", max_bytes=_json_limit_for_surface(normalized_surface)
+            ),
             updated_by=str(row.get("updated_by", "")),
             updated_at=str(row.get("updated_at", "")),
         )
@@ -4823,7 +4836,9 @@ class PostgresTrialStore:
             raise TrialValidationError("expected_version must be non-negative.")
         if related_surface_values and state_precondition is None:
             raise TrialValidationError("related surfaces require a state precondition.")
-        payload_value = _json_object(payload, field_name="payload")
+        payload_value = _json_object(
+            payload, field_name="payload", max_bytes=_json_limit_for_surface(surface_value)
+        )
         command_contract: JsonObject = {
             "surface": surface_value,
             "event_type": event_type_value,
@@ -4841,6 +4856,7 @@ class PostgresTrialStore:
         fingerprint = _canonical_fingerprint(
             "state_command",
             command_contract,
+            max_bytes=_json_limit_for_surface(surface_value),
         )
         normalized = principal.normalized()
         if event_type_value in HUMAN_COMMAND_EVENTS and normalized.actor_kind != HUMAN_ACTOR_KIND:
@@ -4871,7 +4887,10 @@ class PostgresTrialStore:
                     surface=str(replay["surface"]),
                     event_type=str(replay["event_type"]),
                     version=int(replay["version"]),
-                    state=_json_object(replay.get("state", {}), field_name="state"),
+                    state=_json_object(
+                        replay.get("state", {}), field_name="state",
+                        max_bytes=_json_limit_for_surface(surface_value),
+                    ),
                     idempotent_replay=True,
                 )
             locked_surfaces = tuple(sorted({surface_value, *related_surface_values}))
@@ -4897,6 +4916,7 @@ class PostgresTrialStore:
                 states[locked_surface] = _json_object(
                     locked_state,
                     field_name=f"{locked_surface} state",
+                    max_bytes=_json_limit_for_surface(locked_surface),
                 )
             row = rows[surface_value]
             current_version = int(row["version"]) if row else 0
@@ -4952,6 +4972,7 @@ class PostgresTrialStore:
                     captured_at=now,
                 ),
                 field_name="authoritative payload",
+                max_bytes=_json_limit_for_surface(surface_value),
             )
             next_state = _json_object(
                 self.reducer(
@@ -4961,6 +4982,7 @@ class PostgresTrialStore:
                     deepcopy(authoritative_payload),
                 ),
                 field_name="reduced state",
+                max_bytes=_json_limit_for_surface(surface_value),
             )
             if surface_value == "website":
                 from .website_media_references import require_website_media_receipts
@@ -5095,8 +5117,14 @@ class PostgresTrialStore:
             state = state_row.get("state_json", {}) or {}
             if isinstance(state, str):
                 state = json.loads(state)
-            state_value = _json_object(state, field_name="acceptance state")
-            state_digest = f"sha256:{_canonical_fingerprint('product_state', state_value)}"
+            state_value = _json_object(
+                state, field_name="acceptance state",
+                max_bytes=_json_limit_for_surface(surface),
+            )
+            state_digest = "sha256:" + _canonical_fingerprint(
+                "product_state", state_value,
+                max_bytes=_json_limit_for_surface(surface),
+            )
             recorded_at = _utc_now()
             result = ProductAcceptanceRecord(
                 probe_id=probe_id_value,
@@ -5729,7 +5757,9 @@ class InMemoryTrialStore:
             raise TrialValidationError("expected_version must be non-negative.")
         if related_surface_values and state_precondition is None:
             raise TrialValidationError("related surfaces require a state precondition.")
-        payload_value = _json_object(payload, field_name="payload")
+        payload_value = _json_object(
+            payload, field_name="payload", max_bytes=_json_limit_for_surface(surface_value)
+        )
         command_contract: JsonObject = {
             "surface": surface_value,
             "event_type": event_type_value,
@@ -5747,6 +5777,7 @@ class InMemoryTrialStore:
         fingerprint = _canonical_fingerprint(
             "state_command",
             command_contract,
+            max_bytes=_json_limit_for_surface(surface_value),
         )
         with self._lock:
             normalized, readiness = self._guard(
@@ -5777,7 +5808,10 @@ class InMemoryTrialStore:
                     surface=str(replay["surface"]),
                     event_type=str(replay["event_type"]),
                     version=int(replay["version"]),
-                    state=_json_object(replay.get("state", {}), field_name="state"),
+                    state=_json_object(
+                        replay.get("state", {}), field_name="state",
+                        max_bytes=_json_limit_for_surface(surface_value),
+                    ),
                     idempotent_replay=True,
                 )
             current = self._states.get(
@@ -5833,6 +5867,7 @@ class InMemoryTrialStore:
                     captured_at=now,
                 ),
                 field_name="authoritative payload",
+                max_bytes=_json_limit_for_surface(surface_value),
             )
             next_state = _json_object(
                 self.reducer(
@@ -5842,6 +5877,7 @@ class InMemoryTrialStore:
                     deepcopy(authoritative_payload),
                 ),
                 field_name="reduced state",
+                max_bytes=_json_limit_for_surface(surface_value),
             )
             next_version = current.version + 1
             next_row = TrialState(
@@ -5921,6 +5957,10 @@ class InMemoryTrialStore:
                 (normalized.workspace_id, surface),
                 TrialState(normalized.workspace_id, surface, 0, {}),
             )
+            state_digest = "sha256:" + _canonical_fingerprint(
+                "product_state", state.state,
+                max_bytes=_json_limit_for_surface(surface),
+            )
             record = ProductAcceptanceRecord(
                 probe_id=probe_id_value,
                 owner_approval_id=owner_approval_id_value,
@@ -5928,7 +5968,7 @@ class InMemoryTrialStore:
                 surface=surface,
                 release_commit=release_commit_value,
                 state_version=state.version,
-                state_digest=f"sha256:{_canonical_fingerprint('product_state', state.state)}",
+                state_digest=state_digest,
                 recorded_at=_utc_now(),
             )
             self._events[(normalized.workspace_id, probe_id_value)] = (

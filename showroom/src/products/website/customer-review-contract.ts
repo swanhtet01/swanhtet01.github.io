@@ -1,3 +1,5 @@
+import { MAX_WEBSITE_PAGES, MAX_WEBSITE_SECTIONS } from './website-constraints.ts'
+import { isWebsiteImage } from './website-media.ts'
 import type { WebsitePage } from './website-model'
 
 export type CustomerReviewPage = Pick<WebsitePage, 'id' | 'slug' | 'navigation' | 'hero' | 'sections' | 'seo'>
@@ -27,6 +29,15 @@ function text(value: unknown): asserts value is string {
 function strings(value: unknown, keys: string[]) {
   const result = object(value, keys)
   Object.values(result).forEach(text)
+}
+function contentBlock(value: unknown, keys: string[]) {
+  const hasImage = !!value && typeof value === 'object' && !Array.isArray(value) && 'image' in value
+  const result = object(value, hasImage ? [...keys, 'image'] : keys)
+  keys.forEach(key => text(result[key]))
+  const image = result.image
+  // The customer-review surface has no scoped private-media reader yet. Never
+  // let a customer accept a revision containing a photo they cannot see.
+  if (hasImage && (!isWebsiteImage(image) || 'assetId' in image)) invalid()
 }
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
@@ -60,7 +71,7 @@ export function reviewContactDestination(value: string): string {
 export async function verifyWebsitePreviewContent(value: unknown, expectedDigest: unknown): Promise<CustomerWebsiteReview['preview']> {
   const preview = object(structuredClone(value), ['siteName', 'pages'])
   text(preview.siteName)
-  if (!Array.isArray(preview.pages) || preview.pages.length < 1 || preview.pages.length > 4) return invalid()
+  if (!Array.isArray(preview.pages) || preview.pages.length < 1 || preview.pages.length > MAX_WEBSITE_PAGES) return invalid()
   const ids = new Set<string>()
   for (const value of preview.pages) {
     const page = object(value, ['id', 'slug', 'navigation', 'hero', 'sections', 'seo'])
@@ -70,13 +81,13 @@ export async function verifyWebsitePreviewContent(value: unknown, expectedDigest
     const navigation = object(page.navigation, ['label', 'visible'])
     text(navigation.label)
     if (typeof navigation.visible !== 'boolean') invalid()
-    strings(page.hero, ['eyebrow', 'headline', 'summary', 'ctaLabel', 'ctaHref'])
+    contentBlock(page.hero, ['eyebrow', 'headline', 'summary', 'ctaLabel', 'ctaHref'])
     strings(page.seo, ['title', 'description'])
-    if (!Array.isArray(page.sections) || page.sections.length > 4) return invalid()
-    for (const section of page.sections) strings(section, ['id', 'eyebrow', 'title', 'body'])
+    if (!Array.isArray(page.sections) || page.sections.length > MAX_WEBSITE_SECTIONS) return invalid()
+    for (const section of page.sections) contentBlock(section, ['id', 'eyebrow', 'title', 'body'])
   }
   const encoded = new TextEncoder().encode(canonical(preview))
-  if (encoded.length > 250000) invalid()
+  if (encoded.length > 512 * 1024) invalid()
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', encoded))
   const digest = `sha256:${Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')}`
   if (digest !== expectedDigest) invalid()

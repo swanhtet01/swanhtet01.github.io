@@ -113,6 +113,34 @@ class TrialStoreTests(unittest.TestCase):
             capabilities=("approvals.decide",),
         )
 
+    def test_website_json_budget_accepts_burmese_content_without_raising_other_surfaces(self) -> None:
+        payload = {"changes": {"copy": "က" * 30000}}
+        command_id = str(uuid4())
+        saved = self.store.apply_command(
+            self.operator, command_id=command_id, surface="website",
+            event_type="website.content.saved", expected_version=0, payload=payload,
+        )
+        self.assertEqual(saved.state["copy"], payload["changes"]["copy"])
+        replay = self.store.apply_command(
+            self.operator, command_id=command_id, surface="website",
+            event_type="website.content.saved", expected_version=0, payload=payload,
+        )
+        self.assertTrue(replay.idempotent_replay)
+        self.assertEqual(self.store.get_state(self.operator, "website").state["copy"], payload["changes"]["copy"])
+
+        with self.assertRaisesRegex(TrialValidationError, "exceeds"):
+            self.store.apply_command(
+                self.operator, command_id=str(uuid4()), surface="commerce",
+                event_type="commerce.order.saved", expected_version=0, payload=payload,
+            )
+        with self.assertRaisesRegex(TrialValidationError, "exceeds"):
+            self.store.apply_command(
+                self.operator, command_id=str(uuid4()), surface="website",
+                event_type="website.content.saved", expected_version=1,
+                payload={"changes": {"copy": "က" * 400000}},
+            )
+        self.assertEqual(self.store.get_state(self.operator, "website").version, 1)
+
     def _apply(
         self,
         principal: TrialPrincipal,

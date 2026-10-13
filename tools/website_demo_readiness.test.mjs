@@ -618,7 +618,7 @@ test('WEBSITE_SCHEMA, MAX_WEBSITE_PAGES, previewDevices, createId, isCurrentAppr
   assert.equal(WEBSITE_SCHEMA, 'supermega.website.workspace.v2')
   assert.equal(WEBSITE_STORAGE_KEY, 'supermega.website.workspace.v2')
   assert.equal(MAX_WEBSITE_PAGES, 4)
-  assert.equal(MAX_WEBSITE_SECTIONS, 4)
+  assert.equal(MAX_WEBSITE_SECTIONS, 12)
 
   // previewDevices: three entries covering desktop, tablet, and mobile.
   assert.equal(previewDevices.length, 3)
@@ -646,6 +646,31 @@ test('WEBSITE_SCHEMA, MAX_WEBSITE_PAGES, previewDevices, createId, isCurrentAppr
   // Invalid input → 'Unknown time'.
   assert.equal(formatTimestamp('not-a-date'), 'Unknown time')
   assert.equal(formatTimestamp(''), 'Unknown time')
+})
+
+test('a twelve-section page survives restore and preview, while a thirteenth is rejected', () => {
+  const workspace = createInitialWorkspace()
+  const sections = Array.from({ length: 12 }, (_, index) => ({
+    ...createBlankSection(),
+    title: `Service ${index + 1}`,
+    body: `Details for service ${index + 1}`,
+  }))
+  const expanded = {
+    ...workspace,
+    pages: [{ ...workspace.pages[0], sections }, ...workspace.pages.slice(1)],
+  }
+  const restored = restoreWorkspace(expanded)
+  assert.ok(restored, 'twelve sections must remain a valid workspace')
+  assert.equal(restored.pages[0].sections.length, 12)
+  assert.equal(createWebsitePreviewArtifact(restored).pages[0].sections.length, 12)
+  const overflow = {
+    ...expanded,
+    pages: [{
+      ...expanded.pages[0],
+      sections: [...sections, { ...createBlankSection(), title: 'Overflow', body: 'Too many sections' }],
+    }, ...expanded.pages.slice(1)],
+  }
+  assert.equal(restoreWorkspace(overflow), null, 'thirteen sections must fail closed')
 })
 
 test('restoreWorkspace and recordWebsiteSnapshot behave correctly', () => {

@@ -217,7 +217,7 @@ export function ContentWorkspace({
                 disabled={page.sections.length >= MAX_WEBSITE_SECTIONS}
                 onClick={addSection}
                 ref={addSectionRef}
-                title={page.sections.length >= MAX_WEBSITE_SECTIONS ? 'The four-section page limit is reached' : 'Add a section'}
+                title={page.sections.length >= MAX_WEBSITE_SECTIONS ? `This page has reached the ${MAX_WEBSITE_SECTIONS}-section limit` : 'Add a section'}
                 type="button"
               >
                 Add section
@@ -230,7 +230,7 @@ export function ContentWorkspace({
                 onClick={restoreSection}
                 type="button"
               >Undo</button>
-              {page.sections.length >= MAX_WEBSITE_SECTIONS ? <small>This page already has four sections.</small> : null}
+              {page.sections.length >= MAX_WEBSITE_SECTIONS ? <small>This page has {MAX_WEBSITE_SECTIONS} sections.</small> : null}
             </div> : null}
             <div className="website-page-card-list">
               {page.sections.length ? page.sections.map((section, index) => {
