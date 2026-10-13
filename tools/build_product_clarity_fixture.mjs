@@ -7,6 +7,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const fromProject = (path) => resolve(projectRoot, path)
 const { build } = createRequire(fromProject('showroom/package.json'))('esbuild')
 const out = fromProject('.tmp/qa-workspaces')
+const galleryMode = process.argv.includes('--gallery')
 mkdirSync(out, {recursive:true})
 await build({stdin:{resolveDir:fromProject('showroom'),loader:'tsx',contents:`
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
@@ -16,13 +17,22 @@ import {EcommerceProduct} from './src/products/ecommerce/EcommerceProduct';
 import {createInitialWorkspace,WEBSITE_STORAGE_KEY} from './src/products/website/website-model';
 import {applyWebsiteStarterBrief} from './src/products/website/website-starter';
 import {captureWebsiteLead,emptyWebsiteLeadLedger,WEBSITE_LEAD_LEDGER_KEY} from './src/products/website/website-leads';
-import {createEmptyCommerce,createSeedCommerce,validateCommerceState,COMMERCE_KEY} from './src/core/commerce-workspace';
+import {createEmptyCommerce,createSeedCommerce,validateCommerceState,configureCommercePaymentPolicy,COMMERCE_KEY} from './src/core/commerce-workspace';
 import './src/core/core-app.css';
 const values=new Map();const memory=map=>({getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,String(v)),removeItem:k=>map.delete(k),key:i=>[...map.keys()][i]??null,get length(){return map.size}});
 Object.defineProperty(window,'localStorage',{value:memory(values)});Object.defineProperty(window,'sessionStorage',{value:memory(new Map())});
 window.fetch=async()=>{throw Error('Synthetic fixture network denied')};
 const names=['Everyday Tee','Canvas Bag','Desk Notebook','Water Bottle','Daily Planner','Ceramic Mug'];
-const commerce=validateCommerceState({...createEmptyCommerce(),items:createSeedCommerce().items.slice(0,6).map((item,i)=>({...item,sku:'QA-'+i,name:names[i],price:(i+1)*8500}))});
+const galleryMode=${JSON.stringify(galleryMode)};
+const commerceBase=validateCommerceState({...createEmptyCommerce(),items:createSeedCommerce().items.slice(0,6).map((item,i)=>({...item,sku:'QA-'+i,name:names[i],price:(i+1)*8500}))});
+const commerce=galleryMode?configureCommercePaymentPolicy(commerceBase,{
+  adapter:'pay_on_pickup',allowedFulfilments:['pickup'],maximumOrderMmk:1000000,
+  instructions:'Collect at pickup and reconcile in the synthetic Shop fixture.',status:'active',
+  effectiveFrom:'2026-10-09T00:00:00.000Z',effectiveUntil:null
+},{actionId:'ACT-GALLERY-QA-PAYMENT-001',capturedAt:'2026-10-09T00:00:00.000Z',
+  actor:'Synthetic operator',reason:'Local real-component gallery capture only.',evidenceReference:'GALLERY-QA-001'})
+  :commerceBase;
+if(!commerce)throw Error('Synthetic gallery payment policy invalid');
 localStorage.setItem(COMMERCE_KEY,JSON.stringify(commerce));
 const site=applyWebsiteStarterBrief(createInitialWorkspace(),{templateId:'lead-generation',businessName:'Example Studio',offer:'Design and printing for local businesses',audience:'',proof:'',contactHref:''},'2026-10-09T00:00:00.000Z');
 localStorage.setItem(WEBSITE_STORAGE_KEY,JSON.stringify(site));

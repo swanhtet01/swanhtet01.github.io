@@ -13,6 +13,7 @@ const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 const configPath = resolve(outputDir, 'config.json')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
+const publicGalleryProvenance = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
 
 function fail(code, detail = {}) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_public_output', code, ...detail }, null, 2))
@@ -424,22 +425,31 @@ for (const [key, value] of Object.entries({
 }
 if (!/^(?:[0-9a-f]{40}|preview-[a-z0-9-]{8,64}|unknown)$/.test(release.commit)) fail('release_commit_invalid', { commit: release.commit })
 if (!/^\d{4}-\d{2}-\d{2}T/.test(release.generatedAt)) fail('release_timestamp_invalid')
-const shopGalleryEvidence = release.shopGalleryEvidence
-const shopGalleryFiles = ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png']
-if (shopGalleryEvidence?.schemaVersion !== 'supermega.shop-gallery-provenance.v1'
-  || shopGalleryEvidence.status !== 'illustrative_only'
-  || shopGalleryEvidence.records !== 'synthetic'
-  || shopGalleryEvidence.captureSourceCommit !== null
-  || shopGalleryEvidence.capturedAt !== null
-  || shopGalleryEvidence.assets?.map((asset) => asset.file).join(',') !== shopGalleryFiles.join(',')) {
-  fail('shop_gallery_provenance_drift')
+const publicGalleryEvidence = release.publicGalleryEvidence
+const publicGalleryFiles = [
+  'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
+  'actual-sites-editor.png', 'actual-sites-inquiries.png',
+  'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
+]
+if (publicGalleryEvidence?.schemaVersion !== 'supermega.public-gallery-provenance.v1'
+  || publicGalleryEvidence.status !== 'illustrative_only'
+  || publicGalleryEvidence.records !== 'synthetic'
+  || publicGalleryEvidence.captureSourceCommit !== null
+  || publicGalleryEvidence.captureSourceTree !== null
+  || publicGalleryEvidence.capturedAt !== null
+  || publicGalleryEvidence.assets?.map((asset) => asset.file).join(',') !== publicGalleryFiles.join(',')
+  || JSON.stringify(publicGalleryEvidence) !== JSON.stringify(publicGalleryProvenance)) {
+  fail('public_gallery_provenance_drift')
 }
-for (const asset of shopGalleryEvidence.assets) {
+for (const asset of publicGalleryEvidence.assets) {
   const path = resolve(staticDir, 'images', asset.file)
   requireFile(path, `images/${asset.file}`)
-  const actualSha256 = createHash('sha256').update(readFileSync(path)).digest('hex')
-  if (!/^[0-9a-f]{64}$/.test(asset.sha256) || actualSha256 !== asset.sha256) {
-    fail('shop_gallery_asset_digest_mismatch', { file: asset.file })
+  const bytes = readFileSync(path)
+  const actualSha256 = createHash('sha256').update(bytes).digest('hex')
+  if (!/^[0-9a-f]{64}$/.test(asset.sha256) || actualSha256 !== asset.sha256
+    || !bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    || bytes.readUInt32BE(16) !== asset.width || bytes.readUInt32BE(20) !== asset.height) {
+    fail('public_gallery_asset_mismatch', { file: asset.file })
   }
 }
 

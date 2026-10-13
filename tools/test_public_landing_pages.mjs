@@ -18,7 +18,7 @@ const outputDir = isolatedOutputId
   : resolve(root, '.vercel', 'output')
 const staticDir = resolve(outputDir, 'static')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
-const shopGalleryProvenance = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'shop-gallery-provenance.json'), 'utf8'))
+const publicGalleryProvenance = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
 const activeIds = activeProductContracts(manifest).map(product => product.id)
 const discoverablePages = manifest.pages.filter(page => !page.productId || activeIds.includes(page.productId))
 const config = JSON.parse(readFileSync(resolve(outputDir, 'config.json'), 'utf8'))
@@ -90,18 +90,9 @@ const productScreens = {
   website: ['actual-sites-editor.png', 'actual-sites-inquiries.png'],
   ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
 }
-const interfaceCaptureDates = {
-  'actual-shop-stock.png': '2 Oct 2026',
-  'actual-sites-editor.png': '4 Oct 2026',
-  'actual-sites-inquiries.png': '4 Oct 2026',
-  'actual-sites-pages.png': '2 Oct 2026',
-  'actual-sites-setup.png': '2 Oct 2026',
-  'actual-commerce-catalog.png': '2 Oct 2026',
-  'actual-commerce-order-request.png': '4 Oct 2026',
-}
-const interfaceDisclosure = (image) => shopGalleryProvenance.assets.includes(image)
-  ? 'Illustrative Shop app view · synthetic example records'
-  : `App capture · synthetic example records · captured ${interfaceCaptureDates[image]}`
+const interfaceDisclosure = (image) => publicGalleryProvenance.assets.some(asset => asset.file === image)
+  ? 'Illustrative app view · synthetic example records'
+  : null
 check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)

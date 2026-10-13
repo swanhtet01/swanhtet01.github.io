@@ -35,15 +35,27 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
-const shopGalleryProvenance = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'shop-gallery-provenance.json'), 'utf8'))
-const shopGalleryAssetNames = ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png']
-assert(shopGalleryProvenance.schemaVersion === 'supermega.shop-gallery-provenance.v1', 'shop_gallery_provenance_schema_unsupported')
-assert(shopGalleryProvenance.status === 'illustrative_only' && shopGalleryProvenance.records === 'synthetic', 'shop_gallery_provenance_status_invalid')
-assert(shopGalleryProvenance.captureSourceCommit === null && shopGalleryProvenance.capturedAt === null, 'illustrative_shop_gallery_must_not_claim_capture_provenance')
-assert(shopGalleryProvenance.assets?.join(',') === shopGalleryAssetNames.join(','), 'shop_gallery_asset_set_changed')
-const shopGalleryAssetEvidence = await Promise.all(shopGalleryAssetNames.map(async (file) => {
+const publicGalleryProvenance = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
+const publicGalleryAssetNames = [
+  'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
+  'actual-sites-editor.png', 'actual-sites-inquiries.png',
+  'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
+]
+assert(publicGalleryProvenance.schemaVersion === 'supermega.public-gallery-provenance.v1', 'public_gallery_provenance_schema_unsupported')
+assert(publicGalleryProvenance.status === 'illustrative_only' && publicGalleryProvenance.records === 'synthetic', 'public_gallery_provenance_status_invalid')
+assert(publicGalleryProvenance.captureSourceCommit === null && publicGalleryProvenance.captureSourceTree === null
+  && publicGalleryProvenance.capturedAt === null, 'illustrative_public_gallery_must_not_claim_capture_provenance')
+assert(publicGalleryProvenance.assets?.map(asset => asset.file).join(',') === publicGalleryAssetNames.join(','), 'public_gallery_asset_set_changed')
+const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.assets.map(async ({ file, width, height, sha256 }) => {
   const bytes = await readFile(resolve(root, 'tools', 'public-assets', file))
-  return { file, sha256: createHash('sha256').update(bytes).digest('hex') }
+  assert(bytes.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), `public_gallery_asset_not_png:${file}`)
+  assert(Number.isInteger(width) && Number.isInteger(height) && width >= 1000 && height >= 700,
+    `public_gallery_asset_dimensions_invalid:${file}`)
+  assert(bytes.readUInt32BE(16) === width && bytes.readUInt32BE(20) === height,
+    `public_gallery_asset_dimensions_mismatch:${file}`)
+  assert(/^[0-9a-f]{64}$/.test(sha256) && createHash('sha256').update(bytes).digest('hex') === sha256,
+    `public_gallery_asset_digest_mismatch:${file}`)
+  return { file, width, height, sha256 }
 }))
 
 assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
@@ -112,13 +124,14 @@ const release = {
   contextVersion: manifest.contextVersion,
   catalogVersion: manifest.catalogVersion,
   generatedAt: new Date().toISOString(),
-  shopGalleryEvidence: {
-    schemaVersion: shopGalleryProvenance.schemaVersion,
-    status: shopGalleryProvenance.status,
-    records: shopGalleryProvenance.records,
-    captureSourceCommit: shopGalleryProvenance.captureSourceCommit,
-    capturedAt: shopGalleryProvenance.capturedAt,
-    assets: shopGalleryAssetEvidence,
+  publicGalleryEvidence: {
+    schemaVersion: publicGalleryProvenance.schemaVersion,
+    status: publicGalleryProvenance.status,
+    records: publicGalleryProvenance.records,
+    captureSourceCommit: publicGalleryProvenance.captureSourceCommit,
+    captureSourceTree: publicGalleryProvenance.captureSourceTree,
+    capturedAt: publicGalleryProvenance.capturedAt,
+    assets: publicGalleryAssetEvidence,
   },
 }
 
@@ -617,20 +630,9 @@ const productOutcomes = {
   ['Handle the next exception', 'See which request needs attention first. Review payment issues, expiring quotes and refunds from the same workflow.'],
  ],
 }
-const interfaceCaptureDates = {
- 'actual-shop-stock.png': '2 Oct 2026',
- 'actual-sites-editor.png': '4 Oct 2026',
- 'actual-sites-inquiries.png': '4 Oct 2026',
- 'actual-sites-pages.png': '2 Oct 2026',
- 'actual-sites-setup.png': '2 Oct 2026',
- 'actual-commerce-catalog.png': '2 Oct 2026',
- 'actual-commerce-order-request.png': '4 Oct 2026',
-}
 function interfaceDisclosure(image) {
- if (shopGalleryProvenance.assets.includes(image)) return 'Illustrative Shop app view · synthetic example records'
- const capturedAt=interfaceCaptureDates[image]
- assert(typeof capturedAt === 'string', `interface_capture_date_missing:${image}`)
- return `App capture · synthetic example records · captured ${capturedAt}`
+ assert(publicGalleryAssetNames.includes(image), `interface_gallery_asset_unverified:${image}`)
+ return 'Illustrative app view · synthetic example records'
 }
 function productGallery(id,label,eagerFirst=false) {
  const item=stories[id]
