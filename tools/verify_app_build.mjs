@@ -21141,7 +21141,24 @@ const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).si
 // trip, something is structurally wrong rather than merely large. Do NOT raise it to
 // land a feature -- that was the old contract and it is the one being retired. The thing
 // the old ceiling was standing in for is now guarded directly, and harder, just below.
-if (bytes > 3_250_000) fail(`artifact_total_backstop:${bytes}`)
+// Myanmar customer text needs a shipped font on browsers without one. This one licensed
+// WOFF2 is fetched only for Myanmar code points; keep it under a separate exact-asset
+// allowance rather than silently raising the existing app-code and asset backstop.
+const myanmarFontPath = resolve(dist, 'fonts', 'noto-sans-myanmar.woff2')
+const myanmarLicensePath = resolve(dist, 'fonts', 'noto-sans-myanmar-OFL.txt')
+const myanmarFont = await exists(myanmarFontPath) ? await readRawFile(myanmarFontPath) : null
+const myanmarLicense = await exists(myanmarLicensePath) ? await readRawFile(myanmarLicensePath) : null
+if (!myanmarFont || myanmarFont.length !== 153_980
+  || createHash('sha256').update(myanmarFont).digest('hex') !== 'c1453c361ea1802114444e939196d1113c7a56b3647f2961114d913d51276fd1') {
+  fail('myanmar_font_asset_missing_or_changed')
+}
+if (!myanmarLicense || myanmarLicense.length !== 4_474
+  || createHash('sha256').update(myanmarLicense).digest('hex') !== '13c5146bc08e879c4f8fa30b27f0eed13164ab13974e21e048da3623ed6098d1') {
+  fail('myanmar_font_license_missing_or_changed')
+}
+const myanmarAssetBytes = (myanmarFont?.length ?? 0) + (myanmarLicense?.length ?? 0)
+if (myanmarAssetBytes > 160_000) fail(`myanmar_font_asset_budget:${myanmarAssetBytes}`)
+if (bytes - myanmarAssetBytes > 3_250_000) fail(`artifact_total_backstop:${bytes - myanmarAssetBytes}`)
 
 // ---------------------------------------------------------------------------
 // THE SHOP ROUTE'S COMPRESSED WIRE COST -- what a till pays to open, measured the
