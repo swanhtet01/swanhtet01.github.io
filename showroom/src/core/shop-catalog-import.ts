@@ -1,11 +1,16 @@
-import type { CommerceItem } from './commerce-workspace'
+import { commerceCatalogImportDifferences, type CommerceItem } from './commerce-workspace.ts'
 import {
   CLIENT_IMPORT_MAX_BYTES,
   CLIENT_IMPORT_MAX_ROWS,
+  clientImportSha256,
   clientImportTemplate,
   createClientImportPreview,
+  normalizeClientImportHeader,
+  validateClientImportFieldValue,
   type ClientImportIssue,
+  type ClientImportField,
   type ClientImportMapping,
+  type ClientImportPreview,
 } from './client-onboarding.ts'
 
 export const SHOP_CATALOG_IMPORT_SCHEMA = 'supermega.shop.catalog_import.v1' as const
@@ -21,7 +26,7 @@ export type ShopCatalogImportRowStatus = 'ready' | 'invalid' | 'duplicate' | 'co
 
 export type ShopCatalogImportIssue = {
   code: string
-  field: ShopCatalogImportField | 'file' | 'row'
+  field: ShopCatalogImportField | 'variant' | 'file' | 'row'
   message: string
 }
 
@@ -64,6 +69,20 @@ export type ShopCatalogImportPreview = {
 
 const formulaPrefix = /^[=+\-@]/
 const shopFieldSet = new Set<string>(shopCatalogImportFields)
+const shopVariantAliases = new Set(['variant', 'product_variant', 'size', 'flavor', 'option', 'အမျိုးအစား'].map(normalizeClientImportHeader))
+const shopVariantField: ClientImportField = { id: 'variant', label: 'Variant', required: false, kind: 'text', aliases: [], maximum: 120 }
+
+function shopVariantHeader(headers: string[]) {
+  const candidates = headers.filter((header) => shopVariantAliases.has(normalizeClientImportHeader(header)))
+  if (candidates.length > 1) throw new Error('Use one variant column per file.')
+  return candidates[0] ?? ''
+}
+
+function shopVariantIssue(value: string): ShopCatalogImportIssue | null {
+  if (!value) return null
+  const issue = validateClientImportFieldValue(shopVariantField, value)
+  return issue ? { code: issue.code, field: 'variant', message: issue.message } : null
+}
 
 export function shopCatalogImportFieldLabel(field: ShopCatalogImportField) {
   return {
@@ -178,6 +197,76 @@ function existingCatalogConflictIssues(existing: CommerceItem, item: CommerceIte
   return issues
 }
 
+export function commerceCatalogImportReview(existing: CommerceItem, incoming: CommerceItem) {
+  const preserveExistingVariant = !incoming.variant && Boolean(existing.variant)
+  const comparable = preserveExistingVariant ? { ...incoming, variant: existing.variant } : incoming
+  const differences = commerceCatalogImportDifferences(existing, comparable)
+  const labels: Record<(typeof shopCatalogImportFields)[number] | 'variant', string> = {
+    sku: 'SKU',
+    name: 'name',
+    onHand: 'stock',
+    reorderAt: 'reorder level',
+    price: 'price',
+    variant: 'variant',
+  }
+  const details = differences.map((field) => {
+    if (field === 'onHand') return `stock (Shop has ${existing.onHand} on hand; file says ${incoming.onHand})`
+    const currentValue = JSON.stringify(existing[field]) ?? '—'
+    const incomingValue = JSON.stringify(comparable[field]) ?? '—'
+    return `${labels[field]} (Shop: ${currentValue}; file: ${incomingValue})`
+  })
+  return {
+    conflict: differences.length > 0,
+    message: differences.length
+      ? `Already exists with different ${details.join(', ')}. Update the existing product separately.`
+      : preserveExistingVariant
+        ? 'Already current. The saved variant is preserved because this file does not provide one.'
+        : 'Already current. No change needed.',
+  }
+}
+
+export async function addShopVariantColumnToClientImportPreview(preview: ClientImportPreview) {
+  const variantHeader = shopVariantHeader(preview.headers)
+  if (!variantHeader) return { preview, variantHeader }
+  const rows = preview.rows.map((row) => {
+    const variant = row.source[variantHeader] ?? ''
+    const issue = shopVariantIssue(variant)
+    return {
+      ...row,
+      status: issue ? 'invalid' as const : row.status,
+      values: { ...row.values, variant },
+      issues: issue ? [...row.issues, issue as ClientImportIssue] : row.issues,
+    }
+  })
+  const mapping = { ...preview.mapping, variant: variantHeader }
+  const totals = {
+    ...preview.totals,
+    ready: rows.filter((row) => row.status === 'ready').length,
+    invalid: rows.filter((row) => row.status === 'invalid').length,
+    duplicates: rows.filter((row) => row.status === 'duplicate').length,
+    issueRows: rows.filter((row) => row.status === 'invalid' || row.status === 'duplicate').length,
+  }
+  const previewDigest = await clientImportSha256(JSON.stringify({
+    schema: preview.schema,
+    product: preview.product,
+    object: preview.object,
+    workflowTemplateId: preview.workflowTemplateId,
+    sourceDigest: preview.sourceDigest,
+    mapping,
+  }))
+  return {
+    variantHeader,
+    preview: {
+      ...preview,
+      mapping,
+      rows,
+      totals,
+      previewDigest,
+      readyForStaging: preview.fileIssues.length === 0 && rows.length > 0 && totals.ready === rows.length,
+    },
+  }
+}
+
 function classifyAgainstCatalog(rows: ShopCatalogImportRow[], existingCatalog: CommerceItem[]) {
   const existingBySku = new Map(existingCatalog.map((item) => [item.sku, item]))
   for (const row of rows) {
@@ -224,19 +313,22 @@ export async function createShopCatalogImportPreview(
   sourceName = 'catalog.csv',
 ): Promise<ShopCatalogImportPreview> {
   const detected = await createClientImportPreview(csvText, 'commerce', undefined, sourceName, 'social-commerce')
-  const selectedWithDetectedVariant = selectedMapping
-    ? { ...selectedMapping, variant: detected.mapping.variant }
-    : undefined
+  const variantHeader = shopVariantHeader(detected.headers)
   const shared = selectedMapping
-    ? await createClientImportPreview(csvText, 'commerce', selectedWithDetectedVariant as ClientImportMapping, sourceName, 'social-commerce')
+    ? await createClientImportPreview(csvText, 'commerce', selectedMapping as ClientImportMapping, sourceName, 'social-commerce')
     : detected
-  const rows: ShopCatalogImportRow[] = shared.rows.map((row) => ({
-    rowNumber: row.rowNumber,
-    status: row.status,
-    source: row.source,
-    item: row.status === 'invalid' ? null : itemFromValues(row.values),
-    issues: row.issues.map(shopIssue),
-  }))
+  const rows: ShopCatalogImportRow[] = shared.rows.map((row) => {
+    const variant = variantHeader ? row.source[variantHeader] ?? '' : ''
+    const variantIssue = shopVariantIssue(variant)
+    const status = variantIssue && row.status !== 'invalid' ? 'invalid' : row.status
+    return {
+      rowNumber: row.rowNumber,
+      status,
+      source: row.source,
+      item: status === 'invalid' ? null : itemFromValues({ ...row.values, ...(variant ? { variant } : {}) }),
+      issues: [...row.issues.map(shopIssue), ...(variantIssue ? [variantIssue] : [])],
+    }
+  })
   classifyAgainstCatalog(rows, existingCatalog)
   const catalogSignature = shopCatalogImportCatalogSignature(existingCatalog)
   const catalogDigest = await sha256(catalogSignature)
@@ -244,6 +336,7 @@ export async function createShopCatalogImportPreview(
     schema: SHOP_CATALOG_IMPORT_SCHEMA,
     sharedPreviewDigest: shared.previewDigest,
     catalogDigest,
+    variantHeader,
   }))
   return {
     schema: SHOP_CATALOG_IMPORT_SCHEMA,

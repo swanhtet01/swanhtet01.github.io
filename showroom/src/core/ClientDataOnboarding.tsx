@@ -14,7 +14,8 @@ import {
   type ClientSolutionId,
 } from './client-onboarding'
 import { activateLocalStagingPackage } from './local-client-import'
-import { commerceCatalogImportPreviewReview, readCommerceWorkspace } from './commerce-workspace'
+import { readCommerceWorkspace } from './commerce-workspace'
+import { addShopVariantColumnToClientImportPreview, commerceCatalogImportReview } from './shop-catalog-import'
 import {
   ManagedTrialError,
   applyManagedClientImport,
@@ -493,13 +494,35 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     validationRequestRef.current += 1
     setState((current) => ({ ...current, sourceName, sourceText, preview: null, catalogReview: {}, busy: true, validating: false, preflighting: false, applying: false, validation: null, error: '' }))
     try {
-      const preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
+      let preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
       if (requestRef.current !== requestId || productRef.current !== expectedProduct || workflowTemplateRef.current !== expectedWorkflowTemplateId) return
-      let catalogReview: ImportState['catalogReview'] = {}
+      if (expectedProduct === 'commerce') {
+        const shopPreview = await addShopVariantColumnToClientImportPreview(preview)
+        if (managedIdentityRef.current) {
+          if (shopPreview.preview.rows.some((row) => Boolean(row.values.variant))) {
+            throw new Error('Shop variants are not accepted by the company-account import contract yet. Remove the variant column before checking this company import.')
+          }
+        } else {
+          preview = shopPreview.preview
+        }
+      }
+      const catalogReview: ImportState['catalogReview'] = {}
       if (expectedProduct === 'commerce' && !managedIdentityRef.current) {
         const catalog = readCommerceWorkspace()
         if (catalog.error) throw new Error(catalog.error)
-        catalogReview = commerceCatalogImportPreviewReview(catalog.state.items, preview.rows)
+        for (const row of preview.rows) {
+          if (row.status !== 'ready') continue
+          const existing = catalog.state.items.find((item) => item.sku === row.values.sku)
+          if (!existing) continue
+          catalogReview[row.rowNumber] = commerceCatalogImportReview(existing, {
+            sku: row.values.sku,
+            name: row.values.name,
+            variant: row.values.variant,
+            onHand: Number(row.values.onHand),
+            reorderAt: Number(row.values.reorderAt),
+            price: Number(row.values.price),
+          })
+        }
       }
       setState({ ...emptyImportState(), sourceName, sourceText, preview, catalogReview })
       if (!mapping) window.requestAnimationFrame(() => previewRef.current?.focus())
@@ -944,6 +967,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <div><strong>{state.preview.sourceName}</strong><small>{state.preview.totals.rows} rows found, {matchedFieldCount} of {state.preview.fields.length} columns matched</small></div>
             <span className={`status-pill ${appliedIsCurrent || localAppliedIsCurrent || validationIsCurrent || (state.preview.readyForStaging && !catalogHasConflicts) ? 'approved' : 'pending'}`}>{appliedIsCurrent || localAppliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Server checked' : state.preview.readyForStaging && !catalogHasConflicts ? 'Ready to prepare' : 'Review needed'}</span>
           </div>
+          {product === 'commerce' && state.preview.mapping.variant ? <p className="form-notice">Detected “{state.preview.mapping.variant}” as the Shop variant column. Review each row before importing.</p> : null}
           {!state.preview.readyForStaging ? <div aria-label={`${productName} import repair queue`} className="catalog-import-repair">
             <div><span className="core-eyebrow">Repair queue</span><strong>{state.preview.readyForStaging ? 'No blocking fixes' : 'Clean this file'}</strong><small>{importRepairMessage}</small></div>
             <div className="catalog-import-repair-list">

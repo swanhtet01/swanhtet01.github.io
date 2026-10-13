@@ -7057,55 +7057,6 @@ export function commerceCatalogImportDifferences(existing: CommerceItem, incomin
   return commerceCatalogImportFields.filter((field) => existing[field] !== incoming[field])
 }
 
-export function commerceCatalogImportReview(existing: CommerceItem, incoming: CommerceItem) {
-  const preserveExistingVariant = !incoming.variant && Boolean(existing.variant)
-  const comparable = preserveExistingVariant ? { ...incoming, variant: existing.variant } : incoming
-  const differences = commerceCatalogImportDifferences(existing, comparable)
-  const labels: Record<(typeof commerceCatalogImportFields)[number], string> = {
-    name: 'name',
-    variant: 'variant',
-    onHand: 'stock',
-    reorderAt: 'reorder level',
-    price: 'price',
-  }
-  const details = differences.map((field) => {
-    if (field === 'onHand') return `stock (Shop has ${existing.onHand} on hand; file says ${incoming.onHand})`
-    const currentValue = JSON.stringify(existing[field]) ?? '—'
-    const incomingValue = JSON.stringify(comparable[field]) ?? '—'
-    return `${labels[field]} (Shop: ${currentValue}; file: ${incomingValue})`
-  })
-  return {
-    conflict: differences.length > 0,
-    message: differences.length
-      ? `Already exists with different ${details.join(', ')}. Update the existing product separately.`
-      : preserveExistingVariant
-        ? 'Already current. The saved variant is preserved because this file does not provide one.'
-        : 'Already current. No change needed.',
-  }
-}
-
-export function commerceCatalogImportPreviewReview(
-  existingItems: CommerceItem[],
-  rows: Array<{ rowNumber: number; status: string; values: Record<string, string> }>,
-): Record<number, { conflict: boolean; message: string }> {
-  const existingBySku = new Map(existingItems.map((item) => [item.sku, item]))
-  const review: Record<number, { conflict: boolean; message: string }> = {}
-  for (const row of rows) {
-    if (row.status !== 'ready') continue
-    const existing = existingBySku.get(row.values.sku)
-    if (!existing) continue
-    review[row.rowNumber] = commerceCatalogImportReview(existing, {
-      sku: row.values.sku,
-      name: row.values.name,
-      variant: row.values.variant,
-      onHand: Number(row.values.onHand),
-      reorderAt: Number(row.values.reorderAt),
-      price: Number(row.values.price),
-    })
-  }
-  return review
-}
-
 export function importCommerceCatalog(stateValue: CommerceState, input: {
   items: CommerceItem[]
   sourceDigest: string

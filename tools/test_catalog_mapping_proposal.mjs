@@ -49,7 +49,7 @@ test('catalog differences and stock count mismatches show independent review rea
 })
 
 test('Shop review preserves an omitted variant and reports the exact stock discrepancy', async () => {
-  const { commerceCatalogImportReview } = await import('../showroom/src/core/commerce-workspace.ts')
+  const { commerceCatalogImportReview } = await import('../showroom/src/core/shop-catalog-import.ts')
   const existing = { sku: 'CAFE-1', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
   const review = commerceCatalogImportReview(existing, {
     sku: existing.sku,
@@ -78,21 +78,20 @@ test('Shop review preserves an omitted variant and reports the exact stock discr
   assert.match(unchanged.message, /saved variant is preserved/)
 })
 
-test('Shop import preview blocks a mapped variant change for an existing SKU', async () => {
-  const [{ createClientImportPreview }, { commerceCatalogImportPreviewReview }] = await Promise.all([
+test('Shop catalog preview detects a variant change without widening the shared onboarding contract', async () => {
+  const [{ createShopCatalogImportPreview }, { createClientImportPreview }] = await Promise.all([
+    import('../showroom/src/core/shop-catalog-import.ts'),
     import('../showroom/src/core/client-onboarding.ts'),
-    import('../showroom/src/core/commerce-workspace.ts'),
   ])
   const existing = { sku: 'CAFE-1', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
-  const preview = await createClientImportPreview(
-    'sku,item_name,variant,opening_stock,reorder_at,price_mmk\nCAFE-1,မြန်မာ လက်ဖက်ရည်,Small,12,3,1800',
-    'commerce',
-  )
-  const review = commerceCatalogImportPreviewReview([existing], preview.rows)
-  assert.equal(preview.rows[0].status, 'ready')
-  assert.equal(preview.rows[0].values.variant, 'Small')
-  assert.equal(review[preview.rows[0].rowNumber].conflict, true)
-  assert.match(review[preview.rows[0].rowNumber].message, /variant \(Shop: "Large"; file: "Small"\)/)
+  const source =
+    'sku,item_name,variant,opening_stock,reorder_at,price_mmk\nCAFE-1,မြန်မာ လက်ဖက်ရည်,Small,12,3,1800'
+  const preview = await createShopCatalogImportPreview(source, [existing])
+  const genericPreview = await createClientImportPreview(source, 'commerce')
+  assert.equal(genericPreview.fields.length, 5)
+  assert.equal(preview.rows[0].item.variant, 'Small')
+  assert.equal(preview.rows[0].status, 'conflict')
+  assert.match(preview.rows[0].issues.map((issue) => issue.message).join(' '), /variant/)
 })
 
 test('standalone Shop catalog import preserves optional variants and blocks a changed existing variant', async () => {
@@ -110,11 +109,25 @@ test('standalone Shop catalog import preserves optional variants and blocks a ch
   })).reason, 'import_validation_failed')
 })
 
-test('local Shop replay preserves Burmese names and variants and blocks a conflicting same-SKU rename', async () => {
-  const [{ createClientImportPreview, buildClientImportStagingPackage }, commerce, importer] = await Promise.all([
+test('Shop variant columns must be unambiguous and safe', async () => {
+  const { createShopCatalogImportPreview } = await import('../showroom/src/core/shop-catalog-import.ts')
+  const ambiguous = 'sku,item_name,variant,size,opening_stock,reorder_at,price_mmk\nCAFE-1,Tea,Large,Small,12,3,1800'
+  await assert.rejects(() => createShopCatalogImportPreview(ambiguous, []), /one variant column/)
+  const unsafe = await createShopCatalogImportPreview(
+    'sku,item_name,size,opening_stock,reorder_at,price_mmk\nCAFE-1,Tea,=1+1,12,3,1800',
+    [],
+  )
+  assert.equal(unsafe.rows[0].status, 'invalid')
+  assert.equal(unsafe.rows[0].item, null)
+  assert.equal(unsafe.rows[0].issues[0].field, 'variant')
+})
+
+test('local Shop replay preserves variants from the Shop-only preview extension', async () => {
+  const [{ createClientImportPreview, buildClientImportStagingPackage }, commerce, importer, shopImport] = await Promise.all([
     import('../showroom/src/core/client-onboarding.ts'),
     import('../showroom/src/core/commerce-workspace.ts'),
     import('../showroom/src/core/local-client-import.ts'),
+    import('../showroom/src/core/shop-catalog-import.ts'),
   ])
   const sourceDigest = `sha256:${'a'.repeat(64)}`
   const existing = { sku: 'CAFE-1', name: 'မြန်မာ လက်ဖက်ရည်', variant: 'Large', onHand: 12, reorderAt: 3, price: 1800 }
@@ -159,11 +172,15 @@ test('local Shop replay preserves Burmese names and variants and blocks a confli
     assert.equal(savedItem.name, 'မြန်မာ လက်ဖက်ရည်')
     assert.equal(savedItem.variant, 'Large')
 
-    const variantPreview = await createClientImportPreview(
-      'sku,item_name,variant,opening_stock,reorder_at,price_mmk\nCAFE-2,လက်ဖက်စိမ်း,Small,8,2,2200',
+    const rawVariantPreview = await createClientImportPreview(
+      'sku,item_name,size,opening_stock,reorder_at,price_mmk\nCAFE-2,လက်ဖက်စိမ်း,Small,8,2,2200',
       'commerce',
     )
-    assert.equal(variantPreview.rows[0].status, 'ready')
+    const { preview: variantPreview, variantHeader } = await shopImport.addShopVariantColumnToClientImportPreview(rawVariantPreview)
+    assert.equal(rawVariantPreview.fields.length, 5)
+    assert.equal(variantHeader, 'size')
+    assert.equal(variantPreview.mapping.variant, 'size')
+    assert.equal(variantPreview.rows[0].values.variant, 'Small')
     const variantPackage = buildClientImportStagingPackage(variantPreview, {
       workflowTemplateId: variantPreview.workflowTemplateId,
       workspace: 'Synthetic cafe',
