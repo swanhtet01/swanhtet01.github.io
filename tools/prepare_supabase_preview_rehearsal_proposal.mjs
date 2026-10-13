@@ -45,6 +45,17 @@ const EXPECTED_MIGRATIONS = Object.freeze([
 ])
 const EXPECTED_SOURCE_TARGET_SCHEMA_VERSION = 13
 const MAX_PREVIEW_LIFETIME_HOURS = 24
+const PROPOSAL_GENERATED_AT = '2026-10-14T00:00:00.000Z'
+const PRODUCTION_REPLAY_GATE = Object.freeze({
+  status: 'blocked',
+  evidenceClassification: 'historical-provider-observation',
+  observedAt: '2026-10-14',
+  reason: 'public-baseline-not-recorded-before-first-rls-migration',
+  firstRecordedVersion: '20260711081400',
+  currentProviderStateRevalidated: false,
+  newPreviewCreationAllowed: false,
+  recoveryRequiresSeparateOwnerApproval: true,
+})
 const SOURCES = [
   'package.json',
   'tools/prepare_supabase_preview_rehearsal_proposal.mjs',
@@ -211,9 +222,13 @@ function validateProposalShape(packet) {
     || packet.gates.previewRehearsal.privilegedRuntimeCredentialsRejected !== true) {
     fail('supabase_preview_rehearsal_proposal_gate_invalid')
   }
+  if (JSON.stringify(packet.gates?.productionMigrationReplay) !== JSON.stringify(PRODUCTION_REPLAY_GATE)) {
+    fail('supabase_preview_rehearsal_proposal_replay_gate_invalid')
+  }
   if (!Array.isArray(packet.requiredEvidence) || packet.requiredEvidence.length < 10) fail('supabase_preview_rehearsal_proposal_evidence_invalid')
   for (const evidence of [
     'preview-branch-status-and-migration-list',
+    'production-history-replayable-public-baseline-before-first-rls',
     'source-controlled-migration-chain-applied-through-v13',
     'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
     'website-review-recipient-isolation-entitlement-and-session-revocation',
@@ -257,7 +272,7 @@ function validateProposalShape(packet) {
 
 export async function buildSupabasePreviewRehearsalProposal({
   sourceReceipts = [],
-  generatedAt = '2026-08-25T00:00:00.000Z',
+  generatedAt = PROPOSAL_GENERATED_AT,
   securityAudit,
   readiness,
 } = {}) {
@@ -274,7 +289,7 @@ export async function buildSupabasePreviewRehearsalProposal({
     mode: 'owner_approval_required',
     state: 'prepared-not-executed',
     generatedAt,
-    purpose: 'Prepare the exact Supabase preview rehearsal gate without creating a branch, reading production rows, copying production data, or approving managed activation.',
+    purpose: 'Record the source-bound Supabase preview rehearsal plan and its blocked production-history replay prerequisite without creating a branch, reading production rows, copying production data, or approving managed activation.',
     productionBaseline,
     readinessBaseline,
     previewBranch: {
@@ -301,6 +316,7 @@ export async function buildSupabasePreviewRehearsalProposal({
       productionApplyAllowed: false,
     },
     gates: {
+      productionMigrationReplay: { ...PRODUCTION_REPLAY_GATE },
       previewRehearsal: {
         status: 'blocked-until-executed',
         proofComplete: false,
@@ -317,6 +333,7 @@ export async function buildSupabasePreviewRehearsalProposal({
     },
     requiredEvidence: [
       'preview-branch-status-and-migration-list',
+      'production-history-replayable-public-baseline-before-first-rls',
       'clean-empty-data-less-branch-confirmed',
       'source-controlled-migration-chain-applied-through-v13',
       'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
@@ -372,7 +389,7 @@ export async function buildSupabasePreviewRehearsalProposal({
       customerContactAllowed: false,
       paymentOrStockActionAllowed: false,
     },
-    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${migrationPlan.chainDigest} on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
+    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${migrationPlan.chainDigest} on a clean empty maximum-24-hour non-production preview branch only, after separate approval and proof that production migration history can replay the public baseline before its first RLS migration, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
     sourceReceipts,
   }
   return validateProposalShape({ ...body, digest: packetDigest(body) })
@@ -393,7 +410,7 @@ async function currentSourceReceipts() {
   return receipts
 }
 
-async function currentProposal(generatedAt = '2026-08-25T00:00:00.000Z') {
+async function currentProposal(generatedAt = PROPOSAL_GENERATED_AT) {
   return buildSupabasePreviewRehearsalProposal({
     sourceReceipts: await currentSourceReceipts(),
     generatedAt,
@@ -439,6 +456,7 @@ async function runSelfTest() {
     proposal_valid: proposal.contract === SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT,
     clean_empty_preview_only: proposal.previewBranch.startsWithProductionData === false && proposal.previewBranch.maximumLifetimeHours === MAX_PREVIEW_LIFETIME_HOURS,
     migration_chain_bound: proposal.migrationPlan.migrationCount === EXPECTED_MIGRATION_COUNT && /^sha256:[0-9a-f]{64}$/.test(proposal.migrationPlan.chainDigest),
+    production_replay_blocked: proposal.gates.productionMigrationReplay.status === 'blocked' && proposal.gates.productionMigrationReplay.newPreviewCreationAllowed === false,
     no_supabase_mutation_authorized: proposal.controls.supabaseBranchCreationApproved === false && proposal.controls.productionProjectMutated === false,
   }
   const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name)
@@ -468,6 +486,7 @@ async function main() {
       migrationCount: proposal.migrationPlan.migrationCount,
       schemaVersion: proposal.migrationPlan.schemaVersion,
       proofComplete: false,
+      productionMigrationReplay: proposal.gates.productionMigrationReplay.status,
       supabaseBranchCreated: false,
       productionProjectMutated: false,
     }))
@@ -482,6 +501,7 @@ async function main() {
     migrationCount: proposal.migrationPlan.migrationCount,
     schemaVersion: proposal.migrationPlan.schemaVersion,
     proofComplete: false,
+    productionMigrationReplay: proposal.gates.productionMigrationReplay.status,
     supabaseBranchCreated: false,
     productionProjectMutated: false,
   }))

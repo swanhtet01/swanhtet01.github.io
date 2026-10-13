@@ -74,6 +74,10 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.productionBaseline.evidenceClassification, 'historical-audit-only')
   assert.equal(built.productionBaseline.currentStateRevalidated, false)
   assert.equal(built.productionBaseline.currentCandidateProven, false)
+  assert.equal(built.gates.productionMigrationReplay.status, 'blocked')
+  assert.equal(built.gates.productionMigrationReplay.newPreviewCreationAllowed, false)
+  assert.equal(built.gates.productionMigrationReplay.currentProviderStateRevalidated, false)
+  assert.ok(built.requiredEvidence.includes('production-history-replayable-public-baseline-before-first-rls'))
   assert.ok(built.requiredEvidence.includes('durable-attempt-budget-restart-concurrency-and-restored-limit-proof'))
   assert.equal(built.gates.previewRehearsal.proofComplete, false)
   assert.ok(built.requiredEvidence.includes('metadata-only-schema-fingerprint-comparison'))
@@ -129,6 +133,21 @@ test('rehashing cannot hide omitted budget or Website evidence or turn historica
     const { digest: ignored, ...body } = altered
     altered.digest = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`
     await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(migration_digest_invalid|production_baseline_invalid|evidence_missing)/)
+  }
+})
+
+test('a rehashed proposal cannot waive the known production-history replay block', async () => {
+  for (const mutate of [
+    p => { p.gates.productionMigrationReplay.status = 'ready' },
+    p => { p.gates.productionMigrationReplay.newPreviewCreationAllowed = true },
+    p => { p.gates.productionMigrationReplay.currentProviderStateRevalidated = true },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'production-history-replayable-public-baseline-before-first-rls') },
+  ]) {
+    const altered = structuredClone(await proposal())
+    mutate(altered)
+    const { digest: ignored, ...body } = altered
+    altered.digest = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`
+    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(replay_gate_invalid|evidence_missing)/)
   }
 })
 
