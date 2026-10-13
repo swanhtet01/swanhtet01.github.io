@@ -35,12 +35,14 @@ import {
 } from '../../core/managed-trial'
 import {
   claimManagedCommercePublicRequest,
+  closeManagedCommercePublicRequest,
   loadManagedCommercePublicInbox,
   loadManagedCommercePublications,
   publishManagedCommerceStorefront,
   revokeManagedCommerceStorefront,
   type ManagedCommercePublicPublication,
   type ManagedCommercePublicRequest,
+  type ManagedCommerceCloseReason,
 } from './managed-commerce-public'
 import { ProductPhoto } from '../../core/ProductPhoto'
 import { productImageScopeForWorkspace } from '../../core/product-image-store'
@@ -336,6 +338,8 @@ export function EcommerceProduct() {
   const [publicBusy, setPublicBusy] = useState(false)
   const [publicNotice, setPublicNotice] = useState('')
   const [publicReviewId, setPublicReviewId] = useState('')
+  const [publicClosingId, setPublicClosingId] = useState('')
+  const [publicCloseReason, setPublicCloseReason] = useState<ManagedCommerceCloseReason | ''>('')
   const [savedDraft, setSavedDraft] = useState<SavedStorefrontState | null>(null)
   const [draftReadStatus, setDraftReadStatus] = useState<StorefrontDraftReadResult['status']>('empty')
   const [draftIssue, setDraftIssue] = useState('')
@@ -448,8 +452,26 @@ export function EcommerceProduct() {
     } finally { setPublicBusy(false) }
   }
 
+  async function closePublicRequest(entry: ManagedCommercePublicRequest) {
+    if (!managedIdentity || publicBusy || !publicCloseReason || entry.status !== 'new') return
+    setPublicBusy(true)
+    setPublicNotice('')
+    try {
+      const result = await closeManagedCommercePublicRequest(managedIdentity, entry.handle,
+        entry.requestId, publicCloseReason)
+      if (result.status !== 'closed') throw new Error('The request was not closed.')
+      setPublicRequests((current) => current.filter((item) =>
+        item.handle !== entry.handle || item.requestId !== entry.requestId))
+      setPublicClosingId('')
+      setPublicCloseReason('')
+      setPublicNotice('Request closed.')
+    } catch (error) {
+      setPublicNotice(error instanceof Error ? error.message : 'The request could not be closed. Refresh and try again.')
+    } finally { setPublicBusy(false) }
+  }
+
   async function showMorePublicRequests() {
-    const loadedNew = publicRequests.filter((item) => item.status === 'new').length
+    const loadedNew = publicRequests.filter((item) => item.status === 'new' || item.status === 'reviewing').length
     if (loadedNew > publicVisibleCount) {
       setPublicVisibleCount((count) => count + 20)
       return
@@ -2178,7 +2200,7 @@ export function EcommerceProduct() {
   const visibleCatalogItems = catalogSearchTerm
     ? catalog.items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLowerCase().includes(catalogSearchTerm))
     : catalog.items
-  const newPublicRequests = publicRequests.filter((entry) => entry.status === 'new')
+  const newPublicRequests = publicRequests.filter((entry) => entry.status === 'new' || entry.status === 'reviewing')
   const publicStoreIsCurrent = Boolean(publicPublication?.enabled && publicPublication.previewDigest === digest)
 
   if (!catalogHydrating && sampleCatalogPreview) {
@@ -2261,12 +2283,30 @@ export function EcommerceProduct() {
       {publicStatus === 'ready' && managedCanWrite && publicDataIdentity === publicIdentityKey ? <section aria-label="Incoming online requests" className="ecommerce-public-intake">
         <div className="ecommerce-public-intake-head">
           <div><h2>Incoming online requests</h2><p>Requests from your customer store arrive here automatically.</p></div>
-          <strong>{newPublicRequests.length} new in loaded requests</strong>
+          <strong>{newPublicRequests.length} to review</strong>
         </div>
         {newPublicRequests.length ? <div className="ecommerce-public-intake-list">
           {newPublicRequests.slice(0, publicVisibleCount).map((entry) => <div className="ecommerce-public-intake-row" key={`${entry.handle}:${entry.requestId}`}>
             <div><strong>{entry.request.customerReference}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small><small>Phone: {entry.request.customerProfile?.phone || 'Not available'}</small></div>
-            <button className="core-button secondary" disabled={publicBusy} onClick={() => void bringPublicRequestToShop(entry)} type="button">Review in Shop</button>
+            <div>
+              <button className="core-button secondary" disabled={publicBusy} onClick={() => void bringPublicRequestToShop(entry)} type="button">{entry.status === 'reviewing' ? 'Retry Shop review' : 'Review in Shop'}</button>
+              {entry.status === 'new' ? <button className="text-link" disabled={publicBusy} onClick={() => {
+                setPublicClosingId(`${entry.handle}:${entry.requestId}`)
+                setPublicCloseReason('')
+              }} type="button">Close request</button> : null}
+              {publicClosingId === `${entry.handle}:${entry.requestId}` && entry.status === 'new' ? <fieldset>
+                <legend>Why close this request?</legend>
+                {([
+                  ['customer_withdrew', 'Customer withdrew'],
+                  ['no_response', 'No response'],
+                  ['stock_unavailable', 'Stock unavailable'],
+                  ['spam_or_duplicate', 'Spam or duplicate'],
+                  ['other', 'Other'],
+                ] as const).map(([value, label]) => <label key={value}><input checked={publicCloseReason === value} name={`close-reason-${entry.requestId}`} onChange={() => setPublicCloseReason(value)} type="radio" value={value} />{label}</label>)}
+                <button className="core-button compact" disabled={!publicCloseReason || publicBusy} onClick={() => void closePublicRequest(entry)} type="button">Confirm close</button>
+                <button className="text-link" onClick={() => setPublicClosingId('')} type="button">Cancel</button>
+              </fieldset> : null}
+            </div>
           </div>)}
         </div> : <p className="ecommerce-public-intake-empty">{publicNextCursor ? 'No new requests in the latest page. Check older requests below.' : 'New requests will appear here after a customer sends one.'}</p>}
         {newPublicRequests.length > publicVisibleCount || publicNextCursor ? <button className="text-link ecommerce-public-more" disabled={publicPageBusy} onClick={() => void showMorePublicRequests()} type="button">{publicPageBusy ? 'Loading…' : 'Show more requests'}</button> : null}

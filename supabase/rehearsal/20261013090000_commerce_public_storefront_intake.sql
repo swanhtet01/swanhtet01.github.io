@@ -29,6 +29,15 @@ create table app_private.commerce_public_requests (
   input_fingerprint text not null check (input_fingerprint ~ '^[0-9a-f]{64}$'),
   client_key text not null check (client_key ~ '^[0-9a-f]{64}$'),
   received_at timestamptz not null default clock_timestamp(),
+  status text not null default 'received'
+    check (status in ('received', 'in_review', 'in_shop', 'closed')),
+  close_reason text check (close_reason in
+    ('customer_withdrew', 'no_response', 'stock_unavailable', 'spam_or_duplicate', 'other')),
+  closed_by text,
+  closed_at timestamptz,
+  redacted_at timestamptz,
+  check ((status = 'closed') = (close_reason is not null and closed_by is not null and closed_at is not null)),
+  check (redacted_at is null or (status = 'closed' and redacted_at >= closed_at)),
   primary key (handle, request_id),
   foreign key (workspace_id, handle)
     references app_private.commerce_public_storefronts(workspace_id, handle)
@@ -39,11 +48,23 @@ create index commerce_public_requests_client_time
   on app_private.commerce_public_requests(workspace_id, client_key, received_at);
 create index commerce_public_requests_handle_time
   on app_private.commerce_public_requests(handle, received_at);
+create index commerce_public_requests_redaction_due
+  on app_private.commerce_public_requests(closed_at, handle, request_id)
+  where status = 'closed' and redacted_at is null;
+
+create table app_private.commerce_public_redaction_runs (
+  run_id uuid primary key,
+  ran_at timestamptz not null default clock_timestamp(),
+  redacted_count integer not null check (redacted_count between 0 and 500),
+  max_rows integer not null check (max_rows between 1 and 500)
+);
 
 alter table app_private.commerce_public_storefronts enable row level security;
 alter table app_private.commerce_public_storefronts force row level security;
 alter table app_private.commerce_public_requests enable row level security;
 alter table app_private.commerce_public_requests force row level security;
+alter table app_private.commerce_public_redaction_runs enable row level security;
+alter table app_private.commerce_public_redaction_runs force row level security;
 
 create policy commerce_public_storefront_member_read on app_private.commerce_public_storefronts
   for select to supermega_trial_backend using (
@@ -68,7 +89,8 @@ create policy commerce_public_request_member_read on app_private.commerce_public
     workspace_id = current_setting('app.workspace_id', true)
     and app_private.website_review_can('commerce.write'));
 
-revoke all on app_private.commerce_public_storefronts, app_private.commerce_public_requests
+revoke all on app_private.commerce_public_storefronts, app_private.commerce_public_requests,
+  app_private.commerce_public_redaction_runs
   from public, anon, authenticated, service_role;
 grant select, insert, update on app_private.commerce_public_storefronts to supermega_trial_backend;
 grant select on app_private.commerce_public_requests to supermega_trial_backend;
@@ -129,6 +151,9 @@ begin
   select * into previous from app_private.commerce_public_requests
     where handle = p_handle and request_id = p_request;
   if found then
+    if previous.status = 'closed' then
+      raise exception 'commerce_public_request_closed' using errcode = 'P0001';
+    end if;
     if previous.input_fingerprint is distinct from p_fingerprint then
       raise exception 'commerce_public_retry_conflict' using errcode = 'P0001';
     end if;
@@ -142,7 +167,7 @@ begin
     or (select count(*) from app_private.commerce_public_requests
       where workspace_id = binding.workspace_id and received_at > stamp - interval '1 day') >= 500
     or (select count(*) from app_private.commerce_public_requests
-      where workspace_id = binding.workspace_id) >= 10000 then
+      where workspace_id = binding.workspace_id and status <> 'closed') >= 10000 then
     raise exception 'commerce_public_capacity' using errcode = 'P0001';
   end if;
   insert into app_private.commerce_public_requests(
@@ -169,6 +194,9 @@ begin
     where r.handle = p_handle and r.request_id = p_request and s.enabled
       and app_private.workspace_is_active(s.workspace_id);
   if not found then return null; end if;
+  if previous.status = 'closed' then
+    raise exception 'commerce_public_request_closed' using errcode = 'P0001';
+  end if;
   if previous.input_fingerprint is distinct from p_fingerprint then
     raise exception 'commerce_public_retry_conflict' using errcode = 'P0001';
   end if;
@@ -176,12 +204,163 @@ begin
 end;
 $$;
 
+-- Reserve before writing to Shop. Closure and review compete on the same row;
+-- an uncertain Shop acknowledgement leaves the request retryable in_review.
+create function app_private.reserve_commerce_public_request(
+  p_workspace text, p_handle uuid, p_request uuid
+) returns jsonb language plpgsql security definer
+set search_path = pg_catalog, app_private as $$
+declare item app_private.commerce_public_requests%rowtype;
+begin
+  if p_workspace is distinct from current_setting('app.workspace_id', true)
+    or current_setting('app.actor_kind', true) <> 'human'
+    or not app_private.website_review_can('commerce.write') then
+    raise exception 'commerce_public_denied' using errcode = '42501';
+  end if;
+  select * into item from app_private.commerce_public_requests
+    where workspace_id = p_workspace and handle = p_handle and request_id = p_request
+    for update;
+  if not found or item.status = 'closed' or item.redacted_at is not null then
+    raise exception 'commerce_public_unavailable' using errcode = 'P0001';
+  end if;
+  if item.status = 'received' then
+    update app_private.commerce_public_requests set status = 'in_review'
+      where workspace_id = p_workspace and handle = p_handle and request_id = p_request;
+  end if;
+  return jsonb_build_object('status', item.status, 'request', item.request_json);
+end;
+$$;
+
+create function app_private.complete_commerce_public_request_claim(
+  p_workspace text, p_handle uuid, p_request uuid
+) returns boolean language plpgsql security definer
+set search_path = pg_catalog, app_private as $$
+begin
+  if p_workspace is distinct from current_setting('app.workspace_id', true)
+    or current_setting('app.actor_kind', true) <> 'human'
+    or not app_private.website_review_can('commerce.write') then
+    raise exception 'commerce_public_denied' using errcode = '42501';
+  end if;
+  update app_private.commerce_public_requests set status = 'in_shop'
+    where workspace_id = p_workspace and handle = p_handle and request_id = p_request
+      and status in ('in_review', 'in_shop');
+  if not found then
+    raise exception 'commerce_public_claim_state' using errcode = 'P0001';
+  end if;
+  return true;
+end;
+$$;
+
+create function app_private.close_commerce_public_request(
+  p_workspace text, p_handle uuid, p_request uuid, p_reason text
+) returns jsonb language plpgsql security definer
+set search_path = pg_catalog, app_private as $$
+declare item app_private.commerce_public_requests%rowtype;
+  actor text;
+begin
+  actor := current_setting('app.actor_id', true);
+  if p_workspace is distinct from current_setting('app.workspace_id', true)
+    or current_setting('app.actor_kind', true) <> 'human'
+    or actor is null or actor = ''
+    or not app_private.website_review_can('commerce.write') then
+    raise exception 'commerce_public_denied' using errcode = '42501';
+  end if;
+  if p_reason not in ('customer_withdrew', 'no_response', 'stock_unavailable',
+                     'spam_or_duplicate', 'other') or p_reason is null then
+    raise exception 'commerce_public_invalid' using errcode = '22023';
+  end if;
+  select * into item from app_private.commerce_public_requests
+    where workspace_id = p_workspace and handle = p_handle and request_id = p_request
+    for update;
+  if not found then
+    raise exception 'commerce_public_unavailable' using errcode = 'P0001';
+  end if;
+  if item.status = 'closed' then
+    if item.close_reason is distinct from p_reason or item.closed_by is distinct from actor then
+      raise exception 'commerce_public_close_conflict' using errcode = 'P0001';
+    end if;
+    return jsonb_build_object('status', 'closed', 'duplicate', true);
+  end if;
+  if item.status <> 'received' then
+    raise exception 'commerce_public_in_review' using errcode = 'P0001';
+  end if;
+  update app_private.commerce_public_requests
+    set status = 'closed', close_reason = p_reason, closed_by = actor,
+        closed_at = clock_timestamp()
+    where workspace_id = p_workspace and handle = p_handle and request_id = p_request;
+  return jsonb_build_object('status', 'closed', 'duplicate', false);
+end;
+$$;
+
+-- Keep only an opaque request-ID tombstone to reject old retries. Erase the
+-- contact-bearing JSON, input fingerprint and IP-derived abuse key.
+create function app_private.commerce_public_redaction_due_count(p_cap integer)
+returns integer language plpgsql security definer
+set search_path = pg_catalog, app_private as $$
+declare due_count integer;
+begin
+  if p_cap not between 1 and 500 then
+    raise exception 'commerce_public_invalid' using errcode = '22023';
+  end if;
+  select count(*) into due_count from (
+    select 1 from app_private.commerce_public_requests
+    where status = 'closed' and redacted_at is null
+      and closed_at <= clock_timestamp() - interval '30 days'
+    limit p_cap
+  ) due;
+  return due_count;
+end;
+$$;
+
+create function app_private.redact_closed_commerce_public_requests(
+  p_run uuid, p_limit integer
+) returns integer language plpgsql security definer
+set search_path = pg_catalog, app_private as $$
+declare prior integer;
+  changed integer;
+begin
+  if p_run is null or p_limit not between 1 and 500 then
+    raise exception 'commerce_public_invalid' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('commerce-public-redaction:' || p_run::text, 0));
+  select redacted_count into prior from app_private.commerce_public_redaction_runs
+    where run_id = p_run for update;
+  if found then return prior; end if;
+  with due as (
+    select handle, request_id from app_private.commerce_public_requests
+    where status = 'closed' and redacted_at is null
+      and closed_at <= clock_timestamp() - interval '30 days'
+    order by closed_at, handle, request_id
+    for update skip locked limit p_limit
+  )
+  update app_private.commerce_public_requests item
+    set request_json = '{}'::jsonb, input_fingerprint = repeat('0', 64),
+        client_key = repeat('0', 64),
+        redacted_at = clock_timestamp()
+    from due where item.handle = due.handle and item.request_id = due.request_id;
+  get diagnostics changed = row_count;
+  insert into app_private.commerce_public_redaction_runs(run_id, redacted_count, max_rows)
+    values (p_run, changed, p_limit);
+  return changed;
+end;
+$$;
+
 revoke all on function app_private.read_commerce_public_source(uuid),
   app_private.receive_commerce_public_request(uuid,uuid,text,jsonb,text),
-  app_private.replay_commerce_public_request(uuid,uuid,text)
+  app_private.replay_commerce_public_request(uuid,uuid,text),
+  app_private.reserve_commerce_public_request(text,uuid,uuid),
+  app_private.complete_commerce_public_request_claim(text,uuid,uuid),
+  app_private.close_commerce_public_request(text,uuid,uuid,text),
+  app_private.commerce_public_redaction_due_count(integer),
+  app_private.redact_closed_commerce_public_requests(uuid,integer)
   from public, anon, authenticated, service_role;
 grant execute on function app_private.read_commerce_public_source(uuid),
   app_private.receive_commerce_public_request(uuid,uuid,text,jsonb,text),
-  app_private.replay_commerce_public_request(uuid,uuid,text)
+  app_private.replay_commerce_public_request(uuid,uuid,text),
+  app_private.reserve_commerce_public_request(text,uuid,uuid),
+  app_private.complete_commerce_public_request_claim(text,uuid,uuid),
+  app_private.close_commerce_public_request(text,uuid,uuid,text),
+  app_private.commerce_public_redaction_due_count(integer),
+  app_private.redact_closed_commerce_public_requests(uuid,integer)
   to supermega_trial_backend;
 commit;

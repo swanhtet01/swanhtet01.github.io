@@ -108,9 +108,10 @@ def _require_public_schema(cursor: Any) -> None:
         has_table_privilege('service_role',c.oid,'SELECT') as service_read
         from pg_class c join pg_namespace n on n.oid=c.relnamespace
         where n.nspname='app_private' and c.relname in
-          ('commerce_public_storefronts','commerce_public_requests')""")
+          ('commerce_public_storefronts','commerce_public_requests',
+           'commerce_public_redaction_runs')""")
     tables = cursor.fetchall()
-    if (len(tables) != 2 or any(not row['relrowsecurity'] or not row['relforcerowsecurity']
+    if (len(tables) != 3 or any(not row['relrowsecurity'] or not row['relforcerowsecurity']
             or row['anon_read'] or row['auth_read'] or row['service_read'] for row in tables)):
         raise TrialNotReadyError(('commerce_public_schema_unverified',))
     cursor.execute("""select p.proname,p.prosecdef,p.proconfig,
@@ -120,9 +121,12 @@ def _require_public_schema(cursor: Any) -> None:
         from pg_proc p join pg_namespace n on n.oid=p.pronamespace
         where n.nspname='app_private' and p.proname in
           ('read_commerce_public_source','receive_commerce_public_request',
-           'replay_commerce_public_request')""")
+           'replay_commerce_public_request','reserve_commerce_public_request',
+           'complete_commerce_public_request_claim','close_commerce_public_request',
+           'redact_closed_commerce_public_requests',
+           'commerce_public_redaction_due_count')""")
     functions = cursor.fetchall()
-    if (len(functions) != 3 or any(not row['prosecdef']
+    if (len(functions) != 8 or any(not row['prosecdef']
             or 'search_path=pg_catalog, app_private' not in (row['proconfig'] or [])
             or row['anon_exec'] or row['auth_exec'] or row['service_exec'] for row in functions)):
         raise TrialNotReadyError(('commerce_public_schema_unverified',))
@@ -357,8 +361,9 @@ class CommercePublicStorefront:
         cursor_key = _parse_page_cursor(after) if after is not None else None
         with self.store._guarded_cursor(principal, write=False, capability='commerce.write') as (cursor, _):
             _require_public_schema(cursor)
-            cursor.execute("""select handle,request_id,request_json,received_at
+            cursor.execute("""select handle,request_id,request_json,received_at,status
                 from app_private.commerce_public_requests where workspace_id=%s
+                and status <> 'closed'
                 and (%s::timestamptz is null or (received_at,handle,request_id) < (%s::timestamptz,%s::uuid,%s::uuid))
                 order by received_at desc,handle desc,request_id desc limit 51""",
                 (principal.workspace_id, cursor_key[0] if cursor_key else None,
@@ -375,8 +380,10 @@ class CommercePublicStorefront:
             return {'requests': [{'handle': str(row['handle']), 'requestId': str(row['request_id']),
                 'request': row['request_json'],
                 'shopRequestId': _shop_request_id(str(row['handle']), str(row['request_id'])),
-                'status': ('in_shop' if _shop_request_id(str(row['handle']), str(row['request_id'])) in retained
-                    or _shop_request_id(str(row['handle']), str(row['request_id'])) in converted else 'new'),
+                'status': ('in_shop' if row['status'] == 'in_shop'
+                    or _shop_request_id(str(row['handle']), str(row['request_id'])) in retained
+                    or _shop_request_id(str(row['handle']), str(row['request_id'])) in converted
+                    else 'reviewing' if row['status'] == 'in_review' else 'new'),
                 'receivedAt': row['received_at'].astimezone(timezone.utc).isoformat()}
                 for row in rows[:50]],
                 'nextCursor': _page_cursor(rows[49]) if len(rows) > 50 else None}
@@ -387,13 +394,10 @@ class CommercePublicStorefront:
         shop_request_id = _shop_request_id(handle, request_id)
         with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
             _require_public_schema(cursor)
-            cursor.execute("""select request_json from app_private.commerce_public_requests
-                where workspace_id=%s and handle=%s and request_id=%s""",
+            cursor.execute('select app_private.reserve_commerce_public_request(%s,%s,%s) as reserved',
                 (principal.workspace_id, handle, request_id))
-            row = cursor.fetchone()
-            if row is None:
-                raise TrialValidationError('commerce_public_unavailable')
-            original = row['request_json']
+            row = cursor.fetchone()['reserved']
+            original = row['request']
             cursor.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='commerce'",
                            (principal.workspace_id,))
             state_row = cursor.fetchone()
@@ -403,8 +407,12 @@ class CommercePublicStorefront:
             retained = [item for item in state.get('storefrontRequests', []) if item['id'] == shop_request_id]
             converted = any(order.get('sourceRecordId') == shop_request_id for order in state.get('orders', []))
             if retained or converted:
+                cursor.execute('select app_private.complete_commerce_public_request_claim(%s,%s,%s)',
+                               (principal.workspace_id, handle, request_id))
                 return {'status': 'in_shop', 'shopRequestId': shop_request_id,
                         'priceChanged': (retained[0]['totalMmk'] != original['totalMmk']) if retained else False}
+            if row['status'] == 'in_shop':
+                raise TrialNotReadyError(('commerce_public_claim_state',))
             preview = commerce_storefront_preview(state)
             configuration = state['storefrontConfiguration']
             current = {item['sku']: item for item in state['items']}
@@ -450,8 +458,59 @@ class CommercePublicStorefront:
         retained = result.state.get('storefrontRequests', [])
         if not retained or retained[0]['id'] != shop_request_id:
             raise TrialNotReadyError(('commerce_public_claim_readback',))
+        with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
+            cursor.execute('select app_private.complete_commerce_public_request_claim(%s,%s,%s)',
+                           (principal.workspace_id, handle, request_id))
         return {'status': 'in_shop', 'shopRequestId': shop_request_id,
                 'priceChanged': request['totalMmk'] != original['totalMmk']}
+
+    def close(self, principal: TrialPrincipal, *, handle: str, request_id: str,
+              reason: str) -> dict[str, Any]:
+        """Close only an unclaimed request, with a human and a bounded reason code."""
+        if principal.actor_kind != 'human' or reason not in (
+                'customer_withdrew', 'no_response', 'stock_unavailable',
+                'spam_or_duplicate', 'other'):
+            raise TrialValidationError('commerce_public_invalid')
+        handle, request_id = _uuid(handle), _uuid(request_id)
+        with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
+            _require_public_schema(cursor)
+            cursor.execute('select app_private.close_commerce_public_request(%s,%s,%s,%s) as result',
+                           (principal.workspace_id, handle, request_id, reason))
+            result = cursor.fetchone()['result']
+        return {'handle': handle, 'requestId': request_id, **result}
+
+    def redact_due(self, *, run_id: str, limit: int = 100) -> int:
+        """Internal bounded maintenance entrypoint; not mounted on HTTP routes."""
+        if not 1 <= limit <= 500:
+            raise TrialValidationError('commerce_public_invalid')
+        try:
+            run = str(UUID(run_id))
+        except (ValueError, TypeError, AttributeError):
+            raise TrialValidationError('commerce_public_invalid') from None
+        if not self.store.write_enabled:
+            raise TrialNotReadyError(('write_enabled',))
+        with self.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                self.store._assert_runtime_role(cursor)
+                self.store._assert_schema(cursor)
+                _require_public_schema(cursor)
+                cursor.execute("set local statement_timeout='10s'")
+                cursor.execute('select app_private.redact_closed_commerce_public_requests(%s,%s) as count',
+                               (run, limit))
+                return int(cursor.fetchone()['count'])
+
+    def redaction_due_count(self, *, cap: int = 100) -> int:
+        """Return a bounded dry-run count without exposing customer data."""
+        if not 1 <= cap <= 500:
+            raise TrialValidationError('commerce_public_invalid')
+        with self.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                self.store._assert_runtime_role(cursor)
+                self.store._assert_schema(cursor)
+                _require_public_schema(cursor)
+                cursor.execute('select app_private.commerce_public_redaction_due_count(%s) as count',
+                               (cap,))
+                return int(cursor.fetchone()['count'])
 
 
 def create_commerce_public_router(*, store: CommercePublicStorefront, enabled: bool,
@@ -512,6 +571,9 @@ def create_commerce_public_router(*, store: CommercePublicStorefront, enabled: b
                 'commerce_public_invalid': (422, 'request_invalid'),
                 'commerce_public_retry_conflict': (409, 'request_conflict'),
                 'commerce_public_capacity': (429, 'try_later'),
+                'commerce_public_request_closed': (409, 'request_closed'),
+                'commerce_public_in_review': (409, 'request_in_review'),
+                'commerce_public_close_conflict': (409, 'request_changed'),
             }.get(code, (503, 'commerce_public_unavailable'))
             raise _error(status, public_code) from None
         return JSONResponse(result, headers=_HEADERS)
@@ -575,6 +637,16 @@ def create_commerce_public_router(*, store: CommercePublicStorefront, enabled: b
         if body:
             raise _error(422, 'request_invalid')
         return await invoke(lambda: store.claim(actor, handle=handle, request_id=request_id))
+
+    @router.post('/api/trial/v1/commerce-public-inbox/{handle}/{request_id}/close')
+    async def close(handle: str, request_id: str, request: Request):
+        available(request)
+        actor = principal(request)
+        body = await _body(request)
+        if set(body) != {'reason'} or not isinstance(body['reason'], str):
+            raise _error(422, 'request_invalid')
+        return await invoke(lambda: store.close(actor, handle=handle,
+                                                 request_id=request_id, reason=body['reason']))
 
     return router
 

@@ -12,7 +12,7 @@ export type ManagedCommercePublicRequest = {
   handle: string
   requestId: string
   shopRequestId: string
-  status: 'new' | 'in_shop'
+  status: 'new' | 'reviewing' | 'in_shop'
   receivedAt: string
   request: {
     id: string
@@ -51,4 +51,13 @@ export async function claimManagedCommercePublicRequest(identity: ManagedIdentit
   return authorizedRequest<{ status: 'in_shop'; shopRequestId: string; priceChanged: boolean }>(
     `/api/trial/v1/commerce-public-inbox/${encodeURIComponent(handle)}/${encodeURIComponent(requestId)}/claim`,
     { method: 'POST', credentials: 'omit', body: '{}' }, true, identity)
+}
+
+export type ManagedCommerceCloseReason = 'customer_withdrew' | 'no_response' | 'stock_unavailable' | 'spam_or_duplicate' | 'other'
+
+export async function closeManagedCommercePublicRequest(identity: ManagedIdentity, handle: string,
+  requestId: string, reason: ManagedCommerceCloseReason) {
+  return authorizedRequest<{ status: 'closed'; requestId: string; duplicate: boolean }>(
+    `/api/trial/v1/commerce-public-inbox/${encodeURIComponent(handle)}/${encodeURIComponent(requestId)}/close`,
+    { method: 'POST', credentials: 'omit', body: JSON.stringify({ reason }) }, true, identity)
 }

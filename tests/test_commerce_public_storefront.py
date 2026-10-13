@@ -121,6 +121,21 @@ class CommercePublicBoundaryTests(unittest.TestCase):
             headers={'Origin': 'https://other.example.test'}, json=_body()).status_code, 403)
         self.assertEqual(adapter.receive.call_count, 1)
 
+    def test_close_route_requires_a_reason_and_a_human(self):
+        adapter = Mock()
+        adapter.close.return_value = {'status': 'closed', 'duplicate': False}
+        app = FastAPI()
+        app.include_router(create_commerce_public_router(
+            store=adapter, enabled=True,
+            resolve_principal=lambda _: TrialPrincipal('synthetic', 'owner', 'human'),
+            resolve_client_address=lambda _: '192.0.2.10', abuse_key=bytes(range(32)),
+            public_origin='https://store.example.test'))
+        client = TestClient(app)
+        route = f'/api/trial/v1/commerce-public-inbox/{uuid4()}/{uuid4()}/close'
+        self.assertEqual(client.post(route, json={}).status_code, 422)
+        self.assertEqual(client.post(route, json={'reason': 'spam_or_duplicate'}).status_code, 200)
+        self.assertEqual(adapter.close.call_args.kwargs['reason'], 'spam_or_duplicate')
+
 
 @unittest.skipUnless(os.environ.get('SUPERMEGA_RUN_COMMERCE_PUBLIC_SQL') == '1',
                      'explicit disposable PostgreSQL rehearsal only')
@@ -222,8 +237,71 @@ class CommercePublicSqlTests(unittest.TestCase):
             row = connection.execute("""select
                 has_table_privilege('anon','app_private.commerce_public_requests','SELECT'),
                 has_table_privilege('authenticated','app_private.commerce_public_requests','SELECT'),
-                has_function_privilege('anon','app_private.read_commerce_public_source(uuid)','EXECUTE')""").fetchone()
-        self.assertEqual(row, (False, False, False))
+                has_function_privilege('anon','app_private.read_commerce_public_source(uuid)','EXECUTE'),
+                has_function_privilege('anon','app_private.close_commerce_public_request(text,uuid,uuid,text)','EXECUTE'),
+                has_function_privilege('authenticated','app_private.redact_closed_commerce_public_requests(uuid,integer)','EXECUTE'),
+                has_function_privilege('service_role','app_private.commerce_public_redaction_due_count(integer)','EXECUTE'),
+                has_table_privilege('service_role','app_private.commerce_public_redaction_runs','SELECT')""").fetchone()
+        self.assertEqual(row, (False, False, False, False, False, False, False))
+
+    def test_unclaimed_close_and_thirty_day_redaction_leave_an_opaque_tombstone(self):
+        publication = self.adapter.publish(self.owner, expected_version=1)
+        handle = publication['handle']
+        body = _body()
+        self.adapter.receive(handle=handle, body=body, client_key='a' * 64)
+        with self.assertRaises(Exception):
+            self.adapter.close(TrialPrincipal('another-workspace', 'other-owner', 'human'),
+                handle=handle, request_id=body['requestId'], reason='other')
+        closed = self.adapter.close(self.owner, handle=handle,
+                                    request_id=body['requestId'], reason='customer_withdrew')
+        self.assertEqual((closed['status'], closed['duplicate']), ('closed', False))
+        self.assertTrue(self.adapter.close(self.owner, handle=handle,
+            request_id=body['requestId'], reason='customer_withdrew')['duplicate'])
+        self.assertEqual(self.adapter.inbox(self.owner)['requests'], [])
+        with self.assertRaises(Exception):
+            self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
+        with self.assertRaises(Exception):
+            self.adapter.close(self.owner, handle=handle,
+                               request_id=body['requestId'], reason='other')
+        with self.assertRaises(Exception):
+            self.adapter.receive(handle=handle, body=body, client_key='a' * 64)
+        self.assertEqual(self.adapter.redaction_due_count(cap=5), 0)
+        # The test clock is moved in this disposable database only.
+        with self.pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.commerce_public_requests
+                set closed_at=clock_timestamp()-interval '31 days'
+                where handle=%s and request_id=%s""", (handle, body['requestId']))
+        run_id = str(uuid4())
+        self.assertEqual(self.adapter.redaction_due_count(cap=5), 1)
+        self.assertEqual(self.adapter.redact_due(run_id=run_id, limit=5), 1)
+        self.assertEqual(self.adapter.redact_due(run_id=run_id, limit=5), 1)
+        self.assertEqual(self.adapter.redaction_due_count(cap=5), 0)
+        with self.pg._connect(self.admin_url) as connection:
+            row = connection.execute("""select request_json,client_key,input_fingerprint,
+                close_reason,closed_by,redacted_at from app_private.commerce_public_requests
+                where handle=%s and request_id=%s""", (handle, body['requestId'])).fetchone()
+            receipts = connection.execute("""select count(*) from app_private.commerce_public_redaction_runs
+                where run_id=%s""", (run_id,)).fetchone()[0]
+        self.assertEqual(row[0], {})
+        self.assertEqual(row[1], '0' * 64)
+        self.assertEqual(row[2], '0' * 64)
+        self.assertEqual((row[3], row[4]), ('customer_withdrew', self.owner.actor_id))
+        self.assertIsNotNone(row[5])
+        self.assertEqual(receipts, 1)
+
+    def test_claimed_request_cannot_be_closed_as_unconverted_intake(self):
+        publication = self.adapter.publish(self.owner, expected_version=1)
+        handle = publication['handle']
+        body = _body()
+        self.adapter.receive(handle=handle, body=body, client_key='b' * 64)
+        self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
+        with self.assertRaises(Exception):
+            self.adapter.close(self.owner, handle=handle,
+                               request_id=body['requestId'], reason='customer_withdrew')
+        with self.pg._connect(self.admin_url) as connection:
+            status = connection.execute("""select status from app_private.commerce_public_requests
+                where handle=%s and request_id=%s""", (handle, body['requestId'])).fetchone()[0]
+        self.assertEqual(status, 'in_shop')
 
     def test_inbox_keyset_pages_past_fifty_requests(self):
         publication = self.adapter.publish(self.owner, expected_version=1)
