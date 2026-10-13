@@ -1,9 +1,9 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { isWebsiteImage, isWebsiteImageSource, type WebsiteImage } from './website-media'
 import { assertPhotoFile } from './website-media-client'
 import { useWebsiteMedia } from './WebsiteMediaContext'
 
-export function WebsiteImageEditor({ image, onChange }: { image?: WebsiteImage; onChange: (image: WebsiteImage | undefined) => void }) {
+export function WebsiteImageEditor({ image, onChange, onCancelFromCard, openRequest = 0 }: { image?: WebsiteImage; onChange: (image: WebsiteImage | undefined) => void; onCancelFromCard?: () => void; openRequest?: number }) {
   const { client, onEditingChange } = useWebsiteMedia()
   const id = useId()
   const [open, setOpen] = useState(false)
@@ -18,6 +18,7 @@ export function WebsiteImageEditor({ image, onChange }: { image?: WebsiteImage; 
   const changeButton = useRef<HTMLButtonElement>(null)
   const firstField = useRef<HTMLInputElement>(null)
   const returnFocus = useRef(false)
+  const lastOpenRequest = useRef(0)
 
   useEffect(() => {
     onEditingChange?.(open)
@@ -41,14 +42,21 @@ export function WebsiteImageEditor({ image, onChange }: { image?: WebsiteImage; 
     setOpen(false)
   }
 
-  function begin() {
+  const begin = useCallback(() => {
     setSrc(image && 'src' in image ? image.src : '')
     setUseLink(!client?.upload || Boolean(image && 'src' in image))
     setAlt(image?.alt ?? '')
     setDecorative(image?.decorative ?? false)
     setError('')
     setOpen(true)
-  }
+  }, [client?.upload, image])
+
+  useEffect(() => {
+    if (openRequest > 0 && openRequest !== lastOpenRequest.current) {
+      lastOpenRequest.current = openRequest
+      begin()
+    }
+  }, [begin, openRequest])
 
   async function apply() {
     const description = { alt: decorative ? '' : alt.trim(), decorative }
@@ -102,11 +110,11 @@ export function WebsiteImageEditor({ image, onChange }: { image?: WebsiteImage; 
       <label className="website-image-decorative"><input type="checkbox" disabled={busy} checked={decorative} onChange={event => setDecorative(event.target.checked)} />Decorative image</label>
       {error ? <p role="alert" id={`${id}-error`}>{error}</p> : null}
       <div className="website-image-actions">
-        <button type="button" className="website-button is-secondary" onClick={close}>Cancel</button>
+        <button type="button" className="website-button is-secondary" onClick={() => { close(); if (openRequest > 0) onCancelFromCard?.() }}>Cancel</button>
         <button type="button" className="website-button is-primary" disabled={busy} onClick={() => void apply()}>{busy ? 'Saving photo…' : 'Use image'}</button>
       </div>
     </> : <div className="website-image-actions">
-      <button ref={changeButton} type="button" className="website-button is-secondary" onClick={begin}>{image ? 'Change image' : 'Add image'}</button>
+      <button ref={changeButton} type="button" className="website-button is-secondary" onClick={begin}>{image ? 'Change photo' : 'Add photo'}</button>
       {image ? <button type="button" className="website-button is-secondary" onClick={() => onChange(undefined)}>Remove image</button> : null}
     </div>}
   </section>

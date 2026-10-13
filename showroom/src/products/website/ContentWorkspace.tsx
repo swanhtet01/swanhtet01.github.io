@@ -27,12 +27,14 @@ export function ContentWorkspace({
   onUpdatePage,
 }: ContentWorkspaceProps) {
   const [editingSection, setEditingSection] = useState<string | null>(null)
+  const [photoRequest, setPhotoRequest] = useState<{ sectionId: string; ticket: number } | null>(null)
   const [removedSection, setRemovedSection] = useState<{ section: WebsitePage['sections'][number]; index: number } | null>(null)
   const fieldsRef = useRef<HTMLDivElement>(null)
   const addSectionRef = useRef<HTMLButtonElement>(null)
   const focusAddSection = useRef(false)
   const editTriggerRef = useRef<HTMLButtonElement | null>(null)
   const restoreEditFocus = useRef(false)
+  const nextPhotoTicket = useRef(0)
 
   useEffect(() => {
     if (focusAddSection.current) {
@@ -44,9 +46,10 @@ export function ContentWorkspace({
       restoreEditFocus.current = false
       return
     }
+    if (photoRequest?.sectionId === editingSection) return
     const field = fieldsRef.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>('[data-editor-start]')
     field?.focus()
-  }, [editingSection, page.sections.length])
+  }, [editingSection, page.sections.length, photoRequest])
 
   function editPage(update: (current: WebsitePage) => WebsitePage) {
     onUpdatePage((current) => ({ ...update(current), stage: 'draft' }))
@@ -54,13 +57,23 @@ export function ContentWorkspace({
 
   function closeEditor() {
     restoreEditFocus.current = true
+    setPhotoRequest(null)
     setEditingSection(null)
   }
 
   function toggleEditor(sectionId: string, trigger: HTMLButtonElement) {
     editTriggerRef.current = trigger
     if (editingSection === sectionId) closeEditor()
-    else setEditingSection(sectionId)
+    else {
+      setPhotoRequest(null)
+      setEditingSection(sectionId)
+    }
+  }
+
+  function openPhotoEditor(sectionId: string, trigger: HTMLButtonElement) {
+    editTriggerRef.current = trigger
+    setPhotoRequest({ sectionId, ticket: ++nextPhotoTicket.current })
+    setEditingSection(sectionId)
   }
 
   function moveSection(sectionId: string, direction: -1 | 1) {
@@ -119,9 +132,14 @@ export function ContentWorkspace({
         {editingSection ? <button className="website-button is-secondary website-back-to-sections" onClick={closeEditor} type="button">Back to sections</button> : null}
 
         <div aria-label="Page sections" className="website-page-card-list">
-          <fieldset className="website-fieldset website-page-card" data-content-section="hero" data-has-image={Boolean(page.hero.image)} data-editing={editingSection === 'welcome'}>
+          <fieldset className="website-fieldset website-page-card" data-content-section="hero" data-has-image={Boolean(page.hero.image)} data-has-media-slot="true" data-editing={editingSection === 'welcome'}>
             <legend className="sr-only">Welcome section</legend>
-            <WebsiteImage image={page.hero.image} priority />
+            {page.hero.image ? <WebsiteImage image={page.hero.image} priority /> : <button
+              aria-label="Add photo to welcome section"
+              className="website-page-add-photo"
+              onClick={(event) => openPhotoEditor('welcome', event.currentTarget)}
+              type="button"
+            ><span aria-hidden="true">+</span><strong>Add photo</strong></button>}
             <div className="website-page-card-copy">
               <span className="website-eyebrow">Welcome</span>
               <h3>{page.hero.headline || 'Your main message'}</h3>
@@ -133,13 +151,13 @@ export function ContentWorkspace({
               aria-label={editingSection === 'welcome' ? 'Done editing welcome' : 'Edit welcome'}
               className="website-button is-secondary is-compact"
               onClick={(event) => toggleEditor('welcome', event.currentTarget)}
-              ref={(node) => { if (editingSection === 'welcome' && node) editTriggerRef.current = node }}
+              ref={(node) => { if (editingSection === 'welcome' && photoRequest?.sectionId !== 'welcome' && node) editTriggerRef.current = node }}
               type="button"
             >
               {editingSection === 'welcome' ? 'Done' : 'Edit'}
             </button>
             {editingSection === 'welcome' ? <div className="website-page-card-fields" id="website-welcome-fields" ref={fieldsRef}>
-              <WebsiteImageEditor image={page.hero.image} onChange={image => editPage(current => ({ ...current, hero: withWebsiteImage(current.hero, image) }))} />
+              <WebsiteImageEditor image={page.hero.image} onCancelFromCard={closeEditor} onChange={image => editPage(current => ({ ...current, hero: withWebsiteImage(current.hero, image) }))} openRequest={photoRequest?.sectionId === 'welcome' ? photoRequest.ticket : 0} />
               <label>
                 <span>Short label</span>
                 <input
@@ -218,8 +236,13 @@ export function ContentWorkspace({
               {page.sections.length ? page.sections.map((section, index) => {
                 const editorId = `section:${section.id}`
                 const fieldsId = `website-section-fields-${section.id}`
-                return <article className="website-page-card website-section-card" data-content-section="section" data-has-image={Boolean(section.image)} data-editing={editingSection === editorId} key={section.id}>
-                  <WebsiteImage image={section.image} />
+                return <article className="website-page-card website-section-card" data-content-section="section" data-has-image={Boolean(section.image)} data-has-media-slot="true" data-editing={editingSection === editorId} key={section.id}>
+                  {section.image ? <WebsiteImage image={section.image} /> : <button
+                    aria-label={`Add photo to ${section.title || `section ${index + 1}`}`}
+                    className="website-page-add-photo"
+                    onClick={(event) => openPhotoEditor(editorId, event.currentTarget)}
+                    type="button"
+                  ><span aria-hidden="true">+</span><strong>Add photo</strong></button>}
                   <div className="website-page-card-copy">
                     <span className="website-eyebrow">{section.eyebrow || `Section ${index + 1}`}</span>
                     <h3>{section.title || 'Untitled section'}</h3>
@@ -231,13 +254,13 @@ export function ContentWorkspace({
                     aria-label={`${editingSection === editorId ? 'Done editing' : 'Edit'} ${section.title || `section ${index + 1}`}`}
                     className="website-button is-secondary is-compact"
                     onClick={(event) => toggleEditor(editorId, event.currentTarget)}
-                    ref={(node) => { if (editingSection === editorId && node) editTriggerRef.current = node }}
+                    ref={(node) => { if (editingSection === editorId && photoRequest?.sectionId !== editorId && node) editTriggerRef.current = node }}
                     type="button"
                   >
                     {editingSection === editorId ? 'Done' : 'Edit'}
                   </button>
                   {editingSection === editorId ? <div className="website-page-card-fields" id={fieldsId} ref={fieldsRef}>
-                    <WebsiteImageEditor image={section.image} onChange={image => editPage(current => ({ ...current, sections: current.sections.map(candidate => candidate.id === section.id ? withWebsiteImage(candidate, image) : candidate) }))} />
+                    <WebsiteImageEditor image={section.image} onCancelFromCard={closeEditor} onChange={image => editPage(current => ({ ...current, sections: current.sections.map(candidate => candidate.id === section.id ? withWebsiteImage(candidate, image) : candidate) }))} openRequest={photoRequest?.sectionId === editorId ? photoRequest.ticket : 0} />
                     <div className="website-section-order-actions">
                       <button aria-label={`Move section ${index + 1} up`} disabled={index === 0} onClick={() => moveSection(section.id, -1)} type="button">Move up</button>
                       <button aria-label={`Move section ${index + 1} down`} disabled={index === page.sections.length - 1} onClick={() => moveSection(section.id, 1)} type="button">Move down</button>
