@@ -16,7 +16,7 @@ const fixtures = {
   shop: resolve(root, '.tmp', 'qa-shop'),
   workspaces: resolve(root, '.tmp', 'qa-workspaces'),
 }
-const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' }
+const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2' }
 
 function buildFixture(script, args = []) {
   const result = spawnSync(process.execPath, [resolve(root, 'tools', script), ...args], {
@@ -29,6 +29,11 @@ async function serveFixture() {
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url || '/', 'http://127.0.0.1')
+      if (url.pathname === '/fonts/noto-sans-myanmar.woff2') {
+        const bytes = await readFile(resolve(root, 'tools', 'public-assets', 'noto-sans-myanmar.woff2'))
+        response.writeHead(200, { 'Content-Type': mime['.woff2'], 'Cache-Control': 'no-store' }).end(bytes)
+        return
+      }
       const match = /^\/(shop|workspaces)\/(index\.html|fixture\.js|fixture\.css|qa\.css)?$/.exec(url.pathname)
       if (!match) { response.writeHead(404).end(); return }
       const file = match[2] || 'index.html'
@@ -78,6 +83,11 @@ async function typeInto(cdp, sessionId, selector, value) {
 
 async function capture(cdp, sessionId, output, name, expectedTexts) {
   for (const expectedText of expectedTexts) await waitFor(cdp, sessionId, expectedText)
+  const myanmarFontLoaded = await evaluate(cdp, sessionId, `(async () => {
+    await document.fonts.load('16px "Noto Sans Myanmar"', 'မင်္ဂလာပါ');
+    return [...document.fonts].some(face => face.family === 'Noto Sans Myanmar' && face.status === 'loaded');
+  })()`)
+  if (!myanmarFontLoaded) throw new Error(`myanmar_font_missing:${name}`)
   await evaluate(cdp, sessionId, 'document.activeElement?.blur()')
   const visibleQaChrome = await evaluate(cdp, sessionId, `(() => [...document.querySelectorAll('.qa-notice,.qa-nav,#root > p,#root > button,#root > output')]
     .some(node => getComputedStyle(node).display !== 'none' && node.getClientRects().length > 0))()`)
@@ -158,6 +168,13 @@ async function main() {
     await typeInto(cdp, sessionId, 'input[autocomplete="name"]', 'Ma Su')
     await typeInto(cdp, sessionId, 'input[autocomplete="tel"]', '09 123 456 789')
     await clickText(cdp, sessionId, 'Save request locally')
+    const requestPanelShown = await evaluate(cdp, sessionId, `(() => {
+      const panel = document.getElementById('ecommerce-buying-workspace');
+      if (!panel) return false;
+      panel.scrollIntoView({ block: 'start', behavior: 'auto' });
+      return true;
+    })()`)
+    if (!requestPanelShown) throw new Error('commerce_request_panel_missing')
     captures.push(await capture(cdp, sessionId, output, 'actual-commerce-order-request', ['Request saved locally for Shop review.']))
     const sourceTreeAfter = spawnSync('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })
     if (sourceTreeAfter.status !== 0 || sourceTreeAfter.stdout.trim() !== showroomTree.stdout.trim())

@@ -474,6 +474,8 @@ self.addEventListener('fetch', (event) => {
 
 const publicDir = resolve(root, 'showroom', 'public-app')
 await mkdir(publicDir, { recursive: true })
+const fontDir = resolve(publicDir, 'fonts')
+await mkdir(fontDir, { recursive: true })
 await Promise.all([
   writeFile(resolve(publicDir, '__release.json'), `${JSON.stringify(release, null, 2)}\n`, 'utf8'),
   writeFile(resolve(publicDir, 'favicon.svg'), favicon, 'utf8'),
@@ -482,6 +484,8 @@ await Promise.all([
   writeFile(resolve(publicDir, 'theme-restore.js'), themeRestoreScript, 'utf8'),
   writeFile(resolve(publicDir, 'sw-register.js'), serviceWorkerRegisterScript, 'utf8'),
   writeFile(resolve(publicDir, 'vercel-insights.js'), insightsScript, 'utf8'),
+  writeFile(resolve(fontDir, 'noto-sans-myanmar.woff2'), await readFile(resolve(root, 'tools', 'public-assets', 'noto-sans-myanmar.woff2'))),
+  writeFile(resolve(fontDir, 'noto-sans-myanmar-OFL.txt'), await readFile(resolve(root, 'tools', 'public-assets', 'noto-sans-myanmar-OFL.txt'))),
   ...rasterIcons.map(([name, bytes]) => writeFile(resolve(publicDir, name), bytes)),
 ])
 console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release', commit: release.commit }))
