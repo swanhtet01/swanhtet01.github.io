@@ -1327,6 +1327,13 @@ export function WebsiteProduct() {
     }
   }
 
+  if (storageMode === 'managed' && (!managedActorId || !managedWorkspaceId)) {
+    return <main className="website-product"><div className="website-shell"><section className="website-main" role="status">
+      <h1>{storageIssue ? 'Website unavailable' : 'Opening your website'}</h1>
+      <p>{storageIssue || 'Loading your company workspace…'}</p>
+    </section></div></main>
+  }
+
   return (
     <WebsiteMediaContext.Provider value={mediaContext}><div className="website-product">
       <div className="website-shell">
