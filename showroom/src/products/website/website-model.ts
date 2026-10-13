@@ -24,10 +24,19 @@ export function websiteEditSessionStorageKey(scope: string) {
   return `${WEBSITE_EDIT_SESSION_KEY}.${encodeURIComponent(scope)}`
 }
 
-// The scopes a device-local workspace can hold an unsaved preview under -- WebsiteProduct uses the
-// storage mode itself as the scope for anything that is not a signed-in company account. A managed
-// scope is `managed:<actorId>` and belongs to the company record, not to this device.
+// Device-local drafts use the storage mode. Managed drafts must include both the operator and
+// company workspace so a draft cannot be reopened against another company's identical starter.
 export const WEBSITE_LOCAL_EDIT_SESSION_SCOPES = ['browser-local', 'session-only'] as const
+
+export function websiteEditSessionScope(
+  storageMode: 'managed' | typeof WEBSITE_LOCAL_EDIT_SESSION_SCOPES[number],
+  managedActorId: string,
+  managedWorkspaceId: string,
+): string {
+  if (storageMode !== 'managed') return storageMode
+  if (!managedActorId || !managedWorkspaceId) return ''
+  return `managed:${encodeURIComponent(managedActorId)}:${encodeURIComponent(managedWorkspaceId)}`
+}
 
 const WEBSITE_MUTATION_LOCK = 'supermega.website.workspace.mutation.v2'
 const WEBSITE_RECOVERY_SCHEMA = 'supermega.website.workspace.recovery.v1'

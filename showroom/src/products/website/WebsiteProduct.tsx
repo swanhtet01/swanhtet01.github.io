@@ -60,6 +60,7 @@ import {
   restoreWebsiteEditSession,
   updateWebsiteEditSession,
   websiteEditSessionMatches,
+  websiteEditSessionScope,
   websiteEditSessionStorageKey,
   workspaceFingerprint,
   type WebsiteSourceRef,
@@ -323,9 +324,7 @@ export function WebsiteProduct() {
   const [inquiryFilter, setInquiryFilter] = useState<'all' | WebsiteLead['status']>('all')
   const [inquirySearch, setInquirySearch] = useState('')
   const [inquiryDrafts, setInquiryDrafts] = useState<Record<string, InquiryDraft>>({})
-  const editSessionScope = storageMode === 'managed'
-    ? managedActorId ? `managed:${managedActorId}` : ''
-    : storageMode
+  const editSessionScope = websiteEditSessionScope(storageMode, managedActorId, managedWorkspaceId)
   const activeEditSession = editSessionState?.scope === editSessionScope ? editSessionState.session : null
   const pendingRestoredDraft = restoredDraftState?.scope === editSessionScope ? restoredDraftState : null
   const editorWorkspace = activeEditSession?.workspace ?? workspace
