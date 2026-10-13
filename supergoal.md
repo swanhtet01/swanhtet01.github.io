@@ -1,12 +1,18 @@
 # SuperMega Supergoal
 
-Version: 1.4.22
+Version: 1.4.23
 Owner: Swan Htet, Founder
 Maintainer: CTO, sole integration writer
-Updated: 2026-10-13
+Updated: 2026-10-14
 Status: ACTIVE — implementation and acceptance in progress; not production-ready.
 
-## Current checkpoint — 13 October
+## Current checkpoint — 14 October
+
+The integration stack remains draft and unmerged: [#651](https://github.com/swanhtet01/swanhtet01.github.io/pull/651) implements the owner-confirmed 30-day contact-redaction clock after an operator closes an unconverted web request with a reason; [#652](https://github.com/swanhtet01/swanhtet01.github.io/pull/652) binds isolated real-component gallery candidates to source and hashes; [#653](https://github.com/swanhtet01/swanhtet01.github.io/pull/653) simplifies the actual Shop counter; and [#654](https://github.com/swanhtet01/swanhtet01.github.io/pull/654) gives saved Sites photos properly sized editor cards. The #654 source commit is `3931e02233d0ec689395e3e837249a3985c5434d`, stacked on #653. Its isolated 1440px and 390px browser checks used three generated photos only as synthetic QA inputs; those files are not customer templates or public-gallery evidence. Local Sites image/backend parity, app build and artifact verification pass. Exact-head CI, hosted managed media, sign-in, save/reload, recovery and cross-workspace isolation remain separate acceptance gates. The public gallery remains unpublished; the live site and products have not changed through these draft PRs.
+
+**Next product task:** make the Sites first-use page genuinely photo-ready with owner-supplied or clearly chosen licensed template media, then verify a managed upload → save → reload → customer preview journey in an authorized preview. Keep the public site truthful to the actual app shell, and do not promote the synthetic QA photos as customer examples. Repairing the non-production preview migration chain is separately owner-gated; no Supabase provider write has occurred. After that, complete the Commerce buyer-to-operator-to-Shop path and Shop scanner/receipt acceptance before launch claims. The external launch-control record at `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md` tracks the evidence and release blockers.
+
+## Prior checkpoint — 13 October
 
 The last application-code commit in the CTO integration checkout `pr648-base-integration-20261013` is `16d2063e14be1c51e4d4d1482964da32264309e5` on draft [PR #648](https://github.com/swanhtet01/swanhtet01.github.io/pull/648); subsequent Supergoal updates are documentation only. [App CI](https://github.com/swanhtet01/swanhtet01.github.io/actions/runs/38370331884) and GitGuardian passed at that code commit. The PR has no independent review or deployment. Source includes the simplified bilingual public contact form and seven illustrative, actual-component synthetic gallery assets. The [live contact page](https://supermega.dev/contact/) still has the old fields and each live product page shows one illustrative image. Neither the older generated multi-image output nor local synthetic captures proves exact-head hosted product visuals. Managed founder sign-in, workspace save/reload/recovery/isolation and the full Sites publish/inquiry journey remain unaccepted. Keep the PR draft and the live domain unchanged until those gates and an eligible independent review pass. The external launch-control record is `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md`.
 
