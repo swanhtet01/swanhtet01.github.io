@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { readFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import test from 'node:test'
@@ -107,11 +108,24 @@ test('rejects write authority, credentials, altered migration scope, and stale p
   )
 })
 
-test('the generated plan verifies byte-for-byte against current source and readback', async () => {
+test('the historical plan stays bound to its original receipt after source migrations change', async () => {
   const plan = JSON.parse(await readFile(planPath, 'utf8'))
   const validated = await validateRecoveryPlan(plan)
   assert.equal(validated.decision.action, 'repair')
   assert.equal(validated.execution.authorized, false)
+  assert.equal(validated.integrationBaseCommit, readback.sourceCommit)
+})
+
+test('the CLI refuses to regenerate and overwrite the historical repair packet', async () => {
+  const before = await readFile(planPath, 'utf8')
+  const attempted = spawnSync(process.execPath, ['tools/prepare_supabase_preview_recovery_plan.mjs'], {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: 15000,
+  })
+  assert.notEqual(attempted.status, 0)
+  assert.match(attempted.stderr, /supabase_preview_recovery_historical_plan_regeneration_disabled/)
+  assert.equal(await readFile(planPath, 'utf8'), before)
 })
 
 test('the repair receipt binds the exact source migrations and retained provider limitation', async () => {
