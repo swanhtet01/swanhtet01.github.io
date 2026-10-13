@@ -47,7 +47,7 @@ WEBSITE_HUMAN_EVENTS = frozenset(
 
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _MAX_PAGES = 4
-_MAX_SECTIONS = 4
+_MAX_SECTIONS = 12
 _EVIDENCE_KINDS = frozenset({"content", "responsive", "links"})
 _WORKFLOW_ACTIONS = frozenset(
     {

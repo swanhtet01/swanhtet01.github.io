@@ -42,6 +42,19 @@ test('customer preview renders escaped public content with no active links or bu
   assert.ok(html.includes('links and publishing are disabled'))
   assert.doesNotMatch(html, /<script|<img|href=|javascript:|<input|<form|<textarea/)
 })
+
+test('prepared public photos appear beside their review copy without a referrer', () => {
+  const prepared = page('Home')
+  prepared.hero.image = { src: 'https://example.com/hero.webp', alt: 'Storefront', decorative: false }
+  prepared.sections[0].image = { src: 'https://example.com/service.webp', alt: 'Service', decorative: false }
+  const html = render([prepared])
+  assert.equal((html.match(/<img\b/g) ?? []).length, 2)
+  assert.ok(html.includes('src="https://example.com/hero.webp"'))
+  assert.ok(html.includes('src="https://example.com/service.webp"'))
+  assert.ok(html.includes('referrerPolicy="no-referrer"'))
+  assert.ok(html.includes('alt="Storefront"'))
+  assert.doesNotMatch(html, /<a\b|<iframe|<script/)
+})
 test('page selection renders exactly one page and exposes accessible navigation', () => {
   const html = render([page('Home', 'Home headline'), page('Services', 'Services headline')], 'Services')
   assert.ok(html.includes('Services headline'))

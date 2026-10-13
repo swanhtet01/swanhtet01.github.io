@@ -76,6 +76,34 @@ class CustomerReviewTests(unittest.TestCase):
         self.assertNotEqual(result["preview"], self.review["preview"])
         self.assertEqual(self.project()["preview"], self.review["preview"])
 
+    def test_twelve_sections_reach_the_prepared_review(self):
+        template = self.state["pages"][0]["sections"][0]
+        sections = [deepcopy(template) | {"id": f"section-{index}", "title": f"Service {index}"}
+                    for index in range(12)]
+        self.state["pages"][0]["hero"]["image"] = {
+            "src": "https://example.com/storefront.webp", "alt": "Storefront", "decorative": False,
+        }
+        sections[0]["image"] = {
+            "src": "https://example.com/service.webp", "alt": "Service", "decorative": False,
+        }
+        self.state["pages"][0]["sections"] = sections
+        self.review = self.prepare()
+        page = self.project()["preview"]["pages"][0]
+        self.assertEqual(len(page["sections"]), 12)
+        self.assertEqual(page["hero"]["image"]["alt"], "Storefront")
+        self.assertEqual(page["sections"][0]["image"]["alt"], "Service")
+
+        self.state["pages"][0]["sections"] = sections + [deepcopy(template) | {"id": "overflow"}]
+        with self.assertRaisesRegex(TrialValidationError, "section"):
+            self.prepare()
+
+    def test_unviewable_private_photo_cannot_be_prepared_for_acceptance(self):
+        self.state["pages"][0]["hero"]["image"] = {
+            "assetId": "a" * 64 + ".webp", "alt": "Storefront", "decorative": False,
+        }
+        with self.assertRaisesRegex(TrialValidationError, "private_media_unavailable"):
+            self.prepare()
+
     def test_stored_preview_cannot_add_private_fields(self):
         self.review["preview"]["leadLedger"] = {"private": "do not disclose"}
         with self.assertRaisesRegex(TrialValidationError, "stale_revision"):

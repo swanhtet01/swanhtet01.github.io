@@ -35,6 +35,57 @@ test('verifies Unicode prepared content and returns isolated copy', async () => 
   result.preview.pages[0].hero.headline = 'Changed locally'
   assert.equal(input.preview.pages[0].hero.headline, 'Welcome')
 })
+
+test('verifies four prepared pages with twelve sections each and rejects a thirteenth', async () => {
+  const review = fixture()
+  review.preview.pages = Array.from({ length: 4 }, (_, pageIndex) => ({
+    ...structuredClone(review.preview.pages[0]),
+    id: `page-${pageIndex}`,
+    slug: pageIndex ? `/page-${pageIndex}` : '/',
+    sections: Array.from({ length: 12 }, (_, sectionIndex) => ({
+      id: `section-${pageIndex}-${sectionIndex}`,
+      eyebrow: '', title: `Section ${sectionIndex + 1}`, body: 'အသေးစိတ်',
+    })),
+  }))
+  review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
+  const verified = await verifyCustomerWebsiteReview(review, reviewId, now)
+  assert.equal(verified.preview.pages.length, 4)
+  assert.equal(verified.preview.pages[3].sections.length, 12)
+
+  const longUnicodeUrl = `https://example.com/${'က'.repeat(2028)}`
+  for (const page of review.preview.pages) {
+    for (const section of page.sections) {
+      section.image = { src: longUnicodeUrl, alt: 'မြန်မာ', decorative: false }
+    }
+  }
+  const largePreviewBytes = new TextEncoder().encode(canonical(review.preview)).length
+  assert.ok(largePreviewBytes > 250000 && largePreviewBytes < 512 * 1024)
+  review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
+  await verifyCustomerWebsiteReview(review, reviewId, now)
+
+  review.preview.pages[3].sections.push({ id: 'overflow', eyebrow: '', title: 'Overflow', body: 'Too many' })
+  review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
+  await assert.rejects(verifyCustomerWebsiteReview(review, reviewId, now))
+})
+
+test('prepared content retains verified image references without accepting unsafe images', async () => {
+  const review = fixture()
+  review.preview.pages[0].hero.image = { src: 'https://example.com/hero.webp', alt: 'Storefront', decorative: false }
+  review.preview.pages[0].sections[0].image = { src: 'https://example.com/service.webp', alt: '', decorative: true }
+  review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
+  const verified = await verifyCustomerWebsiteReview(review, reviewId, now)
+  assert.equal(verified.preview.pages[0].hero.image.alt, 'Storefront')
+  assert.equal(verified.preview.pages[0].sections[0].image.src, 'https://example.com/service.webp')
+
+  review.preview.pages[0].sections[0].image = { assetId: `${'a'.repeat(64)}.webp`, alt: '', decorative: true }
+  review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
+  await assert.rejects(verifyCustomerWebsiteReview(review, reviewId, now))
+  review.preview.pages[0].sections[0].image = { src: 'https://example.com/service.webp', alt: '', decorative: true }
+
+  review.preview.pages[0].hero.image.src = 'javascript:alert(1)'
+  review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
+  await assert.rejects(verifyCustomerWebsiteReview(review, reviewId, now))
+})
 test('rejects wrong identity, expiry, invalid revision and publication assertion', async () => {
   for (const change of [{ reviewId: commandId }, { expiresAt: 'bad' }, { expiresAt: new Date(now).toISOString() },
     { contentRevision: -1 }, { contentRevision: 0.1 }, { publicationAuthorized: true }]) {
@@ -50,7 +101,7 @@ test('rejects tampered content and private or extra fields', async () => {
 })
 test('rejects broken nested types and out-of-bound collections', async () => {
   for (const mutate of [x => x.preview.pages = [], x => x.preview.pages[0].navigation.visible = 'yes',
-    x => x.preview.pages[0].sections = Array(5).fill({}), x => x.preview.pages[0].hero.headline = 12]) {
+    x => x.preview.pages[0].sections = Array(13).fill({}), x => x.preview.pages[0].hero.headline = 12]) {
     const value = fixture(); mutate(value)
     await assert.rejects(verifyCustomerWebsiteReview(value, reviewId, now))
   }

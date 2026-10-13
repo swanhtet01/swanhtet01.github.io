@@ -1,6 +1,7 @@
 import { isWebsiteImage, withWebsiteImage, type WebsiteImage } from './website-media.ts'
 import { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY } from '../product-storage-keys.ts'
 import type { WebsiteReleaseState } from './website-release-foundation'
+import { MAX_WEBSITE_PAGES, MAX_WEBSITE_SECTIONS } from './website-constraints.ts'
 import {
   readStoredWebsiteLeads,
   restoreWebsiteLeadLedger,
@@ -12,8 +13,7 @@ export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }
 export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
 export const WEBSITE_RECOVERY_INDEX_KEY = 'supermega.website.workspace.recovery.v1.index'
 export const WEBSITE_EDIT_SESSION_KEY = 'supermega.website.edit-session.v1'
-export const MAX_WEBSITE_PAGES = 4
-export const MAX_WEBSITE_SECTIONS = 4
+export { MAX_WEBSITE_PAGES, MAX_WEBSITE_SECTIONS }
 
 // An unsaved preview is NEVER stored under WEBSITE_EDIT_SESSION_KEY on its own. It is stored per
 // workspace identity, in sessionStorage, under this scoped key. The builder used to build that key

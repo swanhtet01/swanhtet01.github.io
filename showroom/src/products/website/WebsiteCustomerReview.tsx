@@ -8,6 +8,7 @@ import { customerWebsiteReviewLoginPath } from '../../core/account-routes'
 import './website-product.css'
 import './customer-review.css'
 import { reviewContactDestination } from './customer-review-contract'
+import type { WebsiteImage } from './website-media'
 
 type Pending = { identity: ManagedIdentity; payload: { reviewId: string; commandId: string; previewDigest: string; note: string } }
 type PendingAcceptance = { identity: ManagedIdentity; payload: { reviewId: string; commandId: string; previewDigest: string; decision: 'accept_preview_for_release_review' } }
@@ -179,8 +180,8 @@ export function PreparedWebsitePage({ review, pageId, onPageChange }: { review: 
       <nav className="customer-review-actions" aria-label="Prepared pages">{review.preview.pages.map(item => <button type="button" key={item.id} aria-current={item.id === page.id ? 'page' : undefined} onClick={() => onPageChange(item.id)}>{item.navigation.label || item.seo.title || 'Page'}</button>)}</nav>
       <article className="website-preview-site" aria-label="Prepared page review">
         <header className="preview-site-header"><strong>{review.preview.siteName}</strong><span>Private review</span></header>
-        <div className="preview-site-main"><section className="preview-hero"><span>{page.hero.eyebrow}</span><h2>{page.hero.headline}</h2><p>{page.hero.summary}</p>{page.hero.ctaLabel && <span className="preview-cta" aria-disabled="true">{page.hero.ctaLabel}</span>}</section>
-          <section className="preview-section-grid">{page.sections.map(section => <article key={section.id}><span>{section.eyebrow}</span><h3>{section.title}</h3><p>{section.body}</p></article>)}</section></div>
+        <div className="preview-site-main"><section className="preview-hero"><ReviewPhoto image={page.hero.image} priority /><span>{page.hero.eyebrow}</span><h2>{page.hero.headline}</h2><p>{page.hero.summary}</p>{page.hero.ctaLabel && <span className="preview-cta" aria-disabled="true">{page.hero.ctaLabel}</span>}</section>
+          <section className="preview-section-grid">{page.sections.map(section => <article key={section.id}><ReviewPhoto image={section.image} /><span>{section.eyebrow}</span><h3>{section.title}</h3><p>{section.body}</p></article>)}</section></div>
         <footer className="preview-site-footer">Review only · links and publishing are disabled</footer>
       </article>
       <details className="customer-review-details" key={page.id}>
@@ -194,4 +195,11 @@ export function PreparedWebsitePage({ review, pageId, onPageChange }: { review: 
         <p>Check these details before requesting changes. This is prepared text, not proof that a link works or that search engines have listed your site.</p>
       </details>
     </>
+}
+
+function ReviewPhoto({ image, priority = false }: { image?: WebsiteImage; priority?: boolean }) {
+  // Private asset IDs need a review-scoped media endpoint before they can be shown.
+  if (!image || !('src' in image)) return null
+  return <figure className="website-content-image"><img src={image.src} alt={image.alt}
+    decoding="async" loading={priority ? 'eager' : 'lazy'} referrerPolicy="no-referrer" /></figure>
 }
