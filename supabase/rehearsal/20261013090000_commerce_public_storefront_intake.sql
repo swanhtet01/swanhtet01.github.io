@@ -63,12 +63,26 @@ create table app_private.commerce_public_redaction_runs (
   max_rows integer not null check (max_rows between 1 and 500)
 );
 
+create table app_private.commerce_public_reconciliation_runs (
+  run_id uuid primary key,
+  ran_at timestamptz not null default clock_timestamp(),
+  reconciled_count integer not null check (reconciled_count between 0 and 500),
+  max_rows integer not null check (max_rows between 1 and 500)
+);
+
+create index commerce_public_close_event_reference
+  on app_private.workspace_events(workspace_id,
+    (payload_json #>> '{evidence,evidenceReference}'))
+  where surface = 'commerce' and event_type = 'commerce.storefront_request.closed';
+
 alter table app_private.commerce_public_storefronts enable row level security;
 alter table app_private.commerce_public_storefronts force row level security;
 alter table app_private.commerce_public_requests enable row level security;
 alter table app_private.commerce_public_requests force row level security;
 alter table app_private.commerce_public_redaction_runs enable row level security;
 alter table app_private.commerce_public_redaction_runs force row level security;
+alter table app_private.commerce_public_reconciliation_runs enable row level security;
+alter table app_private.commerce_public_reconciliation_runs force row level security;
 
 create policy commerce_public_storefront_member_read on app_private.commerce_public_storefronts
   for select to supermega_trial_backend using (
@@ -94,7 +108,7 @@ create policy commerce_public_request_member_read on app_private.commerce_public
     and app_private.website_review_can('commerce.write'));
 
 revoke all on app_private.commerce_public_storefronts, app_private.commerce_public_requests,
-  app_private.commerce_public_redaction_runs
+  app_private.commerce_public_redaction_runs, app_private.commerce_public_reconciliation_runs
   from public, anon, authenticated, service_role;
 grant select, insert, update on app_private.commerce_public_storefronts to supermega_trial_backend;
 grant select on app_private.commerce_public_requests to supermega_trial_backend;
@@ -361,6 +375,80 @@ begin
 end;
 $$;
 
+-- Repair only a Shop close already recorded by a human. A crashed request can
+-- leave the private row in review even after Shop removed the queue action.
+create function app_private.reconcile_commerce_public_closes(
+  p_run uuid, p_limit integer
+) returns integer language plpgsql security definer
+set search_path = pg_catalog, app_private as $$
+declare item app_private.commerce_public_requests%rowtype;
+  shop_state jsonb;
+  close_actor text;
+  event_reason text;
+  closure_at timestamptz;
+  prior integer;
+  changed integer := 0;
+begin
+  if p_run is null or p_limit not between 1 and 500 then
+    raise exception 'commerce_public_invalid' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('commerce-public-reconcile:' || p_run::text, 0));
+  select reconciled_count into prior from app_private.commerce_public_reconciliation_runs
+    where run_id = p_run for update;
+  if found then return prior; end if;
+  for item in
+    select request.* from app_private.commerce_public_requests request
+    where request.status in ('in_review', 'in_shop')
+      and exists (select 1 from app_private.workspace_events event
+        where event.workspace_id = request.workspace_id
+          and event.surface = 'commerce'
+          and event.event_type = 'commerce.storefront_request.closed'
+          and event.actor_kind = 'human'
+          and event.payload_json #>> '{evidence,evidenceReference}' =
+              'ECOMMERCE-CLOSE:' || request.shop_request_id || ':' ||
+              (event.payload_json #>> '{evidence,reason}'))
+    order by request.received_at, request.handle, request.request_id
+    limit p_limit for update of request skip locked
+  loop
+    select state_json into shop_state from app_private.workspace_state
+      where workspace_id = item.workspace_id and surface = 'commerce' for share;
+    if shop_state is null
+      or exists (select 1 from jsonb_array_elements(
+          coalesce(shop_state->'storefrontRequests', '[]'::jsonb)) queued
+          where queued->>'id' = item.shop_request_id)
+      or exists (select 1 from jsonb_array_elements(
+          coalesce(shop_state->'orders', '[]'::jsonb)) shop_order
+          where shop_order->>'sourceRecordId' = item.shop_request_id) then
+      continue;
+    end if;
+    select event.actor_id, event.payload_json #>> '{evidence,reason}', event.created_at
+      into close_actor, event_reason, closure_at
+      from app_private.workspace_events event
+      where event.workspace_id = item.workspace_id
+        and event.surface = 'commerce'
+        and event.event_type = 'commerce.storefront_request.closed'
+        and event.actor_kind = 'human'
+        and event.payload_json #>> '{evidence,evidenceReference}' =
+            'ECOMMERCE-CLOSE:' || item.shop_request_id || ':' ||
+            (event.payload_json #>> '{evidence,reason}')
+      order by event.created_at desc limit 1;
+    if close_actor is null or close_actor = '' or closure_at is null
+      or event_reason not in ('customer_withdrew', 'no_response', 'stock_unavailable',
+                              'spam_or_duplicate', 'other') then
+      raise exception 'commerce_public_close_state' using errcode = 'P0001';
+    end if;
+    update app_private.commerce_public_requests
+      set status = 'closed', close_reason = event_reason,
+          closed_by = close_actor, closed_at = closure_at
+      where handle = item.handle and request_id = item.request_id;
+    changed := changed + 1;
+  end loop;
+  insert into app_private.commerce_public_reconciliation_runs(run_id, reconciled_count, max_rows)
+    values (p_run, changed, p_limit);
+  return changed;
+end;
+$$;
+
 -- Keep only an opaque request-ID tombstone to reject old retries. Erase the
 -- contact-bearing JSON, input fingerprint and IP-derived abuse key.
 create function app_private.commerce_public_redaction_due_count(p_cap integer)
@@ -422,6 +510,7 @@ revoke all on function app_private.read_commerce_public_source(uuid),
   app_private.complete_commerce_public_request_claim(text,uuid,uuid),
   app_private.inspect_commerce_public_request(text,uuid,uuid),
   app_private.close_commerce_public_request(text,uuid,uuid,text),
+  app_private.reconcile_commerce_public_closes(uuid,integer),
   app_private.commerce_public_redaction_due_count(integer),
   app_private.redact_closed_commerce_public_requests(uuid,integer)
   from public, anon, authenticated, service_role;
@@ -432,6 +521,7 @@ grant execute on function app_private.read_commerce_public_source(uuid),
   app_private.complete_commerce_public_request_claim(text,uuid,uuid),
   app_private.inspect_commerce_public_request(text,uuid,uuid),
   app_private.close_commerce_public_request(text,uuid,uuid,text),
+  app_private.reconcile_commerce_public_closes(uuid,integer),
   app_private.commerce_public_redaction_due_count(integer),
   app_private.redact_closed_commerce_public_requests(uuid,integer)
   to supermega_trial_backend;

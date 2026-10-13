@@ -286,10 +286,12 @@ class CommercePublicSqlTests(unittest.TestCase):
                 has_function_privilege('anon','app_private.read_commerce_public_source(uuid)','EXECUTE'),
                 has_function_privilege('anon','app_private.close_commerce_public_request(text,uuid,uuid,text)','EXECUTE'),
                 has_function_privilege('service_role','app_private.inspect_commerce_public_request(text,uuid,uuid)','EXECUTE'),
+                has_function_privilege('service_role','app_private.reconcile_commerce_public_closes(uuid,integer)','EXECUTE'),
                 has_function_privilege('authenticated','app_private.redact_closed_commerce_public_requests(uuid,integer)','EXECUTE'),
                 has_function_privilege('service_role','app_private.commerce_public_redaction_due_count(integer)','EXECUTE'),
-                has_table_privilege('service_role','app_private.commerce_public_redaction_runs','SELECT')""").fetchone()
-        self.assertEqual(row, (False, False, False, False, False, False, False, False))
+                has_table_privilege('service_role','app_private.commerce_public_redaction_runs','SELECT'),
+                has_table_privilege('service_role','app_private.commerce_public_reconciliation_runs','SELECT')""").fetchone()
+        self.assertEqual(row, (False,) * 10)
 
     def test_unclaimed_close_and_thirty_day_redaction_leave_an_opaque_tombstone(self):
         publication = self.adapter.publish(self.owner, expected_version=1)
@@ -364,8 +366,10 @@ class CommercePublicSqlTests(unittest.TestCase):
             state = connection.execute("""select state_json from app_private.workspace_state
                 where workspace_id=%s and surface='commerce'""", (self.workspace_id,)).fetchone()[0]
             journal = connection.execute("""select payload_json from app_private.workspace_events
-                where workspace_id=%s and event_type='commerce.storefront_request.closed'""",
-                (self.workspace_id,)).fetchone()[0]
+                where workspace_id=%s and event_type='commerce.storefront_request.closed'
+                  and payload_json #>> '{evidence,evidenceReference}' = %s""",
+                (self.workspace_id,
+                 f"ECOMMERCE-CLOSE:{claim['shopRequestId']}:customer_withdrew")).fetchone()[0]
         self.assertEqual(row[:3], ('closed', 'customer_withdrew', self.owner.actor_id))
         self.assertIsNotNone(row[3])
         self.assertEqual(row[4]['phone'], body['phone'])
@@ -413,11 +417,53 @@ class CommercePublicSqlTests(unittest.TestCase):
             closed_at = connection.execute("""select closed_at from app_private.commerce_public_requests
                 where handle=%s and request_id=%s""", (handle, body['requestId'])).fetchone()[0]
             event_at = connection.execute("""select created_at from app_private.workspace_events
-                where workspace_id=%s and event_type='commerce.storefront_request.closed'""",
-                (self.workspace_id,)).fetchone()[0]
+                where workspace_id=%s and event_type='commerce.storefront_request.closed'
+                  and payload_json #>> '{evidence,evidenceReference}' = %s""",
+                (self.workspace_id, f'ECOMMERCE-CLOSE:{shop_id}:{reason}')).fetchone()[0]
         self.assertEqual(closed_at, event_at)
         self.assertTrue(self.adapter.close(self.owner, handle=handle,
             request_id=body['requestId'], reason=reason)['duplicate'])
+
+    def test_reconciliation_repairs_only_proven_close_and_replays_its_receipt(self):
+        from datetime import datetime, timezone
+        publication = self.adapter.publish(self.owner, expected_version=1)
+        handle = publication['handle']
+        active = _body()
+        closed = _body()
+        self.adapter.receive(handle=handle, body=active, client_key='e' * 64)
+        self.adapter.claim(self.owner, handle=handle, request_id=active['requestId'])
+        self.adapter.receive(handle=handle, body=closed, client_key='f' * 64)
+        claim = self.adapter.claim(self.owner, handle=handle, request_id=closed['requestId'])
+        with self.pg._connect(self.admin_url) as connection:
+            version = connection.execute("""select version from app_private.workspace_state
+                where workspace_id=%s and surface='commerce'""", (self.workspace_id,)).fetchone()[0]
+        shop_id = claim['shopRequestId']
+        self.adapter.store.apply_command(self.owner, command_id=uuid4(),
+            surface='commerce', event_type='commerce.storefront_request.closed',
+            expected_version=version, payload={
+                'intent': {'requestId': shop_id, 'reason': 'no_response'},
+                'evidence': {'actionId': 'ACT-' + str(uuid4()).upper(),
+                    'capturedAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                    'actor': self.owner.actor_id, 'reason': 'no_response',
+                    'evidenceReference': f'ECOMMERCE-CLOSE:{shop_id}:no_response'}})
+        run_id = str(uuid4())
+        self.assertEqual(self.adapter.reconcile_closes(run_id=run_id, limit=1), 1)
+        self.assertEqual(self.adapter.reconcile_closes(run_id=run_id, limit=1), 1)
+        self.assertEqual(self.adapter.reconcile_closes(run_id=str(uuid4()), limit=1), 0)
+        with self.pg._connect(self.admin_url) as connection:
+            rows = connection.execute("""select request_id,status,close_reason,closed_by,closed_at
+                from app_private.commerce_public_requests where handle=%s""", (handle,)).fetchall()
+            event_at = connection.execute("""select created_at from app_private.workspace_events
+                where workspace_id=%s and event_type='commerce.storefront_request.closed'
+                  and payload_json #>> '{evidence,evidenceReference}' = %s""",
+                (self.workspace_id, f'ECOMMERCE-CLOSE:{shop_id}:no_response')).fetchone()[0]
+            receipts = connection.execute("""select count(*) from app_private.commerce_public_reconciliation_runs
+                where run_id=%s""", (run_id,)).fetchone()[0]
+        by_id = {str(row[0]): row[1:] for row in rows}
+        self.assertEqual(by_id[active['requestId']][0], 'in_shop')
+        self.assertEqual(by_id[closed['requestId']],
+            ('closed', 'no_response', self.owner.actor_id, event_at))
+        self.assertEqual(receipts, 1)
 
     def test_delivery_contact_stays_private_when_shop_receives_request(self):
         publication = self.adapter.publish(self.owner, expected_version=1)

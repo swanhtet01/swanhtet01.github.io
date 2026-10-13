@@ -109,9 +109,9 @@ def _require_public_schema(cursor: Any) -> None:
         from pg_class c join pg_namespace n on n.oid=c.relnamespace
         where n.nspname='app_private' and c.relname in
           ('commerce_public_storefronts','commerce_public_requests',
-           'commerce_public_redaction_runs')""")
+           'commerce_public_redaction_runs','commerce_public_reconciliation_runs')""")
     tables = cursor.fetchall()
-    if (len(tables) != 3 or any(not row['relrowsecurity'] or not row['relforcerowsecurity']
+    if (len(tables) != 4 or any(not row['relrowsecurity'] or not row['relforcerowsecurity']
             or row['anon_read'] or row['auth_read'] or row['service_read'] for row in tables)):
         raise TrialNotReadyError(('commerce_public_schema_unverified',))
     cursor.execute("""select p.proname,p.prosecdef,p.proconfig,
@@ -124,10 +124,11 @@ def _require_public_schema(cursor: Any) -> None:
            'replay_commerce_public_request','reserve_commerce_public_request',
            'complete_commerce_public_request_claim','inspect_commerce_public_request',
            'close_commerce_public_request',
+           'reconcile_commerce_public_closes',
            'redact_closed_commerce_public_requests',
            'commerce_public_redaction_due_count')""")
     functions = cursor.fetchall()
-    if (len(functions) != 9 or any(not row['prosecdef']
+    if (len(functions) != 10 or any(not row['prosecdef']
             or 'search_path=pg_catalog, app_private' not in (row['proconfig'] or [])
             or row['anon_exec'] or row['auth_exec'] or row['service_exec'] for row in functions)):
         raise TrialNotReadyError(('commerce_public_schema_unverified',))
@@ -535,6 +536,26 @@ class CommercePublicStorefront:
                            (principal.workspace_id, handle, request_id, reason))
             result = cursor.fetchone()['result']
         return {'handle': handle, 'requestId': request_id, **result}
+
+    def reconcile_closes(self, *, run_id: str, limit: int = 100) -> int:
+        """Repair proven Shop close events without impersonating their human actor."""
+        if not 1 <= limit <= 500:
+            raise TrialValidationError('commerce_public_invalid')
+        try:
+            run = str(UUID(run_id))
+        except (ValueError, TypeError, AttributeError):
+            raise TrialValidationError('commerce_public_invalid') from None
+        if not self.store.write_enabled:
+            raise TrialNotReadyError(('write_enabled',))
+        with self.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                self.store._assert_runtime_role(cursor)
+                self.store._assert_schema(cursor)
+                _require_public_schema(cursor)
+                cursor.execute("set local statement_timeout='10s'")
+                cursor.execute('select app_private.reconcile_commerce_public_closes(%s,%s) as count',
+                               (run, limit))
+                return int(cursor.fetchone()['count'])
 
     def redact_due(self, *, run_id: str, limit: int = 100) -> int:
         """Internal bounded maintenance entrypoint; not mounted on HTTP routes."""
