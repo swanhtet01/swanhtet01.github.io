@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 import unittest
+from uuid import uuid4
 
-from supermega_runtime.trial_store import TrialValidationError
+from supermega_runtime.trial_store import InMemoryTrialStore, TrialPrincipal, TrialValidationError
 from supermega_runtime.website_runtime import (
     WEBSITE_EVENTS,
     WEBSITE_HUMAN_EVENTS,
@@ -513,6 +515,48 @@ class WebsiteRuntimeTests(unittest.TestCase):
                 state,
                 _command(unchanged, action_id="content-2", reason="Website draft content saved", reference="website:content:1"),
             )
+
+    def test_four_twelve_section_pages_save_and_reload_above_the_old_json_bound(self) -> None:
+        state = _state()
+        pages = []
+        for page_index in range(4):
+            page = _page("page-home" if page_index == 0 else f"page-{page_index}",
+                         "/" if page_index == 0 else f"/page-{page_index}")
+            page["sections"] = [
+                {"id": f"section-{page_index}-{section_index}", "eyebrow": "လုပ်ငန်း",
+                 "title": f"ဝန်ဆောင်မှု {section_index}", "body": "က" * 360,
+                 "image": {"src": "https://example.com/" + "a" * 1000,
+                           "alt": "Service", "decorative": False}}
+                for section_index in range(12)
+            ]
+            pages.append(page)
+        state["pages"] = pages
+        self.assertGreater(len(json.dumps(state, ensure_ascii=False).encode("utf-8")), 64 * 1024)
+
+        store = InMemoryTrialStore(
+            reducer=lambda surface, event, current, payload: reduce_website_state(event, current, payload),
+        )
+        actor = TrialPrincipal("workspace-a", "actor-human", actor_kind="human")
+        store.provision_membership(workspace_id="workspace-a", actor_id="actor-human",
+                                   actor_kind="human", capabilities=("website.write",))
+        initialized = store.apply_command(
+            actor, command_id=str(uuid4()), surface="website",
+            event_type="website.workspace.initialized", expected_version=0,
+            payload=_command(state, action_id="init", reason="Initialize", reference="website:revision:0"),
+        )
+        self.assertEqual(initialized.state, state)
+        self.assertEqual(store.get_state(actor, "website").state, state)
+
+        changed = deepcopy(state)
+        changed["revision"] = changed["contentRevision"] = 1
+        changed["pages"][0]["sections"][0]["body"] = "နောက်ဆုံးပြင်ဆင်ချက်"
+        saved = store.apply_command(
+            actor, command_id=str(uuid4()), surface="website",
+            event_type="website.content.saved", expected_version=1,
+            payload=_command(changed, action_id="content-1", reason="Update page", reference="website:content:1"),
+        )
+        self.assertEqual(saved.version, 2)
+        self.assertEqual(store.get_state(actor, "website").state, changed)
 
     def test_release_records_require_exact_append_only_lifecycle(self) -> None:
         current = _state()
