@@ -129,3 +129,7 @@ jobs:
             --out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json" \
             --screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR" \
             --expected-head "$SUPERMEGA_CI_SOURCE_SHA"
+          node tools/validate_app_entry_rendered_report.mjs \
+            --report "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json" \
+            --expected-head "$SUPERMEGA_CI_SOURCE_SHA" \
+            --expected-scope auth-entry
