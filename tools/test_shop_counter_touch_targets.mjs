@@ -34,8 +34,9 @@ test('base counter quantity controls support tablet touch without a phone breakp
   assert.match(desktopCounterRule, /\.shop-counter-grid \{ height: 100%; grid-template-rows: minmax\(0,1fr\); \}/)
   assert.match(desktopCounterRule, /\.shop-catalog-panel, \.shop-current-sale, \.shop-counter-followup \{ min-height: 0; overflow-y: auto; \}/)
   assert.doesNotMatch(desktopCounterRule, /\.shop-counter-followup \{ grid-column:/)
-  const compactDesktopRule = css.match(/@media \(max-width: 1200px\) and \(min-width: 841px\) \{([\s\S]*?)\n\}/)?.[1]
-  assert.match(compactDesktopRule, /\.shop-counter-grid \{ grid-template-columns: minmax\(20rem, \.94fr\) minmax\(24rem, 1\.06fr\); grid-template-rows: minmax\(0,1fr\) auto; \}/)
+  const compactDesktopRule = css.match(/@media \(max-width: 1380px\) and \(min-width: 841px\) \{([\s\S]*?)\n\}/)?.[1]
+  assert.match(compactDesktopRule, /\.shop-counter-module > \.shop-counter-surface \{ height: auto; min-height: 0; \}/)
+  assert.match(compactDesktopRule, /\.shop-counter-grid \{ height: auto; grid-template-columns: minmax\(20rem, \.94fr\) minmax\(24rem, 1\.06fr\); grid-template-rows: clamp\(36rem,calc\(100svh - 14rem\),42\.5rem\) auto; \}/)
   assert.match(compactDesktopRule, /\.shop-counter-followup \{ grid-column: 1 \/ -1;/)
   const tabletRule = css.match(/@media \(max-width: 1080px\) and \(min-width: 841px\) \{([\s\S]*?)\n\}/)?.[1]
   assert.match(tabletRule, /\.shop-counter-column-head \{ display: none; \}/)
@@ -43,7 +44,8 @@ test('base counter quantity controls support tablet touch without a phone breakp
   assert.match(app, /const CASHIER_SAVE_MY = confirmedBurmese\('Save'\)/)
   assert.match(app, /className="cashier-action-label"/)
   assert.match(css, /\.cashier-action-label > small\[lang="my"\]/)
-  assert.match(css, /\.shop-review-sale \{ min-height: 3\.75rem;/)
+  assert.match(css, /\.shop-review-sale \{ min-height: 4\.5rem;/)
+  assert.match(css, /\.shop-review-sale \.cashier-action-label > small\[lang="my"\] \{[^}]*white-space: nowrap;/)
   assert.match(i18n, /export function confirmedBurmese\(en: string\): string \| null/)
   assert.match(i18n, /return entry\?\.status === 'confirmed' \? entry\.my : null/)
 })

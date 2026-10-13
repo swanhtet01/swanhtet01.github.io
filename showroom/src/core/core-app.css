@@ -3012,9 +3012,10 @@ input, select, textarea,
 .shop-cart-actions .text-link .bi-label,
 .shop-review-sale .bi-label,
 .receipt-dialog-actions .core-button .bi-label { white-space: normal; text-align: left; }
-.shop-review-sale { min-height: 3.75rem; gap: var(--space-3); }
+.shop-review-sale { min-height: 4.5rem; gap: var(--space-3); padding-block: .5rem; }
 .cashier-action-label { display: inline-grid; gap: .375rem; min-width: 0; text-align: left; line-height: 1.25; }
 .cashier-action-label > small[lang="my"] { color: currentColor; font-size: .875em; font-weight: 650; line-height: 1.7; opacity: .88; }
+.shop-review-sale .cashier-action-label > small[lang="my"] { font-family: "Myanmar Text", "Noto Sans Myanmar", Padauk, sans-serif; font-size: .875rem; line-height: 1.8; white-space: nowrap; }
 .core-button.compact .cashier-action-label { text-align: center; }
 .shop-cart-actions { flex-wrap: wrap; }
 /* Unsubmitted local tickets stay secondary to checkout, with touch-sized actions. */
@@ -3120,8 +3121,9 @@ input, select, textarea,
   .shop-counter-grid { height: 100%; grid-template-rows: minmax(0,1fr); }
   .shop-catalog-panel, .shop-current-sale, .shop-counter-followup { min-height: 0; overflow-y: auto; }
 }
-@media (max-width: 1200px) and (min-width: 841px) {
-  .shop-counter-grid { grid-template-columns: minmax(20rem, .94fr) minmax(24rem, 1.06fr); grid-template-rows: minmax(0,1fr) auto; }
+@media (max-width: 1380px) and (min-width: 841px) {
+  .shop-counter-module > .shop-counter-surface { height: auto; min-height: 0; }
+  .shop-counter-grid { height: auto; grid-template-columns: minmax(20rem, .94fr) minmax(24rem, 1.06fr); grid-template-rows: clamp(36rem,calc(100svh - 14rem),42.5rem) auto; }
   .shop-catalog-panel, .shop-current-sale { min-height: 0; overflow-y: auto; }
   .shop-counter-followup { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(12rem,.8fr) minmax(18rem,1.2fr); align-items: start; overflow: visible; }
   .shop-counter-followup > header { border: 0; padding: 0; }
