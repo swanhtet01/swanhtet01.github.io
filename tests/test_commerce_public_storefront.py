@@ -287,11 +287,13 @@ class CommercePublicSqlTests(unittest.TestCase):
                 has_function_privilege('anon','app_private.close_commerce_public_request(text,uuid,uuid,text)','EXECUTE'),
                 has_function_privilege('service_role','app_private.inspect_commerce_public_request(text,uuid,uuid)','EXECUTE'),
                 has_function_privilege('service_role','app_private.reconcile_commerce_public_closes(uuid,integer)','EXECUTE'),
+                has_function_privilege('anon','app_private.commerce_public_reconciliation_due_count(integer)','EXECUTE'),
+                has_function_privilege('service_role','app_private.commerce_public_reconciliation_due_count(integer)','EXECUTE'),
                 has_function_privilege('authenticated','app_private.redact_closed_commerce_public_requests(uuid,integer)','EXECUTE'),
                 has_function_privilege('service_role','app_private.commerce_public_redaction_due_count(integer)','EXECUTE'),
                 has_table_privilege('service_role','app_private.commerce_public_redaction_runs','SELECT'),
                 has_table_privilege('service_role','app_private.commerce_public_reconciliation_runs','SELECT')""").fetchone()
-        self.assertEqual(row, (False,) * 10)
+        self.assertEqual(row, (False,) * 12)
 
     def test_unclaimed_close_and_thirty_day_redaction_leave_an_opaque_tombstone(self):
         publication = self.adapter.publish(self.owner, expected_version=1)
@@ -447,7 +449,10 @@ class CommercePublicSqlTests(unittest.TestCase):
                     'actor': self.owner.actor_id, 'reason': 'no_response',
                     'evidenceReference': f'ECOMMERCE-CLOSE:{shop_id}:no_response'}})
         run_id = str(uuid4())
+        self.assertEqual(self.adapter.reconciliation_due_count(cap=1), 1)
+        self.assertEqual(self.adapter.redaction_due_count(cap=1), 0)
         self.assertEqual(self.adapter.reconcile_closes(run_id=run_id, limit=1), 1)
+        self.assertEqual(self.adapter.reconciliation_due_count(cap=1), 0)
         self.assertEqual(self.adapter.reconcile_closes(run_id=run_id, limit=1), 1)
         self.assertEqual(self.adapter.reconcile_closes(run_id=str(uuid4()), limit=1), 0)
         with self.pg._connect(self.admin_url) as connection:

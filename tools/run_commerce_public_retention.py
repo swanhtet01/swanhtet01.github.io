@@ -100,25 +100,34 @@ def run_maintenance(adapter: Any, *, apply: bool, run_id: str | None, limit: int
         run_id = _run_id(run_id)
     elif run_id is not None:
         raise RetentionConfigurationError('retention_run_id_without_apply')
-    due_before = adapter.redaction_due_count(cap=limit)
+    reconciliation_due_before = adapter.reconciliation_due_count(cap=limit)
+    redaction_due_before = adapter.redaction_due_count(cap=limit)
     if not apply:
         return {
             'ok': True, 'contract': CONTRACT, 'mode': 'check',
-            'status': 'overdue' if due_before else 'clear',
-            'redactionDueCapped': due_before, 'cap': limit,
+            'status': ('overdue' if redaction_due_before else
+                       'reconciliation_due' if reconciliation_due_before else 'clear'),
+            'reconciliationDueCapped': reconciliation_due_before,
+            'redactionDueCapped': redaction_due_before, 'cap': limit,
             'databaseWritesPerformed': False, 'customerDataIncluded': False,
         }
     reconciled = adapter.reconcile_closes(run_id=run_id, limit=limit)
     redacted = adapter.redact_due(run_id=run_id, limit=limit)
-    due_after = adapter.redaction_due_count(cap=1)
+    reconciliation_due_after = adapter.reconciliation_due_count(cap=1)
+    redaction_due_after = adapter.redaction_due_count(cap=1)
     limit_reached = reconciled == limit
     return {
         'ok': True, 'contract': CONTRACT, 'mode': 'apply',
-        'status': 'overdue' if due_after else ('more_possible' if limit_reached else 'clear'),
+        'status': ('overdue' if redaction_due_after else
+                   'reconciliation_due' if reconciliation_due_after else
+                   'more_possible' if limit_reached else 'clear'),
         'runId': run_id,
         'reconciled': reconciled, 'redacted': redacted,
         'reconciliationLimitReached': limit_reached,
-        'redactionDueBeforeCapped': due_before, 'redactionDueAfterCapped': due_after,
+        'reconciliationDueBeforeCapped': reconciliation_due_before,
+        'reconciliationDueAfterCapped': reconciliation_due_after,
+        'redactionDueBeforeCapped': redaction_due_before,
+        'redactionDueAfterCapped': redaction_due_after,
         'cap': limit, 'databaseWritesPerformed': True, 'customerDataIncluded': False,
     }
 

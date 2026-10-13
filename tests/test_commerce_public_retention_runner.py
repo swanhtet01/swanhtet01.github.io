@@ -36,17 +36,32 @@ def invoke(args, env, factory):
 class CommercePublicRetentionRunnerTests(unittest.TestCase):
     def test_check_is_read_only_and_overdue_is_monitorable(self):
         adapter = Mock()
+        adapter.reconciliation_due_count.return_value = 0
         adapter.redaction_due_count.return_value = 2
         factory = Mock(return_value=adapter)
         code, receipt = invoke(['--expected-target', 'preview', '--limit', '20'], environment(), factory)
         self.assertEqual(code, 2)
         self.assertEqual(receipt['status'], 'overdue')
+        self.assertEqual(receipt['reconciliationDueCapped'], 0)
         self.assertEqual(receipt['redactionDueCapped'], 2)
         self.assertFalse(receipt['databaseWritesPerformed'])
         self.assertFalse(receipt['customerDataIncluded'])
         adapter.reconcile_closes.assert_not_called()
         adapter.redact_due.assert_not_called()
         factory.assert_called_once_with(URL, False)
+
+    def test_check_reports_stranded_human_close_before_redaction_is_due(self):
+        adapter = Mock()
+        adapter.reconciliation_due_count.return_value = 1
+        adapter.redaction_due_count.return_value = 0
+        code, receipt = invoke(['--expected-target', 'preview'], environment(),
+                               Mock(return_value=adapter))
+        self.assertEqual(code, 2)
+        self.assertEqual(receipt['status'], 'reconciliation_due')
+        self.assertEqual(receipt['reconciliationDueCapped'], 1)
+        self.assertFalse(receipt['databaseWritesPerformed'])
+        adapter.reconcile_closes.assert_not_called()
+        adapter.redact_due.assert_not_called()
 
     def test_apply_requires_enablement_before_connecting(self):
         factory = Mock()
@@ -102,6 +117,7 @@ class CommercePublicRetentionRunnerTests(unittest.TestCase):
     def test_apply_reconciles_before_redaction_and_checks_backlog(self):
         calls = []
         adapter = Mock()
+        adapter.reconciliation_due_count.side_effect = lambda *, cap: calls.append(('reconciliation_due', cap)) or 0
         adapter.redaction_due_count.side_effect = lambda *, cap: calls.append(('due', cap)) or (1 if cap == 100 else 0)
         adapter.reconcile_closes.side_effect = lambda *, run_id, limit: calls.append(('reconcile', run_id, limit)) or 1
         adapter.redact_due.side_effect = lambda *, run_id, limit: calls.append(('redact', run_id, limit)) or 1
@@ -110,8 +126,9 @@ class CommercePublicRetentionRunnerTests(unittest.TestCase):
                                            SUPERMEGA_TRIAL_WRITES_ENABLED='true'),
                                Mock(return_value=adapter))
         self.assertEqual(code, 0)
-        self.assertEqual(calls, [('due', 100), ('reconcile', RUN_ID, 100),
-                                 ('redact', RUN_ID, 100), ('due', 1)])
+        self.assertEqual(calls, [('reconciliation_due', 100), ('due', 100),
+                                 ('reconcile', RUN_ID, 100), ('redact', RUN_ID, 100),
+                                 ('reconciliation_due', 1), ('due', 1)])
         self.assertEqual(receipt['runId'], RUN_ID)
         self.assertEqual(receipt['redacted'], 1)
         self.assertEqual(receipt['reconciled'], 1)
@@ -120,6 +137,7 @@ class CommercePublicRetentionRunnerTests(unittest.TestCase):
 
     def test_uncertain_apply_keeps_run_id_without_leaking_driver_error(self):
         adapter = Mock()
+        adapter.reconciliation_due_count.return_value = 0
         adapter.redaction_due_count.return_value = 1
         adapter.reconcile_closes.return_value = 1
         adapter.redact_due.side_effect = RuntimeError('private customer name and database password')
@@ -137,6 +155,7 @@ class CommercePublicRetentionRunnerTests(unittest.TestCase):
 
     def test_reconciliation_at_batch_cap_requires_another_run(self):
         adapter = Mock()
+        adapter.reconciliation_due_count.return_value = 0
         adapter.redaction_due_count.return_value = 0
         adapter.reconcile_closes.return_value = 10
         adapter.redact_due.return_value = 0
@@ -148,6 +167,21 @@ class CommercePublicRetentionRunnerTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertEqual(receipt['status'], 'more_possible')
         self.assertTrue(receipt['reconciliationLimitReached'])
+
+    def test_apply_alerts_when_a_stranded_close_remains(self):
+        adapter = Mock()
+        adapter.reconciliation_due_count.return_value = 1
+        adapter.redaction_due_count.return_value = 0
+        adapter.reconcile_closes.return_value = 0
+        adapter.redact_due.return_value = 0
+        code, receipt = invoke(['--expected-target', 'preview', '--apply',
+                                '--run-id', RUN_ID],
+                               environment(SUPERMEGA_COMMERCE_RETENTION_ENABLED='1',
+                                           SUPERMEGA_TRIAL_WRITES_ENABLED='true'),
+                               Mock(return_value=adapter))
+        self.assertEqual(code, 2)
+        self.assertEqual(receipt['status'], 'reconciliation_due')
+        self.assertEqual(receipt['reconciliationDueAfterCapped'], 1)
 
     def test_invalid_run_id_never_connects(self):
         factory = Mock()
