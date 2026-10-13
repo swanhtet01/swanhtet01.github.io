@@ -97,6 +97,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
         "commerce.storefront_request.received",
+        "commerce.storefront_request.closed",
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",
     }
@@ -149,10 +150,15 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
+        "commerce.storefront_request.closed",
         "commerce.service_schedule.initialized",
         "commerce.service_schedule.saved",
     }
 )
+_STOREFRONT_CLOSE_REASONS = frozenset({
+    "customer_withdrew", "no_response", "stock_unavailable",
+    "spam_or_duplicate", "other",
+})
 _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
 _NEXT_ORDER_STATUS = {"confirmed": "preparing", "preparing": "ready", "ready": "completed"}
 _PAYMENT_STATUSES = ("pending", "reconciled")
@@ -5423,6 +5429,15 @@ def _validate_event_evidence(
             )
         ):
             raise TrialValidationError("command evidence must match the retained Ecommerce request receipt.")
+    elif event_type == "commerce.storefront_request.closed":
+        before = _storefront_requests(current)
+        after_ids = {request["id"] for request in _storefront_requests(next_state)}
+        removed = [request for request in before if request["id"] not in after_ids]
+        if (len(removed) != 1
+            or evidence["reason"] not in _STOREFRONT_CLOSE_REASONS
+            or evidence["evidenceReference"] !=
+                f"ECOMMERCE-CLOSE:{removed[0]['id']}:{evidence['reason']}"):
+            raise TrialValidationError("command evidence must match the closed Ecommerce request.")
     elif event_type == "commerce.storefront.configuration.saved":
         saved = next_state["storefrontConfiguration"]["saved"]
         if not _proof_matches_evidence(saved, evidence):
@@ -11335,6 +11350,19 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
         )
 
 
+def _validate_storefront_request_closed(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
+    before = _storefront_requests(current)
+    after = _storefront_requests(next_state)
+    removed = [request for request in before if request not in after]
+    if (len(removed) != 1 or len(after) != len(before) - 1
+        or [request for request in before if request["id"] != removed[0]["id"]] != after
+        or not re.fullmatch(r"Web request [0-9A-F]{8}", removed[0]["customerReference"])
+        or any(order.get("sourceRecordId") == removed[0]["id"] for order in current["orders"])
+        or _without(current, frozenset({"storefrontRequests"}))
+            != _without(next_state, frozenset({"storefrontRequests"}))):
+        raise TrialValidationError("only one unconverted public request may leave the Shop queue.")
+
+
 def _storefront_requests_after_completed_order(current: Mapping[str, Any]) -> list[Any]:
     """Free one queue slot only after an attributable Shop order exists.
 
@@ -11349,6 +11377,31 @@ def _storefront_requests_after_completed_order(current: Mapping[str, Any]) -> li
         if requests[index]["id"] in converted:
             return requests[:index] + requests[index + 1:]
     raise TrialValidationError("commerce_public_claim_queue_full")
+
+
+def create_commerce_storefront_close_from_intent(
+    current_value: Mapping[str, Any], intent_value: Mapping[str, Any],
+    evidence_value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Derive the queue removal server-side from one human-reviewed close intent."""
+    current = validate_commerce_state(current_value)
+    intent = _object(intent_value, "storefront close intent")
+    evidence = _object(evidence_value, "storefront close evidence")
+    _exact_fields(intent, "storefront close intent",
+                  required=frozenset({"requestId", "reason"}))
+    request_id = intent["requestId"]
+    reason = intent["reason"]
+    if (not isinstance(request_id, str) or not isinstance(reason, str)
+        or reason not in _STOREFRONT_CLOSE_REASONS
+        or evidence.get("reason") != reason
+        or evidence.get("evidenceReference") !=
+            f"ECOMMERCE-CLOSE:{request_id}:{reason}"):
+        raise TrialValidationError("storefront close intent and evidence do not match.")
+    requests = _storefront_requests(current)
+    if sum(request["id"] == request_id for request in requests) != 1:
+        raise TrialValidationError("the public request is not in the Shop queue.")
+    return {**current, "storefrontRequests": [
+        request for request in requests if request["id"] != request_id]}
 
 
 def create_commerce_storefront_request_from_intent(
@@ -12342,6 +12395,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.storefront.configuration.saved": _validate_storefront_configuration_saved,
     "commerce.merchant_profile.saved": _validate_merchant_profile_saved,
     "commerce.storefront_request.received": _validate_storefront_request_received,
+    "commerce.storefront_request.closed": _validate_storefront_request_closed,
     "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
     "commerce.account_mapping.saved": _validate_account_mapping_saved,
     "commerce.customer_credit_policy.saved": _validate_customer_credit_policy_saved,
@@ -12392,6 +12446,14 @@ def reduce_commerce_state(
             ),
             "evidence": payload.get("evidence"),
         }
+    if (event_type == "commerce.storefront_request.closed"
+            and isinstance(payload.get("intent"), Mapping)):
+        _exact_fields(payload, "payload", required=frozenset({"intent", "evidence"}))
+        payload = {
+            "state": create_commerce_storefront_close_from_intent(
+                current, payload["intent"], payload.get("evidence", {})),
+            "evidence": payload.get("evidence"),
+        }
     next_state, evidence = _payload(payload)
     if event_type == "commerce.workspace.initialized":
         if dict(current):
@@ -12434,7 +12496,7 @@ def reduce_commerce_state(
         _require_operating_records_unchanged(current_state, next_state)
     if event_type not in {"commerce.item.created", "commerce.item.updated"}:
         _require_catalog_baselines_unchanged(current_state, next_state)
-    if event_type != "commerce.storefront_request.received":
+    if event_type not in {"commerce.storefront_request.received", "commerce.storefront_request.closed"}:
         _require_storefront_requests_unchanged(current_state, next_state)
     if event_type != "commerce.storefront.configuration.saved":
         _require_storefront_configuration_unchanged(current_state, next_state)
