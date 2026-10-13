@@ -976,13 +976,28 @@ class ClientImportRouteTests(unittest.TestCase):
         with self.assertRaises(ClientImportValidationError):
             validate_client_import_staging_package(_resign(unsafe_variant))
 
+        second_row = deepcopy(package["rows"][0])
+        second_row["sourceRow"] = 3
+        second_row["key"] = "TEA-100"
+        second_row["values"] = {
+            "sku": "TEA-100",
+            "name": "Myanmar green tea",
+            "onHand": "12",
+            "reorderAt": "4",
+            "price": "4500",
+            "variant": "",
+        }
+        package["rows"].append(second_row)
+        package["controls"]["rowCount"] = 2
+        package = _resign(package)
+
         reviewed = self.client.post(
             "/api/trial/v1/imports/validate",
             headers=self._headers(),
             json=package,
         )
         self.assertEqual(reviewed.status_code, 200, reviewed.text)
-        self.assertEqual(reviewed.json()["validation"]["row_count"], 1)
+        self.assertEqual(reviewed.json()["validation"]["row_count"], 2)
         self.assertFalse(reviewed.json()["validation"]["activation"]["external_writes_performed"])
 
         body = self._apply_body(
@@ -1005,7 +1020,14 @@ class ClientImportRouteTests(unittest.TestCase):
                     "onHand": 24,
                     "reorderAt": 8,
                     "price": 7000,
-                }
+                },
+                {
+                    "sku": "TEA-100",
+                    "name": "Myanmar green tea",
+                    "onHand": 12,
+                    "reorderAt": 4,
+                    "price": 4500,
+                },
             ],
         )
         self.assertEqual(self.reducer.calls, 1)

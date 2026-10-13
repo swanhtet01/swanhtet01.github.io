@@ -1,9 +1,40 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createShopCatalogImportPreview, shopCatalogImportErrorsCsv } from '../showroom/src/core/shop-catalog-import.ts'
+import { addShopVariantColumnToClientImportPreview, createShopCatalogImportPreview, shopCatalogImportErrorsCsv } from '../showroom/src/core/shop-catalog-import.ts'
+import { buildClientImportStagingPackage, createClientImportPreview } from '../showroom/src/core/client-onboarding.ts'
+import { assertManagedShopImportState } from '../showroom/src/core/managed-trial.ts'
 import { reviewCatalogMappingProposal } from '../showroom/src/core/catalog-mapping-proposal.ts'
 
 const csv = 'sku,name,stock,reorder_at,amount\nSYN-1,Synthetic item,5,1,1200'
+test('company Shop onboarding stages and verifies a detected variant', async () => {
+  const source = [
+    'sku,item_name,opening_stock,reorder_at,price_mmk,color',
+    'QA-TEA-001,Myanmar milk tea,5,2,2500,Black',
+    'QA-TEA-002,Mohinga,4,1,1800,',
+  ].join('\n')
+  const base = await createClientImportPreview(source, 'commerce', undefined, 'synthetic-shop.csv', 'retail-wholesale')
+  const detected = await addShopVariantColumnToClientImportPreview(base)
+  assert.equal(detected.variantHeader, 'color')
+  const staging = buildClientImportStagingPackage(detected.preview, {
+    workflowTemplateId: 'retail-wholesale',
+    workspace: 'Synthetic QA Cafe',
+    owner: 'Synthetic QA Owner',
+  })
+  assert.equal(staging.mapping.variant, 'color')
+  assert.equal(staging.rows[0].values.variant, 'Black')
+  assert.equal(staging.rows[1].values.variant, '')
+  const savedState = {
+    schema: 'supermega.commerce.workspace.v2',
+    items: [
+      { sku: 'QA-TEA-001', name: 'Myanmar milk tea', variant: 'Black', onHand: 5, reorderAt: 2, price: 2500 },
+      { sku: 'QA-TEA-002', name: 'Mohinga', onHand: 4, reorderAt: 1, price: 1800 },
+    ],
+    orders: [],
+    movements: [],
+    closes: [],
+  }
+  assert.equal(assertManagedShopImportState(savedState, staging), savedState)
+})
 async function proposalFor(source = csv) {
   const base = await createShopCatalogImportPreview(source, [])
   return { sourceDigest: base.sourceDigest, mapping: { sku: 'sku', name: 'name', onHand: 'stock', reorderAt: 'reorder_at', price: 'amount' } }
