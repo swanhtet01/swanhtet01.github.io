@@ -28,6 +28,7 @@ const signal = () => new AbortController().signal
 const bytes = Buffer.from('RIFF0000WEBPsynthetic-byte-integrity-fixture')
 const digest = createHash('sha256').update(bytes).digest('hex')
 const assetId = digest + '.webp'
+const reviewId = '11111111-1111-4111-8111-111111111111'
 const receipt = { assetId, sha256: digest, contentType: 'image/webp', visibility: 'private', bytes: bytes.length, width: 32, height: 24 }
 const file = new File([bytes], 'chosen.webp', { type: 'image/webp' })
 let cases = 0
@@ -55,6 +56,27 @@ try {
     return new Response(bytes, { headers: { 'content-type': 'image/webp' } })
   }
   assert.deepEqual(Buffer.from(await (await client.load(assetId, signal())).arrayBuffer()), bytes); cases++
+  const reviewClient = api.createWebsiteReviewMediaClient(identity, reviewId)
+  assert.equal(reviewClient.upload, undefined)
+  assert.throws(() => api.createWebsiteReviewMediaClient(identity, '../other'))
+  globalThis.fetch = async (path, init) => {
+    assert.equal(path, `/api/trial/v1/website-reviews/${reviewId}/media/${assetId}`)
+    assert.equal(init.method, 'GET')
+    assert.equal(init.headers.authorization, 'Bearer synthetic-token')
+    assert.equal(init.headers['x-supermega-workspace-id'], 'workspace-a')
+    assert.equal(init.cache, 'no-store'); assert.equal(init.credentials, 'omit'); assert.equal(init.redirect, 'error')
+    return new Response(bytes, { headers: { 'content-type': 'image/webp', 'x-content-sha256': digest } })
+  }
+  assert.deepEqual(Buffer.from(await (await reviewClient.load(assetId, signal())).arrayBuffer()), bytes); cases++
+  for (const response of [new Response('denied', { status: 403 }),
+    new Response(bytes, { headers: { 'content-type': 'image/webp', 'x-content-sha256': '0'.repeat(64) } }),
+    new Response(bytes, { headers: { 'content-type': 'image/webp', 'x-content-sha256': digest,
+      'content-length': String(api.MAX_PHOTO_BYTES + 1) } }),
+    new Response(Buffer.from('RIFF0000WEBPtampered'), { headers: { 'content-type': 'image/webp', 'x-content-sha256': digest } })]) {
+    globalThis.fetch = async () => response
+    await assert.rejects(reviewClient.load(assetId, signal())); cases++
+  }
+  await assert.rejects(reviewClient.load('../outside', signal()), /reference is invalid/); cases++
   await assert.rejects(client.load('../outside', signal()), /reference is invalid/); cases++
   for (const response of [new Response('denied', { status: 403 }), new Response(bytes, { headers: { 'content-type': 'text/html' } }),
     new Response(bytes, { headers: { 'content-type': 'image/webp', 'content-length': String(api.MAX_PHOTO_BYTES + 1) } }),

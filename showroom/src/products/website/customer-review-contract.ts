@@ -35,9 +35,7 @@ function contentBlock(value: unknown, keys: string[]) {
   const result = object(value, hasImage ? [...keys, 'image'] : keys)
   keys.forEach(key => text(result[key]))
   const image = result.image
-  // The customer-review surface has no scoped private-media reader yet. Never
-  // let a customer accept a revision containing a photo they cannot see.
-  if (hasImage && (!isWebsiteImage(image) || 'assetId' in image)) invalid()
+  if (hasImage && !isWebsiteImage(image)) invalid()
 }
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`

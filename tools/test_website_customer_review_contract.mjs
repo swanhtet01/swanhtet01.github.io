@@ -79,6 +79,10 @@ test('prepared content retains verified image references without accepting unsaf
 
   review.preview.pages[0].sections[0].image = { assetId: `${'a'.repeat(64)}.webp`, alt: '', decorative: true }
   review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
+  const privateReview = await verifyCustomerWebsiteReview(review, reviewId, now)
+  assert.equal(privateReview.preview.pages[0].sections[0].image.assetId, `${'a'.repeat(64)}.webp`)
+  review.preview.pages[0].sections[0].image.assetId = '../unverified.webp'
+  review.previewDigest = `sha256:${createHash('sha256').update(canonical(review.preview)).digest('hex')}`
   await assert.rejects(verifyCustomerWebsiteReview(review, reviewId, now))
   review.preview.pages[0].sections[0].image = { src: 'https://example.com/service.webp', alt: '', decorative: true }
 
