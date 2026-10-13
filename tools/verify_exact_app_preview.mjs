@@ -19,6 +19,7 @@ import {
   Cdp,
   findBrowser,
   launchBrowser,
+  miniMartOwnedCatalogFixture,
   verifyCase,
 } from './verify_app_entry_rendered.mjs'
 
@@ -1052,14 +1053,19 @@ export function expectedText(spec, publicHomepageExpectedText) {
   if (spec.surface === 'ecommerce_brief') return ['Ecommerce', 'Your products, ready to browse.', 'Business name', 'What do you sell?', 'Existing page or catalog', 'Continue', 'Next: your contact details.']
   if (spec.surface === 'website') return [
     'Website',
-    'Your website',
-    ...(spec.mobile ? [] : ['Tell us about the business']),
+    'Start your website',
+    'Choose a starting point. Add pages, services and products whenever you need them.',
     'Business name',
-    'Main customers',
     'What do you sell or provide?',
-    'Create website',
+    'How can customers reach you?',
+    'Create my website',
   ]
-  return ['Ecommerce', 'Online store', 'Browse your catalog and take order requests. Requests stay on this device until Shop review.', 'Get catalog help', 'Open customer ordering']
+  return [
+    'Online store',
+    'Orders',
+    'Review customer requests on this device. Requests stay on this device until Shop review.',
+    'Open customer ordering',
+  ]
 }
 
 function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {
@@ -1082,7 +1088,9 @@ function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {
     noHorizontalOverflow: true,
     screenshotName: spec.screenshot.replace(/\.png$/i, ''),
     timeoutMs: 60_000,
-    ...(spec.surface === 'shop_profit_control' ? {} : { seed: {} }),
+    ...(spec.surface === 'shop_profit_control' ? {} : {
+      seed: spec.surface === 'ecommerce' ? miniMartOwnedCatalogFixture() : {},
+    }),
     ...(spec.surface === 'retired_plant' ? { retirementCaseId: spec.id, requireLauncherProducts: true,
       seed: { retained: Object.fromEntries(RETIRED_STORAGE_KEYS.map(key => [key,
         key === 'supermega.product_setups.v1' ? '{}' : JSON.stringify({ syntheticRetirementSentinel: key })])) } } : {}),

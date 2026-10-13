@@ -68,9 +68,10 @@ test('Website exact preview requires the direct Sites brief', async () => {
     readFile(new URL('../showroom/src/products/website/WebsiteStarterSetup.tsx', import.meta.url), 'utf8'),
   ])).join('\n')
   for (const needle of needles) assert.ok(source.includes(needle), `Website source missing ${needle}`)
-  assert.ok(needles.includes('Tell us about the business'))
-  assert.ok(needles.includes('Create website'))
+  assert.ok(needles.includes('Start your website'))
+  assert.ok(needles.includes('Create my website'))
   assert.ok(needles.includes('What do you sell or provide?'))
+  assert.ok(needles.includes('How can customers reach you?'))
   assert.ok(!needles.includes('Request Website setup'))
   assert.ok(!needles.includes('Create preview'))
 })
@@ -82,8 +83,11 @@ test('Ecommerce checkout proof explicitly opens the workspace and requires local
   const source = await readFile(new URL('../showroom/src/products/ecommerce/EcommerceProduct.tsx', import.meta.url), 'utf8')
   const needles = expectedText({ surface: 'ecommerce' })
   for (const needle of needles) assert.ok(source.includes(needle))
-  assert.ok(needles.includes('Browse your catalog and take order requests. Requests stay on this device until Shop review.'))
+  assert.ok(needles.includes('Review customer requests on this device. Requests stay on this device until Shop review.'))
   assert.ok(needles.includes('Open customer ordering'))
+  assert.ok(!needles.includes('Get catalog help'))
+  const verifierSource = await readFile(new URL('./verify_exact_app_preview.mjs', import.meta.url), 'utf8')
+  assert.ok(verifierSource.includes('seed: spec.surface === \'ecommerce\' ? miniMartOwnedCatalogFixture() : {}'))
   assert.ok(!needles.some(needle => /sample|demo|preview options/i.test(needle)))
 })
 const reportGeneratedAt = '2026-08-28T12:05:00.000Z'
@@ -1032,7 +1036,7 @@ test('brief proof refuses missing, disabled, unrequired or prematurely enabled c
 
 test('actual brief harness expression rejects unusable DOM controls', async () => {
   const source = await readFile(new URL('./verify_app_entry_rendered.mjs', import.meta.url), 'utf8')
-  const line = source.split('\n').find(line => line.includes('const briefControls = testCase.inspectBusinessBrief'))
+  const line = source.split('\n').find(line => line.includes('const briefControls =') && line.includes('testCase.inspectBusinessBrief'))
   assert.ok(line)
   async function inspect(change = () => {}, website = false) {
     const field = required => ({ required, value: '', disabled: false, readOnly: false, tabIndex: 0, labels: [{ textContent: 'Field' }], getClientRects: () => [{}], visibility: 'visible' })
@@ -1041,7 +1045,7 @@ test('actual brief harness expression rejects unusable DOM controls', async () =
     change(data)
     const form = { querySelectorAll: () => data.fields, querySelector: () => data.submit, checkValidity: () => data.valid }
     const document = { querySelector: selector => data.absent ? null : selector === '.website-starter-form' ? (website ? form : null) : (!website ? form : null) }
-    const context = { testCase: { inspectBusinessBrief: true }, cdp: {}, sessionId: 'synthetic', inspectBusinessBrief,
+    const context = { initialStateMatches: true, testCase: { inspectBusinessBrief: true }, cdp: {}, sessionId: 'synthetic', inspectBusinessBrief,
       evalInPage: async (_cdp, _session, expression) => runInNewContext(expression, { document, getComputedStyle: node => ({ visibility: node.visibility }) }) }
     return runInNewContext(`(async () => { ${line}; return briefControls })()`, context)
   }
