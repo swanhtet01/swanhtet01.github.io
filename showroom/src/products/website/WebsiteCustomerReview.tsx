@@ -221,8 +221,8 @@ function ReviewPhoto({ image, priority = false, mediaClient, onReady, onFailed }
   onReady?: (id: string) => void; onFailed?: (id: string) => void
 }) {
   const assetId = image && 'assetId' in image ? image.assetId : null
-  const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
+  const [photo, setPhoto] = useState<{ assetId: string; client: WebsiteMediaClient; url?: string; failed: boolean } | null>(null)
+  const currentPhoto = photo && photo.assetId === assetId && photo.client === mediaClient ? photo : null
   useEffect(() => {
     if (!assetId || !mediaClient) return
     const controller = new AbortController()
@@ -231,15 +231,18 @@ function ReviewPhoto({ image, priority = false, mediaClient, onReady, onFailed }
     void mediaClient.load(assetId, controller.signal).then(blob => {
       if (!current) return
       createdUrl = URL.createObjectURL(blob)
-      setObjectUrl(createdUrl)
-    }).catch(() => { if (current) { setFailed(true); onFailed?.(assetId) } })
+      setPhoto({ assetId, client: mediaClient, url: createdUrl, failed: false })
+    }).catch(() => { if (current) { setPhoto({ assetId, client: mediaClient, failed: true }); onFailed?.(assetId) } })
     return () => { current = false; controller.abort(); if (createdUrl) URL.revokeObjectURL(createdUrl) }
-  }, [assetId, mediaClient, onReady, onFailed])
+  }, [assetId, mediaClient, onFailed])
   if (!image) return null
   if ('src' in image) return <figure className="website-content-image"><img src={image.src} alt={image.alt}
     decoding="async" loading={priority ? 'eager' : 'lazy'} referrerPolicy="no-referrer" /></figure>
-  return <figure className="website-content-image">{objectUrl && !failed
-    ? <img src={objectUrl} alt={image.alt} decoding="async" loading={priority ? 'eager' : 'lazy'}
-        onLoad={() => onReady?.(image.assetId)} onError={() => { setFailed(true); onFailed?.(image.assetId) }} />
-    : <figcaption role="status">{failed || !mediaClient ? 'Photo unavailable' : 'Loading photo…'}</figcaption>}</figure>
+  return <figure className="website-content-image">{currentPhoto?.url && !currentPhoto.failed
+    ? <img src={currentPhoto.url} alt={image.alt} decoding="async" loading={priority ? 'eager' : 'lazy'}
+        onLoad={() => onReady?.(image.assetId)} onError={() => {
+          setPhoto(current => current && current.assetId === image.assetId && current.client === mediaClient ? { ...current, failed: true } : current)
+          onFailed?.(image.assetId)
+        }} />
+    : <figcaption role="status">{currentPhoto?.failed || !mediaClient ? 'Photo unavailable' : 'Loading photo…'}</figcaption>}</figure>
 }
