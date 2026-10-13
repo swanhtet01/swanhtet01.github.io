@@ -1,5 +1,5 @@
 import { recoverWebsiteFeedback, retainWebsiteFeedback, clearWebsiteFeedback } from './pending-website-feedback'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { currentManagedIdentity, loadManagedWebsiteReview, loadManagedWebsiteAcceptance, sameManagedIdentity, sendManagedWebsiteReviewChanges, sendManagedWebsiteAcceptance, type ManagedIdentity } from '../../core/managed-trial'
 import { verifyCustomerChangeAcknowledgement, verifyCustomerWebsiteReview, verifyCustomerReviewDecision, verifyCustomerAcceptanceAcknowledgement, type CustomerWebsiteReview, type CustomerReviewDecision } from './customer-review-contract'
@@ -9,6 +9,7 @@ import './website-product.css'
 import './customer-review.css'
 import { reviewContactDestination } from './customer-review-contract'
 import type { WebsiteImage } from './website-media'
+import { createWebsiteReviewMediaClient, type WebsiteMediaClient } from './website-media-client'
 
 type Pending = { identity: ManagedIdentity; payload: { reviewId: string; commandId: string; previewDigest: string; note: string } }
 type PendingAcceptance = { identity: ManagedIdentity; payload: { reviewId: string; commandId: string; previewDigest: string; decision: 'accept_preview_for_release_review' } }
@@ -36,6 +37,17 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
   const [access] = useState(() => createReviewAccessBoundary(currentManagedIdentity, sameManagedIdentity))
   const lastIdentity = useRef<ManagedIdentity | null>(null)
   const [opening, setOpening] = useState(true)
+  const [mediaProof, setMediaProof] = useState<{ scope: string; status: Record<string, 'ready' | 'failed'> }>({ scope: '', status: {} })
+  const mediaClient = useMemo(() => actor && review ? createWebsiteReviewMediaClient(actor, reviewId) : null, [actor, review, reviewId])
+  const mediaScope = `${actor?.userId ?? ''}:${actor?.workspaceId ?? ''}:${reviewId}:${review?.previewDigest ?? ''}`
+  const privatePhotos = review ? [...new Set(review.preview.pages.flatMap(page =>
+    [page.hero, ...page.sections].flatMap(block => block.image && 'assetId' in block.image ? [block.image.assetId] : [])))] : []
+  const photosReady = privatePhotos.every(id => mediaProof.scope === mediaScope && mediaProof.status[id] === 'ready')
+  const photoFailed = privatePhotos.some(id => mediaProof.scope === mediaScope && mediaProof.status[id] === 'failed')
+  const onMediaReady = useCallback((id: string) => setMediaProof(current => ({ scope: mediaScope,
+    status: { ...(current.scope === mediaScope ? current.status : {}), [id]: 'ready' } })), [mediaScope])
+  const onMediaFailed = useCallback((id: string) => setMediaProof(current => ({ scope: mediaScope,
+    status: { ...(current.scope === mediaScope ? current.status : {}), [id]: 'failed' } })), [mediaScope])
 
   useEffect(() => {
     let active = true
@@ -125,7 +137,7 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
   }
 
   async function acceptRevision() {
-    if (!review || !actor || !confirmed || busy || inFlight.current || pending.current || note.trim()
+    if (!review || !actor || !confirmed || !photosReady || busy || inFlight.current || pending.current || note.trim()
       || decision?.status !== 'pending_review' || Date.parse(review.expiresAt) <= Date.now()) return
     const request = pendingAcceptance.current ?? { identity: actor, payload: { reviewId,
       commandId: crypto.randomUUID(), previewDigest: review.previewDigest, decision: 'accept_preview_for_release_review' as const } }
@@ -158,14 +170,18 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
     </section>}
     {review && <>
       <p>SuperMega handles publishing.</p>
-      <PreparedWebsitePage review={review} pageId={pageId} onPageChange={setPageId} />
+      <PreparedWebsitePage review={review} pageId={pageId} onPageChange={setPageId}
+        mediaClient={mediaClient} onMediaReady={onMediaReady} onMediaFailed={onMediaFailed} />
       {decision?.status === 'accepted_for_operator_release_review' ? <section className="customer-review-feedback"><h2>Acceptance saved</h2><p>Revision {review.contentRevision} is accepted for SuperMega’s release review, not published. Contact SuperMega if you need another revision.</p></section> : <>
         {decision?.status === 'pending_review' && <section className="customer-review-feedback" aria-labelledby="website-accept-title">
           <h2 id="website-accept-title">Accept this revision?</h2>
+          {privatePhotos.length > 0 && !photosReady && <p role="status">{photoFailed
+            ? 'A photo could not be loaded. Ask SuperMega for a fresh review.'
+            : 'Open each prepared page to check its photos before accepting.'}</p>}
           <label className="customer-review-consent"><input type="checkbox" checked={confirmed} disabled={busy || acceptanceUnconfirmed || unconfirmed} onChange={event => setConfirmed(event.target.checked)} /><span>I checked the prepared pages and accept this exact revision for release review.</span></label>
           <p>Accepting does not publish the Website, register a domain, or take payment.</p>
           {note.trim() && <p>Send your changes below, or clear the note before accepting this revision.</p>}
-          <button type="button" disabled={!confirmed || busy || unconfirmed || Boolean(note.trim())} onClick={() => { void acceptRevision() }}>{busy && acceptanceUnconfirmed ? 'Saving acceptance…' : acceptanceUnconfirmed ? 'Retry same acceptance' : 'Accept this revision'}</button>
+          <button type="button" disabled={!confirmed || !photosReady || busy || unconfirmed || Boolean(note.trim())} onClick={() => { void acceptRevision() }}>{busy && acceptanceUnconfirmed ? 'Saving acceptance…' : acceptanceUnconfirmed ? 'Retry same acceptance' : 'Accept this revision'}</button>
         </section>}
         <form className="customer-review-feedback" onSubmit={submit}><h2>Request changes</h2><label htmlFor="website-review-note">Your changes</label><textarea aria-describedby="website-review-note-help" id="website-review-note" rows={4} maxLength={2000} placeholder="What needs changing?" value={note} readOnly={unconfirmed} disabled={acceptanceUnconfirmed} onChange={event => setNote(event.target.value)} required /><p id="website-review-note-help">Your request does not publish the Website.</p><button type="submit" disabled={busy || acceptanceUnconfirmed || !note.trim()}>{busy && !acceptanceUnconfirmed ? 'Saving…' : unconfirmed ? 'Retry same request' : 'Request changes'}</button></form>
       </>}
@@ -173,15 +189,18 @@ function CustomerReviewContent({ reviewId }: { reviewId: string }) {
   </main>
 }
 
-export function PreparedWebsitePage({ review, pageId, onPageChange }: { review: CustomerWebsiteReview; pageId: string; onPageChange: (id: string) => void }) {
+export function PreparedWebsitePage({ review, pageId, onPageChange, mediaClient, onMediaReady, onMediaFailed }: {
+  review: CustomerWebsiteReview; pageId: string; onPageChange: (id: string) => void
+  mediaClient?: WebsiteMediaClient | null; onMediaReady?: (id: string) => void; onMediaFailed?: (id: string) => void
+}) {
   const page = review.preview.pages.find(item => item.id === pageId) ?? review.preview.pages[0]
   const destination = reviewContactDestination(page.hero.ctaHref)
   return <>
       <nav className="customer-review-actions" aria-label="Prepared pages">{review.preview.pages.map(item => <button type="button" key={item.id} aria-current={item.id === page.id ? 'page' : undefined} onClick={() => onPageChange(item.id)}>{item.navigation.label || item.seo.title || 'Page'}</button>)}</nav>
       <article className="website-preview-site" aria-label="Prepared page review">
         <header className="preview-site-header"><strong>{review.preview.siteName}</strong><span>Private review</span></header>
-        <div className="preview-site-main"><section className="preview-hero"><ReviewPhoto image={page.hero.image} priority /><span>{page.hero.eyebrow}</span><h2>{page.hero.headline}</h2><p>{page.hero.summary}</p>{page.hero.ctaLabel && <span className="preview-cta" aria-disabled="true">{page.hero.ctaLabel}</span>}</section>
-          <section className="preview-section-grid">{page.sections.map(section => <article key={section.id}><ReviewPhoto image={section.image} /><span>{section.eyebrow}</span><h3>{section.title}</h3><p>{section.body}</p></article>)}</section></div>
+        <div className="preview-site-main"><section className="preview-hero"><ReviewPhoto image={page.hero.image} priority mediaClient={mediaClient} onReady={onMediaReady} onFailed={onMediaFailed} /><span>{page.hero.eyebrow}</span><h2>{page.hero.headline}</h2><p>{page.hero.summary}</p>{page.hero.ctaLabel && <span className="preview-cta" aria-disabled="true">{page.hero.ctaLabel}</span>}</section>
+          <section className="preview-section-grid">{page.sections.map(section => <article key={section.id}><ReviewPhoto image={section.image} mediaClient={mediaClient} onReady={onMediaReady} onFailed={onMediaFailed} /><span>{section.eyebrow}</span><h3>{section.title}</h3><p>{section.body}</p></article>)}</section></div>
         <footer className="preview-site-footer">Review only · links and publishing are disabled</footer>
       </article>
       <details className="customer-review-details" key={page.id}>
@@ -197,9 +216,30 @@ export function PreparedWebsitePage({ review, pageId, onPageChange }: { review: 
     </>
 }
 
-function ReviewPhoto({ image, priority = false }: { image?: WebsiteImage; priority?: boolean }) {
-  // Private asset IDs need a review-scoped media endpoint before they can be shown.
-  if (!image || !('src' in image)) return null
-  return <figure className="website-content-image"><img src={image.src} alt={image.alt}
+function ReviewPhoto({ image, priority = false, mediaClient, onReady, onFailed }: {
+  image?: WebsiteImage; priority?: boolean; mediaClient?: WebsiteMediaClient | null
+  onReady?: (id: string) => void; onFailed?: (id: string) => void
+}) {
+  const assetId = image && 'assetId' in image ? image.assetId : null
+  const [objectUrl, setObjectUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    if (!assetId || !mediaClient) return
+    const controller = new AbortController()
+    let current = true
+    let createdUrl: string | null = null
+    void mediaClient.load(assetId, controller.signal).then(blob => {
+      if (!current) return
+      createdUrl = URL.createObjectURL(blob)
+      setObjectUrl(createdUrl)
+    }).catch(() => { if (current) { setFailed(true); onFailed?.(assetId) } })
+    return () => { current = false; controller.abort(); if (createdUrl) URL.revokeObjectURL(createdUrl) }
+  }, [assetId, mediaClient, onReady, onFailed])
+  if (!image) return null
+  if ('src' in image) return <figure className="website-content-image"><img src={image.src} alt={image.alt}
     decoding="async" loading={priority ? 'eager' : 'lazy'} referrerPolicy="no-referrer" /></figure>
+  return <figure className="website-content-image">{objectUrl && !failed
+    ? <img src={objectUrl} alt={image.alt} decoding="async" loading={priority ? 'eager' : 'lazy'}
+        onLoad={() => onReady?.(image.assetId)} onError={() => { setFailed(true); onFailed?.(image.assetId) }} />
+    : <figcaption role="status">{failed || !mediaClient ? 'Photo unavailable' : 'Loading photo…'}</figcaption>}</figure>
 }

@@ -23,6 +23,7 @@ vm.runInNewContext(compiled, { URL, exports: module.exports, require: name => {
   if (name === './customer-review-access') return { createReviewAccessBoundary }
   if (name === '../../core/account-routes') return { customerWebsiteReviewLoginPath }
   if (name === './customer-review-contract') return new Proxy({ reviewContactDestination }, { get: (target, key) => { if (key === 'reviewContactDestination') return target[key]; throw new Error('Pure preview must not access auth or transport') } })
+  if (name === './website-media-client') return { createWebsiteReviewMediaClient: () => { throw new Error('Pure preview must not access photo transport') } }
   if (name === '../../core/managed-trial') return new Proxy({}, { get: () => { throw new Error('Pure preview must not access auth or transport') } })
   return require(name)
 } })
@@ -55,6 +56,13 @@ test('prepared public photos appear beside their review copy without a referrer'
   assert.ok(html.includes('alt="Storefront"'))
   assert.doesNotMatch(html, /<a\b|<iframe|<script/)
 })
+test('private photo references are not emitted as image URLs or source text', () => {
+  const prepared = page('Home')
+  prepared.hero.image = { assetId: `${'a'.repeat(64)}.webp`, alt: 'Storefront', decorative: false }
+  const html = render([prepared])
+  assert.ok(html.includes('Photo unavailable'))
+  assert.doesNotMatch(html, /<img\b|[a-f0-9]{64}\.webp|\/website-media\//)
+})
 test('page selection renders exactly one page and exposes accessible navigation', () => {
   const html = render([page('Home', 'Home headline'), page('Services', 'Services headline')], 'Services')
   assert.ok(html.includes('Services headline'))
@@ -70,6 +78,8 @@ test('route and lifecycle safety source pins remain explicit (not browser proof)
     'pending.current ??', '!access.isCurrent(epoch)', 'readOnly={unconfirmed}',
     "window.removeEventListener('storage', refresh)", "window.removeEventListener('focus', refresh)",
     'Date.parse(review.expiresAt) <= Date.now()', 'sameManagedIdentity(request.identity, actor)']) assert.ok(source.includes(pin), pin)
+  for (const pin of ['createWebsiteReviewMediaClient', 'mediaClient.load(assetId', 'URL.revokeObjectURL(createdUrl)',
+    '!photosReady', 'Open each prepared page to check its photos before accepting.']) assert.ok(source.includes(pin), pin)
   assert.doesNotMatch(source, /dangerouslySetInnerHTML|localStorage\.setItem|sessionStorage\.setItem/)
   assert.ok(source.includes('const refresh = () => { access.invalidate(); setOpening(true); setReview(null); setActor(null)'))
 })
@@ -129,13 +139,18 @@ test('acceptance has explicit consent, shared synchronous lock and receipt-bound
   assert.ok(accept.includes('access.commit(epoch, request.identity, review.expiresAt'))
 })
 
-function renderDecision(status, { confirmed = false, note = '', uncertain = false, unavailable = false, opening = false } = {}) {
+function renderDecision(status, { confirmed = false, note = '', uncertain = false, unavailable = false, opening = false,
+  privatePhoto = false, mediaReady = false } = {}) {
   const review = { reviewId: '11111111-1111-4111-8111-111111111111', contentRevision: 7,
     previewDigest: 'sha256:' + 'a'.repeat(64), preview: { siteName: 'Studio', pages: [page('home')] },
     expiresAt: '2099-01-01T00:00:00Z', status: 'prepared_preview', publicationAuthorized: false }
+  const photoId = `${'b'.repeat(64)}.webp`
+  if (privatePhoto) review.preview.pages[0].hero.image = { assetId: photoId, alt: 'Storefront', decorative: false }
   const decision = { ...review, status }
   const states = [unavailable ? null : review, actor, 'home', note, 'Prepared review', false, 0, false,
-    decision, confirmed, uncertain, {}, opening]
+    decision, confirmed, uncertain, {}, opening, mediaReady
+      ? { scope: `${actor.userId}:${actor.workspaceId}:${review.reviewId}:${review.previewDigest}`, status: { [photoId]: 'ready' } }
+      : { scope: '', status: {} }]
   let index = 0
   const controlled = { exports: {} }
   vm.runInNewContext(compiled + '; exports.TestReviewContent = CustomerReviewContent;', {
@@ -149,6 +164,7 @@ function renderDecision(status, { confirmed = false, note = '', uncertain = fals
       if (name === './customer-review-access') return { createReviewAccessBoundary }
       if (name === '../../core/account-routes') return { customerWebsiteReviewLoginPath }
       if (name === './customer-review-contract') return { reviewContactDestination }
+      if (name === './website-media-client') return { createWebsiteReviewMediaClient: () => ({ scopeKey: 'fixture', load: async () => new Blob() }) }
       if (name === '../../core/managed-trial') return {}
       return require(name)
     },
@@ -192,6 +208,15 @@ test('rendered customer decisions show consent only when actionable and never a 
   for (const html of [pending, confirmed, note, uncertain, accepted, changes]) {
     assert.doesNotMatch(html, />Publish|>Deploy|>Register domain|>Pay now/)
   }
+})
+
+test('customer cannot accept a private-photo revision before its image loads', () => {
+  const waiting = renderDecision('pending_review', { confirmed: true, privatePhoto: true })
+  assert.match(waiting, /Open each prepared page to check its photos before accepting/)
+  assert.match(waiting, /disabled="">Accept this revision<\/button>/)
+  assert.doesNotMatch(waiting, /[b]{64}\.webp/)
+  const seen = renderDecision('pending_review', { confirmed: true, privatePhoto: true, mediaReady: true })
+  assert.match(seen, /<button type="button">Accept this revision<\/button>/)
 })
 
 test('consent uses a full touch label without inheriting full-width text-input styling', () => {
@@ -272,7 +297,7 @@ test('actual change and acceptance handlers reject late success after access cha
     const context = {
       retainWebsiteFeedback: () => {}, clearWebsiteFeedback: () => {}, window: { sessionStorage: {} },
       review: { expiresAt: new Date(Date.now() + 60000).toISOString(), previewDigest: 'synthetic-digest' },
-      reviewId: 'synthetic-review', actor, busy: false, confirmed: true,
+      reviewId: 'synthetic-review', actor, busy: false, confirmed: true, photosReady: true,
       note: name === 'submit' ? 'Synthetic changes' : '', decision: { status: 'pending_review' },
       pending: { current: null }, pendingAcceptance: { current: null }, inFlight: { current: false },
       access, sameManagedIdentity: same, crypto: { randomUUID: () => 'synthetic-command' },
@@ -310,7 +335,7 @@ test('actual acceptance keeps an uncertain request for exact retry after a misma
     const review = { reviewId: 'synthetic-review', contentRevision: 3, previewDigest: 'synthetic-digest', expiresAt: new Date(Date.now() + 60000).toISOString() }
     let faulty = true, uuids = 0
     const noop = () => {}
-    const context = { review, reviewId: review.reviewId, actor, confirmed: true, busy: false, note: '',
+    const context = { review, reviewId: review.reviewId, actor, confirmed: true, photosReady: true, busy: false, note: '',
       decision: { status: 'pending_review' }, pending: { current: null }, pendingAcceptance: { current: null }, inFlight: { current: false },
       access: createReviewAccessBoundary(async () => actor, same), sameManagedIdentity: same,
       crypto: { randomUUID: () => { uuids++; return 'synthetic-command' } },
