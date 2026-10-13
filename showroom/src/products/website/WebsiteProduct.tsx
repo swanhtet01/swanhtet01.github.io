@@ -202,6 +202,10 @@ function formatRecoveryDate(value: string) {
   return Number.isNaN(timestamp) ? 'Saved recovery' : new Date(timestamp).toLocaleString()
 }
 
+function inquiryTextLanguage(value: string) {
+  return /[\u1000-\u109f]/u.test(value) ? 'my' : undefined
+}
+
 type InquiryDraft = Pick<WebsiteLead, 'owner' | 'decisionNote'>
 
 function InquiryDetail({ lead, draft, onDraft, readOnly, onReview }: {
@@ -219,9 +223,9 @@ function InquiryDetail({ lead, draft, onDraft, readOnly, onReview }: {
     try { await onReview(lead.id, status, owner, note) } finally { setBusy(false) }
   }
   return <section aria-label={`Inquiry from ${lead.name}`} className="website-inquiry-detail" aria-busy={busy}>
-    <header><span className="website-inquiry-avatar" aria-hidden="true">{lead.name.slice(0, 1)}</span><div><h3>{lead.name}</h3><p>{lead.contact}</p></div><span className="website-inquiry-state">{lead.status}</span></header>
+    <header><span className="website-inquiry-avatar" aria-hidden="true" lang={inquiryTextLanguage(lead.name)}>{lead.name.slice(0, 1)}</span><div><h3 lang={inquiryTextLanguage(lead.name)}>{lead.name}</h3><p>{lead.contact}</p></div><span className="website-inquiry-state">{lead.status}</span></header>
     <p className="website-inquiry-date">{formatRecoveryDate(lead.createdAt)} · {lead.sourcePage}</p>
-    <p className="website-inquiry-message">{lead.request}</p>
+    <p className="website-inquiry-message" lang={inquiryTextLanguage(lead.request)}>{lead.request}</p>
     {lead.status !== 'closed' ? <form onSubmit={(event) => { event.preventDefault(); void review('qualified') }}>
       <label>Assigned to<input disabled={readOnly || busy} maxLength={120} minLength={2} onChange={(event) => onDraft({ ...draft, owner: event.target.value })} placeholder="Name or team" required value={owner} /></label>
       <label><span>Note <small>optional</small></span><textarea disabled={readOnly || busy} maxLength={500} onChange={(event) => onDraft({ ...draft, decisionNote: event.target.value })} placeholder="Add the next step…" rows={3} value={note} /></label>
@@ -1580,7 +1584,7 @@ export function WebsiteProduct() {
                   <label><span className="sr-only">Search inquiries</span><input onChange={(event) => setInquirySearch(event.target.value)} placeholder="Search inquiries" type="search" value={inquirySearch} /></label>
                 </div>
                 {matchingInquiries.length ? <div className="website-inbox-layout">
-                  <div aria-label="Customer requests" className="website-inbox-list">{matchingInquiries.map((lead) => <button aria-pressed={selectedInquiry?.id === lead.id} key={lead.id} onClick={() => setSelectedInquiryId(lead.id)} type="button"><span><strong>{lead.name}</strong><small className="website-inquiry-state">{lead.status}</small></span><p>{lead.request}</p><small>{formatRecoveryDate(lead.createdAt)}</small></button>)}</div>
+                  <div aria-label="Customer requests" className="website-inbox-list">{matchingInquiries.map((lead) => <button aria-pressed={selectedInquiry?.id === lead.id} key={lead.id} onClick={() => setSelectedInquiryId(lead.id)} type="button"><span><strong lang={inquiryTextLanguage(lead.name)}>{lead.name}</strong><small className="website-inquiry-state">{lead.status}</small></span><p lang={inquiryTextLanguage(lead.request)}>{lead.request}</p><small>{formatRecoveryDate(lead.createdAt)}</small></button>)}</div>
                   {selectedInquiry ? <InquiryDetail key={inquiryDraftKey} lead={selectedInquiry} draft={inquiryDrafts[inquiryDraftKey] ?? selectedInquiry} onDraft={(draft) => setInquiryDrafts((current) => ({ ...current, [inquiryDraftKey]: draft }))} readOnly={portalViewOnly} onReview={decideLead} /> : null}
                 </div> : <div className="website-inbox-empty"><strong>{websiteLeads.length ? 'No matching inquiries' : 'Your inbox is clear'}</strong><p>{websiteLeads.length ? 'Try another name or status.' : 'Requests received by phone or in person appear here after you add them.'}</p></div>}
               </section>

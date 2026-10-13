@@ -1,3 +1,12 @@
+@font-face {
+  font-family: "Noto Sans Myanmar";
+  src: url('/fonts/noto-sans-myanmar.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+1000-109F, U+A9E0-A9FF, U+AA60-AA7F;
+}
+
 :root {
   color-scheme: light;
   /* Paired on-color for text ON the accent (Polaris/Material container discipline):
