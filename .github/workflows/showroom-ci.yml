@@ -125,6 +125,7 @@ jobs:
           "$CHROMIUM_BIN" --version
           node --test --test-concurrency=1 tools/browser_startup.test.mjs
           node tools/verify_app_entry_rendered.mjs \
+            --auth-only \
             --out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json" \
             --screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR" \
             --expected-head "$SUPERMEGA_CI_SOURCE_SHA"

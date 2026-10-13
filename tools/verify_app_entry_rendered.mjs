@@ -57,6 +57,7 @@ function argValue(name, fallback = '') {
 const outFile = argValue('--out')
 const screenshotDir = argValue('--screenshot-dir')
 const expectedHead = argValue('--expected-head')
+const authOnly = args.includes('--auth-only')
 const shopOnly = args.includes('--shop-only')
 const shopAccountingOnly = args.includes('--shop-accounting-only')
 const shopOfflineOnly = args.includes('--shop-offline-only')
@@ -65,7 +66,8 @@ const storeToShopOnly = args.includes('--store-to-shop-only')
 const sitesOnly = args.includes('--sites-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
 const verifierPath = fileURLToPath(import.meta.url)
-const proofScope = shopOnly ? 'shop-counter'
+const proofScope = authOnly ? 'auth-entry'
+  : shopOnly ? 'shop-counter'
   : shopAccountingOnly ? 'shop-accounting-export'
     : shopOfflineOnly ? 'shop-offline-restore'
       : ecommerceClaimOnly ? 'ecommerce-claim'
@@ -2285,13 +2287,18 @@ export function unauthenticatedEntryContract(testCase, index = 1) {
     initialExpectedPath: expectedPath,
     expectedText: ['Login', 'Login is currently unavailable.'],
     initialExpectedText: ['Login', 'Login is currently unavailable.'],
+    requireLauncherProducts: true,
+    expectedLauncherProducts: [],
     absentText: [...new Set([...(testCase.absentText || []), ...protectedCopy])],
     seed: testCase.seed,
   }
 }
 
 async function main() {
-  if ([shopOnly, shopAccountingOnly, shopOfflineOnly, ecommerceClaimOnly, storeToShopOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
+  if ([authOnly, shopOnly, shopAccountingOnly, shopOfflineOnly, ecommerceClaimOnly, storeToShopOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
+  // Product routes require an authenticated, isolated workspace. A login redirect
+  // is useful access-gate evidence, but it cannot stand in for product captures.
+  if (!authOnly) throw new Error('app_entry_rendered_product_capture_requires_authenticated_context')
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
   if (!outFile || !screenshotDir) throw new Error('app_entry_rendered_evidence_paths_required')
   const evidence = buildEvidenceDescriptor({ evidenceDir: screenshotDir, outputPath: outFile })

@@ -408,6 +408,7 @@ requireContract('CI verifies exact-source unauthenticated access gates across ap
   && renderedJourneyVerifier.includes('unauthenticatedEntryContract')
   && ciWorkflow.includes('SUPERMEGA_RENDERED_EVIDENCE_DIR: ${{ runner.temp }}/supermega-app-entry-rendered-${{ github.run_id }}-${{ github.run_attempt }}')
   && ciWorkflow.includes('node tools/verify_app_entry_rendered.mjs')
+  && ciWorkflow.includes('--auth-only')
   && ciWorkflow.includes('--out "$SUPERMEGA_RENDERED_EVIDENCE_DIR/report.json"')
   && ciWorkflow.includes('--screenshot-dir "$SUPERMEGA_RENDERED_EVIDENCE_DIR"')
   && ciWorkflow.includes('--expected-head "$SUPERMEGA_CI_SOURCE_SHA"')

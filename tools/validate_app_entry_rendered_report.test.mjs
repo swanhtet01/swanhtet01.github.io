@@ -61,6 +61,8 @@ test('unauthenticated product routes expect sign-in and reject protected fixture
   assert.deepEqual(shop.absentText, ['PRIVATE DEVICE', 'Premium rice 25kg'])
   assert.equal('exerciseShopCounter' in shop, false)
   assert.equal('screenshotName' in shop, false)
+  assert.equal(shop.requireLauncherProducts, true)
+  assert.deepEqual(shop.expectedLauncherProducts, [])
   const home = unauthenticatedEntryContract({ route: '/?choose=1', width: 390, height: 844 })
   assert.equal(home.expectedPath, '/login')
   const settings = unauthenticatedEntryContract({ route: '/settings/?product=production', width: 1280, height: 900,
@@ -614,6 +616,18 @@ test('CLI requires an exact report, commit, and scope', () => {
 
 test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const full = fullCaseMatrixFixture()
+  const auth = full.map((entry, index) => {
+    const contract = unauthenticatedEntryContract(entry, index + 1)
+    return { name: contract.name, route: entry.route, viewport: entry.viewport,
+      path: contract.expectedPath, screenshot: null }
+  })
+  assert.equal(assertRenderedProofCaseMatrix(auth, 'auth-entry').length, full.length)
+  const loginWithProductScreenshot = structuredClone(auth)
+  loginWithProductScreenshot[4].screenshot = { file: 'shop-counter-mini-mart-desktop-1280x900.png' }
+  assert.throws(() => assertRenderedProofCaseMatrix(loginWithProductScreenshot, 'auth-entry'), /case_matrix_mismatch/)
+  const wrongLoginDestination = structuredClone(auth)
+  wrongLoginDestination[4].path = '/shop/?tab=counter'
+  assert.throws(() => assertRenderedProofCaseMatrix(wrongLoginDestination, 'auth-entry'), /case_matrix_mismatch/)
   assert.equal(assertRenderedProofCaseMatrix(full, 'full').length, 35)
   assert.equal(assertRenderedProofCaseMatrix(full.slice(4, 6), 'shop-counter').length, 2)
   assert.equal(assertRenderedProofCaseMatrix(full.filter((entry) => entry.name === 'Shop Today downloads a completed accounting handoff'), 'shop-accounting-export').length, 1)
@@ -674,6 +688,33 @@ test('binds full and bounded scopes to the exact renderer case matrix', () => {
   const wrongMobileViewport = structuredClone(ecommerce)
   wrongMobileViewport[1].viewport = '1280x900'
   assert.throws(() => assertRenderedProofCaseMatrix(wrongMobileViewport, 'ecommerce-claim'), /case_matrix_mismatch/)
+})
+
+test('product evidence flags fail closed without an authenticated capture context', () => {
+  const result = spawnSync(process.execPath, ['tools/verify_app_entry_rendered.mjs', '--shop-only'], {
+    cwd: process.cwd(), encoding: 'utf8', windowsHide: true,
+  })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /app_entry_rendered_product_capture_requires_authenticated_context/)
+  assert.doesNotMatch(result.stdout, /"ok": true/)
+})
+
+test('auth entry evidence excludes product content even when a report claims success', () => {
+  const entry = {
+    ok: true, failures: [], runtime: { clean: true, errors: [] }, bodyLength: 100,
+    path: '/login?product=shop', viewport: '1280x900',
+    network: { mutatingRequestCount: 0, mutatingRequests: [] },
+    rendered: { viewportWidth: 1280, viewportHeight: 900, documentScrollWidth: 1280,
+      noHorizontalOverflow: true, launcherLinks: [] },
+    layout: null, decisionDesk: null, accountingExport: null, offlineRestore: null,
+    claimBoundary: null, storeToShop: null, sitesWorkspace: null, briefControls: null,
+  }
+  const expected = { name: 'unauthenticated app entry 5 requires login', width: 1280,
+    height: 900, semantics: 'auth-entry' }
+  assert.doesNotThrow(() => assertCaseSemantics(entry, expected))
+  assert.throws(() => assertCaseSemantics({ ...entry, layout: { ok: true } }, expected), /auth_product_evidence_invalid/)
+  assert.throws(() => assertCaseSemantics({ ...entry, rendered: { ...entry.rendered,
+    launcherLinks: [{ name: 'Shop', href: '/shop/' }] } }, expected), /launcher_products_mismatch/)
 })
 
 test('full visual cases pin visible product truth copy and Plant canonicalization', async () => {
