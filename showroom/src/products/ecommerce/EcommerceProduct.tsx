@@ -83,6 +83,7 @@ import {
   readStorefrontDraft,
   reconcileStorefrontSelection,
   saveStorefrontDraft,
+  storefrontSummaryValidationMessage,
   storefrontDraftStorageKey,
   type LegacyStorefrontDraft,
   type StorefrontDraft,
@@ -760,6 +761,7 @@ export function EcommerceProduct() {
   )
   const missingSavedSkus = catalogHydrating ? [] : savedSelectionReconciliation.missingSkus
   const selectionReviewRequired = missingSavedSkus.length > 0 && !missingSelectionReviewed
+  const summaryValidationMessage = storefrontSummaryValidationMessage(summary)
   const draftStorageBlocked = !managedIdentity
     && (draftReadStatus === 'invalid' || draftReadStatus === 'unavailable')
   const portalViewOnly = Boolean(managedIdentity && !managedCanWrite)
@@ -775,6 +777,7 @@ export function EcommerceProduct() {
     && !draftStorageBlocked
     && !managedCatalogDigestPending
     && !managedCatalogDigestError
+    && !summaryValidationMessage
 
   useEffect(() => {
     let current = true
@@ -1092,6 +1095,10 @@ export function EcommerceProduct() {
   async function saveCurrentStorefront() {
     if (sampleCatalogPreview) {
       setDraftNotice('Replace the example products in Shop before saving a live store.')
+      return
+    }
+    if (summaryValidationMessage) {
+      setDraftNotice(summaryValidationMessage)
       return
     }
     if (!previewResult.preview
@@ -2488,7 +2495,22 @@ export function EcommerceProduct() {
 
           <div className="ecommerce-copy-fields">
             <label><span>Store name</span><input disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} /></label>
-            <label><span>Description (required)</span><textarea disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} required rows={2} value={summary} /></label>
+            <label>
+              <span>Description (required)</span>
+              <textarea
+                aria-describedby="ecommerce-store-summary-help"
+                aria-invalid={Boolean(summaryValidationMessage)}
+                disabled={portalViewOnly || catalogHydrating || draftBusy}
+                maxLength={180}
+                onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }}
+                required
+                rows={3}
+                value={summary}
+              />
+              <small className="ecommerce-summary-help" data-invalid={Boolean(summaryValidationMessage)} id="ecommerce-store-summary-help">
+                {summaryValidationMessage || 'Shown below your store name in the customer preview.'}
+              </small>
+            </label>
           </div>
           <div className="ecommerce-catalog-head">
             <strong>Products</strong>

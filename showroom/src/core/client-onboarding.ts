@@ -943,6 +943,10 @@ function fieldIssue(field: ClientImportField, value: string, minimumProductionDu
   return null
 }
 
+export function validateClientImportFieldValue(field: ClientImportField, value: string) {
+  return fieldIssue(field, value)
+}
+
 function rowFromMapping(parsed: ParsedCsvRow, object: ClientImportObject, headers: string[], mapping: ClientImportMapping, fileIssues: ClientImportIssue[], minimumProductionDueDate?: string) {
   const source = Object.fromEntries(headers.map((header, index) => [header, parsed.cells[index] ?? '']))
   const issues: ClientImportIssue[] = []

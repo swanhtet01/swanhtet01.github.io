@@ -1524,6 +1524,8 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .ecommerce-copy-fields { display: grid; grid-template-columns: minmax(0,.72fr) minmax(0,1.28fr); gap: 9px; margin-top: 2px; }
 .ecommerce-copy-fields label { display: grid; gap: 6px; color: var(--core-muted); font-size: 0.625rem; font-weight: var(--font-weight-bold); }
 .ecommerce-copy-fields input, .ecommerce-copy-fields textarea { width: 100%; min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 9px; padding: 10px 11px; background: var(--core-panel); color: var(--core-ink); font-size: 0.8125rem; resize: none; }
+.ecommerce-copy-fields .ecommerce-summary-help { color: var(--core-muted); font-size: 0.6875rem; font-weight: 400; line-height: 1.4; }
+.ecommerce-copy-fields .ecommerce-summary-help[data-invalid="true"] { color: var(--core-danger); }
 .ecommerce-catalog-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 15px 0 7px; }
 .ecommerce-catalog-head strong { font-size: 0.75rem; }
 .ecommerce-catalog-head small { color: var(--core-quiet); font-size: 0.5625rem; }
