@@ -18,7 +18,7 @@ import re
 import unicodedata
 from typing import Any, Callable, Mapping
 from urllib.parse import urlsplit
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -122,11 +122,12 @@ def _require_public_schema(cursor: Any) -> None:
         where n.nspname='app_private' and p.proname in
           ('read_commerce_public_source','receive_commerce_public_request',
            'replay_commerce_public_request','reserve_commerce_public_request',
-           'complete_commerce_public_request_claim','close_commerce_public_request',
+           'complete_commerce_public_request_claim','inspect_commerce_public_request',
+           'close_commerce_public_request',
            'redact_closed_commerce_public_requests',
            'commerce_public_redaction_due_count')""")
     functions = cursor.fetchall()
-    if (len(functions) != 8 or any(not row['prosecdef']
+    if (len(functions) != 9 or any(not row['prosecdef']
             or 'search_path=pg_catalog, app_private' not in (row['proconfig'] or [])
             or row['anon_exec'] or row['auth_exec'] or row['service_exec'] for row in functions)):
         raise TrialNotReadyError(('commerce_public_schema_unverified',))
@@ -490,7 +491,7 @@ class CommercePublicStorefront:
 
     def close(self, principal: TrialPrincipal, *, handle: str, request_id: str,
               reason: str) -> dict[str, Any]:
-        """Close only an unclaimed request, with a human and a bounded reason code."""
+        """Close a request only after an unconverted Shop queue item is removed."""
         if principal.actor_kind != 'human' or reason not in (
                 'customer_withdrew', 'no_response', 'stock_unavailable',
                 'spam_or_duplicate', 'other'):
@@ -498,6 +499,38 @@ class CommercePublicStorefront:
         handle, request_id = _uuid(handle), _uuid(request_id)
         with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
             _require_public_schema(cursor)
+            cursor.execute('select app_private.inspect_commerce_public_request(%s,%s,%s) as item',
+                (principal.workspace_id, handle, request_id))
+            intake = cursor.fetchone()['item']
+            if intake['status'] in ('in_review', 'in_shop'):
+                shop_request_id = intake['shopRequestId']
+                cursor.execute("""select version,state_json from app_private.workspace_state
+                    where workspace_id=%s and surface='commerce'""",
+                    (principal.workspace_id,))
+                state_row = cursor.fetchone()
+                if state_row is None:
+                    raise TrialValidationError('commerce_public_close_state')
+                state = validate_commerce_state(state_row['state_json'])
+                if any(order.get('sourceRecordId') == shop_request_id
+                       for order in state['orders']):
+                    raise TrialValidationError('commerce_public_close_state')
+                if any(item['id'] == shop_request_id
+                       for item in state['storefrontRequests']):
+                    command_id = uuid5(NAMESPACE_URL,
+                        f'commerce-public-close:v1:{handle}:{request_id}')
+                    captured_at = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+                    self.store.apply_command(principal, command_id=command_id,
+                        surface='commerce', event_type='commerce.storefront_request.closed',
+                        expected_version=state_row['version'], payload={
+                            'intent': {'requestId': shop_request_id, 'reason': reason},
+                            'evidence': {
+                                'actionId': 'ACT-' + str(command_id).upper(),
+                                'capturedAt': captured_at, 'actor': principal.actor_id,
+                                'reason': reason,
+                                'evidenceReference':
+                                    f'ECOMMERCE-CLOSE:{shop_request_id}:{reason}'}})
+                # If a prior Shop write succeeded but its SQL acknowledgement failed,
+                # the SQL function checks that exact event before completing this retry.
             cursor.execute('select app_private.close_commerce_public_request(%s,%s,%s,%s) as result',
                            (principal.workspace_id, handle, request_id, reason))
             result = cursor.fetchone()['result']
@@ -598,6 +631,7 @@ def create_commerce_public_router(*, store: CommercePublicStorefront, enabled: b
                 'commerce_public_request_closed': (409, 'request_closed'),
                 'commerce_public_in_review': (409, 'request_in_review'),
                 'commerce_public_close_conflict': (409, 'request_changed'),
+                'commerce_public_close_state': (409, 'request_changed'),
             }.get(code, (503, 'commerce_public_unavailable'))
             raise _error(status, public_code) from None
         return JSONResponse(result, headers=_HEADERS)

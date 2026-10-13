@@ -272,12 +272,34 @@ begin
 end;
 $$;
 
+create function app_private.inspect_commerce_public_request(
+  p_workspace text, p_handle uuid, p_request uuid
+) returns jsonb language plpgsql security definer
+set search_path = pg_catalog, app_private as $$
+declare item app_private.commerce_public_requests%rowtype;
+begin
+  if p_workspace is distinct from current_setting('app.workspace_id', true)
+    or current_setting('app.actor_kind', true) <> 'human'
+    or not app_private.website_review_can('commerce.write') then
+    raise exception 'commerce_public_denied' using errcode = '42501';
+  end if;
+  select * into item from app_private.commerce_public_requests
+    where workspace_id = p_workspace and handle = p_handle and request_id = p_request
+    for update;
+  if not found then
+    raise exception 'commerce_public_unavailable' using errcode = 'P0001';
+  end if;
+  return jsonb_build_object('status', item.status, 'shopRequestId', item.shop_request_id);
+end;
+$$;
+
 create function app_private.close_commerce_public_request(
   p_workspace text, p_handle uuid, p_request uuid, p_reason text
 ) returns jsonb language plpgsql security definer
 set search_path = pg_catalog, app_private as $$
 declare item app_private.commerce_public_requests%rowtype;
   actor text;
+  shop_state jsonb;
 begin
   actor := current_setting('app.actor_id', true);
   if p_workspace is distinct from current_setting('app.workspace_id', true)
@@ -302,8 +324,31 @@ begin
     end if;
     return jsonb_build_object('status', 'closed', 'duplicate', true);
   end if;
-  if item.status <> 'received' then
-    raise exception 'commerce_public_in_review' using errcode = 'P0001';
+  if item.status in ('in_review', 'in_shop') then
+    -- The Shop event commits before this private-row transition. A retry after
+    -- an uncertain acknowledgement can finish the transition, but an order or
+    -- an arbitrary caller cannot silently erase an actionable request.
+    select state_json into shop_state from app_private.workspace_state
+      where workspace_id = p_workspace and surface = 'commerce' for share;
+    if shop_state is null
+      or exists (select 1 from jsonb_array_elements(
+          coalesce(shop_state->'storefrontRequests', '[]'::jsonb)) request
+          where request->>'id' = item.shop_request_id)
+      or exists (select 1 from jsonb_array_elements(
+          coalesce(shop_state->'orders', '[]'::jsonb)) shop_order
+          where shop_order->>'sourceRecordId' = item.shop_request_id)
+      or not exists (select 1 from app_private.workspace_events event
+          where event.workspace_id = p_workspace
+            and event.surface = 'commerce'
+            and event.event_type = 'commerce.storefront_request.closed'
+            and event.actor_id = actor and event.actor_kind = 'human'
+            and event.payload_json #>> '{evidence,reason}' = p_reason
+            and event.payload_json #>> '{evidence,evidenceReference}' =
+                'ECOMMERCE-CLOSE:' || item.shop_request_id || ':' || p_reason) then
+      raise exception 'commerce_public_close_state' using errcode = 'P0001';
+    end if;
+  elsif item.status <> 'received' then
+    raise exception 'commerce_public_close_state' using errcode = 'P0001';
   end if;
   update app_private.commerce_public_requests
     set status = 'closed', close_reason = p_reason, closed_by = actor,
@@ -372,6 +417,7 @@ revoke all on function app_private.read_commerce_public_source(uuid),
   app_private.replay_commerce_public_request(uuid,uuid,text),
   app_private.reserve_commerce_public_request(text,uuid,uuid),
   app_private.complete_commerce_public_request_claim(text,uuid,uuid),
+  app_private.inspect_commerce_public_request(text,uuid,uuid),
   app_private.close_commerce_public_request(text,uuid,uuid,text),
   app_private.commerce_public_redaction_due_count(integer),
   app_private.redact_closed_commerce_public_requests(uuid,integer)
@@ -381,6 +427,7 @@ grant execute on function app_private.read_commerce_public_source(uuid),
   app_private.replay_commerce_public_request(uuid,uuid,text),
   app_private.reserve_commerce_public_request(text,uuid,uuid),
   app_private.complete_commerce_public_request_claim(text,uuid,uuid),
+  app_private.inspect_commerce_public_request(text,uuid,uuid),
   app_private.close_commerce_public_request(text,uuid,uuid,text),
   app_private.commerce_public_redaction_due_count(integer),
   app_private.redact_closed_commerce_public_requests(uuid,integer)
