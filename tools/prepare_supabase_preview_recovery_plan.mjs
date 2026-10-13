@@ -386,12 +386,25 @@ export function validatePreviewRepairReceiptShape(receipt, plan) {
   return receipt
 }
 
-export async function validatePreviewRepairReceipt(receipt, plan) {
+export async function validatePreviewRepairReceipt(receipt, plan, options = {}) {
   const actual = validatePreviewRepairReceiptShape(receipt, plan)
-  const source = await sourceMigrationChain()
+  const sourceDirectory = options.migrationDirectory ?? migrationDirectory
   for (const applied of actual.appliedMigrations) {
-    const migration = source.migrations.find((entry) => entry.path === applied.sourcePath)
-    if (!migration || migration.digest !== applied.sourceDigest) {
+    const prefix = 'supabase/migrations/'
+    const name = applied.sourcePath.startsWith(prefix)
+      ? applied.sourcePath.slice(prefix.length)
+      : ''
+    if (!/^\d{14}_[^/\\]+\.sql$/.test(name)
+      || normalizeMigrationName(name) !== applied.name) {
+      fail('supabase_preview_repair_receipt_source_digest')
+    }
+    let content
+    try {
+      content = await readFile(resolve(sourceDirectory, name))
+    } catch {
+      fail('supabase_preview_repair_receipt_source_digest')
+    }
+    if (contentDigest(content) !== applied.sourceDigest) {
       fail('supabase_preview_repair_receipt_source_digest')
     }
   }
