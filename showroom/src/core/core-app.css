@@ -3013,8 +3013,8 @@ input, select, textarea,
 .shop-review-sale .bi-label,
 .receipt-dialog-actions .core-button .bi-label { white-space: normal; text-align: left; }
 .shop-review-sale { min-height: 3.75rem; gap: var(--space-3); }
-.cashier-action-label { display: inline-grid; gap: .125rem; min-width: 0; text-align: left; line-height: 1.15; }
-.cashier-action-label > small[lang="my"] { color: currentColor; font-size: .75em; font-weight: 650; line-height: 1.35; opacity: .78; }
+.cashier-action-label { display: inline-grid; gap: .375rem; min-width: 0; text-align: left; line-height: 1.25; }
+.cashier-action-label > small[lang="my"] { color: currentColor; font-size: .875em; font-weight: 650; line-height: 1.7; opacity: .88; }
 .core-button.compact .cashier-action-label { text-align: center; }
 .shop-cart-actions { flex-wrap: wrap; }
 /* Unsubmitted local tickets stay secondary to checkout, with touch-sized actions. */
