@@ -16,7 +16,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from supermega_runtime.commerce_public_storefront import (
-    CommercePublicStorefront, _input, _page_cursor, _parse_page_cursor, _view,
+    CommercePublicStorefront, _input, _page_cursor, _parse_page_cursor,
+    _shop_request_id, _view,
     create_commerce_public_router,
 )
 from supermega_runtime.commerce_runtime import (
@@ -136,6 +137,30 @@ class CommercePublicBoundaryTests(unittest.TestCase):
         self.assertEqual(client.post(route, json={'reason': 'spam_or_duplicate'}).status_code, 200)
         self.assertEqual(adapter.close.call_args.kwargs['reason'], 'spam_or_duplicate')
 
+    def test_shop_contact_route_requires_sign_in_and_disables_caching(self):
+        adapter = Mock()
+        shop_id = _shop_request_id(str(uuid4()), str(uuid4()))
+        adapter.shop_contact.return_value = {'shopRequestId': shop_id,
+            'contact': {'name': 'Synthetic Buyer', 'phone': '09 12345678', 'address': None}}
+        app = FastAPI()
+        app.include_router(create_commerce_public_router(
+            store=adapter, enabled=True,
+            resolve_principal=lambda _: TrialPrincipal('synthetic', 'owner', 'human'),
+            resolve_client_address=lambda _: '192.0.2.10', abuse_key=bytes(range(32)),
+            public_origin='https://store.example.test'))
+        response = TestClient(app).get(
+            f'/api/trial/v1/commerce-public-inbox/shop/{shop_id}/contact')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('no-store', response.headers['cache-control'])
+        self.assertEqual(adapter.shop_contact.call_args.kwargs['shop_request_id'], shop_id)
+        locked = FastAPI()
+        locked.include_router(create_commerce_public_router(
+            store=adapter, enabled=True, resolve_principal=lambda _: None,
+            resolve_client_address=lambda _: '192.0.2.10', abuse_key=bytes(range(32)),
+            public_origin='https://store.example.test'))
+        self.assertEqual(TestClient(locked).get(
+            f'/api/trial/v1/commerce-public-inbox/shop/{shop_id}/contact').status_code, 401)
+
 
 @unittest.skipUnless(os.environ.get('SUPERMEGA_RUN_COMMERCE_PUBLIC_SQL') == '1',
                      'explicit disposable PostgreSQL rehearsal only')
@@ -220,11 +245,15 @@ class CommercePublicSqlTests(unittest.TestCase):
         self.assertEqual(inbox[0]['contact']['name'], body['name'])
         self.assertNotIn('customerProfile', inbox[0]['request'])
         self.assertEqual(inbox[0]['status'], 'new')
+        with self.assertRaises(TrialValidationError):
+            self.adapter.shop_contact(self.owner, shop_request_id=inbox[0]['shopRequestId'])
         claim = self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
         self.assertEqual(claim['status'], 'in_shop')
         self.assertFalse(claim['priceChanged'])
         self.assertEqual(self.adapter.claim(self.owner, handle=handle, request_id=body['requestId']), claim)
         self.assertEqual(self.adapter.inbox(self.owner)['requests'][0]['status'], 'in_shop')
+        self.assertEqual(self.adapter.shop_contact(
+            self.owner, shop_request_id=claim['shopRequestId'])['contact']['phone'], body['phone'])
         with self.pg._connect(self.admin_url) as connection:
             private = connection.execute("""select request_json,contact_json
                 from app_private.commerce_public_requests where handle=%s and request_id=%s""",
@@ -353,10 +382,12 @@ class CommercePublicSqlTests(unittest.TestCase):
         handle = publication['handle']
         with self.pg._connect(self.admin_url) as connection:
             for number in range(51):
+                request_id = str(uuid4())
                 connection.execute("""insert into app_private.commerce_public_requests
-                    (handle,request_id,workspace_id,request_json,contact_json,input_fingerprint,client_key,received_at)
-                    values(%s,%s,%s,'{}'::jsonb,'{}'::jsonb,%s,%s,now() - (%s * interval '1 second'))""",
-                    (handle, str(uuid4()), self.workspace_id, 'a' * 64, 'b' * 64, number))
+                    (handle,request_id,workspace_id,shop_request_id,request_json,contact_json,input_fingerprint,client_key,received_at)
+                    values(%s,%s,%s,%s,'{}'::jsonb,'{}'::jsonb,%s,%s,now() - (%s * interval '1 second'))""",
+                    (handle, request_id, self.workspace_id, _shop_request_id(handle, request_id),
+                     'a' * 64, 'b' * 64, number))
         first = self.adapter.inbox(self.owner)
         self.assertEqual(len(first['requests']), 50)
         self.assertIsNotNone(first['nextCursor'])

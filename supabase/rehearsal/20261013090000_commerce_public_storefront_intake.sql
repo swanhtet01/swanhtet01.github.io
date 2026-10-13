@@ -25,6 +25,8 @@ create table app_private.commerce_public_requests (
   handle uuid not null,
   request_id uuid not null,
   workspace_id text not null,
+  shop_request_id text not null
+    check (shop_request_id ~ '^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$'),
   request_json jsonb not null check (jsonb_typeof(request_json) = 'object'),
   contact_json jsonb not null check (jsonb_typeof(contact_json) = 'object'),
   input_fingerprint text not null check (input_fingerprint ~ '^[0-9a-f]{64}$'),
@@ -40,6 +42,7 @@ create table app_private.commerce_public_requests (
   check ((status = 'closed') = (close_reason is not null and closed_by is not null and closed_at is not null)),
   check (redacted_at is null or (status = 'closed' and redacted_at >= closed_at)),
   primary key (handle, request_id),
+  unique (workspace_id, shop_request_id),
   foreign key (workspace_id, handle)
     references app_private.commerce_public_storefronts(workspace_id, handle)
 );
@@ -128,7 +131,8 @@ $$;
 -- durable deduplication and bounded intake; it never confirms an order, reserves
 -- stock, sends a message, or creates a payment.
 create function app_private.receive_commerce_public_request(
-  p_handle uuid, p_request uuid, p_fingerprint text, p_request_json jsonb,
+  p_handle uuid, p_request uuid, p_shop_request_id text,
+  p_fingerprint text, p_request_json jsonb,
   p_contact_json jsonb,
   p_client_key text
 ) returns jsonb language plpgsql security definer
@@ -138,6 +142,8 @@ declare binding app_private.commerce_public_storefronts%rowtype;
   stamp timestamptz;
 begin
   if p_request is null or p_fingerprint !~ '^[0-9a-f]{64}$'
+    or p_shop_request_id is null
+    or p_shop_request_id !~ '^ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$'
     or p_client_key !~ '^[0-9a-f]{64}$'
     or jsonb_typeof(p_request_json) is distinct from 'object'
     or p_request_json->>'id' is distinct from 'ECR-' || upper(p_request::text)
@@ -184,9 +190,10 @@ begin
     raise exception 'commerce_public_capacity' using errcode = 'P0001';
   end if;
   insert into app_private.commerce_public_requests(
-    handle, request_id, workspace_id, request_json, contact_json,
+    handle, request_id, workspace_id, shop_request_id, request_json, contact_json,
     input_fingerprint, client_key, received_at)
-    values (p_handle, p_request, binding.workspace_id, p_request_json, p_contact_json,
+    values (p_handle, p_request, binding.workspace_id, p_shop_request_id,
+      p_request_json, p_contact_json,
       p_fingerprint, p_client_key, stamp);
   return jsonb_build_object('status', 'received', 'requestId', p_request, 'duplicate', false);
 end;
@@ -361,7 +368,7 @@ end;
 $$;
 
 revoke all on function app_private.read_commerce_public_source(uuid),
-  app_private.receive_commerce_public_request(uuid,uuid,text,jsonb,jsonb,text),
+  app_private.receive_commerce_public_request(uuid,uuid,text,text,jsonb,jsonb,text),
   app_private.replay_commerce_public_request(uuid,uuid,text),
   app_private.reserve_commerce_public_request(text,uuid,uuid),
   app_private.complete_commerce_public_request_claim(text,uuid,uuid),
@@ -370,7 +377,7 @@ revoke all on function app_private.read_commerce_public_source(uuid),
   app_private.redact_closed_commerce_public_requests(uuid,integer)
   from public, anon, authenticated, service_role;
 grant execute on function app_private.read_commerce_public_source(uuid),
-  app_private.receive_commerce_public_request(uuid,uuid,text,jsonb,jsonb,text),
+  app_private.receive_commerce_public_request(uuid,uuid,text,text,jsonb,jsonb,text),
   app_private.replay_commerce_public_request(uuid,uuid,text),
   app_private.reserve_commerce_public_request(text,uuid,uuid),
   app_private.complete_commerce_public_request_claim(text,uuid,uuid),

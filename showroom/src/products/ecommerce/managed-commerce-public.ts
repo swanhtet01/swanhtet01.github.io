@@ -28,6 +28,8 @@ export type ManagedCommercePublicRequest = {
   }
 }
 
+export type ManagedCommercePublicContact = Pick<ManagedCommercePublicRequest, 'shopRequestId' | 'contact'>
+
 export async function loadManagedCommercePublications(identity: ManagedIdentity) {
   return authorizedRequest<{ publications: ManagedCommercePublicPublication[] }>(
     '/api/trial/v1/commerce-publications', { cache: 'no-store', credentials: 'omit' }, true, identity)
@@ -48,6 +50,12 @@ export async function revokeManagedCommerceStorefront(identity: ManagedIdentity,
 export async function loadManagedCommercePublicInbox(identity: ManagedIdentity, after?: string) {
   return authorizedRequest<{ requests: ManagedCommercePublicRequest[]; nextCursor: string | null }>(
     '/api/trial/v1/commerce-public-inbox' + (after ? `?after=${encodeURIComponent(after)}` : ''),
+    { cache: 'no-store', credentials: 'omit' }, true, identity)
+}
+
+export async function loadManagedCommercePublicShopContact(identity: ManagedIdentity, shopRequestId: string) {
+  return authorizedRequest<ManagedCommercePublicContact>(
+    `/api/trial/v1/commerce-public-inbox/shop/${encodeURIComponent(shopRequestId)}/contact`,
     { cache: 'no-store', credentials: 'omit' }, true, identity)
 }
 

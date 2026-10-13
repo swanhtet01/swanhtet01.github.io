@@ -355,8 +355,8 @@ class CommercePublicStorefront:
                 order_request = build_ecommerce_order_request(
                     quote, source_storefront_revision=source['sourceRevision'],
                     source_storefront_action_id=source['sourceActionId'])
-                cursor.execute('select app_private.receive_commerce_public_request(%s,%s,%s,%s::jsonb,%s::jsonb,%s) as receipt',
-                               (handle, request_id, fingerprint,
+                cursor.execute('select app_private.receive_commerce_public_request(%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s) as receipt',
+                               (handle, request_id, _shop_request_id(handle, request_id), fingerprint,
                                 json.dumps(order_request, ensure_ascii=False),
                                 json.dumps(contact, ensure_ascii=False), client_key))
                 return cursor.fetchone()['receipt']
@@ -365,7 +365,7 @@ class CommercePublicStorefront:
         cursor_key = _parse_page_cursor(after) if after is not None else None
         with self.store._guarded_cursor(principal, write=False, capability='commerce.write') as (cursor, _):
             _require_public_schema(cursor)
-            cursor.execute("""select handle,request_id,request_json,contact_json,received_at,status
+            cursor.execute("""select handle,request_id,shop_request_id,request_json,contact_json,received_at,status
                 from app_private.commerce_public_requests where workspace_id=%s
                 and status <> 'closed'
                 and (%s::timestamptz is null or (received_at,handle,request_id) < (%s::timestamptz,%s::uuid,%s::uuid))
@@ -384,14 +384,38 @@ class CommercePublicStorefront:
             return {'requests': [{'handle': str(row['handle']), 'requestId': str(row['request_id']),
                 'request': row['request_json'],
                 'contact': row['contact_json'],
-                'shopRequestId': _shop_request_id(str(row['handle']), str(row['request_id'])),
+                'shopRequestId': row['shop_request_id'],
                 'status': ('in_shop' if row['status'] == 'in_shop'
-                    or _shop_request_id(str(row['handle']), str(row['request_id'])) in retained
-                    or _shop_request_id(str(row['handle']), str(row['request_id'])) in converted
+                    or row['shop_request_id'] in retained
+                    or row['shop_request_id'] in converted
                     else 'reviewing' if row['status'] == 'in_review' else 'new'),
                 'receivedAt': row['received_at'].astimezone(timezone.utc).isoformat()}
                 for row in rows[:50]],
                 'nextCursor': _page_cursor(rows[49]) if len(rows) > 50 else None}
+
+    def shop_contact(self, principal: TrialPrincipal, *, shop_request_id: str) -> dict[str, Any]:
+        """Show contact only while its unconverted request is in this Shop queue."""
+        if not re.fullmatch(r'ECR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}',
+                            shop_request_id):
+            raise TrialValidationError('commerce_public_invalid')
+        with self.store._guarded_cursor(principal, write=False, capability='commerce.write') as (cursor, _):
+            _require_public_schema(cursor)
+            cursor.execute("""select contact_json from app_private.commerce_public_requests
+                where workspace_id=%s and shop_request_id=%s and status='in_shop'
+                  and redacted_at is null""", (principal.workspace_id, shop_request_id))
+            contact_row = cursor.fetchone()
+            if contact_row is None:
+                raise TrialValidationError('commerce_public_unavailable')
+            cursor.execute("""select state_json from app_private.workspace_state
+                where workspace_id=%s and surface='commerce'""", (principal.workspace_id,))
+            state_row = cursor.fetchone()
+            if state_row is None:
+                raise TrialValidationError('commerce_public_unavailable')
+            state = validate_commerce_state(state_row['state_json'])
+            if (not any(item['id'] == shop_request_id for item in state['storefrontRequests'])
+                    or any(order.get('sourceRecordId') == shop_request_id for order in state['orders'])):
+                raise TrialValidationError('commerce_public_unavailable')
+            return {'shopRequestId': shop_request_id, 'contact': contact_row['contact_json']}
 
     def claim(self, principal: TrialPrincipal, *, handle: str, request_id: str) -> dict[str, Any]:
         """Requote a received request into Shop review; never confirm or charge it."""
@@ -628,6 +652,12 @@ def create_commerce_public_router(*, store: CommercePublicStorefront, enabled: b
             raise _error(422 if configured else 503, 'request_invalid' if configured else 'commerce_public_unavailable')
         after = request.query_params.get('after')
         return await invoke(lambda: store.inbox(principal(request), after=after))
+
+    @router.get('/api/trial/v1/commerce-public-inbox/shop/{shop_request_id}/contact')
+    async def shop_contact(shop_request_id: str, request: Request):
+        available(request)
+        return await invoke(lambda: store.shop_contact(principal(request),
+                                                        shop_request_id=shop_request_id))
 
     @router.post('/api/trial/v1/commerce-public-inbox/{handle}/{request_id}/claim')
     async def claim(handle: str, request_id: str, request: Request):
