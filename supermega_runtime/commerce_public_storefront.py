@@ -586,6 +586,7 @@ class CommercePublicStorefront:
                 self.store._assert_runtime_role(cursor)
                 self.store._assert_schema(cursor)
                 _require_public_schema(cursor)
+                cursor.execute("set local statement_timeout='10s'")
                 cursor.execute('select app_private.commerce_public_redaction_due_count(%s) as count',
                                (cap,))
                 return int(cursor.fetchone()['count'])
