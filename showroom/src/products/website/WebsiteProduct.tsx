@@ -99,6 +99,60 @@ const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   },
 }
 
+const reviewTaskCopy: Record<string, string> = {
+  'site-identity': 'Name your website',
+  'ready-pages': 'Finish a page and mark it ready',
+  'home-path': 'Set a ready Home page',
+  'unique-paths': 'Give each page a unique address',
+  'unique-anchors': 'Give each page a distinct link',
+  navigation: 'Check the pages in your menu',
+  destinations: 'Fix buttons that lead to missing pages',
+}
+
+const reviewTaskDetail: Record<string, string> = {
+  'site-identity': 'Add the name customers should see.',
+  'ready-pages': 'Complete every ready page, and mark at least one page ready.',
+  'home-path': 'Exactly one ready page must use / as its address.',
+  'unique-paths': 'Change repeated page addresses in Page details.',
+  'unique-anchors': 'Rename one page address so every link works.',
+  navigation: 'Show at least one ready page in your menu, with a clear name.',
+  destinations: 'Point each button to a ready page or a secure website.',
+}
+
+function WebsiteReadiness({ checks, onEdit, storageMode }: {
+  checks: ReadinessCheck[]
+  onEdit: () => void
+  storageMode: 'managed' | 'browser-local' | 'session-only'
+}) {
+  const websiteChecks = checks.filter((check) => !check.id.startsWith('evidence-'))
+  const incomplete = websiteChecks.filter((check) => !check.passed)
+  const passed = websiteChecks.length - incomplete.length
+
+  return (
+    <section className="website-editor-panel website-review" aria-labelledby="website-review-title">
+      <header className="website-panel-head">
+        <div>
+          <span className="website-eyebrow">Site review</span>
+          <h2 id="website-review-title">Finish your website</h2>
+          <p>Complete these steps before {storageMode === 'managed' ? 'publishing' : 'downloading'}.</p>
+        </div>
+        <span className="website-status is-pending">{passed}/{websiteChecks.length}</span>
+      </header>
+      <div className="website-editor-scroll website-review-body">
+        <ul aria-label="Steps to finish your website" className="website-review-tasks">
+          {incomplete.map((check, index) => (
+            <li key={check.id}>
+              <span aria-hidden="true">{index + 1}</span>
+              <div><strong>{reviewTaskCopy[check.id] ?? check.label}</strong><p>{reviewTaskDetail[check.id] ?? check.detail}</p></div>
+            </li>
+          ))}
+        </ul>
+        <button className="website-button is-primary" onClick={onEdit} type="button">Edit pages</button>
+      </div>
+    </section>
+  )
+}
+
 function DownloadWorkspace({
   checks,
   onDownload,
@@ -120,7 +174,7 @@ function DownloadWorkspace({
         <div>
           <span className="website-eyebrow">Ready to use</span>
           <h2 id="website-ready-title">Download your website</h2>
-          <p>Open one file on any phone or computer, or hand it to a hosting provider.</p>
+          <p>Preview your pages, then save a website file.</p>
         </div>
         <span className="website-status is-ready">Ready</span>
       </header>
@@ -131,17 +185,6 @@ function DownloadWorkspace({
           <strong>{workspace.siteName}</strong>
           <p>{readyPages.length} ready page{readyPages.length === 1 ? '' : 's'} · {passedChecks}/{websiteChecks.length} website checks passed</p>
         </div>
-
-        <ol className="website-download-steps">
-          <li>
-            <span aria-hidden="true">1</span>
-            <div><strong>Review</strong><p>Open Website view to check the page on the screen you use every day.</p></div>
-          </li>
-          <li>
-            <span aria-hidden="true">2</span>
-            <div><strong>Download</strong><p>Get a standalone HTML website with your ready pages.</p></div>
-          </li>
-        </ol>
 
         <div className="website-download-boundary" role="note">
           <strong>Not online yet</strong>
@@ -308,10 +351,11 @@ export function WebsiteProduct() {
     : null
   const workingSampleIsCurrent = Boolean(workspace.workingSample
     && workspace.workingSample.contentFingerprint === fingerprint)
-  const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
+  const canOpenReview = !hasUnsavedChanges && !starterAvailable
+  const canReview = canOpenReview && contentChecksPass
   const view: WebsiteView = requestedView === 'inquiries'
     ? 'inquiries'
-    : requestedView === 'publish' && canReview
+    : requestedView === 'publish' && canOpenReview
       ? 'publish'
       : 'content'
   // Read once for the life of this screen. The setup component is required to stay free of
@@ -340,10 +384,15 @@ export function WebsiteProduct() {
       }
     : view === 'inquiries'
       ? viewCopy.inquiries
-    : view === 'publish' && storageMode === 'session-only'
+    : view === 'publish' && !canReview
+      ? {
+          title: 'Review website',
+          copy: 'See what is left before your website is ready.',
+        }
+    : view === 'publish' && storageMode !== 'managed'
       ? {
           title: 'Your website is ready',
-          copy: 'Download it now. Go live only after final review.',
+          copy: 'Use Pages to preview it, then download the file.',
         }
       : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
@@ -423,11 +472,11 @@ export function WebsiteProduct() {
   }, [editSessionScope])
 
   useEffect(() => {
-    if (requestedView !== 'publish' || canReview) return
+    if (requestedView !== 'publish' || canOpenReview) return
     const next = new URLSearchParams(searchParams)
     next.delete('view')
     setSearchParams(next, { replace: true })
-  }, [canReview, requestedView, searchParams, setSearchParams])
+  }, [canOpenReview, requestedView, searchParams, setSearchParams])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -476,8 +525,8 @@ export function WebsiteProduct() {
       setNotice('Save or discard the unsaved Website draft before reviewing the file checklist.')
       return
     }
-    if (nextView === 'publish' && !canReview) {
-      setNotice('Finish and save every page before reviewing the file checklist.')
+    if (nextView === 'publish' && !canOpenReview) {
+      setNotice('Set up and save your website before reviewing it.')
       return
     }
     const next = new URLSearchParams(searchParams)
@@ -943,6 +992,10 @@ export function WebsiteProduct() {
 
   async function downloadWebsiteFile() {
     if (exportController.current || imageEditing) return
+    if (!canReview) {
+      setNotice('Finish the website checks before downloading.')
+      return
+    }
     if (!requireSavedWorkspace('downloading the Website')) return
     const controller = new AbortController()
     exportController.current = controller
@@ -1309,7 +1362,7 @@ export function WebsiteProduct() {
             </div>
           ) : null}
 
-          <header aria-label={view === 'content' ? 'Edit page' : view === 'inquiries' ? 'Manage inquiries' : 'Website file'} className="website-heading" data-view={view}>
+          <header aria-label={view === 'content' ? 'Edit page' : view === 'inquiries' ? 'Manage inquiries' : 'Review website'} className="website-heading" data-view={view}>
             <div>
               <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
               <p>{activeViewCopy.copy}</p>
@@ -1321,17 +1374,14 @@ export function WebsiteProduct() {
               </button>
               <button
                 aria-current={view === 'publish' ? 'page' : undefined}
-                disabled={!canReview}
+                disabled={!canOpenReview}
                 onClick={() => openWorkspaceView('publish')}
-                title={!canReview ? 'Finish and save every page before preparing the website file' : undefined}
+                title={!canOpenReview ? 'Set up and save your website before reviewing it' : undefined}
                 type="button"
               >
-                Website file
+                Review
               </button>
             </nav> : null}
-            {view === 'publish' ? (
-              <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
-            ) : null}
           </header>
 
           {pendingRestoredDraft ? (
@@ -1533,7 +1583,7 @@ export function WebsiteProduct() {
           </section></details></> : null}
 
           {view !== 'inquiries' ? <div
-            aria-label={view === 'content' ? 'Edit' : 'Publish'}
+            aria-label={view === 'content' ? 'Edit' : 'Review website'}
             className={'website-workspace-grid view-' + view}
             data-surface={surface}
             id="website-active-panel"
@@ -1634,7 +1684,9 @@ export function WebsiteProduct() {
               ) : null}
 
               {view === 'publish' ? (
-                storageMode === 'managed' ? (<>
+                !canReview ? (
+                  <WebsiteReadiness checks={checks} onEdit={() => openWorkspaceView('content')} storageMode={storageMode} />
+                ) : storageMode === 'managed' ? (<>
                   <Suspense fallback={<p role="status">Checking website hosting…</p>}><HostedWebsite key={`${managedWorkspaceId}:${managedActorId}:publish`} workspaceId={managedWorkspaceId} actorId={managedActorId} view="publish" snapshotId={publish?.id ?? ''} pageId={inquiryPageId} canWrite={canWrite} /></Suspense>
                   <details className="website-status-disclosure" open={!publishIsCurrent ? true : undefined}><summary>Site review and saved versions</summary>
                   <PublishWorkspace

@@ -20,6 +20,7 @@ async function run(failure) {
   } })
   const context = {
     window, workspace: {}, mediaClient: {}, imageEditing: failure === 'image-editing', exportController,
+    canReview: failure !== 'not-ready',
     location: { pathname: '/website/', search: '' }, AbortController,
     requireSavedWorkspace: () => failure !== 'unsaved',
     createWebsitePreviewArtifact: value => value,
@@ -53,6 +54,12 @@ test('export failure does not request a download', async () => {
 })
 test('unsaved content still blocks download', async () => {
   assert.deepEqual(await run('unsaved'), { notice: '', clicks: 0 })
+})
+
+test('incomplete website checks block download', async () => {
+  const result = await run('not-ready')
+  assert.equal(result.clicks, 0)
+  assert.match(result.notice, /Finish the website checks/)
 })
 
 for (const failure of ['busy', 'image-editing']) {
