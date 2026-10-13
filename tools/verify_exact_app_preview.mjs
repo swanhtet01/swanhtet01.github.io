@@ -141,14 +141,18 @@ export function derivePublicHomepageExpectedText({ manifest, generatorSource }) 
   }
   const requiredGeneratorBindings = [
     '<h1>Run the business.<br>Without the busywork.</h1>',
-    '<p class="lede">Sales, stock, a working website and customer orders—one platform, built to stay in step.</p>',
-    '<p class="platform-note">Shop. Sites. Commerce. One connected operating system.</p>',
+    '<p class="lede">Run in-store sales, your website and online orders from one clear platform.</p>',
     'href="https://app.supermega.dev/login">Login</a>',
   ]
   if (requiredGeneratorBindings.some((fragment) => !occursExactlyOnce(generatorSource, fragment))) {
     fail('exact_app_preview_public_generator_binding_drift')
   }
-  const expected = ['Run the business.', 'Without the busywork.', 'Shop. Sites. Commerce. One connected operating system.', 'Login']
+  const expected = [
+    'Run the business.',
+    'Without the busywork.',
+    'Run in-store sales, your website and online orders from one clear platform.',
+    'Login',
+  ]
   if (RETIRED_PUBLIC_HOME_EXPECTED_TEXT.some((retired) => (
     generatorSource.includes(retired) || expected.some((value) => value.includes(retired))
   ))) fail('exact_app_preview_public_retired_copy_present')
