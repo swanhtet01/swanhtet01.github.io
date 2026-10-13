@@ -1,12 +1,20 @@
 # SuperMega Supergoal
 
-Version: 1.4.20
+Version: 1.4.21
 Owner: Swan Htet, Founder
 Maintainer: CTO, sole integration writer
-Updated: 2026-10-10
+Updated: 2026-10-13
 Status: ACTIVE — implementation and acceptance in progress; not production-ready.
 
-## Current checkpoint
+## Current checkpoint — 13 October
+
+The CTO integration checkout `pr648-base-integration-20261013` started at `e0052798949ca2c6379056e00854e8ea1b2ae886` on draft [PR #648](https://github.com/swanhtet01/swanhtet01.github.io/pull/648). App CI and GitGuardian passed at that base commit; new edits need their own exact-head checks. The PR has no independent review or deployment. Source includes the simplified bilingual public contact form and seven illustrative, actual-component synthetic gallery assets. The [live contact page](https://supermega.dev/contact/) still has the old fields and each live product page shows one illustrative image. Neither the older generated multi-image output nor local synthetic captures proves exact-head hosted product visuals. Managed founder sign-in, workspace save/reload/recovery/isolation and the full Sites publish/inquiry journey remain unaccepted. Keep the PR draft and the live domain unchanged until those gates and an eligible independent review pass. The external launch-control record is `C:/Users/thesw/OneDrive - BDA/outputs/supermega-launch-control-20260924.md`.
+
+**Current task:** make the next real first-use Sites or Commerce journey easier and more reliable at this exact source, then run focused checks and obtain hosted managed acceptance. Product acceptance comes before gallery promotion, pricing and agent scale-out. The existing Contabo Windows VPS is owner-approved for SuperMega alongside a live trading application, but RDP fails before sign-in and the VNC viewer's input mapping is unsafe for automated guest work; no worker is installed. Establish a verified management path and inspect workload isolation before using it. SuperMega agents belong on existing paid VPS/cloud capacity; local Ollama/inference plans and local-RAM runtime gates are retired. Browser QA is a separate acceptance stream.
+
+**Sites first-use source slice:** a managed or session-only Sites starter no longer reads or inherits device-local Shop business details; browser-local Sites retains that convenience. The starter remounts on storage-mode, managed-workspace or actor changes so its held draft cannot cross accounts. The focused trade-detection contract passes 50 checks, managed-brief acceptance 55, starter UI 7, scoped lint, TypeScript, production build and app-build contract pass locally. The Shop route is still only 43 bytes under its 475,000-byte ceiling; exact-head Linux CI and hosted managed isolation remain outstanding. This is a local source result, not production or customer acceptance.
+
+## Historical checkpoint — 10 October
 
 Last CI-checked source: `adaddee6ca825e5730774f52d801db5a9fcddd84` on branch `redesign/product-workspace-clarity-20261009`, checkout `product-polish-20261010`, [draft PR #648](https://github.com/swanhtet01/swanhtet01.github.io/pull/648). Its App CI passed through step 635/669 then failed the CSS literal ratchet at step 636; the barcode and advanced-bundle guard repairs are included. This CTO lane owns the selected #647 backend integration; its separate PR must not be merged blindly. The CEO checkout and its independent Supergoal lineage remain separate. The active local follow-up replaces ad hoc Website review colors with semantic tokens and restores the publish accent-token definitions; focused CSS contracts pass, but this source has not yet had remote CI.
 
@@ -36,7 +44,7 @@ This is the maintained project brief. It does not override higher-priority instr
 
 ### Active Codex goal
 
-> Bring SuperMega.dev to a sellable, founder-controlled launch by iteratively completing the real Shop, Sites and Commerce workflows to the accepted premium design standard; keeping the public website truthful to actual product captures; proving managed founder sign-in, membership, save/reload, recovery and cross-workspace isolation; maintaining exact-head CI, security and performance evidence; and only then executing independently reviewed production release. After customer-facing acceptance, package one complete Basic/Free offer, a capability-backed Pro offer and Assisted Launch, then build measured Burmese onboarding, sales/marketing operations, and cost-controlled local/VPS agent infrastructure. Work in bounded serial slices, keep supergoal.md and the launch-control record current, preserve founder gates for spending, production, credentials, IAM, payments and customer contact, and never convert mockups or local tests into hosted/customer claims.
+> Bring SuperMega.dev to a sellable, founder-controlled launch by iteratively completing the real Shop, Sites and Commerce workflows to the accepted premium design standard; keeping the public website truthful to actual product captures; proving managed founder sign-in, membership, save/reload, recovery and cross-workspace isolation; maintaining exact-head CI, security and performance evidence; and only then executing independently reviewed production release. After customer-facing acceptance, package one complete Basic/Free offer, a capability-backed Pro offer and Assisted Launch, then build measured Burmese onboarding, sales/marketing operations, and cost-controlled VPS/cloud agent infrastructure. Work in bounded serial slices, keep supergoal.md and the launch-control record current, preserve founder gates for spending, production, credentials, IAM, payments and customer contact, and never convert mockups or local tests into hosted/customer claims.
 
 Maintain this repository file through version control and reconcile parallel authoring lanes before integration. The active goal remains intact; a passing slice does not complete it.
 
@@ -234,15 +242,15 @@ Use the existing single owner release mechanism where applicable. Bind approval 
 
 Use the owner-provided credential files locally only when a concrete authorized task requires them. Do not read raw secrets into the context, print them, expose them through errors or commit them. Prefer scoped connectors/secret stores. Record permission results and resource identifiers, not credentials. Read access does not prove write permission; never perform a live write merely to test it.
 
-The connected platform is not air-gapped. The realistic requirement is local-only inference where selected, restricted network/data flow and verified secret handling. Do not promise mathematical zero-leak memory behavior in a general-purpose runtime.
+The connected platform is not air-gapped. Use restricted network/data flow and verified secret handling for approved VPS/cloud agent tasks. Do not promise mathematical zero-leak memory behavior in a general-purpose runtime.
 
-### ROG Ally operating limits
+### Current agent runtime policy — 13 October
 
-Readiness check on 28 September confirms Ollama/OpenCode and `llama3.2:1b` installed, with no loaded models. The deeper launcher check blocks inference: 1,885,237,248 bytes available versus 2,684,354,560 required. Keep inference off until the memory gate passes naturally; do not terminate owner applications or bypass the gate. Installation is not accepted coding quality. Use existing local-agent-company launchers and protected-test receipts for bounded tasks, not another agent framework.
+Run SuperMega agents on existing paid VPS/cloud capacity. Local Ollama/inference plans and local-RAM runtime gates are retired by owner direction; do not restart that lane. The Contabo Windows VPS is owner-approved for SuperMega alongside a live trading application, but guest management, workload isolation and one useful verified agent job remain unproven. Do not automate guest clicks through the currently mis-mapped VNC input. Browser QA remains a separate product-acceptance stream.
 
-One active primary task, zero local Codex subagents by default, serial heavy jobs, one dev server and one local worker. Preserve active servers and owner-visible applications. Do not terminate Claude or other applications for memory without the specific owner request. Models remain scale-to-zero with short keep-alive; no hidden paid/cloud fallback.
+Keep one primary integration writer and serial heavy jobs. Delegate bounded read-only reviews when they improve the result, and accept findings through the primary writer. Preserve active servers and owner-visible applications. Do not terminate Claude or other applications for memory without the specific owner request. Treat each new cloud model task as a scoped cost and data-flow decision, not an automatic fallback.
 
-Do not reinstate hourly scheduled tasks. Corporate automation remains paused unless explicitly changed. Current local model policy supports its admitted Llama configurations. DeepSeek or other models are evaluation candidates, not assumed installed capabilities. Do not bypass memory/model gates to simulate a larger team.
+Do not reinstate hourly scheduled tasks. Corporate automation remains paused unless explicitly changed. Additional models and agent frameworks are evaluation candidates, not assumed installed capabilities or permission to scale a fleet.
 
 ## 6. Priorities and immediate queue
 
@@ -349,9 +357,9 @@ Use this compact queue, not a separate fleet or duplicate project board. This is
 | Support analyst | Primary agent, then qualified workcell role | One request-to-resolution record in the existing system | Stable reference, owner, reproduction, verified resolution/reopen outcome |
 | Revenue operations | Primary agent using corporate records | One capability-backed scoped offer | Verified need, cost assumptions, founder-approved price; sending separately authorized |
 | Reliability operator | Deterministic checks with primary triage | An actionable signal tied to a version and affected task | Reproducible failure, severity, next action; no repeated unchanged alerts |
-| R&D engineer | Bounded review now; workcell experiment after capacity passes | Catalog-mapping experiment below | Baseline comparison, integrity checks, measured correction time, adopt/reject |
+| R&D engineer | Bounded review now; VPS/cloud experiment after guest management and workload isolation are proven | Catalog-mapping experiment below | Baseline comparison, integrity checks, measured correction time, adopt/reject |
 
-**Staffing and capacity, 30 September:** one active primary operator; no accepted persistent VPS development or R&D team. Registered roles are configurations, not working employees. The latest local coding admission measured 1,301,999,616 available bytes against 2,684,354,560 required and refused model launch. Installed tools and a generic ready flag do not override admission or quality checks. The read-only Windows capacity probe is prepared at `C:/Users/thesw/OneDrive - BDA/outputs/inspect-supermega-windows-capacity.ps1`; its local test is not Contabo evidence. Preserve known failed-quality outputs for diagnosis; do not present them as accepted work.
+**Staffing and capacity, 13 October:** one active primary integration writer; no accepted persistent VPS development or R&D team. Registered roles are configurations, not working employees. The Contabo Windows VPS is running and owner-approved for SuperMega, but RDP fails before sign-in and VNC input mapping proved unsafe for automated guest work. No worker is installed or accepted. A verified management path, isolated deployment and one useful completed job are needed before reporting an operating agent team. Preserve known failed-quality outputs for diagnosis; do not present them as accepted work.
 
 One coordinator assigns and accepts work. Roles share a serial executor until
 measured capacity and workload isolation support scaling. Delegated reviews

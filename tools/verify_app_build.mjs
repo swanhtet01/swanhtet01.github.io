@@ -4355,10 +4355,9 @@ if (!websiteSource.includes('starterSetupActive')
   || websiteStarterSetupSource.includes('Choose business type')
   || websiteStarterSetupSource.includes('<span>Business type</span>')
   || !websiteStarterSetupSource.includes('<span className="website-eyebrow">Sites</span>')
-  // The starter opens from EMPTY_BRIEF unless the shell passes the trade the device's Shop
-  // was set up as, in which case it opens on that trade's wording. openingState() is a pure
-  // function of that prop -- the storage read lives in WebsiteProduct, which is why the
-  // localStorage ban further down still holds for this component.
+  // Only browser-local Sites may reuse device-local Shop details. Managed and session-only
+  // starters must receive empty context, and a mode/workspace switch must remount the starter
+  // rather than retain a different business's brief in its useState initialization.
   || !websiteStarterSetupSource.includes('const [opening] = useState(() => openingState(initialTradeId, initialBusinessName))')
   || !websiteStarterSetupSource.includes('useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))')
   || !websiteStarterSetupSource.includes('initialTradeId?: ShopBusinessTemplateId | null')
@@ -4367,14 +4366,18 @@ if (!websiteSource.includes('starterSetupActive')
   // hide a validation error behind a silently altered name.
   || !websiteStarterSetupSource.includes('? initialBusinessName')
   || websiteStarterSetupSource.includes('readLocalSetupBusinessName')
-  || !websiteSource.includes('const [shopBusinessName] = useState(readLocalSetupBusinessName)')
-  || !websiteSource.includes('initialBusinessName={shopBusinessName}')
+  || !websiteStarterSource.includes("if (storageMode !== 'browser-local') return { tradeId: null, businessName: null }")
+  || !websiteSource.includes('const shopStarterContext = useMemo(() => readWebsiteStarterShopContext(storageMode), [storageMode])')
+  || websiteSource.includes('readLocalSetupBusinessName')
+  || !websiteSource.includes('initialBusinessName={shopStarterContext.businessName}')
   || !websiteStarterSetupSource.includes("return { brief: { ...EMPTY_BRIEF, businessName }, detected: false }")
   // Stronger than the localStorage ban alone: naming the detection helper here at all would
   // mean this component had started reading device state for itself.
   || websiteStarterSetupSource.includes('readLocalShopBusinessTemplateId')
-  || !websiteSource.includes('const [shopTradeId] = useState(readLocalShopBusinessTemplateId)')
-  || !websiteSource.includes('initialTradeId={shopTradeId}')
+  || websiteSource.includes('readLocalShopBusinessTemplateId')
+  || !websiteSource.includes('initialTradeId={shopStarterContext.tradeId}')
+  || !websiteSource.includes('const editSessionScope = websiteEditSessionScope(storageMode, managedActorId, managedWorkspaceId)')
+  || !websiteSource.includes('key={editSessionScope}')
   || websiteStarterSetupSource.includes('Load sample brief')
   || !websiteStarterSetupSource.includes('Start your website')
   || !websiteStarterSetupSource.includes('Not published')

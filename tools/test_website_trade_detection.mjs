@@ -21,6 +21,7 @@ const bundle = await build({
       export {
         readLocalShopBusinessTemplateId, readLocalSetupBusinessName,
       } from './product-onboarding-runtime.ts'
+      export { readWebsiteStarterShopContext } from '../products/website/website-starter.ts'
       export {
         createSeedCommerce, installCommerceWorkingSampleCatalog, commerceWorkingSampleCatalogId,
       } from './commerce-workspace.ts'
@@ -41,6 +42,7 @@ const bundle = await build({
 
 const {
   readLocalShopBusinessTemplateId, readLocalSetupBusinessName,
+  readWebsiteStarterShopContext,
   createSeedCommerce, installCommerceWorkingSampleCatalog,
   commerceWorkingSampleCatalogId, shopBusinessTemplates, shopBusinessTemplateCommerceItems,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
@@ -251,6 +253,35 @@ check(
   readLocalSetupBusinessName(fakeStore({ [SETUP_KEY]: setupRecord(PADDED) })) === PADDED,
   "and surrounding spaces are preserved too -- trimming is the form's job, not this reader's",
 )
+
+// A founder's managed company may be different from the local Shop on this browser.
+// That context must be absent without even consulting the device store.
+const localShop = storeWithTemplate('pharmacy')
+const sharedDevice = fakeStore({
+  [COMMERCE_KEY]: JSON.stringify(localShop),
+  [SETUP_KEY]: setupRecord('Thiri Pharmacy'),
+})
+const recordedReads = []
+const recordingStore = {
+  getItem(key) { recordedReads.push(key); return sharedDevice.getItem(key) },
+  setItem() {},
+  removeItem() {},
+}
+check(
+  JSON.stringify(readWebsiteStarterShopContext('managed', recordingStore)) === JSON.stringify({ tradeId: null, businessName: null }),
+  'managed Sites does not inherit another business name or trade from this device',
+)
+check(recordedReads.length === 0, 'managed Sites performs zero device-store reads for starter context')
+check(
+  JSON.stringify(readWebsiteStarterShopContext('session-only', recordingStore)) === JSON.stringify({ tradeId: null, businessName: null }),
+  'session-only Sites does not inherit persistent device data',
+)
+check(recordedReads.length === 0, 'session-only Sites also performs zero device-store reads')
+check(
+  JSON.stringify(readWebsiteStarterShopContext('browser-local', recordingStore)) === JSON.stringify({ tradeId: 'pharmacy', businessName: 'Thiri Pharmacy' }),
+  'browser-local Sites still reuses this device Shop setup',
+)
+check(recordedReads.includes(COMMERCE_KEY) && recordedReads.includes(SETUP_KEY), 'browser-local Sites reads both local setup records')
 
 // --- two guards that are redundant today, recorded rather than dressed up -----
 // Mutation testing showed that deleting either the `snapshot.error` early return or the

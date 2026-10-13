@@ -3,10 +3,6 @@ import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import { emitMetric } from '../../analytics/metrics-collector'
-import {
-  readLocalSetupBusinessName,
-  readLocalShopBusinessTemplateId,
-} from '../../core/product-onboarding-runtime'
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
@@ -35,6 +31,7 @@ import type { WebsiteReleaseState } from './website-release-foundation'
 import {
   applyWebsiteStarterBrief,
   isUntouchedWebsiteStarter,
+  readWebsiteStarterShopContext,
   websiteStarterTemplates,
   type WebsiteStarterBrief,
 } from './website-starter'
@@ -357,10 +354,9 @@ export function WebsiteProduct() {
     : requestedView === 'publish' && canOpenReview
       ? 'publish'
       : 'content'
-  // Read once for the life of this screen. The setup component is required to stay free of
-  // device reads, so the shell does it and hands the answer down as a prop.
-  const [shopTradeId] = useState(readLocalShopBusinessTemplateId)
-  const [shopBusinessName] = useState(readLocalSetupBusinessName)
+  // Managed Sites must never inherit another business's device-local Shop details.
+  // Re-evaluate on mode changes so a previously local screen cannot leak stale props.
+  const shopStarterContext = useMemo(() => readWebsiteStarterShopContext(storageMode), [storageMode])
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
@@ -1592,8 +1588,9 @@ export function WebsiteProduct() {
               {view === 'content' ? (
                 starterSetupActive ? (
                   <WebsiteStarterSetup
-                    initialBusinessName={shopBusinessName}
-                    initialTradeId={shopTradeId}
+                    key={editSessionScope}
+                    initialBusinessName={shopStarterContext.businessName}
+                    initialTradeId={shopStarterContext.tradeId}
                     onCreate={startWithBusiness}
                   />
                 ) : (
