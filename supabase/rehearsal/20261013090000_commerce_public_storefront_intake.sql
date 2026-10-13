@@ -398,6 +398,8 @@ begin
   if found then return prior; end if;
   for item in
     select request.* from app_private.commerce_public_requests request
+    join app_private.workspace_state shop
+      on shop.workspace_id = request.workspace_id and shop.surface = 'commerce'
     where request.status in ('in_review', 'in_shop')
       and exists (select 1 from app_private.workspace_events event
         where event.workspace_id = request.workspace_id
@@ -407,6 +409,12 @@ begin
           and event.payload_json #>> '{evidence,evidenceReference}' =
               'ECOMMERCE-CLOSE:' || request.shop_request_id || ':' ||
               (event.payload_json #>> '{evidence,reason}'))
+      and not exists (select 1 from jsonb_array_elements(
+          coalesce(shop.state_json->'storefrontRequests', '[]'::jsonb)) queued
+          where queued->>'id' = request.shop_request_id)
+      and not exists (select 1 from jsonb_array_elements(
+          coalesce(shop.state_json->'orders', '[]'::jsonb)) shop_order
+          where shop_order->>'sourceRecordId' = request.shop_request_id)
     order by request.received_at, request.handle, request.request_id
     limit p_limit for update of request skip locked
   loop
