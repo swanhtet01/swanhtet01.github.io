@@ -89,8 +89,12 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20261014090000_website_channel_stable_update.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name not in ("20260711081300_public_legacy_baseline.sql",
-                                                     *module.DOMAIN_CANDIDATE_MIGRATIONS)))
+                                                     *module.DOMAIN_CANDIDATE_MIGRATIONS,
+                                                     module.SHOP_MEDIA_CANDIDATE_MIGRATION)))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)
+        self.assertTrue((ROOT / "supabase/migrations" / module.SHOP_MEDIA_CANDIDATE_MIGRATION).is_file())
+        self.assertNotIn(module.SHOP_MEDIA_CANDIDATE_MIGRATION, module.CURRENT_MIGRATIONS)
+        self.assertIn(f"supabase/migrations/{module.SHOP_MEDIA_CANDIDATE_MIGRATION}", module.IMPLEMENTATION_PATHS)
         self.assertEqual(len(module.DOMAIN_CANDIDATE_MIGRATIONS), 2)
         for candidate in module.DOMAIN_CANDIDATE_MIGRATIONS:
             self.assertTrue((ROOT / "supabase/migrations" / candidate).is_file())
