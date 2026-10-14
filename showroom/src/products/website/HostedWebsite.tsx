@@ -14,9 +14,9 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
   const [status, setStatus] = useState<PublicationStatus | null>(null)
   const [busy, setBusy] = useState(true)
   const [issue, setIssue] = useState('')
-  const [notice, setNotice] = useState('')
   const [withdrawArmed, setWithdrawArmed] = useState(false)
   const operation = useRef<AbortController | null>(null)
+  const writeInFlight = useRef(false)
   const attempt = useRef<{ source: string; channel: string } | null>(null)
   const refresh = useCallback(() => {
     operation.current?.abort()
@@ -28,13 +28,22 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
     }).finally(() => { if (!controller.signal.aborted) setBusy(false) })
   }, [client])
   useEffect(() => { void refresh(); return () => operation.current?.abort() }, [refresh, snapshotId])
+  useEffect(() => {
+    const checkWhenVisible = () => {
+      if (document.visibilityState === 'visible' && !writeInFlight.current) void refresh()
+    }
+    document.addEventListener('visibilitychange', checkWhenVisible)
+    return () => document.removeEventListener('visibilitychange', checkWhenVisible)
+  }, [refresh])
   const live = status?.publications.find(entry => entry.enabled)
+  const siteUrl = live && status ? `${status.publicOrigin}/sites/${live.channelId}` : ''
   const current = Boolean(live && live.snapshotId === snapshotId)
   const ready = Boolean(status?.source && status.source.snapshotId === snapshotId && pageId)
   async function change(withdraw = false) {
-    if (busy || !canWrite || !status || (!withdraw && !ready)) return
+    if (busy || writeInFlight.current || !canWrite || !status || (!withdraw && !ready)) return
     const controller = new AbortController(); operation.current = controller
-    setBusy(true); setIssue(''); setNotice('')
+    writeInFlight.current = true
+    setBusy(true); setIssue('')
     try {
       if (withdraw && live) {
         await client.withdraw(live, controller.signal)
@@ -46,23 +55,26 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
       const next = await client.status(controller.signal)
       if (!controller.signal.aborted) {
         setStatus(next); setWithdrawArmed(false); attempt.current = null
-        setNotice(withdraw ? 'Your site is offline. Saved inquiries are still available.' : 'Your website is published. Customer requests arrive in Inquiries.')
       }
     } catch (error) { if (!controller.signal.aborted) { setIssue(message(error)); setStatus(null) } }
-    finally { if (!controller.signal.aborted) setBusy(false) }
+    finally { writeInFlight.current = false; if (!controller.signal.aborted) setBusy(false) }
   }
   return <section className="website-hosted-card" aria-labelledby="website-hosting-title" aria-busy={busy}>
-    <header><div><span className="website-hosted-eyebrow">Website hosting</span><h2 id="website-hosting-title">{live ? current ? 'Your site is live' : 'Your live site has an update' : 'Publish your website'}</h2></div>
-      <span className={`website-hosted-status${live ? ' is-live' : ''}`}>{busy ? 'Checking…' : live ? 'Live' : status ? 'Not published' : 'Unavailable'}</span></header>
-    <p>{live ? `Last published ${date(live.publishedAt)}.` : 'Share a real website and receive customer requests in one inbox.'}</p>
+    <header><div><span className="website-hosted-eyebrow">Website hosting</span><h2 id="website-hosting-title">{live ? current ? 'Website published' : 'An update is ready' : 'Publish your website'}</h2></div>
+      <span role="status" className={`website-hosted-status${live ? ' is-published' : ''}`}>{busy ? 'Checking…' : live ? 'Published' : status ? 'Not published' : 'Unavailable'}</span></header>
+    <p>{live ? `Published ${date(live.publishedAt)}. Open the address below to check the site before sharing it.` : 'Publish your reviewed pages to get a website address you can share.'}</p>
     {issue ? <p role="alert" className="website-hosted-error">{issue}</p> : null}
-    {notice ? <p role="status">{notice}</p> : null}
     {status && !ready && !current ? <p className="website-hosted-hint">Review your pages and save an approved site version below before publishing.</p> : null}
+    {siteUrl ? <div className="website-hosted-address">
+      <span>Your website address</span>
+      <a href={siteUrl} target="_blank" rel="noreferrer">{siteUrl}</a>
+      <small>Check the site here before sharing this address with customers.</small>
+    </div> : null}
     <div className="website-hosted-actions">
-      {live && status ? <a className="website-button is-primary" href={`${status.publicOrigin}/sites/${live.channelId}`} target="_blank" rel="noreferrer">Open website ↗</a> : null}
       {!current ? <button className={`website-button ${live ? 'is-secondary' : 'is-primary'}`} disabled={busy || !ready || !canWrite} onClick={() => void change()} type="button">{live ? 'Publish update' : 'Publish website'}</button> : null}
-      <button className="website-button is-secondary" disabled={busy} onClick={() => { setBusy(true); setIssue(''); void refresh() }} type="button">Refresh status</button>
+      {issue ? <button className="website-button is-secondary" disabled={busy} onClick={() => { setBusy(true); setIssue(''); void refresh() }} type="button">Try again</button> : null}
     </div>
+    {live ? <p className="website-hosted-domain-note">Your own domain is not connected. Keep using the website address above until domain setup is available.</p> : null}
     {live && canWrite ? <div className="website-hosted-withdraw">
       {withdrawArmed ? <><p>Take this website offline? Visitors will no longer be able to open its pages or send a request.</p><div className="website-hosted-actions"><button className="website-button is-secondary" disabled={busy} onClick={() => setWithdrawArmed(false)} type="button">Keep online</button><button className="website-button is-secondary" disabled={busy} onClick={() => void change(true)} type="button">Take offline</button></div></>
         : <button disabled={busy} onClick={() => setWithdrawArmed(true)} type="button">Take website offline</button>}

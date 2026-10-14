@@ -5,7 +5,7 @@ This source implementation is not a production activation record.
 ## Customer workflow
 
 1. Edit and save pages, including photos. Review the current content and retain its approved site version.
-2. Open Publish website. The server reports the exact saved version and current publication; Publish uses that version, not browser-supplied HTML.
+2. Open Publish website. The server reports the exact saved version and current publication; Publish uses that version, not browser-supplied HTML. After publication, Sites shows the generated address and asks the owner to open it before sharing. A publication record is not proof that DNS, HTTPS and the public route work end to end.
 3. Open the published site. Its contact form delivers to the company's managed Inquiries view. The visible inbox refreshes every 45 seconds and pauses background polling when the tab is hidden or a request fails.
 4. Take website offline requires a confirmation. Withdrawal closes its pages, photo access and contact form; received inquiries remain available.
 
