@@ -475,6 +475,21 @@ test('requires one exact generation or validation argument set', () => {
   )
 })
 
+test('public preview text binds to the current homepage generator', async () => {
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'site-manifest.json'), 'utf8'))
+  const generatorSource = await readFile(join(repoRoot, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
+  const currentLede = 'Explore tools for in-store sales, website pages and online order requests.'
+  assert.equal(generatorSource.split(`<p class="lede">${currentLede}</p>`).length - 1, 1)
+  assert.deepEqual(await loadPublicHomepageExpectedText(),
+    derivePublicHomepageExpectedText({ manifest, generatorSource }))
+  assert.equal((await loadPublicHomepageExpectedText())[2], currentLede)
+  assert.throws(() => derivePublicHomepageExpectedText({
+    manifest,
+    generatorSource: generatorSource.replace(currentLede,
+      'Run in-store sales, your website and online orders from one clear platform.'),
+  }), /exact_app_preview_public_generator_binding_drift/)
+})
+
 test('builds and validates the exact twenty-eight-case technical preview proof', async () => {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'site-manifest.json'), 'utf8'))
   const generatorSource = await readFile(join(repoRoot, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
@@ -530,7 +545,7 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   assert.deepEqual(publicExpectedText, [
     'Run the business.',
     'Without the busywork.',
-    'Run in-store sales, your website and online orders from one clear platform.',
+    'Explore tools for in-store sales, website pages and online order requests.',
     'Login',
   ])
   assert.deepEqual(
@@ -545,7 +560,7 @@ test('builds and validates the exact twenty-eight-case technical preview proof',
   )
   for (const binding of [
     '<h1>Run the business.<br>Without the busywork.</h1>',
-    '<p class="lede">Run in-store sales, your website and online orders from one clear platform.</p>',
+    '<p class="lede">Explore tools for in-store sales, website pages and online order requests.</p>',
     'href="https://app.supermega.dev/login">Login</a>',
   ]) {
     assert.throws(
