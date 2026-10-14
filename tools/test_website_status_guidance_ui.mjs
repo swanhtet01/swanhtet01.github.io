@@ -90,6 +90,47 @@ test('brief-to-file workflow exposes one current owned step without adding actio
   assert.match(css, /\.website-workflow-rail \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
 })
 
+test('a reviewed file is not guided as published until hosting confirms that exact version', () => {
+  function actualSource(from, to) {
+    const start = source.indexOf(from)
+    const end = source.indexOf(to, start)
+    assert.ok(start >= 0 && end > start, `expected source between ${from} and ${to}`)
+    return source.slice(start, end)
+  }
+  const hostingSource = actualSource('  const hostingState =', '  // Managed Sites')
+  const nextSource = actualSource('  const hostingNext =', '  const websiteTodayStep =')
+  const todaySource = actualSource('  const websiteTodayStep =', '  const websiteAgentJob =')
+  const currentPublication = { enabled: true, snapshotId: 'reviewed-v2', pageId: 'contact', sourceVersion: 2 }
+  const oldPublication = { ...currentPublication, snapshotId: 'reviewed-v1' }
+  const status = (publications) => ({ source: { version: 2 }, publications })
+  const cases = [
+    { name: 'exact published version', state: 'confirmed', publication: status([currentPublication]), expectedCurrent: true, job: 'Check published website', step: 'published' },
+    { name: 'older published version', state: 'confirmed', publication: status([oldPublication]), expectedCurrent: false, job: 'Publish your update', step: 'hosting' },
+    { name: 'no published version', state: 'confirmed', publication: status([]), expectedCurrent: false, job: 'Publish website online', step: 'hosting' },
+    { name: 'hosting check unavailable with stale prior data', state: 'unavailable', publication: status([currentPublication]), expectedCurrent: false, job: 'Check website hosting', step: 'hosting' },
+    { name: 'new scope with stale prior data', state: 'confirmed', scope: 'previous', publication: status([currentPublication]), expectedCurrent: false, job: 'Check website hosting', step: 'hosting' },
+  ]
+  for (const item of cases) {
+    const hosting = runInNewContext(`${hostingSource};\n({ hostingState, hostedStatus, hostedLive, hostedCurrent })`, {
+      hostingRead: { scope: item.scope ?? 'current', state: item.state, status: item.publication },
+      hostingScope: 'current', publish: { id: 'reviewed-v2' }, inquiryPageId: 'contact',
+    })
+    assert.equal(hosting.hostedCurrent, item.expectedCurrent, item.name)
+    const next = runInNewContext(`${nextSource};\nhostingNext`, hosting)
+    assert.equal(next.job, item.job, `${item.name}: next action`)
+    const step = runInNewContext(`${todaySource};\nwebsiteTodayStep`, {
+      storageIssue: false, canRepairLocalStorage: false, pendingRestoredDraft: false,
+      starterSetupActive: false, starterAvailable: false, hasUnsavedChanges: false,
+      leadCounts: { new: 0 }, failingContentChecks: [], localPreviewReady: false,
+      releaseRecordRequired: true, approvalIsCurrent: true, publishIsCurrent: true,
+      hostedCurrent: hosting.hostedCurrent,
+    })
+    assert.equal(step, item.step, `${item.name}: guided step`)
+  }
+  assert.match(source, /label: 'Publish online'/)
+  assert.match(css, /\.website-workflow-rail > li:nth-child\(5\) \{ grid-column: 1 \/ -1;/)
+})
+
 test('saved failures render actual check details in an initially collapsed disclosure', () => {
   assert.ok(failures.length > 0)
   const html = render({ failingContentChecks: failures })

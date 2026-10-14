@@ -15,6 +15,7 @@ import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteMediaDownload } from './website-media-export'
 import { createWebsiteMediaClient } from './website-media-client'
 import { WebsiteMediaContext } from './WebsiteMediaContext'
+import type { PublicationStatus } from './website-publishing-client'
 import { websiteDraftDifference } from './website-draft-difference'
 import {
   captureWebsiteLead,
@@ -80,6 +81,12 @@ type WebsiteView = 'content' | 'inquiries' | 'publish'
 type WebsiteEditSessionState = {
   scope: string
   session: WebsiteEditSession
+}
+
+type WebsiteHostingRead = {
+  scope: string
+  state: 'checking' | 'confirmed' | 'unavailable'
+  status: PublicationStatus | null
 }
 
 const DEFAULT_NOTICE = 'Website ready to edit. Nothing has been published.'
@@ -370,6 +377,43 @@ export function WebsiteProduct() {
     : requestedView === 'publish' && canOpenReview
       ? 'publish'
       : 'content'
+  const hostingScope = storageMode === 'managed' && managedWorkspaceId && managedActorId && publish
+    ? `${managedWorkspaceId}:${managedActorId}:${publish.id}:${inquiryPageId}`
+    : ''
+  const [hostingRead, setHostingRead] = useState<WebsiteHostingRead>({ scope: '', state: 'checking', status: null })
+  useEffect(() => {
+    if (view !== 'content' || !hostingScope || !managedWorkspaceId || !managedActorId) {
+      const reset = window.setTimeout(() => setHostingRead({ scope: '', state: 'checking', status: null }), 0)
+      return () => window.clearTimeout(reset)
+    }
+    let operation: AbortController | null = null
+    const refresh = () => {
+      operation?.abort()
+      const controller = new AbortController()
+      operation = controller
+      setHostingRead({ scope: hostingScope, state: 'checking', status: null })
+      void import('./website-publishing-client')
+        .then(({ createPublishingClient }) => controller.signal.aborted
+          ? null
+          : createPublishingClient({ workspaceId: managedWorkspaceId, userId: managedActorId, email: '' }).status(controller.signal))
+        .then((status) => {
+          if (!controller.signal.aborted && status) setHostingRead({ scope: hostingScope, state: 'confirmed', status })
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setHostingRead({ scope: hostingScope, state: 'unavailable', status: null })
+        })
+    }
+    refresh()
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { operation?.abort(); document.removeEventListener('visibilitychange', onVisible) }
+  }, [hostingScope, managedActorId, managedWorkspaceId, view])
+  const hostingState = hostingRead.scope === hostingScope ? hostingRead.state : 'checking'
+  const hostedStatus = hostingState === 'confirmed' ? hostingRead.status : null
+  const hostedLive = hostedStatus?.publications.find((entry) => entry.enabled)
+  const hostedCurrent = Boolean(hostedLive && publish && inquiryPageId
+    && hostedLive.snapshotId === publish.id && hostedLive.pageId === inquiryPageId
+    && hostedLive.sourceVersion === hostedStatus?.source?.version)
   // Managed Sites must never inherit another business's device-local Shop details.
   // Re-evaluate on mode changes so a previously local screen cannot leak stale props.
   const shopStarterContext = useMemo(() => readWebsiteStarterShopContext(storageMode), [storageMode])
@@ -413,7 +457,7 @@ export function WebsiteProduct() {
   const savedStateNotice = storageMode === 'managed'
     ? portalViewOnly
       ? 'View only — ask a company owner to assign Website operator access.'
-      : 'Changes are saved to this company account. Nothing has been deployed.'
+      : 'Changes are saved to this company account. Publishing is a separate step.'
     : storageMode === 'browser-local'
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
@@ -1063,6 +1107,31 @@ export function WebsiteProduct() {
   const showEditorInsights = showPageChecks || showInquirySummary
   const releaseRecordRequired = storageMode === 'managed'
   const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges && contentChecksPass
+  const hostingNext = hostedCurrent
+    ? {
+        job: 'Check published website',
+        reason: 'Hosting reports this reviewed version as published. Open its address and check the pages and contact form before sharing.',
+        action: 'Open hosting',
+      }
+    : hostedLive
+      ? {
+          job: 'Publish your update',
+          reason: 'An earlier version is published. This reviewed website file still needs to be published as an update.',
+          action: 'Open hosting',
+        }
+      : hostingState === 'confirmed'
+        ? {
+            job: 'Publish website online',
+            reason: 'Your reviewed website file is ready, but no website address is published yet.',
+            action: 'Open hosting',
+          }
+        : {
+            job: 'Check website hosting',
+            reason: hostingState === 'unavailable'
+              ? 'Your reviewed website file is ready. Hosting status could not be confirmed, so check it before sharing an address.'
+              : 'Your reviewed website file is ready. Checking whether a website address has been published.',
+            action: 'Open hosting',
+          }
   const websiteTodayStep = storageIssue || canRepairLocalStorage
     ? 'recover'
     : pendingRestoredDraft
@@ -1081,7 +1150,9 @@ export function WebsiteProduct() {
               ? 'review'
               : releaseRecordRequired && !publishIsCurrent
                 ? 'file'
-                : 'ready'
+                : releaseRecordRequired
+                  ? hostedCurrent ? 'published' : 'hosting'
+                  : 'ready'
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Sites workspace'
     : pendingRestoredDraft
@@ -1103,7 +1174,7 @@ export function WebsiteProduct() {
                 : releaseRecordRequired && !publishIsCurrent
                   ? 'Save website file'
                   : releaseRecordRequired
-                    ? 'Review launch plan'
+                    ? hostingNext.job
                     : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
     ? 'Saving or recovery needs attention before Website work can be trusted.'
@@ -1126,7 +1197,7 @@ export function WebsiteProduct() {
                 : releaseRecordRequired && !publishIsCurrent
                   ? 'Save a static release file for the approved website.'
                 : releaseRecordRequired
-                  ? 'Review the launch steps. This screen does not deploy your site.'
+                  ? hostingNext.reason
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
@@ -1147,7 +1218,7 @@ export function WebsiteProduct() {
             : releaseRecordRequired && !publishIsCurrent
               ? 'Create site file'
               : releaseRecordRequired
-                ? 'Review launch plan'
+                ? hostingNext.action
                 : 'Download website'
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'
@@ -1155,7 +1226,7 @@ export function WebsiteProduct() {
       ? 'attention'
     : starterAvailable || starterSetupActive
       ? 'setup'
-      : hasUnsavedChanges || failingContentChecks.length || leadCounts.new
+      : hasUnsavedChanges || failingContentChecks.length || leadCounts.new || (releaseRecordRequired && !hostedCurrent)
         ? 'attention'
         : 'ready'
   const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace
@@ -1206,6 +1277,16 @@ export function WebsiteProduct() {
           ? approvalIsCurrent && !hasUnsavedChanges && !failingContentChecks.length ? 'current' : 'waiting'
           : localPreviewReady ? 'current' : 'waiting',
     },
+    ...(releaseRecordRequired ? [{
+      id: 'hosting',
+      label: 'Publish online',
+      detail: !publishIsCurrent ? 'After website file'
+        : hostedCurrent ? 'Published · verify address'
+          : hostedLive ? 'Update not published'
+            : hostingState === 'confirmed' ? 'Not published'
+              : hostingState === 'unavailable' ? 'Status unavailable' : 'Checking status',
+      state: !publishIsCurrent ? 'waiting' : hostedCurrent ? 'complete' : 'current',
+    }] : []),
   ] as const
   const websiteTodaySource = storageMode === 'managed'
     ? `Company account · ${managedActorId || 'signed in'}`
