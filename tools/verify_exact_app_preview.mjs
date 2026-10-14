@@ -19,6 +19,7 @@ import {
   Cdp,
   findBrowser,
   launchBrowser,
+  miniMartOwnedCatalogFixture,
   verifyCase,
 } from './verify_app_entry_rendered.mjs'
 
@@ -141,14 +142,18 @@ export function derivePublicHomepageExpectedText({ manifest, generatorSource }) 
   }
   const requiredGeneratorBindings = [
     '<h1>Run the business.<br>Without the busywork.</h1>',
-    '<p class="lede">Sales, stock, a working website and customer orders—one platform, built to stay in step.</p>',
-    '<p class="platform-note">Shop. Sites. Commerce. One connected operating system.</p>',
+    '<p class="lede">Run in-store sales, your website and online orders from one clear platform.</p>',
     'href="https://app.supermega.dev/login">Login</a>',
   ]
   if (requiredGeneratorBindings.some((fragment) => !occursExactlyOnce(generatorSource, fragment))) {
     fail('exact_app_preview_public_generator_binding_drift')
   }
-  const expected = ['Run the business.', 'Without the busywork.', 'Shop. Sites. Commerce. One connected operating system.', 'Login']
+  const expected = [
+    'Run the business.',
+    'Without the busywork.',
+    'Run in-store sales, your website and online orders from one clear platform.',
+    'Login',
+  ]
   if (RETIRED_PUBLIC_HOME_EXPECTED_TEXT.some((retired) => (
     generatorSource.includes(retired) || expected.some((value) => value.includes(retired))
   ))) fail('exact_app_preview_public_retired_copy_present')
@@ -1048,14 +1053,19 @@ export function expectedText(spec, publicHomepageExpectedText) {
   if (spec.surface === 'ecommerce_brief') return ['Ecommerce', 'Your products, ready to browse.', 'Business name', 'What do you sell?', 'Existing page or catalog', 'Continue', 'Next: your contact details.']
   if (spec.surface === 'website') return [
     'Website',
-    'Your website',
-    ...(spec.mobile ? [] : ['Tell us about the business']),
+    'Start your website',
+    'Choose a starting point. Add pages, services and products whenever you need them.',
     'Business name',
-    'Main customers',
     'What do you sell or provide?',
-    'Create website',
+    'How can customers reach you?',
+    'Create my website',
   ]
-  return ['Ecommerce', 'Online store', 'Browse your catalog and take order requests. Requests stay on this device until Shop review.', 'Get catalog help', 'Open customer ordering']
+  return [
+    'Online store',
+    'Orders',
+    'Review customer requests on this device. Requests stay on this device until Shop review.',
+    'Open customer ordering',
+  ]
 }
 
 function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {
@@ -1078,7 +1088,9 @@ function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {
     noHorizontalOverflow: true,
     screenshotName: spec.screenshot.replace(/\.png$/i, ''),
     timeoutMs: 60_000,
-    ...(spec.surface === 'shop_profit_control' ? {} : { seed: {} }),
+    ...(spec.surface === 'shop_profit_control' ? {} : {
+      seed: spec.surface === 'ecommerce' ? miniMartOwnedCatalogFixture() : {},
+    }),
     ...(spec.surface === 'retired_plant' ? { retirementCaseId: spec.id, requireLauncherProducts: true,
       seed: { retained: Object.fromEntries(RETIRED_STORAGE_KEYS.map(key => [key,
         key === 'supermega.product_setups.v1' ? '{}' : JSON.stringify({ syntheticRetirementSentinel: key })])) } } : {}),

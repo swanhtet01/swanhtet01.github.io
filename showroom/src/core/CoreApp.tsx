@@ -3149,8 +3149,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       </form>
       return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Shop</span><h2>Add your first product</h2></div></div>
-      <p className="panel-copy">Enter an item you sell. You can add more products afterward.</p>
       {catalogForm}
+      <details className="secondary-setup-path"><summary>Import existing CSV</summary>
+        <Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed managedIdentityOverride={managedIdentity} onOpenAppliedManagedImport={retryManagedCommerceLoad} product="commerce" /></Suspense>
+      </details>
       {managedTemplate ? <details className="secondary-setup-path"><summary>Use a business catalog</summary><form className="core-form compact-form managed-template-catalog-form" onSubmit={(formEvent) => void initializeManagedTemplateCatalog(formEvent)}>
         <div className="setup-choice-copy"><strong>{managedTemplate.name.en}</strong><span>{managedTemplate.catalog.length} items · prices and opening counts can be edited in Shop after setup</span></div>
         <details><summary>Review starter items</summary><div className="compact-list">{managedTemplate.catalog.map((item) => <span key={item.sku}><strong>{item.name}</strong> · {item.priceMmk.toLocaleString()} MMK · opening {item.openingStock}</span>)}</div></details>
@@ -3446,7 +3448,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
       <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>
     </div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>}
-    {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
+    <div hidden={!catalogImportVisible} id="shop-catalog-import-panel">{catalogImportVisible ? <Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense> : null}</div>
   </section>
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
