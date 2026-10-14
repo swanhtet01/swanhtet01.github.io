@@ -69,7 +69,7 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
       <div className="website-hosted-address">
         <span>Included website address</span>
         {siteUrl ? <a href={siteUrl} target="_blank" rel="noreferrer">{siteUrl}</a> : <strong>{status ? 'Available after publishing' : 'Waiting for hosting status'}</strong>}
-        <small>{siteUrl ? 'Check this site before sharing it with customers.' : 'SuperMega provides this address when your reviewed site is published.'}</small>
+        <small>{siteUrl ? 'Check before sharing. Publishing an update currently creates a new address.' : 'SuperMega provides this address when your reviewed site is published.'}</small>
       </div>
       <div className="website-hosted-address is-unavailable">
         <span>Your own domain</span>
@@ -77,6 +77,7 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
         <small>Custom domain setup is not available in this workspace.</small>
       </div>
     </div>
+    {live && !current ? <p className="website-hosted-hint" role="note">Publishing this update replaces the website address above. Existing links will stop working; check and share the new address afterward.</p> : null}
     <div className="website-hosted-actions">
       {!current ? <button className={`website-button ${live ? 'is-secondary' : 'is-primary'}`} disabled={busy || !ready || !canWrite} onClick={() => void change()} type="button">{live ? 'Publish update' : 'Publish website'}</button> : null}
       {issue ? <button className="website-button is-secondary" disabled={busy} onClick={() => { setBusy(true); setIssue(''); void refresh() }} type="button">Try again</button> : null}
