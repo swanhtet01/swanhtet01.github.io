@@ -85,7 +85,8 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20260930010000_app_rls_initplan_optimization.sql",
             "20261010063000_website_publishing_and_inquiries.sql",
             "20261010070000_website_published_hero_media.sql",
-            "20261010120857_website_inquiry_followup.sql"))
+            "20261010120857_website_inquiry_followup.sql",
+            "20261014090000_website_channel_stable_update.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
                                 if path.name != "20260711081300_public_legacy_baseline.sql"))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)

@@ -72,11 +72,11 @@ export async function websiteReviewCatalogDigests(database) {
 // Keep the earlier-stage pins above: publishing must not erase their checks.
 const publishingExpected = {
   relations: '11216fe242c85cb8831f82eb9f04e257883d6afa0375e46c086b599ce0528fa1',
-  columns: '43eb3c447e09cecca7c9a40904fbd165310a2102708b2b6c46d4cf88543dd41f',
+  columns: '6b75c1c288e4fa2deeb9e19f5b4c5db010bb9ae7dd9b156bf90488ddd5c1c825',
   policies: 'b8c9375ca212785b8fee14b1bf0d614afef7da2221b32054387fb24e88b0bd83',
-  functions: '72ea954f5c239bd366a998ccda8deb698c9bf5c64b3574f5c169b5d5615577e8',
+  functions: 'a60e00164fbd4aee9df4deed0980f7373f2360afca9f2c9c844938ebd6e80527',
   triggers: '8f423ef55794c3a5b8062011d8696064aff095f3f2c0093992f10c804bf8a707',
-  constraints: 'dff5841b341235528f07c1908dcb7838b1df4ec51f10bb3d625311eb5214b8c3',
+  constraints: '1718eccdb3263d4f4c824af0f700a513b59dde7303c183bb334dba416c34d28a',
   indexes: '659bcab90bf3b9f35ef383481081049aaa97e018d2782e5f3107927620cb7984',
 }
 

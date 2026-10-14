@@ -14,6 +14,7 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
   const [status, setStatus] = useState<PublicationStatus | null>(null)
   const [busy, setBusy] = useState(true)
   const [issue, setIssue] = useState('')
+  const [uncertain, setUncertain] = useState(false)
   const [withdrawArmed, setWithdrawArmed] = useState(false)
   const operation = useRef<AbortController | null>(null)
   const writeInFlight = useRef(false)
@@ -22,9 +23,9 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
     operation.current?.abort()
     const controller = new AbortController(); operation.current = controller
     return client.status(controller.signal).then(next => {
-      if (!controller.signal.aborted) { setStatus(next); setIssue('') }
+      if (!controller.signal.aborted) { setStatus(next); setIssue(''); setUncertain(false) }
     }).catch(error => {
-      if (!controller.signal.aborted) { setIssue(message(error)); setStatus(null) }
+      if (!controller.signal.aborted) { setIssue(message(error)); setUncertain(true) }
     }).finally(() => { if (!controller.signal.aborted) setBusy(false) })
   }, [client])
   useEffect(() => { void refresh(); return () => operation.current?.abort() }, [refresh, snapshotId])
@@ -37,16 +38,20 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
   }, [refresh])
   const live = status?.publications.find(entry => entry.enabled)
   const siteUrl = live && status ? `${status.publicOrigin}/sites/${live.channelId}` : ''
-  const current = Boolean(live && live.snapshotId === snapshotId)
-  const ready = Boolean(status?.source && status.source.snapshotId === snapshotId && pageId)
+  const current = Boolean(live && live.snapshotId === snapshotId && live.pageId === pageId
+    && live.sourceVersion === status?.source?.version)
+  const ready = Boolean(status?.source && status.source.snapshotId === snapshotId && pageId
+    && (!live || status.source.version > live.sourceVersion))
   async function change(withdraw = false) {
-    if (busy || writeInFlight.current || !canWrite || !status || (!withdraw && !ready)) return
+    if (busy || uncertain || writeInFlight.current || !canWrite || !status || (!withdraw && !ready)) return
     const controller = new AbortController(); operation.current = controller
     writeInFlight.current = true
     setBusy(true); setIssue('')
     try {
       if (withdraw && live) {
         await client.withdraw(live, controller.signal)
+      } else if (live) {
+        await client.replace(live, pageId, status, controller.signal)
       } else {
         const source = `${status.source?.snapshotId}:${status.source?.version}:${pageId}`
         if (attempt.current?.source !== source) attempt.current = { source, channel: crypto.randomUUID() }
@@ -54,22 +59,22 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
       }
       const next = await client.status(controller.signal)
       if (!controller.signal.aborted) {
-        setStatus(next); setWithdrawArmed(false); attempt.current = null
+        setStatus(next); setWithdrawArmed(false); setUncertain(false); attempt.current = null
       }
-    } catch (error) { if (!controller.signal.aborted) { setIssue(message(error)); setStatus(null) } }
+    } catch (error) { if (!controller.signal.aborted) { setIssue(message(error)); setUncertain(true) } }
     finally { writeInFlight.current = false; if (!controller.signal.aborted) setBusy(false) }
   }
   return <section className="website-hosted-card" aria-labelledby="website-hosting-title" aria-busy={busy}>
-    <header><div><span className="website-hosted-eyebrow">Website hosting</span><h2 id="website-hosting-title">{live ? current ? 'Website published' : 'An update is ready' : 'Publish your website'}</h2></div>
-      <span role="status" className={`website-hosted-status${live ? ' is-published' : ''}`}>{busy ? 'Checking…' : live ? 'Published' : status ? 'Not published' : 'Unavailable'}</span></header>
-    <p>{live ? `Published ${date(live.publishedAt)}. Open the address below to check the site before sharing it.` : 'Publish your reviewed pages to get a website address you can share.'}</p>
+    <header><div><span className="website-hosted-eyebrow">Website hosting</span><h2 id="website-hosting-title">{uncertain ? 'Check website status' : live ? ready ? 'An update is ready' : 'Website published' : 'Publish your website'}</h2></div>
+      <span role="status" className={`website-hosted-status${live && !uncertain ? ' is-published' : ''}`}>{busy ? 'Checking…' : uncertain ? 'Check status' : live ? 'Published' : status ? 'Not published' : 'Unavailable'}</span></header>
+    <p>{live ? uncertain ? 'This was the last confirmed website address. Refresh to check whether your change was saved.' : `Published ${date(live.publishedAt)}. Open the address below to check the site before sharing it.` : 'Publish your reviewed pages to get a website address you can share.'}</p>
     {issue ? <p role="alert" className="website-hosted-error">{issue}</p> : null}
-    {status && !ready && !current ? <p className="website-hosted-hint">Review your pages and save an approved site version below before publishing.</p> : null}
+    {status && !ready && !current && !uncertain ? <p className="website-hosted-hint">Review your pages and save a newer approved site version before publishing.</p> : null}
     <div aria-label="Website addresses" className="website-hosted-addresses">
       <div className="website-hosted-address">
         <span>Included website address</span>
         {siteUrl ? <a href={siteUrl} target="_blank" rel="noreferrer">{siteUrl}</a> : <strong>{status ? 'Available after publishing' : 'Waiting for hosting status'}</strong>}
-        <small>{siteUrl ? 'Check before sharing. Publishing an update currently creates a new address.' : 'SuperMega provides this address when your reviewed site is published.'}</small>
+        <small>{siteUrl ? 'Check before sharing. This address stays the same when you publish an update.' : 'SuperMega provides this address when your reviewed site is published.'}</small>
       </div>
       <div className="website-hosted-address is-unavailable">
         <span>Your own domain</span>
@@ -77,12 +82,11 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
         <small>Custom domain setup is not available in this workspace.</small>
       </div>
     </div>
-    {live && !current ? <p className="website-hosted-hint" role="note">Publishing this update replaces the website address above. Existing links will stop working; check and share the new address afterward.</p> : null}
     <div className="website-hosted-actions">
-      {!current ? <button className={`website-button ${live ? 'is-secondary' : 'is-primary'}`} disabled={busy || !ready || !canWrite} onClick={() => void change()} type="button">{live ? 'Publish update' : 'Publish website'}</button> : null}
+      {!current && ready ? <button className={`website-button ${live ? 'is-secondary' : 'is-primary'}`} disabled={busy || uncertain || !canWrite} onClick={() => void change()} type="button">{live ? 'Publish update' : 'Publish website'}</button> : null}
       {issue ? <button className="website-button is-secondary" disabled={busy} onClick={() => { setBusy(true); setIssue(''); void refresh() }} type="button">Try again</button> : null}
     </div>
-    {live && canWrite ? <div className="website-hosted-withdraw">
+    {live && canWrite && !uncertain ? <div className="website-hosted-withdraw">
       {withdrawArmed ? <><p>Take this website offline? Visitors will no longer be able to open its pages or send a request.</p><div className="website-hosted-actions"><button className="website-button is-secondary" disabled={busy} onClick={() => setWithdrawArmed(false)} type="button">Keep online</button><button className="website-button is-secondary" disabled={busy} onClick={() => void change(true)} type="button">Take offline</button></div></>
         : <button disabled={busy} onClick={() => setWithdrawArmed(true)} type="button">Take website offline</button>}
     </div> : null}

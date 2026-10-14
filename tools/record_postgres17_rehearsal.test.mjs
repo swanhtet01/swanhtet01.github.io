@@ -77,7 +77,7 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.deepEqual(migrationNames, runner.migrations)
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
-  assert.equal(runner.migrations.at(-1), '20261010120857_website_inquiry_followup.sql')
+  assert.equal(runner.migrations.at(-1), '20261014090000_website_channel_stable_update.sql')
 })
 const context = {
   recordedAt: '2026-07-31T10:00:00.000Z',

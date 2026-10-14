@@ -6,7 +6,7 @@ import json
 from .trial_store import TrialNotReadyError
 
 # Derived only from the canonical migrations on disposable PostgreSQL 17.
-PUBLISHING_CATALOG_DIGEST = "b0db9fedc42f9b29154080b69994509f4669438a7a0bb69724f4aeb870366516"
+PUBLISHING_CATALOG_DIGEST = "df490858d94482684956eb53094caf6a68a8e68a48b1833c185ee63094b23956"
 
 
 def publishing_catalog_digest(cursor):
@@ -16,7 +16,7 @@ def publishing_catalog_digest(cursor):
     ), funcs as (
         select p.* from pg_proc p join pg_namespace n on n.oid=p.pronamespace
         where n.nspname='app_private' and p.proname in
-          ('receive_website_inquiry','publish_website_inquiry_channel',
+          ('receive_website_inquiry','publish_website_inquiry_channel','replace_website_inquiry_channel',
            'unpublish_website_inquiry_channel','read_website_inquiry_page','read_website_published_media','change_website_inquiry')
     ) select jsonb_build_object(
       'tables', (select jsonb_agg(jsonb_build_array(relname,relkind,relrowsecurity,

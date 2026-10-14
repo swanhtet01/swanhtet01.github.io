@@ -75,10 +75,10 @@ def create_website_inquiry_router(
     except (ValueError, TypeError):
         publishing_configured = False
 
-    def available(request):
+    def available(request, *, allow_query=False):
         if not configured:
             raise _error(503, 'website_inquiries_unavailable')
-        if request.query_params:
+        if request.query_params and not allow_query:
             raise _error(422, 'request_invalid')
 
     async def invoke(operation, *, render=False, page_path='/', photo=False):
@@ -92,7 +92,9 @@ def create_website_inquiry_router(
             raise _error(404, 'photo_unavailable' if photo else 'form_unavailable') from None
         except TrialNotReadyError:
             raise _error(503, 'website_inquiries_unavailable') from None
-        except TrialValidationError:
+        except TrialValidationError as exc:
+            if str(exc) == 'website_inquiry_source_stale':
+                raise _error(409, 'source_changed') from None
             raise _error(422, 'request_invalid') from None
         except Exception as exc:
             # Match known DB codes only. Never expose a SQL context or customer
@@ -204,14 +206,22 @@ def create_website_inquiry_router(
         return await invoke(lambda: store.public_photo(channel_id=channel_id,
                             public_origin=public_origin, asset_id=asset_id), photo=True)
 
-    @router.get('/sites/{channel_id}')
-    @router.get('/sites/{channel_id}/{page_path:path}')
-    async def page(channel_id: str, request: Request, page_path: str = ''):
-        available(request)
+    async def serve_page(channel_id: str, request: Request, page_path: str):
+        # Campaign links may carry query parameters; only the approved URL path
+        # selects a page from the immutable published artifact.
+        available(request, allow_query=True)
         if not publishing_configured:
             raise _error(503, 'website_inquiries_unavailable')
         return await invoke(lambda: store.public_page(channel_id=channel_id, public_origin=public_origin),
                             render=True, page_path='/' + page_path)
+
+    @router.get('/sites/{channel_id}')
+    async def home(channel_id: str, request: Request):
+        return await serve_page(channel_id, request, '')
+
+    @router.get('/sites/{channel_id}/{page_path:path}')
+    async def page(channel_id: str, page_path: str, request: Request):
+        return await serve_page(channel_id, request, page_path)
 
     @router.post('/api/trial/v1/website-inquiry-channels/{channel_id}/publish')
     async def publish(channel_id: str, request: Request):
@@ -224,6 +234,21 @@ def create_website_inquiry_router(
             raise _error(422, 'request_invalid')
         return await invoke(lambda: store.publish_channel(actor, channel_id=channel_id,
             expected_version=body['expectedVersion'], public_origin=public_origin))
+
+    @router.post('/api/trial/v1/website-inquiry-channels/{channel_id}/replace')
+    async def replace(channel_id: str, request: Request):
+        available(request)
+        actor = principal(request)
+        if not publishing_configured:
+            raise _error(503, 'website_inquiries_unavailable')
+        body = await _body(request)
+        if set(body) != {'expectedOldVersion', 'expectedOldDigest', 'expectedVersion',
+                         'pageId', 'snapshotId', 'artifactDigest'}:
+            raise _error(422, 'request_invalid')
+        return await invoke(lambda: store.replace_channel(actor, channel_id=channel_id,
+            expected_old_version=body['expectedOldVersion'], expected_old_digest=body['expectedOldDigest'],
+            expected_version=body['expectedVersion'], page_id=body['pageId'],
+            snapshot_id=body['snapshotId'], artifact_digest=body['artifactDigest'], public_origin=public_origin))
 
     @router.post('/api/trial/v1/website-inquiry-channels/{channel_id}/unpublish')
     async def unpublish(channel_id: str, request: Request):

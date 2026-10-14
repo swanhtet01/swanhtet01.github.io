@@ -143,6 +143,19 @@ export function createPublishingClient(identity: ManagedIdentity) {
       const result = record(await request(`website-inquiry-channels/${channelId}/publish`, signal, { expectedVersion: status.source.version }))
       if (result.channelId !== channelId || result.enabled !== true || result.artifactDigest !== status.source.artifactDigest) throw invalid()
     },
+    async replace(publication: Publication, pageId: string, status: PublicationStatus, signal: AbortSignal) {
+      text(publication.channelId, 36, uuid); text(publication.artifactDigest, 71, digest); text(pageId, 80)
+      if (!publication.enabled || !status.source || status.source.version <= publication.sourceVersion) {
+        throw new Error('Review and save a newer site version before publishing.')
+      }
+      const result = record(await request(`website-inquiry-channels/${publication.channelId}/replace`, signal, {
+        expectedOldVersion: publication.sourceVersion, expectedOldDigest: publication.artifactDigest,
+        expectedVersion: status.source.version, pageId, snapshotId: status.source.snapshotId,
+        artifactDigest: status.source.artifactDigest,
+      }))
+      if (result.channelId !== publication.channelId || result.enabled !== true
+        || result.artifactDigest !== status.source.artifactDigest) throw invalid()
+    },
     async withdraw(publication: Publication, signal: AbortSignal) {
       text(publication.channelId, 36, uuid); text(publication.artifactDigest, 71, digest)
       const result = record(await request(`website-inquiry-channels/${publication.channelId}/unpublish`, signal, { artifactDigest: publication.artifactDigest }))

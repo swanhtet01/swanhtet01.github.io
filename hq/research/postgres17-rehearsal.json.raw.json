@@ -162,7 +162,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:54bb303eb74e193aceb1e5211f5bf038451f64999682978c83a04555191d16d2",
+    "digest": "sha256:f26485b6f8eb910fe004d54cef233fa6ff557f09a966a22d20e86fa33d74e1a9",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -191,6 +191,7 @@
       "supabase/migrations/20261010063000_website_publishing_and_inquiries.sql",
       "supabase/migrations/20261010070000_website_published_hero_media.sql",
       "supabase/migrations/20261010120857_website_inquiry_followup.sql",
+      "supabase/migrations/20261014090000_website_channel_stable_update.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -241,7 +242,7 @@
   },
   "migrations": {
     "catalog_contract": "supermega_private_trial_database_v13_self_serve_v1",
-    "count": 26,
+    "count": 27,
     "names": [
       "20260722004500_private_trial_backend_role_preflight.sql",
       "20260722005134_private_trial_backend_foundation.sql",
@@ -268,7 +269,8 @@
       "20260930010000_app_rls_initplan_optimization.sql",
       "20261010063000_website_publishing_and_inquiries.sql",
       "20261010070000_website_published_hero_media.sql",
-      "20261010120857_website_inquiry_followup.sql"
+      "20261010120857_website_inquiry_followup.sql",
+      "20261014090000_website_channel_stable_update.sql"
     ],
     "production_validator_ready": true,
     "schema_profile": "v13-self-serve",
@@ -280,15 +282,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:2bd1e9fee02d132f960e63cb56613ebf25565585032fb0ffd3efc7e555b99616",
-    "private_snapshot_before": "sha256:2bd1e9fee02d132f960e63cb56613ebf25565585032fb0ffd3efc7e555b99616",
+    "private_snapshot_after": "sha256:df5d624965d85749c5ca78deabd567adffa28b2b578d1f4939282ee4b984c6c0",
+    "private_snapshot_before": "sha256:df5d624965d85749c5ca78deabd567adffa28b2b578d1f4939282ee4b984c6c0",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "502c81e1095a4781041b6285d585f94fdd755bea",
-    "implementation_digest": "sha256:54bb303eb74e193aceb1e5211f5bf038451f64999682978c83a04555191d16d2",
-    "tree": "04037d5bc75f5dd965ef58012a9bcea7f5e9a131"
+    "head": "5fabda707be8dd6a6fd581a96dfdfda7a73a32cb",
+    "implementation_digest": "sha256:f26485b6f8eb910fe004d54cef233fa6ff557f09a966a22d20e86fa33d74e1a9",
+    "tree": "34bfd856457dfabfa49b83c63db0a7f90a9c0a69"
   },
   "status": "rehearsed",
   "storage": {
