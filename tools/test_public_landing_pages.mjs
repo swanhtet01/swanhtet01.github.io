@@ -93,6 +93,10 @@ check(config.routes.at(-1)?.dest === '/404.html' && config.routes.at(-1)?.status
 
 // Page content markers, SEO metadata, and CTA wiring.
 const descriptions = []
+const expectedReviewDescriptions = {
+  '/website/': 'Edit business pages and services, check readiness, and review customer inquiries in one workspace.',
+  '/ecommerce/': 'Browse a Shop-backed catalog, save customer order requests, and review them before any order or payment is confirmed.',
+}
 const productScreens = {
   shop: ['actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png'],
   website: ['actual-sites-editor.png', 'actual-sites-inquiries.png'],
@@ -118,10 +122,14 @@ for (const page of landingPages) {
   const description = page.description || product.description
   check(Array.isArray(product.firstOperatingLoop) && product.firstOperatingLoop.length === 4, `landing_first_loop_manifest:${page.route}`)
   check(typeof description === 'string' && description.length >= 40, `landing_description_present:${page.route}`)
+  if (expectedReviewDescriptions[page.route]) {
+    check(description === expectedReviewDescriptions[page.route], `landing_claim_scope:${page.route}`)
+  }
   descriptions.push(description)
   check(html.includes(`<title>${page.title}</title>`), `landing_title:${page.route}`)
   check(html.includes(`<link rel="canonical" href="${canonical}" />`), `landing_canonical:${page.route}`)
   check(html.includes(`<meta name="description" content="${description}" />`), `landing_meta_description:${page.route}`)
+  check(html.includes(`<meta property="og:description" content="${description}" />`), `landing_og_description:${page.route}`)
   check(html.includes(`<meta property="og:title" content="${page.title}" />`), `landing_og_title:${page.route}`)
   check(html.includes(`<meta property="og:url" content="${canonical}" />`), `landing_og_url:${page.route}`)
   const shareImage = new URL(`/og-card-${page.productId}.png`, `${manifest.release.productionDomain}/`).href
@@ -256,7 +264,7 @@ for (const token of ['No action is needed now.', 'SuperMega will review your bri
 // Homepage links each product to its landing page without replacing the guided sample CTA.
 const home = readStatic('index.html')
 const homePage = manifest.pages.find((page) => page.route === '/')
-const expectedHomeDescription = 'Sell, publish and fulfil from one connected platform. Shop, Sites and Commerce keep the record, next action and result together.'
+const expectedHomeDescription = 'Explore tools for in-store sales, website pages and customer order requests with SuperMega.'
 check(homePage?.file === 'index.html', 'home_manifest_entry_exact')
 check(homePage?.title === 'SuperMega | Run the business without the busywork', 'home_manifest_business_title_exact')
 check(homePage?.description === expectedHomeDescription, 'home_manifest_description_derived_from_supported_copy')
