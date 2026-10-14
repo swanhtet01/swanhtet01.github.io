@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -31,9 +31,11 @@ import type { WebsiteReleaseState } from './website-release-foundation'
 import {
   applyWebsiteStarterBrief,
   isUntouchedWebsiteStarter,
+  previewWebsiteStarterForScope,
   readWebsiteStarterShopContext,
   websiteStarterTemplates,
   type WebsiteStarterBrief,
+  type WebsiteStarterPreviewState,
 } from './website-starter'
 import {
   approveWebsiteRevision,
@@ -326,6 +328,16 @@ export function WebsiteProduct() {
   const [inquirySearch, setInquirySearch] = useState('')
   const [inquiryDrafts, setInquiryDrafts] = useState<Record<string, InquiryDraft>>({})
   const editSessionScope = websiteEditSessionScope(storageMode, managedActorId, managedWorkspaceId)
+  const [starterPreviewState, setStarterPreviewState] = useState<WebsiteStarterPreviewState | null>(null)
+  const onStarterPreviewChange = useCallback((brief: WebsiteStarterBrief | null) => {
+    setStarterPreviewState((current) => brief
+      ? { scope: editSessionScope, brief }
+      : current?.scope === editSessionScope ? null : current)
+  }, [editSessionScope])
+  const starterPreviewWorkspace = useMemo(
+    () => previewWebsiteStarterForScope(starterPreviewState, editSessionScope),
+    [editSessionScope, starterPreviewState],
+  )
   const activeEditSession = editSessionState?.scope === editSessionScope ? editSessionState.session : null
   const pendingRestoredDraft = restoredDraftState?.scope === editSessionScope ? restoredDraftState : null
   const editorWorkspace = activeEditSession?.workspace ?? workspace
@@ -362,6 +374,10 @@ export function WebsiteProduct() {
   // Re-evaluate on mode changes so a previously local screen cannot leak stale props.
   const shopStarterContext = useMemo(() => readWebsiteStarterShopContext(storageMode), [storageMode])
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
+  const canvasWorkspace = starterSetupActive && starterPreviewWorkspace ? starterPreviewWorkspace : editorWorkspace
+  const canvasPage = canvasWorkspace.pages.find((page) => page.id === selectedPageId)
+    ?? canvasWorkspace.pages.find((page) => page.id === canvasWorkspace.selectedPageId)
+    ?? canvasWorkspace.pages[0]
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
         title: 'Pages',
@@ -1605,6 +1621,7 @@ export function WebsiteProduct() {
                     initialBusinessName={shopStarterContext.businessName}
                     initialTradeId={shopStarterContext.tradeId}
                     onCreate={startWithBusiness}
+                    onPreviewChange={onStarterPreviewChange}
                   />
                 ) : (
                   <div className="website-editor-workbench" data-insights={showEditorInsights ? 'true' : 'false'}>
@@ -1729,12 +1746,12 @@ export function WebsiteProduct() {
             <div className="website-preview-surface">
 
               <SitePreview
-                inquiryPageId={inquiryPageId}
+                inquiryPageId={starterSetupActive ? websiteContactPage(canvasWorkspace.pages)?.id : inquiryPageId}
                 device={device}
                 onSelectPage={selectPage}
-                page={selectedPage}
-                pages={editorWorkspace.pages}
-                siteName={editorWorkspace.siteName}
+                page={canvasPage}
+                pages={canvasWorkspace.pages}
+                siteName={canvasWorkspace.siteName}
               />
             </div>
           </div> : null}
