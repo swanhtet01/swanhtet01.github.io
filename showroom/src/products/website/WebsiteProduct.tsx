@@ -1751,6 +1751,7 @@ export function WebsiteProduct() {
                 onSelectPage={selectPage}
                 page={canvasPage}
                 pages={canvasWorkspace.pages}
+                presentation={canvasWorkspace.presentation}
                 siteName={canvasWorkspace.siteName}
               />
             </div>

@@ -2,7 +2,7 @@ import { WEBSITE_PUBLIC_CSS } from './website-presentation.ts'
 import { websiteDocumentLanguage } from './website-language.ts'
 import { websiteContactPage } from './website-contact-page.ts'
 import { isWebsiteImage, type WebsiteImage } from './website-media.ts'
-import { type WebsiteArtifact } from './website-model.ts'
+import { WEBSITE_PRESENTATION_IDS, type WebsiteArtifact } from './website-model.ts'
 
 export const WEBSITE_HTML_MIME_TYPE = 'text/html;charset=utf-8' as const
 
@@ -73,6 +73,17 @@ export function sanitizeWebsiteFilename(siteName: string): string {
 
 export function validateWebsiteArtifactForExport(artifact: WebsiteArtifact): WebsiteExportIssue[] {
   const issues: WebsiteExportIssue[] = []
+  const presentation: unknown = artifact.presentation
+  if (Object.hasOwn(artifact, 'presentation') && (presentation === null
+    || typeof presentation !== 'object'
+    || Array.isArray(presentation)
+    || Object.keys(presentation).length !== 2
+    || !Object.hasOwn(presentation, 'schema')
+    || !Object.hasOwn(presentation, 'templateId')
+    || (presentation as { schema: unknown }).schema !== 'supermega.sites.presentation.v1'
+    || !WEBSITE_PRESENTATION_IDS.some((id) => id === (presentation as { templateId: unknown }).templateId))) {
+    issues.push({ path: 'presentation', message: 'Choose a supported Sites design.' })
+  }
   const siteName = artifact.siteName.trim()
   const targets = createPageTargets(artifact)
   const slugs = targets.map((target) => target.slug)
@@ -220,7 +231,7 @@ ${activeNavStyles}
 }
   </style>
 </head>
-<body class="sm-site">
+<body class="sm-site"${artifact.presentation ? ` data-design="${artifact.presentation.templateId}"` : ''}>
 ${skipLinks}
   <header class="site-header">
     <div class="site-header-inner">

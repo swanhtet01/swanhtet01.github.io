@@ -21162,7 +21162,9 @@ if (!myanmarLicense || myanmarLicense.length > 5_000 || !myanmarLicense.equals(s
 }
 const myanmarAssetBytes = (myanmarFont?.length ?? 0) + (myanmarLicense?.length ?? 0)
 if (myanmarAssetBytes > 160_000) fail(`myanmar_font_asset_budget:${myanmarAssetBytes}`)
-if (bytes - myanmarAssetBytes > 3_250_000) fail(`artifact_total_backstop:${bytes - myanmarAssetBytes}`)
+// Three versioned Sites designs add a bounded CSS/renderer cost after sharing and
+// minifying the export/hosted binding. Keep the separate route wire budgets below.
+if (bytes - myanmarAssetBytes > 3_254_000) fail(`artifact_total_backstop:${bytes - myanmarAssetBytes}`)
 
 // ---------------------------------------------------------------------------
 // THE SHOP ROUTE'S COMPRESSED WIRE COST -- what a till pays to open, measured the

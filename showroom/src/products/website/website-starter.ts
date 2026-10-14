@@ -220,6 +220,7 @@ export function applyWebsiteStarterBrief(
   return {
     ...workspace,
     siteName: businessName,
+    presentation: { schema: 'supermega.sites.presentation.v1' as const, templateId: brief.templateId },
     selectedPageId: home.id,
     pages: [
       {
