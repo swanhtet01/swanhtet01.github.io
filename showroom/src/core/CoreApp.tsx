@@ -281,7 +281,7 @@ import {
   type ShopServiceSchedule as ShopServiceScheduleState,
 } from './shop-service-scheduling'
 import { projectShopAppointmentTillReconciliation } from './shop-appointment-till-reconciliation'
-import { decideShopNextAction } from './shop-next-action'
+import { decideShopNextAction, SHOP_DEMAND_REVIEW_PREVIEW_LIMIT, shopDemandReviewRows } from './shop-next-action'
 import { projectShopCloseAnomalyFlags, type ShopCloseAnomalyFlag, type ShopCloseAnomalyFlags } from './shop-close-anomaly-flags'
 import { lockedCapabilityNotice } from './capability-tiers'
 
@@ -1696,6 +1696,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderHistoryRef = useRef<HTMLDetailsElement>(null)
+  const purchasingToolsRef = useRef<HTMLDetailsElement>(null)
+  const [showAllDemandRows, setShowAllDemandRows] = useState(false)
   const catalogCreateFormRef = useRef<HTMLFormElement>(null)
   const stockCountTriggerRef = useRef<HTMLButtonElement>(null)
   const stockCountEditorRef = useRef<HTMLFormElement>(null)
@@ -2079,6 +2081,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     [commerce, purchaseOrderClock],
   )
   const demandForecastRows = shopDemandIntelligence.rows.filter((row) => row.netDemandUnits > 0)
+  const actionableDemandRows = demandForecastRows.filter((row) => row.status === 'stockout_risk' || row.status === 'reorder_soon')
+  const demandRowsNeedExpansion = actionableDemandRows.length > SHOP_DEMAND_REVIEW_PREVIEW_LIMIT
+  const visibleDemandRows = shopDemandReviewRows(actionableDemandRows, demandForecastRows, showAllDemandRows)
   const shopReplenishment = useMemo(
     () => projectShopReplenishment(commerce, relatedProduction),
     [commerce, relatedProduction],
@@ -2379,6 +2384,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         if (history) history.open = true
         history?.scrollIntoView({ block: 'center' })
         history?.querySelector('summary')?.focus({ preventScroll: true })
+        return
+      }
+      if (commerceLocation.hash === '#demand-review') {
+        const purchasing = purchasingToolsRef.current
+        if (purchasing) purchasing.open = true
+        const target = document.getElementById('demand-review')
+        target?.scrollIntoView({ block: 'center' })
+        target?.focus({ preventScroll: true })
         return
       }
       if (commerceLocation.hash === '#shop-catalog-import') {
@@ -3299,9 +3312,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       Plant demand does not match a Shop item for {shopReplenishment.unmatchedDemand.map((entry) => `"${entry.sku}" (${entry.materialName}, ${Number((entry.requiredQuantityMilli / 1000).toFixed(3))} ${entry.unit}, job${entry.jobIds.length === 1 ? '' : 's'} ${entry.jobIds.join(', ')})`).join('; ')}. Check the Shop SKU on that material's BOM row -- this demand is not included in the recommendations above.
     </p> : null}
     {procurementReviews.length ? <section aria-label="Shop procurement decisions" className="supplier-performance"><div className="supplier-performance-heading"><span className="core-eyebrow">Requisition review</span><small>Source-bound ranking · budget and review required</small></div><div className="shop-replenishment-list" role="list">{procurementReviews.slice(0, 4).map((row) => { const approved = openPurchaseRequisitions.find((requisition) => requisition.sku === row.sku); const budget = approved?.budgetEnvelopeId ? purchaseBudgetEnvelopes.find((envelope) => envelope.id === approved.budgetEnvelopeId) : null; return <div data-status={approved ? 'approved' : row.status} key={row.requisitionReference} role="listitem"><span><strong>{row.itemName}</strong><small>{approved?.id ?? row.requisitionReference} · {approved?.quantityRequested ?? row.quantity} units{row.plantJobIds.length ? ` · Plant ${row.plantJobIds.join(', ')}` : ''}</small></span><span><b>{approved ? 'Approved requisition' : row.recommendedSupplier ?? 'Supplier terms needed'}</b><small>{approved ? `${approved.supplier} · ${formatMoney(approved.totalMmk)} · ${budget?.budgetCode ?? 'legacy authority'} · second operator next` : `${row.estimatedTotalMmk === null ? 'Cost not retained' : formatMoney(row.estimatedTotalMmk)} · ${row.supplierOptions.length} ${row.supplierOptions.length === 1 ? 'option' : 'options'} · ${row.status === 'risk_review_required' ? 'risk review' : row.status === 'terms_required' ? 'terms review' : 'ready for review'}`}</small></span></div> })}</div></section> : null}
-    {demandForecastRows.length ? <section aria-label="Shop demand intelligence" className="supplier-performance">
+    {demandForecastRows.length ? <section aria-label="Shop demand intelligence" className="supplier-performance" id="demand-review" tabIndex={-1}>
       <div className="supplier-performance-heading"><span className="core-eyebrow">Demand intelligence</span><small>28-day completed sales · returns netted · recommendation only</small></div>
-      <div className="shop-replenishment-list" role="list">{demandForecastRows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.completedOrderCount} completed {row.completedOrderCount === 1 ? 'order' : 'orders'} · {row.confidence} evidence</small></span><span><b>{row.status === 'stockout_risk' ? 'Stockout risk' : row.status === 'reorder_soon' ? 'Reorder soon' : `${row.forecastWeeklyUnits}/week`}</b><small>{row.projectedDaysOfCover === null ? 'Cover collecting' : `${row.projectedDaysOfCover}d projected cover`} · {row.planningHorizonDays}d {row.planningHorizonSource === 'supplier_policy' ? 'supplier lead' : 'planning horizon'}{row.recommendedSafetyStockUnits === null ? '' : ` · ${row.recommendedSafetyStockUnits} safety suggested`}</small></span></div>)}</div>
+      <div className="shop-replenishment-list" id="demand-review-rows" role="list">{visibleDemandRows.map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.completedOrderCount} completed {row.completedOrderCount === 1 ? 'order' : 'orders'} · {row.confidence} evidence</small></span><span><b>{row.status === 'stockout_risk' ? 'Stockout risk' : row.status === 'reorder_soon' ? 'Reorder soon' : `${row.forecastWeeklyUnits}/week`}</b><small>{row.projectedDaysOfCover === null ? 'Cover collecting' : `${row.projectedDaysOfCover}d projected cover`} · {row.planningHorizonDays}d {row.planningHorizonSource === 'supplier_policy' ? 'supplier lead' : 'planning horizon'}{row.recommendedSafetyStockUnits === null ? '' : ` · ${row.recommendedSafetyStockUnits} safety suggested`}</small></span></div>)}</div>
+      {demandRowsNeedExpansion ? <button aria-controls="demand-review-rows" aria-expanded={showAllDemandRows} className="text-link" onClick={() => setShowAllDemandRows((current) => !current)} type="button">{showAllDemandRows ? 'Show top four demand items' : `Show all ${actionableDemandRows.length} demand items`}</button> : null}
     </section> : <p className="empty-state">Demand forecast starts after the first completed sale.</p>}
   </section>
   const shopNextAction = decideShopNextAction({
@@ -3313,6 +3327,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     lowStockCount: lowStock.length,
     pendingAction: Boolean(pendingAction),
     pendingOnlineRequestCount: pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0),
+    reorderSoonCount: shopDemandIntelligence.summary.reorderSoon,
+    stockoutRiskCount: shopDemandIntelligence.summary.stockoutRisks,
   })
   const shopAgentJob = shopNextAction.job
   const shopAgentReason = shopNextAction.reason
@@ -7306,7 +7322,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
       </form> : null}
-      <details className="inventory-tools-disclosure">
+      <details className="inventory-tools-disclosure" ref={purchasingToolsRef}>
         <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
         <div className="inventory-tools-content">
           {supplierControl}
