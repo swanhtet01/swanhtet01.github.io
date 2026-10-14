@@ -21,6 +21,21 @@ export type ShopNextActionDecision = {
   track: 'Review' | 'Orders' | 'Inventory' | 'Counter'
 }
 
+export const SHOP_DEMAND_REVIEW_PREVIEW_LIMIT = 4
+
+export function shopDemandReviewRows<T>(
+  actionableRows: readonly T[],
+  forecastRows: readonly T[],
+  showAllActionableRows: boolean,
+): readonly T[] {
+  if (actionableRows.length) {
+    return showAllActionableRows
+      ? actionableRows
+      : actionableRows.slice(0, SHOP_DEMAND_REVIEW_PREVIEW_LIMIT)
+  }
+  return forecastRows.slice(0, SHOP_DEMAND_REVIEW_PREVIEW_LIMIT)
+}
+
 export function decideShopNextAction(input: ShopNextActionInput): ShopNextActionDecision {
   const counts = [input.actionOrderCount, input.activePurchaseOrderCount, input.catalogItemCount, input.lowStockCount, input.pendingOnlineRequestCount, input.reorderSoonCount, input.stockoutRiskCount]
   if (!counts.every((count) => Number.isSafeInteger(count) && count >= 0)) throw new Error('Shop next-action counts must be non-negative safe integers.')

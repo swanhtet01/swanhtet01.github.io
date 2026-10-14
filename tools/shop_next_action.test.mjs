@@ -4,9 +4,23 @@ import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 
 const root = resolve(import.meta.dirname, '..')
-const { decideShopNextAction } = await import(
+const { decideShopNextAction, shopDemandReviewRows } = await import(
   pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-next-action.ts')).href
 )
+
+test('demand review previews the four highest-ranked action rows and expands on request', () => {
+  const actionableRows = ['risk-1', 'risk-2', 'risk-3', 'risk-4', 'risk-5', 'risk-6']
+  const forecastRows = ['monitor-1', 'monitor-2']
+
+  assert.deepEqual(shopDemandReviewRows(actionableRows, forecastRows, false), actionableRows.slice(0, 4))
+  assert.deepEqual(shopDemandReviewRows(actionableRows, forecastRows, true), actionableRows)
+})
+
+test('demand review keeps a four-row monitor preview when no action risk exists', () => {
+  const forecastRows = ['monitor-1', 'monitor-2', 'monitor-3', 'monitor-4', 'monitor-5']
+
+  assert.deepEqual(shopDemandReviewRows([], forecastRows, false), forecastRows.slice(0, 4))
+})
 
 const base = {
   actionOrderCount: 0,
