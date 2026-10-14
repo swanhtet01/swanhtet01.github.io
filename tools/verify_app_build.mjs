@@ -7627,6 +7627,7 @@ if (!productImageStoreSource.includes('export function productImageScopeForWorks
   || !shopProductPhotoControlSource.includes('else await deleteProductImage(scope, sku)')
   || !useProductImageSource.includes("import('./shop-managed-media-client')")
   || !useProductImageSource.includes('managedClient = client')
+  || !useProductImageSource.includes('if (managed && !managedClient) return')
   || !useProductImageSource.includes('unsubscribe = client.subscribeManagedProductPhotos(changed)')
   || !managedShopMediaFeatureSource.includes('export const MANAGED_SHOP_PHOTOS_ENABLED = false')
   || !useProductImageSource.includes("if (scope.startsWith('managed:') && !MANAGED_SHOP_PHOTOS_ENABLED)")

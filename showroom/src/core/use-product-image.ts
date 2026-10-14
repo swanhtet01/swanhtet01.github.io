@@ -39,6 +39,9 @@ export function useProductImageState(scope: string, sku: string): { url: string 
       }
     }
     function load() {
+      // A visibility event can arrive before the managed chunk resolves. Never
+      // read this company's device-local IndexedDB slot as a shared photo.
+      if (managed && !managedClient) return
       latest += 1
       const sequence = latest
       controller?.abort()
