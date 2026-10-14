@@ -72,8 +72,8 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
     "20261010070000_website_published_hero_media.sql",
     "20261010120857_website_inquiry_followup.sql",
     "20261014090000_website_channel_stable_update.sql",
-    "20261014103000_website_custom_domain_bindings.sql",
 )
+DOMAIN_CANDIDATE_MIGRATION = "20261014103000_website_custom_domain_bindings.sql"
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
@@ -135,6 +135,7 @@ IMPLEMENTATION_PATHS = (
 IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "kernel/database-rehearsal-evidence.mjs",
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
+    f"supabase/migrations/{DOMAIN_CANDIDATE_MIGRATION}",
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
     "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
     "supermega_runtime/website_inquiry_api.py", "supermega_runtime/website_inquiry_store.py",
@@ -218,7 +219,7 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
     if git("rev-parse", "HEAD") != expected_head:
         raise RehearsalFailure("source_head_mismatch")
     observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
-        if path.name != "20260711081300_public_legacy_baseline.sql"))
+        if path.name not in ("20260711081300_public_legacy_baseline.sql", DOMAIN_CANDIDATE_MIGRATION)))
     if observed != CURRENT_MIGRATIONS:
         raise RehearsalFailure("private_migration_inventory_mismatch")
     return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),

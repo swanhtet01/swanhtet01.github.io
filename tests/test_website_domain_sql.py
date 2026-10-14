@@ -67,8 +67,8 @@ class SyntheticVercel:
 class WebsiteDomainSqlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if NEW_MIGRATION not in pg.CURRENT_MIGRATIONS:
-            raise RuntimeError('website_domain_migration_missing_from_canonical_chain')
+        if NEW_MIGRATION != pg.DOMAIN_CANDIDATE_MIGRATION or NEW_MIGRATION in pg.CURRENT_MIGRATIONS:
+            raise RuntimeError('website_domain_candidate_migration_boundary_invalid')
         # The base rehearsal's global Trial schema guard currently fails even
         # for its own Website inquiry SQL tests. This suite still applies real
         # migrations and exercises the domain functions against PostgreSQL.
@@ -101,7 +101,7 @@ class WebsiteDomainSqlTests(unittest.TestCase):
         pg._create_auth_session_fixture(cls.admin_url)
         pg._apply_migrations(postgres_bin=cls.bin, admin_password=password, admin_database_url=cls.admin_url,
                              port=port, environment=cls.environment,
-                             migrations=pg.CURRENT_MIGRATIONS)
+                             migrations=(*pg.CURRENT_MIGRATIONS, NEW_MIGRATION))
         pg._provision_runtime(cls.admin_url, runtime_password)
         pg._seed_rehearsal_data(cls.admin_url)
         with pg._connect(cls.admin_url) as connection:
