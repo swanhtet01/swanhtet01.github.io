@@ -22,10 +22,10 @@ class FullChainProofContractTests(unittest.TestCase):
         self.assertIn("ready.product_entitlements == (product,)", source)
         self.assertIn("ready.capabilities == self_serve_owner_capabilities(product)", source)
 
-    def test_exact_current_private_migration_chain(self):
+    def test_versioned_v13_chain_is_the_exact_prefix_of_the_inquiry_chain(self):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
                         if p.name != "20260711081300_public_legacy_baseline.sql")
-        self.assertEqual(list(proof.MIGRATIONS), actual)
+        self.assertEqual([*proof.MIGRATIONS, proof.INQUIRY_MIGRATION], actual)
         self.assertEqual(len(proof.MIGRATIONS), 23)
         self.assertEqual(proof.MIGRATIONS[-8:], (
             "20260915184728_website_customer_review_storage.sql",

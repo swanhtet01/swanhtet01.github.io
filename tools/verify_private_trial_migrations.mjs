@@ -39,6 +39,7 @@ const expectedMigrations = [
   '20260924231714_ecommerce_customer_decisions.sql',
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
+  '20261014011202_website_inquiry_delivery.sql',
 ]
 // Verify the original private catalog before all Website-review extensions, then
 // verify the complete extended catalog. Adding an extension must not shift the

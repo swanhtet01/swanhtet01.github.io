@@ -45,6 +45,8 @@ TABLES = (
     "website_customer_acceptances", "website_customer_feedback", "website_customer_reviews", "workspace_access_controls",
     "workspace_events", "workspace_memberships", "workspace_state",
 )
+INQUIRY_TABLES = ("website_inbox", "website_inquiry_channels")
+INQUIRY_MIGRATION = "20261014011202_website_inquiry_delivery.sql"
 CHECKS = (
     "v11_baseline_validator_passed", "full_private_chain_applied",
     "unwrapped_migration_failure_rolled_back",
@@ -83,7 +85,8 @@ def source_identity(expected_head):
     require(git("rev-parse", "HEAD") == expected_head, "source_head_mismatch")
     observed = tuple(sorted(p.name for p in (ROOT / "supabase/migrations").glob("*.sql")
                             if p.name != "20260711081300_public_legacy_baseline.sql"))
-    require(observed == MIGRATIONS, "private_migration_inventory_mismatch")
+    require(observed in (MIGRATIONS, (*MIGRATIONS, INQUIRY_MIGRATION)),
+            "private_migration_inventory_mismatch")
     paths = sorted(set([
         "tools/rehearse_self_serve_v13.py", "tools/run_python_tool.mjs",
         "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
@@ -121,16 +124,19 @@ def cluster(bin_path, openssl, password, label):
         temporary.cleanup()
 
 
-def snapshot(admin_url):
+def snapshot(admin_url, *, additional_tables=()):
     from psycopg import sql
+    require(additional_tables in ((), INQUIRY_TABLES), "private_table_scope_invalid")
+    expected_tables = tuple(sorted((*TABLES, *additional_tables)))
     result = {}
     with pg._connect(admin_url) as conn:
         conn.execute("set transaction read only")
         conn.execute("set local timezone = 'UTC'")
         names = conn.execute("select tablename from pg_tables where schemaname='app_private' "
                              "order by tablename").fetchall()
-        require(tuple(row[0] for row in names) == TABLES, "private_table_inventory_mismatch")
-        for table in TABLES:
+        require(tuple(row[0] for row in names) == expected_tables,
+                "private_table_inventory_mismatch")
+        for table in expected_tables:
             result[table] = conn.execute(sql.SQL(
                 "select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),'[]'::jsonb) "
                 "from app_private.{} t").format(sql.Identifier(table))).fetchone()[0]

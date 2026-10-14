@@ -77,7 +77,7 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.deepEqual(migrationNames, runner.migrations)
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
-  assert.equal(runner.migrations.at(-1), '20260930010000_app_rls_initplan_optimization.sql')
+  assert.equal(runner.migrations.at(-1), '20261014011202_website_inquiry_delivery.sql')
 })
 const context = {
   recordedAt: '2026-07-31T10:00:00.000Z',
@@ -89,8 +89,8 @@ const context = {
 const raw = {
   contract: 'supermega_postgres17_rehearsal_v2', ok: true, ready: true, status: 'rehearsed',
   engine: { major: 17, version: '17.10', tls_active: true, loopback_only: true, start_mode: 'pg_ctl_restricted_token' },
-  migrations: { count: migrationNames.length, schema_version: 13, names: migrationNames, schema_profile: 'v13-self-serve',
-    catalog_contract: 'supermega_private_trial_database_v13_self_serve_v1', production_validator_ready: true },
+  migrations: { count: migrationNames.length, schema_version: 13, names: migrationNames, schema_profile: 'v13-inquiry',
+    catalog_contract: 'supermega_private_trial_database_v13_inquiry_v1', production_validator_ready: true },
   source: { head: context.implementationCommit, tree: context.implementationTree, implementation_digest: implementation.digest },
   authority: { actor_identity_source: 'trusted_backend_transaction_context', database_authenticates_individual_actors: false, runtime_credentials_must_remain_server_only: true },
   implementation: { digest: implementation.digest, paths: implementation.paths },
@@ -170,7 +170,7 @@ test('requires exact current migration identity, source commit/tree and implemen
 })
 
 test('exact catalog checks cannot be omitted, renamed, failed or replaced by a count', () => {
-  assert.equal(catalogCheckNames.length, 33)
+  assert.equal(catalogCheckNames.length, 37)
   for (const phase of ['before', 'after']) {
     for (const mode of ['missing', 'renamed', 'false', 'count']) {
       const invalid = structuredClone(raw)

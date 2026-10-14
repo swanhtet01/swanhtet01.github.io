@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 
 export const DATABASE_REHEARSAL_EVIDENCE_SCHEMA = 'supermega.hq.database-rehearsal.v3'
-const schemaProfile = 'v13-self-serve'
-const catalogContract = 'supermega_private_trial_database_v13_self_serve_v1'
+const schemaProfile = 'v13-inquiry'
+const catalogContract = 'supermega_private_trial_database_v13_inquiry_v1'
 
 const migrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',
@@ -28,6 +28,7 @@ const migrations = [
   '20260924231714_ecommerce_customer_decisions.sql',
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
+  '20261014011202_website_inquiry_delivery.sql',
 ]
 
 const implementationPaths = [...new Set([
@@ -67,6 +68,7 @@ const implementationPaths = [...new Set([
   'tests/test_website_runtime.py',
   'tools/rehearse_self_serve_v13.py',
   'tools/private_trial_v13_contract.py',
+  'tools/private_trial_inquiry_contract.py',
   'tools/run_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.test.mjs',
@@ -86,6 +88,8 @@ export const catalogCheckNames = [
   'storage_public_buckets_absent', 'storage_policy_surface_empty_until_allowlisted',
   'extension_columns_exact', 'extension_constraints_exact', 'extension_functions_exact',
   'extension_policies_exact', 'private_column_acl_exact',
+  'inquiry_columns_exact', 'inquiry_constraints_exact',
+  'inquiry_functions_exact', 'inquiry_policies_exact',
 ]
 
 const rawCheckNames = [

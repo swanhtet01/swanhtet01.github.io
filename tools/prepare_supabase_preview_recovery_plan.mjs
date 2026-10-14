@@ -18,6 +18,11 @@ const expectedProductionRef = 'zvtzwcimpvvtkowflhda'
 const expectedAcceptanceRef = 'twflgmlwfkykgzsxnegc'
 const expectedSchemaVersion = 13
 const expectedMigrationCount = 24
+// This packet and its October 2 repair receipt describe the historical 24-file
+// chain. Keep that receipt verifiable without treating it as current release proof.
+const knownLaterMigrations = Object.freeze([
+  '20261014011202_website_inquiry_delivery.sql',
+])
 const publicBaseline = '20260711081300_public_legacy_baseline.sql'
 const rowCountNames = Object.freeze([
   'workspace_memberships',
@@ -54,9 +59,14 @@ function isRecord(value) {
 }
 
 async function sourceMigrationChain() {
-  const names = (await readdir(migrationDirectory))
+  const observed = (await readdir(migrationDirectory))
     .filter((name) => /^\d{14}_.+\.sql$/.test(name))
     .sort()
+  if (observed.length !== expectedMigrationCount + knownLaterMigrations.length
+    || JSON.stringify(observed.slice(expectedMigrationCount)) !== JSON.stringify(knownLaterMigrations)) {
+    fail('supabase_preview_recovery_historical_source_drift')
+  }
+  const names = observed.slice(0, expectedMigrationCount)
   if (names.length !== expectedMigrationCount) fail('supabase_preview_recovery_source_migration_count')
   if (names[0] !== publicBaseline) fail('supabase_preview_recovery_public_baseline')
   const migrations = []
@@ -431,6 +441,8 @@ async function main() {
     console.log(JSON.stringify({
       ok: true,
       contract: plan.contract,
+      scope: 'historical-2026-10-02-repair',
+      currentReleaseCandidate: false,
       action: plan.decision.action,
       missingMigrationCount: plan.decision.missingMigrations.length,
       authorized: plan.execution.authorized,

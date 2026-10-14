@@ -45,6 +45,32 @@ def _multipage_state():
 
 
 class WebsiteInquiryPageTests(unittest.TestCase):
+    def test_runtime_mounts_inquiry_routes_but_keeps_them_closed_by_default(self):
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        configuration = {
+            'SUPERMEGA_WEBSITE_INQUIRIES_ENABLED': 'false',
+            'SUPERMEGA_WEBSITE_INQUIRY_CLIENT_ADDRESS_TRUSTED': 'false',
+            'SUPERMEGA_WEBSITE_INQUIRY_ABUSE_HMAC_KEY': '',
+            'SUPERMEGA_WEBSITE_INQUIRY_PUBLIC_ORIGIN': '',
+        }
+        with patch.dict(os.environ, configuration):
+            from supermega_runtime.runtime import create_app
+            with patch('supermega_runtime.runtime.instrument_telemetry'):
+                app = create_app()
+        client = TestClient(app)
+        response = client.post(f'/api/public/sites/{uuid4()}/inquiries', json={}, headers={'Origin': ORIGIN})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {'detail': 'website_inquiries_unavailable'})
+        inbox = client.get('/api/trial/v1/website-inbox')
+        self.assertEqual(inbox.status_code, 503)
+
+    def test_migration_pins_every_privileged_function_to_empty_search_path(self):
+        migration = Path(__file__).resolve().parents[1] / 'supabase/migrations/20261014011202_website_inquiry_delivery.sql'
+        sql = migration.read_text(encoding='utf-8').lower()
+        self.assertEqual(sql.count('security definer'), 4)
+        self.assertEqual(sql.count("set search_path = ''"), 4)
+
     def test_approved_navigation_buttons_and_form_have_real_destinations(self):
         from supermega_runtime.website_public_page import render_website_inquiry_page
         from supermega_runtime.website_runtime import _website_artifact
@@ -176,9 +202,7 @@ class WebsiteInquirySqlTests(unittest.TestCase):
                              port=port, environment=cls.environment, migrations=pg.CURRENT_MIGRATIONS)
         pg._provision_runtime(cls.admin_url, runtime_password)
         pg._seed_rehearsal_data(cls.admin_url)
-        proposal = Path(__file__).resolve().parents[1] / 'supabase/proposals/website_inquiry_delivery.sql'
         with pg._connect(cls.admin_url, autocommit=True) as connection:
-            connection.execute(proposal.read_text(encoding='utf-8'))
             connection.execute("insert into app_private.workspace_state(workspace_id,surface,version,state_json,updated_by) values (%s,'website',1,%s::jsonb,%s)",
                                (WORKSPACE, json.dumps(_state()), OWNER.actor_id))
 
@@ -215,6 +239,43 @@ class WebsiteInquirySqlTests(unittest.TestCase):
                          payload=BODY, client_key=sha256(key.encode()).hexdigest())
         arguments.update(overrides)
         return self.adapter.receive(**arguments)
+
+    def test_inquiry_catalog_profile_is_exact_and_v13_profile_stays_historical(self):
+        from copy import deepcopy
+        from tools import validate_supermega_database_url as audit
+
+        pg._bootstrap_local_storage_catalog_fixture(self.admin_url)
+        with audit._open_connection(self.runtime_url) as connection:
+            snapshot = audit.collect_snapshot(connection, schema_profile='v13-inquiry')
+        with audit._open_storage_audit_connection(self.admin_url) as connection:
+            snapshot.update(audit.collect_storage_snapshot(connection))
+        current = audit.evaluate_snapshot(snapshot, schema_profile='v13-inquiry')
+        self.assertTrue(current['ready'], current['failed_checks'])
+        historical = audit.evaluate_snapshot(snapshot, schema_profile='v13-self-serve')
+        self.assertFalse(historical['ready'])
+        self.assertIn('expected_private_tables_only', historical['failed_checks'])
+
+        altered = deepcopy(snapshot)
+        altered['inquiry_constraints'] = []
+        failed = audit.evaluate_snapshot(altered, schema_profile='v13-inquiry')
+        self.assertIn('inquiry_constraints_exact', failed['failed_checks'])
+
+        altered = deepcopy(snapshot)
+        privileged = next(row for row in altered['functions']
+                          if row['function_name'] == 'receive_website_inquiry')
+        privileged['function_config'] = ['search_path=public']
+        failed = audit.evaluate_snapshot(altered, schema_profile='v13-inquiry')
+        self.assertIn('inquiry_functions_exact', failed['failed_checks'])
+
+    def test_recovery_snapshot_changes_when_an_inquiry_is_received(self):
+        from tools import rehearse_self_serve_v13 as account
+
+        before = account.snapshot(self.admin_url, additional_tables=account.INQUIRY_TABLES)
+        channel = self.channel()
+        self.receive(channel)
+        after = account.snapshot(self.admin_url, additional_tables=account.INQUIRY_TABLES)
+        self.assertNotEqual(after, before)
+        self.assertTrue(after.startswith('sha256:'))
 
     def test_prepare_is_disabled_idempotent_and_does_not_activate_or_publish(self):
         channel = self.channel(enabled=False)

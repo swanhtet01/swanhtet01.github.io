@@ -1,8 +1,8 @@
-"""Candidate Sites inquiry HTTP adapter, deliberately not mounted in production.
+"""Website inquiry HTTP adapter, mounted but disabled by default.
 
-The hosting integration must supply verified client-address and managed identity
-resolvers. Never wire an unverified Forwarded/X-Forwarded-For header here. Public
-page origin verification, operator UI and deployment migration remain prerequisites.
+Activation requires a verified ASGI client address, a managed identity resolver,
+and the deployed inquiry migration. Never trust a caller-supplied forwarding
+header for the abuse key.
 """
 
 from collections.abc import Callable

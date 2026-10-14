@@ -95,7 +95,7 @@ test('rejects write authority, credentials, altered migration scope, and stale p
   )
 })
 
-test('the generated plan verifies byte-for-byte against current source and readback', async () => {
+test('the historical repair plan verifies against its exact source prefix and readback', async () => {
   const plan = JSON.parse(await readFile(planPath, 'utf8'))
   const validated = await validateRecoveryPlan(plan)
   assert.equal(validated.decision.action, 'repair')
