@@ -317,11 +317,11 @@
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
-      "digest": "sha256:f80d700487b816fa04cea8f1928608786ceb14df1a052efd12f8f199c0d45910"
+      "digest": "sha256:31002bab4d340b4c2f976318e7ff840ff49665d0c6ca2e5413a16c32a1dc57d1"
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:afd0ec770be6fb1b9496cfe721b14c6d3f380b8e0f752e048ac99401015174d9"
+      "digest": "sha256:601301f494025f4d72f245f4a33ce30f4498f1d811bb4ac4a50b6f9535d60269"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -333,7 +333,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:aeb83f9b0c7c5429baf7ce240588c9b513e08440473de4f8b045344f06099e33"
+      "digest": "sha256:5642ad0e704ef2d4021a33d15e6d7320641eb4c83ffe9b968b444ad8c6ca2f76"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
@@ -344,5 +344,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:59f5dd17a0bacae0af8793f9be726db904dcf50ffe665e543d9a84e49607de20"
+  "digest": "sha256:1e451db773db0ddc3ffff4438c8d0df61993870f8201c32b3affb448b7caa283"
 }
