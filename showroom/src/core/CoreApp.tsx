@@ -4,6 +4,8 @@ import { spaCounterFields } from './shop-spa-counter-fields'
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
+import { projectShopCounterCatalog } from './shop-counter-catalog-window'
+import { shopOrderTargetId } from './shop-order-target'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket, type CounterTicketStorageScope } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
@@ -799,10 +801,6 @@ function recordDisplayReference(recordId: string) {
   return match ? `${match[1]}-${match[2]}` : trimmed
 }
 
-function commerceOrderTargetId(orderId: string) {
-  return `shop-order-${orderId.replace(/[^A-Za-z0-9_-]+/g, '-')}`
-}
-
 function commandUuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
@@ -1189,6 +1187,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   const setPayment = (value: string) => updateBasket({ payment: value })
   const setOutcome = (value: CounterBasket['outcome']) => updateBasket({ outcome: value })
   const [query, setQuery] = useState(initialQuery)
+  const [catalogPage, setCatalogPage] = useState(0)
   const [scanFeedback, setScanFeedback] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
   const salePanelRef = useRef<HTMLElement>(null)
@@ -1210,9 +1209,8 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   }, [cartOpen])
 
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const visibleItems = normalizedQuery
-    ? items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
-    : items
+  const catalog = useMemo(() => projectShopCounterCatalog(items, query, catalogPage), [items, query, catalogPage])
+  const visibleItems = catalog.rows
   const lines = items.flatMap((item) => {
     const quantity = cart[item.sku] ?? 0
     return quantity > 0 ? [{ item, quantity }] : []
@@ -1272,7 +1270,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter' || !normalizedQuery) return
     event.preventDefault()
-    addScannedValue(query)
+    if (addScannedValue(query)) setCatalogPage(0)
   }
 
   function addCameraScan(value: string) {
@@ -1280,6 +1278,7 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
     // clears it again in the same commit; when it does not match, the operator sees the
     // exact code the camera read next to the "no matching item" state instead of nothing.
     setQuery(value)
+    setCatalogPage(0)
     addScannedValue(value)
   }
 
@@ -1332,9 +1331,13 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
               <span aria-label="Record safety" className="shop-next-compact shop-record-status-counter" title={recordStatus.detail}>{recordStatus.badge} · {recordStatus.label}<small className="sr-only">{recordStatus.detail} · {operatorLabel || 'Cashier set at review'}</small></span>
             </nav>
           </div>
-          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setScanFeedback('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
+          <div className="shop-item-search-row"><label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input ref={saleSearchRef} autoComplete="off" aria-keyshortcuts="/" onChange={(event) => { setQuery(event.target.value); setCatalogPage(0); setScanFeedback('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /><kbd aria-hidden="true" className="shop-search-shortcut">/</kbd></label><BarcodeScanButton label="Scan a barcode with the camera" onDetected={addCameraScan} /></div>
           {scanFeedback ? <p className="form-notice" role="status">{scanFeedback}</p> : null}
         </header>
+        {catalog.pageCount > 1 ? <nav aria-label="Catalog pages" className="shop-catalog-pages">
+          <span aria-live="polite">{catalog.start + 1}–{Math.min(catalog.start + visibleItems.length, catalog.total)} of {catalog.total} products</span>
+          <div><button disabled={catalog.page === 0} onClick={() => setCatalogPage(catalog.page - 1)} type="button">Previous</button><span>Page {catalog.page + 1} of {catalog.pageCount}</span><button disabled={catalog.page >= catalog.pageCount - 1} onClick={() => setCatalogPage(catalog.page + 1)} type="button">Next</button></div>
+        </nav> : null}
         {/* The tile is named by REFERENCE, not by aria-label. An aria-label on a
             button replaces its whole subtree in the accessibility tree, so the
             previous `aria-label={`Add ${item.name} to this sale`}` announced the
@@ -1364,9 +1367,9 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
             one leaves a traversable StaticText behind. */}
         <span aria-hidden="true" className="sr-only" id="shop-tile-action">{bi('Add to this sale')}</span>
         {visibleItems.length ? <><div aria-hidden="true" className="shop-counter-column-head"><span>Product</span><span>Price</span><span>Stock</span><span>Sale</span></div><div className="shop-item-grid">
-          {visibleItems.map((item, tileIndex) => {
+          {visibleItems.map(({ item, index }, tileIndex) => {
             const quantity = cart[item.sku] ?? 0
-            const artKind = items.indexOf(item) % 5
+            const artKind = index % 5
             // Ids are keyed by render position, not by SKU: aria-labelledby takes a
             // SPACE-separated id list and a SKU is operator-typed, so a SKU with a
             // space in it would silently split into two broken references.
@@ -3884,7 +3887,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         : `Order ${commerceOrderDisplayReference(pendingAction.subjectId)} created. Stock reserved. Finish fulfilment and reconcile payment before completion.`
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
     setPendingAction(null)
-    if (pendingAction.presentation === 'counter' && !counterSettlement) navigate(`/shop/?tab=orders#${commerceOrderTargetId(pendingAction.subjectId)}`)
+    if (pendingAction.presentation === 'counter' && !counterSettlement) navigate(`/shop/?tab=orders#${shopOrderTargetId(pendingAction.subjectId)}`)
   }
 
   async function reviewStorefrontRequest(requestId: string) {
@@ -7207,7 +7210,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
             <span className="core-eyebrow">Next action</span>
             <h3>{nextOrderAction}</h3>
             <p>{nextOrderDetail}</p>
-            {nextOrder ? <a className={coreUi.q} href={`#${commerceOrderTargetId(nextOrder.id)}`}>Open next order</a> : <Link className="core-button compact" to="/shop/?tab=counter">Open the counter</Link>}
+            {nextOrder ? <a className={coreUi.q} href={`#${shopOrderTargetId(nextOrder.id)}`}>Open next order</a> : <Link className="core-button compact" to="/shop/?tab=counter">Open the counter</Link>}
           </section>
           <section className="order-insight-card">
             <div className="order-insight-heading"><span className="core-eyebrow">Queue health</span><strong>What needs attention</strong></div>
@@ -7974,7 +7977,7 @@ function OrderList({
     const canCancelOrder = active && canCancel(order.id)
     const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || (needsPayment && !reconcileIsPrimary)
     const primaryActionLabel = shopOrderPrimaryActionLabel(order)
-    const targetId = commerceOrderTargetId(order.id)
+    const targetId = shopOrderTargetId(order.id)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <strong>{order.customer} · {order.lines
