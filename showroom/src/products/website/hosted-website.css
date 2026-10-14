@@ -16,24 +16,14 @@
 .website-hosted-address>a { width: fit-content; max-width: 100%; color: #4338ca; font-size: 16px; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .website-hosted-address>a:hover { color: #312e81; }
 .website-hosted-address>small { color: #697188; font-size: 12px; }
-.website-domain-address { background: #fbfbff; }
-.website-domain-form { display: flex; flex-wrap: wrap; gap: 9px; align-items: end; margin-top: 4px; }
-.website-domain-form label { flex: 0 0 100%; color: #626c81; font-size: 12px; font-weight: 600; }
-.website-domain-form input { min-width: 0; flex: 1 1 170px; min-height: 44px; padding: 10px 12px; border: 1px solid #cfd4e3; border-radius: 9px; color: #171b30; font: inherit; background: white; }
-.website-domain-form input:focus-visible,.website-domain-address button:focus-visible { outline: 3px solid #8a7be9; outline-offset: 2px; }
-.website-domain-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 9px; }
-.website-domain-actions>span { flex-basis: 100%; color: #30384e; font-size: 13px; }
-.website-domain-remove { border: 0; padding: 7px 0; color: #697188; background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
-.website-domain-steps { border-top: 1px solid #e6e8f0; margin-top: 7px; padding-top: 8px; }
-.website-hosted-address .website-domain-steps p { margin: 0 0 9px; font-size: 12px; }
-.website-domain-steps dl { display: grid; gap: 8px; margin: 0; }
-.website-domain-steps dl>div { padding: 10px; border: 1px solid #e3e5ef; border-radius: 9px; background: white; }
-.website-domain-steps dt { color: #626c81; font-size: 11px; font-weight: 650; }
-.website-domain-steps dd { display: grid; gap: 3px; margin: 4px 0 0; color: #222943; font-size: 12px; overflow-wrap: anywhere; }
+.website-domain-form { display: grid; gap: 8px; margin-top: 4px; }
+.website-domain-form label { font-size: 12px; }
+.website-domain-form input { min-height: 44px; padding: 10px 12px; border-radius: 9px; font-size: 14px; }
+.website-domain-confirm { flex-basis: 100%; }
+.website-domain-steps dl>div { padding: 10px; border: 1px solid #e3e5ef; border-radius: 9px; margin-top: 8px; }
+.website-domain-steps dd { display: grid; gap: 3px; margin: 4px 0 0; font-size: 12px; overflow-wrap: anywhere; }
 .website-domain-steps code { font-size: 12px; user-select: all; }
 .website-hosted-address .website-domain-pending { margin: 8px 0 0; color: #8a651a; }
-.website-domain-address>.website-hosted-error { margin: 4px 0; font-size: 12px; }
-.website-domain-address>.website-hosted-error button { border: 0; background: transparent; text-decoration: underline; color: inherit; font: inherit; cursor: pointer; }
 .website-hosted-card .website-hosted-error { color: #a53641; }
 .website-hosted-hint { padding: 14px; border-radius: 8px; background: #f7f7fc; }
 .website-hosted-withdraw { margin-top: 24px; padding-top: 18px; border-top: 1px solid #eceef4; }

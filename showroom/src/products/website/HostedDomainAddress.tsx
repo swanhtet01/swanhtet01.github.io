@@ -79,10 +79,10 @@ export function HostedDomainAddress({ client, channelId, canWrite }: {
           {domain.dns ? <div><dt>Hosting · {domain.dns.type}</dt><dd><span>{domain.dns.name}</span><code>{domain.dns.value}</code></dd></div> : null}</dl>
         {domain.issue ? <p className="website-domain-pending">{connectionIssue(domain.issue)}</p> : null}
       </div> : null}
-      {canWrite ? <div className="website-domain-actions">
+      {canWrite ? <div className="website-hosted-actions">
         {domain.state === 'pending' && domain.issue !== 'provider_cleanup_pending' && domain.issue !== 'channel_unpublished' ? <button type="button" className="website-button is-secondary" disabled={busy} onClick={() => void mutate(signal => client.checkDomain(domain.hostname, signal))}>Check connection</button> : null}
-        {removeArmed ? <><span>Remove this domain from your website?</span><button type="button" className="website-button is-secondary" disabled={busy} onClick={() => setRemoveArmed(false)}>Keep domain</button><button type="button" className="website-button is-secondary" disabled={busy} onClick={() => void mutate(signal => client.releaseDomain(domain.hostname, signal))}>Remove domain</button></>
-          : <button type="button" className="website-domain-remove" disabled={busy} onClick={() => setRemoveArmed(true)}>{domain.issue === 'provider_cleanup_pending' ? 'Retry removal' : 'Remove domain'}</button>}
+        {removeArmed ? <><p className="website-domain-confirm">Remove this domain from your website?</p><button type="button" className="website-button is-secondary" disabled={busy} onClick={() => setRemoveArmed(false)}>Keep domain</button><button type="button" className="website-button is-secondary" disabled={busy} onClick={() => void mutate(signal => client.releaseDomain(domain.hostname, signal))}>Remove domain</button></>
+          : <button type="button" className="website-button is-secondary" disabled={busy} onClick={() => setRemoveArmed(true)}>{domain.issue === 'provider_cleanup_pending' ? 'Retry removal' : 'Remove domain'}</button>}
       </div> : null}
     </> : status?.enabled && channelId ? <>
       <strong>Connect a domain you own</strong>
@@ -93,6 +93,6 @@ export function HostedDomainAddress({ client, channelId, canWrite }: {
       </form>
       <small>We’ll show the DNS records to add. Your included address keeps working.</small>
     </> : <><strong>{busy ? 'Checking…' : 'Not connected'}</strong><small>{channelId ? 'Custom domain setup is not available in this workspace.' : 'Publish your website first, then connect a domain.'}</small></>}
-    {issue ? <p role="alert" className="website-hosted-error">{issue} <button type="button" onClick={() => { setBusy(true); void refresh() }} disabled={busy}>Refresh</button></p> : null}
+    {issue ? <p role="alert" className="website-hosted-error">{issue} <button className="website-button is-secondary" type="button" onClick={() => { setBusy(true); void refresh() }} disabled={busy}>Refresh</button></p> : null}
   </div>
 }

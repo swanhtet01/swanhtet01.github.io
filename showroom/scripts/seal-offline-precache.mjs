@@ -247,7 +247,14 @@ const build = digest.digest('hex').slice(0, 16)
 swSource = swSource
   .replace(BUILD_PLACEHOLDER, build)
   .replace(FILES_PLACEHOLDER, JSON.stringify(precache, null, 2))
-await writeFile(swPath, swSource, 'utf8')
+// Keep the documented template readable in source, while shipping only executable lines.
+// This preserves exact code tokens used by the release verifier and avoids changing
+// service-worker behavior, cache names, or the sealed precache manifest.
+const shippedWorker = swSource.split(/\r?\n/)
+  .filter((line) => line.trim() && !line.trimStart().startsWith('//'))
+  .map((line) => line.trimStart())
+  .join('\n') + '\n'
+await writeFile(swPath, shippedWorker, 'utf8')
 
 // The manifest was a build input, not a deliverable: it would ship a full map of the chunk graph
 // and count against the artifact byte budget for nothing. On Windows, Vite's manifest directory
