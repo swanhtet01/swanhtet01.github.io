@@ -1,5 +1,6 @@
 """Custom-domain HTTP and provider contract without live DNS or provider calls."""
 
+from contextlib import nullcontext
 import os
 import unittest
 from unittest.mock import Mock, patch
@@ -102,8 +103,10 @@ class HostnameTests(unittest.TestCase):
         provider.verify.return_value = {key: value for key, value in pending.items() if key != 'verification'}
         domain_store = WebsiteDomainStore(Mock(), provider=provider)
         domain_store._owned = Mock(return_value={'binding_id': CHANNEL, 'hostname': HOST,
+                                                 'state': 'pending',
                                                  'challenge': 'supermega-domain=v1:synthetic',
                                                  'dns_record': None})
+        domain_store._check_lock = Mock(return_value=nullcontext())
         domain_store._record = Mock()
         domain_store.status = Mock(return_value={'enabled': True, 'domain': None})
         with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
@@ -117,6 +120,12 @@ class HostnameTests(unittest.TestCase):
             domain_store.check(TrialPrincipal('workspace', 'owner', 'human'), hostname=HOST)
         self.assertIsNone(domain_store._record.call_args.kwargs['dns'])
         self.assertEqual(domain_store._record.call_args.kwargs['issue'], 'provider_unavailable')
+
+        domain_store._owned.return_value['state'] = 'releasing'
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            with self.assertRaisesRegex(TrialValidationError, 'website_domain_changed'):
+                domain_store.check(TrialPrincipal('workspace', 'owner', 'human'), hostname=HOST)
+        provider.add.assert_not_called()
 
     def test_custom_domain_renders_root_navigation_and_host_bound_assets(self):
         record = {'channelId': CHANNEL, 'pageId': 'page-contact',

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import timezone
 import ipaddress
 import json
@@ -52,8 +53,12 @@ def require_domain_schema(cursor) -> None:
         from pg_class where oid=to_regclass('app_private.website_domain_bindings')),false) as guarded,
         to_regprocedure('app_private.claim_website_domain(uuid,text,uuid,text)') is not null as claim,
         to_regprocedure('app_private.record_website_domain_check(uuid,text,boolean,jsonb,text)') is not null as record_check,
-        to_regprocedure('app_private.claim_website_domain_renewals(integer)') is not null as claim_renewals,
-        to_regprocedure('app_private.complete_website_domain_renewal(uuid,text)') is not null as complete_renewal,
+        to_regprocedure('app_private.claim_website_domain_renewals_v2(integer)') is not null as claim_renewals,
+        to_regprocedure('app_private.complete_website_domain_renewal_v2(uuid,text,timestamptz)') is not null as complete_renewal,
+        not has_function_privilege(current_user,
+          'app_private.claim_website_domain_renewals(integer)','EXECUTE') as old_claim_blocked,
+        not has_function_privilege(current_user,
+          'app_private.complete_website_domain_renewal(uuid,text)','EXECUTE') as old_complete_blocked,
         to_regprocedure('app_private.begin_website_domain_release(text)') is not null as begin_release,
         to_regprocedure('app_private.finish_website_domain_release(text)') is not null as finish_release,
         to_regprocedure('app_private.read_website_domain_page(text)') is not null as page,
@@ -62,6 +67,7 @@ def require_domain_schema(cursor) -> None:
     row = cursor.fetchone()
     if not row or not all(row[key] is True for key in ('guarded', 'claim', 'record_check',
                                                      'claim_renewals', 'complete_renewal',
+                                                     'old_claim_blocked', 'old_complete_blocked',
                                                      'begin_release', 'finish_release', 'page', 'media', 'inquiry')):
         raise TrialNotReadyError(('website_domain_schema_unverified',))
 
@@ -309,10 +315,31 @@ class WebsiteDomainStore:
             cursor.execute("select app_private.record_website_domain_check(%s,%s,%s,%s::jsonb,%s)",
                            (binding_id, row['challenge'], verified, json.dumps(dns) if dns else None, issue))
 
+    @contextmanager
+    def _check_lock(self, principal: TrialPrincipal, hostname: str):
+        # A transaction lock spans the bounded provider calls and the final
+        # local record. Release takes the same hostname lock before changing
+        # state. DNS and provider reads each have a five-second socket timeout;
+        # this holds one database connection during those calls. A connection
+        # lost after an external request is accepted still needs reconciliation.
+        with self.store._guarded_cursor(principal, write=True, capability='website.write') as (cursor, _):
+            require_domain_schema(cursor)
+            cursor.execute("set local lock_timeout='30s'")
+            cursor.execute("select pg_advisory_xact_lock(hashtextextended('website-domain-ops:' || %s,0))",
+                           (hostname,))
+            yield
+
     def check(self, principal: TrialPrincipal, *, hostname: str) -> dict:
         hostname = normalize_hostname(hostname)
+        with self._check_lock(principal, hostname):
+            return self._check_locked(principal, hostname)
+
+    def _check_locked(self, principal: TrialPrincipal, hostname: str) -> dict:
+        # Re-read after acquiring the lock. A queued check must not attach a
+        # hostname that release has already begun detaching or another tenant
+        # has subsequently claimed.
         row = self._owned(principal)
-        if row is None or row['hostname'] != hostname:
+        if row is None or row['hostname'] != hostname or row['state'] not in ('pending', 'active'):
             raise TrialValidationError('website_domain_changed')
         dns = None
         issue = 'ownership_pending'
@@ -370,7 +397,7 @@ class WebsiteDomainStore:
                 self.store._assert_schema(cursor)
                 require_domain_schema(cursor)
                 cursor.execute("set local statement_timeout='5s'")
-                cursor.execute('select * from app_private.claim_website_domain_renewals(%s)', (limit,))
+                cursor.execute('select * from app_private.claim_website_domain_renewals_v2(%s)', (limit,))
                 due = cursor.fetchall()
         renewed = 0
         for row in due:
@@ -390,8 +417,8 @@ class WebsiteDomainStore:
                     self.store._assert_schema(cursor)
                     require_domain_schema(cursor)
                     cursor.execute("set local statement_timeout='5s'")
-                    cursor.execute('select app_private.complete_website_domain_renewal(%s,%s) as renewed',
-                                   (row['binding_id'], row['challenge']))
+                    cursor.execute('select app_private.complete_website_domain_renewal_v2(%s,%s,%s) as renewed',
+                                   (row['binding_id'], row['challenge'], row['attempt_at']))
                     renewed += int(cursor.fetchone()['renewed'] is True)
         return {'examined': len(due), 'renewed': renewed, 'notRenewed': len(due) - renewed}
 
