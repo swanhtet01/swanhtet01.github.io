@@ -1,9 +1,10 @@
 # Managed Shop photos: dormant candidate and reconciliation
 
-The Shop media browser and server flags remain **off**. The candidate migration
-`20261014164000_shop_product_media.sql` is not in the canonical managed release
-chain. A source build and disposable PostgreSQL tests do not establish a deployed
-private bucket, schema, provider behavior, or customer readiness.
+The Shop media browser and server flags remain **off**. The candidate SQL lives
+at `supabase/candidate-migrations/20261014164000_shop_product_media.sql`, outside
+`supabase/migrations`, so an unfiltered migration push cannot apply it. A source
+build and disposable PostgreSQL tests do not establish a deployed private bucket,
+schema, provider behavior, or customer readiness.
 
 The server reserves a unique `attempt_id` and private `object_key` before each
 upload. Every original photo POST has `x-upsert:false`; an unknown response is

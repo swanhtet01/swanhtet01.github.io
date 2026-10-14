@@ -78,9 +78,13 @@ test('rejects every omitted migration, unknown SQL, duplicate and reordered inve
   const names = packet.release.migrations.map(({ name }) => name)
   validateRehearsalMigrationNames(names)
   const dormant = ['20261014103000_website_custom_domain_bindings.sql',
-    '20261014122400_website_domain_attempt_fencing.sql',
-    '20261014164000_shop_product_media.sql']
+    '20261014122400_website_domain_attempt_fencing.sql']
   assert.deepEqual(reviewedRehearsalMigrationNames([...names, ...dormant]), names)
+  // Shop media is outside supabase/migrations; reintroducing it there must
+  // fail the exact release inventory, including through the dormant filter.
+  assert.throws(() => reviewedRehearsalMigrationNames(
+    [...names, ...dormant, '20261014164000_shop_product_media.sql']),
+  /full_migration_inventory_mismatch/)
   for (const candidate of dormant) {
     assert.throws(() => validateRehearsalMigrationNames([...names, candidate]), /full_migration_inventory_mismatch/)
     assert.throws(() => reviewedRehearsalMigrationNames([...names, candidate, candidate]), /full_migration_inventory_mismatch/)

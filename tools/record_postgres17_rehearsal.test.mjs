@@ -68,7 +68,6 @@ const implementation = await implementationEvidence()
 const dormantCandidates = new Set([
   '20261014103000_website_custom_domain_bindings.sql',
   '20261014122400_website_domain_attempt_fencing.sql',
-  '20261014164000_shop_product_media.sql',
 ])
 const migrationNames = implementation.paths
   .filter((path) => path.startsWith('supabase/migrations/') && !dormantCandidates.has(path.split('/').at(-1)))
@@ -83,6 +82,8 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   assert.deepEqual(implementation.paths, runner.paths)
   assert.deepEqual(migrationNames, runner.migrations)
   for (const candidate of dormantCandidates) assert.ok(runner.paths.includes(`supabase/migrations/${candidate}`))
+  assert.ok(runner.paths.includes('supabase/candidate-migrations/20261014164000_shop_product_media.sql'))
+  assert.ok(!runner.paths.includes('supabase/migrations/20261014164000_shop_product_media.sql'))
   assert.ok(runner.paths.includes('supermega_runtime/website_domain.py'))
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))

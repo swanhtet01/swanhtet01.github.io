@@ -14,13 +14,13 @@ const migrationDirectory = resolve(root, 'supabase', 'migrations')
 // not part of the private-trial backend contract these checks cover, and it requires
 // pgvector, which PGlite does not provide — applying it here would fail for reasons
 // unrelated to what is being verified.
-// Domain bindings, corrective fencing, and Shop media are dormant candidates.
-// Their focused SQL suites apply them after this canonical chain in disposable PG17.
+// Domain bindings and corrective fencing are dormant candidates still in this
+// directory. Shop media lives outside migrations so a generic db push cannot
+// accidentally apply it. Focused SQL suites exercise candidates separately.
 const outOfScopeMigrations = [
   '20260711081300_public_legacy_baseline.sql',
   '20261014103000_website_custom_domain_bindings.sql',
   '20261014122400_website_domain_attempt_fencing.sql',
-  '20261014164000_shop_product_media.sql',
 ]
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',

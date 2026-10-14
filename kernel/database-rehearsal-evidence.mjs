@@ -57,7 +57,7 @@ const implementationPaths = [...new Set([
   ...migrations.map((name) => `supabase/migrations/${name}`),
   'supabase/migrations/20261014103000_website_custom_domain_bindings.sql',
   'supabase/migrations/20261014122400_website_domain_attempt_fencing.sql',
-  'supabase/migrations/20261014164000_shop_product_media.sql',
+  'supabase/candidate-migrations/20261014164000_shop_product_media.sql',
   'kernel/database-rehearsal-evidence.mjs',
   'supermega_runtime/billing_rail.py',
   'tests/test_billing_rail.py',

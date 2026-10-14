@@ -1012,7 +1012,7 @@ class ShopMediaPostgresTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.admin, runtime = cls.enterClassContext(_local_database())
-        migration = (Path(__file__).resolve().parents[1] / "supabase" / "migrations"
+        migration = (Path(__file__).resolve().parents[1] / "supabase" / "candidate-migrations"
                      / pg.SHOP_MEDIA_CANDIDATE_MIGRATION)
         with pg._connect(cls.admin) as connection:
             connection.execute(migration.read_text(encoding="utf-8"))
