@@ -248,6 +248,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     && state.localApplied.contextKey === currentValidationContext,
   )
   const localActivationAvailable = !managedIdentity
+  const importRowsId = `catalog-import-rows-${product}-${workflowTemplateId}`
   const localRecordLabel = product === 'commerce' ? 'Shop items' : product === 'production' ? 'Plant jobs' : product === 'website' ? 'Website pages' : 'Ecommerce display rows'
   const localActionLabel = product === 'commerce' ? 'items to Shop' : product === 'production' ? 'jobs to Plant' : product === 'website' ? 'pages to Website' : 'display rows to Ecommerce'
   const localUseLabel = product === 'commerce' ? 'catalog in a real sale' : product === 'production' ? 'jobs in production control' : product === 'website' ? 'page drafts in the Website editor' : 'reviewed merchandising in the customer storefront'
@@ -1054,7 +1055,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           {catalogHasConflicts ? <p className="form-error" role="alert">{catalogConflictCount} existing SKU conflict{catalogConflictCount === 1 ? '' : 's'} block this import. {catalogReadyRowCount > 0 ? `${catalogReadyRowCount} other row${catalogReadyRowCount === 1 ? '' : 's'} passed checks, but ` : ''}No products will be imported until the conflicts are resolved.</p> : null}
           <details className="catalog-import-row-review" open={state.preview.rows.length > 12 || state.preview.totals.issueRows > 0 || catalogHasConflicts || undefined}>
             <summary><span>Review rows</span><small>{catalogHasConflicts ? 'Existing products need review' : state.preview.totals.issueRows ? `${state.preview.totals.issueRows} need attention` : 'All rows passed'}</small></summary>
-            <div className="catalog-import-table" role="table" aria-label={`${object.label} import preview`}>
+            <div className="catalog-import-table" id={importRowsId} role="table" aria-label={`${object.label} import preview`}>
               <div className="catalog-import-row catalog-import-head" role="row"><span role="columnheader">Row</span><span role="columnheader">Key</span><span role="columnheader">Status</span><span role="columnheader">{variantHeader ? 'Imported values, variant, and checks' : 'Imported values and checks'}</span></div>
               {visibleRows.map((row) => {
                 const importedValues = state.preview!.fields
@@ -1070,7 +1071,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             </div>
             {state.preview.rows.length > 12 ? <>
               <p className="panel-copy">Showing {visibleRows.length} of {state.preview.rows.length} import rows.</p>
-              <button className="core-button" onClick={() => setShowAllRows((current) => !current)} type="button">{showAllRows ? 'Show first 12 rows' : `Show all ${state.preview.rows.length} rows`}</button>
+              <button aria-controls={importRowsId} aria-expanded={showAllRows} className="core-button" onClick={() => setShowAllRows((current) => !current)} type="button">{showAllRows ? 'Show first 12 rows' : `Show all ${state.preview.rows.length} rows`}</button>
             </> : null}
             {!allRowsVisible ? <p className="form-notice" role="status">Show all {state.preview.rows.length} rows before preparing or approving this import.</p> : null}
           </details>
