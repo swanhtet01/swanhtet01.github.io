@@ -305,7 +305,7 @@ const requireContract = (name, condition) => {
 const currentDatabasePins = [
   [databaseValidator, [
     'def schema_contract(profile: str)',
-    'choices=("legacy-v11", "v13-self-serve")',
+    'choices=("legacy-v11", "v13-self-serve", "v13-inquiry")',
     'schema_profile=args.schema_profile',
     'schema_profile=schema_profile',
     'schema_profile_mode_conflict',
