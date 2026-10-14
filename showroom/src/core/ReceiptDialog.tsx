@@ -151,12 +151,14 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const [setupOpen, setSetupOpen] = useState(false)
+  const [optionalOpen, setOptionalOpen] = useState(false)
   const [profileDraft, setProfileDraft] = useState<CommerceMerchantProfileInput>({ nameMyanmar: '', nameEnglish: '', phone: '', addressMyanmar: '', addressEnglish: '' })
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState('')
   const [printNotice, setPrintNotice] = useState('')
 
   function openMerchantProfileSetup() {
+    setOptionalOpen(Boolean(merchantProfile?.nameEnglish || merchantProfile?.phone || merchantProfile?.addressMyanmar || merchantProfile?.addressEnglish))
     setProfileDraft(merchantProfile
       ? { nameMyanmar: merchantProfile.nameMyanmar, nameEnglish: merchantProfile.nameEnglish, phone: merchantProfile.phone, addressMyanmar: merchantProfile.addressMyanmar, addressEnglish: merchantProfile.addressEnglish }
       : { nameMyanmar: '', nameEnglish: '', phone: '', addressMyanmar: '', addressEnglish: '' })
@@ -235,7 +237,7 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
       {setupOpen ? <form className="receipt-profile-form" onSubmit={(event) => void saveMerchantProfile(event)} style={{ display: 'grid', gap: 12, padding: 16 }}>
         <header className="receipt-dialog-header"><span className="core-eyebrow">Customer receipt</span><h2 id="receipt-dialog-title">Set up your receipt</h2><p>Add your business name in Burmese or English.</p></header>
         <label>Burmese business name<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameMyanmar: event.target.value }))} value={profileDraft.nameMyanmar} /></label>
-        <details className="receipt-profile-optional" defaultOpen={Boolean(merchantProfile?.nameEnglish || merchantProfile?.phone || merchantProfile?.addressMyanmar || merchantProfile?.addressEnglish)}>
+        <details className="receipt-profile-optional" onToggle={(event) => setOptionalOpen(event.currentTarget.open)} open={optionalOpen}>
           <summary>English name, phone and address <small>optional</small></summary>
           <div>
             <label>English business name<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameEnglish: event.target.value }))} value={profileDraft.nameEnglish} /></label>
