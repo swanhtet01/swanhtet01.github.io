@@ -314,7 +314,7 @@ class WebsiteDomainStore:
         row = self._owned(principal)
         if row is None or row['hostname'] != hostname:
             raise TrialValidationError('website_domain_changed')
-        dns = row['dns_record']
+        dns = None
         issue = 'ownership_pending'
         verified = False
         try:
@@ -333,13 +333,18 @@ class WebsiteDomainStore:
                 domain = self.provider.add(hostname)
             if not domain['verified']:
                 try:
-                    domain = self.provider.verify(hostname)
+                    verification = self.provider.verify(hostname)
+                    # The verify endpoint can omit the still-required TXT
+                    # challenge from an unverified response. Keep the
+                    # project-domain challenge from get/add in that case.
+                    if verification['verified'] or provider_txt_challenge(hostname, verification) is not None:
+                        domain = verification
                 except ProviderUnavailable as exc:
                     if str(exc) != 'provider_conflict' or provider_txt_challenge(hostname, domain) is None:
                         raise
             if not domain['verified']:
                 dns = provider_txt_challenge(hostname, domain)
-                issue = 'provider_verification_pending'
+                issue = 'provider_verification_pending' if dns is not None else 'provider_unavailable'
             else:
                 config = self.provider.config(hostname)
                 dns = recommended_dns(hostname, domain, config)

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from supermega_runtime.trial_store import TrialPrincipal, TrialValidationError
 from supermega_runtime.website_domain import (
-    ProviderUnavailable, VercelDomainProvider, normalize_hostname, provider_txt_challenge,
+    ProviderUnavailable, VercelDomainProvider, WebsiteDomainStore, normalize_hostname, provider_txt_challenge,
     recommended_dns, tenant_txt_proven,
 )
 from supermega_runtime.website_inquiry_api import create_website_inquiry_router
@@ -91,6 +91,32 @@ class HostnameTests(unittest.TestCase):
     def test_environment_defaults_closed(self):
         with patch.dict(os.environ, {}, clear=True):
             self.assertIsNone(VercelDomainProvider.from_environment())
+
+    def test_unverified_provider_response_retains_actionable_txt_challenge(self):
+        provider = Mock()
+        challenge = {'type': 'TXT', 'domain': '_vercel.customer-example.org',
+                     'value': 'vc-domain-verify=customer-example.org,synthetic'}
+        pending = {'name': HOST, 'projectId': 'prj_test', 'verified': False,
+                   'apexName': 'customer-example.org', 'verification': [challenge]}
+        provider.get.return_value = pending
+        provider.verify.return_value = {key: value for key, value in pending.items() if key != 'verification'}
+        domain_store = WebsiteDomainStore(Mock(), provider=provider)
+        domain_store._owned = Mock(return_value={'binding_id': CHANNEL, 'hostname': HOST,
+                                                 'challenge': 'supermega-domain=v1:synthetic',
+                                                 'dns_record': None})
+        domain_store._record = Mock()
+        domain_store.status = Mock(return_value={'enabled': True, 'domain': None})
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            domain_store.check(TrialPrincipal('workspace', 'owner', 'human'), hostname=HOST)
+        self.assertEqual(domain_store._record.call_args.kwargs['dns'],
+                         {'type': 'TXT', 'name': challenge['domain'], 'value': challenge['value']})
+        self.assertEqual(domain_store._record.call_args.kwargs['issue'], 'provider_verification_pending')
+
+        provider.get.return_value = {key: value for key, value in pending.items() if key != 'verification'}
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            domain_store.check(TrialPrincipal('workspace', 'owner', 'human'), hostname=HOST)
+        self.assertIsNone(domain_store._record.call_args.kwargs['dns'])
+        self.assertEqual(domain_store._record.call_args.kwargs['issue'], 'provider_unavailable')
 
     def test_custom_domain_renders_root_navigation_and_host_bound_assets(self):
         record = {'channelId': CHANNEL, 'pageId': 'page-contact',
