@@ -1,6 +1,7 @@
 """Server-only private Supabase object storage. No bucket creation or public URLs."""
 
 from dataclasses import dataclass
+from base64 import b64decode
 from hashlib import sha256
 import json
 import os
@@ -14,6 +15,13 @@ from .website_media import MAX_ASSET_BYTES, PreparedPhoto, private_object_path
 
 BUCKET = "supermega-sites-media"
 SHOP_BUCKET = "supermega-shop-media"
+# A fixed, valid one-pixel WebP occupies an abandoned attempt's exact key.
+# Original uploads use x-upsert:false; once this fence is observed, a delayed
+# original POST cannot create or replace the customer's photo at that key.
+SHOP_ATTEMPT_FENCE = b64decode(
+    "UklGRiwAAABXRUJQVlA4ICAAAABwAQCdASoBAAEAAsBMJYwCdAFAAAD+8utym3LwoQAAAA==")
+SHOP_ATTEMPT_FENCE_RECEIPT = {"sha256": sha256(SHOP_ATTEMPT_FENCE).hexdigest(),
+                              "bytes": len(SHOP_ATTEMPT_FENCE)}
 
 
 @dataclass(frozen=True, repr=False)
@@ -50,6 +58,7 @@ class SupabasePrivateMediaStorage:
         self.config = config
 
     def _request(self, method: str, path: str, *, data: bytes | None = None,
+                 upsert: bool = False,
                  maximum: int = 16 * 1024) -> tuple[int, bytes]:
         if not self.config.ready:
             raise TrialNotReadyError(("website_media_storage_unavailable",))
@@ -60,7 +69,7 @@ class SupabasePrivateMediaStorage:
         if not self.config.secret.startswith("sb_secret_"):
             headers["authorization"] = f"Bearer {self.config.secret}"
         if data is not None:
-            headers.update({"content-type": "image/webp", "x-upsert": "false",
+            headers.update({"content-type": "image/webp", "x-upsert": "true" if upsert else "false",
                             "cache-control": "private, no-store"})
         request = Request(f"{self.config.base_url}/storage/v1/{path}", data=data, headers=headers, method=method)
         try:
@@ -150,3 +159,36 @@ class SupabasePrivateMediaStorage:
                                     maximum=MAX_ASSET_BYTES)
         if observed != 404:
             raise TrialNotReadyError(("website_media_delete_unconfirmed",))
+
+    def fence_abandoned_attempt(self, workspace_id: str, asset_id: str,
+                                object_key: str) -> dict:
+        """Replace only a retired attempt key with a permanent private fence.
+
+        The ledger owner must first prove this attempt cannot become a live
+        binding. A DELETE/404 check alone is unsafe: the original POST may
+        finish later. Upserting a fixed body is idempotent across collectors;
+        the original no-upsert POST cannot overwrite a successfully read-back
+        fence. The tiny fence remains physically charged as one object.
+        """
+        if self.config.bucket != SHOP_BUCKET:
+            raise TrialNotReadyError(("shop_media_private_bucket_required",))
+        path = self._object_path(workspace_id, asset_id, object_key)
+        self._require_private_bucket()
+        observed, original = self._request(
+            "GET", f"object/authenticated/{self.config.bucket}/{path}", maximum=MAX_ASSET_BYTES)
+        if observed == 404:
+            prior = "absent"
+        elif observed == 200 and original == SHOP_ATTEMPT_FENCE:
+            prior = "fenced"
+        elif observed == 200 and sha256(original).hexdigest() == asset_id[:-5]:
+            prior = "attempt"
+        else:
+            raise TrialNotReadyError(("shop_media_attempt_inspection_unconfirmed",))
+        status, _ = self._request("POST", f"object/{self.config.bucket}/{path}",
+                                  data=SHOP_ATTEMPT_FENCE, upsert=True)
+        if status not in (200, 201):
+            raise TrialNotReadyError(("shop_media_fence_unconfirmed",))
+        observed = self._download(path)
+        if observed != SHOP_ATTEMPT_FENCE:
+            raise TrialNotReadyError(("shop_media_fence_unconfirmed",))
+        return {**SHOP_ATTEMPT_FENCE_RECEIPT, "observedBeforeFence": prior}

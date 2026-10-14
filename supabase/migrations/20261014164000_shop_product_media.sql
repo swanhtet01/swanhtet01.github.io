@@ -12,7 +12,9 @@ create table app_private.shop_media_upload_attempts (
   byte_size integer not null check (byte_size between 1 and 2097152),
   -- An ambiguous provider acknowledgement can still finish after our timeout.
   -- It stays quota-charged; neither a GET nor a lease expiry can reuse its key.
-  state text not null check (state in ('pending', 'ambiguous', 'confirmed', 'deleted')),
+  -- Fenced attempts retain a tiny private object to reject late original POSTs.
+  -- They release payload bytes but count against a separate fence cap.
+  state text not null check (state in ('pending', 'ambiguous', 'confirmed', 'fenced', 'deleted')),
   updated_by text not null check (length(btrim(updated_by)) > 0),
   created_at timestamptz not null default clock_timestamp(),
   updated_at timestamptz not null default clock_timestamp(),

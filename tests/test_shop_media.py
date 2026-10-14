@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from copy import deepcopy
+from hashlib import sha256
 from io import BytesIO
 import json
 import os
@@ -15,13 +16,14 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from supermega_runtime.shop_media import (ShopMediaStore, MEDIA_EVENT, REMOVE_EVENT,
-    COLLECT_EVENT, _shop_media_schema_ready)
+    COLLECT_EVENT, FENCE_EVENT, _shop_media_schema_ready)
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (PostgresTrialStore, TrialNotFound,
     TrialNotReadyError, TrialPermissionDenied, TrialPrincipal, TrialReadiness,
     TrialValidationError, TrialVersionConflict)
 from supermega_runtime.website_media import prepare_photo
 from supermega_runtime.website_media_storage import (BUCKET, SHOP_BUCKET,
+    SHOP_ATTEMPT_FENCE, SHOP_ATTEMPT_FENCE_RECEIPT,
     MediaStorageConfig, SupabasePrivateMediaStorage)
 from tests.test_website_media_postgres import _local_database
 from tools import rehearse_supermega_postgres17 as pg
@@ -90,13 +92,19 @@ class MemoryDatabase:
                           and row["result"].get("attemptId") == params[3]
                           and row["result"].get("objectKey") == params[4]), None)
             self.result = {"result_json": deepcopy(event)} if event else None
-        elif "select count(*) as assets" in query:
+        elif "as assets," in query and "from app_private.shop_media_upload_attempts" in query:
             relevant = [row for (workspace, _), row in self.attempts.items()
-                        if workspace == params[0] and row["state"] != "deleted"]
-            self.result = {"assets": len(relevant), "bytes": sum(row["byte_size"] for row in relevant)}
+                        if workspace == params[1] and row["state"] != "deleted"]
+            self.result = {"assets": sum(row["state"] != "fenced" for row in relevant),
+                           "fences": sum(row["state"] == "fenced" for row in relevant),
+                           "bytes": sum(SHOP_ATTEMPT_FENCE_RECEIPT["bytes"] if row["state"] == "fenced"
+                                        else row["byte_size"] for row in relevant)}
         elif "select count(*) as recent" in query:
             self.result = {"recent": sum(workspace == params[0]
                                           for workspace, _ in self.attempts)}
+        elif "select count(*) as fences" in query:
+            self.result = {"fences": sum(workspace == params[0] and row["state"] == "fenced"
+                                          for (workspace, _), row in self.attempts.items())}
         elif "select count(*) as refs from app_private.shop_product_media" in query:
             self.result = {"refs": sum(workspace == params[0] and row["asset_id"] == params[1]
                                        for (workspace, _), row in self.bindings.items())}
@@ -116,6 +124,20 @@ class MemoryDatabase:
                                     in self.bindings.items() if bound_workspace == workspace)
                                 and ((row["state"] == "live" and row["collect_after"])
                                      or (row["state"] == "retiring" and row["expired"]))), None)
+        elif "select a.asset_id,a.attempt_id,a.object_key from app_private.shop_media_assets" in query:
+            self.result = next((deepcopy(row) for (workspace, asset), row in self.assets.items()
+                                if workspace == params[0] and row["state"] == "pending"
+                                and row["expired"] and self.attempts[(workspace, row["attempt_id"])]["state"]
+                                in ("pending", "ambiguous") and not any(
+                                    binding["asset_id"] == asset for (owner, _), binding in self.bindings.items()
+                                    if owner == workspace)), None)
+        elif "select t.attempt_id,t.asset_id,t.object_key,t.byte_size" in query:
+            self.result = next((deepcopy(row) for (workspace, attempt), row in self.attempts.items()
+                                if workspace == params[0] and row["state"] == "ambiguous"
+                                and not any(asset["attempt_id"] == attempt
+                                            and asset["object_key"] == row["object_key"]
+                                            and asset["state"] != "deleted"
+                                            for (owner, _), asset in self.assets.items() if owner == workspace)), None)
         elif "select sku,catalog_fingerprint,asset_id,generation from app_private.shop_product_media" in query:
             candidates = [deepcopy(row) for (workspace, _), row in self.bindings.items()
                           if workspace == params[0] and row["asset_id"] is not None]
@@ -151,6 +173,18 @@ class MemoryDatabase:
                 "attempt_id": attempt_id, "asset_id": asset_id,
                 "object_key": object_key, "byte_size": size, "state": "pending"}
             self.result = None
+        elif "update app_private.shop_media_upload_attempts t set" in query:
+            _, workspace, attempt_id, asset_id, object_key = params
+            row = self.attempts.get((workspace, attempt_id))
+            linked = any(asset["attempt_id"] == attempt_id and asset["object_key"] == object_key
+                         and asset["state"] != "deleted" for (owner, _), asset in self.assets.items()
+                         if owner == workspace)
+            if row and row["asset_id"] == asset_id and row["object_key"] == object_key \
+                    and row["state"] == "ambiguous" and not linked:
+                row["state"] = "fenced"
+                self.result = {"attempt_id": attempt_id}
+            else:
+                self.result = None
         elif "update app_private.shop_media_upload_attempts" in query:
             if "state='ambiguous'" in query and "asset_id=%s" in query:
                 _, workspace, attempt_id, asset_id, object_key = params
@@ -195,6 +229,15 @@ class MemoryDatabase:
             if row["state"] == "pending" and row["attempt_id"] == attempt_id and row["object_key"] == object_key:
                 row["expired"] = True
             self.result = None
+        elif "update app_private.shop_media_assets set state='deleted'" in query:
+            _, workspace, asset, attempt_id, object_key = params
+            row = self.assets[(workspace, asset)]
+            if (row["state"] == "pending" and row["expired"]
+                    and row["attempt_id"] == attempt_id and row["object_key"] == object_key):
+                row.update(state="deleted", lease_token=None, lease_until=None, expired=False)
+                self.result = {"asset_id": asset}
+            else:
+                self.result = None
         elif "update app_private.shop_media_assets" in query and "state='live'" in query and "lease_token=null" in query:
             _, workspace, asset, attempt_id, object_key, token = params
             row = self.assets[(workspace, asset)]
@@ -274,6 +317,7 @@ class MemoryObjects:
         self.database = database
         self.objects = {}
         self.after_put = None
+        self.after_fence = None
         self.after_get = None
         self.put_count = 0
         self.delete_count = 0
@@ -281,6 +325,8 @@ class MemoryObjects:
     def put(self, workspace, prepared, object_key):
         assert not self.database.in_transaction, "provider I/O held a Commerce transaction"
         self.put_count += 1
+        if (workspace, object_key) in self.objects:
+            raise TrialNotReadyError(("synthetic_asset_already_exists",))
         self.objects[(workspace, object_key)] = prepared.data
         if self.after_put:
             self.after_put()
@@ -300,6 +346,24 @@ class MemoryObjects:
         assert not self.database.in_transaction, "provider I/O held a Commerce transaction"
         self.delete_count += 1
         self.objects.pop((workspace, object_key), None)
+
+    def fence_abandoned_attempt(self, workspace, asset, object_key):
+        assert not self.database.in_transaction, "provider I/O held a Commerce transaction"
+        prior_bytes = self.objects.get((workspace, object_key))
+        if prior_bytes is None:
+            prior = "absent"
+        elif prior_bytes == SHOP_ATTEMPT_FENCE:
+            prior = "fenced"
+        elif asset == sha256(prior_bytes).hexdigest() + ".webp":
+            prior = "attempt"
+        else:
+            raise TrialNotReadyError(("shop_media_attempt_inspection_unconfirmed",))
+        self.objects[(workspace, object_key)] = SHOP_ATTEMPT_FENCE
+        if self.after_fence:
+            self.after_fence()
+        if self.objects[(workspace, object_key)] != SHOP_ATTEMPT_FENCE:
+            raise TrialNotReadyError(("shop_media_fence_unconfirmed",))
+        return {**SHOP_ATTEMPT_FENCE_RECEIPT, "observedBeforeFence": prior}
 
 
 class ShopMediaStoreTests(unittest.TestCase):
@@ -384,7 +448,7 @@ class ShopMediaStoreTests(unittest.TestCase):
         with self.assertRaises(TrialNotFound):
             self.media.get(self.actor, self.photo.asset_id)
 
-    def test_pending_upload_charges_quota_until_reconciled(self):
+    def test_pending_upload_charges_quota_until_fence_is_verified(self):
         self.objects.after_put = lambda: setattr(self.db, "active", False)
         with self.assertRaises(TrialNotReadyError):
             self.media.put(self.actor, "CUP-1", self.photo, 0)
@@ -398,15 +462,18 @@ class ShopMediaStoreTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             self.media.put(self.actor, "CUP-1", photo("#1199aa"), 0)
         self.assertFalse(self.db.bindings)
+        pending = self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]
         self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]["expired"] = True
-        # A paused uploader may still PUT after its lease expires. An absence
-        # read cannot justify releasing its quota or deleting the reservation.
-        self.assertEqual(self.media.collect(self.actor), 0)
-        self.assertEqual(self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]["state"], "pending")
-        with self.assertRaises(TrialValidationError):
-            self.media.put(self.actor, "CUP-1", self.photo, 0)
-        self.assertEqual(pending["state"], "pending")
-        self.assertEqual(self.db.attempts[(self.actor.workspace_id, pending["attempt_id"])]["state"], "pending")
+        # Expiry alone never releases quota. The collector retires the old
+        # reservation and reads back a permanent same-key private fence.
+        self.assertEqual(self.media.collect(self.actor), 1)
+        self.assertEqual(pending["state"], "deleted")
+        self.assertEqual(self.db.attempts[(self.actor.workspace_id, pending["attempt_id"])]["state"], "fenced")
+        self.assertEqual(self.objects.objects[(self.actor.workspace_id, pending["object_key"])],
+                         SHOP_ATTEMPT_FENCE)
+        self.objects.after_put = None
+        with patch("supermega_runtime.shop_media.MAX_HOURLY_UPLOADS", 2000):
+            self.assertEqual(self.media.put(self.actor, "CUP-1", self.photo, 0)["generation"], 1)
 
     def test_ambiguous_upload_retries_on_new_key_and_charges_both_attempts(self):
         def ambiguous():
@@ -441,31 +508,100 @@ class ShopMediaStoreTests(unittest.TestCase):
         self.assertNotEqual(key, current_key)
         # Simulate the first provider POST completing after the second attempt.
         self.objects.objects[(self.actor.workspace_id, key)] = self.photo.data
-        self.assertEqual(self.media.collect(self.actor), 0)
+        self.assertEqual(self.media.collect(self.actor), 1)
         self.assertEqual(self.media.get(self.actor, self.photo.asset_id)[0], self.photo.data)
         self.assertEqual(self.object_key(self.photo), current_key)
-        self.assertEqual(self.db.attempts[(self.actor.workspace_id, old_attempt)]["state"], "ambiguous")
+        self.assertEqual(self.db.attempts[(self.actor.workspace_id, old_attempt)]["state"], "fenced")
+        self.assertEqual(self.objects.objects[(self.actor.workspace_id, key)], SHOP_ATTEMPT_FENCE)
         self.assertEqual(self.objects.put_count, 1)
 
-    def test_definitive_no_write_stays_pending_and_quota_charged(self):
+    def test_late_original_post_cannot_replace_a_verified_fence(self):
+        original_put = self.objects.put
+        self.objects.put = lambda *_: (_ for _ in ()).throw(
+            TrialNotReadyError(("synthetic_upload_timeout",)))
+        with self.assertRaises(TrialNotReadyError):
+            self.media.put(self.actor, "CUP-1", self.photo, 0)
+        old_key = self.object_key(self.photo)
+        self.objects.put = original_put
+        self.media.put(self.actor, "CUP-1", self.photo, 0)
+        self.assertEqual(self.media.collect(self.actor), 1)
+        with self.assertRaises(TrialNotReadyError):
+            original_put(self.actor.workspace_id, self.photo, old_key)
+        self.assertEqual(self.objects.objects[(self.actor.workspace_id, old_key)], SHOP_ATTEMPT_FENCE)
+        self.assertEqual(self.media.get(self.actor, self.photo.asset_id)[0], self.photo.data)
+
+    def test_ambiguous_fence_acknowledgement_keeps_payload_quota_until_readback(self):
+        self.objects.after_put = lambda: (_ for _ in ()).throw(
+            TrialNotReadyError(("synthetic_upload_timeout",)))
+        with self.assertRaises(TrialNotReadyError):
+            self.media.put(self.actor, "CUP-1", self.photo, 0)
+        old_key = self.object_key(self.photo)
+        old_attempt = self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]["attempt_id"]
+        self.objects.after_put = None
+        self.media.put(self.actor, "CUP-1", self.photo, 0)
+        self.objects.after_fence = lambda: (_ for _ in ()).throw(
+            TrialNotReadyError(("synthetic_fence_timeout",)))
+        self.assertEqual(self.media.collect(self.actor), 0)
+        self.assertEqual(self.db.attempts[(self.actor.workspace_id, old_attempt)]["state"], "ambiguous")
+        self.assertEqual(self.objects.objects[(self.actor.workspace_id, old_key)], SHOP_ATTEMPT_FENCE)
+        with patch("supermega_runtime.shop_media.MAX_WORKSPACE_ASSETS", 1):
+            with self.assertRaises(TrialValidationError):
+                self.media.put(self.actor, "CUP-1", photo("#11aa22"), 1)
+        self.objects.after_fence = None
+        self.assertEqual(self.media.collect(self.actor), 1)
+        self.assertEqual(self.db.attempts[(self.actor.workspace_id, old_attempt)]["state"], "fenced")
+        self.assertEqual(self.media.collect(self.actor), 0)
+        self.assertEqual(sum(row["type"] == FENCE_EVENT for row in self.db.events.values()), 1)
+
+    def test_other_workspace_cannot_reconcile_an_attempt(self):
+        self.objects.after_put = lambda: (_ for _ in ()).throw(
+            TrialNotReadyError(("synthetic_upload_timeout",)))
+        with self.assertRaises(TrialNotReadyError):
+            self.media.put(self.actor, "CUP-1", self.photo, 0)
+        old = self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]
+        old["expired"] = True
+        other = TrialPrincipal("workspace-b", "owner-b", "human")
+        self.assertEqual(self.media.reconcile_abandoned_attempts(other), 0)
+        self.assertEqual(self.db.attempts[(self.actor.workspace_id, old["attempt_id"])]["state"],
+                         "ambiguous")
+        self.assertEqual(self.media.reconcile_abandoned_attempts(self.actor), 1)
+        self.assertEqual(self.db.attempts[(self.actor.workspace_id, old["attempt_id"])]["state"],
+                         "fenced")
+
+    def test_fence_cap_keeps_other_ambiguous_attempt_charged(self):
+        self.objects.after_put = lambda: (_ for _ in ()).throw(
+            TrialNotReadyError(("synthetic_upload_timeout",)))
+        for _ in range(2):
+            with self.assertRaises(TrialNotReadyError):
+                self.media.put(self.actor, "CUP-1", self.photo, 0)
+        with patch("supermega_runtime.shop_media.MAX_WORKSPACE_FENCES", 1):
+            self.assertEqual(self.media.reconcile_abandoned_attempts(self.actor, limit=4), 1)
+        states = [row["state"] for row in self.db.attempts.values()]
+        self.assertEqual(sorted(states), ["ambiguous", "fenced"])
+        self.assertEqual(sum(row["type"] == FENCE_EVENT for row in self.db.events.values()), 1)
+
+    def test_absent_payload_releases_quota_only_after_verified_fence(self):
         original_put = self.objects.put
         self.objects.put = lambda *_: (_ for _ in ()).throw(
             TrialNotReadyError(("synthetic_definitive_no_write",)))
         with self.assertRaises(TrialNotReadyError):
             self.media.put(self.actor, "CUP-1", self.photo, 0)
-        self.objects.put = original_put
         pending = self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]
-        first_key = pending["object_key"]
         with patch("supermega_runtime.shop_media.MAX_WORKSPACE_ASSETS", 1):
-            for _ in range(3):
+            for index in range(3):
                 pending["expired"] = True
-                with self.assertRaises(TrialValidationError):
-                    self.media.put(self.actor, "CUP-1", self.photo, 0)
-                self.assertEqual(self.media.collect(self.actor), 0)
-                self.assertEqual(pending["state"], "pending")
-                self.assertEqual(pending["object_key"], first_key)
+                self.assertEqual(self.media.collect(self.actor), 1)
+                self.assertEqual(pending["state"], "deleted")
+                self.assertEqual(self.objects.objects[(self.actor.workspace_id, pending["object_key"])],
+                                 SHOP_ATTEMPT_FENCE)
+                if index < 2:
+                    with self.assertRaises(TrialNotReadyError):
+                        self.media.put(self.actor, "CUP-1", self.photo, 0)
+                    pending = self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]
+        self.objects.put = original_put
         self.assertEqual(self.objects.put_count, 0)
-        self.assertFalse(self.db.events)
+        self.assertEqual(sum(row["type"] == FENCE_EVENT for row in self.db.events.values()), 3)
+        self.assertFalse(any(row["type"] == MEDIA_EVENT for row in self.db.events.values()))
 
     def test_pending_attempts_count_toward_hourly_rate(self):
         with patch("supermega_runtime.shop_media.MAX_HOURLY_UPLOADS", 1):
@@ -670,7 +806,8 @@ class ShopMediaTransportTests(unittest.TestCase):
         self.assertEqual(image.content, self.photo.data)
         deleted = self.client.delete("/api/trial/v1/shop-media/sku/~CUP-1", headers={"If-Match": '"1"'})
         self.assertEqual(deleted.status_code, 200)
-        self.adapter.collect.assert_called_once_with(self.actor, limit=1)
+        self.assertEqual(self.adapter.collect.call_count, 2)
+        self.adapter.collect.assert_any_call(self.actor, limit=1)
         for response in (manifest, uploaded, image, deleted):
             self.assertEqual(response.headers["cache-control"], "private, no-store")
 
@@ -726,6 +863,78 @@ class ShopMediaTransportTests(unittest.TestCase):
             with self.assertRaises(TrialNotReadyError):
                 storage.put("workspace-a", self.photo, "a" * 32)
         self.assertEqual(calls, ["GET", "POST"])
+
+    def test_fence_uses_upsert_only_for_exact_abandoned_key_and_requires_readback(self):
+        self.bucket_patch.stop()
+        storage = SupabasePrivateMediaStorage(MediaStorageConfig(
+            "https://synthetic.supabase.co", "sb_secret_synthetic_fixture_only_123456789", SHOP_BUCKET))
+        calls = []
+        def request(method, path, **kwargs):
+            calls.append((method, path, kwargs.get("upsert", False)))
+            if path == f"bucket/{SHOP_BUCKET}":
+                return 200, json.dumps({"id": SHOP_BUCKET, "public": False}).encode()
+            if method == "POST":
+                self.assertEqual(kwargs["data"], SHOP_ATTEMPT_FENCE)
+                return 201, b""
+            if len(calls) == 2:
+                return 404, b""
+            return 200, SHOP_ATTEMPT_FENCE
+        with patch.object(storage, "_request", side_effect=request):
+            self.assertEqual(storage.fence_abandoned_attempt(
+                "workspace-a", self.photo.asset_id, "a" * 32),
+                {**SHOP_ATTEMPT_FENCE_RECEIPT, "observedBeforeFence": "absent"})
+        self.assertEqual([method for method, _, _ in calls], ["GET", "GET", "POST", "GET"])
+        self.assertEqual(calls[2][2], True)
+        self.assertTrue(calls[2][1].endswith(f"/{'a' * 32}/{self.photo.asset_id}"))
+        object_reads = 0
+        def wrong_readback(method, path, **kwargs):
+            nonlocal object_reads
+            if path == f"bucket/{SHOP_BUCKET}":
+                return 200, json.dumps({"id": SHOP_BUCKET, "public": False}).encode()
+            if method == "POST":
+                return 201, b""
+            object_reads += 1
+            return 200, self.photo.data
+        with patch.object(storage, "_request", side_effect=wrong_readback):
+            with self.assertRaises(TrialNotReadyError):
+                storage.fence_abandoned_attempt("workspace-a", self.photo.asset_id, "a" * 32)
+        self.assertEqual(object_reads, 2)
+        writes = []
+        def unknown_existing(method, path, **kwargs):
+            if path == f"bucket/{SHOP_BUCKET}":
+                return 200, json.dumps({"id": SHOP_BUCKET, "public": False}).encode()
+            if method == "POST":
+                writes.append(path)
+                return 201, b""
+            return 200, b"unexpected tenant content"
+        with patch.object(storage, "_request", side_effect=unknown_existing):
+            with self.assertRaises(TrialNotReadyError):
+                storage.fence_abandoned_attempt("workspace-a", self.photo.asset_id, "a" * 32)
+        self.assertEqual(writes, [])
+
+    def test_original_upload_is_non_upsert_and_only_fence_can_overwrite(self):
+        self.bucket_patch.stop()
+        storage = SupabasePrivateMediaStorage(MediaStorageConfig(
+            "https://synthetic.supabase.co", "sb_secret_synthetic_fixture_only_123456789", SHOP_BUCKET))
+        requests = []
+        class Response:
+            status = 201
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def read(self, *_):
+                return b""
+        class Opener:
+            def open(self, request, *, timeout):
+                requests.append(request)
+                return Response()
+        with patch("supermega_runtime.website_media_storage.build_opener", return_value=Opener()):
+            storage._request("POST", "object/example/original", data=self.photo.data)
+            storage._request("POST", "object/example/fence", data=SHOP_ATTEMPT_FENCE,
+                             upsert=True)
+        self.assertEqual([request.get_header("X-upsert") for request in requests],
+                         ["false", "true"])
 
 
 class ShopMediaServerGateTests(unittest.TestCase):
@@ -902,6 +1111,41 @@ class ShopMediaPostgresTests(unittest.TestCase):
             has_table_privilege('authenticated','app_private.shop_media_upload_attempts','select')
             from pg_class where oid='app_private.shop_media_upload_attempts'::regclass""")
         self.assertEqual(attempt_permissions, [(True, True, True, False, False, False)])
+
+    def test_real_sql_fence_reconciles_only_own_abandoned_attempt(self):
+        actor = self._principal()
+        other = self._principal()
+        prepared = photo("#663399")
+        storage = MagicMock()
+        storage.put.side_effect = TrialNotReadyError(("synthetic_upload_timeout",))
+        storage.fence_abandoned_attempt.return_value = {
+            **SHOP_ATTEMPT_FENCE_RECEIPT, "observedBeforeFence": "absent"}
+        media = ShopMediaStore(self.store, storage)
+        with self.assertRaises(TrialNotReadyError):
+            media.put(actor, "CUP-1", prepared, 0)
+        attempt_id, key = self._sql("""select attempt_id,object_key
+            from app_private.shop_media_upload_attempts where workspace_id=%s""",
+            (actor.workspace_id,))[0]
+        self.assertEqual(media.reconcile_abandoned_attempts(other), 0)
+        storage.fence_abandoned_attempt.assert_not_called()
+        self.assertEqual(media.reconcile_abandoned_attempts(actor), 1)
+        storage.fence_abandoned_attempt.assert_called_once_with(
+            actor.workspace_id, prepared.asset_id, key)
+        self.assertEqual(self._sql("""select state from app_private.shop_media_upload_attempts
+            where workspace_id=%s and attempt_id=%s""", (actor.workspace_id, attempt_id)),
+            [("fenced",)])
+        self.assertEqual(self._sql("""select state from app_private.shop_media_assets
+            where workspace_id=%s and asset_id=%s""", (actor.workspace_id, prepared.asset_id)),
+            [("deleted",)])
+        receipt = self._sql("""select result_json from app_private.workspace_events
+            where workspace_id=%s and event_type=%s""", (actor.workspace_id, FENCE_EVENT))[0][0]
+        self.assertEqual(receipt["objectKey"], key)
+        self.assertEqual(receipt["fenceSha256"], SHOP_ATTEMPT_FENCE_RECEIPT["sha256"])
+        self.assertEqual(media.reconcile_abandoned_attempts(actor), 0)
+        with patch("supermega_runtime.shop_media.MAX_WORKSPACE_FENCES", 1):
+            with self.assertRaises(TrialNotReadyError) as full:
+                media.put(actor, "CUP-1", photo("#336699"), 0)
+        self.assertIn("shop_media_fence_limit_reached", str(full.exception))
 
     def test_removed_catalog_sku_retires_private_asset_under_rls(self):
         actor = self._principal()

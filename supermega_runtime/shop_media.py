@@ -23,15 +23,18 @@ from .trial_store import (PostgresTrialStore, TrialNotFound, TrialNotReadyError,
                           has_surface_read_capability)
 from .website_media import (IMAGE_TYPES, MAX_ASSET_BYTES, MAX_UPLOAD_BYTES,
                             PreparedPhoto, prepare_photo, validate_asset_id)
-from .website_media_storage import MediaStorageConfig, SupabasePrivateMediaStorage
+from .website_media_storage import (MediaStorageConfig, SupabasePrivateMediaStorage,
+                                    SHOP_ATTEMPT_FENCE_RECEIPT)
 
 PRIVATE_HEADERS = {"Cache-Control": "private, no-store", "Pragma": "no-cache",
                    "X-Content-Type-Options": "nosniff", "Vary": "Authorization, X-Supermega-Workspace-Id"}
 MEDIA_EVENT = "commerce.shop_photo.uploaded"
 REMOVE_EVENT = "commerce.shop_photo.removed"
 COLLECT_EVENT = "commerce.shop_photo.collected"
+FENCE_EVENT = "commerce.shop_photo.attempt_fenced"
 MAX_WORKSPACE_ASSETS = 1000
 MAX_WORKSPACE_BYTES = 250 * 1024 * 1024
+MAX_WORKSPACE_FENCES = 1000
 MAX_HOURLY_UPLOADS = 60
 MAX_CATALOG_ITEMS = 2000
 MAX_GENERATION = 9007199254740991
@@ -156,11 +159,15 @@ class ShopMediaStore:
     @staticmethod
     def _quota(cursor, workspace_id: str, byte_count: int,
                replacement_asset_id: str | None = None) -> None:
-        cursor.execute("""select count(*) as assets,
-            coalesce(sum(byte_size),0) as bytes
+        cursor.execute("""select count(*) filter (where state <> 'fenced') as assets,
+            count(*) filter (where state = 'fenced') as fences,
+            coalesce(sum(case when state = 'fenced' then %s else byte_size end),0) as bytes
             from app_private.shop_media_upload_attempts
-            where workspace_id=%s and state <> 'deleted'""", (workspace_id,))
+            where workspace_id=%s and state <> 'deleted'""",
+            (SHOP_ATTEMPT_FENCE_RECEIPT["bytes"], workspace_id))
         quota = cursor.fetchone()
+        if quota["fences"] >= MAX_WORKSPACE_FENCES:
+            raise TrialNotReadyError(("shop_media_fence_limit_reached",))
         if quota["assets"] >= MAX_WORKSPACE_ASSETS or quota["bytes"] + byte_count > MAX_WORKSPACE_BYTES:
             # One bounded in-flight slot lets a full catalog replace a photo.
             # The old object must become unreferenced on commit. A second
@@ -404,9 +411,9 @@ class ShopMediaStore:
 
         A separate scheduled caller is still needed to guarantee wall-clock
         retention for an inactive workspace. HTTP mutations schedule a bounded
-        best-effort pass; quota pressure also invokes it before denial. Pending
-        reservations are never auto-collected: a delayed first POST could
-        otherwise create untracked bytes after an absence check.
+        best-effort pass; quota pressure also invokes it before denial. An
+        expired pending attempt is retired before its exact key is fenced;
+        a mere absence check never releases its quota.
         """
         actor = principal.normalized()
         if actor.actor_kind != "human":
@@ -431,7 +438,7 @@ class ShopMediaStore:
                     (actor.workspace_id,))
                 candidate = cursor.fetchone()
                 if candidate is None:
-                    return removed
+                    break
                 asset_id = candidate["asset_id"]
                 attempt_id = candidate["attempt_id"]
                 object_key = candidate["object_key"]
@@ -482,7 +489,128 @@ class ShopMediaStore:
                              "objectState": "deleted", "visibility": "private"})
                 self._reauthorize(cursor, actor, write=True)
             removed += 1
-        return removed
+        return removed + self.reconcile_abandoned_attempts(actor, limit=limit - removed)
+
+    def reconcile_abandoned_attempts(self, principal: TrialPrincipal, *, limit: int = 4) -> int:
+        """Fence only unbound attempt keys, then release their payload quota.
+
+        A fence remains as one bounded private object. The original upload's
+        no-upsert POST may finish before or after this pass; it can never
+        replace a read-back fence. This method is safe to retry after an
+        ambiguous provider acknowledgement or a failed database commit.
+        """
+        actor = principal.normalized()
+        if actor.actor_kind != "human":
+            raise TrialPermissionDenied("commerce.write")
+        limit = max(0, min(limit, 8))
+        resolved = 0
+        for _ in range(limit):
+            with self.store._guarded_cursor(actor, write=True, capability="commerce.write") as (cursor, _):
+                self._reauthorize(cursor, actor, write=True)
+                self.store._lock(cursor, f"shop-media:{actor.workspace_id}")
+                cursor.execute("""select count(*) as fences
+                    from app_private.shop_media_upload_attempts
+                    where workspace_id=%s and state='fenced'""", (actor.workspace_id,))
+                if cursor.fetchone()["fences"] >= MAX_WORKSPACE_FENCES:
+                    return resolved
+                # Abandon an expired current reservation before provider I/O.
+                # A delayed uploader will fail its asset/lease check and cannot
+                # publish the old key even if its POST eventually succeeds.
+                cursor.execute("""select a.asset_id,a.attempt_id,a.object_key
+                    from app_private.shop_media_assets a
+                    join app_private.shop_media_upload_attempts t
+                      on t.workspace_id=a.workspace_id and t.attempt_id=a.attempt_id
+                    where a.workspace_id=%s and a.state='pending'
+                      and a.lease_until < clock_timestamp()
+                      and t.state in ('pending','ambiguous')
+                      and not exists (select 1 from app_private.shop_product_media b
+                        where b.workspace_id=a.workspace_id and b.asset_id=a.asset_id)
+                    order by a.lease_until,a.asset_id limit 1""", (actor.workspace_id,))
+                expired = cursor.fetchone()
+                if expired is not None:
+                    cursor.execute("""update app_private.shop_media_assets set
+                        state='deleted',lease_token=null,lease_until=null,
+                        updated_by=%s,updated_at=clock_timestamp()
+                        where workspace_id=%s and asset_id=%s and attempt_id=%s
+                          and object_key=%s and state='pending'
+                          and lease_until < clock_timestamp() returning asset_id""",
+                        (actor.actor_id, actor.workspace_id, expired["asset_id"],
+                         expired["attempt_id"], expired["object_key"]))
+                    if cursor.fetchone() is None:
+                        raise TrialNotReadyError(("shop_media_gc_race",))
+                    cursor.execute("""update app_private.shop_media_upload_attempts set
+                        state='ambiguous',updated_by=%s,updated_at=clock_timestamp()
+                        where workspace_id=%s and attempt_id=%s and asset_id=%s
+                          and object_key=%s and state='pending'""",
+                        (actor.actor_id, actor.workspace_id, expired["attempt_id"],
+                         expired["asset_id"], expired["object_key"]))
+                cursor.execute("""select t.attempt_id,t.asset_id,t.object_key,t.byte_size
+                    from app_private.shop_media_upload_attempts t
+                    where t.workspace_id=%s and t.state='ambiguous'
+                      and not exists (select 1 from app_private.shop_media_assets a
+                        where a.workspace_id=t.workspace_id and a.attempt_id=t.attempt_id
+                          and a.object_key=t.object_key and a.state <> 'deleted')
+                    order by t.created_at,t.attempt_id limit 1""", (actor.workspace_id,))
+                candidate = cursor.fetchone()
+                self._reauthorize(cursor, actor, write=True)
+            if candidate is None:
+                break
+            try:
+                receipt = self.storage.fence_abandoned_attempt(
+                    actor.workspace_id, candidate["asset_id"], candidate["object_key"])
+                if (not isinstance(receipt, dict)
+                        or receipt.get("sha256") != SHOP_ATTEMPT_FENCE_RECEIPT["sha256"]
+                        or receipt.get("bytes") != SHOP_ATTEMPT_FENCE_RECEIPT["bytes"]
+                        or receipt.get("observedBeforeFence") not in ("absent", "attempt", "fenced")):
+                    raise TrialNotReadyError(("shop_media_fence_unconfirmed",))
+            except TrialNotReadyError:
+                # Unknown acknowledgement stays fully charged. Retry the same
+                # immutable key later; the fence upsert itself is idempotent.
+                break
+            with self.store._guarded_cursor(actor, write=True, capability="commerce.write") as (cursor, _):
+                self._reauthorize(cursor, actor, write=True)
+                self.store._lock(cursor, f"shop-media:{actor.workspace_id}")
+                cursor.execute("""select count(*) as fences
+                    from app_private.shop_media_upload_attempts
+                    where workspace_id=%s and state='fenced'""", (actor.workspace_id,))
+                if cursor.fetchone()["fences"] >= MAX_WORKSPACE_FENCES:
+                    # Another collector used the final fence slot. This key
+                    # is physically fenced but remains fully quota-charged.
+                    return resolved
+                cursor.execute("""update app_private.shop_media_upload_attempts t set
+                    state='fenced',updated_by=%s,updated_at=clock_timestamp()
+                    where t.workspace_id=%s and t.attempt_id=%s and t.asset_id=%s
+                      and t.object_key=%s and t.state='ambiguous'
+                      and not exists (select 1 from app_private.shop_media_assets a
+                        where a.workspace_id=t.workspace_id and a.attempt_id=t.attempt_id
+                          and a.object_key=t.object_key and a.state <> 'deleted')
+                    returning attempt_id""",
+                    (actor.actor_id, actor.workspace_id, candidate["attempt_id"],
+                     candidate["asset_id"], candidate["object_key"]))
+                if cursor.fetchone() is None:
+                    current = self._attempt(cursor, actor.workspace_id, candidate["attempt_id"])
+                    if (current is not None and current["state"] == "fenced"
+                            and current["asset_id"] == candidate["asset_id"]
+                            and current["object_key"] == candidate["object_key"]):
+                        # Another collector committed the same fixed fence.
+                        self._reauthorize(cursor, actor, write=True)
+                        continue
+                    raise TrialNotReadyError(("shop_media_gc_race",))
+                self._event(cursor, actor, FENCE_EVENT,
+                            {"assetId": candidate["asset_id"],
+                             "attemptId": candidate["attempt_id"],
+                             "objectKey": candidate["object_key"]},
+                            {"assetId": candidate["asset_id"],
+                             "attemptId": candidate["attempt_id"],
+                             "objectKey": candidate["object_key"],
+                             "payloadBytesReleased": int(candidate["byte_size"]),
+                             "fenceSha256": receipt["sha256"],
+                             "fenceBytes": receipt["bytes"],
+                             "observedBeforeFence": receipt["observedBeforeFence"],
+                             "objectState": "fenced", "visibility": "private"})
+                self._reauthorize(cursor, actor, write=True)
+            resolved += 1
+        return resolved
 
     def _prepare_upload(self, actor: TrialPrincipal, sku: str, photo: PreparedPhoto,
                         expected_generation: int) -> tuple[str, str | None, str, str, bool]:
@@ -784,8 +912,7 @@ def mount_shop_media_routes(router, *, store, resolve_principal):
                 body.extend(chunk)
             photo = await run_in_threadpool(_invoke, lambda: prepare_photo(bytes(body), content_type))
             result = await run_in_threadpool(_invoke, lambda: adapter.put(actor, sku, photo, expected))
-            if expected > 0:
-                background_tasks.add_task(reconcile_after_mutation, actor, adapter)
+            background_tasks.add_task(reconcile_after_mutation, actor, adapter)
             return JSONResponse(result, status_code=201 if expected == 0 else 200,
                                 headers={**PRIVATE_HEADERS, "ETag": f'"{result["generation"]}"'})
         except ClientDisconnect as exc:
