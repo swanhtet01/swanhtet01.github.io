@@ -3552,7 +3552,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
     <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Bring your existing products into Shop' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Check the mapping and any row issues, confirm once, then open Counter.' : 'Review a CSV before adding products in bulk.'}</p></div>
     {catalogIsEmpty ? <div aria-label="Import to first sale" className="catalog-onboarding-status">{SHOP_CATALOG_IMPORT_STEPS.map((step, index) => <span key={step}><small>Step {index + 1}</small><strong>{step}</strong></span>)}</div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Bring existing products'}</button>}
-    {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
+    <div hidden={!catalogImportVisible} id="shop-catalog-import-panel">{catalogImportVisible ? <Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense> : null}</div>
   </section>
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
