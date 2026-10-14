@@ -14,7 +14,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from supermega_runtime.shop_media import ShopMediaStore, MEDIA_EVENT, REMOVE_EVENT, COLLECT_EVENT
+from supermega_runtime.shop_media import (ShopMediaStore, MEDIA_EVENT, REMOVE_EVENT,
+    COLLECT_EVENT, _shop_media_schema_ready)
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (PostgresTrialStore, TrialNotFound,
     TrialNotReadyError, TrialPermissionDenied, TrialPrincipal, TrialReadiness,
@@ -622,6 +623,15 @@ class ShopMediaStoreTests(unittest.TestCase):
 
 class ShopMediaTransportTests(unittest.TestCase):
     def setUp(self):
+        self.server_gate_patch = patch("supermega_runtime.shop_media.SHOP_MEDIA_SERVER_ENABLED", True)
+        self.server_gate_patch.start()
+        self.addCleanup(self.server_gate_patch.stop)
+        self.schema_patch = patch("supermega_runtime.shop_media._shop_media_schema_ready", return_value=True)
+        self.schema_patch.start()
+        self.addCleanup(self.schema_patch.stop)
+        self.bucket_patch = patch("supermega_runtime.shop_media.SupabasePrivateMediaStorage._require_private_bucket")
+        self.bucket_patch.start()
+        self.addCleanup(self.bucket_patch.stop)
         self.store = MagicMock(spec=PostgresTrialStore)
         ready = MagicMock(spec=TrialReadiness)
         for flag in ("database_ready", "schema_ready", "audit_ready", "write_enabled",
@@ -687,6 +697,7 @@ class ShopMediaTransportTests(unittest.TestCase):
         self.assertEqual(self.adapter.put.call_args.args[1], "..")
 
     def test_private_shop_bucket_is_separate_and_public_bucket_rejected(self):
+        self.bucket_patch.stop()
         self.assertNotEqual(BUCKET, SHOP_BUCKET)
         storage = SupabasePrivateMediaStorage(MediaStorageConfig(
             "https://synthetic.supabase.co", "sb_secret_synthetic_fixture_only_123456789", SHOP_BUCKET))
@@ -702,6 +713,7 @@ class ShopMediaTransportTests(unittest.TestCase):
                 storage.put("workspace-a", self.photo)
 
     def test_conflict_acknowledgement_cannot_be_promoted_by_later_get(self):
+        self.bucket_patch.stop()
         storage = SupabasePrivateMediaStorage(MediaStorageConfig(
             "https://synthetic.supabase.co", "sb_secret_synthetic_fixture_only_123456789", SHOP_BUCKET))
         calls = []
@@ -714,6 +726,75 @@ class ShopMediaTransportTests(unittest.TestCase):
             with self.assertRaises(TrialNotReadyError):
                 storage.put("workspace-a", self.photo, "a" * 32)
         self.assertEqual(calls, ["GET", "POST"])
+
+
+class ShopMediaServerGateTests(unittest.TestCase):
+    def setUp(self):
+        self.store = MagicMock(spec=PostgresTrialStore)
+        ready = MagicMock(spec=TrialReadiness)
+        for flag in ("database_ready", "schema_ready", "audit_ready", "write_enabled",
+                     "auth_ready", "membership_ready"):
+            setattr(ready, flag, True)
+        ready.capabilities = frozenset({"commerce.read", "commerce.write"})
+        self.store.readiness.return_value = ready
+        self.actor = TrialPrincipal("workspace-a", "owner-a", "human")
+        self.resolve = MagicMock(return_value=self.actor)
+        app = FastAPI()
+        app.include_router(create_trial_router(store=self.store, resolve_principal=self.resolve))
+        self.client = TestClient(app)
+        self.config = MediaStorageConfig("https://synthetic.supabase.co",
+            "sb_secret_synthetic_fixture_only_123456789", SHOP_BUCKET)
+
+    def test_storage_key_cannot_enable_server_routes_without_rollout(self):
+        with (patch("supermega_runtime.shop_media.MediaStorageConfig.for_shop_from_environment",
+                    return_value=self.config) as config,
+              patch("supermega_runtime.shop_media.ShopMediaStore") as adapter):
+            responses = [self.client.get("/api/trial/v1/shop-media"),
+                self.client.get(f"/api/trial/v1/shop-media/image/{photo().asset_id}"),
+                self.client.put("/api/trial/v1/shop-media/sku/~CUP-1",
+                    content=photo().data, headers={"Content-Type": "image/webp", "If-Match": '"0"'}),
+                self.client.delete("/api/trial/v1/shop-media/sku/~CUP-1",
+                    headers={"If-Match": '"1"'})]
+        for response in responses:
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json()["detail"]["code"], "shop_media_disabled")
+            self.assertEqual(response.headers["cache-control"], "private, no-store")
+        config.assert_not_called()
+        adapter.assert_not_called()
+        self.store._guarded_cursor.assert_not_called()
+
+    def test_explicit_server_rollout_still_rejects_absent_candidate_tables(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {"ready": False}
+        @contextmanager
+        def missing_schema(*_, **__):
+            yield cursor, None
+        self.store._guarded_cursor.side_effect = missing_schema
+        with (patch("supermega_runtime.shop_media.SHOP_MEDIA_SERVER_ENABLED", True),
+              patch("supermega_runtime.shop_media.MediaStorageConfig.for_shop_from_environment",
+                    return_value=self.config),
+              patch("supermega_runtime.shop_media.SupabasePrivateMediaStorage") as storage,
+              patch("supermega_runtime.shop_media.ShopMediaStore") as adapter):
+            response = self.client.get("/api/trial/v1/shop-media")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"]["code"], "shop_media_schema_unavailable")
+        self.assertIn("shop_media_upload_attempts", cursor.execute.call_args.args[0])
+        storage.assert_not_called()
+        adapter.assert_not_called()
+
+    def test_explicit_server_rollout_still_requires_a_private_bucket(self):
+        with (patch("supermega_runtime.shop_media.SHOP_MEDIA_SERVER_ENABLED", True),
+              patch("supermega_runtime.shop_media._shop_media_schema_ready", return_value=True),
+              patch("supermega_runtime.shop_media.MediaStorageConfig.for_shop_from_environment",
+                    return_value=self.config),
+              patch("supermega_runtime.shop_media.SupabasePrivateMediaStorage") as storage,
+              patch("supermega_runtime.shop_media.ShopMediaStore") as adapter):
+            storage.return_value._require_private_bucket.side_effect = TrialNotReadyError(
+                ("website_media_private_bucket_required",))
+            response = self.client.get("/api/trial/v1/shop-media")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"]["code"], "shop_media_storage_unavailable")
+        adapter.assert_not_called()
 
 
 @unittest.skipUnless(os.environ.get("SUPERMEGA_TEST_POSTGRES") == "1",
@@ -763,6 +844,7 @@ class ShopMediaPostgresTests(unittest.TestCase):
 
     def test_real_private_rls_binding_and_cross_tenant_denial(self):
         actor = self._principal()
+        self.assertTrue(_shop_media_schema_ready(self.store, actor))
         prepared = photo()
         storage = MagicMock()
         storage.put.return_value = prepared.receipt()

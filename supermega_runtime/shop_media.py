@@ -3,7 +3,7 @@
 Bindings are versioned independently of the accountable Commerce state. A
 binding is visible only after its immutable object and ledger receipt commit.
 The private object can be orphaned if storage succeeds but PostgreSQL fails;
-retry verifies it, and this module never makes it public.
+its attempt stays quota-charged, and this module never makes it public.
 """
 
 from hashlib import sha256
@@ -35,6 +35,9 @@ MAX_WORKSPACE_BYTES = 250 * 1024 * 1024
 MAX_HOURLY_UPLOADS = 60
 MAX_CATALOG_ITEMS = 2000
 MAX_GENERATION = 9007199254740991
+# A code-reviewed server rollout must explicitly change this after the private
+# SQL and bucket are deployed. A storage key or browser flag cannot enable it.
+SHOP_MEDIA_SERVER_ENABLED = False
 _MATCH = re.compile(r'^"(0|[1-9][0-9]{0,15})"$')
 _LOG = logging.getLogger(__name__)
 
@@ -53,6 +56,19 @@ def _generation(value: str | None) -> int:
     if matched is None or int(matched.group(1)) > MAX_GENERATION:
         raise HTTPException(400, detail={"code": "shop_media_version_invalid"})
     return int(matched.group(1))
+
+
+def _shop_media_schema_ready(store: PostgresTrialStore, actor: TrialPrincipal) -> bool:
+    """Check the optional candidate tables without querying an absent table."""
+    with store._guarded_cursor(actor, write=False) as (cursor, _):
+        cursor.execute("""select count(*) = 3 as ready from pg_catalog.pg_class c
+            join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'app_private' and c.relkind = 'r'
+              and c.relname in ('shop_media_upload_attempts',
+                'shop_media_assets', 'shop_product_media')
+              and c.relrowsecurity and c.relforcerowsecurity""")
+        row = cursor.fetchone()
+        return bool(row and row["ready"])
 
 
 class ShopMediaStore:
@@ -675,6 +691,8 @@ def mount_shop_media_routes(router, *, store, resolve_principal):
         actor = _resolve_principal(request, resolve_principal)
         if actor.actor_kind != "human":
             raise _error(403, "shop_media_human_required")
+        if not SHOP_MEDIA_SERVER_ENABLED:
+            raise _error(503, "shop_media_disabled")
         ready = _readiness(store, actor)
         if write:
             _require_write_ready(ready, "commerce.write")
@@ -687,7 +705,18 @@ def mount_shop_media_routes(router, *, store, resolve_principal):
         config = MediaStorageConfig.for_shop_from_environment()
         if not config.ready:
             raise _error(503, "shop_media_storage_unavailable")
-        return actor, ShopMediaStore(store, SupabasePrivateMediaStorage(config))
+        try:
+            schema_ready = _shop_media_schema_ready(store, actor)
+        except Exception as exc:
+            raise _error(503, "shop_media_schema_unavailable") from exc
+        if not schema_ready:
+            raise _error(503, "shop_media_schema_unavailable")
+        storage = SupabasePrivateMediaStorage(config)
+        try:
+            storage._require_private_bucket()
+        except Exception as exc:
+            raise _error(503, "shop_media_storage_unavailable") from exc
+        return actor, ShopMediaStore(store, storage)
 
     def reject_query(request):
         if request.query_params:
