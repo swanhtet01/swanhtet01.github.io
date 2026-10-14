@@ -56,6 +56,7 @@ const implementationPaths = [...new Set([
   'tools/verify_managed_runtime_environment_values.mjs',
   ...migrations.map((name) => `supabase/migrations/${name}`),
   'supabase/migrations/20261014103000_website_custom_domain_bindings.sql',
+  'supabase/migrations/20261014122400_website_domain_attempt_fencing.sql',
   'kernel/database-rehearsal-evidence.mjs',
   'supermega_runtime/billing_rail.py',
   'tests/test_billing_rail.py',

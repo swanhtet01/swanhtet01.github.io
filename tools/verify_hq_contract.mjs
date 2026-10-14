@@ -1064,8 +1064,10 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
   && databaseImplementationPaths.includes('supabase/migrations/20261014103000_website_custom_domain_bindings.sql')
+  && databaseImplementationPaths.includes('supabase/migrations/20261014122400_website_domain_attempt_fencing.sql')
   && databaseRehearsal.migration?.count === databaseImplementationPaths.filter((path) => path.startsWith('supabase/migrations/')
-    && path !== 'supabase/migrations/20261014103000_website_custom_domain_bindings.sql').length
+    && path !== 'supabase/migrations/20261014103000_website_custom_domain_bindings.sql'
+    && path !== 'supabase/migrations/20261014122400_website_domain_attempt_fencing.sql').length
   && databaseRehearsal.migration?.schemaVersion === 13
   && databaseRehearsal.migration?.productionValidatorReady === true
   && Object.keys(databaseRehearsal.checks || {}).length === 74

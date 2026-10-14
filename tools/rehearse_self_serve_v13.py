@@ -87,7 +87,7 @@ def source_identity(expected_head):
     require(git("rev-parse", "HEAD") == expected_head, "source_head_mismatch")
     observed = tuple(sorted(p.name for p in (ROOT / "supabase/migrations").glob("*.sql")
                             if p.name not in ("20260711081300_public_legacy_baseline.sql",
-                                              pg.DOMAIN_CANDIDATE_MIGRATION)))
+                                              *pg.DOMAIN_CANDIDATE_MIGRATIONS)))
     require(observed == MIGRATIONS, "private_migration_inventory_mismatch")
     paths = sorted(set([
         "tools/rehearse_self_serve_v13.py", "tools/run_python_tool.mjs",

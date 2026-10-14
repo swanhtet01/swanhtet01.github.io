@@ -35,7 +35,10 @@ test('binds the complete candidate chain without granting baseline or migration 
   assert.equal(packet.state, 'prepared-not-executed')
   assert.equal(packet.release.schemaVersion, 13)
   assert.equal(packet.release.migrationCount, 28)
-  assert.ok(!packet.release.migrations.some(({ name }) => name === '20261014103000_website_custom_domain_bindings.sql'))
+  for (const candidate of ['20261014103000_website_custom_domain_bindings.sql',
+    '20261014122400_website_domain_attempt_fencing.sql']) {
+    assert.ok(!packet.release.migrations.some(({ name }) => name === candidate))
+  }
   assert.deepEqual(packet.release.review, releaseReview)
   assert.equal(packet.release.migrations[0].name, '20260711081300_public_legacy_baseline.sql')
   assert.equal(packet.release.migrations.at(-1).name, '20261014090000_website_channel_stable_update.sql')
@@ -73,9 +76,13 @@ test('rejects every omitted migration, unknown SQL, duplicate and reordered inve
   const packet = await buildSupabaseRehearsalPacket({ repositoryRoot, targetProjectRef, releaseCommit, releaseReview, generatedAt })
   const names = packet.release.migrations.map(({ name }) => name)
   validateRehearsalMigrationNames(names)
-  assert.deepEqual(reviewedRehearsalMigrationNames([...names, '20261014103000_website_custom_domain_bindings.sql']), names)
-  assert.throws(() => validateRehearsalMigrationNames([...names, '20261014103000_website_custom_domain_bindings.sql']), /full_migration_inventory_mismatch/)
-  assert.throws(() => reviewedRehearsalMigrationNames([...names, '20261014103000_website_custom_domain_bindings.sql', '20261014103000_website_custom_domain_bindings.sql']), /full_migration_inventory_mismatch/)
+  const dormant = ['20261014103000_website_custom_domain_bindings.sql',
+    '20261014122400_website_domain_attempt_fencing.sql']
+  assert.deepEqual(reviewedRehearsalMigrationNames([...names, ...dormant]), names)
+  for (const candidate of dormant) {
+    assert.throws(() => validateRehearsalMigrationNames([...names, candidate]), /full_migration_inventory_mismatch/)
+    assert.throws(() => reviewedRehearsalMigrationNames([...names, candidate, candidate]), /full_migration_inventory_mismatch/)
+  }
   for (let i = 0; i < names.length; i++) {
     assert.throws(() => validateRehearsalMigrationNames(names.filter((_, j) => i !== j)), /full_migration_inventory_mismatch/)
     const altered = structuredClone(packet)

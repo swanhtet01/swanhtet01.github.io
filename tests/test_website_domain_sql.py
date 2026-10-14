@@ -7,18 +7,20 @@ from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 import json
 import os
+from threading import Event, Thread
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
 from tools import rehearse_supermega_postgres17 as pg
-from supermega_runtime.trial_store import PostgresTrialStore, TrialPrincipal
+from supermega_runtime.trial_store import PostgresTrialStore, TrialNotReadyError, TrialPrincipal, TrialValidationError
 from supermega_runtime.website_domain import ProviderUnavailable, WebsiteDomainStore
 from supermega_runtime.website_inquiry_store import WebsiteInquiryStore
 from tests.test_website_runtime import _published_state
 
 
 NEW_MIGRATION = '20261014103000_website_custom_domain_bindings.sql'
+CORRECTIVE_MIGRATION = '20261014122400_website_domain_attempt_fencing.sql'
 PLATFORM = 'https://sites.example.test'
 HOST = 'shop.customer-example.org'
 FIRST = TrialPrincipal('rehearsal-product', 'owner-product', 'human')
@@ -105,7 +107,7 @@ class WebsiteDomainSqlTests(unittest.TestCase):
         pg._create_auth_session_fixture(cls.admin_url)
         pg._apply_migrations(postgres_bin=cls.bin, admin_password=password, admin_database_url=cls.admin_url,
                              port=port, environment=cls.environment,
-                             migrations=(*pg.CURRENT_MIGRATIONS, NEW_MIGRATION))
+                             migrations=(*pg.CURRENT_MIGRATIONS, NEW_MIGRATION, CORRECTIVE_MIGRATION))
         pg._provision_runtime(cls.admin_url, runtime_password)
         pg._seed_rehearsal_data(cls.admin_url)
         with pg._connect(cls.admin_url) as connection:
@@ -206,34 +208,320 @@ class WebsiteDomainSqlTests(unittest.TestCase):
             self.assertGreater(binding[2], datetime.now(timezone.utc) + timedelta(hours=23))
         with self.domains.store._connect() as connection:
             with connection.transaction(), connection.cursor() as cursor:
-                cursor.execute('select app_private.complete_website_domain_renewal(%s,%s) as renewed',
-                               (binding[0], binding[1]))
+                cursor.execute('select app_private.complete_website_domain_renewal_v2(%s,%s,%s) as renewed',
+                               (binding[0], binding[1], datetime.now(timezone.utc)))
                 self.assertFalse(cursor.fetchone()['renewed'])
         with pg._connect(self.admin_url) as connection:
             connection.execute("""update app_private.website_domain_bindings
                 set verified_until=clock_timestamp()+interval '1 hour' where hostname=%s""", (HOST,))
         with self.domains.store._connect() as connection:
             with connection.transaction(), connection.cursor() as cursor:
-                cursor.execute('select * from app_private.claim_website_domain_renewals(1)')
-                self.assertEqual(len(cursor.fetchall()), 1)
+                cursor.execute('select * from app_private.claim_website_domain_renewals_v2(1)')
+                attempt = cursor.fetchone()
+                self.assertIsNotNone(attempt)
         self.domains.release(FIRST, hostname=HOST)
         with self.domains.store._connect() as connection:
             with connection.transaction(), connection.cursor() as cursor:
-                cursor.execute('select app_private.complete_website_domain_renewal(%s,%s) as renewed',
-                               (binding[0], binding[1]))
+                cursor.execute('select app_private.complete_website_domain_renewal_v2(%s,%s,%s) as renewed',
+                               (binding[0], binding[1], attempt['attempt_at']))
                 self.assertFalse(cursor.fetchone()['renewed'])
         self.assertIsNone(self.domains.public_page(HOST))
 
-    def test_initial_provider_failure_recovers_after_tenant_proves_txt(self):
+    def test_retry_attempt_fences_old_worker_completion(self):
+        channel = self.channel(FIRST)
+        self.domains.claim(FIRST, hostname=HOST, channel_id=channel)
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.domains.check(FIRST, hostname=HOST)
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.website_domain_bindings
+                set verified_until=clock_timestamp()+interval '1 hour' where hostname=%s""", (HOST,))
+        with self.domains.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                cursor.execute('select * from app_private.claim_website_domain_renewals_v2(1)')
+                first = cursor.fetchone()
+        self.assertIsNotNone(first)
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.website_domain_bindings
+                set renewal_checked_at=clock_timestamp()-interval '31 minutes' where hostname=%s""", (HOST,))
+            expired_at = connection.execute("""select renewal_checked_at
+                from app_private.website_domain_bindings where hostname=%s""", (HOST,)).fetchone()[0]
+        with self.domains.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                cursor.execute('select app_private.complete_website_domain_renewal_v2(%s,%s,%s) as renewed',
+                               (first['binding_id'], first['challenge'], expired_at))
+                self.assertFalse(cursor.fetchone()['renewed'])
+        with self.domains.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                cursor.execute('select * from app_private.claim_website_domain_renewals_v2(1)')
+                second = cursor.fetchone()
+        self.assertIsNotNone(second)
+        self.assertNotEqual(first['attempt_at'], second['attempt_at'])
+        with self.domains.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                cursor.execute('select app_private.complete_website_domain_renewal_v2(%s,%s,%s) as renewed',
+                               (first['binding_id'], first['challenge'], first['attempt_at']))
+                self.assertFalse(cursor.fetchone()['renewed'])
+                cursor.execute('select app_private.complete_website_domain_renewal_v2(%s,%s,%s) as renewed',
+                               (second['binding_id'], second['challenge'], second['attempt_at']))
+                self.assertTrue(cursor.fetchone()['renewed'])
+                cursor.execute('select app_private.complete_website_domain_renewal_v2(%s,%s,%s) as renewed',
+                               (second['binding_id'], second['challenge'], second['attempt_at']))
+                self.assertFalse(cursor.fetchone()['renewed'])
+                cursor.execute("""select
+                    has_function_privilege(current_user,
+                      'app_private.claim_website_domain_renewals(integer)','EXECUTE') as old_claim,
+                    has_function_privilege(current_user,
+                      'app_private.complete_website_domain_renewal(uuid,text)','EXECUTE') as old_complete,
+                    has_function_privilege(current_user,
+                      'app_private.begin_website_domain_release(text)','EXECUTE') as old_begin_release,
+                    has_function_privilege(current_user,
+                      'app_private.finish_website_domain_release(text)','EXECUTE') as old_finish_release""")
+                privileges = cursor.fetchone()
+                self.assertFalse(any(privileges.values()))
+
+    def test_provider_add_finishes_before_release_then_new_tenant_can_claim(self):
+        first_channel, second_channel = self.channel(FIRST), self.channel(SECOND)
+        self.domains.claim(FIRST, hostname=HOST, channel_id=first_channel)
+        self.provider.missing = True
+        entered_add, continue_add, remove_called = Event(), Event(), Event()
+        operations, errors = [], []
+        original_add, original_remove = self.provider.add, self.provider.remove
+
+        def blocked_add(hostname):
+            entered_add.set()
+            if not continue_add.wait(5):
+                raise RuntimeError('synthetic_add_timeout')
+            result = original_add(hostname)
+            operations.append('add')
+            return result
+
+        def tracked_remove(hostname):
+            operations.append('remove')
+            self.provider.missing = True
+            remove_called.set()
+            return original_remove(hostname)
+
+        def run_check():
+            try:
+                with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+                    self.domains.check(FIRST, hostname=HOST)
+            except Exception as exc:
+                errors.append(exc)
+
+        def run_release():
+            try:
+                self.domains.release(FIRST, hostname=HOST)
+            except Exception as exc:
+                errors.append(exc)
+
+        with patch.object(self.provider, 'add', side_effect=blocked_add), \
+             patch.object(self.provider, 'remove', side_effect=tracked_remove):
+            checker = Thread(target=run_check, daemon=True)
+            releaser = Thread(target=run_release, daemon=True)
+            checker.start()
+            self.assertTrue(entered_add.wait(5))
+            try:
+                releaser.start()
+                self.assertFalse(remove_called.wait(0.3), 'release detached while add was in flight')
+            finally:
+                continue_add.set()
+            checker.join(5)
+            releaser.join(5)
+            self.assertFalse(checker.is_alive() or releaser.is_alive(), 'domain race threads hung')
+        self.assertEqual(errors, [])
+        self.assertEqual(operations, ['add', 'remove'])
+        self.assertTrue(self.provider.missing)
+        self.assertIsNone(self.domains.public_page(HOST))
+        self.domains.claim(SECOND, hostname=HOST, channel_id=second_channel)
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.domains.check(SECOND, hostname=HOST)
+        self.assertEqual(self.domains.public_page(HOST)['channelId'], second_channel)
+        self.assertFalse(self.provider.missing)
+
+    def test_late_add_after_db_settlement_failure_keeps_hostname_reserved(self):
+        first_channel, second_channel = self.channel(FIRST), self.channel(SECOND)
+        self.domains.claim(FIRST, hostname=HOST, channel_id=first_channel)
+        self.provider.missing = True
+        entered_add, continue_add = Event(), Event()
+        errors = []
+        original_add = self.provider.add
+
+        def blocked_add(hostname):
+            entered_add.set()
+            if not continue_add.wait(5):
+                raise RuntimeError('synthetic_add_timeout')
+            return original_add(hostname)
+
+        def run_check():
+            try:
+                with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+                    self.domains.check(FIRST, hostname=HOST)
+            except Exception as exc:
+                errors.append(exc)
+
+        with patch.object(self.provider, 'add', side_effect=blocked_add), \
+             patch.object(self.domains, '_settle_provider_add',
+                          side_effect=TrialNotReadyError(('synthetic_db_connection_lost',))):
+            checker = Thread(target=run_check, daemon=True)
+            checker.start()
+            self.assertTrue(entered_add.wait(5))
+            try:
+                # Release commits while the outbound POST is still open. It
+                # must not detach, free, or let another tenant claim the name.
+                self.assertEqual(self.domains.release(FIRST, hostname=HOST)['domain']['issue'],
+                                 'provider_cleanup_pending')
+                with self.assertRaises(Exception):
+                    self.domains.claim(SECOND, hostname=HOST, channel_id=second_channel)
+            finally:
+                continue_add.set()
+            checker.join(5)
+            self.assertFalse(checker.is_alive(), 'domain add thread hung')
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], TrialNotReadyError)
+        self.assertFalse(self.provider.missing, 'provider add succeeded after release began')
+        self.assertEqual(self.provider.removed, [])
+        with pg._connect(self.admin_url) as connection:
+            state, token = connection.execute("""select state,provider_add_token
+                from app_private.website_domain_bindings where hostname=%s""", (HOST,)).fetchone()
+        self.assertEqual(state, 'releasing')
+        self.assertIsNotNone(token)
+        # A current provider GET is not terminal evidence about the old POST.
+        self.assertEqual(self.domains.release(FIRST, hostname=HOST)['domain']['issue'],
+                         'provider_cleanup_pending')
+        with self.assertRaises(Exception):
+            self.domains.claim(SECOND, hostname=HOST, channel_id=second_channel)
+        self.assertIsNone(self.domains.public_page(HOST))
+
+    def test_add_intent_is_atomic_tenant_bound_and_exact_token_only(self):
+        channel = self.channel(FIRST)
+        self.domains.claim(FIRST, hostname=HOST, channel_id=channel)
+        with pg._connect(self.admin_url) as connection:
+            binding, challenge = connection.execute("""select binding_id,challenge
+                from app_private.website_domain_bindings where hostname=%s""", (HOST,)).fetchone()
+        first, stale, other = (str(uuid4()) for _ in range(3))
+
+        def run(principal, function, token):
+            with self.domains.store._guarded_cursor(principal, write=True,
+                                                     capability='website.write') as (cursor, _):
+                cursor.execute(f'select app_private.{function}(%s,%s,%s) as result',
+                               (binding, challenge, token))
+                return cursor.fetchone()['result']
+
+        self.assertTrue(run(FIRST, 'begin_website_domain_provider_add', first))
+        self.assertFalse(run(FIRST, 'begin_website_domain_provider_add', stale))
+        self.assertFalse(run(SECOND, 'begin_website_domain_provider_add', other))
+        self.assertFalse(run(FIRST, 'settle_website_domain_provider_add', stale))
+        with pg._connect(self.admin_url) as connection:
+            stored = connection.execute('select provider_add_token from app_private.website_domain_bindings').fetchone()[0]
+        self.assertEqual(str(stored), first)
+        self.assertTrue(run(FIRST, 'settle_website_domain_provider_add', first))
+        self.assertFalse(run(FIRST, 'settle_website_domain_provider_add', first))
+
+    def test_second_release_cannot_detach_a_new_tenant_after_reclaim(self):
+        first_channel, second_channel = self.channel(FIRST), self.channel(SECOND)
+        self.domains.claim(FIRST, hostname=HOST, channel_id=first_channel)
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.domains.check(FIRST, hostname=HOST)
+        entered_remove, continue_remove = Event(), Event()
+        errors = []
+        original_remove = self.provider.remove
+
+        def blocked_remove(hostname):
+            entered_remove.set()
+            if not continue_remove.wait(5):
+                raise RuntimeError('synthetic_remove_timeout')
+            self.provider.missing = True
+            return original_remove(hostname)
+
+        def run_release():
+            try:
+                self.domains.release(FIRST, hostname=HOST)
+            except Exception as exc:
+                errors.append(exc)
+
+        with patch.object(self.provider, 'remove', side_effect=blocked_remove) as remove:
+            releaser = Thread(target=run_release, daemon=True)
+            releaser.start()
+            self.assertTrue(entered_remove.wait(5))
+            try:
+                with pg._connect(self.admin_url) as connection:
+                    token = connection.execute('select provider_remove_token from app_private.website_domain_bindings').fetchone()[0]
+                self.assertIsNotNone(token)
+                with self.domains.store._guarded_cursor(FIRST, write=True,
+                                                         capability='website.write') as (cursor, _):
+                    cursor.execute('select app_private.begin_website_domain_release_v2(%s,%s) as may_remove',
+                                   (HOST, token))
+                    self.assertFalse(cursor.fetchone()['may_remove'])
+                self.assertEqual(self.domains.release(FIRST, hostname=HOST)['domain']['issue'],
+                                 'provider_cleanup_pending')
+                with self.assertRaises(Exception):
+                    self.domains.claim(SECOND, hostname=HOST, channel_id=second_channel)
+                self.assertEqual(remove.call_count, 1)
+            finally:
+                continue_remove.set()
+            releaser.join(5)
+            self.assertFalse(releaser.is_alive(), 'domain remove thread hung')
+        self.assertEqual(errors, [])
+        self.assertEqual(remove.call_count, 1)
+        self.assertIsNone(self.domains.status(FIRST)['domain'])
+        self.domains.claim(SECOND, hostname=HOST, channel_id=second_channel)
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.domains.check(SECOND, hostname=HOST)
+        self.assertEqual(self.domains.public_page(HOST)['channelId'], second_channel)
+        self.assertEqual(remove.call_count, 1)
+
+    def test_successful_delete_without_db_ack_keeps_tombstone(self):
+        first_channel, second_channel = self.channel(FIRST), self.channel(SECOND)
+        self.domains.claim(FIRST, hostname=HOST, channel_id=first_channel)
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.domains.check(FIRST, hostname=HOST)
+        token = str(uuid4())
+        with self.domains.store._guarded_cursor(FIRST, write=True,
+                                                 capability='website.write') as (cursor, _):
+            cursor.execute('select app_private.begin_website_domain_release_v2(%s,%s) as may_remove',
+                           (HOST, token))
+            self.assertTrue(cursor.fetchone()['may_remove'])
+        self.provider.remove(HOST)
+        self.provider.missing = True
+        # The process/DB connection dies before finish_release_v2 can commit.
+        # A later GET of absence does not authorize another DELETE or reclaim.
+        with patch.object(self.provider, 'remove', wraps=self.provider.remove) as remove:
+            self.assertEqual(self.domains.release(FIRST, hostname=HOST)['domain']['issue'],
+                             'provider_cleanup_pending')
+            remove.assert_not_called()
+        with self.assertRaises(Exception):
+            self.domains.claim(SECOND, hostname=HOST, channel_id=second_channel)
+        with pg._connect(self.admin_url) as connection:
+            state, stored = connection.execute("""select state,provider_remove_token
+                from app_private.website_domain_bindings where hostname=%s""", (HOST,)).fetchone()
+            connection.execute("""update app_private.website_inquiry_channels set enabled=false
+                where channel_id=%s""", (first_channel,))
+        self.assertEqual((state, str(stored)), ('releasing', token))
+        self.assertEqual(self.domains.status(FIRST)['domain']['issue'], 'provider_cleanup_pending')
+        self.assertIsNone(self.domains.public_page(HOST))
+
+    def test_ambiguous_provider_add_cannot_be_retried_or_released(self):
         channel = self.channel(FIRST)
         self.provider.fail_add_once = True
         self.provider.missing = True
         pending = self.domains.claim(FIRST, hostname=HOST, channel_id=channel)
         self.assertEqual(pending['domain']['issue'], 'ownership_pending')
         with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
-            self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['issue'], 'provider_unavailable')
-            self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['state'], 'active')
-        self.assertIsNotNone(self.domains.public_page(HOST))
+            self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['issue'], 'provider_add_pending')
+            self.provider.missing = False  # GET can now see a late successful add.
+            with patch.object(self.provider, 'get', wraps=self.provider.get) as get:
+                self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['issue'],
+                                 'provider_add_pending')
+                get.assert_not_called()
+        self.assertEqual(self.domains.claim(FIRST, hostname=HOST, channel_id=channel)['domain']['issue'],
+                         'provider_add_pending')
+        with pg._connect(self.admin_url) as connection:
+            token = connection.execute('select provider_add_token from app_private.website_domain_bindings').fetchone()[0]
+        self.assertIsNotNone(token)
+        self.assertEqual(self.domains.release(FIRST, hostname=HOST)['domain']['issue'], 'provider_cleanup_pending')
+        self.assertIsNone(self.domains.public_page(HOST))
+        with self.assertRaises(Exception):
+            self.domains.claim(SECOND, hostname=HOST, channel_id=self.channel(SECOND))
 
     def test_provider_txt_is_shown_after_own_txt_until_vercel_verifies(self):
         channel = self.channel(FIRST)
@@ -264,6 +552,13 @@ class WebsiteDomainSqlTests(unittest.TestCase):
         self.assertEqual(self.domains.release(FIRST, hostname=HOST)['domain'], None)
         self.assertIsNone(self.domains.public_page(HOST))
         self.domains.claim(SECOND, hostname=HOST, channel_id=second_channel)
+        with (patch.object(self.provider, 'get', wraps=self.provider.get) as get,
+              patch.object(self.provider, 'add', wraps=self.provider.add) as add,
+              patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True)):
+            with self.assertRaisesRegex(TrialValidationError, 'website_domain_changed'):
+                self.domains.check(FIRST, hostname=HOST)
+            get.assert_not_called()
+            add.assert_not_called()
         with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
             self.domains.check(SECOND, hostname=HOST)
         self.assertEqual(self.domains.public_page(HOST)['channelId'], second_channel)
@@ -301,9 +596,10 @@ class WebsiteDomainSqlTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.domains.claim(FIRST, hostname=HOST, channel_id=first_channel)
         self.provider.fail_remove = False
-        self.assertIsNone(self.domains.release(FIRST, hostname=HOST)['domain'])
-        self.assertEqual(self.domains.claim(SECOND, hostname=HOST,
-                                           channel_id=second_channel)['domain']['state'], 'pending')
+        self.assertEqual(self.domains.release(FIRST, hostname=HOST)['domain']['issue'],
+                         'provider_cleanup_pending')
+        with self.assertRaises(Exception):
+            self.domains.claim(SECOND, hostname=HOST, channel_id=second_channel)
 
 
 if __name__ == '__main__':
