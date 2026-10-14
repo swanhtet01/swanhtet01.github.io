@@ -65,9 +65,12 @@ const checkNames = [
 ]
 
 const implementation = await implementationEvidence()
-const domainCandidate = '20261014103000_website_custom_domain_bindings.sql'
+const domainCandidates = new Set([
+  '20261014103000_website_custom_domain_bindings.sql',
+  '20261014122400_website_domain_attempt_fencing.sql',
+])
 const migrationNames = implementation.paths
-  .filter((path) => path.startsWith('supabase/migrations/') && !path.endsWith(domainCandidate))
+  .filter((path) => path.startsWith('supabase/migrations/') && !domainCandidates.has(path.split('/').at(-1)))
   .map((path) => path.split('/').at(-1))
 test('receipt inventory matches the actual PostgreSQL runner including Website acceptance', () => {
   const python = process.env.SUPERMEGA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
@@ -78,7 +81,7 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   const runner = JSON.parse(result.stdout)
   assert.deepEqual(implementation.paths, runner.paths)
   assert.deepEqual(migrationNames, runner.migrations)
-  assert.ok(runner.paths.includes(`supabase/migrations/${domainCandidate}`))
+  for (const candidate of domainCandidates) assert.ok(runner.paths.includes(`supabase/migrations/${candidate}`))
   assert.ok(runner.paths.includes('supermega_runtime/website_domain.py'))
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
