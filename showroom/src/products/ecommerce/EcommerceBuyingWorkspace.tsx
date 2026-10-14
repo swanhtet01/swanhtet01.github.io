@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { SavedRequestReceipt } from './SavedRequestReceipt'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
