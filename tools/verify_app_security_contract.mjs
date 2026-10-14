@@ -305,10 +305,11 @@ const requireContract = (name, condition) => {
 const currentDatabasePins = [
   [databaseValidator, [
     'def schema_contract(profile: str)',
-    'choices=("legacy-v11", "v13-self-serve")',
+    'choices=("legacy-v11", "v13-self-serve", PRE_SITES_PROFILE)',
     'schema_profile=args.schema_profile',
     'schema_profile=schema_profile',
     'schema_profile_mode_conflict',
+    'raise AuditConfigurationError("pre_sites_activation_target_forbidden")',
   ]],
   [currentDatabaseProfile, [
     'PROFILE = "v13-self-serve"',
