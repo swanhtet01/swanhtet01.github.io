@@ -4,6 +4,11 @@ import test from 'node:test'
 import './shop_action_feedback.test.mjs'
 import './shop_sale_focus.test.mjs'
 import { shopOrderLink, shopOrderTargetId } from '../showroom/src/core/shop-order-target.ts'
+import {
+  SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE,
+  shopCatalogImportRowsAreVisible,
+  toggleShopCatalogImportRowsVisibility,
+} from '../showroom/src/core/shop-catalog-import.ts'
 
 const today = readFileSync(new URL('../showroom/src/core/ShopToday.tsx', import.meta.url), 'utf8')
 const app = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
@@ -18,6 +23,20 @@ test('Today order rows link to focusable order targets in the Orders tab', () =>
   assert.match(app, /const targetId = shopOrderTargetId\(order\.id\)/)
   assert.match(app, /id=\{targetId\} key=\{order\.id\} tabIndex=\{-1\}/)
   assert.match(app, /if \(tab === 'orders' && commerceLocation\.hash\.startsWith\('#shop-order-'\)\)[\s\S]*?target\?\.scrollIntoView\([\s\S]*?target\?\.focus\(\{ preventScroll: true \}\)/)
+})
+
+test('expanded CSV rows are bound to one preview and do not carry to the next file', () => {
+  const firstPreview = 'sha256:first-csv-preview'
+  const nextPreview = 'sha256:next-csv-preview'
+  const rowCount = SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE + 1
+
+  const expandedRows = toggleShopCatalogImportRowsVisibility(null, firstPreview)
+  assert.equal(shopCatalogImportRowsAreVisible(firstPreview, rowCount, expandedRows), true)
+  assert.equal(shopCatalogImportRowsAreVisible(nextPreview, rowCount, expandedRows), false)
+
+  const nextExpandedRows = toggleShopCatalogImportRowsVisibility(expandedRows, nextPreview)
+  assert.equal(shopCatalogImportRowsAreVisible(nextPreview, rowCount, nextExpandedRows), true)
+  assert.equal(shopCatalogImportRowsAreVisible(nextPreview, SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE, nextExpandedRows), true)
 })
 
 test('base counter quantity controls support tablet touch without a phone breakpoint', () => {

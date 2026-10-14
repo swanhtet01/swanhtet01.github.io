@@ -17,8 +17,11 @@ import { activateLocalStagingPackage } from './local-client-import'
 import { readCommerceWorkspace } from './commerce-workspace'
 import {
   classifyShopCatalogImportRows,
+  SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE,
   SHOP_CATALOG_IMPORT_MAX_ROWS,
   summarizeShopCatalogImportReview,
+  shopCatalogImportRowsAreVisible,
+  toggleShopCatalogImportRowsVisibility,
   addShopVariantColumnToClientImportPreview,
 } from './shop-catalog-import'
 import {
@@ -225,7 +228,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   managedIdentityRef.current = managedIdentity
   onProgressRef.current = onProgress
   const [state, setState] = useState<ImportState>(emptyImportState)
-  const [showAllRows, setShowAllRows] = useState(false)
+  const [expandedRowsPreviewDigest, setExpandedRowsPreviewDigest] = useState<string | null>(null)
   const currentValidationContext = validationContextKey(
     product,
     workflowTemplateId,
@@ -264,8 +267,14 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         ...state.preview.rows.filter((row) => row.status === 'ready' && !catalogReviewBlocksImport(state.catalogReview[row.rowNumber])),
       ]
     : []
-  const visibleRows = showAllRows ? importReviewRows : importReviewRows.slice(0, 12)
-  const allRowsVisible = !state.preview || state.preview.rows.length <= 12 || showAllRows
+  const visibleRows = expandedRowsPreviewDigest === state.preview?.previewDigest
+    ? importReviewRows
+    : importReviewRows.slice(0, SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE)
+  const allRowsVisible = !state.preview || shopCatalogImportRowsAreVisible(
+    state.preview.previewDigest,
+    state.preview.rows.length,
+    expandedRowsPreviewDigest,
+  )
   const variantHeader = product === 'commerce' ? state.preview?.mapping.variant ?? '' : ''
   const variantChoiceRequired = product === 'commerce' && Boolean(state.preview?.fileIssues.some((issue) => issue.code === 'variant_choice_required'))
   const variantMappingNeedsReview = product === 'commerce' && Boolean(state.preview?.fileIssues.some((issue) => issue.field === 'variant'))
@@ -574,6 +583,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   useEffect(() => {
     requestRef.current += 1
     validationRequestRef.current += 1
+    setExpandedRowsPreviewDigest(null)
     setState(emptyImportState())
   }, [product, workflowTemplateId])
 
@@ -593,7 +603,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     const requestId = requestRef.current + 1
     requestRef.current = requestId
     validationRequestRef.current += 1
-    setShowAllRows(false)
+    setExpandedRowsPreviewDigest(null)
     setState((current) => ({ ...current, sourceName, sourceText, preview: null, catalogReview: {}, busy: true, validating: false, preflighting: false, applying: false, validation: null, error: '' }))
     try {
       let preview = await createClientImportPreview(sourceText, expectedProduct, mapping, sourceName, expectedWorkflowTemplateId)
@@ -663,7 +673,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   function clearPreview() {
     requestRef.current += 1
     validationRequestRef.current += 1
-    setShowAllRows(false)
+    setExpandedRowsPreviewDigest(null)
     setState(emptyImportState())
   }
 
@@ -1112,7 +1122,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             </div>
             {state.preview.rows.length > 12 ? <>
               <p className="panel-copy">Showing {visibleRows.length} of {state.preview.rows.length} import rows.</p>
-              <button className="core-button" onClick={() => setShowAllRows((current) => !current)} type="button">{showAllRows ? 'Show first 12 rows' : `Show all ${state.preview.rows.length} rows`}</button>
+              <button className="core-button" onClick={() => setExpandedRowsPreviewDigest((current) => toggleShopCatalogImportRowsVisibility(current, state.preview!.previewDigest))} type="button">{expandedRowsPreviewDigest === state.preview.previewDigest ? `Show first ${SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE} rows` : `Show all ${state.preview.rows.length} rows`}</button>
             </> : null}
             {!allRowsVisible ? <p className="form-notice" role="status">Show all {state.preview.rows.length} rows before preparing or approving this import.</p> : null}
           </details>

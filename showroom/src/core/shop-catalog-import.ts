@@ -46,6 +46,23 @@ export type ShopCatalogImportRow = {
 
 export type ShopCatalogImportReviewKind = 'new' | 'possible_match' | 'conflict' | 'unchanged' | 'capacity'
 
+export const SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE = 12
+
+export function shopCatalogImportRowsAreVisible(
+  previewDigest: string,
+  rowCount: number,
+  expandedPreviewDigest: string | null,
+) {
+  return rowCount <= SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE || expandedPreviewDigest === previewDigest
+}
+
+export function toggleShopCatalogImportRowsVisibility(
+  expandedPreviewDigest: string | null,
+  previewDigest: string,
+) {
+  return expandedPreviewDigest === previewDigest ? null : previewDigest
+}
+
 export function summarizeShopCatalogImportReview(
   readyRows: number,
   reviewRows: readonly { kind: ShopCatalogImportReviewKind }[],
