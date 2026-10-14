@@ -5,7 +5,7 @@
   "mode": "owner_approval_required",
   "state": "prepared-not-executed",
   "generatedAt": "2026-10-14T00:00:00.000Z",
-  "purpose": "Record the source-bound Supabase preview rehearsal plan and its blocked production-history replay prerequisite without creating a branch, reading production rows, copying production data, or approving managed activation.",
+  "purpose": "Record a source-bound Supabase preview plan that requires inherited-history reconciliation and a reviewed unapplied delta; do not create a branch or approve managed activation.",
   "productionBaseline": {
     "projectRef": "zvtzwcimpvvtkowflhda",
     "classification": "protected-production",
@@ -46,6 +46,7 @@
     "parentClassification": "protected-production",
     "maximumLifetimeHours": 24,
     "startsWithProductionData": false,
+    "costConfirmed": false,
     "seedProductionDataAllowed": false,
     "productionRefsAllowed": false,
     "privilegedRuntimeCredentialsAllowed": false,
@@ -208,7 +209,10 @@
     },
     "liveProductionSchemaVersion": 11,
     "sourceAheadOfLiveProduction": true,
-    "productionApplyAllowed": false
+    "productionApplyAllowed": false,
+    "branchApplyStrategy": "verify_inherited_schema_then_review_unapplied_delta",
+    "fullChainReplayAllowed": false,
+    "currentLiveHistoryReconciled": false
   },
   "gates": {
     "productionMigrationReplay": {
@@ -237,9 +241,9 @@
   },
   "requiredEvidence": [
     "preview-branch-status-and-migration-list",
-    "production-history-replayable-public-baseline-before-first-rls",
     "clean-empty-data-less-branch-confirmed",
-    "source-controlled-migration-chain-applied-through-v13",
+    "inherited-production-migration-history-reconciled-before-any-delta",
+    "only-reviewed-unapplied-migrations-run-on-preview",
     "durable-attempt-budget-restart-concurrency-and-restored-limit-proof",
     "website-review-recipient-isolation-entitlement-and-session-revocation",
     "website-review-and-feedback-nonempty-backup-restore",
@@ -256,10 +260,10 @@
     "no-production-retry-on-failure"
   ],
   "executionPacketAfterApproval": {
-    "tool": "tools/prepare_supabase_rehearsal_packet.mjs",
-    "commandTemplate": "npm run database:supabase:packet -- --target-project-ref <preview-branch-ref> --output .tmp/supermega-rehearsal-packet.json --release-handoff <release-handoff.json>",
-    "outputMustBeGitignored": true,
-    "bindsExactCommitAfterSourcePacketCommit": true
+    "status": "blocked-pending-inherited-history-adapter",
+    "tool": null,
+    "commandTemplate": null,
+    "reason": "The existing packet expects an empty public catalog and an ordered source-chain replay; it cannot run against a production-derived branch."
   },
   "compatibilityWatchList": [
     {
@@ -293,7 +297,7 @@
     "customerContactAllowed": false,
     "paymentOrStockActionAllowed": false
   },
-  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:8792fefdcaf49d7e36960fb5ed2b470cb739a9449184011a86ba424e7cf18286 on a clean empty maximum-24-hour non-production preview branch only, after separate approval and proof that production migration history can replay the public baseline before its first RLS migration, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:8792fefdcaf49d7e36960fb5ed2b470cb739a9449184011a86ba424e7cf18286 on a data-less maximum-24-hour non-production preview branch only, with deletion after evidence, only after current parent migration history and the exact catalog are reconciled and I separately confirm the quoted branch cost. On a branch that inherits its parent schema, replaying the full source chain is not approved; apply only a reviewed unapplied delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
   "sourceReceipts": [
     {
       "path": "package.json",
@@ -301,7 +305,7 @@
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:22a060b59318f50b8b9e189a18eb0dd4594db9f4c4f8792291dfa7672e96182a"
+      "digest": "sha256:5dddaa95710a19e944080c15f1b7825e8481f129e53a416751772c33ba54e5c4"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
@@ -332,5 +336,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:0887f9a870b1654502475960755433dc25c612a21eab79adec0043d5fbfb6bf4"
+  "digest": "sha256:46f675d9713de984c2482fcf38d08be5ee7f6194dcf232a9a7d74926e769b7cd"
 }
