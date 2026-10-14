@@ -1,10 +1,16 @@
-import { createShopCatalogImportPreview, shopCatalogImportFields, type ShopCatalogImportMapping } from './shop-catalog-import.ts'
+import { createShopCatalogImportPreview, ShopCatalogImportVariantChoiceRequiredError, shopCatalogImportFields, type ShopCatalogImportMapping } from './shop-catalog-import.ts'
 import type { CommerceItem } from './commerce-workspace'
 
 // Model output is data, never executable instructions or permission to import.
 export async function reviewCatalogMappingProposal(csv: string, catalog: CommerceItem[], proposal: unknown) {
-  const baseline = await createShopCatalogImportPreview(csv, catalog)
   const reject = (reason: string) => ({ status: 'rejected' as const, reason })
+  let baseline
+  try {
+    baseline = await createShopCatalogImportPreview(csv, catalog)
+  } catch (error) {
+    if (error instanceof ShopCatalogImportVariantChoiceRequiredError) return reject(error.code)
+    throw error
+  }
   if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) return reject('invalid_proposal')
   const value = proposal as Record<string, unknown>
   if (Object.keys(value).some(key => !['sourceDigest', 'mapping'].includes(key))) return reject('unexpected_proposal_field')

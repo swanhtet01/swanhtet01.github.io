@@ -965,6 +965,98 @@ class ClientImportRouteTests(unittest.TestCase):
         self.assertEqual(self.reducer.calls, 1)
         self.assertEqual(len(self.store._events), 1)
 
+    def test_reviewed_shop_import_preserves_optional_variant(self) -> None:
+        omitted_variant = _package("commerce", "retail-wholesale")
+        omitted_variant["mapping"]["variant"] = ""
+        omitted_variant["rows"][0]["values"]["variant"] = ""
+        omitted_variant = _resign(omitted_variant)
+        omitted_review = self.client.post(
+            "/api/trial/v1/imports/validate",
+            headers=self._headers(),
+            json=omitted_variant,
+        )
+        self.assertEqual(omitted_review.status_code, 200, omitted_review.text)
+        self.assertEqual(omitted_review.json()["validation"]["status"], "valid")
+        self.assertEqual(omitted_review.json()["validation"]["row_count"], 1)
+        self.assertFalse(omitted_review.json()["validation"]["activation"]["external_writes_performed"])
+
+        package = _package("commerce", "retail-wholesale")
+        package["mapping"]["variant"] = "product_variant"
+        package["rows"][0]["values"]["variant"] = "Large"
+        package = _resign(package)
+
+        unsafe_variant = deepcopy(package)
+        unsafe_variant["rows"][0]["values"]["variant"] = "=1+1"
+        with self.assertRaises(ClientImportValidationError):
+            validate_client_import_staging_package(_resign(unsafe_variant))
+
+        second_row = deepcopy(package["rows"][0])
+        second_row["sourceRow"] = 3
+        second_row["key"] = "TEA-100"
+        second_row["values"] = {
+            "sku": "TEA-100",
+            "name": "Myanmar green tea",
+            "onHand": "12",
+            "reorderAt": "4",
+            "price": "4500",
+            "variant": "",
+        }
+        package["rows"].append(second_row)
+        package["controls"]["rowCount"] = 2
+        package = _resign(package)
+
+        reviewed = self.client.post(
+            "/api/trial/v1/imports/validate",
+            headers=self._headers(),
+            json=package,
+        )
+        self.assertEqual(reviewed.status_code, 200, reviewed.text)
+        self.assertEqual(reviewed.json()["validation"]["row_count"], 2)
+        self.assertFalse(reviewed.json()["validation"]["activation"]["external_writes_performed"])
+
+        body = self._apply_body(
+            package,
+            command_id="00000000-0000-4000-8000-000000000180",
+        )
+        applied = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(applied.status_code, 200, applied.text)
+        self.assertEqual(
+            applied.json()["result"]["state"]["items"],
+            [
+                {
+                    "sku": "COFFEE-250",
+                    "name": "Myanmar coffee 250g",
+                    "variant": "Large",
+                    "onHand": 24,
+                    "reorderAt": 8,
+                    "price": 7000,
+                },
+                {
+                    "sku": "TEA-100",
+                    "name": "Myanmar green tea",
+                    "onHand": 12,
+                    "reorderAt": 4,
+                    "price": 4500,
+                },
+            ],
+        )
+        self.assertEqual(self.reducer.calls, 1)
+        self.assertEqual(len(self.store._events), 1)
+
+        replay = self.client.post(
+            "/api/trial/v1/imports/apply",
+            headers=self._headers("writer"),
+            json=body,
+        )
+        self.assertEqual(replay.status_code, 200)
+        self.assertTrue(replay.json()["result"]["idempotent_replay"])
+        self.assertEqual(self.reducer.calls, 1)
+        self.assertEqual(len(self.store._events), 1)
+
     def test_reviewed_website_import_applies_once_as_server_stamped_drafts(self) -> None:
         package = _package("website", "business-presence")
         second_row = deepcopy(package["rows"][0])

@@ -1548,7 +1548,7 @@ export function assertManagedShopImportState(
   stagingPackage: ManagedClientImportPackage,
 ) {
   const stateKeys = ['closes', 'items', 'movements', 'orders', 'schema'] as const
-  const itemKeys = ['name', 'onHand', 'price', 'reorderAt', 'sku'] as const
+  const baseItemKeys = ['name', 'onHand', 'price', 'reorderAt', 'sku'] as const
   if (stagingPackage.product !== 'commerce'
     || !isRecord(state)
     || !hasExactKeys(state, stateKeys)
@@ -1565,9 +1565,12 @@ export function assertManagedShopImportState(
   }
   for (const [index, row] of stagingPackage.rows.entries()) {
     const item = state.items[index]
+    const variant = row.values.variant
+    const itemKeys = variant ? [...baseItemKeys, 'variant'] : baseItemKeys
     const expected = {
       sku: row.values.sku,
       name: row.values.name,
+      ...(variant ? { variant } : {}),
       onHand: Number(row.values.onHand),
       reorderAt: Number(row.values.reorderAt),
       price: Number(row.values.price),
