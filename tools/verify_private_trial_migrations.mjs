@@ -445,12 +445,31 @@ requireCheck(
 )
 const migrationNames = allMigrationNames.filter((name) => !outOfScopeMigrations.includes(name))
 
+const privateSurfaceQuery = await readFile(
+  resolve(root, 'tools', 'supabase_private_surface_digest.sql'),
+  'utf8',
+)
+const privateSurfaceStages = []
+const capturePrivateSurfaceStage = async (stage) => {
+  const surfaceDigest = (
+    await database.query(privateSurfaceQuery)
+  ).rows[0]?.surface_digest
+  requireCheck(
+    `${stage} private surface digest contract`,
+    surfaceDigest?.contract === 'supermega.supabase-private-surface-digest.v1'
+      && /^([0-9a-f]{64})$/.test(surfaceDigest?.surface || ''),
+  )
+  privateSurfaceStages.push({ stage, surface: surfaceDigest.surface })
+  return surfaceDigest
+}
+
 const database = new PGlite()
 await database.waitReady
 await seedSupabaseRoles(database)
 // Preserve the exact pre-review catalog assertions, then verify the entire
 // resulting private catalog after applying the Website review and acceptance migrations.
 await applyMigrations(database, expectedMigrations.slice(0, websiteReviewStart))
+await capturePrivateSurfaceStage('private-core-and-attempt-budget')
 
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
@@ -890,25 +909,13 @@ requireCheck(
 
 await verifySelfServeAttemptBudget(database, requireCheck)
 await applyMigrations(database, expectedMigrations.slice(websiteReviewStart, websitePublishingStart))
+await capturePrivateSurfaceStage('website-and-commerce-review')
 await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
 await verifyCatalogEntitlementMutations(database, requireCheck)
 await verifyCatalogStorageMutations(database, requireCheck)
 await applyMigrations(database, expectedMigrations.slice(websitePublishingStart))
-
-// Emit the same private-surface fingerprint used for hosted read-only parity checks.
-// This proves only the app_private surface; public schema and migration-history parity
-// still require separate evidence from the exact hosted target.
-const privateSurfaceQuery = await readFile(
-  resolve(root, 'tools', 'supabase_private_surface_digest.sql'),
-  'utf8',
-)
-const privateSurfaceDigest = (
-  await database.query(privateSurfaceQuery)
-).rows[0]?.surface_digest
-requireCheck(
-  'private surface digest contract',
-  privateSurfaceDigest?.contract === 'supermega.supabase-private-surface-digest.v1',
-)
+const privateSurfaceDigest = await capturePrivateSurfaceStage('website-publishing-follow-up')
+// These hashes cover app_private only. They do not prove public schema or migration-history parity.
 await verifyWebsitePublishingMigrationCatalog(database, requireCheck)
 
 const unsafeRoleDatabase = new PGlite()
@@ -993,6 +1000,7 @@ console.log(
       migrations: expectedMigrations.length,
       checks: checks.length,
       private_surface_scope: 'app_private only; not full hosted schema or migration-history parity',
+      private_surface_stages: privateSurfaceStages,
       private_surface_digest: privateSurfaceDigest,
       hosted_postgres_17_proof_required: true,
     },
