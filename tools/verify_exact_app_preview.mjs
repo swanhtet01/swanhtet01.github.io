@@ -1053,13 +1053,12 @@ export function expectedText(spec, publicHomepageExpectedText) {
   if (spec.surface === 'website') return [
     'Website',
     'Your website',
-    ...(spec.mobile ? [] : ['Tell us about the business']),
+    'Start your website',
     'Business name',
-    'Main customers',
     'What do you sell or provide?',
-    'Create website',
+    'Create my website',
   ]
-  return ['Ecommerce', 'Online store', 'Review customer requests on this device. Requests stay on this device until Shop review.', 'Get catalog help', 'Open customer ordering']
+  return ['Ecommerce', 'Online store', 'Review customer requests on this device. Requests stay on this device until Shop review.', 'Open customer ordering']
 }
 
 function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {
