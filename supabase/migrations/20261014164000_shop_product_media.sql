@@ -4,9 +4,29 @@ begin;
 -- Immutable upload receipts remain in workspace_events. This ledger describes
 -- physical private objects, including uploads that never reached a binding.
 -- Quota is charged until confirmed deletion, not until a SKU is unbound.
+create table app_private.shop_media_upload_attempts (
+  workspace_id text not null references app_private.workspace_access_controls(workspace_id),
+  attempt_id text not null check (attempt_id ~ '^[0-9a-f]{32}$'),
+  asset_id text not null check (asset_id ~ '^[0-9a-f]{64}\.webp$'),
+  object_key text not null check (object_key ~ '^[0-9a-f]{32}$'),
+  byte_size integer not null check (byte_size between 1 and 2097152),
+  -- An ambiguous provider acknowledgement can still finish after our timeout.
+  -- It stays quota-charged; neither a GET nor a lease expiry can reuse its key.
+  state text not null check (state in ('pending', 'ambiguous', 'confirmed', 'deleted')),
+  updated_by text not null check (length(btrim(updated_by)) > 0),
+  created_at timestamptz not null default clock_timestamp(),
+  updated_at timestamptz not null default clock_timestamp(),
+  primary key (workspace_id, attempt_id),
+  unique (workspace_id, object_key),
+  unique (workspace_id, attempt_id, asset_id, object_key)
+);
+create index shop_media_attempt_quota_idx
+  on app_private.shop_media_upload_attempts(workspace_id, created_at)
+  where state <> 'deleted';
 create table app_private.shop_media_assets (
   workspace_id text not null references app_private.workspace_access_controls(workspace_id),
   asset_id text not null check (asset_id ~ '^[0-9a-f]{64}\.webp$'),
+  attempt_id text not null check (attempt_id ~ '^[0-9a-f]{32}$'),
   -- A restored digest receives a new physical key. Delayed deletion of the
   -- old key can never remove the new live image.
   object_key text not null check (object_key ~ '^[0-9a-f]{32}$'),
@@ -20,6 +40,8 @@ create table app_private.shop_media_assets (
   updated_at timestamptz not null default clock_timestamp(),
   primary key (workspace_id, asset_id),
   unique (workspace_id, object_key),
+  foreign key (workspace_id, attempt_id, asset_id, object_key)
+    references app_private.shop_media_upload_attempts(workspace_id, attempt_id, asset_id, object_key),
   check ((state in ('pending', 'retiring') and lease_token is not null and lease_until is not null)
     or (state in ('live', 'deleted') and lease_token is null and lease_until is null)),
   check (state = 'live' or collect_after is null)
@@ -91,6 +113,26 @@ alter table app_private.shop_product_media enable row level security;
 alter table app_private.shop_product_media force row level security;
 alter table app_private.shop_media_assets enable row level security;
 alter table app_private.shop_media_assets force row level security;
+alter table app_private.shop_media_upload_attempts enable row level security;
+alter table app_private.shop_media_upload_attempts force row level security;
+create policy shop_media_attempts_read on app_private.shop_media_upload_attempts
+  for select to supermega_trial_backend using (
+    workspace_id = (select current_setting('app.workspace_id', true))
+    and ((select app_private.shop_media_can('commerce.read'))
+      or (select app_private.shop_media_can('commerce.write'))));
+create policy shop_media_attempts_insert on app_private.shop_media_upload_attempts
+  for insert to supermega_trial_backend with check (
+    workspace_id = (select current_setting('app.workspace_id', true))
+    and updated_by = (select current_setting('app.actor_id', true))
+    and (select app_private.shop_media_can('commerce.write')));
+create policy shop_media_attempts_update on app_private.shop_media_upload_attempts
+  for update to supermega_trial_backend using (
+    workspace_id = (select current_setting('app.workspace_id', true))
+    and (select app_private.shop_media_can('commerce.write')))
+  with check (
+    workspace_id = (select current_setting('app.workspace_id', true))
+    and updated_by = (select current_setting('app.actor_id', true))
+    and (select app_private.shop_media_can('commerce.write')));
 create policy shop_media_assets_read on app_private.shop_media_assets
   for select to supermega_trial_backend using (
     workspace_id = (select current_setting('app.workspace_id', true))
@@ -141,5 +183,11 @@ revoke all on app_private.shop_product_media from public, anon, authenticated, s
 grant select, insert, update on app_private.shop_product_media to supermega_trial_backend;
 revoke all on app_private.shop_media_assets from public, anon, authenticated, service_role;
 grant select, insert, update on app_private.shop_media_assets to supermega_trial_backend;
+revoke all on app_private.shop_media_upload_attempts from public, anon, authenticated, service_role;
+-- The runtime role can advance state but cannot rewrite an attempt's identity,
+-- key, or size after reservation. Avoid introducing an optional trigger into
+-- the pinned trial-schema hardening contract.
+grant select, insert, update(state, updated_by, updated_at)
+  on app_private.shop_media_upload_attempts to supermega_trial_backend;
 
 commit;

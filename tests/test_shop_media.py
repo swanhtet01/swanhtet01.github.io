@@ -39,6 +39,7 @@ class MemoryDatabase:
                         "catalogBaselines": [{"sku": "CUP-1", "anchorDigest": "sha256:" + "a" * 64}]}
         self.bindings = {}
         self.assets = {}
+        self.attempts = {}
         self.events = {}
         self.products = ("commerce",)
         self.capabilities = {"commerce.read", "commerce.write"}
@@ -54,12 +55,12 @@ class MemoryDatabase:
         if capability and capability not in self.capabilities:
             raise TrialPermissionDenied(capability)
         assert not self.in_transaction
-        before = deepcopy((self.bindings, self.assets, self.events))
+        before = deepcopy((self.bindings, self.assets, self.attempts, self.events))
         self.in_transaction = True
         try:
             yield self, self.capabilities
         except Exception:
-            self.bindings, self.assets, self.events = before
+            self.bindings, self.assets, self.attempts, self.events = before
             raise
         finally:
             self.in_transaction = False
@@ -84,25 +85,30 @@ class MemoryDatabase:
         elif "select result_json from app_private.workspace_events" in query:
             event = next((row["result"] for row in self.events.values()
                           if row["workspace"] == params[0] and row["type"] == MEDIA_EVENT
-                          and row["result"].get("assetId") == params[2]), None)
+                          and row["result"].get("assetId") == params[2]
+                          and row["result"].get("attemptId") == params[3]
+                          and row["result"].get("objectKey") == params[4]), None)
             self.result = {"result_json": deepcopy(event)} if event else None
         elif "select count(*) as assets" in query:
-            relevant = [row for (workspace, _), row in self.assets.items()
+            relevant = [row for (workspace, _), row in self.attempts.items()
                         if workspace == params[0] and row["state"] != "deleted"]
             self.result = {"assets": len(relevant), "bytes": sum(row["byte_size"] for row in relevant)}
         elif "select count(*) as recent" in query:
-            self.result = {"recent": sum(row["workspace"] == params[0]
-                                          and row["type"] == MEDIA_EVENT for row in self.events.values())}
+            self.result = {"recent": sum(workspace == params[0]
+                                          for workspace, _ in self.attempts)}
         elif "select count(*) as refs from app_private.shop_product_media" in query:
             self.result = {"refs": sum(workspace == params[0] and row["asset_id"] == params[1]
                                        for (workspace, _), row in self.bindings.items())}
-        elif "select asset_id,object_key,byte_size,state,lease_token,lease_until,collect_after" in query:
+        elif "select asset_id,attempt_id,object_key,byte_size,state,lease_token,lease_until,collect_after" in query:
             self.result = deepcopy(self.assets.get((params[0], params[1])))
+        elif "select attempt_id,asset_id,object_key,byte_size,state" in query:
+            self.result = deepcopy(self.attempts.get((params[0], params[1])))
         elif "select lease_token from app_private.shop_media_assets" in query:
             row = self.assets.get((params[0], params[1]))
             self.result = ({"lease_token": row["lease_token"]} if row and
-                           row["state"] == "pending" and not row["expired"] else None)
-        elif "select asset_id,object_key,byte_size from app_private.shop_media_assets" in query:
+                           row["state"] == "pending" and not row["expired"] and
+                           self.attempts[(params[0], row["attempt_id"])]["state"] == "pending" else None)
+        elif "select asset_id,attempt_id,object_key,byte_size from app_private.shop_media_assets" in query:
             self.result = next((deepcopy(row) for (workspace, asset), row in self.assets.items()
                                 if workspace == params[0] and not any(
                                     binding["asset_id"] == asset for (bound_workspace, _), binding
@@ -135,32 +141,64 @@ class MemoryDatabase:
                                       "result": json.loads(params[-1]),
                                       "payload": json.loads(params[-2])}
             self.result = None
+        elif "insert into app_private.shop_media_upload_attempts" in query:
+            workspace, attempt_id, asset_id, object_key, size, actor = params
+            assert (workspace, attempt_id) not in self.attempts
+            assert all(existing["object_key"] != object_key for (owner, _), existing
+                       in self.attempts.items() if owner == workspace)
+            self.attempts[(workspace, attempt_id)] = {
+                "attempt_id": attempt_id, "asset_id": asset_id,
+                "object_key": object_key, "byte_size": size, "state": "pending"}
+            self.result = None
+        elif "update app_private.shop_media_upload_attempts" in query:
+            if "state='ambiguous'" in query and "asset_id=%s" in query:
+                _, workspace, attempt_id, asset_id, object_key = params
+            elif "state='ambiguous'" in query:
+                _, workspace, attempt_id = params
+                asset_id = object_key = None
+            else:
+                _, workspace, attempt_id, asset_id, object_key = params
+            row = self.attempts[(workspace, attempt_id)]
+            if ((asset_id is None or row["asset_id"] == asset_id)
+                    and (object_key is None or row["object_key"] == object_key)):
+                if "state='ambiguous'" in query and row["state"] == "pending":
+                    row["state"] = "ambiguous"
+                elif "state='confirmed'" in query and row["state"] == "pending":
+                    row["state"] = "confirmed"
+                elif "state='deleted'" in query and row["state"] == "confirmed":
+                    row["state"] = "deleted"
+                else:
+                    self.result = None
+                    return
+                self.result = {"attempt_id": attempt_id} if "returning attempt_id" in query else None
+            else:
+                self.result = None
         elif "insert into app_private.shop_media_assets" in query:
-            workspace, asset, object_key, size, token, _ = params
-            self.assets[(workspace, asset)] = {"asset_id": asset, "object_key": object_key, "byte_size": size,
+            workspace, asset, attempt_id, object_key, size, token, _ = params
+            self.assets[(workspace, asset)] = {"asset_id": asset, "attempt_id": attempt_id,
+                "object_key": object_key, "byte_size": size,
                 "state": "pending", "lease_token": token, "lease_until": True,
                 "collect_after": False, "expired": False}
             self.result = None
-        elif "update app_private.shop_media_assets" in query and "state='pending'" in query and "state='deleted'" in query:
-            object_key, token, _, workspace, asset = params
+        elif "update app_private.shop_media_assets set state='pending'" in query:
+            attempt_id, object_key, token, _, workspace, asset = params
             row = self.assets[(workspace, asset)]
-            assert row["state"] == "deleted"
-            row.update(state="pending", object_key=object_key, lease_token=token, lease_until=True,
+            assert row["state"] in ("deleted", "pending")
+            row.update(state="pending", attempt_id=attempt_id, object_key=object_key,
+                       lease_token=token, lease_until=True,
                        collect_after=False, expired=False)
-            self.result = None
-        elif "update app_private.shop_media_assets" in query and "state='pending'" in query and "lease_until <" in query:
-            token, _, workspace, asset = params
+            self.result = {"asset_id": asset}
+        elif "update app_private.shop_media_assets set lease_until=clock_timestamp()" in query:
+            _, workspace, asset, attempt_id, object_key = params
             row = self.assets[(workspace, asset)]
-            if row["state"] == "pending" and row["expired"]:
-                row.update(lease_token=token, lease_until=True, expired=False)
-                self.result = {"asset_id": asset}
-            else:
-                self.result = None
+            if row["state"] == "pending" and row["attempt_id"] == attempt_id and row["object_key"] == object_key:
+                row["expired"] = True
+            self.result = None
         elif "update app_private.shop_media_assets" in query and "state='live'" in query and "lease_token=null" in query:
-            _, workspace, asset, object_key, token = params
+            _, workspace, asset, attempt_id, object_key, token = params
             row = self.assets[(workspace, asset)]
             if (row["state"] == "pending" and row["lease_token"] == token
-                    and row["object_key"] == object_key):
+                    and row["attempt_id"] == attempt_id and row["object_key"] == object_key):
                 row.update(state="live", lease_token=None, lease_until=None,
                            collect_after=False, expired=False)
                 self.result = {"asset_id": asset}
@@ -274,6 +312,16 @@ class ShopMediaStoreTests(unittest.TestCase):
     def object_key(self, prepared):
         return self.db.assets[(self.actor.workspace_id, prepared.asset_id)]["object_key"]
 
+    def add_synthetic_live_asset(self, asset_id, object_key, byte_size=1):
+        attempt_id = uuid4().hex
+        self.db.attempts[(self.actor.workspace_id, attempt_id)] = {
+            "attempt_id": attempt_id, "asset_id": asset_id,
+            "object_key": object_key, "byte_size": byte_size, "state": "confirmed"}
+        self.db.assets[(self.actor.workspace_id, asset_id)] = {
+            "asset_id": asset_id, "attempt_id": attempt_id, "object_key": object_key,
+            "byte_size": byte_size, "state": "live", "lease_token": None,
+            "lease_until": None, "collect_after": False, "expired": False}
+
     def test_upload_manifest_read_delete_and_generation_tombstone(self):
         self.assertEqual(self.media.manifest(self.actor), {"photos": {}, "generations": {}})
         result = self.media.put(self.actor, "CUP-1", self.photo, 0)
@@ -315,7 +363,7 @@ class ShopMediaStoreTests(unittest.TestCase):
         self.assertFalse(self.db.bindings)
         self.db.active = True
         self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]["expired"] = True
-        self.objects.after_get = lambda: self.db.bindings.update({(self.actor.workspace_id, "CUP-1"):
+        self.objects.after_put = lambda: self.db.bindings.update({(self.actor.workspace_id, "CUP-1"):
             {"sku": "CUP-1", "catalog_fingerprint": "x" * 64, "asset_id": None,
              "generation": 1, "byte_size": None, "width": None, "height": None}})
         with self.assertRaises(TrialVersionConflict):
@@ -344,10 +392,7 @@ class ShopMediaStoreTests(unittest.TestCase):
         self.assertEqual(pending["state"], "pending")
         for index in range(999):
             asset = f"{index:064x}.webp"
-            self.db.assets[(self.actor.workspace_id, asset)] = {
-                "asset_id": asset, "object_key": f"{index:032x}", "byte_size": 1,
-                "state": "live", "lease_token": None,
-                "lease_until": None, "collect_after": False, "expired": False}
+            self.add_synthetic_live_asset(asset, f"{index:032x}")
         self.objects.after_put = None
         with self.assertRaises(TrialValidationError):
             self.media.put(self.actor, "CUP-1", photo("#1199aa"), 0)
@@ -357,35 +402,49 @@ class ShopMediaStoreTests(unittest.TestCase):
         # read cannot justify releasing its quota or deleting the reservation.
         self.assertEqual(self.media.collect(self.actor), 0)
         self.assertEqual(self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]["state"], "pending")
-        self.assertEqual(self.media.put(self.actor, "CUP-1", self.photo, 0)["generation"], 1)
+        with self.assertRaises(TrialValidationError):
+            self.media.put(self.actor, "CUP-1", self.photo, 0)
+        self.assertEqual(pending["state"], "pending")
+        self.assertEqual(self.db.attempts[(self.actor.workspace_id, pending["attempt_id"])]["state"], "pending")
 
-    def test_ambiguous_upload_can_retry_same_bytes_without_waiting_for_lease(self):
+    def test_ambiguous_upload_retries_on_new_key_and_charges_both_attempts(self):
         def ambiguous():
             raise TrialNotReadyError(("synthetic_ambiguous_upload",))
         self.objects.after_put = ambiguous
         with self.assertRaises(TrialNotReadyError):
             self.media.put(self.actor, "CUP-1", self.photo, 0)
+        old_key = self.object_key(self.photo)
+        old_attempt = self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]["attempt_id"]
+        self.assertEqual(self.db.attempts[(self.actor.workspace_id, old_attempt)]["state"], "ambiguous")
         self.objects.after_put = None
         self.assertEqual(self.media.put(self.actor, "CUP-1", self.photo, 0)["generation"], 1)
-        self.assertEqual(self.objects.put_count, 1)
+        self.assertEqual(self.objects.put_count, 2)
+        self.assertNotEqual(old_key, self.object_key(self.photo))
+        self.assertEqual(len([row for row in self.db.attempts.values() if row["state"] != "deleted"]), 2)
         self.assertEqual(sum(row["type"] == MEDIA_EVENT for row in self.db.events.values()), 1)
+        receipt = next(row["result"] for row in self.db.events.values() if row["type"] == MEDIA_EVENT)
+        self.assertEqual(receipt["objectKey"], self.object_key(self.photo))
+        self.assertNotEqual(receipt["attemptId"], old_attempt)
 
-    def test_paused_first_upload_cannot_be_replaced_by_a_second_put(self):
+    def test_paused_first_upload_cannot_recreate_the_current_key(self):
         original_put = self.objects.put
         self.objects.put = lambda *_: (_ for _ in ()).throw(
             TrialNotReadyError(("synthetic_paused_upload",)))
         with self.assertRaises(TrialNotReadyError):
             self.media.put(self.actor, "CUP-1", self.photo, 0)
         key = self.object_key(self.photo)
+        old_attempt = self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]["attempt_id"]
         self.objects.put = original_put
-        with self.assertRaises(TrialNotReadyError):
-            self.media.put(self.actor, "CUP-1", self.photo, 0)
-        self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]["expired"] = True
-        self.assertEqual(self.media.collect(self.actor), 0)
-        # A late first PUT is still quota-accounted under its pending key.
-        self.objects.objects[(self.actor.workspace_id, key)] = self.photo.data
         self.assertEqual(self.media.put(self.actor, "CUP-1", self.photo, 0)["generation"], 1)
-        self.assertEqual(self.objects.put_count, 0)
+        current_key = self.object_key(self.photo)
+        self.assertNotEqual(key, current_key)
+        # Simulate the first provider POST completing after the second attempt.
+        self.objects.objects[(self.actor.workspace_id, key)] = self.photo.data
+        self.assertEqual(self.media.collect(self.actor), 0)
+        self.assertEqual(self.media.get(self.actor, self.photo.asset_id)[0], self.photo.data)
+        self.assertEqual(self.object_key(self.photo), current_key)
+        self.assertEqual(self.db.attempts[(self.actor.workspace_id, old_attempt)]["state"], "ambiguous")
+        self.assertEqual(self.objects.put_count, 1)
 
     def test_definitive_no_write_stays_pending_and_quota_charged(self):
         original_put = self.objects.put
@@ -395,16 +454,27 @@ class ShopMediaStoreTests(unittest.TestCase):
             self.media.put(self.actor, "CUP-1", self.photo, 0)
         self.objects.put = original_put
         pending = self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]
-        for expired in (False, True, True):
-            pending["expired"] = expired
+        first_key = pending["object_key"]
+        with patch("supermega_runtime.shop_media.MAX_WORKSPACE_ASSETS", 1):
+            for _ in range(3):
+                pending["expired"] = True
+                with self.assertRaises(TrialValidationError):
+                    self.media.put(self.actor, "CUP-1", self.photo, 0)
+                self.assertEqual(self.media.collect(self.actor), 0)
+                self.assertEqual(pending["state"], "pending")
+                self.assertEqual(pending["object_key"], first_key)
+        self.assertEqual(self.objects.put_count, 0)
+        self.assertFalse(self.db.events)
+
+    def test_pending_attempts_count_toward_hourly_rate(self):
+        with patch("supermega_runtime.shop_media.MAX_HOURLY_UPLOADS", 1):
+            self.objects.put = lambda *_: (_ for _ in ()).throw(
+                TrialNotReadyError(("synthetic_unknown_ack",)))
             with self.assertRaises(TrialNotReadyError):
                 self.media.put(self.actor, "CUP-1", self.photo, 0)
-            self.assertEqual(self.media.collect(self.actor), 0)
-            self.assertEqual(pending["state"], "pending")
-        with patch("supermega_runtime.shop_media.MAX_WORKSPACE_ASSETS", 1):
-            with self.assertRaises(TrialValidationError):
-                self.media.put(self.actor, "CUP-1", photo("#000099"), 0)
-        self.assertEqual(self.objects.put_count, 0)
+            with self.assertRaises(TrialNotReadyError) as blocked:
+                self.media.put(self.actor, "CUP-1", self.photo, 0)
+            self.assertIn("shop_media_upload_rate_limited", str(blocked.exception))
         self.assertFalse(self.db.events)
 
     def test_repeated_replacement_and_remove_reclaim_physical_quota(self):
@@ -453,6 +523,21 @@ class ShopMediaStoreTests(unittest.TestCase):
         self.assertEqual(self.objects.put_count, 2)
         self.assertEqual(sum(row["type"] == MEDIA_EVENT for row in self.db.events.values()), 2)
 
+    def test_old_digest_receipt_does_not_authorize_a_new_upload_attempt(self):
+        self.media.put(self.actor, "CUP-1", self.photo, 0)
+        old_key = self.object_key(self.photo)
+        old_attempt = self.db.assets[(self.actor.workspace_id, self.photo.asset_id)]["attempt_id"]
+        self.media.delete(self.actor, "CUP-1", 1)
+        self.assertEqual(self.media.collect(self.actor), 1)
+        _, _, new_key, new_attempt, fresh = self.media._prepare_upload(
+            self.actor, "CUP-1", self.photo, 2)
+        self.assertTrue(fresh)
+        self.assertNotEqual((old_attempt, old_key), (new_attempt, new_key))
+        self.assertIsNotNone(self.media._receipt(self.db, self.actor.workspace_id,
+                                                 self.photo.asset_id, old_attempt, old_key))
+        self.assertIsNone(self.media._receipt(self.db, self.actor.workspace_id,
+                                             self.photo.asset_id, new_attempt, new_key))
+
     def test_delayed_old_collector_cannot_delete_restored_digest(self):
         self.media.put(self.actor, "CUP-1", self.photo, 0)
         old_key = self.object_key(self.photo)
@@ -482,10 +567,7 @@ class ShopMediaStoreTests(unittest.TestCase):
         for index in range(2001):
             sku = f"OLD-{index:04d}"
             asset_id = f"{index:064x}.webp"
-            self.db.assets[(self.actor.workspace_id, asset_id)] = {
-                "asset_id": asset_id, "object_key": f"{index:032x}", "byte_size": 1,
-                "state": "live", "lease_token": None, "lease_until": None,
-                "collect_after": False, "expired": False}
+            self.add_synthetic_live_asset(asset_id, f"{index:032x}")
             self.db.bindings[(self.actor.workspace_id, sku)] = {
                 "sku": sku, "catalog_fingerprint": "0" * 64, "asset_id": asset_id,
                 "generation": 1, "byte_size": 1, "width": 1, "height": 1}
@@ -619,6 +701,20 @@ class ShopMediaTransportTests(unittest.TestCase):
             with self.assertRaises(TrialNotReadyError):
                 storage.put("workspace-a", self.photo)
 
+    def test_conflict_acknowledgement_cannot_be_promoted_by_later_get(self):
+        storage = SupabasePrivateMediaStorage(MediaStorageConfig(
+            "https://synthetic.supabase.co", "sb_secret_synthetic_fixture_only_123456789", SHOP_BUCKET))
+        calls = []
+        def request(method, path, **_):
+            calls.append(method)
+            if method == "GET":
+                return 200, json.dumps({"id": SHOP_BUCKET, "public": False}).encode()
+            return 409, b""
+        with patch.object(storage, "_request", side_effect=request):
+            with self.assertRaises(TrialNotReadyError):
+                storage.put("workspace-a", self.photo, "a" * 32)
+        self.assertEqual(calls, ["GET", "POST"])
+
 
 @unittest.skipUnless(os.environ.get("SUPERMEGA_TEST_POSTGRES") == "1",
                      "Set SUPERMEGA_TEST_POSTGRES=1 for disposable local PostgreSQL.")
@@ -714,6 +810,16 @@ class ShopMediaPostgresTests(unittest.TestCase):
             has_table_privilege('authenticated','app_private.shop_media_assets','select')
             from pg_class where oid='app_private.shop_media_assets'::regclass""")
         self.assertEqual(asset_permissions, [(True, True, False, False)])
+        attempt_permissions = self._sql("""select relrowsecurity,relforcerowsecurity,
+            has_column_privilege('supermega_trial_backend',
+              'app_private.shop_media_upload_attempts','state','update'),
+            has_column_privilege('supermega_trial_backend',
+              'app_private.shop_media_upload_attempts','object_key','update'),
+            has_column_privilege('supermega_trial_backend',
+              'app_private.shop_media_upload_attempts','attempt_id','update'),
+            has_table_privilege('authenticated','app_private.shop_media_upload_attempts','select')
+            from pg_class where oid='app_private.shop_media_upload_attempts'::regclass""")
+        self.assertEqual(attempt_permissions, [(True, True, True, False, False, False)])
 
     def test_removed_catalog_sku_retires_private_asset_under_rls(self):
         actor = self._principal()
@@ -740,9 +846,15 @@ class ShopMediaPostgresTests(unittest.TestCase):
         storage.put.return_value = prepared.receipt()
         media = ShopMediaStore(self.store, storage)
         media.put(actor, "CUP-1", prepared, 0)
+        self._sql("""insert into app_private.shop_media_upload_attempts
+            (workspace_id,attempt_id,asset_id,object_key,byte_size,state,updated_by)
+            select %s,md5('attempt:'||i::text),lpad(to_hex(i),64,'0')||'.webp',
+              md5(i::text),1,'confirmed',%s
+            from generate_series(0,2000) i""", (actor.workspace_id, actor.actor_id))
         self._sql("""insert into app_private.shop_media_assets
-            (workspace_id,asset_id,object_key,byte_size,state,updated_by)
-            select %s,lpad(to_hex(i),64,'0')||'.webp',md5(i::text),1,'live',%s
+            (workspace_id,asset_id,attempt_id,object_key,byte_size,state,updated_by)
+            select %s,lpad(to_hex(i),64,'0')||'.webp',md5('attempt:'||i::text),
+              md5(i::text),1,'live',%s
             from generate_series(0,2000) i""", (actor.workspace_id, actor.actor_id))
         self._sql("""insert into app_private.shop_product_media
             (workspace_id,sku,catalog_fingerprint,asset_id,generation,byte_size,width,height,updated_by)

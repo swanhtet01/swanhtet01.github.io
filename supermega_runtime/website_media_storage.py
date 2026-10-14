@@ -106,7 +106,11 @@ class SupabasePrivateMediaStorage:
         self._require_private_bucket()
         path = self._object_path(workspace_id, photo.asset_id, object_key)
         status, _ = self._request("POST", f"object/{self.config.bucket}/{path}", data=photo.data)
-        if status not in (200, 201, 400, 409):
+        # Shop keys are single-use attempts. A conflict or an unknown POST
+        # acknowledgement cannot be promoted by a later GET: the original
+        # request may still finish after that GET and after cleanup.
+        accepted = (200, 201) if self.config.bucket == SHOP_BUCKET else (200, 201, 400, 409)
+        if status not in accepted:
             raise TrialNotReadyError(("website_media_upload_unconfirmed",))
         # A duplicate or interrupted retry is success only when exact immutable bytes exist.
         stored = self._download(path)

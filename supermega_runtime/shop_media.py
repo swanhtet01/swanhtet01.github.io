@@ -120,11 +120,13 @@ class ShopMediaStore:
         return cursor.fetchone()
 
     @staticmethod
-    def _receipt(cursor, workspace_id: str, asset_id: str) -> dict | None:
+    def _receipt(cursor, workspace_id: str, asset_id: str,
+                 attempt_id: str, object_key: str) -> dict | None:
         cursor.execute("""select result_json from app_private.workspace_events
             where workspace_id=%s and surface='commerce' and event_type=%s
-              and result_json->>'assetId'=%s order by created_at,event_id limit 1""",
-            (workspace_id, MEDIA_EVENT, asset_id))
+              and result_json->>'assetId'=%s and result_json->>'attemptId'=%s
+              and result_json->>'objectKey'=%s order by created_at,event_id limit 1""",
+            (workspace_id, MEDIA_EVENT, asset_id, attempt_id, object_key))
         row = cursor.fetchone()
         receipt = row["result_json"] if row else None
         return json.loads(receipt) if isinstance(receipt, str) else receipt
@@ -140,7 +142,7 @@ class ShopMediaStore:
                replacement_asset_id: str | None = None) -> None:
         cursor.execute("""select count(*) as assets,
             coalesce(sum(byte_size),0) as bytes
-            from app_private.shop_media_assets
+            from app_private.shop_media_upload_attempts
             where workspace_id=%s and state <> 'deleted'""", (workspace_id,))
         quota = cursor.fetchone()
         if quota["assets"] >= MAX_WORKSPACE_ASSETS or quota["bytes"] + byte_count > MAX_WORKSPACE_BYTES:
@@ -158,19 +160,30 @@ class ShopMediaStore:
             previous = ShopMediaStore._asset(cursor, workspace_id, replacement_asset_id)
             if previous is None or previous["state"] != "live":
                 raise TrialValidationError("Shop photo storage is full. Contact support.")
-        cursor.execute("""select count(*) as recent from app_private.workspace_events
-            where workspace_id=%s and surface='commerce' and event_type=%s
+        cursor.execute("""select count(*) as recent from app_private.shop_media_upload_attempts
+            where workspace_id=%s
               and created_at > clock_timestamp() - interval '1 hour'""",
-            (workspace_id, MEDIA_EVENT))
+            (workspace_id,))
         if cursor.fetchone()["recent"] >= MAX_HOURLY_UPLOADS:
             raise TrialNotReadyError(("shop_media_upload_rate_limited",))
 
     @staticmethod
     def _asset(cursor, workspace_id: str, asset_id: str) -> dict | None:
-        cursor.execute("""select asset_id,object_key,byte_size,state,lease_token,lease_until,collect_after
+        cursor.execute("""select asset_id,attempt_id,object_key,byte_size,state,lease_token,lease_until,collect_after
             from app_private.shop_media_assets where workspace_id=%s and asset_id=%s""",
             (workspace_id, asset_id))
         return cursor.fetchone()
+
+    @staticmethod
+    def _attempt(cursor, workspace_id: str, attempt_id: str) -> dict | None:
+        cursor.execute("""select attempt_id,asset_id,object_key,byte_size,state
+            from app_private.shop_media_upload_attempts
+            where workspace_id=%s and attempt_id=%s""", (workspace_id, attempt_id))
+        return cursor.fetchone()
+
+    @staticmethod
+    def _prepared_receipt(photo: PreparedPhoto, attempt_id: str, object_key: str) -> dict:
+        return {**photo.receipt(), "attemptId": attempt_id, "objectKey": object_key}
 
     @staticmethod
     def _event(cursor, actor: TrialPrincipal, event_type: str, payload: dict, result: dict) -> None:
@@ -184,54 +197,64 @@ class ShopMediaStore:
              json.dumps(payload), json.dumps(result)))
 
     def _reserve(self, cursor, actor: TrialPrincipal, photo: PreparedPhoto,
-                 replacement_asset_id: str | None) -> tuple[str | None, str, bool]:
-        """Account for bytes before I/O; only a new lifecycle may issue a PUT."""
+                 replacement_asset_id: str | None) -> tuple[str | None, str, str, bool]:
+        """Reserve one immutable physical key; never PUT that key twice."""
         asset = self._asset(cursor, actor.workspace_id, photo.asset_id)
         if asset is not None and asset["byte_size"] != len(photo.data):
             raise TrialNotReadyError(("shop_media_integrity_failed",))
         if asset is not None and asset["state"] == "live":
-            return None, asset["object_key"], False
+            return None, asset["object_key"], asset["attempt_id"], False
         if asset is not None and asset["state"] == "retiring":
             raise TrialNotReadyError(("shop_media_object_retiring",))
-        token = str(uuid4())
-        if asset is None:
-            self._quota(cursor, actor.workspace_id, len(photo.data), replacement_asset_id)
-            object_key = uuid4().hex
-            cursor.execute("""insert into app_private.shop_media_assets
-                (workspace_id,asset_id,object_key,byte_size,state,lease_token,lease_until,updated_by)
-                values(%s,%s,%s,%s,'pending',%s,clock_timestamp()+interval '2 minutes',%s)""",
-                (actor.workspace_id, photo.asset_id, object_key, len(photo.data), token, actor.actor_id))
-        elif asset["state"] == "deleted":
-            self._quota(cursor, actor.workspace_id, len(photo.data), replacement_asset_id)
-            object_key = uuid4().hex
-            cursor.execute("""update app_private.shop_media_assets set state='pending',
-                object_key=%s,lease_token=%s,lease_until=clock_timestamp()+interval '2 minutes',
-                collect_after=null,updated_by=%s,updated_at=clock_timestamp()
-                where workspace_id=%s and asset_id=%s and state='deleted'""",
-                (object_key, token, actor.actor_id, actor.workspace_id, photo.asset_id))
-        elif asset["state"] == "pending":
-            object_key = asset["object_key"]
-            # A retry may finalize bytes already written by the first POST.
-            # It must only GET this key: a second POST can overtake the first,
-            # then the delayed first POST can recreate bytes after later GC.
+        if asset is not None and asset["state"] == "pending":
+            previous = self._attempt(cursor, actor.workspace_id, asset["attempt_id"])
+            if (previous is None or previous["asset_id"] != photo.asset_id
+                    or previous["object_key"] != asset["object_key"]
+                    or previous["byte_size"] != len(photo.data)
+                    or previous["state"] not in ("pending", "ambiguous")):
+                raise TrialNotReadyError(("shop_media_integrity_failed",))
             cursor.execute("""select lease_token from app_private.shop_media_assets
                 where workspace_id=%s and asset_id=%s and state='pending'
-                  and lease_until >= clock_timestamp()""",
-                (actor.workspace_id, photo.asset_id))
-            active = cursor.fetchone()
-            if active is not None:
-                return active["lease_token"], object_key, False
-            cursor.execute("""update app_private.shop_media_assets set lease_token=%s,
-                lease_until=clock_timestamp()+interval '2 minutes',updated_by=%s,
-                updated_at=clock_timestamp() where workspace_id=%s and asset_id=%s
-                  and state='pending' and lease_until < clock_timestamp()
+                  and lease_until >= clock_timestamp()
+                  and exists (select 1 from app_private.shop_media_upload_attempts a
+                    where a.workspace_id=%s and a.attempt_id=shop_media_assets.attempt_id
+                      and a.state='pending')""",
+                (actor.workspace_id, photo.asset_id, actor.workspace_id))
+            if cursor.fetchone() is not None:
+                raise TrialNotReadyError(("shop_media_upload_in_progress",))
+
+        self._quota(cursor, actor.workspace_id, len(photo.data), replacement_asset_id)
+        token = str(uuid4())
+        attempt_id = uuid4().hex
+        object_key = uuid4().hex
+        cursor.execute("""insert into app_private.shop_media_upload_attempts
+            (workspace_id,attempt_id,asset_id,object_key,byte_size,state,updated_by)
+            values(%s,%s,%s,%s,%s,'pending',%s)""",
+            (actor.workspace_id, attempt_id, photo.asset_id, object_key,
+             len(photo.data), actor.actor_id))
+        if asset is None:
+            cursor.execute("""insert into app_private.shop_media_assets
+                (workspace_id,asset_id,attempt_id,object_key,byte_size,state,lease_token,lease_until,updated_by)
+                values(%s,%s,%s,%s,%s,'pending',%s,clock_timestamp()+interval '2 minutes',%s)""",
+                (actor.workspace_id, photo.asset_id, attempt_id, object_key,
+                 len(photo.data), token, actor.actor_id))
+        else:
+            if asset["state"] == "pending":
+                cursor.execute("""update app_private.shop_media_upload_attempts set
+                    state='ambiguous',updated_by=%s,updated_at=clock_timestamp()
+                    where workspace_id=%s and attempt_id=%s and state='pending'""",
+                    (actor.actor_id, actor.workspace_id, asset["attempt_id"]))
+            cursor.execute("""update app_private.shop_media_assets set state='pending',
+                attempt_id=%s,object_key=%s,lease_token=%s,
+                lease_until=clock_timestamp()+interval '2 minutes',
+                collect_after=null,updated_by=%s,updated_at=clock_timestamp()
+                where workspace_id=%s and asset_id=%s and state in ('deleted','pending')
                 returning asset_id""",
-                (token, actor.actor_id, actor.workspace_id, photo.asset_id))
+                (attempt_id, object_key, token, actor.actor_id,
+                 actor.workspace_id, photo.asset_id))
             if cursor.fetchone() is None:
                 raise TrialNotReadyError(("shop_media_upload_in_progress",))
-        else:
-            raise TrialNotReadyError(("shop_media_integrity_failed",))
-        return token, object_key, asset is None or asset["state"] == "deleted"
+        return token, object_key, attempt_id, True
 
     @staticmethod
     def _mark_collectible(cursor, actor: TrialPrincipal, asset_id: str | None) -> None:
@@ -285,8 +308,11 @@ class ShopMediaStore:
         asset = self._asset(cursor, actor.workspace_id, asset_id)
         if asset is None or asset["state"] != "live" or asset["byte_size"] != binding["byte_size"]:
             raise TrialNotReadyError(("shop_media_integrity_failed",))
-        receipt = self._receipt(cursor, actor.workspace_id, asset_id)
+        receipt = self._receipt(cursor, actor.workspace_id, asset_id,
+                                asset["attempt_id"], asset["object_key"])
         if (not isinstance(receipt, dict) or receipt.get("assetId") != asset_id
+                or receipt.get("attemptId") != asset["attempt_id"]
+                or receipt.get("objectKey") != asset["object_key"]
                 or receipt.get("sha256") != asset_id[:-5]
                 or receipt.get("bytes") != binding["byte_size"]
                 or receipt.get("width") != binding["width"]
@@ -379,7 +405,7 @@ class ShopMediaStore:
             with self.store._guarded_cursor(actor, write=True, capability="commerce.write") as (cursor, _):
                 self._reauthorize(cursor, actor, write=True)
                 self.store._lock(cursor, f"shop-media:{actor.workspace_id}")
-                cursor.execute("""select asset_id,object_key,byte_size from app_private.shop_media_assets a
+                cursor.execute("""select asset_id,attempt_id,object_key,byte_size from app_private.shop_media_assets a
                     where workspace_id=%s and (
                       (state='live' and collect_after <= clock_timestamp())
                       or (state='retiring' and lease_until < clock_timestamp()))
@@ -391,6 +417,7 @@ class ShopMediaStore:
                 if candidate is None:
                     return removed
                 asset_id = candidate["asset_id"]
+                attempt_id = candidate["attempt_id"]
                 object_key = candidate["object_key"]
                 cursor.execute("""update app_private.shop_media_assets a set
                     state='retiring',lease_token=%s,
@@ -425,8 +452,16 @@ class ShopMediaStore:
                     (actor.actor_id, actor.workspace_id, asset_id, object_key, token))
                 if cursor.fetchone() is None:
                     raise TrialNotReadyError(("shop_media_gc_race",))
+                cursor.execute("""update app_private.shop_media_upload_attempts set
+                    state='deleted',updated_by=%s,updated_at=clock_timestamp()
+                    where workspace_id=%s and attempt_id=%s and asset_id=%s
+                      and object_key=%s and state='confirmed' returning attempt_id""",
+                    (actor.actor_id, actor.workspace_id, attempt_id, asset_id, object_key))
+                if cursor.fetchone() is None:
+                    raise TrialNotReadyError(("shop_media_gc_race",))
                 self._event(cursor, actor, COLLECT_EVENT,
-                            {"assetId": asset_id, "objectKey": object_key},
+                            {"assetId": asset_id, "attemptId": attempt_id,
+                             "objectKey": object_key},
                             {"assetId": asset_id, "bytes": int(candidate["byte_size"]),
                              "objectState": "deleted", "visibility": "private"})
                 self._reauthorize(cursor, actor, write=True)
@@ -434,7 +469,7 @@ class ShopMediaStore:
         return removed
 
     def _prepare_upload(self, actor: TrialPrincipal, sku: str, photo: PreparedPhoto,
-                        expected_generation: int) -> tuple[str, str | None, str, bool]:
+                        expected_generation: int) -> tuple[str, str | None, str, str, bool]:
         # Short quota reservation precedes provider I/O. The workspace media
         # lock serializes all capacity claims without stalling Commerce sales.
         with self.store._guarded_cursor(actor, write=True, capability="commerce.write") as (cursor, _):
@@ -450,14 +485,34 @@ class ShopMediaStore:
                 raise TrialVersionConflict(expected_version=expected_generation, current_version=generation)
             if generation >= MAX_GENERATION:
                 raise TrialNotReadyError(("shop_media_generation_exhausted",))
-            known_receipt = self._receipt(cursor, actor.workspace_id, photo.asset_id)
-            if known_receipt is not None and known_receipt != photo.receipt():
-                raise TrialNotReadyError(("shop_media_integrity_failed",))
             replacement_asset_id = (current["asset_id"] if current and current["asset_id"] != photo.asset_id
                                     else None)
-            reservation, object_key, new_object = self._reserve(
+            reservation, object_key, attempt_id, new_object = self._reserve(
                 cursor, actor, photo, replacement_asset_id)
-        return catalog_fingerprint, reservation, object_key, new_object
+            if reservation is None:
+                receipt = self._receipt(cursor, actor.workspace_id, photo.asset_id,
+                                        attempt_id, object_key)
+                if receipt != self._prepared_receipt(photo, attempt_id, object_key):
+                    raise TrialNotReadyError(("shop_media_integrity_failed",))
+        return catalog_fingerprint, reservation, object_key, attempt_id, new_object
+
+    def _mark_ambiguous(self, actor: TrialPrincipal, photo: PreparedPhoto,
+                        attempt_id: str, object_key: str) -> None:
+        # If auth/database fails here, the untouched pending attempt still
+        # consumes quota and cannot be reused after its lease expires.
+        with self.store._guarded_cursor(actor, write=True, capability="commerce.write") as (cursor, _):
+            self._reauthorize(cursor, actor, write=True)
+            self.store._lock(cursor, f"shop-media:{actor.workspace_id}")
+            cursor.execute("""update app_private.shop_media_upload_attempts set
+                state='ambiguous',updated_by=%s,updated_at=clock_timestamp()
+                where workspace_id=%s and attempt_id=%s and asset_id=%s
+                  and object_key=%s and state='pending'""",
+                (actor.actor_id, actor.workspace_id, attempt_id, photo.asset_id, object_key))
+            cursor.execute("""update app_private.shop_media_assets set
+                lease_until=clock_timestamp(),updated_by=%s,updated_at=clock_timestamp()
+                where workspace_id=%s and asset_id=%s and attempt_id=%s
+                  and object_key=%s and state='pending'""",
+                (actor.actor_id, actor.workspace_id, photo.asset_id, attempt_id, object_key))
 
     def put(self, principal: TrialPrincipal, sku: str, photo: PreparedPhoto,
             expected_generation: int) -> dict:
@@ -466,24 +521,28 @@ class ShopMediaStore:
         if actor.actor_kind != "human":
             raise TrialPermissionDenied("commerce.write")
         try:
-            catalog_fingerprint, reservation, object_key, new_object = self._prepare_upload(
+            catalog_fingerprint, reservation, object_key, attempt_id, new_object = self._prepare_upload(
                 actor, sku, photo, expected_generation)
         except TrialValidationError:
             # Reclaim only when physical capacity would block this upload;
             # normal counter work does not wait on provider deletion.
             self.collect(actor, limit=8)
-            catalog_fingerprint, reservation, object_key, new_object = self._prepare_upload(
+            catalog_fingerprint, reservation, object_key, attempt_id, new_object = self._prepare_upload(
                 actor, sku, photo, expected_generation)
 
         # Supabase object I/O is outside every database transaction and advisory
         # lock. A later conflict leaves a quota-charged pending reservation.
         if new_object:
-            stored_receipt = self.storage.put(actor.workspace_id, photo, object_key)
-            if stored_receipt != photo.receipt():
-                raise TrialNotReadyError(("shop_media_integrity_failed",))
-        # A pending retry never sends a second PUT. If the first request is
-        # still in flight, this read fails closed and the reservation remains
-        # quota-charged. If its bytes exist, finalization can safely proceed.
+            try:
+                stored_receipt = self.storage.put(actor.workspace_id, photo, object_key)
+                if stored_receipt != photo.receipt():
+                    raise TrialNotReadyError(("shop_media_integrity_failed",))
+            except Exception:
+                try:
+                    self._mark_ambiguous(actor, photo, attempt_id, object_key)
+                except Exception:
+                    _LOG.warning("Shop photo attempt could not be marked ambiguous; pending quota retained")
+                raise
         elif self.storage.get(actor.workspace_id, photo.asset_id, object_key) != photo.data:
             raise TrialNotReadyError(("shop_media_integrity_failed",))
 
@@ -499,24 +558,38 @@ class ShopMediaStore:
                 raise TrialVersionConflict(expected_version=expected_generation, current_version=generation)
             asset = self._asset(cursor, actor.workspace_id, photo.asset_id)
             if (asset is None or asset["byte_size"] != len(photo.data)
+                    or asset["attempt_id"] != attempt_id
                     or asset["object_key"] != object_key
                     or (reservation is None and asset["state"] != "live")
                     or (reservation is not None and
                         (asset["state"] != "pending" or asset["lease_token"] != reservation))):
                 raise TrialNotReadyError(("shop_media_asset_changed",))
-            current_receipt = self._receipt(cursor, actor.workspace_id, photo.asset_id)
-            if current_receipt is not None and current_receipt != photo.receipt():
+            current_receipt = self._receipt(cursor, actor.workspace_id, photo.asset_id,
+                                            attempt_id, object_key)
+            expected_receipt = self._prepared_receipt(photo, attempt_id, object_key)
+            if ((reservation is None and current_receipt != expected_receipt)
+                    or (reservation is not None and current_receipt is not None)):
                 raise TrialNotReadyError(("shop_media_integrity_failed",))
             if reservation is not None:
                 self._event(cursor, actor, MEDIA_EVENT,
-                            {"assetId": photo.asset_id, "objectKey": object_key,
+                            {"assetId": photo.asset_id, "attemptId": attempt_id,
+                             "objectKey": object_key,
                              "preparation": "webp-2048-v1"},
-                            photo.receipt())
+                            expected_receipt)
+                cursor.execute("""update app_private.shop_media_upload_attempts set
+                    state='confirmed',updated_by=%s,updated_at=clock_timestamp()
+                    where workspace_id=%s and attempt_id=%s and asset_id=%s
+                      and object_key=%s and state='pending' returning attempt_id""",
+                    (actor.actor_id, actor.workspace_id, attempt_id, photo.asset_id, object_key))
+                if cursor.fetchone() is None:
+                    raise TrialNotReadyError(("shop_media_asset_changed",))
                 cursor.execute("""update app_private.shop_media_assets set state='live',
                     lease_token=null,lease_until=null,collect_after=null,updated_by=%s,
                     updated_at=clock_timestamp() where workspace_id=%s and asset_id=%s
-                      and object_key=%s and state='pending' and lease_token=%s returning asset_id""",
-                    (actor.actor_id, actor.workspace_id, photo.asset_id, object_key, reservation))
+                      and attempt_id=%s and object_key=%s and state='pending'
+                      and lease_token=%s returning asset_id""",
+                    (actor.actor_id, actor.workspace_id, photo.asset_id, attempt_id,
+                     object_key, reservation))
                 if cursor.fetchone() is None:
                     raise TrialNotReadyError(("shop_media_asset_changed",))
             else:
