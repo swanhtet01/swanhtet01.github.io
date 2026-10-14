@@ -178,9 +178,11 @@ function validateSupabasePreviewProposalForApproval(packet) {
   if (packet.repository !== REPOSITORY || packet.mode !== 'owner_approval_required' || packet.state !== 'prepared-not-executed') {
     fail('release_owner_approval_supabase_state_invalid')
   }
-  if (packet.previewBranch?.kind !== 'clean_empty_ephemeral_preview'
+  if (packet.previewBranch?.kind !== 'data_less_inherited_schema_ephemeral_preview'
     || packet.previewBranch?.maximumLifetimeHours !== 24
     || packet.previewBranch?.startsWithProductionData !== false
+    || packet.previewBranch?.includeProductionData !== false
+    || packet.previewBranch?.schemaInheritanceVerified !== false
     || packet.previewBranch?.costConfirmed !== false
     || packet.previewBranch?.productionRefsAllowed !== false
     || packet.previewBranch?.privilegedRuntimeCredentialsAllowed !== false
@@ -675,9 +677,11 @@ function sampleSupabaseProposal() {
     mode: 'owner_approval_required',
     state: 'prepared-not-executed',
     previewBranch: {
-      kind: 'clean_empty_ephemeral_preview',
+      kind: 'data_less_inherited_schema_ephemeral_preview',
       maximumLifetimeHours: 24,
       startsWithProductionData: false,
+      includeProductionData: false,
+      schemaInheritanceVerified: false,
       costConfirmed: false,
       productionRefsAllowed: false,
       privilegedRuntimeCredentialsAllowed: false,

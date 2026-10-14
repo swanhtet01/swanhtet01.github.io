@@ -41,11 +41,13 @@
     "hostedActivationReady": false
   },
   "previewBranch": {
-    "kind": "clean_empty_ephemeral_preview",
+    "kind": "data_less_inherited_schema_ephemeral_preview",
     "parentProjectRef": "zvtzwcimpvvtkowflhda",
     "parentClassification": "protected-production",
     "maximumLifetimeHours": 24,
     "startsWithProductionData": false,
+    "includeProductionData": false,
+    "schemaInheritanceVerified": false,
     "costConfirmed": false,
     "seedProductionDataAllowed": false,
     "productionRefsAllowed": false,
@@ -241,7 +243,7 @@
   },
   "requiredEvidence": [
     "preview-branch-status-and-migration-list",
-    "clean-empty-data-less-branch-confirmed",
+    "data-less-branch-and-inherited-schema-confirmed",
     "inherited-production-migration-history-reconciled-before-any-delta",
     "only-reviewed-unapplied-migrations-run-on-preview",
     "durable-attempt-budget-restart-concurrency-and-restored-limit-proof",
@@ -305,7 +307,7 @@
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:5dddaa95710a19e944080c15f1b7825e8481f129e53a416751772c33ba54e5c4"
+      "digest": "sha256:ae7dd2b19ba3f3d7f129b0131a06cd596970fca1be62c35e4019898168d98313"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
@@ -336,5 +338,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:46f675d9713de984c2482fcf38d08be5ee7f6194dcf232a9a7d74926e769b7cd"
+  "digest": "sha256:bf3d97bb07bd478e8ebdbba95b04d7fbf7dea8094bdc7c638cea92944316cd3f"
 }

@@ -167,9 +167,11 @@ function input(overrides = {}) {
     mode: 'owner_approval_required',
     state: 'prepared-not-executed',
     previewBranch: {
-      kind: 'clean_empty_ephemeral_preview',
+      kind: 'data_less_inherited_schema_ephemeral_preview',
       maximumLifetimeHours: 24,
       startsWithProductionData: false,
+      includeProductionData: false,
+      schemaInheritanceVerified: false,
       seedProductionDataAllowed: false,
       productionRefsAllowed: false,
       privilegedRuntimeCredentialsAllowed: false,
@@ -311,6 +313,17 @@ test('rejects fifth-product AI, weak GitHub checks, and unsafe Supabase preview 
   }))
   assert.equal(unsafeSupabase.ok, false)
   assert.ok(unsafeSupabase.failures.includes('release_stack_owner_gate_supabase_proposal_invalid'))
+
+  for (const change of [
+    { includeProductionData: true },
+    { schemaInheritanceVerified: true },
+  ]) {
+    const proposal = structuredClone(input().supabaseProposal)
+    Object.assign(proposal.previewBranch, change)
+    const report = assessReleaseStackOwnerGates(input({ supabaseProposal: proposal }))
+    assert.equal(report.ok, false)
+    assert.ok(report.failures.includes('release_stack_owner_gate_supabase_proposal_invalid'))
+  }
 })
 
 test('rejects tampered reports', () => {

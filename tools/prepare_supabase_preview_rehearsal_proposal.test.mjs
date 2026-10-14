@@ -54,14 +54,16 @@ async function proposal(overrides = {}) {
   })
 }
 
-test('builds a clean empty Supabase preview rehearsal proposal', async () => {
+test('builds a data-less inherited-schema Supabase preview rehearsal proposal', async () => {
   const built = await proposal()
   assert.equal(built.contract, SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT)
   assert.equal(built.mode, 'owner_approval_required')
   assert.equal(built.state, 'prepared-not-executed')
-  assert.equal(built.previewBranch.kind, 'clean_empty_ephemeral_preview')
+  assert.equal(built.previewBranch.kind, 'data_less_inherited_schema_ephemeral_preview')
   assert.equal(built.previewBranch.maximumLifetimeHours, 24)
   assert.equal(built.previewBranch.startsWithProductionData, false)
+  assert.equal(built.previewBranch.includeProductionData, false)
+  assert.equal(built.previewBranch.schemaInheritanceVerified, false)
   assert.equal(built.previewBranch.costConfirmed, false)
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
@@ -82,6 +84,7 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.gates.productionMigrationReplay.newPreviewCreationAllowed, false)
   assert.equal(built.gates.productionMigrationReplay.currentProviderStateRevalidated, false)
   assert.ok(built.requiredEvidence.includes('inherited-production-migration-history-reconciled-before-any-delta'))
+  assert.ok(built.requiredEvidence.includes('data-less-branch-and-inherited-schema-confirmed'))
   assert.ok(built.requiredEvidence.includes('only-reviewed-unapplied-migrations-run-on-preview'))
   assert.ok(built.requiredEvidence.includes('durable-attempt-budget-restart-concurrency-and-restored-limit-proof'))
   assert.equal(built.gates.previewRehearsal.proofComplete, false)
@@ -154,6 +157,8 @@ test('a rehashed proposal cannot waive inherited-history and cost gates', async 
     p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'inherited-production-migration-history-reconciled-before-any-delta') },
     p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'only-reviewed-unapplied-migrations-run-on-preview') },
     p => { p.previewBranch.costConfirmed = true },
+    p => { p.previewBranch.includeProductionData = true },
+    p => { p.previewBranch.schemaInheritanceVerified = true },
     p => { p.migrationPlan.fullChainReplayAllowed = true },
     p => { p.migrationPlan.currentLiveHistoryReconciled = true },
     p => { p.executionPacketAfterApproval.commandTemplate = 'apply all migrations' },
@@ -162,7 +167,7 @@ test('a rehashed proposal cannot waive inherited-history and cost gates', async 
     mutate(altered)
     const { digest: ignored, ...body } = altered
     altered.digest = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`
-    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(replay_gate_invalid|evidence_missing|cost_gate_invalid|branch_strategy_invalid|execution_packet_invalid)/)
+    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(replay_gate_invalid|evidence_missing|cost_gate_invalid|data_boundary_invalid|branch_kind_invalid|branch_strategy_invalid|execution_packet_invalid)/)
   }
 })
 

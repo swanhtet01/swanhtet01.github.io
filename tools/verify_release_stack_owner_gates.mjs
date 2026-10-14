@@ -355,9 +355,11 @@ export function assessReleaseStackOwnerGates(input = {}) {
     || supabaseProposal.repository !== REPOSITORY
     || supabaseProposal.mode !== 'owner_approval_required'
     || supabaseProposal.state !== 'prepared-not-executed'
-    || supabaseProposal.previewBranch?.kind !== 'clean_empty_ephemeral_preview'
+    || supabaseProposal.previewBranch?.kind !== 'data_less_inherited_schema_ephemeral_preview'
     || supabaseProposal.previewBranch?.maximumLifetimeHours !== 24
     || supabaseProposal.previewBranch?.startsWithProductionData !== false
+    || supabaseProposal.previewBranch?.includeProductionData !== false
+    || supabaseProposal.previewBranch?.schemaInheritanceVerified !== false
     || supabaseProposal.previewBranch?.seedProductionDataAllowed !== false
     || supabaseProposal.previewBranch?.productionRefsAllowed !== false
     || supabaseProposal.previewBranch?.privilegedRuntimeCredentialsAllowed !== false
@@ -721,9 +723,11 @@ function sampleInput(overrides = {}) {
     mode: 'owner_approval_required',
     state: 'prepared-not-executed',
     previewBranch: {
-      kind: 'clean_empty_ephemeral_preview',
+      kind: 'data_less_inherited_schema_ephemeral_preview',
       maximumLifetimeHours: 24,
       startsWithProductionData: false,
+      includeProductionData: false,
+      schemaInheritanceVerified: false,
       seedProductionDataAllowed: false,
       productionRefsAllowed: false,
       privilegedRuntimeCredentialsAllowed: false,

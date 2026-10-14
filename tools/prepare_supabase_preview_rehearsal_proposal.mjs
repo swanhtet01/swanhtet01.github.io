@@ -188,9 +188,12 @@ function validateProposalShape(packet) {
   if (packet.repository !== REPOSITORY) fail('supabase_preview_rehearsal_proposal_repository_invalid')
   if (packet.mode !== 'owner_approval_required') fail('supabase_preview_rehearsal_proposal_mode_invalid')
   if (packet.state !== 'prepared-not-executed') fail('supabase_preview_rehearsal_proposal_state_invalid')
-  if (packet.previewBranch?.kind !== 'clean_empty_ephemeral_preview') fail('supabase_preview_rehearsal_proposal_branch_kind_invalid')
+  if (packet.previewBranch?.kind !== 'data_less_inherited_schema_ephemeral_preview'
+    || packet.previewBranch?.schemaInheritanceVerified !== false) fail('supabase_preview_rehearsal_proposal_branch_kind_invalid')
   if (packet.previewBranch.maximumLifetimeHours !== MAX_PREVIEW_LIFETIME_HOURS) fail('supabase_preview_rehearsal_proposal_lifetime_invalid')
-  if (packet.previewBranch.startsWithProductionData !== false || packet.previewBranch.deleteAfterEvidence !== true) fail('supabase_preview_rehearsal_proposal_data_boundary_invalid')
+  if (packet.previewBranch.startsWithProductionData !== false
+    || packet.previewBranch.includeProductionData !== false
+    || packet.previewBranch.deleteAfterEvidence !== true) fail('supabase_preview_rehearsal_proposal_data_boundary_invalid')
   if (packet.previewBranch.costConfirmed !== false) fail('supabase_preview_rehearsal_proposal_cost_gate_invalid')
   if (packet.previewBranch.productionRefsAllowed !== false || packet.previewBranch.privilegedRuntimeCredentialsAllowed !== false) fail('supabase_preview_rehearsal_proposal_secret_boundary_invalid')
   if (packet.migrationPlan?.schemaVersion !== EXPECTED_SOURCE_TARGET_SCHEMA_VERSION
@@ -309,11 +312,13 @@ export async function buildSupabasePreviewRehearsalProposal({
     productionBaseline,
     readinessBaseline,
     previewBranch: {
-      kind: 'clean_empty_ephemeral_preview',
+      kind: 'data_less_inherited_schema_ephemeral_preview',
       parentProjectRef: productionBaseline.projectRef,
       parentClassification: 'protected-production',
       maximumLifetimeHours: MAX_PREVIEW_LIFETIME_HOURS,
       startsWithProductionData: false,
+      includeProductionData: false,
+      schemaInheritanceVerified: false,
       costConfirmed: false,
       seedProductionDataAllowed: false,
       productionRefsAllowed: false,
@@ -353,7 +358,7 @@ export async function buildSupabasePreviewRehearsalProposal({
     },
     requiredEvidence: [
       'preview-branch-status-and-migration-list',
-      'clean-empty-data-less-branch-confirmed',
+      'data-less-branch-and-inherited-schema-confirmed',
       'inherited-production-migration-history-reconciled-before-any-delta',
       'only-reviewed-unapplied-migrations-run-on-preview',
       'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
@@ -474,7 +479,10 @@ async function runSelfTest() {
   })
   const checks = {
     proposal_valid: proposal.contract === SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT,
-    clean_empty_preview_only: proposal.previewBranch.startsWithProductionData === false && proposal.previewBranch.maximumLifetimeHours === MAX_PREVIEW_LIFETIME_HOURS,
+    data_less_inherited_schema_preview_only: proposal.previewBranch.startsWithProductionData === false
+      && proposal.previewBranch.includeProductionData === false
+      && proposal.previewBranch.schemaInheritanceVerified === false
+      && proposal.previewBranch.maximumLifetimeHours === MAX_PREVIEW_LIFETIME_HOURS,
     migration_chain_bound: proposal.migrationPlan.migrationCount === EXPECTED_MIGRATION_COUNT && /^sha256:[0-9a-f]{64}$/.test(proposal.migrationPlan.chainDigest),
     production_replay_blocked: proposal.gates.productionMigrationReplay.status === 'blocked' && proposal.gates.productionMigrationReplay.newPreviewCreationAllowed === false,
     inherited_history_delta_only: proposal.previewBranch.costConfirmed === false
