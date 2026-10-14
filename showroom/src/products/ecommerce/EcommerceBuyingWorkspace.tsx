@@ -1209,6 +1209,7 @@ export function EcommerceBuyingWorkspace({
         if (!stillCurrent()) return
         setManagedConfirmation(confirmation)
         onCartChange([])
+        focusRequestReceiptOnNextMount.current = true
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
         setNotice('This order request is in the Company Shop inbox. No order, stock, message, or charge changed.')

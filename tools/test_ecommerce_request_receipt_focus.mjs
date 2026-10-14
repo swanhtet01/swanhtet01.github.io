@@ -19,11 +19,86 @@ test('a submitted request waits for the rendered receipt before moving focus', (
   assert.match(source, /ref=\{receiptElementRef\} tabIndex=\{-1\}/)
 })
 
-test('restored requests do not steal focus; only a new submission arms receipt focus', () => {
+test('restored requests do not steal focus; explicit submission or retry arms receipt focus', () => {
   assert.match(source, /focusRequestReceiptOnNextMount\.current = false/)
   assert.match(source, /if \(!receipt\.isConnected\) return/)
   assert.match(source, /!freshQuoteId \|\| !focusRequestReceiptOnNextMount\.current/)
-  assert.equal([...source.matchAll(/focusRequestReceiptOnNextMount\.current = true/g)].length, 1)
+  assert.equal([...source.matchAll(/focusRequestReceiptOnNextMount\.current = true/g)].length, 2)
+})
+
+test('successful retained managed-request retry focuses the rendered receipt', async () => {
+  const require = createRequire(new URL('../showroom/package.json', import.meta.url))
+  const ts = require('typescript')
+  const tree = ts.createSourceFile('EcommerceBuyingWorkspace.tsx', source,
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const retryBranches = []
+  const focusEffects = []
+  function visit(node) {
+    if (ts.isIfStatement(node)
+      && node.expression.getText(tree) === 'retainedMatches && retained && onRecordManagedRequest') {
+      retryBranches.push(node.thenStatement.getText(tree))
+    }
+    if (ts.isCallExpression(node) && node.expression.getText(tree) === 'useEffect'
+      && node.arguments[0]?.getText(tree).includes('receiptElementRef.current')) {
+      focusEffects.push(node.arguments[0].getText(tree))
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(tree)
+  assert.equal(retryBranches.length, 1)
+  assert.equal(focusEffects.length, 1)
+  const javascript = expression => ts.transpileModule(expression, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const focusRequestReceiptOnNextMount = { current: false }
+  const retained = { id: 'ECR-SYNTHETIC-RETRY' }
+  let freshQuoteId = ''
+  let confirmed = 0
+  let clearedCart = 0
+  await runInNewContext(javascript(`async function retry() {
+    if (retainedMatches && retained && onRecordManagedRequest) ${retryBranches[0]}
+  }
+  retry()`), {
+    retainedMatches: true,
+    retained,
+    onRecordManagedRequest: () => {},
+    confirmManagedRequest: async () => { confirmed += 1; return 'confirmed' },
+    stillCurrent: () => true,
+    setManagedConfirmation: () => {},
+    onCartChange: () => { clearedCart += 1 },
+    focusRequestReceiptOnNextMount,
+    setFreshQuoteId: id => { freshQuoteId = id },
+    setQuoteClock: () => {},
+    setNotice: () => {},
+    quotedAt: new Date('2026-10-15T00:00:00Z'),
+  })
+  assert.equal(confirmed, 1)
+  assert.equal(clearedCart, 1)
+  assert.equal(freshQuoteId, retained.id)
+  assert.equal(focusRequestReceiptOnNextMount.current, true)
+
+  let scrolled = 0
+  let focused = 0
+  const receipt = {
+    isConnected: true,
+    querySelector: selector => {
+      assert.equal(selector, 'p')
+      return { scrollIntoView: () => { scrolled += 1 } }
+    },
+    focus: options => {
+      assert.equal(options.preventScroll, true)
+      focused += 1
+    },
+  }
+  runInNewContext(javascript(`(${focusEffects[0]})()`), {
+    freshQuoteId,
+    focusRequestReceiptOnNextMount,
+    receiptElementRef: { current: receipt },
+    requestAnimationFrame: callback => callback(),
+  })
+  assert.equal(scrolled, 1)
+  assert.equal(focused, 1)
+  assert.equal(focusRequestReceiptOnNextMount.current, false)
 })
 
 test('the browser-local truth boundary is the element brought into view', () => {
