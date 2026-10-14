@@ -16,7 +16,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from supermega_runtime.commerce_public_storefront import (
-    CommercePublicStorefront, _input, _page_cursor, _parse_page_cursor, _view,
+    CommercePublicStorefront, _input, _page_cursor, _parse_page_cursor,
+    _shop_request_id, _view,
     create_commerce_public_router,
 )
 from supermega_runtime.commerce_runtime import (
@@ -121,6 +122,45 @@ class CommercePublicBoundaryTests(unittest.TestCase):
             headers={'Origin': 'https://other.example.test'}, json=_body()).status_code, 403)
         self.assertEqual(adapter.receive.call_count, 1)
 
+    def test_close_route_requires_a_reason_and_a_human(self):
+        adapter = Mock()
+        adapter.close.return_value = {'status': 'closed', 'duplicate': False}
+        app = FastAPI()
+        app.include_router(create_commerce_public_router(
+            store=adapter, enabled=True,
+            resolve_principal=lambda _: TrialPrincipal('synthetic', 'owner', 'human'),
+            resolve_client_address=lambda _: '192.0.2.10', abuse_key=bytes(range(32)),
+            public_origin='https://store.example.test'))
+        client = TestClient(app)
+        route = f'/api/trial/v1/commerce-public-inbox/{uuid4()}/{uuid4()}/close'
+        self.assertEqual(client.post(route, json={}).status_code, 422)
+        self.assertEqual(client.post(route, json={'reason': 'spam_or_duplicate'}).status_code, 200)
+        self.assertEqual(adapter.close.call_args.kwargs['reason'], 'spam_or_duplicate')
+
+    def test_shop_contact_route_requires_sign_in_and_disables_caching(self):
+        adapter = Mock()
+        shop_id = _shop_request_id(str(uuid4()), str(uuid4()))
+        adapter.shop_contact.return_value = {'shopRequestId': shop_id,
+            'contact': {'name': 'Synthetic Buyer', 'phone': '09 12345678', 'address': None}}
+        app = FastAPI()
+        app.include_router(create_commerce_public_router(
+            store=adapter, enabled=True,
+            resolve_principal=lambda _: TrialPrincipal('synthetic', 'owner', 'human'),
+            resolve_client_address=lambda _: '192.0.2.10', abuse_key=bytes(range(32)),
+            public_origin='https://store.example.test'))
+        response = TestClient(app).get(
+            f'/api/trial/v1/commerce-public-inbox/shop/{shop_id}/contact')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('no-store', response.headers['cache-control'])
+        self.assertEqual(adapter.shop_contact.call_args.kwargs['shop_request_id'], shop_id)
+        locked = FastAPI()
+        locked.include_router(create_commerce_public_router(
+            store=adapter, enabled=True, resolve_principal=lambda _: None,
+            resolve_client_address=lambda _: '192.0.2.10', abuse_key=bytes(range(32)),
+            public_origin='https://store.example.test'))
+        self.assertEqual(TestClient(locked).get(
+            f'/api/trial/v1/commerce-public-inbox/shop/{shop_id}/contact').status_code, 401)
+
 
 @unittest.skipUnless(os.environ.get('SUPERMEGA_RUN_COMMERCE_PUBLIC_SQL') == '1',
                      'explicit disposable PostgreSQL rehearsal only')
@@ -201,13 +241,34 @@ class CommercePublicSqlTests(unittest.TestCase):
         inbox = self.adapter.inbox(self.owner)['requests']
         self.assertEqual(len(inbox), 1)
         self.assertEqual(inbox[0]['request']['totalMmk'], 200)
-        self.assertEqual(inbox[0]['request']['customerProfile']['phone'], body['phone'])
+        self.assertEqual(inbox[0]['contact']['phone'], body['phone'])
+        self.assertEqual(inbox[0]['contact']['name'], body['name'])
+        self.assertNotIn('customerProfile', inbox[0]['request'])
         self.assertEqual(inbox[0]['status'], 'new')
+        with self.assertRaises(TrialValidationError):
+            self.adapter.shop_contact(self.owner, shop_request_id=inbox[0]['shopRequestId'])
         claim = self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
         self.assertEqual(claim['status'], 'in_shop')
         self.assertFalse(claim['priceChanged'])
         self.assertEqual(self.adapter.claim(self.owner, handle=handle, request_id=body['requestId']), claim)
         self.assertEqual(self.adapter.inbox(self.owner)['requests'][0]['status'], 'in_shop')
+        self.assertEqual(self.adapter.shop_contact(
+            self.owner, shop_request_id=claim['shopRequestId'])['contact']['phone'], body['phone'])
+        with self.pg._connect(self.admin_url) as connection:
+            private = connection.execute("""select request_json,contact_json
+                from app_private.commerce_public_requests where handle=%s and request_id=%s""",
+                (handle, body['requestId'])).fetchone()
+            journal = connection.execute("""select payload_json,result_json from app_private.workspace_events
+                where workspace_id=%s and event_type='commerce.storefront_request.received'""",
+                (self.workspace_id,)).fetchone()
+            state = connection.execute("""select state_json from app_private.workspace_state
+                where workspace_id=%s and surface='commerce'""",
+                (self.workspace_id,)).fetchone()[0]
+        self.assertEqual(private[1]['phone'], body['phone'])
+        for persisted in (private[0], journal[0], journal[1], state):
+            contents = self.json.dumps(persisted, ensure_ascii=False)
+            self.assertNotIn(body['name'], contents)
+            self.assertNotIn(body['phone'], contents)
         conflict = {**body, 'lines': [{'sku': 'SKU-1', 'quantity': 3}]}
         with self.assertRaises(Exception):
             self.adapter.receive(handle=handle, body=conflict, client_key='a' * 64)
@@ -222,18 +283,111 @@ class CommercePublicSqlTests(unittest.TestCase):
             row = connection.execute("""select
                 has_table_privilege('anon','app_private.commerce_public_requests','SELECT'),
                 has_table_privilege('authenticated','app_private.commerce_public_requests','SELECT'),
-                has_function_privilege('anon','app_private.read_commerce_public_source(uuid)','EXECUTE')""").fetchone()
-        self.assertEqual(row, (False, False, False))
+                has_function_privilege('anon','app_private.read_commerce_public_source(uuid)','EXECUTE'),
+                has_function_privilege('anon','app_private.close_commerce_public_request(text,uuid,uuid,text)','EXECUTE'),
+                has_function_privilege('authenticated','app_private.redact_closed_commerce_public_requests(uuid,integer)','EXECUTE'),
+                has_function_privilege('service_role','app_private.commerce_public_redaction_due_count(integer)','EXECUTE'),
+                has_table_privilege('service_role','app_private.commerce_public_redaction_runs','SELECT')""").fetchone()
+        self.assertEqual(row, (False, False, False, False, False, False, False))
+
+    def test_unclaimed_close_and_thirty_day_redaction_leave_an_opaque_tombstone(self):
+        publication = self.adapter.publish(self.owner, expected_version=1)
+        handle = publication['handle']
+        body = _body()
+        self.adapter.receive(handle=handle, body=body, client_key='a' * 64)
+        with self.assertRaises(Exception):
+            self.adapter.close(TrialPrincipal('another-workspace', 'other-owner', 'human'),
+                handle=handle, request_id=body['requestId'], reason='other')
+        closed = self.adapter.close(self.owner, handle=handle,
+                                    request_id=body['requestId'], reason='customer_withdrew')
+        self.assertEqual((closed['status'], closed['duplicate']), ('closed', False))
+        self.assertTrue(self.adapter.close(self.owner, handle=handle,
+            request_id=body['requestId'], reason='customer_withdrew')['duplicate'])
+        self.assertEqual(self.adapter.inbox(self.owner)['requests'], [])
+        with self.assertRaises(Exception):
+            self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
+        with self.assertRaises(Exception):
+            self.adapter.close(self.owner, handle=handle,
+                               request_id=body['requestId'], reason='other')
+        with self.assertRaises(Exception):
+            self.adapter.receive(handle=handle, body=body, client_key='a' * 64)
+        self.assertEqual(self.adapter.redaction_due_count(cap=5), 0)
+        # The test clock is moved in this disposable database only.
+        with self.pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.commerce_public_requests
+                set closed_at=clock_timestamp()-interval '31 days'
+                where handle=%s and request_id=%s""", (handle, body['requestId']))
+        run_id = str(uuid4())
+        self.assertEqual(self.adapter.redaction_due_count(cap=5), 1)
+        self.assertEqual(self.adapter.redact_due(run_id=run_id, limit=5), 1)
+        self.assertEqual(self.adapter.redact_due(run_id=run_id, limit=5), 1)
+        self.assertEqual(self.adapter.redaction_due_count(cap=5), 0)
+        with self.pg._connect(self.admin_url) as connection:
+            row = connection.execute("""select request_json,contact_json,client_key,input_fingerprint,
+                close_reason,closed_by,redacted_at from app_private.commerce_public_requests
+                where handle=%s and request_id=%s""", (handle, body['requestId'])).fetchone()
+            receipts = connection.execute("""select count(*) from app_private.commerce_public_redaction_runs
+                where run_id=%s""", (run_id,)).fetchone()[0]
+        self.assertEqual(row[0], {})
+        self.assertEqual(row[1], {})
+        self.assertEqual(row[2], '0' * 64)
+        self.assertEqual(row[3], '0' * 64)
+        self.assertEqual((row[4], row[5]), ('customer_withdrew', self.owner.actor_id))
+        self.assertIsNotNone(row[6])
+        self.assertEqual(receipts, 1)
+
+    def test_claimed_request_cannot_be_closed_as_unconverted_intake(self):
+        publication = self.adapter.publish(self.owner, expected_version=1)
+        handle = publication['handle']
+        body = _body()
+        self.adapter.receive(handle=handle, body=body, client_key='b' * 64)
+        self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
+        with self.assertRaises(Exception):
+            self.adapter.close(self.owner, handle=handle,
+                               request_id=body['requestId'], reason='customer_withdrew')
+        with self.pg._connect(self.admin_url) as connection:
+            status = connection.execute("""select status from app_private.commerce_public_requests
+                where handle=%s and request_id=%s""", (handle, body['requestId'])).fetchone()[0]
+        self.assertEqual(status, 'in_shop')
+
+    def test_delivery_contact_stays_private_when_shop_receives_request(self):
+        publication = self.adapter.publish(self.owner, expected_version=1)
+        handle = publication['handle']
+        body = {**_body(), 'name': 'Synthetic Buyer Z', 'phone': '09 777 888 999',
+                'fulfilment': 'delivery',
+                'address': {'line1': 'Synthetic Private Lane 17', 'township': 'Kamayut',
+                            'city': 'Yangon', 'instructions': 'Blue gate'}}
+        self.adapter.receive(handle=handle, body=body, client_key='c' * 64)
+        self.adapter.claim(self.owner, handle=handle, request_id=body['requestId'])
+        with self.pg._connect(self.admin_url) as connection:
+            row = connection.execute("""select request_json,contact_json
+                from app_private.commerce_public_requests where handle=%s and request_id=%s""",
+                (handle, body['requestId'])).fetchone()
+            events = connection.execute("""select payload_json,result_json from app_private.workspace_events
+                where workspace_id=%s and surface='commerce'""",
+                (self.workspace_id,)).fetchall()
+            state = connection.execute("""select state_json from app_private.workspace_state
+                where workspace_id=%s and surface='commerce'""",
+                (self.workspace_id,)).fetchone()[0]
+        self.assertEqual(row[1]['address']['line1'], body['address']['line1'])
+        self.assertNotIn('customerProfile', row[0])
+        self.assertNotIn('deliveryAddress', row[0])
+        for persisted in (row[0], state, *(part for event in events for part in event)):
+            contents = self.json.dumps(persisted, ensure_ascii=False)
+            for private in (body['name'], body['phone'], body['address']['line1']):
+                self.assertNotIn(private, contents)
 
     def test_inbox_keyset_pages_past_fifty_requests(self):
         publication = self.adapter.publish(self.owner, expected_version=1)
         handle = publication['handle']
         with self.pg._connect(self.admin_url) as connection:
             for number in range(51):
+                request_id = str(uuid4())
                 connection.execute("""insert into app_private.commerce_public_requests
-                    (handle,request_id,workspace_id,request_json,input_fingerprint,client_key,received_at)
-                    values(%s,%s,%s,'{}'::jsonb,%s,%s,now() - (%s * interval '1 second'))""",
-                    (handle, str(uuid4()), self.workspace_id, 'a' * 64, 'b' * 64, number))
+                    (handle,request_id,workspace_id,shop_request_id,request_json,contact_json,input_fingerprint,client_key,received_at)
+                    values(%s,%s,%s,%s,'{}'::jsonb,'{}'::jsonb,%s,%s,now() - (%s * interval '1 second'))""",
+                    (handle, request_id, self.workspace_id, _shop_request_id(handle, request_id),
+                     'a' * 64, 'b' * 64, number))
         first = self.adapter.inbox(self.owner)
         self.assertEqual(len(first['requests']), 50)
         self.assertIsNotNone(first['nextCursor'])

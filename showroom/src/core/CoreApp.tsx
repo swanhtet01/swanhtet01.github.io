@@ -15,6 +15,7 @@ import { Link, Navigate, useLocation, useNavigate, useOutletContext, useSearchPa
 
 import './core-app.css'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
+import { loadManagedCommercePublicShopContact, type ManagedCommercePublicContact } from '../products/ecommerce/managed-commerce-public'
 import type { EcommerceCancellationIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceShopDraftV2 } from '../products/ecommerce/ecommerce-buying-lifecycle'
 import { ecommerceShopIntentReference, type EcommerceShopNavigationIntents } from '../products/ecommerce/ecommerce-shop-intent-route'
 import type { WebsiteEcommerceHandoffContext, WebsiteOrderRecord } from '../products/product-handoff'
@@ -1665,6 +1666,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [paymentTermsDays, setPaymentTermsDays] = useState<0 | 7 | 30>(0)
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
+  const [publicShopContact, setPublicShopContact] = useState<ManagedCommercePublicContact | null>(null)
+  const publicContactReviewEpoch = useRef(0)
   const [orderDraftRead, setOrderDraftRead] = useState<CommerceOrderDraftReadResult>({ status: 'empty', draft: null, error: '' })
   const [orderDraftActive, setOrderDraftActive] = useState(false)
   const [resumedOrderDraft, setResumedOrderDraft] = useState<CommerceOrderDraft | null>(null)
@@ -2493,6 +2496,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         setPromisedAt('')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(null)
+        publicContactReviewEpoch.current += 1
+        setPublicShopContact(null)
       })
     }
     void import('./commerce-order-draft')
@@ -3491,6 +3496,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   function resetOrderDraftFields() {
+    publicContactReviewEpoch.current += 1
+    setPublicShopContact(null)
     setSku(commerce.items[0]?.sku ?? '')
     setQuantity(1)
     setExtraOrderLines([])
@@ -3515,7 +3522,11 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
     }
     if (removeChannel) setPreparedChannelDraft(null)
-    if (removeEcommerce) setPreparedEcommerceDraft(null)
+    if (removeEcommerce) {
+      publicContactReviewEpoch.current += 1
+      setPublicShopContact(null)
+      setPreparedEcommerceDraft(null)
+    }
     if (removed) setFulfilmentReference('')
     return removed
   }
@@ -3542,6 +3553,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   function closeOrderComposer() {
+    publicContactReviewEpoch.current += 1
+    setPublicShopContact(null)
     orderComposerRef.current?.close()
     setOrderDraftActive(false)
     setResumedOrderDraft(null)
@@ -3894,6 +3907,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   async function reviewStorefrontRequest(requestId: string) {
+    const reviewEpoch = ++publicContactReviewEpoch.current
+    setPublicShopContact(null)
     if (!commerceCanWrite || pendingAction) {
       setNotice('Finish the current Shop action before reviewing an Ecommerce request.')
       return
@@ -3918,6 +3933,17 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         })
         const [firstLine, ...remainingLines] = draft.lines
         if (!firstLine) throw new Error('The managed Ecommerce request has no reviewed item.')
+        const contact = /^Web request [0-9A-F]{8}$/.test(request.customerReference)
+          ? managedIdentity
+            ? await loadManagedCommercePublicShopContact(managedIdentity, request.id)
+            : null
+          : null
+        if (reviewEpoch !== publicContactReviewEpoch.current || !orderComposerRef.current?.open) return
+        if (/^Web request [0-9A-F]{8}$/.test(request.customerReference)
+          && (!contact || contact.shopRequestId !== request.id)) {
+          throw new Error('Buyer contact is unavailable. Reopen this request from Ecommerce.')
+        }
+        setPublicShopContact(contact)
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(draft)
         setCustomer(draft.customerProfile?.name ?? draft.customerReference)
@@ -3957,6 +3983,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       setPromisedAt(defaultOrderPromiseInput())
       setNotice(`${request.id} loaded from the authenticated inbox. Confirm the promise and payment, then use the separate Shop action gate.`)
     } catch (error) {
+      if (reviewEpoch !== publicContactReviewEpoch.current) return
       detachPreparedOrderSources({ channel: false })
       setNotice(error instanceof Error ? error.message : 'The Ecommerce inbox request failed closed.')
     }
@@ -7252,6 +7279,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       onScheduleChange={(schedule) => setScheduleSnapshot({ key: scheduleScopeKey, schedule })}
     /></Suspense> : null}
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
+      publicContactReviewEpoch.current += 1
+      setPublicShopContact(null)
       setFocusedEcommerceRequestId(null)
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
@@ -7282,6 +7311,10 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === coreUi.e ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
+        {preparedEcommerceDraft && publicShopContact?.shopRequestId === preparedEcommerceDraft.sourceRequestId
+          ? <div className="channel-source-ready"><div><span className="core-eyebrow">Buyer details</span><strong>{publicShopContact.contact.name}</strong><small>{publicShopContact.contact.phone}{publicShopContact.contact.address
+            ? ` · ${publicShopContact.contact.address.line1}, ${publicShopContact.contact.address.township}, ${publicShopContact.contact.address.city}${publicShopContact.contact.address.instructions ? ` · ${publicShopContact.contact.address.instructions}` : ''}`
+            : ''}</small></div></div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
           <div><span className="core-eyebrow">Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>Exact excerpts reviewed; the full message was discarded.</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ ecommerce: false }); setNotice('Source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>

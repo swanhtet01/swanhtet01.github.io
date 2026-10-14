@@ -12,17 +12,23 @@ export type ManagedCommercePublicRequest = {
   handle: string
   requestId: string
   shopRequestId: string
-  status: 'new' | 'in_shop'
+  status: 'new' | 'reviewing' | 'in_shop'
   receivedAt: string
+  contact: {
+    name: string
+    phone: string
+    address: null | { line1: string; township: string; city: string; instructions: string | null }
+  }
   request: {
     id: string
     customerReference: string
     fulfilment: 'pickup' | 'delivery'
     totalMmk: number
     lines: Array<{ sku: string; name: string; quantity: number }>
-    customerProfile?: { phone: string }
   }
 }
+
+export type ManagedCommercePublicContact = Pick<ManagedCommercePublicRequest, 'shopRequestId' | 'contact'>
 
 export async function loadManagedCommercePublications(identity: ManagedIdentity) {
   return authorizedRequest<{ publications: ManagedCommercePublicPublication[] }>(
@@ -47,8 +53,23 @@ export async function loadManagedCommercePublicInbox(identity: ManagedIdentity, 
     { cache: 'no-store', credentials: 'omit' }, true, identity)
 }
 
+export async function loadManagedCommercePublicShopContact(identity: ManagedIdentity, shopRequestId: string) {
+  return authorizedRequest<ManagedCommercePublicContact>(
+    `/api/trial/v1/commerce-public-inbox/shop/${encodeURIComponent(shopRequestId)}/contact`,
+    { cache: 'no-store', credentials: 'omit' }, true, identity)
+}
+
 export async function claimManagedCommercePublicRequest(identity: ManagedIdentity, handle: string, requestId: string) {
   return authorizedRequest<{ status: 'in_shop'; shopRequestId: string; priceChanged: boolean }>(
     `/api/trial/v1/commerce-public-inbox/${encodeURIComponent(handle)}/${encodeURIComponent(requestId)}/claim`,
     { method: 'POST', credentials: 'omit', body: '{}' }, true, identity)
+}
+
+export type ManagedCommerceCloseReason = 'customer_withdrew' | 'no_response' | 'stock_unavailable' | 'spam_or_duplicate' | 'other'
+
+export async function closeManagedCommercePublicRequest(identity: ManagedIdentity, handle: string,
+  requestId: string, reason: ManagedCommerceCloseReason) {
+  return authorizedRequest<{ status: 'closed'; requestId: string; duplicate: boolean }>(
+    `/api/trial/v1/commerce-public-inbox/${encodeURIComponent(handle)}/${encodeURIComponent(requestId)}/close`,
+    { method: 'POST', credentials: 'omit', body: JSON.stringify({ reason }) }, true, identity)
 }
