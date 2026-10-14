@@ -75,6 +75,7 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
 )
 DOMAIN_CANDIDATE_MIGRATION = "20261014103000_website_custom_domain_bindings.sql"
 DOMAIN_CORRECTIVE_MIGRATION = "20261014122400_website_domain_attempt_fencing.sql"
+SHOP_MEDIA_CANDIDATE_MIGRATION = "20261014164000_shop_product_media.sql"
 # Both depend on each other and remain outside the canonical release chain.
 DOMAIN_CANDIDATE_MIGRATIONS = (DOMAIN_CANDIDATE_MIGRATION, DOMAIN_CORRECTIVE_MIGRATION)
 RUNTIME_ROLE = "supermega_trial_login"
@@ -139,6 +140,7 @@ IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "kernel/database-rehearsal-evidence.mjs",
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
     *(f"supabase/migrations/{name}" for name in DOMAIN_CANDIDATE_MIGRATIONS),
+    f"supabase/candidate-migrations/{SHOP_MEDIA_CANDIDATE_MIGRATION}",
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
     "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
     "supermega_runtime/website_inquiry_api.py", "supermega_runtime/website_inquiry_store.py",

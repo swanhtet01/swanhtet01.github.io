@@ -91,6 +91,11 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                                 if path.name not in ("20260711081300_public_legacy_baseline.sql",
                                                      *module.DOMAIN_CANDIDATE_MIGRATIONS)))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)
+        self.assertTrue((ROOT / "supabase/candidate-migrations"
+                         / module.SHOP_MEDIA_CANDIDATE_MIGRATION).is_file())
+        self.assertFalse((ROOT / "supabase/migrations" / module.SHOP_MEDIA_CANDIDATE_MIGRATION).exists())
+        self.assertNotIn(module.SHOP_MEDIA_CANDIDATE_MIGRATION, module.CURRENT_MIGRATIONS)
+        self.assertIn(f"supabase/candidate-migrations/{module.SHOP_MEDIA_CANDIDATE_MIGRATION}", module.IMPLEMENTATION_PATHS)
         self.assertEqual(len(module.DOMAIN_CANDIDATE_MIGRATIONS), 2)
         for candidate in module.DOMAIN_CANDIDATE_MIGRATIONS:
             self.assertTrue((ROOT / "supabase/migrations" / candidate).is_file())

@@ -321,7 +321,7 @@
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:601301f494025f4d72f245f4a33ce30f4498f1d811bb4ac4a50b6f9535d60269"
+      "digest": "sha256:c65056cf319136532ea640829b86771eb0f1ffb0f748565e037f6bf5f214fa5f"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -333,7 +333,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:5642ad0e704ef2d4021a33d15e6d7320641eb4c83ffe9b968b444ad8c6ca2f76"
+      "digest": "sha256:9cbb1d5db11a0f816f3cea42b3707ad6fcf1098b305380ab324c07b3e8e95ef1"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
@@ -344,5 +344,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:1e451db773db0ddc3ffff4438c8d0df61993870f8201c32b3affb448b7caa283"
+  "digest": "sha256:f1da62f387b9930ce01bfa5d273323742fae26b8490a0f7f9177d0d36a49d72f"
 }

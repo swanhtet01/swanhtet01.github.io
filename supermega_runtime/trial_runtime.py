@@ -1029,6 +1029,8 @@ def create_trial_router(
 
     from .website_media_routes import mount_website_media_routes
     mount_website_media_routes(router, store=store, resolve_principal=resolve_principal)
+    from .shop_media import mount_shop_media_routes
+    mount_shop_media_routes(router, store=store, resolve_principal=resolve_principal)
 
     async def ecommerce_review_request(request: Request, operation: Callable, *, body_limit: int | None = None) -> JSONResponse:
         # Private prepared content and feedback never enter a shared HTTP cache.

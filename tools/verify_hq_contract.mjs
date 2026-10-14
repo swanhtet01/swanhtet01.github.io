@@ -1065,6 +1065,7 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.runtime?.explicitTransaction === true
   && databaseImplementationPaths.includes('supabase/migrations/20261014103000_website_custom_domain_bindings.sql')
   && databaseImplementationPaths.includes('supabase/migrations/20261014122400_website_domain_attempt_fencing.sql')
+  && databaseImplementationPaths.includes('supabase/candidate-migrations/20261014164000_shop_product_media.sql')
   && databaseRehearsal.migration?.count === databaseImplementationPaths.filter((path) => path.startsWith('supabase/migrations/')
     && path !== 'supabase/migrations/20261014103000_website_custom_domain_bindings.sql'
     && path !== 'supabase/migrations/20261014122400_website_domain_attempt_fencing.sql').length

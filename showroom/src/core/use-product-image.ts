@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 
 import { getProductImage, subscribeProductImages } from './product-image-store'
+import { MANAGED_SHOP_PHOTOS_ENABLED } from './shop-managed-media-feature'
+import type * as ManagedPhotoClient from './shop-managed-media-client'
 
 /**
  * The current photo for a SKU as an object URL, or null. Scope is required (see
@@ -11,11 +13,17 @@ import { getProductImage, subscribeProductImages } from './product-image-store'
  * stores or removes this scope+SKU's photo. Lives apart from ProductPhoto.tsx
  * so that file exports only components (react-refresh contract).
  */
-export function useProductImageUrl(scope: string, sku: string): string | null {
-  const [url, setUrl] = useState<string | null>(null)
+export function useProductImageState(scope: string, sku: string): { url: string | null; issue: string | null } {
+  const [state, setState] = useState<{ scope: string; sku: string; url: string | null; issue: string | null }>(
+    { scope, sku, url: null, issue: null },
+  )
   useEffect(() => {
     let active = true
     let objectUrl: string | null = null
+    let controller: AbortController | null = null
+    const managed = MANAGED_SHOP_PHOTOS_ENABLED && scope.startsWith('managed:')
+    let managedClient: typeof ManagedPhotoClient | null = null
+    let unsubscribe = () => {}
     // Each load() is an independent IndexedDB read on its own connection, so two
     // in flight have no ordering guarantee. Replacing a photo twice quickly fires
     // two change notifications and therefore two concurrent loads within ONE
@@ -31,28 +39,65 @@ export function useProductImageUrl(scope: string, sku: string): string | null {
       }
     }
     function load() {
+      // A visibility event can arrive before the managed chunk resolves. Never
+      // read this company's device-local IndexedDB slot as a shared photo.
+      if (managed && !managedClient) return
       latest += 1
       const sequence = latest
-      getProductImage(scope, sku).then((record) => {
+      controller?.abort()
+      controller = new AbortController()
+      const photo = managedClient
+        ? managedClient.loadManagedProductPhoto(scope, sku, controller.signal)
+        : getProductImage(scope, sku).then((record) => record?.blob ?? null)
+      photo.then((blob) => {
         if (!active || sequence !== latest) return
         release()
-        objectUrl = record ? URL.createObjectURL(record.blob) : null
-        setUrl(objectUrl)
-      }).catch(() => {
+        objectUrl = blob ? URL.createObjectURL(blob) : null
+        setState({ scope, sku, url: objectUrl, issue: null })
+      }).catch((error) => {
         if (!active || sequence !== latest) return
         release()
-        setUrl(null)
+        setState({ scope, sku, url: null, issue: managed
+          ? error instanceof Error && error.message ? error.message : 'Shared product photos are unavailable.'
+          : null })
       })
     }
-    load()
-    const unsubscribe = subscribeProductImages((changedScope, changedSku) => {
+    const changed = (changedScope: string, changedSku: string) => {
       if (changedScope === scope && changedSku === sku) load()
-    })
+    }
+    if (scope.startsWith('managed:') && !MANAGED_SHOP_PHOTOS_ENABLED) {
+      return () => { active = false; release() }
+    }
+    if (managed) {
+      // Keep the authenticated media client off the default Shop route. Bind
+      // the listener before the first load so a concurrent edit is not missed.
+      void import('./shop-managed-media-client').then((client) => {
+        if (!active) return
+        managedClient = client
+        unsubscribe = client.subscribeManagedProductPhotos(changed)
+        load()
+      }).catch(() => {
+        if (active) setState({ scope, sku, url: null, issue: 'Shared product photos are unavailable.' })
+      })
+    } else {
+      unsubscribe = subscribeProductImages(changed)
+      load()
+    }
+    const reloadWhenVisible = () => { if (!document.hidden) load() }
+    if (managed) document.addEventListener('visibilitychange', reloadWhenVisible)
     return () => {
       active = false
+      controller?.abort()
       unsubscribe()
+      if (managed) document.removeEventListener('visibilitychange', reloadWhenVisible)
       release()
     }
   }, [scope, sku])
-  return url
+  return (MANAGED_SHOP_PHOTOS_ENABLED || !scope.startsWith('managed:')) && state.scope === scope && state.sku === sku
+    ? { url: state.url, issue: state.issue }
+    : { url: null, issue: null }
+}
+
+export function useProductImageUrl(scope: string, sku: string): string | null {
+  return useProductImageState(scope, sku).url
 }
