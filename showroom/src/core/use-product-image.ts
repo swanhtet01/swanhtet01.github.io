@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 
 import { getProductImage, subscribeProductImages } from './product-image-store'
-import { loadManagedProductPhoto, subscribeManagedProductPhotos } from './shop-managed-media-client'
+import { MANAGED_SHOP_PHOTOS_ENABLED } from './shop-managed-media-feature'
+import type * as ManagedPhotoClient from './shop-managed-media-client'
 
 /**
  * The current photo for a SKU as an object URL, or null. Scope is required (see
@@ -20,7 +21,9 @@ export function useProductImageState(scope: string, sku: string): { url: string 
     let active = true
     let objectUrl: string | null = null
     let controller: AbortController | null = null
-    const managed = scope.startsWith('managed:')
+    const managed = MANAGED_SHOP_PHOTOS_ENABLED && scope.startsWith('managed:')
+    let managedClient: typeof ManagedPhotoClient | null = null
+    let unsubscribe = () => {}
     // Each load() is an independent IndexedDB read on its own connection, so two
     // in flight have no ordering guarantee. Replacing a photo twice quickly fires
     // two change notifications and therefore two concurrent loads within ONE
@@ -40,8 +43,8 @@ export function useProductImageState(scope: string, sku: string): { url: string 
       const sequence = latest
       controller?.abort()
       controller = new AbortController()
-      const photo = managed
-        ? loadManagedProductPhoto(scope, sku, controller.signal)
+      const photo = managedClient
+        ? managedClient.loadManagedProductPhoto(scope, sku, controller.signal)
         : getProductImage(scope, sku).then((record) => record?.blob ?? null)
       photo.then((blob) => {
         if (!active || sequence !== latest) return
@@ -56,11 +59,27 @@ export function useProductImageState(scope: string, sku: string): { url: string 
           : null })
       })
     }
-    load()
-    const subscribe = managed ? subscribeManagedProductPhotos : subscribeProductImages
-    const unsubscribe = subscribe((changedScope, changedSku) => {
+    const changed = (changedScope: string, changedSku: string) => {
       if (changedScope === scope && changedSku === sku) load()
-    })
+    }
+    if (scope.startsWith('managed:') && !MANAGED_SHOP_PHOTOS_ENABLED) {
+      return () => { active = false; release() }
+    }
+    if (managed) {
+      // Keep the authenticated media client off the default Shop route. Bind
+      // the listener before the first load so a concurrent edit is not missed.
+      void import('./shop-managed-media-client').then((client) => {
+        if (!active) return
+        managedClient = client
+        unsubscribe = client.subscribeManagedProductPhotos(changed)
+        load()
+      }).catch(() => {
+        if (active) setState({ scope, sku, url: null, issue: 'Shared product photos are unavailable.' })
+      })
+    } else {
+      unsubscribe = subscribeProductImages(changed)
+      load()
+    }
     const reloadWhenVisible = () => { if (!document.hidden) load() }
     if (managed) document.addEventListener('visibilitychange', reloadWhenVisible)
     return () => {
@@ -71,7 +90,7 @@ export function useProductImageState(scope: string, sku: string): { url: string 
       release()
     }
   }, [scope, sku])
-  return state.scope === scope && state.sku === sku
+  return (MANAGED_SHOP_PHOTOS_ENABLED || !scope.startsWith('managed:')) && state.scope === scope && state.sku === sku
     ? { url: state.url, issue: state.issue }
     : { url: null, issue: null }
 }

@@ -9,6 +9,7 @@ import {
   putProductImage,
 } from './product-image-store'
 import { removeManagedProductPhoto, retryManagedProductPhoto, saveManagedProductPhoto } from './shop-managed-media-client'
+import { MANAGED_SHOP_PHOTOS_ENABLED } from './shop-managed-media-feature'
 import { useProductImageState } from './use-product-image'
 
 /**
@@ -19,7 +20,8 @@ import { useProductImageState } from './use-product-image'
  * control.
  */
 export function ShopProductPhotoControl({ disabled, name, scope, sku }: { disabled: boolean; name: string; scope: string; sku: string }) {
-  const managed = scope.startsWith('managed:')
+  const managedScope = scope.startsWith('managed:')
+  const managed = MANAGED_SHOP_PHOTOS_ENABLED && managedScope
   const { url, issue: loadIssue } = useProductImageState(scope, sku)
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -34,6 +36,7 @@ export function ShopProductPhotoControl({ disabled, name, scope, sku }: { disabl
     }).catch(() => { if (active) setDeviceRecord({ scope, sku, blob: null }) })
     return () => { active = false }
   }, [managed, scope, sku])
+  if (managedScope && !MANAGED_SHOP_PHOTOS_ENABLED) return null
   if (!managed && !productImagesSupported()) return null
 
   async function upload(photo: Blob) {
