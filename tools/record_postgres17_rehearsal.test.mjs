@@ -65,7 +65,10 @@ const checkNames = [
 ]
 
 const implementation = await implementationEvidence()
-const migrationNames = implementation.paths.filter((path) => path.startsWith('supabase/migrations/')).map((path) => path.split('/').at(-1))
+const domainCandidate = '20261014103000_website_custom_domain_bindings.sql'
+const migrationNames = implementation.paths
+  .filter((path) => path.startsWith('supabase/migrations/') && !path.endsWith(domainCandidate))
+  .map((path) => path.split('/').at(-1))
 test('receipt inventory matches the actual PostgreSQL runner including Website acceptance', () => {
   const python = process.env.SUPERMEGA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
   const result = spawnSync(python, ['-c', 'import json; from tools.rehearse_supermega_postgres17 import IMPLEMENTATION_PATHS, CURRENT_MIGRATIONS; print(json.dumps({"paths": list(IMPLEMENTATION_PATHS), "migrations": list(CURRENT_MIGRATIONS)}))'], {
@@ -75,6 +78,8 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   const runner = JSON.parse(result.stdout)
   assert.deepEqual(implementation.paths, runner.paths)
   assert.deepEqual(migrationNames, runner.migrations)
+  assert.ok(runner.paths.includes(`supabase/migrations/${domainCandidate}`))
+  assert.ok(runner.paths.includes('supermega_runtime/website_domain.py'))
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
   assert.equal(runner.migrations.at(-1), '20261014090000_website_channel_stable_update.sql')
