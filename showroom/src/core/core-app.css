@@ -3084,6 +3084,12 @@ input, select, textarea,
 .shop-counter-column-head { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 5rem 3.25rem; gap: .75rem; border-block: 1px solid var(--core-line); padding: .6875rem .875rem .6875rem 4.75rem; color: var(--core-muted); font-size: .6875rem; font-weight: 650; }
 .shop-counter-column-head span:not(:first-child) { text-align: right; }
 .shop-item-grid { display: block; overflow: visible; padding: 0; }
+.shop-catalog-pages { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: .125rem .25rem .875rem; color: var(--core-muted); font-size: .75rem; }
+.shop-catalog-pages > div { display: flex; align-items: center; gap: .625rem; }
+.shop-catalog-pages button { min-height: 2.5rem; border: 1px solid var(--core-line-strong); border-radius: .625rem; padding: 0 .75rem; background: var(--core-panel); color: var(--core-ink); font: inherit; font-weight: 650; }
+.shop-catalog-pages button:disabled { opacity: .45; cursor: default; }
+.shop-catalog-pages button:not(:disabled) { cursor: pointer; }
+.shop-catalog-pages button:not(:disabled):hover { background: var(--core-surface-soft); }
 .shop-product-tile { width: 100%; min-height: 4.75rem; display: grid; grid-template-columns: 3.25rem minmax(0, 1fr) 3.25rem; align-items: center; gap: .75rem; border: 0; border-bottom: 1px solid var(--core-line); border-radius: 0; padding: .5rem .875rem; background: transparent; }
 .shop-product-tile:hover { border-color: var(--core-line); background: var(--core-surface-soft); transform: none; }
 .shop-product-tile:focus-visible { position: relative; z-index: 1; }
