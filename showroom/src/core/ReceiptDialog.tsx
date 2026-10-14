@@ -233,12 +233,17 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
     <button className="text-link receipt-profile-trigger" disabled={disabled} onClick={openMerchantProfileSetup} type="button">{merchantProfile ? 'Receipt details' : 'Set up customer receipt'}</button>
     <dialog aria-labelledby="receipt-dialog-title" className="receipt-dialog" onClose={() => { setSetupOpen(false); onClose() }} ref={ref}>
       {setupOpen ? <form className="receipt-profile-form" onSubmit={(event) => void saveMerchantProfile(event)} style={{ display: 'grid', gap: 12, padding: 16 }}>
-        <header className="receipt-dialog-header"><span className="core-eyebrow">Customer receipt</span><h2 id="receipt-dialog-title">Business details</h2><p>These details appear on printed customer receipts.</p></header>
+        <header className="receipt-dialog-header"><span className="core-eyebrow">Customer receipt</span><h2 id="receipt-dialog-title">Set up your receipt</h2><p>Add your business name in Burmese or English.</p></header>
         <label>Burmese business name<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameMyanmar: event.target.value }))} value={profileDraft.nameMyanmar} /></label>
-        <label>English business name<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameEnglish: event.target.value }))} value={profileDraft.nameEnglish} /></label>
-        <label>Phone<input autoComplete="tel" maxLength={40} onChange={(event) => setProfileDraft((draft) => ({ ...draft, phone: event.target.value }))} value={profileDraft.phone} /></label>
-        <label>Burmese address<textarea autoComplete="street-address" maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressMyanmar: event.target.value }))} rows={2} value={profileDraft.addressMyanmar} /></label>
-        <label>English address<textarea maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressEnglish: event.target.value }))} rows={2} value={profileDraft.addressEnglish} /></label>
+        <details className="receipt-profile-optional" defaultOpen={Boolean(merchantProfile?.nameEnglish || merchantProfile?.phone || merchantProfile?.addressMyanmar || merchantProfile?.addressEnglish)}>
+          <summary>English name, phone and address <small>optional</small></summary>
+          <div>
+            <label>English business name<input autoComplete="organization" maxLength={80} onChange={(event) => setProfileDraft((draft) => ({ ...draft, nameEnglish: event.target.value }))} value={profileDraft.nameEnglish} /></label>
+            <label>Phone<input autoComplete="tel" maxLength={40} onChange={(event) => setProfileDraft((draft) => ({ ...draft, phone: event.target.value }))} value={profileDraft.phone} /></label>
+            <label>Burmese address<textarea autoComplete="street-address" maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressMyanmar: event.target.value }))} rows={2} value={profileDraft.addressMyanmar} /></label>
+            <label>English address<textarea maxLength={180} onChange={(event) => setProfileDraft((draft) => ({ ...draft, addressEnglish: event.target.value }))} rows={2} value={profileDraft.addressEnglish} /></label>
+          </div>
+        </details>
         <p aria-live="polite" role="status">{profileError}</p>
         <div className="receipt-dialog-actions"><button className="core-button compact" disabled={profileBusy} onClick={() => setSetupOpen(false)} type="button">Cancel</button><button className="core-button primary compact" disabled={disabled || profileBusy || !profileDraft.nameMyanmar.trim() && !profileDraft.nameEnglish.trim()} type="submit">{profileBusy ? 'Saving…' : 'Save details'}</button></div>
       </form> : ack ? <>
@@ -289,10 +294,12 @@ export function ReceiptDialog({ ack, loyalty, onClose, paymentQrScope, merchantP
         <p className="receipt-dialog-notice">{ack.notice}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{copyResult?.record === ack ? copyResult.notice : ''}</p>
         <p className="receipt-dialog-notice" aria-live="polite" role="status">{printNotice}</p>
-        <div className="receipt-dialog-actions">
-          {merchantProfile ? <button className="core-button compact" onClick={printCustomerReceipt} type="button">Print customer receipt</button> : <button className="core-button compact" onClick={openMerchantProfileSetup} type="button">Set up customer receipt</button>}
+        <details className="receipt-dialog-more"><summary>More options</summary><div>
           <button className="core-button compact" onClick={() => openPrintWindow(ack)} type="button">{bi('Print order record')}</button>
           <button className="core-button compact" onClick={() => void copyReceiptText()} type="button">{bi('Copy text')}</button>
+        </div></details>
+        <div className="receipt-dialog-actions">
+          {merchantProfile ? <button className="core-button primary compact" onClick={printCustomerReceipt} type="button">Print receipt</button> : <button className="core-button primary compact" onClick={openMerchantProfileSetup} type="button">Set up receipt</button>}
           <button className="core-button compact" onClick={onClose} type="button">{bi('Close')}</button>
         </div>
       </> : null}

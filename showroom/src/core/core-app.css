@@ -390,7 +390,15 @@ label.checkbox-row input { width: 1.25rem; min-width: 1.25rem; min-height: 1.25r
 .receipt-dialog-payment small { flex-basis: 100%; color: var(--core-quiet); }
 .receipt-dialog-delivery { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 18px; border-top: 1px solid var(--core-line); font-size: 0.8125rem; color: var(--core-quiet); }
 .receipt-dialog-notice { margin: 0; padding: 8px 18px; font-size: 0.6875rem; color: var(--core-quiet); border-top: 1px solid var(--core-line); }
-.receipt-dialog-actions { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--core-line); }
+.receipt-dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--core-line); }
+.receipt-dialog > .receipt-dialog-actions { position: sticky; bottom: 0; z-index: 1; background: var(--core-panel); }
+.receipt-dialog-actions > .primary { flex: 1 1 12rem; }
+.receipt-profile-optional { border-top: 1px solid var(--core-line); }
+.receipt-profile-optional > summary, .receipt-dialog-more > summary { min-height: 2.75rem; padding-block: .625rem; color: var(--core-muted); font-size: 0.8125rem; cursor: pointer; }
+.receipt-profile-optional > summary small { float: right; margin-left: .5rem; color: var(--core-quiet); }
+.receipt-profile-optional > div { display: grid; gap: 12px; padding-top: 8px; }
+.receipt-dialog-more { border-top: 1px solid var(--core-line); padding: 0 18px 12px; }
+.receipt-dialog-more > div { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 4px; }
 .action-change h2 { margin: 5px 0 10px; font-size: 1.375rem; }
 .action-change-flow { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 0; }
 .action-change-flow > div { min-width: 0; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px; background: var(--core-surface-soft); }
