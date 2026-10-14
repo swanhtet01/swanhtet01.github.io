@@ -727,8 +727,25 @@ test('applyWebsiteWorkspaceUpdate and importWebsitePageDrafts behave correctly',
 
 test('Website retains its next action and collapses only routine editing status', () => {
   assert.doesNotMatch(websiteProductSource, /compactWebsiteStatus|data-preview=/)
-  assert.match(websiteProductSource, /const editingRoutineStatus = view === 'content' && surface === 'work'\s*&& websiteTodayState === 'ready' && !pendingRestoredDraft\s*&& !storageIssue && !canRepairLocalStorage/)
-  assert.match(websiteProductSource, /<details className="website-status-disclosure">[\s\S]*?<summary>Next: \{websiteAgentJob\} · \{readinessSummary\}<\/summary>/)
+  const routineStart = websiteProductSource.indexOf('  const editingRoutineStatus =')
+  const routineEnd = websiteProductSource.indexOf('  const websiteTodayOwner =', routineStart)
+  assert.ok(routineStart >= 0 && routineEnd > routineStart)
+  const routineSource = websiteProductSource.slice(routineStart, routineEnd)
+  const routine = (releaseRecordRequired, websiteTodayState = 'ready') => runInNewContext(`${routineSource};\neditingRoutineStatus`, {
+    view: 'content', surface: 'work', websiteTodayState, releaseRecordRequired,
+    pendingRestoredDraft: null, storageIssue: false, canRepairLocalStorage: false,
+  })
+  assert.equal(routine(false), true, 'routine local editing collapses')
+  assert.equal(routine(true), false, 'managed publication status stays visible')
+  assert.equal(routine(false, 'attention'), false, 'local problems stay visible')
+  const summaryStart = websiteProductSource.indexOf('<details className="website-status-disclosure">')
+  const summaryEnd = websiteProductSource.indexOf('</summary>', summaryStart)
+  assert.ok(summaryStart >= 0 && summaryEnd > summaryStart)
+  const summary = websiteProductSource.slice(summaryStart, summaryEnd + '</summary>'.length)
+    .match(/<summary>\{([\s\S]+)\}<\/summary>/)?.[1]
+  assert.ok(summary)
+  assert.equal(runInNewContext(summary, { hostedCurrent: true }), 'Published · verify address')
+  assert.equal(runInNewContext(summary, { hostedCurrent: false, websiteAgentJob: 'Check website hosting', readinessSummary: 'Checks clear' }), 'Next: Check website hosting · Checks clear')
   assert.doesNotMatch(websiteProductSource, /data-editing-routine=/)
   assert.match(websiteProductSource, /<div className="website-today-priority">[\s\S]*?\{websiteAgentJob\}[\s\S]*?onClick=\{runWebsiteAutopilot\}/)
 })

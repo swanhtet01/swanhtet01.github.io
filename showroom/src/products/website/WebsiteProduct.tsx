@@ -15,6 +15,7 @@ import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteMediaDownload } from './website-media-export'
 import { createWebsiteMediaClient } from './website-media-client'
 import { WebsiteMediaContext } from './WebsiteMediaContext'
+import type { PublicationStatus } from './website-publishing-client'
 import { websiteDraftDifference } from './website-draft-difference'
 import {
   captureWebsiteLead,
@@ -80,6 +81,12 @@ type WebsiteView = 'content' | 'inquiries' | 'publish'
 type WebsiteEditSessionState = {
   scope: string
   session: WebsiteEditSession
+}
+
+type WebsiteHostingRead = {
+  scope: string
+  state: 'checking' | 'confirmed' | 'unavailable'
+  status: PublicationStatus | null
 }
 
 const DEFAULT_NOTICE = 'Website ready to edit. Nothing has been published.'
@@ -370,6 +377,43 @@ export function WebsiteProduct() {
     : requestedView === 'publish' && canOpenReview
       ? 'publish'
       : 'content'
+  const hostingScope = storageMode === 'managed' && managedWorkspaceId && managedActorId && publish
+    ? `${managedWorkspaceId}:${managedActorId}:${publish.id}:${inquiryPageId}`
+    : ''
+  const [hostingRead, setHostingRead] = useState<WebsiteHostingRead>({ scope: '', state: 'checking', status: null })
+  useEffect(() => {
+    if (view !== 'content' || portalViewOnly || !hostingScope || !managedWorkspaceId || !managedActorId) {
+      const reset = window.setTimeout(() => setHostingRead({ scope: '', state: 'checking', status: null }), 0)
+      return () => window.clearTimeout(reset)
+    }
+    let operation: AbortController | null = null
+    const refresh = () => {
+      operation?.abort()
+      const controller = new AbortController()
+      operation = controller
+      setHostingRead({ scope: hostingScope, state: 'checking', status: null })
+      void import('./website-publishing-client')
+        .then(({ createPublishingClient }) => controller.signal.aborted
+          ? null
+          : createPublishingClient({ workspaceId: managedWorkspaceId, userId: managedActorId, email: '' }).status(controller.signal))
+        .then((status) => {
+          if (!controller.signal.aborted && status) setHostingRead({ scope: hostingScope, state: 'confirmed', status })
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setHostingRead({ scope: hostingScope, state: 'unavailable', status: null })
+        })
+    }
+    refresh()
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { operation?.abort(); document.removeEventListener('visibilitychange', onVisible) }
+  }, [hostingScope, managedActorId, managedWorkspaceId, portalViewOnly, view])
+  const hostingState = portalViewOnly ? 'restricted' : hostingRead.scope === hostingScope ? hostingRead.state : 'checking'
+  const hostedStatus = hostingState === 'confirmed' ? hostingRead.status : null
+  const hostedLive = hostedStatus?.publications.find((entry) => entry.enabled)
+  const hostedCurrent = Boolean(hostedLive && publish && inquiryPageId
+    && hostedLive.snapshotId === publish.id && hostedLive.pageId === inquiryPageId
+    && hostedLive.sourceVersion === hostedStatus?.source?.version)
   // Managed Sites must never inherit another business's device-local Shop details.
   // Re-evaluate on mode changes so a previously local screen cannot leak stale props.
   const shopStarterContext = useMemo(() => readWebsiteStarterShopContext(storageMode), [storageMode])
@@ -413,7 +457,7 @@ export function WebsiteProduct() {
   const savedStateNotice = storageMode === 'managed'
     ? portalViewOnly
       ? 'View only — ask a company owner to assign Website operator access.'
-      : 'Changes are saved to this company account. Nothing has been deployed.'
+      : 'Changes are saved to this company account. Publishing is a separate step.'
     : storageMode === 'browser-local'
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
@@ -1063,6 +1107,32 @@ export function WebsiteProduct() {
   const showEditorInsights = showPageChecks || showInquirySummary
   const releaseRecordRequired = storageMode === 'managed'
   const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges && contentChecksPass
+  const hostingNext = portalViewOnly
+    ? {
+        job: 'Ask owner to check hosting',
+        reason: 'Ask an operator to verify the live site.',
+      }
+    : hostedCurrent
+    ? {
+        job: 'Check published website',
+        reason: 'Check the site before sharing.',
+      }
+    : hostedLive
+      ? {
+          job: 'Publish your update',
+          reason: 'An earlier version is online. Publish this update.',
+        }
+      : hostingState === 'confirmed'
+        ? {
+            job: 'Publish website online',
+            reason: 'Publish to get an address.',
+          }
+        : {
+            job: 'Check website hosting',
+            reason: hostingState === 'unavailable'
+              ? 'Hosting status unavailable.'
+              : 'Checking hosting status.',
+          }
   const websiteTodayStep = storageIssue || canRepairLocalStorage
     ? 'recover'
     : pendingRestoredDraft
@@ -1081,7 +1151,9 @@ export function WebsiteProduct() {
               ? 'review'
               : releaseRecordRequired && !publishIsCurrent
                 ? 'file'
-                : 'ready'
+                : releaseRecordRequired
+                  ? hostedCurrent ? 'published' : 'hosting'
+                  : 'ready'
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Sites workspace'
     : pendingRestoredDraft
@@ -1103,30 +1175,30 @@ export function WebsiteProduct() {
                 : releaseRecordRequired && !publishIsCurrent
                   ? 'Save website file'
                   : releaseRecordRequired
-                    ? 'Review launch plan'
+                    ? hostingNext.job
                     : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
-    ? 'Saving or recovery needs attention before Website work can be trusted.'
+    ? 'Recover Website data before editing.'
     : pendingRestoredDraft
-      ? `This tab has an unsaved ${pendingRestoredDraft.session.workspace.siteName} draft, while the current Website is ${workspace.siteName}. Choose one before editing.`
+      ? 'Choose the saved Website or unsaved draft.'
     : starterSetupActive
-      ? 'Answer a short brief to prepare client-specific pages.'
+      ? 'Add a few details to start.'
       : starterAvailable
       ? 'Name and offer first; details later.'
         : hasUnsavedChanges
-          ? 'Save the draft or discard it before review.'
+          ? 'Save or discard the draft.'
           : leadCounts.new
-            ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
+            ? `${leadCounts.new} new ${leadCounts.new === 1 ? 'inquiry' : 'inquiries'} to review.`
             : failingContentChecks.length
-              ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before the website file is ready.`
+              ? 'Page checks need attention.'
               : localPreviewReady
                 ? 'Download an HTML file of your saved site. This does not publish it.'
               : releaseRecordRequired && !approvalIsCurrent
-                ? 'Final review is required before a website file is saved.'
+                ? 'Review before saving the file.'
                 : releaseRecordRequired && !publishIsCurrent
-                  ? 'Save a static release file for the approved website.'
+                  ? 'Save the reviewed website file.'
                 : releaseRecordRequired
-                  ? 'Review the launch steps. This screen does not deploy your site.'
+                  ? hostingNext.reason
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
@@ -1147,7 +1219,7 @@ export function WebsiteProduct() {
             : releaseRecordRequired && !publishIsCurrent
               ? 'Create site file'
               : releaseRecordRequired
-                ? 'Review launch plan'
+                ? 'Open hosting'
                 : 'Download website'
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'
@@ -1155,7 +1227,7 @@ export function WebsiteProduct() {
       ? 'attention'
     : starterAvailable || starterSetupActive
       ? 'setup'
-      : hasUnsavedChanges || failingContentChecks.length || leadCounts.new
+      : hasUnsavedChanges || failingContentChecks.length || leadCounts.new || (releaseRecordRequired && !hostedCurrent)
         ? 'attention'
         : 'ready'
   const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace
@@ -1206,6 +1278,17 @@ export function WebsiteProduct() {
           ? approvalIsCurrent && !hasUnsavedChanges && !failingContentChecks.length ? 'current' : 'waiting'
           : localPreviewReady ? 'current' : 'waiting',
     },
+    ...(releaseRecordRequired ? [{
+      id: 'hosting',
+      label: 'Publish online',
+      detail: !publishIsCurrent ? 'After file'
+        : portalViewOnly ? 'Owner check'
+        : hostedCurrent ? 'Published · verify address'
+          : hostedLive ? 'Update pending'
+            : hostingState === 'confirmed' ? 'Not published'
+              : hostingState === 'unavailable' ? 'Unavailable' : 'Checking',
+      state: !publishIsCurrent ? 'waiting' : hostedCurrent ? 'complete' : 'current',
+    }] : []),
   ] as const
   const websiteTodaySource = storageMode === 'managed'
     ? `Company account · ${managedActorId || 'signed in'}`
@@ -1213,7 +1296,7 @@ export function WebsiteProduct() {
       ? 'Saved on this device'
       : 'Available in this browser session'
   const editingRoutineStatus = view === 'content' && surface === 'work'
-    && websiteTodayState === 'ready' && !pendingRestoredDraft
+    && websiteTodayState === 'ready' && !releaseRecordRequired && !pendingRestoredDraft
     && !storageIssue && !canRepairLocalStorage
   const websiteTodayOwner = portalViewOnly ? 'Company owner' : 'Website operator'
   const websiteTodayContext = `${workingSampleTemplate
@@ -1558,7 +1641,7 @@ export function WebsiteProduct() {
                   </>
                 ) : storageMode === 'managed' ? canReview && !portalViewOnly ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
-                    Review &amp; publish
+                    {hostedCurrent ? 'View publication' : 'Review & publish'}
                   </button>
                 ) : null : null}
                 </div>
@@ -1758,7 +1841,7 @@ export function WebsiteProduct() {
           </div> : null}
 
           {view === 'content' && !starterSetupActive && !editingRoutineStatus ? <details className="website-status-disclosure">
-            <summary>Next: {websiteAgentJob} · {readinessSummary}</summary>
+            <summary>{hostedCurrent ? 'Published · verify address' : `Next: ${websiteAgentJob} · ${readinessSummary}`}</summary>
             <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
               <span className="core-eyebrow">Next action</span>
