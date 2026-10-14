@@ -1122,7 +1122,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             </div>
             {state.preview.rows.length > 12 ? <>
               <p className="panel-copy">Showing {visibleRows.length} of {state.preview.rows.length} import rows.</p>
-              <button className="core-button" onClick={() => setExpandedRowsPreviewDigest((current) => toggleShopCatalogImportRowsVisibility(current, state.preview!.previewDigest))} type="button">{expandedRowsPreviewDigest === state.preview.previewDigest ? `Show first ${SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE} rows` : `Show all ${state.preview.rows.length} rows`}</button>
+              <button aria-expanded={expandedRowsPreviewDigest === state.preview.previewDigest} className="core-button" onClick={() => setExpandedRowsPreviewDigest((current) => toggleShopCatalogImportRowsVisibility(current, state.preview!.previewDigest))} type="button">{expandedRowsPreviewDigest === state.preview.previewDigest ? `Show first ${SHOP_CATALOG_IMPORT_REVIEW_PAGE_SIZE} rows` : `Show all ${state.preview.rows.length} rows`}</button>
             </> : null}
             {!allRowsVisible ? <p className="form-notice" role="status">Show all {state.preview.rows.length} rows before preparing or approving this import.</p> : null}
           </details>
