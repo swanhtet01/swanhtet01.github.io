@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-inquiry"
 CONTRACT = "supermega_private_trial_database_v13_inquiry_v1"
 MIGRATION = "20261014011202_website_inquiry_delivery.sql"
-MIGRATION_SHA256 = "7dbeebee03ae9b4f3f91e5c1451893319da646f70e55aecb6283406bf322cfd6"
+MIGRATION_SHA256 = "a90c0cff5e5c817d66939bfb0f12382fbd6dc3666f661c07319f8af2c1a6ff6c"
 TABLES = frozenset({"website_inquiry_channels", "website_inbox"})
 ROLE = "supermega_trial_backend"
 
@@ -69,7 +69,7 @@ POLICIES = {
 CATALOG_PINS = {
     "inquiry_columns_exact": "72b06d1624ca27534372d6a567084c861a44a3bf484c4101ad704c1184f4001c",
     "inquiry_constraints_exact": "b14504ba2b1b1efc71c7a561cec555ccc9eff1642e3e2b69961400e25c083cbc",
-    "inquiry_functions_exact": "a7177c46e5c4c74982f40ac0f04a325a6ec6f22ea161adc6f00ab41cd08d9089",
+    "inquiry_functions_exact": "ee569c737437bdcc1b7f262513eb1c88da4dcca01cff27249d4161b4a393dd49",
     "inquiry_policies_exact": "63b897630ddfb7b349ccb21c8376fa8cc2874443e0d4ef503bf269505a313dc6",
 }
 CATALOG_COUNTS = {

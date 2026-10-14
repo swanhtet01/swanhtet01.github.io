@@ -250,7 +250,8 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         with audit._open_storage_audit_connection(self.admin_url) as connection:
             snapshot.update(audit.collect_storage_snapshot(connection))
         current = audit.evaluate_snapshot(snapshot, schema_profile='v13-inquiry')
-        self.assertTrue(current['ready'], current['failed_checks'])
+        from tools.private_trial_inquiry_contract import observed_extension_digests
+        self.assertTrue(current['ready'], (current['failed_checks'], observed_extension_digests(snapshot)))
         historical = audit.evaluate_snapshot(snapshot, schema_profile='v13-self-serve')
         self.assertFalse(historical['ready'])
         self.assertIn('expected_private_tables_only', historical['failed_checks'])
@@ -433,7 +434,10 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         self.assertEqual(withdrawn.status_code, 200)
         self.assertEqual(client.get(f'/sites/{channel}').status_code, 404)
         self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries', json={**BODY, 'requestId': request}, headers={'Origin': ORIGIN}).status_code, 404)
-        self.assertEqual(client.post(f'/api/trial/v1/website-inquiry-channels/{channel}/publish', json={'expectedVersion': 1}).status_code, 409)
+        restored = client.post(f'/api/trial/v1/website-inquiry-channels/{channel}/publish', json={'expectedVersion': 1})
+        self.assertEqual(restored.status_code, 200, restored.text)
+        self.assertEqual(restored.json()['artifactDigest'], publish.json()['artifactDigest'])
+        self.assertEqual(client.get(f'/sites/{channel}').status_code, 200)
         self.assertEqual(len(self.adapter.inbox(OWNER)['inquiries']), 1)
 
     def test_publication_is_immutable_when_a_new_draft_is_saved(self):
@@ -449,6 +453,10 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         self.assertEqual(retry['artifactDigest'], published['artifactDigest'])
         with self.assertRaisesRegex(self.db_error, 'source_stale'):
             self.adapter.publish_channel(OWNER, channel_id=channel, expected_version=2, public_origin=ORIGIN)
+        self.adapter.unpublish_channel(OWNER, channel_id=channel, artifact_digest=published['artifactDigest'])
+        with self.assertRaisesRegex(self.db_error, 'source_stale'):
+            self.adapter.publish_channel(OWNER, channel_id=channel, expected_version=1, public_origin=ORIGIN)
+        self.assertIsNone(self.adapter.public_page(channel_id=channel, public_origin=ORIGIN))
         unapproved = str(uuid4())
         self.adapter.prepare_channel(OWNER, channel_id=unapproved, page_id='page-home', expected_version=2, origin=ORIGIN)
         with self.assertRaises(TrialValidationError):
@@ -471,10 +479,23 @@ class WebsiteInquirySqlTests(unittest.TestCase):
             self.assertIn('no-store', response.headers['cache-control'])
         for path in ('/private-draft', '/missing', '/services/extra'):
             self.assertEqual(client.get(base + path).status_code, 404)
-        self.assertEqual(client.get(base + '?page_path=contact').status_code, 422)
+        campaign = client.get(base + '?utm_source=campaign&ref=launch')
+        self.assertEqual(campaign.status_code, 200, campaign.text)
+        self.assertIn('<title>Home | Synthetic Studio</title>', campaign.text)
+        self.assertNotIn('<form', campaign.text)
+        query_page = client.get(base + '?page_path=contact')
+        self.assertEqual(query_page.status_code, 200, query_page.text)
+        self.assertIn('<title>Home | Synthetic Studio</title>', query_page.text)
+        self.assertNotIn('<form', query_page.text)
+        nested_query_page = client.get(base + '/services?page_path=contact')
+        self.assertEqual(nested_query_page.status_code, 200, nested_query_page.text)
+        self.assertIn('<title>Services | Synthetic Studio</title>', nested_query_page.text)
+        self.assertNotIn('<form', nested_query_page.text)
         self.assertEqual(self.client(public_origin='https://other.example').get(base + '/contact').status_code, 404)
         body = {**BODY, 'requestId': str(uuid4())}
         self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries', json={**body, 'pageId': 'page-home'},
+                                    headers={'Origin': ORIGIN}).status_code, 422)
+        self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries?utm_source=campaign', json=body,
                                     headers={'Origin': ORIGIN}).status_code, 422)
         self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries', json=body, headers={'Origin': ORIGIN}).status_code, 200)
         inquiry = self.adapter.inbox(OWNER)['inquiries'][0]

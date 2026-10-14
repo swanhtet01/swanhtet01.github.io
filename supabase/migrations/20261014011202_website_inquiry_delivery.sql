@@ -178,10 +178,14 @@ begin
     raise exception 'website_inquiry_source_stale' using errcode='40001';
   end if;
   if channel.published_at is not null then
-    if not channel.enabled or p_snapshot is distinct from channel.snapshot_id or p_digest is distinct from channel.artifact_digest then
+    if p_snapshot is distinct from channel.snapshot_id or p_digest is distinct from channel.artifact_digest then
       raise exception 'website_inquiry_source_stale' using errcode='40001';
     end if;
-    return pg_catalog.jsonb_build_object('channelId',p_channel,'enabled',true,'artifactDigest',channel.artifact_digest);
+    if channel.enabled then
+      return pg_catalog.jsonb_build_object('channelId',p_channel,'enabled',true,'artifactDigest',channel.artifact_digest);
+    end if;
+    -- A withdrawn URL may return only while its original source and approval
+    -- still match. Continue through the current-source checks below.
   end if;
   if source.version is distinct from p_version or channel.source_digest is distinct from
     'sha256:' || pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(app_private.website_review_json(source.state_json),'UTF8')),'hex') then
