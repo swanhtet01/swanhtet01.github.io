@@ -1,6 +1,5 @@
 """Custom-domain HTTP and provider contract without live DNS or provider calls."""
 
-from contextlib import nullcontext
 import os
 import unittest
 from unittest.mock import Mock, patch
@@ -105,8 +104,8 @@ class HostnameTests(unittest.TestCase):
         domain_store._owned = Mock(return_value={'binding_id': CHANNEL, 'hostname': HOST,
                                                  'state': 'pending',
                                                  'challenge': 'supermega-domain=v1:synthetic',
+                                                 'provider_add_token': None,
                                                  'dns_record': None})
-        domain_store._check_lock = Mock(return_value=nullcontext())
         domain_store._record = Mock()
         domain_store.status = Mock(return_value={'enabled': True, 'domain': None})
         with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):

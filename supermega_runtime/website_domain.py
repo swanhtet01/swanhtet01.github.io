@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from datetime import timezone
 import ipaddress
 import json
@@ -53,22 +52,33 @@ def require_domain_schema(cursor) -> None:
         from pg_class where oid=to_regclass('app_private.website_domain_bindings')),false) as guarded,
         to_regprocedure('app_private.claim_website_domain(uuid,text,uuid,text)') is not null as claim,
         to_regprocedure('app_private.record_website_domain_check(uuid,text,boolean,jsonb,text)') is not null as record_check,
+        to_regprocedure('app_private.begin_website_domain_provider_add(uuid,text,uuid)') is not null as begin_add,
+        to_regprocedure('app_private.settle_website_domain_provider_add(uuid,text,uuid)') is not null as settle_add,
+        exists(select 1 from pg_attribute where attrelid=to_regclass('app_private.website_domain_bindings')
+          and attname='provider_add_token' and not attisdropped) as add_token,
         to_regprocedure('app_private.claim_website_domain_renewals_v2(integer)') is not null as claim_renewals,
         to_regprocedure('app_private.complete_website_domain_renewal_v2(uuid,text,timestamptz)') is not null as complete_renewal,
         not has_function_privilege(current_user,
           'app_private.claim_website_domain_renewals(integer)','EXECUTE') as old_claim_blocked,
         not has_function_privilege(current_user,
           'app_private.complete_website_domain_renewal(uuid,text)','EXECUTE') as old_complete_blocked,
-        to_regprocedure('app_private.begin_website_domain_release(text)') is not null as begin_release,
-        to_regprocedure('app_private.finish_website_domain_release(text)') is not null as finish_release,
+        to_regprocedure('app_private.begin_website_domain_release_v2(text,uuid)') is not null as begin_release,
+        to_regprocedure('app_private.finish_website_domain_release_v2(text,uuid)') is not null as finish_release,
+        not has_function_privilege(current_user,
+          'app_private.begin_website_domain_release(text)','EXECUTE') as old_begin_release_blocked,
+        not has_function_privilege(current_user,
+          'app_private.finish_website_domain_release(text)','EXECUTE') as old_finish_release_blocked,
         to_regprocedure('app_private.read_website_domain_page(text)') is not null as page,
         to_regprocedure('app_private.read_website_domain_media(text,text)') is not null as media,
         to_regprocedure('app_private.receive_website_domain_inquiry(text,uuid,text,text,text,boolean,text)') is not null as inquiry""")
     row = cursor.fetchone()
     if not row or not all(row[key] is True for key in ('guarded', 'claim', 'record_check',
+                                                     'begin_add', 'settle_add', 'add_token',
                                                      'claim_renewals', 'complete_renewal',
                                                      'old_claim_blocked', 'old_complete_blocked',
-                                                     'begin_release', 'finish_release', 'page', 'media', 'inquiry')):
+                                                     'begin_release', 'finish_release',
+                                                     'old_begin_release_blocked', 'old_finish_release_blocked',
+                                                     'page', 'media', 'inquiry')):
         raise TrialNotReadyError(('website_domain_schema_unverified',))
 
 
@@ -265,7 +275,7 @@ class WebsiteDomainStore:
         with self.store._guarded_cursor(principal, write=False, capability='website.write') as (cursor, _):
             require_domain_schema(cursor)
             cursor.execute("""select b.binding_id,b.hostname,b.channel_id,b.challenge,b.state,b.verified_until,
-                b.dns_record,b.issue,c.enabled as channel_enabled
+                b.dns_record,b.issue,b.provider_add_token,c.enabled as channel_enabled
                 from app_private.website_domain_bindings b
                 join app_private.website_inquiry_channels c
                   on c.workspace_id=b.workspace_id and c.channel_id=b.channel_id
@@ -280,7 +290,9 @@ class WebsiteDomainStore:
         from datetime import datetime
         active = (row['state'] == 'active' and row['channel_enabled']
                   and until is not None and until > datetime.now(timezone.utc))
-        issue = ('channel_unpublished' if not row['channel_enabled'] else
+        issue = (('provider_cleanup_pending' if row['state'] == 'releasing' else 'provider_add_pending')
+                 if row['provider_add_token'] is not None else
+                 'channel_unpublished' if not row['channel_enabled'] else
                  row['issue'] or ('verification_expired' if row['state'] == 'active' and not active else ''))
         return {'enabled': True, 'domain': {
             'hostname': row['hostname'], 'channelId': str(row['channel_id']),
@@ -296,8 +308,10 @@ class WebsiteDomainStore:
             cursor.execute('select app_private.claim_website_domain(%s,%s,%s,%s) as receipt',
                            (str(uuid4()), hostname, channel_id, challenge))
             receipt = cursor.fetchone()['receipt']
-        if receipt['replay'] and self.status(principal)['domain']['state'] == 'active':
-            return self.status(principal)
+        if receipt['replay']:
+            row = self._owned(principal)
+            if row is not None and (row['state'] == 'active' or row['provider_add_token'] is not None):
+                return self.status(principal)
         # A claim only reserves the hostname locally and returns its fresh TXT
         # challenge. Do not attach an arbitrary domain to the provider before
         # this tenant proves control of it.
@@ -315,32 +329,28 @@ class WebsiteDomainStore:
             cursor.execute("select app_private.record_website_domain_check(%s,%s,%s,%s::jsonb,%s)",
                            (binding_id, row['challenge'], verified, json.dumps(dns) if dns else None, issue))
 
-    @contextmanager
-    def _check_lock(self, principal: TrialPrincipal, hostname: str):
-        # A transaction lock spans the bounded provider calls and the final
-        # local record. Release takes the same hostname lock before changing
-        # state. DNS and provider reads each have a five-second socket timeout;
-        # this holds one database connection during those calls. A connection
-        # lost after an external request is accepted still needs reconciliation.
+    def _begin_provider_add(self, principal: TrialPrincipal, row: dict, token: str) -> bool:
         with self.store._guarded_cursor(principal, write=True, capability='website.write') as (cursor, _):
             require_domain_schema(cursor)
-            cursor.execute("set local lock_timeout='30s'")
-            cursor.execute("select pg_advisory_xact_lock(hashtextextended('website-domain-ops:' || %s,0))",
-                           (hostname,))
-            yield
+            cursor.execute('select app_private.begin_website_domain_provider_add(%s,%s,%s) as started',
+                           (row['binding_id'], row['challenge'], token))
+            return cursor.fetchone()['started'] is True
+
+    def _settle_provider_add(self, principal: TrialPrincipal, row: dict, token: str) -> bool:
+        with self.store._guarded_cursor(principal, write=True, capability='website.write') as (cursor, _):
+            require_domain_schema(cursor)
+            cursor.execute('select app_private.settle_website_domain_provider_add(%s,%s,%s) as settled',
+                           (row['binding_id'], row['challenge'], token))
+            return cursor.fetchone()['settled'] is True
 
     def check(self, principal: TrialPrincipal, *, hostname: str) -> dict:
         hostname = normalize_hostname(hostname)
-        with self._check_lock(principal, hostname):
-            return self._check_locked(principal, hostname)
-
-    def _check_locked(self, principal: TrialPrincipal, hostname: str) -> dict:
-        # Re-read after acquiring the lock. A queued check must not attach a
-        # hostname that release has already begun detaching or another tenant
-        # has subsequently claimed.
         row = self._owned(principal)
         if row is None or row['hostname'] != hostname or row['state'] not in ('pending', 'active'):
             raise TrialValidationError('website_domain_changed')
+        if row['provider_add_token'] is not None:
+            # A read-back cannot settle a POST that may still complete later.
+            return self.status(principal)
         dns = None
         issue = 'ownership_pending'
         verified = False
@@ -355,9 +365,21 @@ class WebsiteDomainStore:
             except ProviderUnavailable as exc:
                 if str(exc) != 'provider_missing':
                     raise
-                # A failed initial attachment remains recoverable after the
-                # tenant has proved the fresh per-claim DNS challenge.
-                domain = self.provider.add(hostname)
+                # Commit the tenant-bound intent before any outbound POST. A
+                # timeout is ambiguous; release keeps the hostname reserved
+                # until this exact attempt has a conclusive result.
+                token = str(uuid4())
+                if not self._begin_provider_add(principal, row, token):
+                    return self.status(principal)
+                try:
+                    domain = self.provider.add(hostname)
+                except ProviderUnavailable:
+                    return self.status(principal)
+                if not self._settle_provider_add(principal, row, token):
+                    raise TrialValidationError('website_domain_changed')
+                current = self._owned(principal)
+                if current is None or current['state'] == 'releasing':
+                    return self.release(principal, hostname=hostname) if current else self.status(principal)
             if not domain['verified']:
                 try:
                     verification = self.provider.verify(hostname)
@@ -424,18 +446,25 @@ class WebsiteDomainStore:
 
     def release(self, principal: TrialPrincipal, *, hostname: str) -> dict:
         hostname = normalize_hostname(hostname)
+        token = str(uuid4())
         with self.store._guarded_cursor(principal, write=True, capability='website.write') as (cursor, _):
             require_domain_schema(cursor)
-            cursor.execute('select app_private.begin_website_domain_release(%s)', (hostname,))
-        # Local routing closes first, and the hostname remains reserved until
-        # Vercel detachment has succeeded. A failed cleanup is retryable.
+            cursor.execute('select app_private.begin_website_domain_release_v2(%s,%s) as may_remove',
+                           (hostname, token))
+            may_remove = cursor.fetchone()['may_remove'] is True
+        # Pending POST or DELETE intent keeps this hostname reserved. A retry
+        # cannot assume either ambiguous provider operation has finished.
+        if not may_remove:
+            return self.status(principal)
+        # Local routing closes first. An ambiguous detachment keeps its exact
+        # token and hostname reservation for explicit operator reconciliation.
         try:
             self.provider.remove(hostname)
         except ProviderUnavailable:
             return self.status(principal)
         with self.store._guarded_cursor(principal, write=True, capability='website.write') as (cursor, _):
             require_domain_schema(cursor)
-            cursor.execute('select app_private.finish_website_domain_release(%s)', (hostname,))
+            cursor.execute('select app_private.finish_website_domain_release_v2(%s,%s)', (hostname, token))
         return self.status(principal)
 
     def public_page(self, hostname: str) -> dict | None:
