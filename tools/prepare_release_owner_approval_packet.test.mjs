@@ -292,14 +292,16 @@ test('rejects preview proposals that would allow production data or writes', () 
   )
 })
 
-test('rejects owner packets that waive branch cost, inherited-history, or execution gates', () => {
+test('rejects owner packets that waive branch cost, creation-mode, or execution gates', () => {
   for (const [mutate, expected] of [
     [proposal => { proposal.previewBranch.costConfirmed = true }, /release_owner_approval_supabase_preview_invalid/],
     [proposal => { proposal.previewBranch.includeProductionData = true }, /release_owner_approval_supabase_preview_invalid/],
-    [proposal => { proposal.previewBranch.schemaInheritanceVerified = true }, /release_owner_approval_supabase_preview_invalid/],
-    [proposal => { proposal.migrationPlan.fullChainReplayAllowed = true }, /release_owner_approval_supabase_migration_invalid/],
+    [proposal => { proposal.previewBranch.creationMode = 'dashboard' }, /release_owner_approval_supabase_preview_invalid/],
+    [proposal => { proposal.previewBranch.branchSchemaVerified = true }, /release_owner_approval_supabase_preview_invalid/],
+    [proposal => { proposal.migrationPlan.manualFullChainReplayAllowed = true }, /release_owner_approval_supabase_migration_invalid/],
+    [proposal => { proposal.migrationPlan.providerAutomaticReplayReviewed = true }, /release_owner_approval_supabase_migration_invalid/],
     [proposal => { proposal.executionPacketAfterApproval.commandTemplate = 'apply all migrations' }, /release_owner_approval_supabase_execution_packet_invalid/],
-    [proposal => { proposal.ownerApprovalTemplate = proposal.ownerApprovalTemplate.replace('replaying the full source chain is not approved', 'full replay approved') }, /release_owner_approval_supabase_template_invalid/],
+    [proposal => { proposal.ownerApprovalTemplate = proposal.ownerApprovalTemplate.replace('Manual replay of the full source chain is not approved', 'full replay approved') }, /release_owner_approval_supabase_template_invalid/],
   ]) {
     const input = selfTestInput()
     mutate(input.supabaseProposal)

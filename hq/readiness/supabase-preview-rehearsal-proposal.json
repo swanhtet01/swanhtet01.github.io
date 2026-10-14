@@ -5,7 +5,7 @@
   "mode": "owner_approval_required",
   "state": "prepared-not-executed",
   "generatedAt": "2026-10-14T00:00:00.000Z",
-  "purpose": "Record a source-bound Supabase preview plan that requires inherited-history reconciliation and a reviewed unapplied delta; do not create a branch or approve managed activation.",
+  "purpose": "Record a source-bound Supabase preview plan that requires a known creation mode, actual branch catalog and migration-history reconciliation, and a reviewed delta; do not create a branch or approve managed activation.",
   "productionBaseline": {
     "projectRef": "zvtzwcimpvvtkowflhda",
     "classification": "protected-production",
@@ -41,13 +41,14 @@
     "hostedActivationReady": false
   },
   "previewBranch": {
-    "kind": "data_less_inherited_schema_ephemeral_preview",
+    "kind": "data_less_ephemeral_preview_schema_unverified",
+    "creationMode": "unselected",
     "parentProjectRef": "zvtzwcimpvvtkowflhda",
     "parentClassification": "protected-production",
     "maximumLifetimeHours": 24,
     "startsWithProductionData": false,
     "includeProductionData": false,
-    "schemaInheritanceVerified": false,
+    "branchSchemaVerified": false,
     "costConfirmed": false,
     "seedProductionDataAllowed": false,
     "productionRefsAllowed": false,
@@ -213,8 +214,9 @@
     "sourceAheadOfHistoricalAudit": true,
     "currentProductionSchemaVersionVerified": false,
     "productionApplyAllowed": false,
-    "branchApplyStrategy": "verify_inherited_schema_then_review_unapplied_delta",
-    "fullChainReplayAllowed": false,
+    "branchApplyStrategy": "inspect_creation_mode_and_actual_catalog_then_review_delta",
+    "manualFullChainReplayAllowed": false,
+    "providerAutomaticReplayReviewed": false,
     "currentLiveHistoryReconciled": false
   },
   "gates": {
@@ -244,9 +246,10 @@
   },
   "requiredEvidence": [
     "preview-branch-status-and-migration-list",
-    "data-less-branch-and-inherited-schema-confirmed",
-    "inherited-production-migration-history-reconciled-before-any-delta",
-    "only-reviewed-unapplied-migrations-run-on-preview",
+    "branch-creation-mode-and-workflow-reviewed",
+    "data-less-branch-and-actual-schema-verified",
+    "production-and-branch-migration-history-reconciled-before-any-delta",
+    "only-reviewed-manual-delta-run-after-provider-branch-workflow",
     "durable-attempt-budget-restart-concurrency-and-restored-limit-proof",
     "website-review-recipient-isolation-entitlement-and-session-revocation",
     "website-review-and-feedback-nonempty-backup-restore",
@@ -263,10 +266,10 @@
     "no-production-retry-on-failure"
   ],
   "executionPacketAfterApproval": {
-    "status": "blocked-pending-inherited-history-adapter",
+    "status": "blocked-pending-branch-mode-and-history-adapter",
     "tool": null,
     "commandTemplate": null,
-    "reason": "The existing packet expects an empty public catalog and an ordered source-chain replay; it cannot run against a production-derived branch."
+    "reason": "The old packet assumes an empty public catalog and manual source-chain replay. Dashboard and GitHub branch creation rebuild schema differently, and the actual branch workflow and catalog are not verified."
   },
   "compatibilityWatchList": [
     {
@@ -282,6 +285,8 @@
   ],
   "documentation": {
     "branching": "https://supabase.com/docs/guides/deployment/branching",
+    "dashboardMigrationFailures": "https://supabase.com/docs/guides/troubleshooting/branch-in-migrations-failed-status",
+    "githubIntegration": "https://supabase.com/docs/guides/deployment/branching/github-integration",
     "productionChecklist": "https://supabase.com/docs/guides/deployment/going-into-prod",
     "changelogBreakingChanges": "https://supabase.com/changelog?types=breaking-change"
   },
@@ -300,7 +305,7 @@
     "customerContactAllowed": false,
     "paymentOrStockActionAllowed": false
   },
-  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:8792fefdcaf49d7e36960fb5ed2b470cb739a9449184011a86ba424e7cf18286 on a data-less maximum-24-hour non-production preview branch only, with deletion after evidence, only after current parent migration history and the exact catalog are reconciled and I separately confirm the quoted branch cost. On a branch that inherits its parent schema, replaying the full source chain is not approved; apply only a reviewed unapplied delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:8792fefdcaf49d7e36960fb5ed2b470cb739a9449184011a86ba424e7cf18286 on a data-less maximum-24-hour non-production preview branch only, with deletion after evidence, only after branch creation mode and automatic migration replay are reviewed, current production history and the actual branch catalog are reconciled, and I separately confirm the quoted branch cost. Manual replay of the full source chain is not approved; apply only a reviewed delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
   "sourceReceipts": [
     {
       "path": "package.json",
@@ -308,7 +313,7 @@
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:367aff3d5ed14ead427f9fd498be66f1c849d0c857f0912b8c169f51ab590260"
+      "digest": "sha256:57f432ef081ec516d9f4d9f2a13164646aa993d4ee7e5057147e4e4deef8629e"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
@@ -339,5 +344,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:1c125568ca110d8f44fc8ea77f01b12bf023ba59d91f0d5e135170181c0892c5"
+  "digest": "sha256:cd39806861aba77fc26c8fbe3ee3278c6e47d15246230be9cffab10721b50b59"
 }

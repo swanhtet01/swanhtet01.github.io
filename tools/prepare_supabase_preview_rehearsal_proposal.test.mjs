@@ -54,16 +54,17 @@ async function proposal(overrides = {}) {
   })
 }
 
-test('builds a data-less inherited-schema Supabase preview rehearsal proposal', async () => {
+test('builds a data-less preview proposal with branch mode and schema unverified', async () => {
   const built = await proposal()
   assert.equal(built.contract, SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT)
   assert.equal(built.mode, 'owner_approval_required')
   assert.equal(built.state, 'prepared-not-executed')
-  assert.equal(built.previewBranch.kind, 'data_less_inherited_schema_ephemeral_preview')
+  assert.equal(built.previewBranch.kind, 'data_less_ephemeral_preview_schema_unverified')
+  assert.equal(built.previewBranch.creationMode, 'unselected')
   assert.equal(built.previewBranch.maximumLifetimeHours, 24)
   assert.equal(built.previewBranch.startsWithProductionData, false)
   assert.equal(built.previewBranch.includeProductionData, false)
-  assert.equal(built.previewBranch.schemaInheritanceVerified, false)
+  assert.equal(built.previewBranch.branchSchemaVerified, false)
   assert.equal(built.previewBranch.costConfirmed, false)
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
@@ -77,8 +78,9 @@ test('builds a data-less inherited-schema Supabase preview rehearsal proposal', 
   assert.equal(built.migrationPlan.historicalAuditSchemaVersion, 11)
   assert.equal(built.migrationPlan.sourceAheadOfHistoricalAudit, true)
   assert.equal(built.migrationPlan.currentProductionSchemaVersionVerified, false)
-  assert.equal(built.migrationPlan.branchApplyStrategy, 'verify_inherited_schema_then_review_unapplied_delta')
-  assert.equal(built.migrationPlan.fullChainReplayAllowed, false)
+  assert.equal(built.migrationPlan.branchApplyStrategy, 'inspect_creation_mode_and_actual_catalog_then_review_delta')
+  assert.equal(built.migrationPlan.manualFullChainReplayAllowed, false)
+  assert.equal(built.migrationPlan.providerAutomaticReplayReviewed, false)
   assert.equal(built.migrationPlan.currentLiveHistoryReconciled, false)
   assert.equal(built.productionBaseline.evidenceClassification, 'historical-audit-only')
   assert.equal(built.productionBaseline.currentStateRevalidated, false)
@@ -86,9 +88,10 @@ test('builds a data-less inherited-schema Supabase preview rehearsal proposal', 
   assert.equal(built.gates.productionMigrationReplay.status, 'blocked')
   assert.equal(built.gates.productionMigrationReplay.newPreviewCreationAllowed, false)
   assert.equal(built.gates.productionMigrationReplay.currentProviderStateRevalidated, false)
-  assert.ok(built.requiredEvidence.includes('inherited-production-migration-history-reconciled-before-any-delta'))
-  assert.ok(built.requiredEvidence.includes('data-less-branch-and-inherited-schema-confirmed'))
-  assert.ok(built.requiredEvidence.includes('only-reviewed-unapplied-migrations-run-on-preview'))
+  assert.ok(built.requiredEvidence.includes('branch-creation-mode-and-workflow-reviewed'))
+  assert.ok(built.requiredEvidence.includes('production-and-branch-migration-history-reconciled-before-any-delta'))
+  assert.ok(built.requiredEvidence.includes('data-less-branch-and-actual-schema-verified'))
+  assert.ok(built.requiredEvidence.includes('only-reviewed-manual-delta-run-after-provider-branch-workflow'))
   assert.ok(built.requiredEvidence.includes('durable-attempt-budget-restart-concurrency-and-restored-limit-proof'))
   assert.equal(built.gates.previewRehearsal.proofComplete, false)
   assert.ok(built.requiredEvidence.includes('metadata-only-schema-fingerprint-comparison'))
@@ -98,9 +101,10 @@ test('builds a data-less inherited-schema Supabase preview rehearsal proposal', 
   assert.equal(built.controls.productionProjectMutated, false)
   assert.equal(built.controls.productionDataCopied, false)
   assert.equal(built.controls.githubWritesAllowed, false)
-  assert.equal(built.executionPacketAfterApproval.status, 'blocked-pending-inherited-history-adapter')
+  assert.equal(built.executionPacketAfterApproval.status, 'blocked-pending-branch-mode-and-history-adapter')
   assert.equal(built.executionPacketAfterApproval.commandTemplate, null)
-  assert.match(built.ownerApprovalTemplate, /replaying the full source chain is not approved/)
+  assert.match(built.ownerApprovalTemplate, /Manual replay of the full source chain is not approved/)
+  assert.match(built.ownerApprovalTemplate, /branch creation mode and automatic migration replay are reviewed/)
   assert.match(built.ownerApprovalTemplate, /separately confirm the quoted branch cost/)
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
 })
@@ -154,17 +158,20 @@ test('rehashing cannot hide omitted budget or Website evidence or turn historica
   }
 })
 
-test('a rehashed proposal cannot waive inherited-history and cost gates', async () => {
+test('a rehashed proposal cannot waive branch-mode, history, and cost gates', async () => {
   for (const mutate of [
     p => { p.gates.productionMigrationReplay.status = 'ready' },
     p => { p.gates.productionMigrationReplay.newPreviewCreationAllowed = true },
     p => { p.gates.productionMigrationReplay.currentProviderStateRevalidated = true },
-    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'inherited-production-migration-history-reconciled-before-any-delta') },
-    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'only-reviewed-unapplied-migrations-run-on-preview') },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'production-and-branch-migration-history-reconciled-before-any-delta') },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'branch-creation-mode-and-workflow-reviewed') },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'only-reviewed-manual-delta-run-after-provider-branch-workflow') },
     p => { p.previewBranch.costConfirmed = true },
     p => { p.previewBranch.includeProductionData = true },
-    p => { p.previewBranch.schemaInheritanceVerified = true },
-    p => { p.migrationPlan.fullChainReplayAllowed = true },
+    p => { p.previewBranch.creationMode = 'dashboard' },
+    p => { p.previewBranch.branchSchemaVerified = true },
+    p => { p.migrationPlan.manualFullChainReplayAllowed = true },
+    p => { p.migrationPlan.providerAutomaticReplayReviewed = true },
     p => { p.migrationPlan.currentLiveHistoryReconciled = true },
     p => { p.executionPacketAfterApproval.commandTemplate = 'apply all migrations' },
   ]) {

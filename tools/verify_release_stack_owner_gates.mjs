@@ -355,11 +355,12 @@ export function assessReleaseStackOwnerGates(input = {}) {
     || supabaseProposal.repository !== REPOSITORY
     || supabaseProposal.mode !== 'owner_approval_required'
     || supabaseProposal.state !== 'prepared-not-executed'
-    || supabaseProposal.previewBranch?.kind !== 'data_less_inherited_schema_ephemeral_preview'
+    || supabaseProposal.previewBranch?.kind !== 'data_less_ephemeral_preview_schema_unverified'
     || supabaseProposal.previewBranch?.maximumLifetimeHours !== 24
     || supabaseProposal.previewBranch?.startsWithProductionData !== false
     || supabaseProposal.previewBranch?.includeProductionData !== false
-    || supabaseProposal.previewBranch?.schemaInheritanceVerified !== false
+    || supabaseProposal.previewBranch?.creationMode !== 'unselected'
+    || supabaseProposal.previewBranch?.branchSchemaVerified !== false
     || supabaseProposal.previewBranch?.seedProductionDataAllowed !== false
     || supabaseProposal.previewBranch?.productionRefsAllowed !== false
     || supabaseProposal.previewBranch?.privilegedRuntimeCredentialsAllowed !== false
@@ -368,6 +369,13 @@ export function assessReleaseStackOwnerGates(input = {}) {
     || supabaseProposal.migrationPlan?.schemaVersion !== 13
     || !/^sha256:[0-9a-f]{64}$/.test(String(supabaseProposal.migrationPlan?.chainDigest || ''))
     || supabaseProposal.migrationPlan?.productionApplyAllowed !== false
+    || supabaseProposal.migrationPlan?.branchApplyStrategy !== 'inspect_creation_mode_and_actual_catalog_then_review_delta'
+    || supabaseProposal.migrationPlan?.manualFullChainReplayAllowed !== false
+    || supabaseProposal.migrationPlan?.providerAutomaticReplayReviewed !== false
+    || supabaseProposal.migrationPlan?.currentLiveHistoryReconciled !== false
+    || supabaseProposal.executionPacketAfterApproval?.status !== 'blocked-pending-branch-mode-and-history-adapter'
+    || supabaseProposal.executionPacketAfterApproval?.tool !== null
+    || supabaseProposal.executionPacketAfterApproval?.commandTemplate !== null
     || !includesAll(supabaseProposal.requiredEvidence, [
       'metadata-only-schema-fingerprint-comparison',
       'public-table-rls-and-anon-authenticated-denial',
@@ -723,11 +731,12 @@ function sampleInput(overrides = {}) {
     mode: 'owner_approval_required',
     state: 'prepared-not-executed',
     previewBranch: {
-      kind: 'data_less_inherited_schema_ephemeral_preview',
+      kind: 'data_less_ephemeral_preview_schema_unverified',
+      creationMode: 'unselected',
       maximumLifetimeHours: 24,
       startsWithProductionData: false,
       includeProductionData: false,
-      schemaInheritanceVerified: false,
+      branchSchemaVerified: false,
       seedProductionDataAllowed: false,
       productionRefsAllowed: false,
       privilegedRuntimeCredentialsAllowed: false,
@@ -738,6 +747,15 @@ function sampleInput(overrides = {}) {
       schemaVersion: 13,
       chainDigest: `sha256:${'c'.repeat(64)}`,
       productionApplyAllowed: false,
+      branchApplyStrategy: 'inspect_creation_mode_and_actual_catalog_then_review_delta',
+      manualFullChainReplayAllowed: false,
+      providerAutomaticReplayReviewed: false,
+      currentLiveHistoryReconciled: false,
+    },
+    executionPacketAfterApproval: {
+      status: 'blocked-pending-branch-mode-and-history-adapter',
+      tool: null,
+      commandTemplate: null,
     },
     requiredEvidence: [
       'metadata-only-schema-fingerprint-comparison',
