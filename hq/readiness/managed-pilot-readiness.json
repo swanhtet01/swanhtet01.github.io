@@ -1,22 +1,22 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
-  "asOf": "2026-10-09T17:20:34.485Z",
+  "asOf": "2026-10-14T01:37:33.930Z",
   "pilotMode": "owner_named",
   "localDatabase": {
     "contract": "supermega.hq.database-rehearsal.v3",
     "schemaVersion": 13,
-    "schemaProfile": "v13-self-serve",
-    "migrationCount": 23,
-    "implementationCommit": "21167a2c4d1bada35191c0ae2a033ffc5a642fe8",
-    "implementationTree": "521554b540397e2d3c04a62495b1101ff560f478",
-    "implementationDigest": "sha256:9dbf54cfe9cacf6059ffc52b57053eca0277d9523954e2f6f03d290953639ff1",
-    "receiptDigest": "sha256:b458364ecdb5bed43479f697c47d00c9980119542173d85fd9a800caa09a53dc",
+    "schemaProfile": "v13-inquiry",
+    "migrationCount": 24,
+    "implementationCommit": "1d4358262fb3250e61dad1824f887ea557365629",
+    "implementationTree": "95c1f4ac4358f7289e8a7c5eebeeaa337401f2aa",
+    "implementationDigest": "sha256:02023b11119804cf8fa0003de06a85d9004b954028e758ec0dbd89838bdb9ad6",
+    "receiptDigest": "sha256:7ba92336a95af4237316449710a90f81f942a6f0e6b25dbdf3e00581eef91be7",
     "behaviorChecks": 74,
-    "catalogChecksBefore": 33,
-    "catalogChecksAfter": 33,
+    "catalogChecksBefore": 37,
+    "catalogChecksAfter": 37,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:62003891b197650a9b9b20bcdde217e9eb683e264e5af40eb3bac8c0febb3dac",
+  "sourceDigest": "sha256:7c441030efb7fcc9e687a39236648307f9baa335ac7fbaa97ed001ac29ac5811",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -282,7 +282,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:31662792070ff4bf8e471723790dd0459f6f70346a74dc39cdd303c72a06d643"
+      "digest": "sha256:cc3bd37e0af1cbf8947752c590da124a1bcad59bea1f44b58eb1cbd55ab674b8"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -314,7 +314,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:59200c71e9ffa154273b93f379ddeefa0cf03498f1ce1231586fe99ce9af6789"
+      "digest": "sha256:d6488a7315df61bb7c5eaf6bfe3bca0f55c05c03a562716b921d736a3d41dc9d"
     }
   ]
 }

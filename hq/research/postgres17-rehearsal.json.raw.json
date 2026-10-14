@@ -17,6 +17,10 @@
       "extension_functions_exact": true,
       "extension_policies_exact": true,
       "immutable_and_version_triggers_exact": true,
+      "inquiry_columns_exact": true,
+      "inquiry_constraints_exact": true,
+      "inquiry_functions_exact": true,
+      "inquiry_policies_exact": true,
       "metadata_table_rls": true,
       "policy_contract_exact": true,
       "postgres_major_supported": true,
@@ -52,6 +56,10 @@
       "extension_functions_exact": true,
       "extension_policies_exact": true,
       "immutable_and_version_triggers_exact": true,
+      "inquiry_columns_exact": true,
+      "inquiry_constraints_exact": true,
+      "inquiry_functions_exact": true,
+      "inquiry_policies_exact": true,
       "metadata_table_rls": true,
       "policy_contract_exact": true,
       "postgres_major_supported": true,
@@ -162,7 +170,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:9dbf54cfe9cacf6059ffc52b57053eca0277d9523954e2f6f03d290953639ff1",
+    "digest": "sha256:02023b11119804cf8fa0003de06a85d9004b954028e758ec0dbd89838bdb9ad6",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -188,6 +196,7 @@
       "supabase/migrations/20260924231714_ecommerce_customer_decisions.sql",
       "supabase/migrations/20260929171000_ecommerce_decision_review_fk_index.sql",
       "supabase/migrations/20260930010000_app_rls_initplan_optimization.sql",
+      "supabase/migrations/20261014011202_website_inquiry_delivery.sql",
       "supabase/proposals/website_inquiry_delivery.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
@@ -211,6 +220,7 @@
       "tests/test_website_inquiry_sql.py",
       "tests/test_website_runtime.py",
       "tools/activate_supermega_database.ps1",
+      "tools/private_trial_inquiry_contract.py",
       "tools/private_trial_v13_contract.py",
       "tools/record_postgres17_rehearsal.mjs",
       "tools/record_postgres17_rehearsal.test.mjs",
@@ -223,8 +233,8 @@
     ]
   },
   "migrations": {
-    "catalog_contract": "supermega_private_trial_database_v13_self_serve_v1",
-    "count": 23,
+    "catalog_contract": "supermega_private_trial_database_v13_inquiry_v1",
+    "count": 24,
     "names": [
       "20260722004500_private_trial_backend_role_preflight.sql",
       "20260722005134_private_trial_backend_foundation.sql",
@@ -248,10 +258,11 @@
       "20260924194557_ecommerce_customer_review_storage.sql",
       "20260924231714_ecommerce_customer_decisions.sql",
       "20260929171000_ecommerce_decision_review_fk_index.sql",
-      "20260930010000_app_rls_initplan_optimization.sql"
+      "20260930010000_app_rls_initplan_optimization.sql",
+      "20261014011202_website_inquiry_delivery.sql"
     ],
     "production_validator_ready": true,
-    "schema_profile": "v13-self-serve",
+    "schema_profile": "v13-inquiry",
     "schema_version": 13
   },
   "ok": true,
@@ -260,15 +271,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:31e319ea1ff242ed11233a39f0df8e549ebe0b8b64dca09d8494793df8dc57e6",
-    "private_snapshot_before": "sha256:31e319ea1ff242ed11233a39f0df8e549ebe0b8b64dca09d8494793df8dc57e6",
+    "private_snapshot_after": "sha256:464025fd296e95f804a13d8d2962a1693bc5a0d550024f61c58a02122ce37789",
+    "private_snapshot_before": "sha256:464025fd296e95f804a13d8d2962a1693bc5a0d550024f61c58a02122ce37789",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "21167a2c4d1bada35191c0ae2a033ffc5a642fe8",
-    "implementation_digest": "sha256:9dbf54cfe9cacf6059ffc52b57053eca0277d9523954e2f6f03d290953639ff1",
-    "tree": "521554b540397e2d3c04a62495b1101ff560f478"
+    "head": "1d4358262fb3250e61dad1824f887ea557365629",
+    "implementation_digest": "sha256:02023b11119804cf8fa0003de06a85d9004b954028e758ec0dbd89838bdb9ad6",
+    "tree": "95c1f4ac4358f7289e8a7c5eebeeaa337401f2aa"
   },
   "status": "rehearsed",
   "storage": {

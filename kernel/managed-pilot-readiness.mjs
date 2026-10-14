@@ -458,9 +458,9 @@ export function validateManagedPilotReadiness(value) {
   if (value.pilotMode !== PILOT_MODE) fail('managed_pilot_readiness_pilot_mode_invalid')
   const localDatabase = value.localDatabase
   if (!isRecord(localDatabase) || localDatabase.contract !== 'supermega.hq.database-rehearsal.v3'
-    || localDatabase.schemaVersion !== CURRENT_DATABASE_SCHEMA || localDatabase.schemaProfile !== 'v13-self-serve'
-    || localDatabase.migrationCount !== 23 || localDatabase.behaviorChecks !== 74
-    || localDatabase.catalogChecksBefore !== 33 || localDatabase.catalogChecksAfter !== 33
+    || localDatabase.schemaVersion !== CURRENT_DATABASE_SCHEMA || localDatabase.schemaProfile !== 'v13-inquiry'
+    || localDatabase.migrationCount !== 24 || localDatabase.behaviorChecks !== 74
+    || localDatabase.catalogChecksBefore !== 37 || localDatabase.catalogChecksAfter !== 37
     || !/^[0-9a-f]{40}$/.test(localDatabase.implementationCommit || '')
     || !/^[0-9a-f]{40}$/.test(localDatabase.implementationTree || '')
     || !/^sha256:[0-9a-f]{64}$/.test(localDatabase.implementationDigest || '')
