@@ -1214,9 +1214,6 @@ function ShopCounter({ canCompleteInOneReview, disabled, draftStorageScope = nul
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const catalog = useMemo(() => projectShopCounterCatalog(items, query, catalogPage), [items, query, catalogPage])
   const visibleItems = catalog.rows
-  useEffect(() => {
-    if (catalogPage !== catalog.page) setCatalogPage(catalog.page)
-  }, [catalogPage, catalog.page])
   const lines = items.flatMap((item) => {
     const quantity = cart[item.sku] ?? 0
     return quantity > 0 ? [{ item, quantity }] : []
