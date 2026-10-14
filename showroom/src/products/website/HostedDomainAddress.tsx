@@ -15,6 +15,11 @@ function normalizedHostname(input: string): string | null {
 function connectionIssue(code: string | undefined): string {
   if (code === 'ownership_pending') return 'Add the TXT record below to prove that this domain is yours.'
   if (code === 'dns_pending') return 'Point the domain to the hosting record below, then check again.'
+  if (code === 'verification_expired') return 'The connection needs a fresh check. Check again to restore this address.'
+  if (code === 'channel_unpublished') return 'Publish your website to make this address visible.'
+  if (code === 'provider_cleanup_pending') return 'Removal is still pending. Retry removal.'
+  if (code === 'provider_verification_pending') return 'Hosting verification is still in progress. Check again shortly.'
+  if (code === 'provider_missing') return 'Hosting is not attached yet. Keep the TXT record in place, then check again.'
   if (code === 'provider_unavailable') return 'Domain checks are temporarily unavailable. Try again shortly.'
   return 'The domain is not connected yet. Check the DNS records and try again.'
 }
@@ -67,17 +72,17 @@ export function HostedDomainAddress({ client, channelId, canWrite }: {
     <span>Your own domain</span>
     {domain ? <>
       {connected ? <a href={`https://${domain.hostname}/`} target="_blank" rel="noreferrer">{domain.hostname}</a> : <strong>{domain.hostname}</strong>}
-      <small>{connected ? 'Connected and ready to share.' : domain.state === 'active' ? 'Connected. Publish the website to make it visible here.' : 'Waiting for domain verification.'}</small>
-      {domain.state === 'pending' ? <div className="website-domain-steps" aria-label="Domain setup records">
+      <small>{connected ? 'Connected and ready to share.' : domain.issue === 'provider_cleanup_pending' ? 'Removal is still pending.' : domain.state === 'active' ? 'Connected. Publish the website to make it visible here.' : 'Waiting for domain verification.'}</small>
+      {domain.issue === 'provider_cleanup_pending' ? <p className="website-domain-pending">{connectionIssue(domain.issue)}</p> : domain.state === 'pending' ? <div className="website-domain-steps" aria-label="Domain setup records">
         <p>Add these records where you manage the domain, then check the connection.</p>
         <dl><div><dt>Ownership · TXT</dt><dd><span>{domain.verification.name}</span><code>{domain.verification.value}</code></dd></div>
           {domain.dns ? <div><dt>Hosting · {domain.dns.type}</dt><dd><span>{domain.dns.name}</span><code>{domain.dns.value}</code></dd></div> : null}</dl>
         {domain.issue ? <p className="website-domain-pending">{connectionIssue(domain.issue)}</p> : null}
       </div> : null}
       {canWrite ? <div className="website-domain-actions">
-        {domain.state === 'pending' ? <button type="button" className="website-button is-secondary" disabled={busy} onClick={() => void mutate(signal => client.checkDomain(domain.hostname, signal))}>Check connection</button> : null}
+        {domain.state === 'pending' && domain.issue !== 'provider_cleanup_pending' && domain.issue !== 'channel_unpublished' ? <button type="button" className="website-button is-secondary" disabled={busy} onClick={() => void mutate(signal => client.checkDomain(domain.hostname, signal))}>Check connection</button> : null}
         {removeArmed ? <><span>Remove this domain from your website?</span><button type="button" className="website-button is-secondary" disabled={busy} onClick={() => setRemoveArmed(false)}>Keep domain</button><button type="button" className="website-button is-secondary" disabled={busy} onClick={() => void mutate(signal => client.releaseDomain(domain.hostname, signal))}>Remove domain</button></>
-          : <button type="button" className="website-domain-remove" disabled={busy} onClick={() => setRemoveArmed(true)}>Remove domain</button>}
+          : <button type="button" className="website-domain-remove" disabled={busy} onClick={() => setRemoveArmed(true)}>{domain.issue === 'provider_cleanup_pending' ? 'Retry removal' : 'Remove domain'}</button>}
       </div> : null}
     </> : status?.enabled && channelId ? <>
       <strong>Connect a domain you own</strong>

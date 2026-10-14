@@ -4,6 +4,7 @@ Run only with SUPERMEGA_RUN_WEBSITE_DOMAIN_SQL=1. No managed database is used.
 """
 
 from hashlib import sha256
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import unittest
@@ -31,11 +32,20 @@ class SyntheticVercel:
         self.verified, self.configured = True, True
         self.removed = []
         self.fail_remove = False
+        self.fail_add_once = False
+        self.missing = False
 
     def add(self, hostname):
+        if self.fail_add_once:
+            self.fail_add_once = False
+            self.missing = True
+            raise ProviderUnavailable('provider_unavailable')
+        self.missing = False
         return self.get(hostname)
 
     def get(self, hostname):
+        if self.missing:
+            raise ProviderUnavailable('provider_missing')
         return {'name': hostname, 'projectId': 'prj_synthetic', 'verified': self.verified,
                 'apexName': 'customer-example.org'}
 
@@ -57,6 +67,8 @@ class SyntheticVercel:
 class WebsiteDomainSqlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if NEW_MIGRATION not in pg.CURRENT_MIGRATIONS:
+            raise RuntimeError('website_domain_migration_missing_from_canonical_chain')
         # The base rehearsal's global Trial schema guard currently fails even
         # for its own Website inquiry SQL tests. This suite still applies real
         # migrations and exercises the domain functions against PostgreSQL.
@@ -89,7 +101,7 @@ class WebsiteDomainSqlTests(unittest.TestCase):
         pg._create_auth_session_fixture(cls.admin_url)
         pg._apply_migrations(postgres_bin=cls.bin, admin_password=password, admin_database_url=cls.admin_url,
                              port=port, environment=cls.environment,
-                             migrations=(*pg.CURRENT_MIGRATIONS, NEW_MIGRATION))
+                             migrations=pg.CURRENT_MIGRATIONS)
         pg._provision_runtime(cls.admin_url, runtime_password)
         pg._seed_rehearsal_data(cls.admin_url)
         with pg._connect(cls.admin_url) as connection:
@@ -157,6 +169,59 @@ class WebsiteDomainSqlTests(unittest.TestCase):
         self.assertEqual(self.domains.status(FIRST)['domain']['state'], 'pending')
         with self.assertRaises(Exception):
             self.domains.receive(**{**arguments, 'request_id':str(uuid4())})
+
+    def test_worker_renewal_is_bounded_retried_and_cannot_revive_release(self):
+        channel = self.channel(FIRST)
+        self.domains.claim(FIRST, hostname=HOST, channel_id=channel)
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.domains.check(FIRST, hostname=HOST)
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.website_domain_bindings
+                set verified_until=clock_timestamp()+interval '1 hour' where hostname=%s""", (HOST,))
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=False):
+            self.assertEqual(self.domains.renew_due(limit=1),
+                             {'examined': 1, 'renewed': 0, 'notRenewed': 1})
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.assertEqual(self.domains.renew_due(limit=1)['examined'], 0)
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.website_domain_bindings
+                set renewal_checked_at=clock_timestamp()-interval '31 minutes' where hostname=%s""", (HOST,))
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.assertEqual(self.domains.renew_due(limit=1),
+                             {'examined': 1, 'renewed': 1, 'notRenewed': 0})
+        self.assertIsNotNone(self.domains.public_page(HOST))
+        with pg._connect(self.admin_url) as connection:
+            binding = connection.execute("""select binding_id,challenge,verified_until
+                from app_private.website_domain_bindings where hostname=%s""", (HOST,)).fetchone()
+            self.assertGreater(binding[2], datetime.now(timezone.utc) + timedelta(hours=23))
+        with self.domains.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                cursor.execute('select app_private.complete_website_domain_renewal(%s,%s) as renewed',
+                               (binding[0], binding[1]))
+                self.assertFalse(cursor.fetchone()['renewed'])
+        with pg._connect(self.admin_url) as connection:
+            connection.execute("""update app_private.website_domain_bindings
+                set verified_until=clock_timestamp()+interval '1 hour' where hostname=%s""", (HOST,))
+        with self.domains.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                cursor.execute('select * from app_private.claim_website_domain_renewals(1)')
+                self.assertEqual(len(cursor.fetchall()), 1)
+        self.domains.release(FIRST, hostname=HOST)
+        with self.domains.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                cursor.execute('select app_private.complete_website_domain_renewal(%s,%s) as renewed',
+                               (binding[0], binding[1]))
+                self.assertFalse(cursor.fetchone()['renewed'])
+        self.assertIsNone(self.domains.public_page(HOST))
+
+    def test_initial_provider_failure_recovers_after_tenant_proves_txt(self):
+        channel = self.channel(FIRST)
+        self.provider.fail_add_once = True
+        pending = self.domains.claim(FIRST, hostname=HOST, channel_id=channel)
+        self.assertEqual(pending['domain']['issue'], 'provider_unavailable')
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['state'], 'active')
+        self.assertIsNotNone(self.domains.public_page(HOST))
 
     def test_cross_tenant_claim_rejected_then_release_keeps_original_inbox(self):
         first_channel, second_channel = self.channel(FIRST), self.channel(SECOND)

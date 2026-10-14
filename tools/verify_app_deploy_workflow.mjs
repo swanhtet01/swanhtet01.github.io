@@ -459,17 +459,24 @@ requireContract('coordinated release avoids redundant local app install',
   && workflow.includes('npx --yes vercel@56.1.0 build --prod --standalone --yes --token="$VERCEL_TOKEN"'))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
-requireContract('canonical SPA routes use one filesystem-first fallback behind the header floor',
-  config.routes?.length === 5
+requireContract('canonical SPA and tenant-domain routes preserve the published HTML policy',
+  config.routes?.length === 6
   && config.routes[0]?.src === '/sites/(.*)' && config.routes[0]?.dest === '/api/app.py'
-  && config.routes[1]?.src === '/(.*)' && config.routes[1]?.continue === true && !config.routes[1]?.dest
-  && config.routes[2]?.src === '/api/(.*)' && config.routes[2]?.dest === '/api/app.py'
-  && config.routes[3]?.handle === 'filesystem'
-  && config.routes[4]?.src === '/(.*)' && config.routes[4]?.dest === '/index.html')
+  && config.routes[1]?.src === '/((?!(?:api|sites)(?:/|$))(.*))'
+  && JSON.stringify(config.routes[1]?.methods) === JSON.stringify(['GET', 'HEAD'])
+  && config.routes[1]?.missing?.[0]?.type === 'host'
+  && config.routes[1]?.missing?.[0]?.value === '^(?:[A-Za-z0-9-]+\\.)*(?:supermega\\.dev|vercel\\.app)$'
+  && config.routes[1]?.transforms?.[0]?.type === 'request.path'
+  && config.routes[1]?.transforms?.[0]?.args === '/__site-domain/$1'
+  && config.routes[1]?.dest === '/api/app.py'
+  && config.routes[2]?.src === '/(.*)' && config.routes[2]?.continue === true && !config.routes[2]?.dest
+  && config.routes[3]?.src === '/api/(.*)' && config.routes[3]?.dest === '/api/app.py'
+  && config.routes[4]?.handle === 'filesystem'
+  && config.routes[5]?.src === '/(.*)' && config.routes[5]?.dest === '/index.html')
 // The app keeps a client's catalog, orders, and evidence in browser storage. It
 // shipped with no response headers at all while the kernel already had a full
 // set, so it was framable and ran under no content policy.
-const appSecurityHeaders = config.routes?.[1]?.headers || {}
+const appSecurityHeaders = config.routes?.[2]?.headers || {}
 const appPolicy = String(appSecurityHeaders['Content-Security-Policy'] || '')
 requireContract('app is served with a security header floor',
   appSecurityHeaders['X-Frame-Options'] === 'DENY'
@@ -509,7 +516,7 @@ requireContract('app shell carries the same policy for hosts that cannot set hea
   && !appShellPolicy.includes('frame-ancestors'))
 requireContract('app shell carries no inline script the policy would refuse',
   ![...appShell.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].some((match) => match[1].trim().length))
-requireContract('canonical API function', config.routes?.[2]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
+requireContract('canonical API function', config.routes?.[3]?.dest === '/api/app.py' && JSON.stringify(Object.keys(config.functions || {}).sort()) === JSON.stringify(['api/app.py']) && config.functions?.['api/app.py']?.maxDuration === 60 && config.functions?.['api/app.py']?.includeFiles === 'supermega_runtime/**' && generator.includes('maxDuration: 60') && generator.includes("includeFiles: 'supermega_runtime/**'"))
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('Python dependencies and entrypoint probe trigger app review',

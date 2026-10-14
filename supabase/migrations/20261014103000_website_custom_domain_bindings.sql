@@ -12,6 +12,7 @@ create table app_private.website_domain_bindings (
   state text not null default 'pending' check (state in ('pending','active','releasing','released')),
   verified_until timestamptz,
   last_verified_at timestamptz,
+  renewal_checked_at timestamptz,
   dns_record jsonb,
   issue text not null default '' check (issue ~ '^[a-z_]{0,40}$'),
   created_by text not null,
@@ -90,7 +91,7 @@ end;
 $$;
 
 -- Only the server can report an external check, and a released claim can never
--- be revived by a late provider response. An active lease is at most 48 hours.
+-- be revived by a late provider response. An active lease lasts 24 hours.
 create function app_private.record_website_domain_check(
   p_binding uuid,p_challenge text,p_verified boolean,p_dns jsonb,p_issue text
 ) returns void language plpgsql security definer
@@ -111,11 +112,71 @@ begin
     state=case when p_verified and c.enabled then 'active' else 'pending' end,
     verified_until=case when p_verified and c.enabled then clock_timestamp()+interval '24 hours' else null end,
     last_verified_at=case when p_verified and c.enabled then clock_timestamp() else b.last_verified_at end,
-    dns_record=p_dns,issue=p_issue
+    renewal_checked_at=null,dns_record=p_dns,issue=p_issue
     from app_private.website_inquiry_channels c
     where b.binding_id=p_binding and b.workspace_id=workspace and b.state in ('pending','active')
       and b.challenge=p_challenge and c.workspace_id=b.workspace_id and c.channel_id=b.channel_id;
   if not found then raise exception 'website_domain_changed' using errcode='40001'; end if;
+end;
+$$;
+
+-- A separately scheduled worker claims a bounded batch before making DNS and
+-- provider reads. A 30-minute retry delay prevents duplicate provider traffic
+-- when jobs overlap or a process crashes. The private challenge never enters
+-- a public HTTP response.
+create function app_private.claim_website_domain_renewals(p_limit integer)
+returns table(binding_id uuid,hostname text,challenge text)
+language plpgsql security definer set search_path=pg_catalog,app_private as $$
+begin
+  if p_limit is null or p_limit not between 1 and 20 then
+    raise exception 'website_domain_invalid' using errcode='22023';
+  end if;
+  return query
+    with due as (
+      select b.binding_id
+      from app_private.website_domain_bindings b
+      join app_private.website_inquiry_channels c
+        on c.workspace_id=b.workspace_id and c.channel_id=b.channel_id
+      where b.state='active' and b.verified_until<=clock_timestamp()+interval '12 hours'
+        and (b.renewal_checked_at is null
+          or b.renewal_checked_at<=clock_timestamp()-interval '30 minutes')
+        and c.enabled and app_private.workspace_is_active(b.workspace_id)
+      order by b.verified_until,b.binding_id
+      limit p_limit for update of b skip locked
+    )
+    update app_private.website_domain_bindings b
+      set renewal_checked_at=clock_timestamp()
+      from due where b.binding_id=due.binding_id
+      returning b.binding_id,b.hostname,b.challenge;
+end;
+$$;
+
+-- Completion is single-use and cannot revive a released, unpublished, or
+-- replaced claim. The worker calls this only after fresh tenant TXT ownership
+-- and Vercel project/DNS checks all succeed.
+create function app_private.complete_website_domain_renewal(
+  p_binding uuid,p_challenge text
+) returns boolean language plpgsql security definer
+set search_path=pg_catalog,app_private as $$
+declare workspace text;
+begin
+  if p_binding is null or p_challenge is null then
+    raise exception 'website_domain_invalid' using errcode='22023';
+  end if;
+  select b.workspace_id into workspace from app_private.website_domain_bindings b
+    where b.binding_id=p_binding;
+  if not found then return false; end if;
+  perform pg_advisory_xact_lock(hashtextextended('website-inquiry:' || workspace,0));
+  update app_private.website_domain_bindings b set
+    verified_until=clock_timestamp()+interval '24 hours',
+    last_verified_at=clock_timestamp(),renewal_checked_at=null,issue=''
+    from app_private.website_inquiry_channels c
+    where b.binding_id=p_binding and b.workspace_id=workspace
+      and b.challenge=p_challenge and b.state='active'
+      and b.renewal_checked_at is not null
+      and c.workspace_id=b.workspace_id and c.channel_id=b.channel_id
+      and c.enabled and app_private.workspace_is_active(b.workspace_id);
+  return found;
 end;
 $$;
 
@@ -130,6 +191,7 @@ begin
   end if;
   perform pg_advisory_xact_lock(hashtextextended('website-inquiry:' || workspace,0));
   update app_private.website_domain_bindings set state='releasing',verified_until=null,
+    renewal_checked_at=null,
     issue='provider_cleanup_pending'
     where hostname=p_hostname and workspace_id=workspace and state<>'released';
   if not found then raise exception 'website_domain_changed' using errcode='40001'; end if;
@@ -210,6 +272,8 @@ $$;
 
 revoke all on function app_private.claim_website_domain(uuid,text,uuid,text),
   app_private.record_website_domain_check(uuid,text,boolean,jsonb,text),
+  app_private.claim_website_domain_renewals(integer),
+  app_private.complete_website_domain_renewal(uuid,text),
   app_private.begin_website_domain_release(text),
   app_private.finish_website_domain_release(text),app_private.read_website_domain_page(text),
   app_private.read_website_domain_media(text,text),
@@ -217,6 +281,8 @@ revoke all on function app_private.claim_website_domain(uuid,text,uuid,text),
   from public,anon,authenticated,service_role;
 grant execute on function app_private.claim_website_domain(uuid,text,uuid,text),
   app_private.record_website_domain_check(uuid,text,boolean,jsonb,text),
+  app_private.claim_website_domain_renewals(integer),
+  app_private.complete_website_domain_renewal(uuid,text),
   app_private.begin_website_domain_release(text),
   app_private.finish_website_domain_release(text),app_private.read_website_domain_page(text),
   app_private.read_website_domain_media(text,text),

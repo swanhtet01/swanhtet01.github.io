@@ -52,6 +52,8 @@ def require_domain_schema(cursor) -> None:
         from pg_class where oid=to_regclass('app_private.website_domain_bindings')),false) as guarded,
         to_regprocedure('app_private.claim_website_domain(uuid,text,uuid,text)') is not null as claim,
         to_regprocedure('app_private.record_website_domain_check(uuid,text,boolean,jsonb,text)') is not null as record_check,
+        to_regprocedure('app_private.claim_website_domain_renewals(integer)') is not null as claim_renewals,
+        to_regprocedure('app_private.complete_website_domain_renewal(uuid,text)') is not null as complete_renewal,
         to_regprocedure('app_private.begin_website_domain_release(text)') is not null as begin_release,
         to_regprocedure('app_private.finish_website_domain_release(text)') is not null as finish_release,
         to_regprocedure('app_private.read_website_domain_page(text)') is not null as page,
@@ -59,6 +61,7 @@ def require_domain_schema(cursor) -> None:
         to_regprocedure('app_private.receive_website_domain_inquiry(text,uuid,text,text,text,boolean,text)') is not null as inquiry""")
     row = cursor.fetchone()
     if not row or not all(row[key] is True for key in ('guarded', 'claim', 'record_check',
+                                                     'claim_renewals', 'complete_renewal',
                                                      'begin_release', 'finish_release', 'page', 'media', 'inquiry')):
         raise TrialNotReadyError(('website_domain_schema_unverified',))
 
@@ -153,7 +156,10 @@ class VercelDomainProvider:
 
     def get(self, hostname: str) -> dict:
         route = f'/v9/projects/{quote(self.project_id)}/domains/{quote(hostname)}'
-        return self._checked_domain(_read_json(self._url(route), token=self._token), hostname)
+        data = _read_json(self._url(route), token=self._token, accept_not_found=True)
+        if not data:
+            raise ProviderUnavailable('provider_missing')
+        return self._checked_domain(data, hostname)
 
     def verify(self, hostname: str) -> dict:
         route = f'/v9/projects/{quote(self.project_id)}/domains/{quote(hostname)}/verify'
@@ -275,7 +281,14 @@ class WebsiteDomainStore:
         verified = False
         try:
             tenant_proof = tenant_txt_proven(hostname, row['challenge'])
-            domain = self.provider.get(hostname)
+            try:
+                domain = self.provider.get(hostname)
+            except ProviderUnavailable as exc:
+                if not tenant_proof or str(exc) != 'provider_missing':
+                    raise
+                # A failed initial attachment remains recoverable after the
+                # tenant has proved the fresh per-claim DNS challenge.
+                domain = self.provider.add(hostname)
             if tenant_proof and not domain['verified']:
                 domain = self.provider.verify(hostname)
             config = self.provider.config(hostname)
@@ -293,6 +306,43 @@ class WebsiteDomainStore:
         self._record(principal, str(row['binding_id']), hostname,
                      verified=verified, dns=dns, issue=issue)
         return self.status(principal)
+
+    def renew_due(self, *, limit: int = 20) -> dict:
+        """Recheck a bounded due batch for a separately scheduled worker."""
+        if not self.store.write_enabled or self.provider is None:
+            raise TrialNotReadyError(('website_domain_renewal_unavailable',))
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise TrialValidationError('website_domain_invalid')
+        with self.store._connect() as connection:
+            with connection.transaction(), connection.cursor() as cursor:
+                self.store._assert_runtime_role(cursor)
+                self.store._assert_schema(cursor)
+                require_domain_schema(cursor)
+                cursor.execute("set local statement_timeout='5s'")
+                cursor.execute('select * from app_private.claim_website_domain_renewals(%s)', (limit,))
+                due = cursor.fetchall()
+        renewed = 0
+        for row in due:
+            hostname = normalize_hostname(row['hostname'])
+            try:
+                if not tenant_txt_proven(hostname, row['challenge']):
+                    continue
+                domain = self.provider.get(hostname)
+                config = self.provider.config(hostname)
+                if not domain['verified'] or config['misconfigured'] is not False:
+                    continue
+            except ProviderUnavailable:
+                continue
+            with self.store._connect() as connection:
+                with connection.transaction(), connection.cursor() as cursor:
+                    self.store._assert_runtime_role(cursor)
+                    self.store._assert_schema(cursor)
+                    require_domain_schema(cursor)
+                    cursor.execute("set local statement_timeout='5s'")
+                    cursor.execute('select app_private.complete_website_domain_renewal(%s,%s) as renewed',
+                                   (row['binding_id'], row['challenge']))
+                    renewed += int(cursor.fetchone()['renewed'] is True)
+        return {'examined': len(due), 'renewed': renewed, 'notRenewed': len(due) - renewed}
 
     def release(self, principal: TrialPrincipal, *, hostname: str) -> dict:
         hostname = normalize_hostname(hostname)

@@ -54,6 +54,9 @@ class HostnameTests(unittest.TestCase):
         with patch('supermega_runtime.website_domain._read_json', return_value={**domain, 'projectId': 'prj_other'}):
             with self.assertRaises(ProviderUnavailable):
                 provider.get(HOST)
+        with patch('supermega_runtime.website_domain._read_json', return_value={}):
+            with self.assertRaisesRegex(ProviderUnavailable, 'provider_missing'):
+                provider.get(HOST)
         with patch('supermega_runtime.website_domain._read_json', return_value={'misconfigured': False, 'recommendedCNAME': [{'value':'target.vercel-dns.com'}]}):
             config = provider.config(HOST)
             self.assertIs(config['misconfigured'], False)
@@ -108,6 +111,9 @@ class DomainRouterTests(unittest.TestCase):
         platform.receive.assert_not_called()
         domain.public_page.return_value = None
         self.assertEqual(client.get('/__site-domain').status_code, 404)
+        domain.public_page.assert_called_once_with(HOST)
+        domain.public_page.reset_mock()
+        self.assertEqual(client.get('/__site-domain/').status_code, 404)
         domain.public_page.assert_called_once_with(HOST)
 
     def test_domain_inquiry_requires_exact_host_origin_and_no_channel(self):

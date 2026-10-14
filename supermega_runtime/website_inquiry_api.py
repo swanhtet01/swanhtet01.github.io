@@ -363,6 +363,7 @@ def create_website_inquiry_router(
         return await invoke(lambda: domain_store.public_photo(host, asset_id), photo=True)
 
     @router.get('/__site-domain')
+    @router.get('/__site-domain/')
     async def domain_home(request: Request):
         available(request, allow_query=True)
         host = verified_custom_host(request)

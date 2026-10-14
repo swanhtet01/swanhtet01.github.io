@@ -30,7 +30,17 @@ test('app Vercel generator emits zero crons and a bounded Python function', asyn
     assert.deepEqual(config.crons, [])
     assert.equal(config.git.deploymentEnabled, false)
     assert.deepEqual(config.routes[0], { src: '/sites/(.*)', dest: '/api/app.py' })
-    assert.equal(config.routes[1].continue, true)
+    const customerRoute = config.routes[1]
+    assert.equal(customerRoute.dest, '/api/app.py')
+    assert.deepEqual(customerRoute.methods, ['GET', 'HEAD'])
+    assert.deepEqual(customerRoute.transforms, [{ type: 'request.path', op: 'set', args: '/__site-domain/$1' }])
+    const customerPath = new RegExp(`^${customerRoute.src}$`)
+    const platformHost = new RegExp(customerRoute.missing[0].value)
+    for (const path of ['/', '/contact', '/about/team']) assert.ok(customerPath.test(path), path)
+    for (const path of ['/sites/one', '/api/public/domain-inquiries', '/api/public/domain-media/a']) assert.ok(!customerPath.test(path), path)
+    for (const host of ['supermega.dev', 'app.supermega.dev', 'megaos.vercel.app']) assert.ok(platformHost.test(host), host)
+    for (const host of ['shop.example.com', 'cafe.example.org']) assert.ok(!platformHost.test(host), host)
+    assert.equal(config.routes[2].continue, true)
     assert.equal(project.projectName, 'megaos')
   } finally {
     await rm(workspace, { recursive: true, force: true })
