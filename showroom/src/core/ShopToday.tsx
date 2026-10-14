@@ -7,6 +7,7 @@ import { bi } from './i18n-actions'
 import { projectShopTodaySalesPulse } from './shop-today-sales'
 import { prioritizeShopTodayProducts } from './shop-today-priority'
 import { ProductPhoto } from './ProductPhoto'
+import { shopOrderLink } from './shop-order-target'
 
 const ShopTodayAdvancedPanel = lazy(() => import('./ShopTodayAdvanced').then((module) => ({ default: module.ShopTodayAdvanced })))
 
@@ -173,7 +174,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
       <article aria-label="Order queue" className="shop-operations-card shop-order-queue-card">
         <header><span><strong>Order queue</strong></span><b>{openOrderCount} open</b></header>
         <div className="shop-operating-list">
-          {activeOrders.length ? activeOrders.map((order) => <Link key={order.id} to="/shop/?tab=orders#shop-order-queue">
+          {activeOrders.length ? activeOrders.map((order) => <Link key={order.id} to={shopOrderLink(order.id)}>
             <span><strong>{order.item}</strong><small>{privacySafeQueueCustomer(order.customer)} · {order.quantity} item{order.quantity === 1 ? '' : 's'}</small></span>
             <span><b>{formatMmk(order.total)}</b><small>{order.status} · {order.paymentStatus === 'pending' ? 'payment due' : 'paid'}</small></span>
           </Link>) : <p className="shop-operating-empty"><strong>Queue clear</strong><span>No open orders need fulfilment.</span></p>}

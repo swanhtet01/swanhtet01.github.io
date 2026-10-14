@@ -5,6 +5,7 @@ import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, t
 import { shopCounterDraftContext } from './shop-counter-draft-context'
 import { installShopSaleFocus } from './shop-sale-focus'
 import { projectShopCounterCatalog } from './shop-counter-catalog-window'
+import { shopOrderTargetId } from './shop-order-target'
 import { createCounterTicketSession, emptyCounterBasket, type CounterBasket, type CounterTicketStorageScope } from './shop-parked-tickets'
 import {
   shopBusinessTemplate,
@@ -798,10 +799,6 @@ function recordDisplayReference(recordId: string) {
   // untouched. Every caller happens to pass a generated UUID today, so this was latent.
   const match = /^([A-Z]{2,5})-([A-F0-9]{8})(?:-[A-F0-9-]+)?$/.exec(trimmed.toUpperCase())
   return match ? `${match[1]}-${match[2]}` : trimmed
-}
-
-function commerceOrderTargetId(orderId: string) {
-  return `shop-order-${orderId.replace(/[^A-Za-z0-9_-]+/g, '-')}`
 }
 
 function commandUuid() {
@@ -3890,7 +3887,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         : `Order ${commerceOrderDisplayReference(pendingAction.subjectId)} created. Stock reserved. Finish fulfilment and reconcile payment before completion.`
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
     setPendingAction(null)
-    if (pendingAction.presentation === 'counter' && !counterSettlement) navigate(`/shop/?tab=orders#${commerceOrderTargetId(pendingAction.subjectId)}`)
+    if (pendingAction.presentation === 'counter' && !counterSettlement) navigate(`/shop/?tab=orders#${shopOrderTargetId(pendingAction.subjectId)}`)
   }
 
   async function reviewStorefrontRequest(requestId: string) {
@@ -7213,7 +7210,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
             <span className="core-eyebrow">Next action</span>
             <h3>{nextOrderAction}</h3>
             <p>{nextOrderDetail}</p>
-            {nextOrder ? <a className={coreUi.q} href={`#${commerceOrderTargetId(nextOrder.id)}`}>Open next order</a> : <Link className="core-button compact" to="/shop/?tab=counter">Open the counter</Link>}
+            {nextOrder ? <a className={coreUi.q} href={`#${shopOrderTargetId(nextOrder.id)}`}>Open next order</a> : <Link className="core-button compact" to="/shop/?tab=counter">Open the counter</Link>}
           </section>
           <section className="order-insight-card">
             <div className="order-insight-heading"><span className="core-eyebrow">Queue health</span><strong>What needs attention</strong></div>
@@ -7980,7 +7977,7 @@ function OrderList({
     const canCancelOrder = active && canCancel(order.id)
     const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary) || (needsPayment && !reconcileIsPrimary)
     const primaryActionLabel = shopOrderPrimaryActionLabel(order)
-    const targetId = commerceOrderTargetId(order.id)
+    const targetId = shopOrderTargetId(order.id)
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <strong>{order.customer} · {order.lines
