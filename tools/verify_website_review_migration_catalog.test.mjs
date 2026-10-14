@@ -8,7 +8,7 @@ import { verifyWebsiteReviewMigrationCatalog } from './verify_website_review_mig
 const root = resolve(import.meta.dirname, '..')
 const verify = db => verifyWebsiteReviewMigrationCatalog(db, (name, ok) => assert.ok(ok, name))
 
-test('complete migration chain and adversarial private catalog changes', async t => {
+test('historical Website review catalog and later inquiry migration compatibility', async t => {
   const db = new PGlite()
   await db.waitReady
   try {
@@ -17,7 +17,11 @@ test('complete migration chain and adversarial private catalog changes', async t
       create table auth.sessions(id uuid primary key,user_id uuid not null);`)
     const names = (await readdir(resolve(root, 'supabase/migrations')))
       .filter(name => name.endsWith('.sql') && name !== '20260711081300_public_legacy_baseline.sql').sort()
-    for (const name of names) await db.exec(await readFile(resolve(root, 'supabase/migrations', name), 'utf8'))
+    const inquiryMigration = '20261014011202_website_inquiry_delivery.sql'
+    assert.equal(names.at(-1), inquiryMigration)
+    for (const name of names.slice(0, -1)) {
+      await db.exec(await readFile(resolve(root, 'supabase/migrations', name), 'utf8'))
+    }
     await t.test('exact full catalog accepted', async () => { await verify(db) })
     await t.test('checkout CRLF and LF preserve the same function contract', async () => {
       await db.exec('begin')
@@ -62,5 +66,19 @@ test('complete migration chain and adversarial private catalog changes', async t
         await verify(db)
       })
     }
+    await t.test('inquiry migration adds two RLS-sealed private relations', async () => {
+      await db.exec(await readFile(resolve(root, 'supabase/migrations', inquiryMigration), 'utf8'))
+      const { rows } = await db.query(`
+        select c.relname, c.relrowsecurity, c.relforcerowsecurity
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'app_private'
+          and c.relname in ('website_inquiry_channels', 'website_inbox')
+        order by c.relname
+      `)
+      assert.deepEqual(rows, [
+        { relname: 'website_inbox', relrowsecurity: true, relforcerowsecurity: true },
+        { relname: 'website_inquiry_channels', relrowsecurity: true, relforcerowsecurity: true },
+      ])
+    })
   } finally { await db.close() }
 })
