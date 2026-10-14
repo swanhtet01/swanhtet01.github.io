@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { getProductImage, subscribeProductImages } from './product-image-store'
+import { loadManagedProductPhoto, subscribeManagedProductPhotos } from './shop-managed-media-client'
 
 /**
  * The current photo for a SKU as an object URL, or null. Scope is required (see
@@ -11,11 +12,15 @@ import { getProductImage, subscribeProductImages } from './product-image-store'
  * stores or removes this scope+SKU's photo. Lives apart from ProductPhoto.tsx
  * so that file exports only components (react-refresh contract).
  */
-export function useProductImageUrl(scope: string, sku: string): string | null {
-  const [url, setUrl] = useState<string | null>(null)
+export function useProductImageState(scope: string, sku: string): { url: string | null; issue: string | null } {
+  const [state, setState] = useState<{ scope: string; sku: string; url: string | null; issue: string | null }>(
+    { scope, sku, url: null, issue: null },
+  )
   useEffect(() => {
     let active = true
     let objectUrl: string | null = null
+    let controller: AbortController | null = null
+    const managed = scope.startsWith('managed:')
     // Each load() is an independent IndexedDB read on its own connection, so two
     // in flight have no ordering guarantee. Replacing a photo twice quickly fires
     // two change notifications and therefore two concurrent loads within ONE
@@ -33,26 +38,44 @@ export function useProductImageUrl(scope: string, sku: string): string | null {
     function load() {
       latest += 1
       const sequence = latest
-      getProductImage(scope, sku).then((record) => {
+      controller?.abort()
+      controller = new AbortController()
+      const photo = managed
+        ? loadManagedProductPhoto(scope, sku, controller.signal)
+        : getProductImage(scope, sku).then((record) => record?.blob ?? null)
+      photo.then((blob) => {
         if (!active || sequence !== latest) return
         release()
-        objectUrl = record ? URL.createObjectURL(record.blob) : null
-        setUrl(objectUrl)
-      }).catch(() => {
+        objectUrl = blob ? URL.createObjectURL(blob) : null
+        setState({ scope, sku, url: objectUrl, issue: null })
+      }).catch((error) => {
         if (!active || sequence !== latest) return
         release()
-        setUrl(null)
+        setState({ scope, sku, url: null, issue: managed
+          ? error instanceof Error && error.message ? error.message : 'Shared product photos are unavailable.'
+          : null })
       })
     }
     load()
-    const unsubscribe = subscribeProductImages((changedScope, changedSku) => {
+    const subscribe = managed ? subscribeManagedProductPhotos : subscribeProductImages
+    const unsubscribe = subscribe((changedScope, changedSku) => {
       if (changedScope === scope && changedSku === sku) load()
     })
+    const reloadWhenVisible = () => { if (!document.hidden) load() }
+    if (managed) document.addEventListener('visibilitychange', reloadWhenVisible)
     return () => {
       active = false
+      controller?.abort()
       unsubscribe()
+      if (managed) document.removeEventListener('visibilitychange', reloadWhenVisible)
       release()
     }
   }, [scope, sku])
-  return url
+  return state.scope === scope && state.sku === sku
+    ? { url: state.url, issue: state.issue }
+    : { url: null, issue: null }
+}
+
+export function useProductImageUrl(scope: string, sku: string): string | null {
+  return useProductImageState(scope, sku).url
 }

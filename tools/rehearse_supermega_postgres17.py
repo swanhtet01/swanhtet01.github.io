@@ -75,6 +75,7 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
 )
 DOMAIN_CANDIDATE_MIGRATION = "20261014103000_website_custom_domain_bindings.sql"
 DOMAIN_CORRECTIVE_MIGRATION = "20261014122400_website_domain_attempt_fencing.sql"
+SHOP_MEDIA_CANDIDATE_MIGRATION = "20261014164000_shop_product_media.sql"
 # Both depend on each other and remain outside the canonical release chain.
 DOMAIN_CANDIDATE_MIGRATIONS = (DOMAIN_CANDIDATE_MIGRATION, DOMAIN_CORRECTIVE_MIGRATION)
 RUNTIME_ROLE = "supermega_trial_login"
@@ -222,7 +223,8 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
     if git("rev-parse", "HEAD") != expected_head:
         raise RehearsalFailure("source_head_mismatch")
     observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
-        if path.name not in ("20260711081300_public_legacy_baseline.sql", *DOMAIN_CANDIDATE_MIGRATIONS)))
+        if path.name not in ("20260711081300_public_legacy_baseline.sql", *DOMAIN_CANDIDATE_MIGRATIONS,
+                             SHOP_MEDIA_CANDIDATE_MIGRATION)))
     if observed != CURRENT_MIGRATIONS:
         raise RehearsalFailure("private_migration_inventory_mismatch")
     return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
