@@ -178,6 +178,7 @@ function validateProposalShape(packet) {
   if (packet.previewBranch.maximumLifetimeHours !== MAX_PREVIEW_LIFETIME_HOURS) fail('supabase_preview_rehearsal_proposal_lifetime_invalid')
   if (packet.previewBranch.startsWithProductionData !== false || packet.previewBranch.deleteAfterEvidence !== true) fail('supabase_preview_rehearsal_proposal_data_boundary_invalid')
   if (packet.previewBranch.productionRefsAllowed !== false || packet.previewBranch.privilegedRuntimeCredentialsAllowed !== false) fail('supabase_preview_rehearsal_proposal_secret_boundary_invalid')
+  if (packet.previewBranch.costConfirmed !== false) fail('supabase_preview_rehearsal_proposal_cost_gate_invalid')
   if (packet.migrationPlan?.schemaVersion !== EXPECTED_SOURCE_TARGET_SCHEMA_VERSION
     || packet.migrationPlan?.migrationCount !== EXPECTED_MIGRATION_COUNT
     || packet.migrationPlan?.privateMigrationCount !== EXPECTED_PRIVATE_MIGRATION_COUNT
@@ -186,6 +187,11 @@ function validateProposalShape(packet) {
     fail('supabase_preview_rehearsal_proposal_migration_plan_invalid')
   }
   if (!/^sha256:[0-9a-f]{64}$/.test(packet.migrationPlan?.chainDigest || '')) fail('supabase_preview_rehearsal_proposal_migration_digest_invalid')
+  if (packet.migrationPlan?.branchApplyStrategy !== 'verify_inherited_schema_then_review_unapplied_delta'
+    || packet.migrationPlan?.fullChainReplayAllowed !== false
+    || packet.migrationPlan?.currentLiveHistoryReconciled !== false) {
+    fail('supabase_preview_rehearsal_proposal_branch_apply_invalid')
+  }
   if (!Array.isArray(packet.migrationPlan?.migrations) || packet.migrationPlan.migrations.length !== EXPECTED_MIGRATION_COUNT) fail('supabase_preview_rehearsal_proposal_migrations_invalid')
   validatePreviewMigrationEntries(packet.migrationPlan.migrations)
   if (packet.migrationPlan.chainDigest !== digest(JSON.stringify(packet.migrationPlan.migrations))) fail('supabase_preview_rehearsal_proposal_migration_digest_invalid')
@@ -212,6 +218,8 @@ function validateProposalShape(packet) {
   if (!Array.isArray(packet.requiredEvidence) || packet.requiredEvidence.length < 10) fail('supabase_preview_rehearsal_proposal_evidence_invalid')
   for (const evidence of [
     'preview-branch-status-and-migration-list',
+    'inherited-production-migration-history-reconciled-before-any-delta',
+    'only-reviewed-unapplied-migrations-run-on-preview',
     'source-controlled-migration-chain-applied-through-v13',
     'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
     'website-review-recipient-isolation-entitlement-and-session-revocation',
@@ -240,7 +248,11 @@ function validateProposalShape(packet) {
     || packet.controls?.githubWritesAllowed !== false) {
     fail('supabase_preview_rehearsal_proposal_controls_invalid')
   }
-  if (!String(packet.ownerApprovalTemplate || '').includes('I approve one Supabase preview rehearsal setup')) fail('supabase_preview_rehearsal_proposal_approval_invalid')
+  if (!String(packet.ownerApprovalTemplate || '').includes('I approve one Supabase preview rehearsal setup')
+    || !String(packet.ownerApprovalTemplate).includes('replaying the full source chain is not approved')
+    || !String(packet.ownerApprovalTemplate).includes('separately confirm the quoted branch cost')) {
+    fail('supabase_preview_rehearsal_proposal_approval_invalid')
+  }
   if (!Array.isArray(packet.sourceReceipts) || packet.sourceReceipts.length !== SOURCES.length) fail('supabase_preview_rehearsal_proposal_sources_invalid')
   for (const receipt of packet.sourceReceipts) {
     if (!SOURCES.includes(receipt.path) || !/^sha256:[0-9a-f]{64}$/.test(receipt.digest || '')) fail('supabase_preview_rehearsal_proposal_sources_invalid')
@@ -281,6 +293,7 @@ export async function buildSupabasePreviewRehearsalProposal({
       parentClassification: 'protected-production',
       maximumLifetimeHours: MAX_PREVIEW_LIFETIME_HOURS,
       startsWithProductionData: false,
+      costConfirmed: false,
       seedProductionDataAllowed: false,
       productionRefsAllowed: false,
       privilegedRuntimeCredentialsAllowed: false,
@@ -297,6 +310,9 @@ export async function buildSupabasePreviewRehearsalProposal({
       liveProductionSchemaVersion: productionBaseline.liveSchemaVersion,
       sourceAheadOfLiveProduction: migrationPlan.schemaVersion > productionBaseline.liveSchemaVersion,
       productionApplyAllowed: false,
+      branchApplyStrategy: 'verify_inherited_schema_then_review_unapplied_delta',
+      fullChainReplayAllowed: false,
+      currentLiveHistoryReconciled: false,
     },
     gates: {
       previewRehearsal: {
@@ -316,6 +332,8 @@ export async function buildSupabasePreviewRehearsalProposal({
     requiredEvidence: [
       'preview-branch-status-and-migration-list',
       'clean-empty-data-less-branch-confirmed',
+      'inherited-production-migration-history-reconciled-before-any-delta',
+      'only-reviewed-unapplied-migrations-run-on-preview',
       'source-controlled-migration-chain-applied-through-v13',
       'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
       'website-review-recipient-isolation-entitlement-and-session-revocation',
@@ -370,7 +388,7 @@ export async function buildSupabasePreviewRehearsalProposal({
       customerContactAllowed: false,
       paymentOrStockActionAllowed: false,
     },
-    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${migrationPlan.chainDigest} on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
+    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${migrationPlan.chainDigest} on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence, only after current parent migration history and the exact catalog are reconciled and I separately confirm the quoted branch cost. On a branch that inherits its parent schema, replaying the full source chain is not approved; apply only a reviewed unapplied delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
     sourceReceipts,
   }
   return validateProposalShape({ ...body, digest: packetDigest(body) })

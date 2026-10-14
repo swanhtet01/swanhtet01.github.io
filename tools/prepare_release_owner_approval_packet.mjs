@@ -181,13 +181,18 @@ function validateSupabasePreviewProposalForApproval(packet) {
   if (packet.previewBranch?.kind !== 'clean_empty_ephemeral_preview'
     || packet.previewBranch?.maximumLifetimeHours !== 24
     || packet.previewBranch?.startsWithProductionData !== false
+    || packet.previewBranch?.costConfirmed !== false
     || packet.previewBranch?.productionRefsAllowed !== false
     || packet.previewBranch?.privilegedRuntimeCredentialsAllowed !== false
     || packet.previewBranch?.deleteAfterEvidence !== true) {
     fail('release_owner_approval_supabase_preview_invalid')
   }
   const chainDigest = String(packet.migrationPlan?.chainDigest || '')
-  if (!DIGEST_PATTERN.test(chainDigest) || packet.migrationPlan?.productionApplyAllowed !== false) {
+  if (!DIGEST_PATTERN.test(chainDigest)
+    || packet.migrationPlan?.productionApplyAllowed !== false
+    || packet.migrationPlan?.branchApplyStrategy !== 'verify_inherited_schema_then_review_unapplied_delta'
+    || packet.migrationPlan?.fullChainReplayAllowed !== false
+    || packet.migrationPlan?.currentLiveHistoryReconciled !== false) {
     fail('release_owner_approval_supabase_migration_invalid')
   }
   falseOnly(packet.controls, [
@@ -208,6 +213,8 @@ function validateSupabasePreviewProposalForApproval(packet) {
   const approvalTemplate = String(packet.ownerApprovalTemplate || '')
   if (!approvalTemplate.includes('I approve one Supabase preview rehearsal setup')
     || !approvalTemplate.includes(chainDigest)
+    || !approvalTemplate.includes('replaying the full source chain is not approved')
+    || !approvalTemplate.includes('separately confirm the quoted branch cost')
     || !approvalTemplate.includes('I do not approve production refs, production data, production writes')) {
     fail('release_owner_approval_supabase_template_invalid')
   }
@@ -666,6 +673,7 @@ function sampleSupabaseProposal() {
       kind: 'clean_empty_ephemeral_preview',
       maximumLifetimeHours: 24,
       startsWithProductionData: false,
+      costConfirmed: false,
       productionRefsAllowed: false,
       privilegedRuntimeCredentialsAllowed: false,
       deleteAfterEvidence: true,
@@ -673,6 +681,9 @@ function sampleSupabaseProposal() {
     migrationPlan: {
       chainDigest,
       productionApplyAllowed: false,
+      branchApplyStrategy: 'verify_inherited_schema_then_review_unapplied_delta',
+      fullChainReplayAllowed: false,
+      currentLiveHistoryReconciled: false,
     },
     controls: {
       supabaseBranchCreationApproved: false,
@@ -689,7 +700,7 @@ function sampleSupabaseProposal() {
       customerContactAllowed: false,
       paymentOrStockActionAllowed: false,
     },
-    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${chainDigest} on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
+    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${chainDigest} on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence, only after current parent migration history and the exact catalog are reconciled and I separately confirm the quoted branch cost. On a branch that inherits its parent schema, replaying the full source chain is not approved; apply only a reviewed unapplied delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
   }
 }
 

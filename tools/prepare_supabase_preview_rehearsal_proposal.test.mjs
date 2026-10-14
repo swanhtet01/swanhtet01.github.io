@@ -62,6 +62,7 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.previewBranch.kind, 'clean_empty_ephemeral_preview')
   assert.equal(built.previewBranch.maximumLifetimeHours, 24)
   assert.equal(built.previewBranch.startsWithProductionData, false)
+  assert.equal(built.previewBranch.costConfirmed, false)
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
@@ -71,18 +72,25 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
   assert.equal(built.migrationPlan.finalMigration, '20261014011202_website_inquiry_delivery.sql')
   assert.equal(built.migrationPlan.sourceAheadOfLiveProduction, true)
+  assert.equal(built.migrationPlan.branchApplyStrategy, 'verify_inherited_schema_then_review_unapplied_delta')
+  assert.equal(built.migrationPlan.fullChainReplayAllowed, false)
+  assert.equal(built.migrationPlan.currentLiveHistoryReconciled, false)
   assert.equal(built.productionBaseline.evidenceClassification, 'historical-audit-only')
   assert.equal(built.productionBaseline.currentStateRevalidated, false)
   assert.equal(built.productionBaseline.currentCandidateProven, false)
   assert.ok(built.requiredEvidence.includes('durable-attempt-budget-restart-concurrency-and-restored-limit-proof'))
   assert.equal(built.gates.previewRehearsal.proofComplete, false)
   assert.ok(built.requiredEvidence.includes('metadata-only-schema-fingerprint-comparison'))
+  assert.ok(built.requiredEvidence.includes('inherited-production-migration-history-reconciled-before-any-delta'))
+  assert.ok(built.requiredEvidence.includes('only-reviewed-unapplied-migrations-run-on-preview'))
   assert.ok(built.requiredEvidence.includes('private-storage-six-request-privacy-proof'))
   assert.equal(built.controls.supabaseBranchCreationApproved, false)
   assert.equal(built.controls.supabaseBranchCreated, false)
   assert.equal(built.controls.productionProjectMutated, false)
   assert.equal(built.controls.productionDataCopied, false)
   assert.equal(built.controls.githubWritesAllowed, false)
+  assert.match(built.ownerApprovalTemplate, /replaying the full source chain is not approved/)
+  assert.match(built.ownerApprovalTemplate, /separately confirm the quoted branch cost/)
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
 })
 
@@ -135,6 +143,14 @@ test('rejects production data, privileged credentials, mutation authority, and t
   await assert.rejects(
     validateSupabasePreviewRehearsalProposal({ ...built, previewBranch: { ...built.previewBranch, startsWithProductionData: true } }),
     /supabase_preview_rehearsal_proposal_data_boundary_invalid/,
+  )
+  await assert.rejects(
+    validateSupabasePreviewRehearsalProposal({ ...built, previewBranch: { ...built.previewBranch, costConfirmed: true } }),
+    /supabase_preview_rehearsal_proposal_cost_gate_invalid/,
+  )
+  await assert.rejects(
+    validateSupabasePreviewRehearsalProposal({ ...built, migrationPlan: { ...built.migrationPlan, fullChainReplayAllowed: true } }),
+    /supabase_preview_rehearsal_proposal_branch_apply_invalid/,
   )
   await assert.rejects(
     validateSupabasePreviewRehearsalProposal({ ...built, previewBranch: { ...built.previewBranch, privilegedRuntimeCredentialsAllowed: true } }),
