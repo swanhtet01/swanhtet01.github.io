@@ -274,7 +274,7 @@ export function EcommerceBuyingWorkspace({
   const focusRequestReceipt = useCallback((receipt: HTMLElement | null) => {
     if (!receipt) return
     requestAnimationFrame(() => {
-      receipt.querySelector('p')?.scrollIntoView({ block: 'center' })
+      receipt.scrollIntoView({ block: 'start' })
       receipt.focus({ preventScroll: true })
     })
   }, [])
@@ -1424,10 +1424,15 @@ export function EcommerceBuyingWorkspace({
               <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
             </article>
           ) : receiptCurrent ? (
-            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={focusRequestReceipt} tabIndex={-1}>
+            <article aria-labelledby="ecommerce-request-confirmation-heading" className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={focusRequestReceipt} tabIndex={-1}>
               <span className="status-pill ready">{managedDeliveryConfirmed ? 'Request sent to Shop' : 'Request saved locally'}</span>
-              <strong>Request for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
+              <h3 id="ecommerce-request-confirmation-heading">{managedDeliveryConfirmed ? 'Shop received your request' : 'Request saved on this device'}</h3>
+              <p>{managedDeliveryConfirmed
+                ? 'Shop review is next. This is not a confirmed order; Shop still checks stock, delivery, and payment.'
+                : sourceStorefront
+                  ? 'Shop delivery is not verified. Open Shop operator review to continue. No order or payment was confirmed.'
+                  : 'Open Shop operator review to continue. No order or payment was confirmed.'}</p>
               <EcommerceOrderProgress delivered={managedDeliveryConfirmed} />
               <div className="ecommerce-quote-boundaries">
                 <span><small>Receive order</small><b>{receiveOrderLabel(latestRequest.fulfilment)}</b></span>
@@ -1435,8 +1440,7 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Tax</small><b>Included in listed price</b></span>
                 <span><small>Payment</small><b>{paymentLabel(latestRequest.quote.payment.adapter)} · not charged</b></span>
               </div>
-              <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
-              <p>{managedDeliveryConfirmed ? 'Company Shop received this request.' : sourceStorefront ? 'Request saved locally. Company Shop delivery has not been verified.' : 'Request saved locally for Shop review.'} Shop still confirms stock, promise, payment, and delivery.</p>
+              <small>For {latestRequest.customerReference} · Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
               <button className="core-button secondary" disabled={disabled || recoveryBlocked || !receiptCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
                 {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>
@@ -1447,14 +1451,14 @@ export function EcommerceBuyingWorkspace({
             <div className="ecommerce-stale-quote" role="status">
               <strong>{latestRequestOrder ? 'Order confirmed in Shop' : 'Review a new total'}</strong>
               <small>{latestRequestOrder
-                ? 'Choose a product above to start another order. The confirmed order remains in Your orders.'
-                : 'The previous quote remains in Your orders. Review the current items and details before requesting a new total.'}</small>
+                ? 'Choose a product above to start another order. The confirmed order remains in Requests and orders.'
+                : 'The previous quote remains in Requests and orders. Review the current items and details before requesting a new total.'}</small>
             </div>
           ) : null}
 
           <section className="ecommerce-order-tracking" aria-label="Customer order tracking" tabIndex={-1}>
             <div className="ecommerce-order-tracking-head">
-              <span><strong>Your orders</strong><small>Quotes and orders, followed through Shop</small></span>
+              <span><strong>Requests and orders</strong><small>Saved requests appear here before Shop confirms an order</small></span>
               <b>{customerOrderTimeline.length ? `${customerOrderTimeline.length} found` : 'Enter contact above'}</b>
             </div>
             {customerOrderTimeline.length ? (
