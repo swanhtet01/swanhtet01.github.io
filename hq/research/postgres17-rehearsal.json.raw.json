@@ -162,7 +162,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:f26485b6f8eb910fe004d54cef233fa6ff557f09a966a22d20e86fa33d74e1a9",
+    "digest": "sha256:f7c10bcb2697e9b5ffdb49d344077fe2bb83a0103ad64078a4a502407348fe87",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -219,6 +219,7 @@
       "supermega_runtime/website_release_foundation.py",
       "supermega_runtime/website_runtime.py",
       "tests/test_billing_rail.py",
+      "tests/test_database_v13_contract.py",
       "tests/test_postgres17_rehearsal_contract.py",
       "tests/test_website_inquiry_followup.py",
       "tests/test_website_inquiry_sql.py",
@@ -230,6 +231,7 @@
       "tests/test_website_runtime.py",
       "tools/activate_supermega_database.ps1",
       "tools/private_trial_v13_contract.py",
+      "tools/private_trial_v13_pre_sites_contract.py",
       "tools/record_postgres17_rehearsal.mjs",
       "tools/record_postgres17_rehearsal.test.mjs",
       "tools/rehearse_self_serve_v13.py",
@@ -282,15 +284,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:df5d624965d85749c5ca78deabd567adffa28b2b578d1f4939282ee4b984c6c0",
-    "private_snapshot_before": "sha256:df5d624965d85749c5ca78deabd567adffa28b2b578d1f4939282ee4b984c6c0",
+    "private_snapshot_after": "sha256:dc9e5388552b7cc604cff78cb376b398a679e5a5c062659302ca88df3a7a4274",
+    "private_snapshot_before": "sha256:dc9e5388552b7cc604cff78cb376b398a679e5a5c062659302ca88df3a7a4274",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "5fabda707be8dd6a6fd581a96dfdfda7a73a32cb",
-    "implementation_digest": "sha256:f26485b6f8eb910fe004d54cef233fa6ff557f09a966a22d20e86fa33d74e1a9",
-    "tree": "34bfd856457dfabfa49b83c63db0a7f90a9c0a69"
+    "head": "e89e434d44b01fd33517c9146e9e92d05879efed",
+    "implementation_digest": "sha256:f7c10bcb2697e9b5ffdb49d344077fe2bb83a0103ad64078a4a502407348fe87",
+    "tree": "6b2388dfd93149a7358570ffe4c69c1f9db8803b"
   },
   "status": "rehearsed",
   "storage": {
