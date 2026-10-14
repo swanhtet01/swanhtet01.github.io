@@ -441,10 +441,23 @@ class WebsiteInquirySqlTests(unittest.TestCase):
             self.assertIn('no-store', response.headers['cache-control'])
         for path in ('/private-draft', '/missing', '/services/extra'):
             self.assertEqual(client.get(base + path).status_code, 404)
-        self.assertEqual(client.get(base + '?page_path=contact').status_code, 422)
+        campaign = client.get(base + '?utm_source=campaign&ref=launch')
+        self.assertEqual(campaign.status_code, 200, campaign.text)
+        self.assertIn('<title>Home | Synthetic Studio</title>', campaign.text)
+        self.assertNotIn('<form', campaign.text)
+        query_page = client.get(base + '?page_path=contact')
+        self.assertEqual(query_page.status_code, 200, query_page.text)
+        self.assertIn('<title>Home | Synthetic Studio</title>', query_page.text)
+        self.assertNotIn('<form', query_page.text)
+        nested_query_page = client.get(base + '/services?page_path=contact')
+        self.assertEqual(nested_query_page.status_code, 200, nested_query_page.text)
+        self.assertIn('<title>Services | Synthetic Studio</title>', nested_query_page.text)
+        self.assertNotIn('<form', nested_query_page.text)
         self.assertEqual(self.client(public_origin='https://other.example').get(base + '/contact').status_code, 404)
         body = {**BODY, 'requestId': str(uuid4())}
         self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries', json={**body, 'pageId': 'page-home'},
+                                    headers={'Origin': ORIGIN}).status_code, 422)
+        self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries?utm_source=campaign', json=body,
                                     headers={'Origin': ORIGIN}).status_code, 422)
         self.assertEqual(client.post(f'/api/public/sites/{channel}/inquiries', json=body, headers={'Origin': ORIGIN}).status_code, 200)
         inquiry = self.adapter.inbox(OWNER)['inquiries'][0]
