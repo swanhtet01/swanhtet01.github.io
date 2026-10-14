@@ -494,7 +494,10 @@ class WebsiteDomainSqlTests(unittest.TestCase):
         with pg._connect(self.admin_url) as connection:
             state, stored = connection.execute("""select state,provider_remove_token
                 from app_private.website_domain_bindings where hostname=%s""", (HOST,)).fetchone()
+            connection.execute("""update app_private.website_inquiry_channels set enabled=false
+                where channel_id=%s""", (first_channel,))
         self.assertEqual((state, str(stored)), ('releasing', token))
+        self.assertEqual(self.domains.status(FIRST)['domain']['issue'], 'provider_cleanup_pending')
         self.assertIsNone(self.domains.public_page(HOST))
 
     def test_ambiguous_provider_add_cannot_be_retried_or_released(self):

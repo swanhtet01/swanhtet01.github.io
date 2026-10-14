@@ -290,8 +290,8 @@ class WebsiteDomainStore:
         from datetime import datetime
         active = (row['state'] == 'active' and row['channel_enabled']
                   and until is not None and until > datetime.now(timezone.utc))
-        issue = (('provider_cleanup_pending' if row['state'] == 'releasing' else 'provider_add_pending')
-                 if row['provider_add_token'] is not None else
+        issue = ('provider_cleanup_pending' if row['state'] == 'releasing' else
+                 'provider_add_pending' if row['provider_add_token'] is not None else
                  'channel_unpublished' if not row['channel_enabled'] else
                  row['issue'] or ('verification_expired' if row['state'] == 'active' and not active else ''))
         return {'enabled': True, 'domain': {
