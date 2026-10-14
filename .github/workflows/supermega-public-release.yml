@@ -193,12 +193,27 @@ jobs:
           case "$SELECTED_RUNTIME_MODE" in
             managed_trial)
               npx --yes vercel@56.1.0 env run --environment=production --token="$VERCEL_TOKEN" -- \
-                python tools/validate_supermega_database_url.py \
-                  --env-key SUPERMEGA_DATABASE_URL \
-                  --storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL \
-                  --schema-profile v13-self-serve \
-                  --ensure-schema \
-                  --require-ready
+                bash -e -u -o pipefail -c '
+                  profile="${SUPERMEGA_TRIAL_SCHEMA_PROFILE:-v13-self-serve}"
+                  case "$profile" in
+                    v13-self-serve|v13-inquiry) ;;
+                    *) echo "::error::Managed schema profile is unsupported."; exit 1 ;;
+                  esac
+                  case "${SUPERMEGA_WEBSITE_INQUIRIES_ENABLED:-false}" in
+                    1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn])
+                      if [ "$profile" != v13-inquiry ]; then
+                        echo "::error::Website inquiries require the inquiry schema profile."
+                        exit 1
+                      fi
+                      ;;
+                  esac
+                  python tools/validate_supermega_database_url.py \
+                    --env-key SUPERMEGA_DATABASE_URL \
+                    --storage-audit-env-key SUPERMEGA_STORAGE_AUDIT_DATABASE_URL \
+                    --schema-profile "$profile" \
+                    --ensure-schema \
+                    --require-ready
+                '
               ;;
             staged)
               echo "Managed credentials are value-verified, but writes remain disabled; production stays isolated_demo while named-user signup is staged."

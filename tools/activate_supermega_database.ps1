@@ -112,9 +112,14 @@ $activationReleaseCommit = ([string]$activationPlan.target.releaseCommit).Trim()
 if ($activationSchemaVersion -ne '13') {
   throw 'Activation plan must target the reviewed managed schema version 13.'
 }
-if ([string]$activationPlan.target.schemaProfile -cne 'v13-self-serve' -or
-    [string]$activationPlan.target.databaseContract -cne 'supermega_private_trial_database_v13_self_serve_v1') {
-  throw 'Activation plan must bind the reviewed v13 self-serve database profile; rebuild and reapprove older plans.'
+$activationSchemaProfile = [string]$activationPlan.target.schemaProfile
+$expectedDatabaseContract = switch -CaseSensitive ($activationSchemaProfile) {
+  'v13-self-serve' { 'supermega_private_trial_database_v13_self_serve_v1' }
+  'v13-inquiry' { 'supermega_private_trial_database_v13_inquiry_v1' }
+  default { throw 'Activation plan database profile is unsupported.' }
+}
+if ([string]$activationPlan.target.databaseContract -cne $expectedDatabaseContract) {
+  throw 'Activation plan database contract does not match its reviewed profile; rebuild and reapprove the plan.'
 }
 if ($activationReleaseCommit -notmatch '^[0-9a-f]{40}$') {
   throw 'Activation plan must bind the exact reviewed 40-character release commit.'
@@ -198,7 +203,7 @@ try {
     '--env-key', 'SUPERMEGA_DATABASE_URL',
     '--storage-audit-env-key', 'SUPERMEGA_STORAGE_AUDIT_DATABASE_URL',
     '--activation-target',
-    '--schema-profile', 'v13-self-serve',
+    '--schema-profile', $activationSchemaProfile,
     '--expected-project-ref-env-key', 'SUPERMEGA_ACTIVATION_PROJECT_REF',
     '--ensure-schema',
     '--require-ready'
@@ -268,9 +273,10 @@ try {
     Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_URL' -Value $supabaseUrl
     Add-ManagedEnvironmentValue -Key 'VITE_SUPABASE_PUBLISHABLE_KEY' -Value $resolvedPublishableKey
     Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_SCHEMA_VERSION' -Value $activationSchemaVersion
+    Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_SCHEMA_PROFILE' -Value $activationSchemaProfile
     Add-ManagedEnvironmentValue -Key 'SUPERMEGA_BILLING_SCHEMA_VERSION' -Value $activationSchemaVersion
     Add-ManagedEnvironmentValue -Key 'SUPERMEGA_SUPABASE_PROJECT_REF' -Value $ExpectedProjectRef
-    & npx.cmd --yes $VercelCli env run --environment=production --cwd $RepoRoot --scope $Scope -- node $EnvironmentValueVerifier staged
+    & npx.cmd --yes $VercelCli env run --environment=production --cwd $RepoRoot --scope $Scope -- node $EnvironmentValueVerifier staged $activationSchemaProfile
     if ($LASTEXITCODE -ne 0) { throw 'Staged Vercel values failed value-aware verification.' }
 
     Write-Output '==> activate the workspace gate and exact owner membership atomically'
@@ -298,7 +304,7 @@ try {
 
     Write-Output '==> enable managed writes last and verify effective Vercel values'
     Add-ManagedEnvironmentValue -Key 'SUPERMEGA_TRIAL_WRITES_ENABLED' -Value 'true'
-    & npx.cmd --yes $VercelCli env run --environment=production --cwd $RepoRoot --scope $Scope -- node $EnvironmentValueVerifier managed_trial
+    & npx.cmd --yes $VercelCli env run --environment=production --cwd $RepoRoot --scope $Scope -- node $EnvironmentValueVerifier managed_trial $activationSchemaProfile
     if ($LASTEXITCODE -ne 0) { throw 'Effective managed Vercel values failed verification.' }
   }
   catch {
