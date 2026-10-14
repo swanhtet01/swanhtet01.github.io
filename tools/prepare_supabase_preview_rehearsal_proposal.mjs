@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { reviewedRehearsalMigrationNames } from './prepare_supabase_rehearsal_packet.mjs'
 
 export const SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT = 'supermega.supabase-preview-rehearsal-proposal.v1'
 
@@ -106,9 +107,9 @@ export function validatePreviewMigrationEntries(entries) {
 
 async function migrationChain() {
   const directory = resolve(root, 'supabase', 'migrations')
-  const names = (await readdir(directory))
+  const names = reviewedRehearsalMigrationNames((await readdir(directory))
     .filter((name) => /^\d{14}_.+\.sql$/.test(name))
-    .sort()
+    .sort())
   if (names.length !== EXPECTED_MIGRATION_COUNT) fail('supabase_preview_rehearsal_migration_count_invalid')
   if (names[0] !== EXPECTED_PUBLIC_BASELINE) fail('supabase_preview_rehearsal_public_baseline_invalid')
   if (names.at(-1) !== EXPECTED_FINAL_MIGRATION) fail('supabase_preview_rehearsal_final_migration_invalid')

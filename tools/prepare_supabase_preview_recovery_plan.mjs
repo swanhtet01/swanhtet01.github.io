@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { validateRehearsalMigrationNames } from './prepare_supabase_rehearsal_packet.mjs'
+import { reviewedRehearsalMigrationNames } from './prepare_supabase_rehearsal_packet.mjs'
 
 // Replay the recorded October 1-2 recovery evidence against its original chain.
 // Later Sites migrations belong to the full candidate packet, not this receipt.
@@ -82,8 +82,7 @@ async function sourceMigrationChain() {
 }
 
 export function historicalRecoveryMigrationNames(candidateNames) {
-  validateRehearsalMigrationNames(candidateNames)
-  const names = candidateNames.slice(0, expectedMigrationCount)
+  const names = reviewedRehearsalMigrationNames(candidateNames).slice(0, expectedMigrationCount)
   if (names.at(-1) !== '20260930010000_app_rls_initplan_optimization.sql') {
     fail('supabase_preview_recovery_historical_boundary')
   }
