@@ -992,7 +992,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           : managedIdentity
           ? 'Your CSV stays in this tab. Only prepared rows are checked with your company account; nothing is written until you confirm the import.'
           : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
-        <div aria-label={`${productName} import next step`} className="catalog-import-next-step">
+        <div aria-atomic="true" aria-label={`${productName} import next step`} aria-live="polite" className="catalog-import-next-step" role="status">
           <div><span className="core-eyebrow">Next</span><strong>{importCoachAction}</strong><small>{importStageMessage}</small></div>
 
         </div>
