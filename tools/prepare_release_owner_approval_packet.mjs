@@ -178,17 +178,31 @@ function validateSupabasePreviewProposalForApproval(packet) {
   if (packet.repository !== REPOSITORY || packet.mode !== 'owner_approval_required' || packet.state !== 'prepared-not-executed') {
     fail('release_owner_approval_supabase_state_invalid')
   }
-  if (packet.previewBranch?.kind !== 'clean_empty_ephemeral_preview'
+  if (packet.previewBranch?.kind !== 'data_less_ephemeral_preview_schema_unverified'
     || packet.previewBranch?.maximumLifetimeHours !== 24
     || packet.previewBranch?.startsWithProductionData !== false
+    || packet.previewBranch?.includeProductionData !== false
+    || packet.previewBranch?.creationMode !== 'unselected'
+    || packet.previewBranch?.branchSchemaVerified !== false
+    || packet.previewBranch?.costConfirmed !== false
     || packet.previewBranch?.productionRefsAllowed !== false
     || packet.previewBranch?.privilegedRuntimeCredentialsAllowed !== false
     || packet.previewBranch?.deleteAfterEvidence !== true) {
     fail('release_owner_approval_supabase_preview_invalid')
   }
   const chainDigest = String(packet.migrationPlan?.chainDigest || '')
-  if (!DIGEST_PATTERN.test(chainDigest) || packet.migrationPlan?.productionApplyAllowed !== false) {
+  if (!DIGEST_PATTERN.test(chainDigest)
+    || packet.migrationPlan?.productionApplyAllowed !== false
+    || packet.migrationPlan?.branchApplyStrategy !== 'inspect_creation_mode_and_actual_catalog_then_review_delta'
+    || packet.migrationPlan?.manualFullChainReplayAllowed !== false
+    || packet.migrationPlan?.providerAutomaticReplayReviewed !== false
+    || packet.migrationPlan?.currentLiveHistoryReconciled !== false) {
     fail('release_owner_approval_supabase_migration_invalid')
+  }
+  if (packet.executionPacketAfterApproval?.status !== 'blocked-pending-branch-mode-and-history-adapter'
+    || packet.executionPacketAfterApproval?.tool !== null
+    || packet.executionPacketAfterApproval?.commandTemplate !== null) {
+    fail('release_owner_approval_supabase_execution_packet_invalid')
   }
   falseOnly(packet.controls, [
     'supabaseBranchCreationApproved',
@@ -208,6 +222,9 @@ function validateSupabasePreviewProposalForApproval(packet) {
   const approvalTemplate = String(packet.ownerApprovalTemplate || '')
   if (!approvalTemplate.includes('I approve one Supabase preview rehearsal setup')
     || !approvalTemplate.includes(chainDigest)
+    || !approvalTemplate.includes('Manual replay of the full source chain is not approved')
+    || !approvalTemplate.includes('branch creation mode and automatic migration replay are reviewed')
+    || !approvalTemplate.includes('separately confirm the quoted branch cost')
     || !approvalTemplate.includes('I do not approve production refs, production data, production writes')) {
     fail('release_owner_approval_supabase_template_invalid')
   }
@@ -663,9 +680,13 @@ function sampleSupabaseProposal() {
     mode: 'owner_approval_required',
     state: 'prepared-not-executed',
     previewBranch: {
-      kind: 'clean_empty_ephemeral_preview',
+      kind: 'data_less_ephemeral_preview_schema_unverified',
+      creationMode: 'unselected',
       maximumLifetimeHours: 24,
       startsWithProductionData: false,
+      includeProductionData: false,
+      branchSchemaVerified: false,
+      costConfirmed: false,
       productionRefsAllowed: false,
       privilegedRuntimeCredentialsAllowed: false,
       deleteAfterEvidence: true,
@@ -673,6 +694,15 @@ function sampleSupabaseProposal() {
     migrationPlan: {
       chainDigest,
       productionApplyAllowed: false,
+      branchApplyStrategy: 'inspect_creation_mode_and_actual_catalog_then_review_delta',
+      manualFullChainReplayAllowed: false,
+      providerAutomaticReplayReviewed: false,
+      currentLiveHistoryReconciled: false,
+    },
+    executionPacketAfterApproval: {
+      status: 'blocked-pending-branch-mode-and-history-adapter',
+      tool: null,
+      commandTemplate: null,
     },
     controls: {
       supabaseBranchCreationApproved: false,
@@ -689,7 +719,7 @@ function sampleSupabaseProposal() {
       customerContactAllowed: false,
       paymentOrStockActionAllowed: false,
     },
-    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${chainDigest} on a clean empty maximum-24-hour non-production preview branch only, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
+    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${chainDigest} on a data-less maximum-24-hour non-production preview branch only, with deletion after evidence, only after branch creation mode and automatic migration replay are reviewed, current production history and the actual branch catalog are reconciled, and I separately confirm the quoted branch cost. Manual replay of the full source chain is not approved; apply only a reviewed delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
   }
 }
 

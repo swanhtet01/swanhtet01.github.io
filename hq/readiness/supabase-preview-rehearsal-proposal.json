@@ -5,7 +5,7 @@
   "mode": "owner_approval_required",
   "state": "prepared-not-executed",
   "generatedAt": "2026-10-14T00:00:00.000Z",
-  "purpose": "Record the source-bound Supabase preview rehearsal plan and its blocked production-history replay prerequisite without creating a branch, reading production rows, copying production data, or approving managed activation.",
+  "purpose": "Record a source-bound Supabase preview plan that requires a known creation mode, actual branch catalog and migration-history reconciliation, and a reviewed delta; do not create a branch or approve managed activation.",
   "productionBaseline": {
     "projectRef": "zvtzwcimpvvtkowflhda",
     "classification": "protected-production",
@@ -15,8 +15,8 @@
     "asOf": "2026-08-20T17:02:04.312+06:30",
     "postgresMajor": 17,
     "projectStatus": "ACTIVE_HEALTHY",
-    "liveSchemaVersion": 11,
-    "localTargetVersion": 11,
+    "schemaVersionAtAudit": 11,
+    "localTargetVersionAtAudit": 11,
     "versionDrift": 0,
     "browserRolesDenied": true,
     "publicBrowserQuarantinePresent": true,
@@ -41,11 +41,15 @@
     "hostedActivationReady": false
   },
   "previewBranch": {
-    "kind": "clean_empty_ephemeral_preview",
+    "kind": "data_less_ephemeral_preview_schema_unverified",
+    "creationMode": "unselected",
     "parentProjectRef": "zvtzwcimpvvtkowflhda",
     "parentClassification": "protected-production",
     "maximumLifetimeHours": 24,
     "startsWithProductionData": false,
+    "includeProductionData": false,
+    "branchSchemaVerified": false,
+    "costConfirmed": false,
     "seedProductionDataAllowed": false,
     "productionRefsAllowed": false,
     "privilegedRuntimeCredentialsAllowed": false,
@@ -206,9 +210,14 @@
       "path": "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     },
-    "liveProductionSchemaVersion": 11,
-    "sourceAheadOfLiveProduction": true,
-    "productionApplyAllowed": false
+    "historicalAuditSchemaVersion": 11,
+    "sourceAheadOfHistoricalAudit": true,
+    "currentProductionSchemaVersionVerified": false,
+    "productionApplyAllowed": false,
+    "branchApplyStrategy": "inspect_creation_mode_and_actual_catalog_then_review_delta",
+    "manualFullChainReplayAllowed": false,
+    "providerAutomaticReplayReviewed": false,
+    "currentLiveHistoryReconciled": false
   },
   "gates": {
     "productionMigrationReplay": {
@@ -237,9 +246,10 @@
   },
   "requiredEvidence": [
     "preview-branch-status-and-migration-list",
-    "production-history-replayable-public-baseline-before-first-rls",
-    "clean-empty-data-less-branch-confirmed",
-    "source-controlled-migration-chain-applied-through-v13",
+    "branch-creation-mode-and-workflow-reviewed",
+    "data-less-branch-and-actual-schema-verified",
+    "production-and-branch-migration-history-reconciled-before-any-delta",
+    "only-reviewed-manual-delta-run-after-provider-branch-workflow",
     "durable-attempt-budget-restart-concurrency-and-restored-limit-proof",
     "website-review-recipient-isolation-entitlement-and-session-revocation",
     "website-review-and-feedback-nonempty-backup-restore",
@@ -256,10 +266,10 @@
     "no-production-retry-on-failure"
   ],
   "executionPacketAfterApproval": {
-    "tool": "tools/prepare_supabase_rehearsal_packet.mjs",
-    "commandTemplate": "npm run database:supabase:packet -- --target-project-ref <preview-branch-ref> --output .tmp/supermega-rehearsal-packet.json --release-handoff <release-handoff.json>",
-    "outputMustBeGitignored": true,
-    "bindsExactCommitAfterSourcePacketCommit": true
+    "status": "blocked-pending-branch-mode-and-history-adapter",
+    "tool": null,
+    "commandTemplate": null,
+    "reason": "The old packet assumes an empty public catalog and manual source-chain replay. Dashboard and GitHub branch creation rebuild schema differently, and the actual branch workflow and catalog are not verified."
   },
   "compatibilityWatchList": [
     {
@@ -275,6 +285,8 @@
   ],
   "documentation": {
     "branching": "https://supabase.com/docs/guides/deployment/branching",
+    "dashboardMigrationFailures": "https://supabase.com/docs/guides/troubleshooting/branch-in-migrations-failed-status",
+    "githubIntegration": "https://supabase.com/docs/guides/deployment/branching/github-integration",
     "productionChecklist": "https://supabase.com/docs/guides/deployment/going-into-prod",
     "changelogBreakingChanges": "https://supabase.com/changelog?types=breaking-change"
   },
@@ -293,7 +305,7 @@
     "customerContactAllowed": false,
     "paymentOrStockActionAllowed": false
   },
-  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:8792fefdcaf49d7e36960fb5ed2b470cb739a9449184011a86ba424e7cf18286 on a clean empty maximum-24-hour non-production preview branch only, after separate approval and proof that production migration history can replay the public baseline before its first RLS migration, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:8792fefdcaf49d7e36960fb5ed2b470cb739a9449184011a86ba424e7cf18286 on a data-less maximum-24-hour non-production preview branch only, with deletion after evidence, only after branch creation mode and automatic migration replay are reviewed, current production history and the actual branch catalog are reconciled, and I separately confirm the quoted branch cost. Manual replay of the full source chain is not approved; apply only a reviewed delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
   "sourceReceipts": [
     {
       "path": "package.json",
@@ -301,7 +313,7 @@
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:22a060b59318f50b8b9e189a18eb0dd4594db9f4c4f8792291dfa7672e96182a"
+      "digest": "sha256:57f432ef081ec516d9f4d9f2a13164646aa993d4ee7e5057147e4e4deef8629e"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
@@ -321,7 +333,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:a6b4bd24ace773890e6c4514255d07e73ac295fb8ba684389ba85a03731fa5df"
+      "digest": "sha256:1dc4facd16e5dc70cbeca96cf6bb493220807893ec71a86e50369b6bd493d702"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
@@ -332,5 +344,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:0887f9a870b1654502475960755433dc25c612a21eab79adec0043d5fbfb6bf4"
+  "digest": "sha256:cd39806861aba77fc26c8fbe3ee3278c6e47d15246230be9cffab10721b50b59"
 }

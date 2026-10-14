@@ -85,6 +85,8 @@ const implementationPaths = [...new Set([
   'tests/test_website_runtime.py',
   'tools/rehearse_self_serve_v13.py',
   'tools/private_trial_v13_contract.py',
+  'tools/private_trial_v13_pre_sites_contract.py',
+  'tests/test_database_v13_contract.py',
   'tools/run_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.mjs',
   'tools/record_postgres17_rehearsal.test.mjs',

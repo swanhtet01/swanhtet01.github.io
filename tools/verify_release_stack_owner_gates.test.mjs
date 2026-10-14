@@ -167,9 +167,12 @@ function input(overrides = {}) {
     mode: 'owner_approval_required',
     state: 'prepared-not-executed',
     previewBranch: {
-      kind: 'clean_empty_ephemeral_preview',
+      kind: 'data_less_ephemeral_preview_schema_unverified',
+      creationMode: 'unselected',
       maximumLifetimeHours: 24,
       startsWithProductionData: false,
+      includeProductionData: false,
+      branchSchemaVerified: false,
       seedProductionDataAllowed: false,
       productionRefsAllowed: false,
       privilegedRuntimeCredentialsAllowed: false,
@@ -180,6 +183,15 @@ function input(overrides = {}) {
       schemaVersion: 13,
       chainDigest: `sha256:${'c'.repeat(64)}`,
       productionApplyAllowed: false,
+      branchApplyStrategy: 'inspect_creation_mode_and_actual_catalog_then_review_delta',
+      manualFullChainReplayAllowed: false,
+      providerAutomaticReplayReviewed: false,
+      currentLiveHistoryReconciled: false,
+    },
+    executionPacketAfterApproval: {
+      status: 'blocked-pending-branch-mode-and-history-adapter',
+      tool: null,
+      commandTemplate: null,
     },
     requiredEvidence: [
       'metadata-only-schema-fingerprint-comparison',
@@ -311,6 +323,28 @@ test('rejects fifth-product AI, weak GitHub checks, and unsafe Supabase preview 
   }))
   assert.equal(unsafeSupabase.ok, false)
   assert.ok(unsafeSupabase.failures.includes('release_stack_owner_gate_supabase_proposal_invalid'))
+
+  for (const change of [
+    { includeProductionData: true },
+    { creationMode: 'dashboard' },
+    { branchSchemaVerified: true },
+  ]) {
+    const proposal = structuredClone(input().supabaseProposal)
+    Object.assign(proposal.previewBranch, change)
+    const report = assessReleaseStackOwnerGates(input({ supabaseProposal: proposal }))
+    assert.equal(report.ok, false)
+    assert.ok(report.failures.includes('release_stack_owner_gate_supabase_proposal_invalid'))
+  }
+  for (const change of [
+    { manualFullChainReplayAllowed: true },
+    { providerAutomaticReplayReviewed: true },
+  ]) {
+    const proposal = structuredClone(input().supabaseProposal)
+    Object.assign(proposal.migrationPlan, change)
+    const report = assessReleaseStackOwnerGates(input({ supabaseProposal: proposal }))
+    assert.equal(report.ok, false)
+    assert.ok(report.failures.includes('release_stack_owner_gate_supabase_proposal_invalid'))
+  }
 })
 
 test('rejects tampered reports', () => {

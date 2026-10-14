@@ -150,8 +150,8 @@ function currentSecurityBaseline(securityAudit) {
     asOf: securityAudit.asOf,
     postgresMajor: securityAudit.postgres?.major,
     projectStatus: securityAudit.postgres?.status,
-    liveSchemaVersion: securityAudit.managedBackend.liveSchemaVersion,
-    localTargetVersion: securityAudit.managedBackend.localTargetVersion,
+    schemaVersionAtAudit: securityAudit.managedBackend.liveSchemaVersion,
+    localTargetVersionAtAudit: securityAudit.managedBackend.localTargetVersion,
     versionDrift: securityAudit.managedBackend.versionDrift,
     browserRolesDenied: true,
     publicBrowserQuarantinePresent: true,
@@ -188,9 +188,14 @@ function validateProposalShape(packet) {
   if (packet.repository !== REPOSITORY) fail('supabase_preview_rehearsal_proposal_repository_invalid')
   if (packet.mode !== 'owner_approval_required') fail('supabase_preview_rehearsal_proposal_mode_invalid')
   if (packet.state !== 'prepared-not-executed') fail('supabase_preview_rehearsal_proposal_state_invalid')
-  if (packet.previewBranch?.kind !== 'clean_empty_ephemeral_preview') fail('supabase_preview_rehearsal_proposal_branch_kind_invalid')
+  if (packet.previewBranch?.kind !== 'data_less_ephemeral_preview_schema_unverified'
+    || packet.previewBranch?.creationMode !== 'unselected'
+    || packet.previewBranch?.branchSchemaVerified !== false) fail('supabase_preview_rehearsal_proposal_branch_kind_invalid')
   if (packet.previewBranch.maximumLifetimeHours !== MAX_PREVIEW_LIFETIME_HOURS) fail('supabase_preview_rehearsal_proposal_lifetime_invalid')
-  if (packet.previewBranch.startsWithProductionData !== false || packet.previewBranch.deleteAfterEvidence !== true) fail('supabase_preview_rehearsal_proposal_data_boundary_invalid')
+  if (packet.previewBranch.startsWithProductionData !== false
+    || packet.previewBranch.includeProductionData !== false
+    || packet.previewBranch.deleteAfterEvidence !== true) fail('supabase_preview_rehearsal_proposal_data_boundary_invalid')
+  if (packet.previewBranch.costConfirmed !== false) fail('supabase_preview_rehearsal_proposal_cost_gate_invalid')
   if (packet.previewBranch.productionRefsAllowed !== false || packet.previewBranch.privilegedRuntimeCredentialsAllowed !== false) fail('supabase_preview_rehearsal_proposal_secret_boundary_invalid')
   if (packet.migrationPlan?.schemaVersion !== EXPECTED_SOURCE_TARGET_SCHEMA_VERSION
     || packet.migrationPlan?.migrationCount !== EXPECTED_MIGRATION_COUNT
@@ -200,6 +205,19 @@ function validateProposalShape(packet) {
     fail('supabase_preview_rehearsal_proposal_migration_plan_invalid')
   }
   if (!/^sha256:[0-9a-f]{64}$/.test(packet.migrationPlan?.chainDigest || '')) fail('supabase_preview_rehearsal_proposal_migration_digest_invalid')
+  if (packet.migrationPlan?.branchApplyStrategy !== 'inspect_creation_mode_and_actual_catalog_then_review_delta'
+    || packet.migrationPlan?.manualFullChainReplayAllowed !== false
+    || packet.migrationPlan?.providerAutomaticReplayReviewed !== false
+    || packet.migrationPlan?.currentLiveHistoryReconciled !== false) {
+    fail('supabase_preview_rehearsal_proposal_branch_strategy_invalid')
+  }
+  if (!Number.isInteger(packet.productionBaseline?.schemaVersionAtAudit)
+    || packet.productionBaseline.schemaVersionAtAudit !== packet.productionBaseline.localTargetVersionAtAudit
+    || packet.migrationPlan?.historicalAuditSchemaVersion !== packet.productionBaseline.schemaVersionAtAudit
+    || packet.migrationPlan?.sourceAheadOfHistoricalAudit !== (EXPECTED_SOURCE_TARGET_SCHEMA_VERSION > packet.productionBaseline.schemaVersionAtAudit)
+    || packet.migrationPlan?.currentProductionSchemaVersionVerified !== false) {
+    fail('supabase_preview_rehearsal_proposal_historical_schema_invalid')
+  }
   if (!Array.isArray(packet.migrationPlan?.migrations) || packet.migrationPlan.migrations.length !== EXPECTED_MIGRATION_COUNT) fail('supabase_preview_rehearsal_proposal_migrations_invalid')
   validatePreviewMigrationEntries(packet.migrationPlan.migrations)
   if (packet.migrationPlan.chainDigest !== digest(JSON.stringify(packet.migrationPlan.migrations))) fail('supabase_preview_rehearsal_proposal_migration_digest_invalid')
@@ -229,8 +247,10 @@ function validateProposalShape(packet) {
   if (!Array.isArray(packet.requiredEvidence) || packet.requiredEvidence.length < 10) fail('supabase_preview_rehearsal_proposal_evidence_invalid')
   for (const evidence of [
     'preview-branch-status-and-migration-list',
-    'production-history-replayable-public-baseline-before-first-rls',
-    'source-controlled-migration-chain-applied-through-v13',
+    'branch-creation-mode-and-workflow-reviewed',
+    'production-and-branch-migration-history-reconciled-before-any-delta',
+    'data-less-branch-and-actual-schema-verified',
+    'only-reviewed-manual-delta-run-after-provider-branch-workflow',
     'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
     'website-review-recipient-isolation-entitlement-and-session-revocation',
     'website-review-and-feedback-nonempty-backup-restore',
@@ -258,7 +278,17 @@ function validateProposalShape(packet) {
     || packet.controls?.githubWritesAllowed !== false) {
     fail('supabase_preview_rehearsal_proposal_controls_invalid')
   }
-  if (!String(packet.ownerApprovalTemplate || '').includes('I approve one Supabase preview rehearsal setup')) fail('supabase_preview_rehearsal_proposal_approval_invalid')
+  if (!String(packet.ownerApprovalTemplate || '').includes('I approve one Supabase preview rehearsal setup')
+    || !packet.ownerApprovalTemplate.includes('Manual replay of the full source chain is not approved')
+    || !packet.ownerApprovalTemplate.includes('branch creation mode and automatic migration replay are reviewed')
+    || !packet.ownerApprovalTemplate.includes('separately confirm the quoted branch cost')) {
+    fail('supabase_preview_rehearsal_proposal_approval_invalid')
+  }
+  if (packet.executionPacketAfterApproval?.status !== 'blocked-pending-branch-mode-and-history-adapter'
+    || packet.executionPacketAfterApproval?.tool !== null
+    || packet.executionPacketAfterApproval?.commandTemplate !== null) {
+    fail('supabase_preview_rehearsal_proposal_execution_packet_invalid')
+  }
   if (!Array.isArray(packet.sourceReceipts) || packet.sourceReceipts.length !== SOURCES.length) fail('supabase_preview_rehearsal_proposal_sources_invalid')
   for (const receipt of packet.sourceReceipts) {
     if (!SOURCES.includes(receipt.path) || !/^sha256:[0-9a-f]{64}$/.test(receipt.digest || '')) fail('supabase_preview_rehearsal_proposal_sources_invalid')
@@ -290,15 +320,19 @@ export async function buildSupabasePreviewRehearsalProposal({
     mode: 'owner_approval_required',
     state: 'prepared-not-executed',
     generatedAt,
-    purpose: 'Record the source-bound Supabase preview rehearsal plan and its blocked production-history replay prerequisite without creating a branch, reading production rows, copying production data, or approving managed activation.',
+    purpose: 'Record a source-bound Supabase preview plan that requires a known creation mode, actual branch catalog and migration-history reconciliation, and a reviewed delta; do not create a branch or approve managed activation.',
     productionBaseline,
     readinessBaseline,
     previewBranch: {
-      kind: 'clean_empty_ephemeral_preview',
+      kind: 'data_less_ephemeral_preview_schema_unverified',
+      creationMode: 'unselected',
       parentProjectRef: productionBaseline.projectRef,
       parentClassification: 'protected-production',
       maximumLifetimeHours: MAX_PREVIEW_LIFETIME_HOURS,
       startsWithProductionData: false,
+      includeProductionData: false,
+      branchSchemaVerified: false,
+      costConfirmed: false,
       seedProductionDataAllowed: false,
       productionRefsAllowed: false,
       privilegedRuntimeCredentialsAllowed: false,
@@ -312,9 +346,14 @@ export async function buildSupabasePreviewRehearsalProposal({
         path: 'supabase/rehearsal/20260804_public_browser_quarantine.sql',
         digest: digest(browserQuarantineSql),
       },
-      liveProductionSchemaVersion: productionBaseline.liveSchemaVersion,
-      sourceAheadOfLiveProduction: migrationPlan.schemaVersion > productionBaseline.liveSchemaVersion,
+      historicalAuditSchemaVersion: productionBaseline.schemaVersionAtAudit,
+      sourceAheadOfHistoricalAudit: migrationPlan.schemaVersion > productionBaseline.schemaVersionAtAudit,
+      currentProductionSchemaVersionVerified: false,
       productionApplyAllowed: false,
+      branchApplyStrategy: 'inspect_creation_mode_and_actual_catalog_then_review_delta',
+      manualFullChainReplayAllowed: false,
+      providerAutomaticReplayReviewed: false,
+      currentLiveHistoryReconciled: false,
     },
     gates: {
       productionMigrationReplay: { ...PRODUCTION_REPLAY_GATE },
@@ -334,9 +373,10 @@ export async function buildSupabasePreviewRehearsalProposal({
     },
     requiredEvidence: [
       'preview-branch-status-and-migration-list',
-      'production-history-replayable-public-baseline-before-first-rls',
-      'clean-empty-data-less-branch-confirmed',
-      'source-controlled-migration-chain-applied-through-v13',
+      'branch-creation-mode-and-workflow-reviewed',
+      'data-less-branch-and-actual-schema-verified',
+      'production-and-branch-migration-history-reconciled-before-any-delta',
+      'only-reviewed-manual-delta-run-after-provider-branch-workflow',
       'durable-attempt-budget-restart-concurrency-and-restored-limit-proof',
       'website-review-recipient-isolation-entitlement-and-session-revocation',
       'website-review-and-feedback-nonempty-backup-restore',
@@ -353,10 +393,10 @@ export async function buildSupabasePreviewRehearsalProposal({
       'no-production-retry-on-failure',
     ],
     executionPacketAfterApproval: {
-      tool: 'tools/prepare_supabase_rehearsal_packet.mjs',
-      commandTemplate: 'npm run database:supabase:packet -- --target-project-ref <preview-branch-ref> --output .tmp/supermega-rehearsal-packet.json --release-handoff <release-handoff.json>',
-      outputMustBeGitignored: true,
-      bindsExactCommitAfterSourcePacketCommit: true,
+      status: 'blocked-pending-branch-mode-and-history-adapter',
+      tool: null,
+      commandTemplate: null,
+      reason: 'The old packet assumes an empty public catalog and manual source-chain replay. Dashboard and GitHub branch creation rebuild schema differently, and the actual branch workflow and catalog are not verified.',
     },
     compatibilityWatchList: [
       {
@@ -372,6 +412,8 @@ export async function buildSupabasePreviewRehearsalProposal({
     ],
     documentation: {
       branching: 'https://supabase.com/docs/guides/deployment/branching',
+      dashboardMigrationFailures: 'https://supabase.com/docs/guides/troubleshooting/branch-in-migrations-failed-status',
+      githubIntegration: 'https://supabase.com/docs/guides/deployment/branching/github-integration',
       productionChecklist: 'https://supabase.com/docs/guides/deployment/going-into-prod',
       changelogBreakingChanges: 'https://supabase.com/changelog?types=breaking-change',
     },
@@ -390,7 +432,7 @@ export async function buildSupabasePreviewRehearsalProposal({
       customerContactAllowed: false,
       paymentOrStockActionAllowed: false,
     },
-    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${migrationPlan.chainDigest} on a clean empty maximum-24-hour non-production preview branch only, after separate approval and proof that production migration history can replay the public baseline before its first RLS migration, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
+    ownerApprovalTemplate: `I approve one Supabase preview rehearsal setup for ${REPOSITORY} using migration chain ${migrationPlan.chainDigest} on a data-less maximum-24-hour non-production preview branch only, with deletion after evidence, only after branch creation mode and automatic migration replay are reviewed, current production history and the actual branch catalog are reconciled, and I separately confirm the quoted branch cost. Manual replay of the full source chain is not approved; apply only a reviewed delta after exact baseline proof. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.`,
     sourceReceipts,
   }
   return validateProposalShape({ ...body, digest: packetDigest(body) })
@@ -455,9 +497,18 @@ async function runSelfTest() {
   })
   const checks = {
     proposal_valid: proposal.contract === SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT,
-    clean_empty_preview_only: proposal.previewBranch.startsWithProductionData === false && proposal.previewBranch.maximumLifetimeHours === MAX_PREVIEW_LIFETIME_HOURS,
+    data_less_schema_unverified_preview_only: proposal.previewBranch.startsWithProductionData === false
+      && proposal.previewBranch.includeProductionData === false
+      && proposal.previewBranch.creationMode === 'unselected'
+      && proposal.previewBranch.branchSchemaVerified === false
+      && proposal.previewBranch.maximumLifetimeHours === MAX_PREVIEW_LIFETIME_HOURS,
     migration_chain_bound: proposal.migrationPlan.migrationCount === EXPECTED_MIGRATION_COUNT && /^sha256:[0-9a-f]{64}$/.test(proposal.migrationPlan.chainDigest),
     production_replay_blocked: proposal.gates.productionMigrationReplay.status === 'blocked' && proposal.gates.productionMigrationReplay.newPreviewCreationAllowed === false,
+    branch_mode_and_history_delta_only: proposal.previewBranch.costConfirmed === false
+      && proposal.migrationPlan.branchApplyStrategy === 'inspect_creation_mode_and_actual_catalog_then_review_delta'
+      && proposal.migrationPlan.manualFullChainReplayAllowed === false
+      && proposal.migrationPlan.providerAutomaticReplayReviewed === false
+      && proposal.executionPacketAfterApproval.status === 'blocked-pending-branch-mode-and-history-adapter',
     no_supabase_mutation_authorized: proposal.controls.supabaseBranchCreationApproved === false && proposal.controls.productionProjectMutated === false,
   }
   const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name)

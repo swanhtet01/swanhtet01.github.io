@@ -54,14 +54,18 @@ async function proposal(overrides = {}) {
   })
 }
 
-test('builds a clean empty Supabase preview rehearsal proposal', async () => {
+test('builds a data-less preview proposal with branch mode and schema unverified', async () => {
   const built = await proposal()
   assert.equal(built.contract, SUPABASE_PREVIEW_REHEARSAL_PROPOSAL_CONTRACT)
   assert.equal(built.mode, 'owner_approval_required')
   assert.equal(built.state, 'prepared-not-executed')
-  assert.equal(built.previewBranch.kind, 'clean_empty_ephemeral_preview')
+  assert.equal(built.previewBranch.kind, 'data_less_ephemeral_preview_schema_unverified')
+  assert.equal(built.previewBranch.creationMode, 'unselected')
   assert.equal(built.previewBranch.maximumLifetimeHours, 24)
   assert.equal(built.previewBranch.startsWithProductionData, false)
+  assert.equal(built.previewBranch.includeProductionData, false)
+  assert.equal(built.previewBranch.branchSchemaVerified, false)
+  assert.equal(built.previewBranch.costConfirmed, false)
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
@@ -70,14 +74,24 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.migrationPlan.schemaVersion, 13)
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
   assert.equal(built.migrationPlan.finalMigration, '20261014090000_website_channel_stable_update.sql')
-  assert.equal(built.migrationPlan.sourceAheadOfLiveProduction, true)
+  assert.equal(built.productionBaseline.schemaVersionAtAudit, 11)
+  assert.equal(built.migrationPlan.historicalAuditSchemaVersion, 11)
+  assert.equal(built.migrationPlan.sourceAheadOfHistoricalAudit, true)
+  assert.equal(built.migrationPlan.currentProductionSchemaVersionVerified, false)
+  assert.equal(built.migrationPlan.branchApplyStrategy, 'inspect_creation_mode_and_actual_catalog_then_review_delta')
+  assert.equal(built.migrationPlan.manualFullChainReplayAllowed, false)
+  assert.equal(built.migrationPlan.providerAutomaticReplayReviewed, false)
+  assert.equal(built.migrationPlan.currentLiveHistoryReconciled, false)
   assert.equal(built.productionBaseline.evidenceClassification, 'historical-audit-only')
   assert.equal(built.productionBaseline.currentStateRevalidated, false)
   assert.equal(built.productionBaseline.currentCandidateProven, false)
   assert.equal(built.gates.productionMigrationReplay.status, 'blocked')
   assert.equal(built.gates.productionMigrationReplay.newPreviewCreationAllowed, false)
   assert.equal(built.gates.productionMigrationReplay.currentProviderStateRevalidated, false)
-  assert.ok(built.requiredEvidence.includes('production-history-replayable-public-baseline-before-first-rls'))
+  assert.ok(built.requiredEvidence.includes('branch-creation-mode-and-workflow-reviewed'))
+  assert.ok(built.requiredEvidence.includes('production-and-branch-migration-history-reconciled-before-any-delta'))
+  assert.ok(built.requiredEvidence.includes('data-less-branch-and-actual-schema-verified'))
+  assert.ok(built.requiredEvidence.includes('only-reviewed-manual-delta-run-after-provider-branch-workflow'))
   assert.ok(built.requiredEvidence.includes('durable-attempt-budget-restart-concurrency-and-restored-limit-proof'))
   assert.equal(built.gates.previewRehearsal.proofComplete, false)
   assert.ok(built.requiredEvidence.includes('metadata-only-schema-fingerprint-comparison'))
@@ -87,6 +101,11 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.controls.productionProjectMutated, false)
   assert.equal(built.controls.productionDataCopied, false)
   assert.equal(built.controls.githubWritesAllowed, false)
+  assert.equal(built.executionPacketAfterApproval.status, 'blocked-pending-branch-mode-and-history-adapter')
+  assert.equal(built.executionPacketAfterApproval.commandTemplate, null)
+  assert.match(built.ownerApprovalTemplate, /Manual replay of the full source chain is not approved/)
+  assert.match(built.ownerApprovalTemplate, /branch creation mode and automatic migration replay are reviewed/)
+  assert.match(built.ownerApprovalTemplate, /separately confirm the quoted branch cost/)
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
 })
 
@@ -124,6 +143,8 @@ test('rehashing cannot hide omitted budget or Website evidence or turn historica
   for (const mutate of [p => { p.migrationPlan.migrations.at(-1).digest = `sha256:${'1'.repeat(64)}` },
     p => { p.productionBaseline.currentCandidateProven = true },
     p => { p.productionBaseline.currentStateRevalidated = true },
+    p => { p.migrationPlan.currentProductionSchemaVersionVerified = true },
+    p => { p.migrationPlan.historicalAuditSchemaVersion = 13 },
     p => { p.requiredEvidence = p.requiredEvidence.filter(e => !e.startsWith('durable-attempt-budget-')) },
     p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'website-review-recipient-isolation-entitlement-and-session-revocation') },
     p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'website-review-and-feedback-nonempty-backup-restore') },
@@ -133,22 +154,32 @@ test('rehashing cannot hide omitted budget or Website evidence or turn historica
     mutate(altered)
     const { digest: ignored, ...body } = altered
     altered.digest = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`
-    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(migration_digest_invalid|production_baseline_invalid|evidence_missing)/)
+    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(migration_digest_invalid|production_baseline_invalid|historical_schema_invalid|evidence_missing)/)
   }
 })
 
-test('a rehashed proposal cannot waive the known production-history replay block', async () => {
+test('a rehashed proposal cannot waive branch-mode, history, and cost gates', async () => {
   for (const mutate of [
     p => { p.gates.productionMigrationReplay.status = 'ready' },
     p => { p.gates.productionMigrationReplay.newPreviewCreationAllowed = true },
     p => { p.gates.productionMigrationReplay.currentProviderStateRevalidated = true },
-    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'production-history-replayable-public-baseline-before-first-rls') },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'production-and-branch-migration-history-reconciled-before-any-delta') },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'branch-creation-mode-and-workflow-reviewed') },
+    p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'only-reviewed-manual-delta-run-after-provider-branch-workflow') },
+    p => { p.previewBranch.costConfirmed = true },
+    p => { p.previewBranch.includeProductionData = true },
+    p => { p.previewBranch.creationMode = 'dashboard' },
+    p => { p.previewBranch.branchSchemaVerified = true },
+    p => { p.migrationPlan.manualFullChainReplayAllowed = true },
+    p => { p.migrationPlan.providerAutomaticReplayReviewed = true },
+    p => { p.migrationPlan.currentLiveHistoryReconciled = true },
+    p => { p.executionPacketAfterApproval.commandTemplate = 'apply all migrations' },
   ]) {
     const altered = structuredClone(await proposal())
     mutate(altered)
     const { digest: ignored, ...body } = altered
     altered.digest = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`
-    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(replay_gate_invalid|evidence_missing)/)
+    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(replay_gate_invalid|evidence_missing|cost_gate_invalid|data_boundary_invalid|branch_kind_invalid|branch_strategy_invalid|execution_packet_invalid)/)
   }
 })
 
