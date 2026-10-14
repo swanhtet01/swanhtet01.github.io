@@ -45,6 +45,7 @@ const expectedMigrationNames = [
   '20261010063000_website_publishing_and_inquiries.sql',
   '20261010070000_website_published_hero_media.sql',
   '20261010120857_website_inquiry_followup.sql',
+  '20261014090000_website_channel_stable_update.sql',
 ]
 
 export function validateRehearsalMigrationNames(names) {

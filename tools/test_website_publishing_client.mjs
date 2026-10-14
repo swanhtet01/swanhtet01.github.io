@@ -50,6 +50,19 @@ try {
   await client.publish(channelId, 'home', status, signal())
   assert.deepEqual(calls.map(c => c.path), ['/api/trial/v1/website-inquiry-channels', `/api/trial/v1/website-inquiry-channels/${channelId}/publish`])
   assert.equal(calls[0].body.expectedVersion, 4); assert.equal(calls[0].body.origin, status.publicOrigin); count++
+  const nextSource = { version: 5, snapshotId: 'snapshot-updated', artifactDigest: 'sha256:' + 'b'.repeat(64) }
+  const nextStatus = { ...status, source: nextSource }
+  calls.length = 0
+  globalThis.fetch = async (path, init) => {
+    calls.push({ path, body: JSON.parse(init.body) })
+    return Response.json({ channelId, enabled: true, artifactDigest: nextSource.artifactDigest })
+  }
+  await client.replace(publication, 'home', nextStatus, signal())
+  assert.deepEqual(calls, [{ path: `/api/trial/v1/website-inquiry-channels/${channelId}/replace`, body: {
+    expectedOldVersion: 4, expectedOldDigest: source.artifactDigest, expectedVersion: 5,
+    pageId: 'home', snapshotId: nextSource.snapshotId, artifactDigest: nextSource.artifactDigest,
+  } }], 'an update preserves the channel and never prepares a new one'); count++
+  await assert.rejects(client.replace(publication, 'home', status, signal()), /newer site version/); count++
   let attempts = 0
   globalThis.fetch = async () => { attempts++; throw new Error('connection interrupted') }
   await assert.rejects(client.publish(channelId, 'home', status, signal()), /interrupted/)

@@ -247,6 +247,92 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         arguments.update(overrides)
         return self.adapter.receive(**arguments)
 
+    def approved_update(self, headline='The updated website is live.', site_name=None):
+        state = _state()
+        state['pages'][0]['hero']['headline'] = headline
+        if site_name is not None:
+            state['siteName'] = site_name
+        with pg._connect(self.admin_url) as connection:
+            version = connection.execute("select version from app_private.workspace_state where workspace_id=%s and surface='website'",
+                                         (WORKSPACE,)).fetchone()[0]
+            connection.execute("update app_private.workspace_state set version=%s,state_json=%s::jsonb where workspace_id=%s and surface='website'",
+                               (version + 1, json.dumps(_published_state(state)), WORKSPACE))
+        return self.adapter.publications(OWNER, public_origin=ORIGIN)['source']
+
+    @staticmethod
+    def replace_body(old, source, *, page_id='page-home'):
+        return {'expectedOldVersion': old['sourceVersion'], 'expectedOldDigest': old['artifactDigest'],
+                'expectedVersion': source['version'], 'pageId': page_id,
+                'snapshotId': source['snapshotId'], 'artifactDigest': source['artifactDigest']}
+
+    def test_approved_update_keeps_url_and_inquiry_channel_with_idempotent_retry(self):
+        channel = self.channel()
+        first = self.adapter.public_page(channel_id=channel, public_origin=ORIGIN)
+        self.receive(channel)
+        original_inquiry = self.adapter.inbox(OWNER)['inquiries'][0]
+        old = self.adapter.publications(OWNER, public_origin=ORIGIN)['publications'][0]
+        source = self.approved_update(site_name='Renamed Studio')
+        client = self.client()
+        body = self.replace_body(old, source)
+        route = f'/api/trial/v1/website-inquiry-channels/{channel}/replace'
+        updated = client.post(route, json=body)
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()['artifactDigest'], source['artifactDigest'])
+        self.assertEqual(client.post(route, json=body).json(), updated.json())
+        next_page = self.adapter.public_page(channel_id=channel, public_origin=ORIGIN)
+        self.assertNotEqual(first['artifactDigest'], next_page['artifactDigest'])
+        self.assertEqual(client.get(f'/sites/{channel}').status_code, 200)
+        self.assertIn('The updated website is live.', client.get(f'/sites/{channel}').text)
+        self.assertEqual([item['channelId'] for item in self.adapter.publications(OWNER, public_origin=ORIGIN)['publications'] if item['enabled']], [channel])
+        self.assertEqual(self.adapter.inbox(OWNER)['inquiries'][0]['siteName'], original_inquiry['siteName'])
+        self.assertEqual(self.receive(channel)['status'], 'received')
+        after = self.adapter.inbox(OWNER)['inquiries']
+        self.assertEqual(after[0]['siteName'], 'Renamed Studio')
+        self.assertEqual(after[1]['siteName'], original_inquiry['siteName'])
+        self.assertEqual(after[1]['sourcePage'], original_inquiry['sourcePage'])
+        self.assertEqual(client.post(f'/api/trial/v1/website-inquiry-channels/{channel}/unpublish',
+                                     json={'artifactDigest': old['artifactDigest']}).status_code, 409)
+        self.assertEqual(self.adapter.public_page(channel_id=channel, public_origin=ORIGIN), next_page)
+
+    def test_failed_and_stale_updates_leave_previous_site_online(self):
+        channel = self.channel()
+        first = self.adapter.public_page(channel_id=channel, public_origin=ORIGIN)
+        old = self.adapter.publications(OWNER, public_origin=ORIGIN)['publications'][0]
+        client = self.client()
+        route = f'/api/trial/v1/website-inquiry-channels/{channel}/replace'
+        self.assertEqual(client.post(route, json={'expectedVersion': 2}).status_code, 422)
+        with pg._connect(self.admin_url) as connection:
+            draft = _state()
+            draft['pages'][0]['hero']['headline'] = 'PRIVATE UNAPPROVED DRAFT'
+            connection.execute("update app_private.workspace_state set version=2,state_json=%s::jsonb where workspace_id=%s and surface='website'",
+                               (json.dumps(draft), WORKSPACE))
+        forged = self.replace_body(old, {'version': 2, 'snapshotId': 'forged',
+                                         'artifactDigest': 'sha256:' + '0' * 64})
+        self.assertEqual(client.post(route, json=forged).status_code, 422)
+        self.assertEqual(self.adapter.public_page(channel_id=channel, public_origin=ORIGIN), first)
+        source = self.approved_update()
+        valid = self.replace_body(old, source)
+        self.assertEqual(client.post(route, json={**valid, 'expectedOldDigest': 'sha256:' + '0' * 64}).status_code, 409)
+        other = self.client(principal=TrialPrincipal('rehearsal-b', 'owner-b', 'human'))
+        self.assertEqual(other.post(route, json=valid).status_code, 403)
+        self.assertEqual(client.post(route, json=valid).status_code, 200)
+        self.assertEqual(client.post(route, json={**valid, 'snapshotId': 'forged'}).status_code, 409)
+        self.assertEqual(client.post(route, json=valid).status_code, 200)
+
+    def test_older_update_retry_cannot_roll_back_a_newer_publication(self):
+        channel = self.channel()
+        client = self.client()
+        route = f'/api/trial/v1/website-inquiry-channels/{channel}/replace'
+        old = self.adapter.publications(OWNER, public_origin=ORIGIN)['publications'][0]
+        first_source = self.approved_update('First approved update')
+        first_request = self.replace_body(old, first_source)
+        self.assertEqual(client.post(route, json=first_request).status_code, 200)
+        newer_old = self.adapter.publications(OWNER, public_origin=ORIGIN)['publications'][0]
+        newer_source = self.approved_update('Second approved update')
+        self.assertEqual(client.post(route, json=self.replace_body(newer_old, newer_source)).status_code, 200)
+        self.assertEqual(client.post(route, json=first_request).status_code, 409)
+        self.assertIn('Second approved update', client.get(f'/sites/{channel}').text)
+
     def test_prepare_is_disabled_idempotent_and_does_not_activate_or_publish(self):
         channel = self.channel(enabled=False)
         self.assertEqual(self.adapter.prepare_channel(OWNER, channel_id=channel, page_id='page-home', expected_version=1, origin=ORIGIN),
@@ -504,6 +590,7 @@ class WebsiteInquirySqlTests(unittest.TestCase):
         with pg._connect(self.admin_url) as connection:
             for role in ('anon', 'authenticated', 'service_role'):
                 for signature in ('publish_website_inquiry_channel(uuid,bigint,text,text,text)',
+                                  'replace_website_inquiry_channel(uuid,bigint,text,bigint,text,text,text,text)',
                                   'unpublish_website_inquiry_channel(uuid,text)', 'read_website_inquiry_page(uuid,text)'):
                     self.assertFalse(connection.execute('select has_function_privilege(%s,%s,%s)',
                         (role, 'app_private.' + signature, 'execute')).fetchone()[0])

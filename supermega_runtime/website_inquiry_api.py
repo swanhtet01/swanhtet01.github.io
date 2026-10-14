@@ -92,7 +92,9 @@ def create_website_inquiry_router(
             raise _error(404, 'photo_unavailable' if photo else 'form_unavailable') from None
         except TrialNotReadyError:
             raise _error(503, 'website_inquiries_unavailable') from None
-        except TrialValidationError:
+        except TrialValidationError as exc:
+            if str(exc) == 'website_inquiry_source_stale':
+                raise _error(409, 'source_changed') from None
             raise _error(422, 'request_invalid') from None
         except Exception as exc:
             # Match known DB codes only. Never expose a SQL context or customer
@@ -224,6 +226,21 @@ def create_website_inquiry_router(
             raise _error(422, 'request_invalid')
         return await invoke(lambda: store.publish_channel(actor, channel_id=channel_id,
             expected_version=body['expectedVersion'], public_origin=public_origin))
+
+    @router.post('/api/trial/v1/website-inquiry-channels/{channel_id}/replace')
+    async def replace(channel_id: str, request: Request):
+        available(request)
+        actor = principal(request)
+        if not publishing_configured:
+            raise _error(503, 'website_inquiries_unavailable')
+        body = await _body(request)
+        if set(body) != {'expectedOldVersion', 'expectedOldDigest', 'expectedVersion',
+                         'pageId', 'snapshotId', 'artifactDigest'}:
+            raise _error(422, 'request_invalid')
+        return await invoke(lambda: store.replace_channel(actor, channel_id=channel_id,
+            expected_old_version=body['expectedOldVersion'], expected_old_digest=body['expectedOldDigest'],
+            expected_version=body['expectedVersion'], page_id=body['pageId'],
+            snapshot_id=body['snapshotId'], artifact_digest=body['artifactDigest'], public_origin=public_origin))
 
     @router.post('/api/trial/v1/website-inquiry-channels/{channel_id}/unpublish')
     async def unpublish(channel_id: str, request: Request):

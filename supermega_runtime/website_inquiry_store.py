@@ -81,31 +81,69 @@ class WebsiteInquiryStore:
             if prior and prior['snapshot_id']:
                 snapshot, digest = prior['snapshot_id'], prior['artifact_digest']
             else:
-                cursor.execute("""select version,state_json from app_private.workspace_state
-                    where workspace_id=%s and surface='website' for share""", (principal.workspace_id,))
-                source = cursor.fetchone()
-                if source is None or source['version'] != expected_version:
-                    raise TrialValidationError('website_inquiry_source_stale')
-                state = validate_website_state(source['state_json'])
-                release = _current_release_source(state)
-                snapshot, digest = release['snapshotId'], release['artifactDigest']
-                artifact = next(item['artifact'] for item in state['localPublishes'] if item['id'] == snapshot)
-                require_website_media_receipts(cursor, principal.workspace_id, artifact)
-                asset_ids = website_asset_ids(artifact)
-                if asset_ids and self.media_storage is None:
-                    raise TrialNotReadyError(('website_media_unavailable',))
-                # Verify one asset at a time: no unbounded in-memory publication bundle.
-                media = WebsiteMediaStore(self.store, self.media_storage)
-                total = 0
-                for asset_id in sorted(asset_ids):
-                    data, receipt = media.get(principal, asset_id)
-                    verify_photo_bytes(data, receipt, asset_id)
-                    total += len(data)
-                    if total > 8 * 1024 * 1024:
-                        raise TrialValidationError('website_publication_photos_too_large')
-                self.store._assert_active_identity_session(cursor, principal.normalized())
+                _, snapshot, digest = self._approved_publication(cursor, principal, expected_version)
             cursor.execute('select app_private.publish_website_inquiry_channel(%s,%s,%s,%s,%s) as receipt',
                            (channel_id, expected_version, snapshot, digest, public_origin))
+            result = cursor.fetchone()['receipt']
+        return result
+
+    def _approved_publication(self, cursor, principal: TrialPrincipal,
+                              expected_version: int) -> tuple[dict[str, Any], str, str]:
+        cursor.execute("""select version,state_json from app_private.workspace_state
+            where workspace_id=%s and surface='website' for share""", (principal.workspace_id,))
+        source = cursor.fetchone()
+        if source is None or source['version'] != expected_version:
+            raise TrialValidationError('website_inquiry_source_stale')
+        state = validate_website_state(source['state_json'])
+        release = _current_release_source(state)
+        snapshot, digest = release['snapshotId'], release['artifactDigest']
+        artifact = next(item['artifact'] for item in state['localPublishes'] if item['id'] == snapshot)
+        require_website_media_receipts(cursor, principal.workspace_id, artifact)
+        asset_ids = website_asset_ids(artifact)
+        if asset_ids and self.media_storage is None:
+            raise TrialNotReadyError(('website_media_unavailable',))
+        # Verify one asset at a time: no unbounded in-memory publication bundle.
+        media = WebsiteMediaStore(self.store, self.media_storage)
+        total = 0
+        for asset_id in sorted(asset_ids):
+            data, receipt = media.get(principal, asset_id)
+            verify_photo_bytes(data, receipt, asset_id)
+            total += len(data)
+            if total > 8 * 1024 * 1024:
+                raise TrialValidationError('website_publication_photos_too_large')
+        self.store._assert_active_identity_session(cursor, principal.normalized())
+        return state, snapshot, digest
+
+    def replace_channel(self, principal: TrialPrincipal, *, channel_id: str,
+                        expected_old_version: int, expected_old_digest: str,
+                        expected_version: int, page_id: str, snapshot_id: str,
+                        artifact_digest: str, public_origin: str) -> dict[str, Any]:
+        """Atomically replace an approved site on its existing public URL."""
+        channel_id = _uuid(channel_id)
+        page_id = _text(page_id, 80)
+        snapshot_id = _text(snapshot_id, 160)
+        expected_old_digest = _text(expected_old_digest, 71)
+        artifact_digest = _text(artifact_digest, 71)
+        if (type(expected_old_version) is not int or expected_old_version < 1
+                or type(expected_version) is not int or expected_version <= expected_old_version):
+            raise TrialValidationError('website_inquiry_version_invalid')
+        with self.store._guarded_cursor(principal, write=True, capability='website.write') as (cursor, _):
+            require_publishing_schema(cursor)
+            cursor.execute("""select source_version,snapshot_id,artifact_digest,page_id,enabled
+                from app_private.website_inquiry_channels where channel_id=%s and workspace_id=%s""",
+                (channel_id, principal.workspace_id))
+            current = cursor.fetchone()
+            replay = bool(current and current['enabled'] and current['source_version'] == expected_version
+                          and current['snapshot_id'] == snapshot_id and current['artifact_digest'] == artifact_digest
+                          and current['page_id'] == page_id)
+            if not replay:
+                state, approved_snapshot, approved_digest = self._approved_publication(cursor, principal, expected_version)
+                if (approved_snapshot != snapshot_id or approved_digest != artifact_digest
+                        or not any(page['id'] == page_id for page in state['pages'])):
+                    raise TrialValidationError('website_inquiry_source_stale')
+            cursor.execute('select app_private.replace_website_inquiry_channel(%s,%s,%s,%s,%s,%s,%s,%s) as receipt',
+                           (channel_id, expected_old_version, expected_old_digest, expected_version,
+                            page_id, snapshot_id, artifact_digest, public_origin))
             result = cursor.fetchone()['receipt']
         return result
 
@@ -194,14 +232,13 @@ class WebsiteInquiryStore:
         with self.store._guarded_cursor(principal, write=False, capability='website.write') as (cursor, _):
             require_publishing_schema(cursor)
             cursor.execute("""select i.channel_id,i.request_id,i.name,i.contact,i.message,i.received_at,
-                c.site_name,c.source_page,i.status,i.revision,i.assigned_to,i.followup_note,i.updated_by,i.updated_at
+                i.received_site_name,i.received_source_page,i.status,i.revision,i.assigned_to,i.followup_note,i.updated_by,i.updated_at
                 from app_private.website_inbox i
-                join app_private.website_inquiry_channels c on c.channel_id=i.channel_id
                 where i.workspace_id=%s """ + status_filter + ' ' + boundary + " order by i.received_at desc,i.channel_id desc,i.request_id desc limit 51", parameters)
             rows = cursor.fetchall()
             entries = [{'channelId': str(row['channel_id']), 'requestId': str(row['request_id']),
                         'name': row['name'], 'contact': row['contact'], 'message': row['message'],
-                        'siteName': row['site_name'], 'sourcePage': row['source_page'],
+                        'siteName': row['received_site_name'], 'sourcePage': row['received_source_page'],
                         'receivedAt': row['received_at'].astimezone(timezone.utc).isoformat(),
                         'status': row['status'], 'revision': row['revision'], 'assignedTo': row['assigned_to'],
                         'note': row['followup_note'], 'updatedBy': row['updated_by'],

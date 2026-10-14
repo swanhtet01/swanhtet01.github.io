@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20261014090000_website_channel_stable_update.sql": "9ed6dc61a3ebc832db5ad54e4d7c91ad18e48d3a4f577ffb9a093baa52b3612a",
     "20261010063000_website_publishing_and_inquiries.sql": "adc3cca04a41f5048366d10ab2f5a1ae6b313683a5cf6d049bcd766cd43cd8b2",
     "20261010070000_website_published_hero_media.sql": "1f7d75e040574ac394a6d1cdc82118f21fabfdc5d91ea6f011c584dffcc6a026",
     "20261010120857_website_inquiry_followup.sql": "b794decd2456c16c2ce81f18b9a631562cc54d5f5032bec2ad5c2b0b1d674203",
@@ -32,6 +33,7 @@ MIGRATION_PINS = {
 TABLES = frozenset({'website_inquiry_channels', 'website_inbox', 'website_inquiry_actions', "ecommerce_customer_decisions", "ecommerce_customer_reviews", "billing_invoices", "billing_events", "billing_entitlements",
                     "self_serve_attempt_budgets", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances"})
 WEBSITE_FUNCTIONS = {
+    'replace_website_inquiry_channel': ('p_channel uuid, p_expected_version bigint, p_expected_digest text, p_version bigint, p_page text, p_snapshot text, p_digest text, p_origin text', 'jsonb'),
     'change_website_inquiry': ('p_channel uuid, p_request uuid, p_action uuid, p_revision bigint, p_operation text, p_note text', 'jsonb'),
     'publish_website_inquiry_channel': ('p_channel uuid, p_version bigint, p_snapshot text, p_digest text, p_origin text', 'jsonb'),
     'read_website_inquiry_page': ('p_channel uuid, p_origin text', 'jsonb'),
@@ -89,9 +91,9 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 # Exact PostgreSQL 17 output from the pinned migrations, with all row keys retained.
 # Source-derived, synthetic catalog evidence only. Unknown/extra/missing rows fail.
 CATALOG_PINS = {
-    "extension_columns_exact": "533c2f79353d013486899db3e93e0ce8a04c49390e2b7ea6e255dc481c6785d6",
-    "extension_constraints_exact": "0931c294b0bf34d515cce0751e5f5dc86b43cb9227be210e25f4d751f975bdf6",
-    "extension_functions_exact": "ed8304bf4366017691d8df8fe8dbd625183637184f0fe2abf20c0b8dd8c1ed27",
+    "extension_columns_exact": "a4ff9d29472484ce891adb75e177e24887daafad3a7171f6a24c67ac9cfc0fd4",
+    "extension_constraints_exact": "7424be8d7673fae470ad3f826ffc423504f0865a79f5064bf5f515496ce290af",
+    "extension_functions_exact": "451bfe0aa47ec9713ca0a28ef11c6f0e99dd8a55b98d88b60fa8bce9d750446d",
     "extension_policies_exact": "9ebb7163b5e86d70fdddec40768d71fc3fff2284a4e2072a2d1a8a6d0ce76de5",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
