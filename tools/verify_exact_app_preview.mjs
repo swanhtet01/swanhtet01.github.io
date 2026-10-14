@@ -1059,7 +1059,7 @@ export function expectedText(spec, publicHomepageExpectedText) {
     'What do you sell or provide?',
     'Create website',
   ]
-  return ['Ecommerce', 'Online store', 'Browse your catalog and take order requests. Requests stay on this device until Shop review.', 'Get catalog help', 'Open customer ordering']
+  return ['Ecommerce', 'Online store', 'Review customer requests on this device. Requests stay on this device until Shop review.', 'Get catalog help', 'Open customer ordering']
 }
 
 function browserCase(spec, origin, publicHomepageExpectedText, appOrigin) {
