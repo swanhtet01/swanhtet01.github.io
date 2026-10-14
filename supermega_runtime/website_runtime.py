@@ -75,7 +75,7 @@ _STATE_FIELDS = frozenset(
         "events",
     }
 )
-_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "releaseRecords", "leadLedger"})
+_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "releaseRecords", "leadLedger", "presentation"})
 _OPENING_PLAN_FIELDS = frozenset(
     {"contract", "packageDigest", "workflowTemplateId", "confirmedAt", "pageIds"}
 )
@@ -83,6 +83,7 @@ _OPENING_PLAN_CONTRACT = "supermega.website.opening-plan.v1"
 _WEBSITE_TEMPLATE_IDS = frozenset(
     {"business-presence", "lead-generation", "catalog-showcase"}
 )
+_PRESENTATION_FIELDS = frozenset({"schema", "templateId"})
 _MAX_RELEASE_RECORDS = 50
 _MAX_RELEASE_COMMANDS = 500
 _PAGE_FIELDS = frozenset(
@@ -227,6 +228,16 @@ def _canonical_digest(value: object) -> str:
     return f"{digest:08x}"
 
 
+def _validate_presentation(value: object, field: str) -> dict[str, Any]:
+    presentation = _object(value, field)
+    _exact(presentation, field, _PRESENTATION_FIELDS)
+    if presentation["schema"] != "supermega.sites.presentation.v1":
+        raise TrialValidationError(f"{field}.schema is unsupported.")
+    if not isinstance(presentation["templateId"], str) or presentation["templateId"] not in _WEBSITE_TEMPLATE_IDS:
+        raise TrialValidationError(f"{field}.templateId is unsupported.")
+    return presentation
+
+
 def _website_fingerprint(state: Mapping[str, Any]) -> str:
     publishable = {
         "siteName": _js_trim(str(state["siteName"])),
@@ -244,6 +255,8 @@ def _website_fingerprint(state: Mapping[str, Any]) -> str:
             for page in state["pages"]
         ],
     }
+    if "presentation" in state:
+        publishable["presentation"] = state["presentation"]
     return f"web-{_canonical_digest(publishable)}"
 
 
@@ -270,6 +283,8 @@ def _website_artifact(state: Mapping[str, Any]) -> dict[str, Any]:
             if page["stage"] == "ready"
         ],
     }
+    if "presentation" in state:
+        content["presentation"] = deepcopy(state["presentation"])
     return {**content, "contentDigest": f"site-{_canonical_digest(content)}"}
 
 
@@ -456,7 +471,9 @@ def _validate_artifact_page(value: object, field: str) -> dict[str, Any]:
 
 def _validate_artifact(value: object, field: str) -> dict[str, Any]:
     artifact = _object(value, field)
-    _exact(artifact, field, _ARTIFACT_FIELDS)
+    _exact(artifact, field, _ARTIFACT_FIELDS | ({"presentation"} if "presentation" in artifact else set()))
+    if "presentation" in artifact:
+        _validate_presentation(artifact["presentation"], f"{field}.presentation")
     if artifact["schema"] != "supermega.website.artifact.v1":
         raise TrialValidationError(f"{field}.schema is unsupported.")
     _text(artifact["siteName"], f"{field}.siteName", maximum=60)
@@ -652,6 +669,8 @@ def validate_website_state(value: object) -> dict[str, Any]:
     if content_revision > revision:
         raise TrialValidationError("website contentRevision cannot exceed revision.")
     _text(state["siteName"], "website state.siteName", maximum=60, allow_blank=True)
+    if "presentation" in state:
+        _validate_presentation(state["presentation"], "website state.presentation")
 
     pages = _array(state["pages"], "website state.pages")
     if not 1 <= len(pages) <= _MAX_PAGES:

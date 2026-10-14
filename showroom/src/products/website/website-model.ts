@@ -123,6 +123,13 @@ export type WebsiteArtifactPage = {
   seo: WebsitePage['seo']
 }
 
+export const WEBSITE_PRESENTATION_IDS = ['business-presence', 'lead-generation', 'catalog-showcase'] as const
+export type WebsitePresentationId = (typeof WEBSITE_PRESENTATION_IDS)[number]
+export type WebsitePresentation = {
+  schema: 'supermega.sites.presentation.v1'
+  templateId: WebsitePresentationId
+}
+
 export type WebsiteArtifact = {
   schema: 'supermega.website.artifact.v1'
   siteName: string
@@ -130,6 +137,7 @@ export type WebsiteArtifact = {
   contentDigest: string
   source: WebsiteSourceRef
   pages: WebsiteArtifactPage[]
+  presentation?: WebsitePresentation
 }
 
 export type PublishEvidence = {
@@ -202,6 +210,7 @@ export type WebsiteWorkspace = {
   contentRevision: number
   siteName: string
   pages: WebsitePage[]
+  presentation?: WebsitePresentation
   selectedPageId: string
   evidence: PublishEvidence[]
   approvals: PublishApproval[]
@@ -637,6 +646,7 @@ export function pageIssues(page: WebsitePage) {
 export function workspaceFingerprint(workspace: WebsiteWorkspace) {
   const publishableState = {
     siteName: workspace.siteName.trim(),
+    ...(workspace.presentation ? { presentation: workspace.presentation } : {}),
     pages: workspace.pages.map((page) => ({
       id: page.id,
       internalName: page.internalName,
@@ -775,6 +785,7 @@ function createWebsiteArtifactFromPages(workspace: WebsiteWorkspace, pages: Webs
   const content: Omit<WebsiteArtifact, 'contentDigest'> = {
     schema: 'supermega.website.artifact.v1',
     siteName: workspace.siteName,
+    ...(workspace.presentation ? { presentation: workspace.presentation } : {}),
     fingerprint: source.digest,
     source,
     pages: pages
@@ -1511,6 +1522,7 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
     'evidence', 'approvals', 'localPublishes', 'events',
   ]
   if (Object.hasOwn(value, 'openingPlan')) workspaceKeys.push('openingPlan')
+  if (Object.hasOwn(value, 'presentation')) workspaceKeys.push('presentation')
   if (Object.hasOwn(value, 'workingSample')) workspaceKeys.push('workingSample')
   if (Object.hasOwn(value, 'releaseRecords')) workspaceKeys.push('releaseRecords')
   if (Object.hasOwn(value, 'leadLedger')) workspaceKeys.push('leadLedger')
@@ -1520,6 +1532,7 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
   const contentRevision = value.contentRevision
   if (!isNonNegativeInteger(revision) || !isNonNegativeInteger(contentRevision) || contentRevision > revision) return false
   if (!isText(value.siteName, 60, true) || !Array.isArray(value.pages) || value.pages.length < 1 || value.pages.length > MAX_WEBSITE_PAGES) return false
+  if (Object.hasOwn(value, 'presentation') && !isWebsitePresentation(value.presentation)) return false
   if (!value.pages.every(isWebsitePage) || !hasUniqueIds(value.pages) || !hasUniqueSectionIds(value.pages)) return false
   if (!isText(value.selectedPageId, 80) || !value.pages.some((page) => page.id === value.selectedPageId)) return false
   if (!Array.isArray(value.evidence) || !value.evidence.every(isPublishEvidence) || !hasUniqueIds(value.evidence)) return false
@@ -1739,7 +1752,7 @@ function isLegacyApproval(value: unknown): value is LegacyPublishApproval {
 
 function isWebsiteArtifact(value: unknown): value is WebsiteArtifact {
   if (!isRecord(value)
-    || !hasExactKeys(value, ['schema', 'siteName', 'fingerprint', 'contentDigest', 'source', 'pages'])
+    || !hasExactKeys(value, ['schema', 'siteName', 'fingerprint', 'contentDigest', 'source', 'pages', ...(Object.hasOwn(value, 'presentation') ? ['presentation'] : [])])
     || value.schema !== 'supermega.website.artifact.v1'
     || !isText(value.siteName, 60)
     || typeof value.fingerprint !== 'string'
@@ -1751,6 +1764,7 @@ function isWebsiteArtifact(value: unknown): value is WebsiteArtifact {
     || !Array.isArray(value.pages)
     || value.pages.length < 1
     || value.pages.length > MAX_WEBSITE_PAGES
+    || (Object.hasOwn(value, 'presentation') && !isWebsitePresentation(value.presentation))
     || !value.pages.every(isWebsiteArtifactPage)
     || !hasUniqueIds(value.pages)
     || !hasUniqueSectionIds(value.pages)) return false
@@ -1771,6 +1785,13 @@ function isWebsiteArtifact(value: unknown): value is WebsiteArtifact {
         || isSafeHttpsDestination(destination)
         || (destination.startsWith('/') && readyPaths.has(normalizeSlug(destination)))
     })
+}
+
+function isWebsitePresentation(value: unknown): value is WebsitePresentation {
+  return isRecord(value)
+    && hasExactKeys(value, ['schema', 'templateId'])
+    && value.schema === 'supermega.sites.presentation.v1'
+    && WEBSITE_PRESENTATION_IDS.some((id) => id === value.templateId)
 }
 
 function isWebsiteArtifactPage(value: unknown): value is WebsiteArtifactPage {

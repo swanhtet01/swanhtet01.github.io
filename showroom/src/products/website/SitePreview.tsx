@@ -1,5 +1,5 @@
 import { WebsiteImage } from './WebsiteImage'
-import { normalizeSlug, type PreviewDevice, type WebsitePage } from './website-model'
+import { normalizeSlug, type PreviewDevice, type WebsitePage, type WebsitePresentation } from './website-model'
 import { websiteDocumentLanguage } from './website-language'
 import { websiteContactPage } from './website-contact-page'
 import './website-presentation.css'
@@ -9,11 +9,12 @@ type SitePreviewProps = {
   page: WebsitePage
   pages: WebsitePage[]
   siteName: string
+  presentation?: WebsitePresentation
   inquiryPageId?: string
   onSelectPage: (pageId: string) => void
 }
 
-export function SitePreview({ device, page, pages, siteName, inquiryPageId, onSelectPage }: SitePreviewProps) {
+export function SitePreview({ device, page, pages, siteName, presentation, inquiryPageId, onSelectPage }: SitePreviewProps) {
   const visiblePages = pages.filter(candidate => candidate.navigation.visible)
   const home = pages.find(candidate => candidate.slug === '/') ?? pages[0]
   const contact = websiteContactPage(pages, inquiryPageId)
@@ -29,7 +30,7 @@ export function SitePreview({ device, page, pages, siteName, inquiryPageId, onSe
 
   return <section className="website-preview-panel" aria-label={siteName + ' site canvas'}>
     <div className="website-preview-stage"><div className={'website-preview-frame is-' + device}>
-      <article className="sm-site" lang={websiteDocumentLanguage(siteName, pages)} aria-label={page.internalName + ' page canvas'} role="document">
+      <article className="sm-site" data-design={presentation?.templateId} lang={websiteDocumentLanguage(siteName, pages)} aria-label={page.internalName + ' page canvas'} role="document">
         <header className="site-header"><div className="site-header-inner">
           <button className="site-name" type="button" onClick={() => home && onSelectPage(home.id)}>{siteName || 'Untitled site'}</button>
           <nav className="site-nav" aria-label="Site navigation">{visiblePages.map(candidate => <button aria-current={candidate.id === page.id ? 'page' : undefined} key={candidate.id} onClick={() => onSelectPage(candidate.id)} type="button">{candidate.navigation.label || candidate.internalName}</button>)}</nav>

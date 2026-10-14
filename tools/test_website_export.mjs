@@ -96,11 +96,11 @@ check(
 // outvote a genuinely Burmese page, so the counter must not see them.
 const burmeseHtml = buildWebsiteHtml(burmesify(englishArtifact))
 check(
-  burmeseHtml.includes('"Noto Sans Myanmar", "Myanmar Text", Padauk, sans-serif'),
+  /(?:"?Noto Sans Myanmar"?),\s*(?:"?Myanmar Text"?),\s*Padauk,\s*sans-serif/.test(burmeseHtml),
   'Burmese exports include installed Myanmar font fallbacks without remote font requests',
 )
 check(
-  /:lang\(my\) :is\(h1, h2\)\s*\{\s*line-height:\s*1\.[45];\s*letter-spacing:\s*0;\s*\}/.test(burmeseHtml),
+  /:lang\(my\)\s+:is\(h1,\s*h2\)\s*\{\s*line-height:\s*1\.[45];\s*letter-spacing:\s*0;?\s*\}/.test(burmeseHtml),
   'Burmese headings retain room for stacked marks and avoid Latin negative tracking',
 )
 check(
@@ -123,6 +123,12 @@ check(injectedHtml.includes('&lt;script&gt;'), 'the escaped form is what reaches
 // buildWebsiteHtml refuses rather than emitting a broken download.
 const brokenArtifact = { ...englishArtifact, pages: [] }
 check(validateWebsiteArtifactForExport(brokenArtifact).length > 0, 'an artifact with no pages is reported as unexportable')
+for (const invalid of [null, { schema: 'supermega.sites.presentation.v1', templateId: 'unknown' },
+  { schema: 'supermega.sites.presentation.v1', templateId: 'business-presence', extra: true }]) {
+  const malformed = { ...englishArtifact, presentation: invalid }
+  check(validateWebsiteArtifactForExport(malformed).some((issue) => issue.path === 'presentation'),
+    'an unsupported or malformed visual design is rejected before export')
+}
 assert.throws(
   () => buildWebsiteHtml(brokenArtifact),
   /not exportable/,

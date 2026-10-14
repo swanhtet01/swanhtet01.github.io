@@ -1,13 +1,40 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { createInitialWorkspace, createWebsitePreviewArtifact, restoreWorkspace, createWebsiteEditSession, updateWebsiteEditSession, commitWebsiteEditSession, mutateWebsiteWorkspace, loadWebsiteWorkspace } from '../showroom/src/products/website/website-model.ts'
+import { createInitialWorkspace, createWebsitePreviewArtifact, restoreWorkspace, createWebsiteEditSession, updateWebsiteEditSession, commitWebsiteEditSession, mutateWebsiteWorkspace, loadWebsiteWorkspace, workspaceFingerprint, applyWebsiteWorkspaceUpdate } from '../showroom/src/products/website/website-model.ts'
 import { buildWebsiteHtml } from '../showroom/src/products/website/website-export.ts'
 import { applyWebsiteStarterBrief, installWebsiteWorkingSample, previewWebsiteStarterBrief, previewWebsiteStarterForScope, websiteStarterTemplateManifest, websiteStarterTemplateManifests, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
 import { websiteTradeBrief, websiteTradeBriefOptions } from '../showroom/src/products/website/website-trade-brief.ts'
 
 const capturedAt = '2026-09-18T00:00:00.000Z'
 const brief = { businessName: 'Example Studio', audience: 'local businesses', offer: 'Print design for local businesses', proof: 'Owner-supplied description for review.', contactHref: '' }
+test('visual starter design is versioned, saved, exported, and changes the content fingerprint', () => {
+  const legacy = createInitialWorkspace()
+  const oldFingerprint = workspaceFingerprint(legacy)
+  assert.equal(legacy.presentation, undefined)
+  assert.match(buildWebsiteHtml(createWebsitePreviewArtifact(legacy)), /<body class="sm-site">/)
+  const exported = new Set()
+  for (const template of websiteStarterTemplates) {
+    const workspace = applyWebsiteStarterBrief(legacy, { ...brief, templateId: template.id }, capturedAt)
+    assert.deepEqual(workspace.presentation, { schema: 'supermega.sites.presentation.v1', templateId: template.id })
+    assert.deepEqual(restoreWorkspace(JSON.parse(JSON.stringify(workspace))), workspace)
+    assert.notEqual(workspaceFingerprint(workspace), oldFingerprint)
+    const artifact = createWebsitePreviewArtifact(workspace)
+    assert.deepEqual(artifact.presentation, workspace.presentation)
+    const html = buildWebsiteHtml(artifact)
+    assert.match(html, new RegExp(`data-design="${template.id}"`))
+    assert.match(html.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '', new RegExp(`data-design="?${template.id}"?`))
+    exported.add(html.match(/<body class="sm-site" data-design="([^"]+)">/)?.[1])
+  }
+  assert.equal(exported.size, 3)
+  const result = applyWebsiteWorkspaceUpdate(legacy, current => ({
+    ...current, presentation: { schema: 'supermega.sites.presentation.v1', templateId: 'lead-generation' },
+  }))
+  assert.equal(result.ok, true)
+  assert.equal(result.workspace.contentRevision, 1)
+  assert.notEqual(workspaceFingerprint(result.workspace), oldFingerprint)
+  assert.equal(restoreWorkspace({ ...result.workspace, presentation: { schema: 'supermega.sites.presentation.v1', templateId: 'unknown' } }), null)
+})
 test('starter canvas matches the content that creation produces for every choice', () => {
   for (const template of websiteStarterTemplates) {
     const input = { ...brief, templateId: template.id }

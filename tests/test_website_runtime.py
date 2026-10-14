@@ -12,10 +12,12 @@ from supermega_runtime.website_runtime import (
     _canonical_digest,
     _website_artifact,
     _website_fingerprint,
+    _validate_artifact,
     reduce_website_state,
     validate_website_snapshot_source,
     validate_website_state,
 )
+from supermega_runtime.website_public_page import render_website_inquiry_page
 from supermega_runtime.website_release_foundation import (
     approve_website_release_package,
     build_website_release_package,
@@ -485,6 +487,27 @@ class WebsiteRuntimeTests(unittest.TestCase):
         blank = _state()
         blank["siteName"] = ""
         self.assertNotEqual(_website_fingerprint(control_character), _website_fingerprint(blank))
+
+    def test_versioned_starter_design_survives_runtime_and_public_rendering(self) -> None:
+        legacy = _state()
+        legacy_fingerprint = _website_fingerprint(legacy)
+        legacy_page = render_website_inquiry_page({"artifact": _website_artifact(legacy), "pageId": "page-home", "channelId": "demo"})
+        self.assertIsNotNone(legacy_page)
+        self.assertIn(b'<body class="sm-site">', legacy_page.body)
+        for template_id in ("business-presence", "lead-generation", "catalog-showcase"):
+            state = _state()
+            state["presentation"] = {"schema": "supermega.sites.presentation.v1", "templateId": template_id}
+            self.assertEqual(validate_website_state(state), state)
+            self.assertNotEqual(_website_fingerprint(state), legacy_fingerprint)
+            artifact = _website_artifact(state)
+            self.assertEqual(_validate_artifact(artifact, "artifact"), artifact)
+            response = render_website_inquiry_page({"artifact": artifact, "pageId": "page-home", "channelId": "demo"})
+            self.assertIsNotNone(response)
+            self.assertIn(f'data-design="{template_id}"'.encode(), response.body)
+        tampered = _state()
+        tampered["presentation"] = {"schema": "supermega.sites.presentation.v1", "templateId": '<script>'}
+        with self.assertRaises(TrialValidationError):
+            validate_website_state(tampered)
 
     def test_initialization_and_content_save_are_exact(self) -> None:
         state = _state()
