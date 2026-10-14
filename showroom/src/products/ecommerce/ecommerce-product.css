@@ -1281,6 +1281,17 @@
   line-height: 1.25;
 }
 
+.ecommerce-quote-receipt > strong {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  color: var(--core-ink);
+  font-size: 1.25rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .ecommerce-quote-receipt > .status-pill {
   grid-column: 1;
   grid-row: 1;
