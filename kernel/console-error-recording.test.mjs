@@ -404,7 +404,13 @@ test('lead intake returns a bounded retryable response when durable storage fail
 
 test('lead intake rejects invalid timestamps before storage and preserves valid RFC 3339 timestamps', async () => {
   const { createLead } = await import(`./console/api.mjs?lead-created-at-validation=${Date.now()}-${Math.random()}`)
-  for (const created_at of ['not-a-timestamp', '2026-02-31T00:00:00.000Z', '2026-01-01T00:00:00+99:99']) {
+  for (const created_at of [
+    'not-a-timestamp',
+    '2026-02-31T00:00:00.000Z',
+    '2026-01-01T00:00:00+99:99',
+    0,
+    false,
+  ]) {
     let insertCalled = false
     const result = await createLead({ created_at }, {
       insertLead: async () => {

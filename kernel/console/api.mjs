@@ -124,7 +124,9 @@ const isValidLeadTimestamp = (value) => {
 }
 
 export async function createLead(body = {}, { insertLead = store.insertLead } = {}) {
-  const createdAt = body.created_at ? String(body.created_at) : undefined
+  const rawCreatedAt = body?.created_at
+  const hasCreatedAt = rawCreatedAt !== undefined && rawCreatedAt !== null && rawCreatedAt !== ''
+  const createdAt = hasCreatedAt ? String(rawCreatedAt) : undefined
   if (createdAt !== undefined && !isValidLeadTimestamp(createdAt)) {
     return bad(400, 'invalid_created_at')
   }
