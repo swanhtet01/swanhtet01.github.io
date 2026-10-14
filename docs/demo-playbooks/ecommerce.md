@@ -5,7 +5,7 @@
 Current public page:
 
 - `Commerce | Your product catalog | SuperMega`
-- `Manage products, customer order requests, availability, payment review, and fulfilment in one clear workflow.`
+- `Browse a Shop-backed catalog, save customer order requests, and review them before any order or payment is confirmed.`
 
 The public website shows interface screenshots and one Login. Contact is in the footer. It has no sample, trial, setup or product-launch buttons.
 

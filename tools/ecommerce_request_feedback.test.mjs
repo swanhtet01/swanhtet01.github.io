@@ -10,7 +10,8 @@ assert.ok(start >= 0 && end > start)
 const handler = source.slice(start, end).replace('event: FormEvent<HTMLFormElement>', 'event')
 
 async function run({ managed = false, failure = '', duplicate = false, invalidateAt = '' } = {}) {
-  const result = { saved: 0, delivered: 0, notice: '', fresh: '', busy: false, cartClears: 0 }
+  const result = { saved: 0, delivered: 0, notice: '', fresh: '', busy: false, cartClears: 0, focusArmed: false }
+  const focusRequestReceiptOnNextMount = { current: false }
   const window = { location: { pathname: '/ecommerce/', search: '' } }
   Object.defineProperty(window, 'localStorage', { get() {
     if (failure === 'storage') throw new Error('storage unavailable')
@@ -18,6 +19,7 @@ async function run({ managed = false, failure = '', duplicate = false, invalidat
   } })
   const context = {
     window, Error, disabled: false, quoteBusy: false, quoteInFlight: { current: false }, checkoutEpoch: { current: 1 }, recoveryBlocked: false,
+    focusRequestReceiptOnNextMount,
     cart: [{ sku: 'SYNTHETIC' }], paymentPolicyReady: true,
     crypto: { randomUUID: () => 'synthetic' }, scope: 'local', sourcePreviewDigest: 'digest', preview: {},
     sourceStorefront: null, activeBuyingState: { requests: [], headDigest: 'head' },
@@ -46,6 +48,7 @@ async function run({ managed = false, failure = '', duplicate = false, invalidat
   if (duplicate) await invoke({ preventDefault() {} })
   await first
   assert.equal(context.quoteInFlight.current, false, 'completion or failure releases the synchronous guard')
+  result.focusArmed = focusRequestReceiptOnNextMount.current
   return result
 }
 for (const managed of [false, true]) for (const failure of ['', 'storage', 'behavior']) {
@@ -56,6 +59,7 @@ for (const managed of [false, true]) for (const failure of ['', 'storage', 'beha
     assert.equal(result.delivered, managed ? 1 : 0)
     assert.equal(result.fresh, 'REQUEST')
     assert.equal(result.busy, false)
+    assert.equal(result.focusArmed, true)
     assert.match(result.notice, managed ? /Company Shop inbox and local recovery/ : /saved locally/i)
   })
 }
@@ -67,6 +71,7 @@ for (const failure of ['save', 'delivery']) {
     assert.equal(result.cartClears, 0, 'unconfirmed save or delivery must preserve cart')
     assert.equal(result.fresh, '')
     assert.equal(result.busy, false)
+    assert.equal(result.focusArmed, false)
     assert.match(result.notice, /unconfirmed/)
   })
 }
@@ -79,6 +84,7 @@ for (const managed of [false, true]) {
     assert.equal(result.delivered, managed ? 1 : 0)
     assert.equal(result.fresh, 'REQUEST')
     assert.equal(result.busy, false)
+    assert.equal(result.focusArmed, true)
   })
 }
 
