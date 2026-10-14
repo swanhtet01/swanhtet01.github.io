@@ -14,7 +14,12 @@ const migrationDirectory = resolve(root, 'supabase', 'migrations')
 // not part of the private-trial backend contract these checks cover, and it requires
 // pgvector, which PGlite does not provide — applying it here would fail for reasons
 // unrelated to what is being verified.
-const outOfScopeMigrations = ['20260711081300_public_legacy_baseline.sql']
+// Domain bindings are a dormant candidate. The Linux Sites SQL suite applies
+// that delta after this canonical chain in disposable PostgreSQL 17.
+const outOfScopeMigrations = [
+  '20260711081300_public_legacy_baseline.sql',
+  '20261014103000_website_custom_domain_bindings.sql',
+]
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',
   '20260722005134_private_trial_backend_foundation.sql',
