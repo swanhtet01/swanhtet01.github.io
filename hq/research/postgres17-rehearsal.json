@@ -1,15 +1,16 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v3",
-  "recordedAt": "2026-10-14T23:16:20.496Z",
+  "recordedAt": "2026-10-14T23:40:42.873Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "daa1e4ae10c42ff072863aac31b60a93d6807027",
-  "implementationTree": "0950ad66608ced1c3ad693912883469cbbefb1ae",
+  "implementationCommit": "6adf6be1f71349d9f91e704de7ddd26d72ed1add",
+  "implementationTree": "cefb52f0cb1b92fe96b878c1f98d9e201ed940dc",
   "sourceCleanBeforeAndAfter": true,
-  "rawReportDigest": "sha256:8d9b384ec23f052fa26cf996ae306d35929adda2244c8e5e1e7b538708be1de1",
+  "rawReportDigest": "sha256:065d2d87cd5756afd0ee749b6bfa14fe090d1181e08875d8ae65efd784dcfb41",
   "implementation": {
-    "digest": "sha256:9bf6e20a62b825721651dfbaf8b334a9a9da22f223775f38ba6e72f7c2c46aa9",
+    "digest": "sha256:ad2b3be1f91e4b681eecdac79f028253cd65598f18fa517c1629335a28023c14",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
+      "supabase/candidate-migrations/20261014164000_shop_product_media.sql",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
       "supabase/migrations/20260722005134_private_trial_backend_foundation.sql",
       "supabase/migrations/20260722142801_private_trial_backend_v2.sql",
@@ -39,7 +40,6 @@
       "supabase/migrations/20261014090000_website_channel_stable_update.sql",
       "supabase/migrations/20261014103000_website_custom_domain_bindings.sql",
       "supabase/migrations/20261014122400_website_domain_attempt_fencing.sql",
-      "supabase/migrations/20261014164000_shop_product_media.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -95,7 +95,7 @@
       "tools/verify_public_browser_quarantine.mjs"
     ]
   },
-  "implementationDigest": "sha256:9bf6e20a62b825721651dfbaf8b334a9a9da22f223775f38ba6e72f7c2c46aa9",
+  "implementationDigest": "sha256:ad2b3be1f91e4b681eecdac79f028253cd65598f18fa517c1629335a28023c14",
   "implementationFileCount": 84,
   "localVerification": {
     "command": "npm run database:postgres17:record",
@@ -317,8 +317,8 @@
     "backupNonempty": true,
     "format": "pg_dump_custom",
     "restoredSchemaVersion": 13,
-    "privateSnapshotBefore": "sha256:a196b4c691b636bb3e812ca66b17d06ab107a45dd1dfc6e8f90e4205c367089c",
-    "privateSnapshotAfter": "sha256:a196b4c691b636bb3e812ca66b17d06ab107a45dd1dfc6e8f90e4205c367089c"
+    "privateSnapshotBefore": "sha256:43c13f27e1fb0b146abc66c79474957ecf031581d63b1f889e9d728ba954b4dd",
+    "privateSnapshotAfter": "sha256:43c13f27e1fb0b146abc66c79474957ecf031581d63b1f889e9d728ba954b4dd"
   },
   "storage": {
     "catalogMode": "local_private_fixture",
@@ -342,5 +342,5 @@
     "Prove real Auth signup, verified email, account recovery, admin MFA and revocation on the hosted target.",
     "Keep production writes disabled until founder approval."
   ],
-  "receiptDigest": "sha256:09025e938c9c7ee72f7afe1f02be6310ec84eaf12e859ceadb44323a9fce8b7b"
+  "receiptDigest": "sha256:a08c37c64814687c7761d00401e582177cb10344160bd9ae33013f9d45de09de"
 }
