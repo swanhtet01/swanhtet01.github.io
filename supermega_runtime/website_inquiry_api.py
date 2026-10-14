@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from .trial_store import TrialNotFound, TrialNotReadyError, TrialPermissionDenied, TrialPrincipal, TrialValidationError
 from .website_inquiry_store import WebsiteInquiryStore
 from .website_public_page import render_website_inquiry_page
+from .website_domain import WebsiteDomainStore, normalize_hostname
 
 _HEADERS = {'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer'}
 
@@ -61,6 +62,7 @@ def create_website_inquiry_router(
     resolve_principal: Callable[[Request], TrialPrincipal] | None = None,
     abuse_key: bytes = b'',
     public_origin: str = '',
+    domain_store: WebsiteDomainStore | None = None,
 ) -> APIRouter:
     router = APIRouter(tags=['website-inquiries'])
     configured = (enabled and callable(resolve_client_address) and callable(resolve_principal)
@@ -74,6 +76,23 @@ def create_website_inquiry_router(
             and (origin_parts.port is None or 1 <= origin_parts.port <= 65535))
     except (ValueError, TypeError):
         publishing_configured = False
+    domain_configured = publishing_configured and domain_store is not None
+
+    def request_host(request: Request) -> str:
+        hosts = request.headers.getlist('host')
+        if len(hosts) != 1 or ',' in hosts[0] or '%' in hosts[0] or ':' in hosts[0]:
+            raise _error(404, 'form_unavailable')
+        try:
+            return normalize_hostname(hosts[0])
+        except TrialValidationError:
+            raise _error(404, 'form_unavailable') from None
+
+    def require_platform_host(request: Request) -> None:
+        # Once domain routing is enabled, channel-ID URLs are platform-only.
+        if domain_configured:
+            hosts = request.headers.getlist('host')
+            if len(hosts) != 1 or hosts[0] != origin_parts.netloc:
+                raise _error(404, 'form_unavailable')
 
     def available(request, *, allow_query=False):
         if not configured:
@@ -81,11 +100,11 @@ def create_website_inquiry_router(
         if request.query_params and not allow_query:
             raise _error(422, 'request_invalid')
 
-    async def invoke(operation, *, render=False, page_path='/', photo=False):
+    async def invoke(operation, *, render=False, page_path='/', photo=False, custom_domain=False):
         try:
             result = await run_in_threadpool(operation)
             if render and result is not None:
-                result = render_website_inquiry_page(result, page_path)
+                result = render_website_inquiry_page(result, page_path, custom_domain=custom_domain)
         except TrialPermissionDenied:
             raise _error(403, 'access_denied') from None
         except TrialNotFound:
@@ -110,6 +129,11 @@ def create_website_inquiry_router(
                 'website_inquiry_changed': (409, 'inquiry_changed'),
                 'website_inquiry_not_found': (404, 'inquiry_unavailable'),
                 'website_inquiry_approval_required': (422, 'approval_required'),
+                'website_domain_invalid': (422, 'request_invalid'),
+                'website_domain_access_denied': (403, 'access_denied'),
+                'website_domain_channel_missing': (404, 'channel_unavailable'),
+                'website_domain_conflict': (409, 'domain_conflict'),
+                'website_domain_changed': (409, 'domain_changed'),
             }.get(code, (503, 'website_inquiries_unavailable'))
             raise _error(status, public_code) from None
         if render:
@@ -134,6 +158,7 @@ def create_website_inquiry_router(
     @router.post('/api/public/sites/{channel_id}/inquiries')
     async def receive(channel_id: str, request: Request):
         available(request)
+        require_platform_host(request)
         try:
             address = ipaddress.ip_address(resolve_client_address(request))
         except Exception:
@@ -201,6 +226,7 @@ def create_website_inquiry_router(
     @router.get('/api/public/sites/{channel_id}/media/{asset_id}')
     async def photo(channel_id: str, asset_id: str, request: Request):
         available(request)
+        require_platform_host(request)
         if not publishing_configured:
             raise _error(503, 'website_inquiries_unavailable')
         return await invoke(lambda: store.public_photo(channel_id=channel_id,
@@ -210,6 +236,7 @@ def create_website_inquiry_router(
         # Campaign links may carry query parameters; only the approved URL path
         # selects a page from the immutable published artifact.
         available(request, allow_query=True)
+        require_platform_host(request)
         if not publishing_configured:
             raise _error(503, 'website_inquiries_unavailable')
         return await invoke(lambda: store.public_page(channel_id=channel_id, public_origin=public_origin),
@@ -258,5 +285,95 @@ def create_website_inquiry_router(
         if set(body) != {'artifactDigest'}:
             raise _error(422, 'request_invalid')
         return await invoke(lambda: store.unpublish_channel(actor, channel_id=channel_id, artifact_digest=body['artifactDigest']))
+
+    @router.get('/api/trial/v1/website-domains')
+    async def domains(request: Request):
+        if request.query_params:
+            raise _error(422, 'request_invalid')
+        actor = principal(request)
+        if not domain_configured:
+            return JSONResponse({'enabled': False, 'domain': None}, headers=_HEADERS)
+        return await invoke(lambda: domain_store.status(actor))
+
+    @router.post('/api/trial/v1/website-domains')
+    async def claim_domain(request: Request):
+        available(request)
+        actor = principal(request)
+        if not domain_configured:
+            raise _error(503, 'website_domains_unavailable')
+        body = await _body(request)
+        if set(body) != {'hostname', 'channelId'}:
+            raise _error(422, 'request_invalid')
+        return await invoke(lambda: domain_store.claim(actor, hostname=body['hostname'], channel_id=body['channelId']))
+
+    @router.post('/api/trial/v1/website-domains/check')
+    async def check_domain(request: Request):
+        available(request)
+        actor = principal(request)
+        if not domain_configured:
+            raise _error(503, 'website_domains_unavailable')
+        body = await _body(request)
+        if set(body) != {'hostname'}:
+            raise _error(422, 'request_invalid')
+        return await invoke(lambda: domain_store.check(actor, hostname=body['hostname']))
+
+    @router.post('/api/trial/v1/website-domains/release')
+    async def release_domain(request: Request):
+        available(request)
+        actor = principal(request)
+        if not domain_configured:
+            raise _error(503, 'website_domains_unavailable')
+        body = await _body(request)
+        if set(body) != {'hostname'}:
+            raise _error(422, 'request_invalid')
+        return await invoke(lambda: domain_store.release(actor, hostname=body['hostname']))
+
+    def verified_custom_host(request: Request) -> str:
+        if not domain_configured:
+            raise _error(503, 'website_domains_unavailable')
+        host = request_host(request)
+        if host == origin_parts.hostname:
+            raise _error(404, 'form_unavailable')
+        return host
+
+    @router.post('/api/public/domain-inquiries')
+    async def domain_inquiry(request: Request):
+        available(request)
+        host = verified_custom_host(request)
+        try:
+            address = ipaddress.ip_address(resolve_client_address(request))
+        except Exception:
+            raise _error(503, 'website_inquiries_unavailable') from None
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+            address = address.ipv4_mapped
+        if request.headers.get('origin') != 'https://' + host:
+            raise _error(404, 'form_unavailable')
+        body = await _body(request)
+        if set(body) != {'requestId', 'name', 'contact', 'message', 'consent'}:
+            raise _error(422, 'request_invalid')
+        request_id = body.pop('requestId')
+        client_key = hmac.new(abuse_key, b'website-inquiry:v1:' + address.compressed.encode('ascii'), hashlib.sha256).hexdigest()
+        return await invoke(lambda: domain_store.receive(hostname=host, request_id=request_id,
+                            payload=body, client_key=client_key))
+
+    @router.get('/api/public/domain-media/{asset_id}')
+    async def domain_photo(asset_id: str, request: Request):
+        available(request)
+        host = verified_custom_host(request)
+        return await invoke(lambda: domain_store.public_photo(host, asset_id), photo=True)
+
+    @router.get('/__site-domain')
+    async def domain_home(request: Request):
+        available(request, allow_query=True)
+        host = verified_custom_host(request)
+        return await invoke(lambda: domain_store.public_page(host), render=True,
+                            page_path='/', custom_domain=True)
+
+    @router.get('/__site-domain/{page_path:path}')
+    async def domain_page(page_path: str, request: Request):
+        available(request, allow_query=True)
+        host = verified_custom_host(request)
+        return await invoke(lambda: domain_store.public_page(host), render=True,
+                            page_path='/' + page_path, custom_domain=True)
 
     return router
