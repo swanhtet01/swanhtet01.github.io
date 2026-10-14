@@ -3,11 +3,37 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createInitialWorkspace, createWebsitePreviewArtifact, restoreWorkspace, createWebsiteEditSession, updateWebsiteEditSession, commitWebsiteEditSession, mutateWebsiteWorkspace, loadWebsiteWorkspace } from '../showroom/src/products/website/website-model.ts'
 import { buildWebsiteHtml } from '../showroom/src/products/website/website-export.ts'
-import { applyWebsiteStarterBrief, installWebsiteWorkingSample, websiteStarterTemplateManifest, websiteStarterTemplateManifests, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
+import { applyWebsiteStarterBrief, installWebsiteWorkingSample, previewWebsiteStarterBrief, previewWebsiteStarterForScope, websiteStarterTemplateManifest, websiteStarterTemplateManifests, websiteStarterTemplates } from '../showroom/src/products/website/website-starter.ts'
 import { websiteTradeBrief, websiteTradeBriefOptions } from '../showroom/src/products/website/website-trade-brief.ts'
 
 const capturedAt = '2026-09-18T00:00:00.000Z'
 const brief = { businessName: 'Example Studio', audience: 'local businesses', offer: 'Print design for local businesses', proof: 'Owner-supplied description for review.', contactHref: '' }
+test('starter canvas matches the content that creation produces for every choice', () => {
+  for (const template of websiteStarterTemplates) {
+    const input = { ...brief, templateId: template.id }
+    const preview = previewWebsiteStarterBrief(input)
+    const created = applyWebsiteStarterBrief(createInitialWorkspace(), input, capturedAt)
+    assert.equal(preview.siteName, created.siteName)
+    assert.deepEqual(preview.pages.map(({ updatedAt, ...page }) => page), created.pages.map(({ updatedAt, ...page }) => page))
+    assert.equal(preview.approvals.length, 0)
+    assert.equal(preview.localPublishes.length, 0)
+  }
+})
+
+test('incomplete or invalid starter input shows safe sample content without changing the submitted brief', () => {
+  const input = { ...brief, templateId: 'lead-generation', businessName: '', offer: '', contactHref: 'javascript:alert(1)' }
+  const preview = previewWebsiteStarterBrief(input)
+  assert.equal(preview.siteName, 'Your business')
+  assert.equal(preview.pages[1].slug, '/services')
+  assert.doesNotMatch(JSON.stringify(preview.pages), /javascript:alert/)
+  assert.equal(input.businessName, '')
+  assert.equal(input.offer, '')
+})
+test('starter canvas rejects text from another account or storage scope', () => {
+  const state = { scope: 'browser-local:owner-a', brief: { ...brief, templateId: 'catalog-showcase' } }
+  assert.equal(previewWebsiteStarterForScope(state, 'managed:owner-b'), null)
+  assert.equal(previewWebsiteStarterForScope(state, 'browser-local:owner-a').pages[1].slug, '/catalog')
+})
 test('Sites layouts resolve through portable manifests with only supported customer-facing slots', () => {
   assert.equal(websiteStarterTemplateManifests.manifests.length, websiteStarterTemplates.length)
   for (const template of websiteStarterTemplates) {
@@ -183,7 +209,7 @@ test('operator starter does not prefill an unrelated business contact', () => {
   assert.doesNotMatch(source, /https:\/\/m\.me\/mingalarfreshmart/)
   assert.ok(source.includes('What do you sell or provide?'))
   assert.ok(source.includes('Start your website'))
-  assert.ok(source.includes('Choose an editable starting layout. It creates three pages; you can add one more.'))
+  assert.ok(source.includes('Choose a starting point. See your pages update as you type. Add a fourth page later.'))
   assert.ok(source.includes('Create my website'))
   assert.ok(!source.includes('Choose business type'))
   assert.ok(!source.includes('View example'))

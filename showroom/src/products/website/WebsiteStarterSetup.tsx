@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import {
   websiteStarterBriefIssues,
@@ -10,6 +10,7 @@ import type { ShopBusinessTemplateId } from '../shop/business-templates'
 
 type WebsiteStarterSetupProps = {
   onCreate: (brief: WebsiteStarterBrief) => void
+  onPreviewChange: (brief: WebsiteStarterBrief | null) => void
   // The trade this device's Shop was set up as, or null when it is not known.
   //
   // Passed in rather than read here on purpose. This component is required to be free of
@@ -58,12 +59,16 @@ function openingState(
 }
 
 export function WebsiteStarterSetup({
-  onCreate, initialTradeId, initialBusinessName,
+  onCreate, onPreviewChange, initialTradeId, initialBusinessName,
 }: WebsiteStarterSetupProps) {
   const [opening] = useState(() => openingState(initialTradeId, initialBusinessName))
   const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
   const [attempted, setAttempted] = useState(false)
   const starterFormRef = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    onPreviewChange(brief)
+  }, [brief, onPreviewChange])
+  useEffect(() => () => onPreviewChange(null), [onPreviewChange])
   const issues = websiteStarterBriefIssues(brief)
   const issueFor = (field: keyof WebsiteStarterBrief) => (
     attempted ? issues.find((issue) => issue.field === field) : undefined
@@ -96,7 +101,7 @@ export function WebsiteStarterSetup({
         <div>
           <span className="website-eyebrow">Sites</span>
           <h2 id="website-starter-title">Start your website</h2>
-          <p>Choose an editable starting layout. It creates three pages; you can add one more.</p>
+          <p>Choose a starting point. See your pages update as you type. Add a fourth page later.</p>
         </div>
         <span className="website-status is-draft">Not published</span>
       </header>

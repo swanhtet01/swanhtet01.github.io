@@ -284,6 +284,29 @@ export function applyWebsiteStarterBrief(
   }
 }
 
+/** Render a starter without saving it. Valid owner input follows the same path as creation. */
+export function previewWebsiteStarterBrief(brief: WebsiteStarterBrief): WebsiteWorkspace {
+  const invalid = new Set(websiteStarterBriefIssues(brief).map((issue) => issue.field))
+  const previewBrief: WebsiteStarterBrief = {
+    ...brief,
+    templateId: invalid.has('templateId') ? 'business-presence' : brief.templateId,
+    businessName: invalid.has('businessName') ? 'Your business' : brief.businessName,
+    offer: invalid.has('offer') ? 'Describe what your business offers.' : brief.offer,
+    audience: invalid.has('audience') ? '' : brief.audience,
+    proof: invalid.has('proof') ? '' : brief.proof,
+    contactHref: invalid.has('contactHref') ? '' : brief.contactHref,
+    offerings: invalid.has('offerings') ? undefined : brief.offerings,
+  }
+  return applyWebsiteStarterBrief(createInitialWorkspace(), previewBrief, '2000-01-01T00:00:00.000Z')
+}
+
+export type WebsiteStarterPreviewState = { scope: string; brief: WebsiteStarterBrief }
+
+/** An old account or storage mode must never supply the current canvas. */
+export function previewWebsiteStarterForScope(state: WebsiteStarterPreviewState | null, scope: string) {
+  return state?.scope === scope ? previewWebsiteStarterBrief(state.brief) : null
+}
+
 function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteStarterBrief {
   const businessName = normalizedLine(input.businessName)
   if (input.templateId === 'lead-generation') {

@@ -15,20 +15,21 @@ const source = readFileSync(new URL('../showroom/src/products/website/WebsiteSta
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
 
 function harness({ fillBusiness = true, initialTradeId = null, initialBusinessName = null } = {}) {
-  const state = [], created = []
+  const state = [], created = [], previews = []
   let cursor = 0, tree
   const exports = {}
   runInNewContext(compiled, { exports, Error, requestAnimationFrame: callback => callback(), require(name) {
     if (name === 'react') return {
       useState(initial) { const index = cursor++; if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial; return [state[index], value => { state[index] = typeof value === 'function' ? value(state[index]) : value }] },
       useRef(initial) { const index = cursor++; if (!(index in state)) state[index] = { current: initial }; return state[index] },
+      useEffect(callback) { callback() },
     }
     if (name === 'react/jsx-runtime') return require(name)
     if (name === './website-starter') return starter
     if (name === './website-trade-brief') return trade
     throw new Error('Unexpected component dependency: ' + name)
   } })
-  function render() { cursor = 0; tree = exports.WebsiteStarterSetup({ initialTradeId, initialBusinessName, onCreate: value => created.push(value) }); return tree }
+  function render() { cursor = 0; tree = exports.WebsiteStarterSetup({ initialTradeId, initialBusinessName, onCreate: value => created.push(value), onPreviewChange: value => previews.push(value) }); return tree }
   function nodes(node = tree) {
     if (Array.isArray(node)) return node.flatMap(item => nodes(item))
     if (!node || typeof node !== 'object' || !node.props) return []
@@ -49,7 +50,7 @@ function harness({ fillBusiness = true, initialTradeId = null, initialBusinessNa
     setField(50, 'Test Cafe')
     setField(140, 'Coffee and pastries for nearby customers')
   }
-  return { nodes, find, setField, chooseTemplate, submit, created }
+  return { nodes, find, setField, chooseTemplate, submit, created, previews }
 }
 
 test('two essential fields block an empty site and identify the errors', () => {
@@ -84,6 +85,10 @@ test('three direct starting points are selectable without a setup dropdown', () 
   const ui = harness()
   assert.equal(ui.nodes().filter(node => node.props['aria-pressed'] === true).length, 1)
   ui.chooseTemplate('Show products')
+  const preview = starter.previewWebsiteStarterBrief(ui.previews.at(-1))
+  assert.equal(preview.siteName, 'Test Cafe')
+  assert.equal(preview.pages[1].slug, '/catalog')
+  assert.equal(preview.pages[0].hero.headline, 'Coffee and pastries for nearby customers')
   ui.submit()
   assert.equal(ui.created.length, 1)
   assert.equal(ui.created[0].templateId, 'catalog-showcase')
