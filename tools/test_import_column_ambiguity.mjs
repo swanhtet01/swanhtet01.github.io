@@ -61,19 +61,20 @@ test('managed importer never falls through to local controls while identity is a
   const { renderToStaticMarkup } = require('react-dom/server')
   const source = readFileSync(new URL('../showroom/src/core/ProductSystemNavigator.tsx', import.meta.url), 'utf8')
   const component = source.slice(source.indexOf('export function ProductDataImport('), source.indexOf('function WorkflowLink('))
-  assert.ok(component.includes('useManagedIdentity(managed)'))
+  assert.ok(component.includes('useManagedIdentity(managed && !managedIdentityOverride)'))
   const compiled = ts.transpileModule(component, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText
   const identity = { userId: 'synthetic-user', workspaceId: 'synthetic-workspace' }
   for (const scenario of [
     { managed: true, identity: null, settled: false, expected: 'Loading your account...', importer: false },
     { managed: true, identity: null, settled: true, expected: 'Login to import data.', importer: false },
+    { managed: true, identity: null, override: identity, settled: true, expected: 'Import controls', importer: true },
     { managed: true, identity, settled: true, expected: 'Import controls', importer: true },
     { managed: false, identity: null, settled: true, expected: 'Import controls', importer: true },
   ]) {
     const exports = {}, seen = []
     runInNewContext(compiled, { exports, require,
       useSetupWorkspace: () => [{ product: 'commerce', templateId: 'retail', workspace: 'Synthetic shop', owner: 'Tester' }],
-      useManagedIdentity: enabled => { assert.equal(enabled, scenario.managed); return [scenario.identity, () => {}, scenario.settled] },
+      useManagedIdentity: enabled => { assert.equal(enabled, scenario.managed && !scenario.override); return [scenario.identity, () => {}, scenario.settled] },
       useState: value => [typeof value === 'function' ? value() : value],
       readCurrentShopIndustryPackId: () => 'retail', readPlantIndustryPackId: () => 'general',
       productDetails: { commerce: { label: 'Shop' } }, productContracts: { commerce: { slug: 'shop' } },
@@ -81,11 +82,11 @@ test('managed importer never falls through to local controls while identity is a
       Suspense: React.Suspense, Link: props => React.createElement('a', { href: props.to }, props.children),
       ClientDataOnboarding: props => { seen.push(props); return React.createElement('div', null, 'Import controls') },
     })
-    const html = renderToStaticMarkup(React.createElement(exports.ProductDataImport, { product: 'commerce', managed: scenario.managed }))
+    const html = renderToStaticMarkup(React.createElement(exports.ProductDataImport, { product: 'commerce', managed: scenario.managed, managedIdentityOverride: scenario.override }))
     assert.ok(html.includes(scenario.expected), html)
     assert.equal(seen.length, scenario.importer ? 1 : 0)
-    if (seen.length) assert.equal(seen[0].managedIdentity, scenario.identity)
-    if (scenario.managed && scenario.settled && !scenario.identity) assert.ok(html.includes('/login?product=shop'))
+    if (seen.length) assert.equal(seen[0].managedIdentity, scenario.override ?? scenario.identity)
+    if (scenario.managed && scenario.settled && !scenario.identity && !scenario.override) assert.ok(html.includes('/login?product=shop'))
   }
 })
 
