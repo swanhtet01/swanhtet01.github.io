@@ -250,15 +250,11 @@ class WebsiteDomainStore:
             receipt = cursor.fetchone()['receipt']
         if receipt['replay'] and self.status(principal)['domain']['state'] == 'active':
             return self.status(principal)
-        try:
-            domain = self.provider.add(hostname)
-            config = self.provider.config(hostname)
-            dns = recommended_dns(hostname, domain, config)
-            self._record(principal, receipt['bindingId'], hostname, verified=False,
-                         dns=dns, issue='ownership_pending')
-        except ProviderUnavailable as exc:
-            self._record(principal, receipt['bindingId'], hostname, verified=False,
-                         dns=None, issue=str(exc))
+        # A claim only reserves the hostname locally and returns its fresh TXT
+        # challenge. Do not attach an arbitrary domain to the provider before
+        # this tenant proves control of it.
+        self._record(principal, receipt['bindingId'], hostname, verified=False,
+                     dns=None, issue='ownership_pending')
         return self.status(principal)
 
     def _record(self, principal: TrialPrincipal, binding_id: str, hostname: str,
@@ -281,22 +277,24 @@ class WebsiteDomainStore:
         verified = False
         try:
             tenant_proof = tenant_txt_proven(hostname, row['challenge'])
+            if not tenant_proof:
+                self._record(principal, str(row['binding_id']), hostname,
+                             verified=False, dns=None, issue='ownership_pending')
+                return self.status(principal)
             try:
                 domain = self.provider.get(hostname)
             except ProviderUnavailable as exc:
-                if not tenant_proof or str(exc) != 'provider_missing':
+                if str(exc) != 'provider_missing':
                     raise
                 # A failed initial attachment remains recoverable after the
                 # tenant has proved the fresh per-claim DNS challenge.
                 domain = self.provider.add(hostname)
-            if tenant_proof and not domain['verified']:
+            if not domain['verified']:
                 domain = self.provider.verify(hostname)
             config = self.provider.config(hostname)
             dns = recommended_dns(hostname, domain, config)
-            if tenant_proof and domain['verified'] and config['misconfigured'] is False:
+            if domain['verified'] and config['misconfigured'] is False:
                 verified, issue = True, ''
-            elif not tenant_proof:
-                issue = 'ownership_pending'
             elif not domain['verified']:
                 issue = 'provider_verification_pending'
             else:

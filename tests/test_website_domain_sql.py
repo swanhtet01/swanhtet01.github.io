@@ -145,12 +145,18 @@ class WebsiteDomainSqlTests(unittest.TestCase):
 
     def test_ownership_dns_publication_and_lease_all_gate_serving(self):
         channel = self.channel(FIRST)
-        claim = self.domains.claim(FIRST, hostname=HOST.upper(), channel_id=channel)
+        with (patch.object(self.provider, 'add', wraps=self.provider.add) as add,
+              patch.object(self.provider, 'get', wraps=self.provider.get) as get,
+              patch.object(self.provider, 'config', wraps=self.provider.config) as config):
+            claim = self.domains.claim(FIRST, hostname=HOST.upper(), channel_id=channel)
+            with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=False):
+                self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['state'], 'pending')
+            add.assert_not_called()
+            get.assert_not_called()
+            config.assert_not_called()
         self.assertEqual(claim['domain']['state'], 'pending')
         self.assertEqual(claim['domain']['verification']['name'], '_supermega.' + HOST)
         self.assertIsNone(self.domains.public_page(HOST))
-        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=False):
-            self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['state'], 'pending')
         with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
             self.provider.configured = False
             self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['issue'], 'dns_pending')
@@ -217,9 +223,11 @@ class WebsiteDomainSqlTests(unittest.TestCase):
     def test_initial_provider_failure_recovers_after_tenant_proves_txt(self):
         channel = self.channel(FIRST)
         self.provider.fail_add_once = True
+        self.provider.missing = True
         pending = self.domains.claim(FIRST, hostname=HOST, channel_id=channel)
-        self.assertEqual(pending['domain']['issue'], 'provider_unavailable')
+        self.assertEqual(pending['domain']['issue'], 'ownership_pending')
         with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['issue'], 'provider_unavailable')
             self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['state'], 'active')
         self.assertIsNotNone(self.domains.public_page(HOST))
 
