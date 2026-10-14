@@ -10,6 +10,7 @@ from unittest.mock import patch
 from tools import rehearse_self_serve_v13 as proof
 from tools import validate_supermega_database_url as audit
 from tools import private_trial_v13_contract as current
+from tools import private_trial_v13_pre_sites_contract as pre_sites
 
 
 class V13CatalogTests(unittest.TestCase):
@@ -36,6 +37,8 @@ class V13CatalogTests(unittest.TestCase):
         pg._bootstrap_local_storage_catalog_fixture(cls.admin)
         cls.legacy_snapshot = cls.snapshot("legacy-v11")
         for name in proof.EXTRAS:
+            if name == "20261010063000_website_publishing_and_inquiries.sql":
+                cls.pre_sites_snapshot = cls.snapshot(pre_sites.PROFILE)
             with pg._connect(cls.admin, autocommit=True) as conn:
                 conn.execute((proof.ROOT / "supabase/migrations" / name).read_text(encoding="utf-8"))
         cls.good = cls.snapshot(current.PROFILE)
@@ -58,6 +61,29 @@ class V13CatalogTests(unittest.TestCase):
 
     def evaluate(self, snapshot):
         return audit.evaluate_snapshot(snapshot, schema_profile=current.PROFILE)
+
+    def test_pre_sites_contract_matches_only_the_inherited_baseline(self):
+        baseline = audit.evaluate_snapshot(self.pre_sites_snapshot, schema_profile=pre_sites.PROFILE)
+        self.assertTrue(baseline["ready"], baseline["failed_checks"])
+        self.assertEqual(baseline["contract"], pre_sites.CONTRACT)
+        self.assertNotIn("website_inbox", audit.schema_contract(pre_sites.PROFILE)["EXPECTED_TABLES"])
+
+        after_sites = audit.evaluate_snapshot(self.good, schema_profile=pre_sites.PROFILE)
+        self.assertFalse(after_sites["ready"])
+        self.assertIn("expected_private_tables_only", after_sites["failed_checks"])
+
+    def test_pre_sites_contract_cannot_be_used_for_activation(self):
+        with self.assertRaisesRegex(audit.AuditConfigurationError, "pre_sites_activation_target_forbidden"):
+            audit.audit_supabase_activation_target(
+                "unused", storage_audit_database_url="unused",
+                expected_project_ref="abcdefghijklmnopqrst",
+                schema_profile=pre_sites.PROFILE,
+            )
+        output = StringIO()
+        with redirect_stdout(output):
+            result = audit.main(["--schema-profile", pre_sites.PROFILE, "--activation-target"])
+        self.assertEqual(result, 2)
+        self.assertEqual(json.loads(output.getvalue())["error"], "pre_sites_audit_only")
 
     def test_referencing_foreign_key_does_not_duplicate_owned_index(self):
         indexes = [r for r in self.good['indexes'] if r['table_name'] in {'website_customer_acceptances', 'website_customer_feedback', 'website_customer_reviews'}]
