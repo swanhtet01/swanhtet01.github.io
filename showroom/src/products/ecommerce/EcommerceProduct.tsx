@@ -2221,11 +2221,14 @@ export function EcommerceProduct() {
     return (
       <div className="workspace-screen ecommerce-product">
         <header className="ecommerce-heading">
-          <div><span className="core-eyebrow">Commerce</span><h1>Add products in Shop</h1>
-            <p>Your online store uses the same prices and stock.</p></div>
+          <div><span className="core-eyebrow">Commerce</span><h1>Add your first product</h1>
+            <p>Shop and Commerce share one catalog. Start with one item, or import a CSV if you already have a list.</p></div>
         </header>
-        <section className="core-panel" aria-label="Open Shop inventory">
-          <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-import">Add products</Link>
+        <section className="core-panel" aria-label="Add the first Shop product">
+          <div className="form-actions">
+            <Link className="core-button primary" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
+            <Link className="text-link" state={{ commerceReturn: true }} to="/shop/?tab=inventory#shop-catalog-import">Import a CSV <span aria-hidden="true">→</span></Link>
+          </div>
         </section>
       </div>
     )
