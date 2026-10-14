@@ -2,7 +2,7 @@ import { WebsiteImage } from './WebsiteImage'
 import { normalizeSlug, type PreviewDevice, type WebsitePage, type WebsitePresentation } from './website-model'
 import { websiteDocumentLanguage } from './website-language'
 import { websiteContactPage } from './website-contact-page'
-import './website-presentation.css'
+import { WEBSITE_PUBLIC_CSS } from './website-presentation'
 
 type SitePreviewProps = {
   device: PreviewDevice
@@ -29,6 +29,7 @@ export function SitePreview({ device, page, pages, siteName, presentation, inqui
   } catch { /* An incomplete destination stays disabled in the editor. */ }
 
   return <section className="website-preview-panel" aria-label={siteName + ' site canvas'}>
+    <style>{WEBSITE_PUBLIC_CSS}</style>
     <div className="website-preview-stage"><div className={'website-preview-frame is-' + device}>
       <article className="sm-site" data-design={presentation?.templateId} lang={websiteDocumentLanguage(siteName, pages)} aria-label={page.internalName + ' page canvas'} role="document">
         <header className="site-header"><div className="site-header-inner">

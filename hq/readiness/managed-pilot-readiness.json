@@ -1,22 +1,22 @@
 {
   "contract": "supermega.managed-pilot-readiness.v5",
-  "asOf": "2026-10-14T09:09:27.622Z",
+  "asOf": "2026-10-14T10:10:07.868Z",
   "pilotMode": "owner_named",
   "localDatabase": {
     "contract": "supermega.hq.database-rehearsal.v3",
     "schemaVersion": 13,
     "schemaProfile": "v13-self-serve",
     "migrationCount": 27,
-    "implementationCommit": "cec68965c17cf4f29fffe1154e23732e6a326389",
-    "implementationTree": "1d5640881e08470c5f945f73db4309c6f36f9d69",
-    "implementationDigest": "sha256:b0c711eebef218177bddaf6095654d8a86fc2cab49cf8225ea1dedf737859916",
-    "receiptDigest": "sha256:866653742d09961347324432a5cfdac986e3eae4d6f32601384179263ef52ed8",
+    "implementationCommit": "d5ff89af80d5ddb3cf465a73463f3d3a9ec9067e",
+    "implementationTree": "b453ca2bf905779e865d6b095812661b45559ef8",
+    "implementationDigest": "sha256:3aa8a964050e78db79a0ff601c1bf6ae8b73dee5ea5c303d96319b63c9786133",
+    "receiptDigest": "sha256:cd8e20447da356bd3d700735c0201e0fa3c1e595dc29ad93e9f93f6059fa1047",
     "behaviorChecks": 74,
     "catalogChecksBefore": 33,
     "catalogChecksAfter": 33,
     "hostedEvidenceCurrent": false
   },
-  "sourceDigest": "sha256:7119cc1fffaf70822b36e2aa8a6a60bfd171d29de37ce485d48c6a0b067b8532",
+  "sourceDigest": "sha256:6b9208204d82e06abe1be098769d2b9ded63c5451ede8ec429fc5e71a6a9eebe",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -282,7 +282,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:28bc6f32ba40372c94dc0c092c38bf4fca0489ad4dadea0d664818b191d151c2"
+      "digest": "sha256:c61acd95b31f5dc77c03046458bdd0605f7cafcd1a7c64b47b460d105dc828d9"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",

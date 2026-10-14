@@ -154,6 +154,7 @@ jobs:
           import os
           from pathlib import Path
           from shutil import copy2
+          from urllib.parse import parse_qs, urlsplit
 
           report = Path(os.environ['RUNNER_TEMP'], 'gallery-candidate.json')
           evidence = json.loads(report.read_text(encoding='utf-8'))
@@ -162,14 +163,40 @@ jobs:
           assert evidence['publicationReady'] is False
           assert evidence['sourceCommit'] == os.environ['SUPERMEGA_CI_SOURCE_SHA']
           assert evidence['deniedExternal'] == 0
+          assert evidence['completedSale'] is True
+          assert evidence['customerReceiptVisible'] is False
+          assert evidence['fulfilledSyntheticMedia'] == 3
           captures = evidence['captures']
-          assert len(captures) == 7
+          assert len(captures) == 8
           expected = {
-              'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
+              'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-order-record.png', 'actual-shop-orders.png',
               'actual-sites-editor.png', 'actual-sites-inquiries.png',
               'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
           }
           assert {item['file'] for item in captures} == expected
+          expected_states = {
+              'actual-shop-today.png': ('/shop/', 'today'),
+              'actual-shop-sell.png': ('/shop/', 'counter'),
+              'actual-shop-order-record.png': ('/shop/', 'counter'),
+              'actual-shop-orders.png': ('/shop/', 'orders'),
+              'actual-sites-editor.png': ('/workspaces/', '/website/'),
+              'actual-sites-inquiries.png': ('/workspaces/', '/website/?view=inquiries'),
+              'actual-commerce-catalog.png': ('/workspaces/', '/ecommerce/?view=preview'),
+              'actual-commerce-order-request.png': ('/workspaces/', '/ecommerce/?view=preview'),
+          }
+          for item in captures:
+              expected_path, expected_route = expected_states[item['file']]
+              assert item['fixturePath'] == expected_path
+              if item['file'].startswith('actual-commerce-'):
+                  actual_route = urlsplit(item['routeState'])
+                  assert actual_route.path == '/ecommerce/'
+                  assert parse_qs(actual_route.query).get('view') == ['preview']
+              else:
+                  assert item['routeState'] == expected_route
+              assert item['visibleSelector']
+          assert next(item for item in captures if item['file'] == 'actual-shop-order-record.png')['recordKind'] == 'paid_order_record_not_customer_receipt'
+          assert next(item for item in captures if item['file'] == 'actual-sites-editor.png')['loadedImages'] >= 3
+          assert next(item for item in captures if item['file'] == 'actual-commerce-catalog.png')['loadedImages'] >= 3
           source = Path(evidence['output']).resolve()
           assert source.parent == Path(os.environ['GITHUB_WORKSPACE'], '.tmp').resolve()
           assert source.name.startswith('gallery-candidate-')

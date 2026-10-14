@@ -182,7 +182,7 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact, privateImages: Reado
     `      body:has(.site-page[id="${target.anchor}"]:target) .skip-link[data-page="${target.anchor}"] { display: block; }`
   )).join('\n')
   const activeNavStyles = targets.map(target => (
-    `  body:has(.site-page[id="${target.anchor}"]:target) .site-nav a[href="#${target.anchor}"] { background: #eeedff; color: #4338ca; }`
+    `  body:has(.site-page[id="${target.anchor}"]:target) .site-nav a[href="#${target.anchor}"] { background: var(--nav, #eeedff); color: var(--accent, #4338ca); }`
   )).join('\n')
   const navigation = artifact.pages
     .map((page, index) => ({ page, target: targets[index] }))
@@ -224,7 +224,7 @@ ${WEBSITE_PUBLIC_CSS}
   body:not(:has(.site-page:target)) .skip-link[data-home="true"] { display: block; }
 ${activeSkipStyles}
 ${activeNavStyles}
-  body:not(:has(.site-page:target)) .site-nav a[href="#${homeTarget.anchor}"] { background: #eeedff; color: #4338ca; }
+  body:not(:has(.site-page:target)) .site-nav a[href="#${homeTarget.anchor}"] { background: var(--nav, #eeedff); color: var(--accent, #4338ca); }
   .sm-site .site-page { display: none; }
   .sm-site .site-page:target { display: block; }
   .sm-site .site-main:not(:has(.site-page:target)) .site-page[data-home="true"] { display: block; }

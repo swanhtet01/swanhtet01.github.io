@@ -16,6 +16,7 @@ const fixtures = {
   shop: resolve(root, '.tmp', 'qa-shop'),
   workspaces: resolve(root, '.tmp', 'qa-workspaces'),
 }
+const samplePhotoFiles = ['sites-studio-sample.jpg', 'sites-studio-materials.jpg', 'sites-studio-entrance.jpg']
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2' }
 
 function buildFixture(script, args = []) {
@@ -62,6 +63,20 @@ async function waitFor(cdp, sessionId, text) {
   throw new Error(`visible_state_missing:${text}`)
 }
 
+async function waitForPaidOrderRecord(cdp, sessionId) {
+  let seen = null
+  for (let i = 0; i < 50; i += 1) {
+    seen = await evaluate(cdp, sessionId, `(() => {
+      const dialog = document.querySelector('dialog.receipt-dialog[open]');
+      return dialog ? { open: true, text: dialog.innerText.slice(0, 600) } : { open: false };
+    })()`)
+    if (seen.open && seen.text.includes('Order record') && seen.text.includes('PAID')
+      && seen.text.includes('Not a tax invoice, receipt, or payment confirmation.')) return
+    await new Promise(resolveWait => setTimeout(resolveWait, 200))
+  }
+  throw new Error(`paid_order_record_missing:${JSON.stringify(seen)}`)
+}
+
 async function clickText(cdp, sessionId, text) {
   const clicked = await evaluate(cdp, sessionId, `(() => {
     const target = [...document.querySelectorAll('button,a')].find(node => node.textContent.trim() === ${JSON.stringify(text)});
@@ -70,10 +85,18 @@ async function clickText(cdp, sessionId, text) {
   if (!clicked) throw new Error(`fixture_control_missing:${text}`)
 }
 
+async function clickSelector(cdp, sessionId, selector) {
+  const clicked = await evaluate(cdp, sessionId, `(() => {
+    const target = document.querySelector(${JSON.stringify(selector)});
+    if (!(target instanceof HTMLElement)) return false; target.click(); return true;
+  })()`)
+  if (!clicked) throw new Error(`fixture_control_missing:${selector}`)
+}
+
 async function typeInto(cdp, sessionId, selector, value) {
   const focused = await evaluate(cdp, sessionId, `(() => {
     const input=document.querySelector(${JSON.stringify(selector)});
-    if (!(input instanceof HTMLInputElement)) return false;
+    if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) return false;
     input.focus(); input.select(); return true;
   })()`)
   if (!focused) throw new Error(`fixture_input_missing:${selector}`)
@@ -81,8 +104,35 @@ async function typeInto(cdp, sessionId, selector, value) {
   await new Promise(resolveWait => setTimeout(resolveWait, 150))
 }
 
-async function capture(cdp, sessionId, output, name, expectedTexts) {
+async function capture(cdp, sessionId, output, name, expectedTexts, view) {
   for (const expectedText of expectedTexts) await waitFor(cdp, sessionId, expectedText)
+  let viewVerified = false
+  let loadedImages = 0
+  let lastState = null
+  for (let i = 0; i < 50; i += 1) {
+    const state = await evaluate(cdp, sessionId, `(() => {
+      const node = document.querySelector(${JSON.stringify(view.selector)});
+      const bounds = node?.getBoundingClientRect();
+      const images = [...document.querySelectorAll(${JSON.stringify(view.imageSelector || 'img[data-no-gallery-images]')})];
+      return { path: location.pathname, route: window.__qaGalleryRoute ?? null,
+        tab: window.__qaGalleryTab ?? null, visible: Boolean(bounds && bounds.bottom > 0 && bounds.top < innerHeight && bounds.right > 0 && bounds.left < innerWidth),
+        imageCount: images.length, loadedImages: images.filter(image => image.complete && image.naturalWidth > 0).length };
+    })()`)
+    lastState = state
+    loadedImages = state.loadedImages
+    const actualRoute = state.route ? new URL(state.route, 'http://fixture.example') : null
+    const expectedRoute = view.route ? new URL(view.route, 'http://fixture.example') : null
+    const routeMatches = expectedRoute ? actualRoute?.pathname === expectedRoute.pathname
+      && [...expectedRoute.searchParams].every(([key, value]) => actualRoute.searchParams.get(key) === value)
+      : actualRoute === null
+    if (state.path === view.fixturePath && routeMatches && state.tab === (view.tab || null)
+      && state.visible && state.imageCount >= (view.images || 0) && state.loadedImages >= (view.images || 0)) {
+      viewVerified = true
+      break
+    }
+    await new Promise(resolveWait => setTimeout(resolveWait, 200))
+  }
+  if (!viewVerified) throw new Error(`capture_view_or_images_missing:${name}:${JSON.stringify(lastState)}`)
   const myanmarFontLoaded = await evaluate(cdp, sessionId, `(async () => {
     await document.fonts.load('16px "Noto Sans Myanmar"', 'မင်္ဂလာပါ');
     return [...document.fonts].some(face => face.family === 'Noto Sans Myanmar' && face.status === 'loaded');
@@ -99,7 +149,8 @@ async function capture(cdp, sessionId, output, name, expectedTexts) {
   const height = bytes.readUInt32BE(20)
   if (width !== 1440 || height !== 900) throw new Error(`capture_dimensions_invalid:${name}:${width}x${height}`)
   await writeFile(resolve(output, `${name}.png`), bytes, { flag: 'wx' })
-  return { file: `${name}.png`, width, height, sha256: createHash('sha256').update(bytes).digest('hex') }
+  return { file: `${name}.png`, width, height, sha256: createHash('sha256').update(bytes).digest('hex'),
+    fixturePath: view.fixturePath, routeState: lastState.route || lastState.tab, visibleSelector: view.selector, loadedImages }
 }
 
 async function main() {
@@ -108,13 +159,18 @@ async function main() {
   const captureChanges = spawnSync('git', ['status', '--porcelain', '--', 'showroom',
     'tools/capture_public_gallery.mjs', 'tools/build_shop_browser_fixture.mjs',
     'tools/build_product_clarity_fixture.mjs', 'tools/verify_app_entry_rendered.mjs',
-    'tools/public-assets/noto-sans-myanmar.woff2'], { cwd: root, encoding: 'utf8', windowsHide: true })
+    'tools/public-assets/noto-sans-myanmar.woff2', 'tools/qa-assets',
+    '.github/workflows/showroom-ci.yml'], { cwd: root, encoding: 'utf8', windowsHide: true })
   if (head.status !== 0 || showroomTree.status !== 0 || captureChanges.status !== 0 || captureChanges.stdout.trim())
     throw new Error('clean_capture_source_commit_required')
   buildFixture('build_shop_browser_fixture.mjs', ['--today'])
   buildFixture('build_product_clarity_fixture.mjs', ['--gallery'])
   await mkdir(outputRoot, { recursive: true })
   const output = await mkdtemp(join(outputRoot, 'gallery-candidate-'))
+  const sampleMedia = new Map(await Promise.all(samplePhotoFiles.map(async file =>
+    [`https://gallery-fixture.example/media/${file}`, await readFile(resolve(root, 'tools', 'qa-assets', file))])))
+  const sampleMediaDigests = [...sampleMedia].map(([url, bytes]) => ({ file: basename(url),
+    sha256: createHash('sha256').update(bytes).digest('hex'), evidence: 'synthetic_sample_photo' }))
   const server = await serveFixture()
   const origin = `http://127.0.0.1:${server.address().port}`
   const profile = await mkdtemp(join(tmpdir(), 'supermega-gallery-capture-'))
@@ -122,6 +178,7 @@ async function main() {
   let cdp
   let sessionId
   let deniedExternal = 0
+  const fulfilledSampleMedia = new Set()
   const captures = []
   try {
     const launched = await launchBrowser(findBrowser(), profile)
@@ -134,6 +191,13 @@ async function main() {
     await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*' }] }, sessionId)
     cdp.on(sessionId, 'Fetch.requestPaused', event => {
       const url = event.request?.url || ''
+      const sample = sampleMedia.get(url)
+      if (sample) {
+        fulfilledSampleMedia.add(url)
+        void cdp.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: 200,
+          responseHeaders: [{ name: 'Content-Type', value: 'image/jpeg' }], body: sample.toString('base64') }, sessionId).catch(() => {})
+        return
+      }
       const local = url.startsWith(`${origin}/`) || url === 'about:blank'
       if (!local) deniedExternal += 1
       void cdp.send(local ? 'Fetch.continueRequest' : 'Fetch.failRequest', local
@@ -143,29 +207,58 @@ async function main() {
     await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
     await waitFor(cdp, sessionId, 'Today')
     await evaluate(cdp, sessionId, `(() => { const s=document.createElement('style');s.textContent='#root > p,#root > button,#root > output{display:none!important}body{margin:0!important}';document.head.append(s) })()`)
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue']))
     await clickText(cdp, sessionId, 'Show Counter')
+    await waitFor(cdp, sessionId, 'Set up customer receipt')
+    await clickText(cdp, sessionId, 'Set up customer receipt')
+    await typeInto(cdp, sessionId, '.receipt-profile-form input[autocomplete="organization"]', 'Example Corner Shop')
+    await clickText(cdp, sessionId, 'Save details')
+    await waitFor(cdp, sessionId, 'Receipt details')
     const saleItemAdded = await evaluate(cdp, sessionId, "(() => { const tile=document.querySelector('button.shop-product-tile'); if (!tile) return false; tile.click(); return true })()")
     if (!saleItemAdded) throw new Error('counter_product_tile_missing')
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'Daily essentials basket']))
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'Daily essentials basket'],
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
+    await clickSelector(cdp, sessionId, '.shop-review-sale')
+    await waitFor(cdp, sessionId, 'Review counter sale')
+    await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')
+    await clickText(cdp, sessionId, 'Complete sale')
+    await waitForPaidOrderRecord(cdp, sessionId)
+    const completedSale = await evaluate(cdp, sessionId, `(() => {
+      const state = JSON.parse(localStorage.getItem('supermega.commerce.workspace.v2') || '{}');
+      return state.orders?.some(order => order.status === 'completed' && order.paymentStatus === 'reconciled') === true;
+    })()`)
+    if (!completedSale) throw new Error('synthetic_counter_sale_not_completed')
+    captures.push({
+      ...await capture(cdp, sessionId, output, 'actual-shop-order-record', ['Order record', 'PAID'],
+        { fixturePath: '/shop/', tab: 'counter', selector: 'dialog.receipt-dialog[open]' }),
+      recordKind: 'paid_order_record_not_customer_receipt',
+    })
+    await clickSelector(cdp, sessionId, '.receipt-dialog-actions button:last-child')
+    await clickText(cdp, sessionId, 'Show Today')
+    captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
+      { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
     await clickText(cdp, sessionId, 'Show Orders')
-    captures.push(await capture(cdp, sessionId, output, 'actual-shop-orders', ['Orders to finish', 'Payment pending']))
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-orders', ['Orders to finish', 'Payment pending'],
+      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
     await clickText(cdp, sessionId, 'Clean synthetic databases')
 
     await cdp.send('Page.navigate', { url: `${origin}/workspaces/` }, sessionId)
     await waitFor(cdp, sessionId, 'Inquiries')
     await evaluate(cdp, sessionId, `(() => { const s=document.createElement('style');s.textContent='.qa-notice,.qa-nav{display:none!important}.qa-shell{display:block!important;min-height:900px!important}.qa-content{padding:0!important}.website-product,.ecommerce-product{min-height:900px!important}body{margin:0!important}';document.head.append(s) })()`)
     await clickText(cdp, sessionId, 'Pages')
-    captures.push(await capture(cdp, sessionId, output, 'actual-sites-editor', ['Edit page', 'Business details', 'Page checks']))
+    captures.push(await capture(cdp, sessionId, output, 'actual-sites-editor', ['Edit page', 'Business details', 'Page checks'],
+      { fixturePath: '/workspaces/', route: '/website/', selector: '[data-content-section="hero"]', imageSelector: '.website-page-card img', images: 3 }))
     await clickText(cdp, sessionId, 'Inquiries')
-    captures.push(await capture(cdp, sessionId, output, 'actual-sites-inquiries', ['12 requests need review', 'Ko Min']))
+    captures.push(await capture(cdp, sessionId, output, 'actual-sites-inquiries', ['12 requests need review', 'Ko Min'],
+      { fixturePath: '/workspaces/', route: '/website/?view=inquiries', selector: '.website-inquiry-detail' }))
     await clickText(cdp, sessionId, 'Store editor')
     await waitFor(cdp, sessionId, 'Store details')
-    await typeInto(cdp, sessionId, '.ecommerce-copy-fields input', 'Mingalar Fresh Mart')
+    await typeInto(cdp, sessionId, '.ecommerce-copy-fields input', 'Example Studio')
+    await typeInto(cdp, sessionId, '.ecommerce-copy-fields textarea', 'Sample paper, notebooks, and design support for local businesses. Shop reviews each pickup request before confirming it.')
     await clickText(cdp, sessionId, 'Customer view')
     await clickText(cdp, sessionId, 'Save store')
     await waitFor(cdp, sessionId, 'Storefront saved on this device')
-    captures.push(await capture(cdp, sessionId, output, 'actual-commerce-catalog', ['Mingalar Fresh Mart', '4 products', 'Add to cart']))
+    captures.push(await capture(cdp, sessionId, output, 'actual-commerce-catalog', ['Example Studio', '3 products', 'Add to cart'],
+      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.storefront-grid', imageSelector: '.storefront-grid img.storefront-product-photo', images: 3 }))
     const addedToCart = await evaluate(cdp, sessionId, "(() => { const item=document.querySelector('button.storefront-request-button'); if (!item) return false; item.click(); return true })()")
     if (!addedToCart) throw new Error('customer_store_product_not_orderable')
     await typeInto(cdp, sessionId, 'input[autocomplete="name"]', 'Ma Su')
@@ -178,12 +271,17 @@ async function main() {
       return true;
     })()`)
     if (!requestPanelShown) throw new Error('commerce_request_panel_missing')
-    captures.push(await capture(cdp, sessionId, output, 'actual-commerce-order-request', ['Request saved locally for Shop review.']))
+    captures.push(await capture(cdp, sessionId, output, 'actual-commerce-order-request', ['Request saved locally for Shop review.'],
+      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '#ecommerce-buying-workspace' }))
     const sourceTreeAfter = spawnSync('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })
     if (sourceTreeAfter.status !== 0 || sourceTreeAfter.stdout.trim() !== showroomTree.stdout.trim())
       throw new Error('product_source_changed_during_capture')
+    if (deniedExternal !== 0 || fulfilledSampleMedia.size !== sampleMedia.size)
+      throw new Error(`sample_media_or_external_request_mismatch:${fulfilledSampleMedia.size}:${deniedExternal}`)
     console.log(JSON.stringify({ ok: true, classification: 'candidate_only_local_real_component_synthetic', publicationReady: false,
-      sourceCommit: head.stdout.trim(), showroomTree: showroomTree.stdout.trim(), deniedExternal, output, captures }, null, 2))
+      sourceCommit: head.stdout.trim(), showroomTree: showroomTree.stdout.trim(), deniedExternal,
+      fulfilledSyntheticMedia: fulfilledSampleMedia.size, sampleMediaDigests, completedSale,
+      customerReceiptVisible: false, output, captures }, null, 2))
   } finally {
     if (cdp) {
       await cdp.send('Browser.close', {}, '', 2000).catch(() => {})
