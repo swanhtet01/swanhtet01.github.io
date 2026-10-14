@@ -3197,8 +3197,24 @@
 }
 
 .website-template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.website-template-card { min-height: 5rem; flex-direction: column; align-items: flex-start; justify-content: center; white-space: normal; text-align: left; }
+.website-template-card { min-height: 8rem; flex-direction: column; align-items: flex-start; justify-content: center; white-space: normal; text-align: left; }
 .website-template-card small { font-size: .6875rem; font-weight: var(--font-weight-medium); line-height: 1.35; opacity: .8; }
+.website-template-swatch { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr); grid-template-rows:7px 49px; gap:4px; width:100%; margin-bottom:5px; padding:7px; border:1px solid color-mix(in srgb,currentColor 18%,transparent); border-radius:7px; background:#fff; }
+.website-template-swatch i { display:block; min-width:0; border-radius:3px; }
+.website-template-swatch-head { grid-column:1/-1; background:#e8e8ec; }
+.website-template-swatch-main { position:relative; background:#efece2; }
+.website-template-swatch-main::after { position:absolute; top:18px; left:12px; width:55%; height:4px; border-radius:5px; background:currentColor; content:""; opacity:.45; }
+.website-template-swatch-side { background:#f5f4f1; }
+.website-template-swatch.is-business-presence { color:#1f604e; }
+.website-template-swatch.is-business-presence .website-template-swatch-main { grid-column:1/-1; }
+.website-template-swatch.is-business-presence .website-template-swatch-side { display:none; }
+.website-template-swatch.is-lead-generation { color:#9ce7df; }
+.website-template-swatch.is-lead-generation .website-template-swatch-main { grid-column:1/-1; background:#182b48; }
+.website-template-swatch.is-lead-generation .website-template-swatch-main::after { left:25%; width:50%; }
+.website-template-swatch.is-lead-generation .website-template-swatch-side { display:none; }
+.website-template-swatch.is-catalog-showcase { color:#6042a0; }
+.website-template-swatch.is-catalog-showcase .website-template-swatch-main { background:#f2eafb; }
+.website-template-swatch.is-catalog-showcase .website-template-swatch-side { border:1px solid #e8dfef; background:#fffdf9; }
 @media screen and (max-width: 700px) {
   .website-template-grid { grid-template-columns: minmax(0, 1fr); }
 }

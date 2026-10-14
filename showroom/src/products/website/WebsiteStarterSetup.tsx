@@ -115,6 +115,7 @@ export function WebsiteStarterSetup({
               : template.id === 'lead-generation' ? 'Get inquiries'
                 : 'Show products'
             return <button aria-label={`${label}. ${template.detail}`} aria-pressed={brief.templateId === template.id} className={`website-button website-template-card${brief.templateId === template.id ? ' is-primary' : ' is-secondary'}`} key={template.id} onClick={() => updateBrief('templateId', template.id)} type="button">
+              <span aria-hidden="true" className={`website-template-swatch is-${template.id}`}><i className="website-template-swatch-head" /><i className="website-template-swatch-main" /><i className="website-template-swatch-side" /></span>
               <strong>{label}</strong><small>{template.detail}</small>
             </button>
           })}
