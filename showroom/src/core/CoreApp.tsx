@@ -3256,10 +3256,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
       </form>
       return <section className="core-panel managed-commerce-boundary">
       <div className="panel-head"><div><span className="core-eyebrow">Shop</span><h2>Add your first product</h2></div></div>
-      <p className="panel-copy">Enter one item you sell, or bring in your existing catalog CSV.</p>
       {catalogForm}
-      <details className="secondary-setup-path"><summary>Import an existing catalog CSV</summary>
-        <p className="panel-copy">Review the columns and every row before creating your company catalog.</p>
+      <details className="secondary-setup-path"><summary>Import existing CSV</summary>
         <Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed managedIdentityOverride={managedIdentity} onOpenAppliedManagedImport={retryManagedCommerceLoad} product="commerce" /></Suspense>
       </details>
       {managedTemplate ? <details className="secondary-setup-path"><summary>Use a business catalog</summary><form className="core-form compact-form managed-template-catalog-form" onSubmit={(formEvent) => void initializeManagedTemplateCatalog(formEvent)}>
