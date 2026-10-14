@@ -271,8 +271,9 @@ async function main() {
       return true;
     })()`)
     if (!requestPanelShown) throw new Error('commerce_request_panel_missing')
-    captures.push(await capture(cdp, sessionId, output, 'actual-commerce-order-request', ['Request saved locally for Shop review.'],
-      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '#ecommerce-buying-workspace' }))
+    captures.push(await capture(cdp, sessionId, output, 'actual-commerce-order-request',
+      ['Request saved on this device', 'No order or payment was confirmed.'],
+      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.ecommerce-quote-receipt[data-current="true"]' }))
     const sourceTreeAfter = spawnSync('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })
     if (sourceTreeAfter.status !== 0 || sourceTreeAfter.stdout.trim() !== showroomTree.stdout.trim())
       throw new Error('product_source_changed_during_capture')
