@@ -98,6 +98,7 @@ export default defineConfig(({ command }) => ({
   preview: { proxy: apiProxy },
   build: {
     target: 'es2022',
+    cssMinify: 'lightningcss',
     // Emitted so scripts/seal-offline-precache.mjs can derive the service worker's
     // precache list from the real chunk graph instead of a hand-kept route list --
     // a hand-kept list is what left the till out of the offline cache in the first

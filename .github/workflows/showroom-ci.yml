@@ -75,6 +75,7 @@ jobs:
         env:
           SUPERMEGA_TEST_POSTGRES: '1'
           SUPERMEGA_RUN_WEBSITE_INQUIRY_SQL: '1'
+          SUPERMEGA_RUN_WEBSITE_DOMAIN_SQL: '1'
           SUPERMEGA_TRIAL_SCHEMA_VERSION: '13'
           SUPERMEGA_TEST_POSTGRES_BIN: /usr/lib/postgresql/17/bin
           OTEL_SDK_DISABLED: 'true'

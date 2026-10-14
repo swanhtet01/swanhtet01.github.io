@@ -1,13 +1,13 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v3",
-  "recordedAt": "2026-10-14T06:13:03.752Z",
+  "recordedAt": "2026-10-14T09:09:27.622Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "7c1b0fba9bfe6aac5f9fc958e2c53fe91fbcfd7b",
-  "implementationTree": "629b1a2de632c56295b7901cca938f67149508ed",
+  "implementationCommit": "cec68965c17cf4f29fffe1154e23732e6a326389",
+  "implementationTree": "1d5640881e08470c5f945f73db4309c6f36f9d69",
   "sourceCleanBeforeAndAfter": true,
-  "rawReportDigest": "sha256:f87e87cc42f0e1f074e493f285829aa877f88d80fbdc8eebf5155eb7f2dc9c63",
+  "rawReportDigest": "sha256:20e19b8be66e0d6d226045178c3b3d25834b3616bd5fcec7eea41a7bbfe5b461",
   "implementation": {
-    "digest": "sha256:efe9451fdde45ea89f070e4b8140ff5e797b2ea218b3a48b5a17a721767724d9",
+    "digest": "sha256:b0c711eebef218177bddaf6095654d8a86fc2cab49cf8225ea1dedf737859916",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -37,6 +37,7 @@
       "supabase/migrations/20261010070000_website_published_hero_media.sql",
       "supabase/migrations/20261010120857_website_inquiry_followup.sql",
       "supabase/migrations/20261014090000_website_channel_stable_update.sql",
+      "supabase/migrations/20261014103000_website_custom_domain_bindings.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -49,6 +50,7 @@
       "supermega_runtime/website_acceptance_schema.py",
       "supermega_runtime/website_customer_review.py",
       "supermega_runtime/website_customer_review_store.py",
+      "supermega_runtime/website_domain.py",
       "supermega_runtime/website_inquiry_api.py",
       "supermega_runtime/website_inquiry_store.py",
       "supermega_runtime/website_media.py",
@@ -66,6 +68,9 @@
       "tests/test_billing_rail.py",
       "tests/test_database_v13_contract.py",
       "tests/test_postgres17_rehearsal_contract.py",
+      "tests/test_website_domain.py",
+      "tests/test_website_domain_sql.py",
+      "tests/test_website_domain_worker.py",
       "tests/test_website_inquiry_followup.py",
       "tests/test_website_inquiry_sql.py",
       "tests/test_website_media.py",
@@ -82,13 +87,14 @@
       "tools/rehearse_self_serve_v13.py",
       "tools/rehearse_supermega_postgres17.py",
       "tools/run_postgres17_rehearsal.mjs",
+      "tools/run_website_domain_renewal.py",
       "tools/validate_supermega_database_url.py",
       "tools/verify_managed_runtime_environment_values.mjs",
       "tools/verify_public_browser_quarantine.mjs"
     ]
   },
-  "implementationDigest": "sha256:efe9451fdde45ea89f070e4b8140ff5e797b2ea218b3a48b5a17a721767724d9",
-  "implementationFileCount": 76,
+  "implementationDigest": "sha256:b0c711eebef218177bddaf6095654d8a86fc2cab49cf8225ea1dedf737859916",
+  "implementationFileCount": 82,
   "localVerification": {
     "command": "npm run database:postgres17:record",
     "conclusion": "success",
@@ -309,8 +315,8 @@
     "backupNonempty": true,
     "format": "pg_dump_custom",
     "restoredSchemaVersion": 13,
-    "privateSnapshotBefore": "sha256:8cbb013d5f8e7c4ebaed5773fb24fec48c08f4cd8db0a08ccf3289e5c3896aae",
-    "privateSnapshotAfter": "sha256:8cbb013d5f8e7c4ebaed5773fb24fec48c08f4cd8db0a08ccf3289e5c3896aae"
+    "privateSnapshotBefore": "sha256:1cc8bddea885f749603f608f40456ab5d58e9dea7584fc231a7b9a9e598e902e",
+    "privateSnapshotAfter": "sha256:1cc8bddea885f749603f608f40456ab5d58e9dea7584fc231a7b9a9e598e902e"
   },
   "storage": {
     "catalogMode": "local_private_fixture",
@@ -334,5 +340,5 @@
     "Prove real Auth signup, verified email, account recovery, admin MFA and revocation on the hosted target.",
     "Keep production writes disabled until founder approval."
   ],
-  "receiptDigest": "sha256:82da21ae0caf23175857d210367e0aab9bd605d1d31b9b6aed6aa8221aff0a5c"
+  "receiptDigest": "sha256:866653742d09961347324432a5cfdac986e3eae4d6f32601384179263ef52ed8"
 }

@@ -13,6 +13,7 @@ MODULES = (
     'tests.test_website_published_media',
     'tests.test_website_inquiry_sql',
     'tests.test_website_inquiry_followup',
+    'tests.test_website_domain_sql',
 )
 
 
@@ -38,6 +39,7 @@ def main():
         parser.error('This acceptance lane requires Linux and Python 3.12.')
     if any(os.environ.get(key) != value for key, value in {
         'SUPERMEGA_TEST_POSTGRES': '1', 'SUPERMEGA_RUN_WEBSITE_INQUIRY_SQL': '1',
+        'SUPERMEGA_RUN_WEBSITE_DOMAIN_SQL': '1',
         'SUPERMEGA_TRIAL_SCHEMA_VERSION': '13',
     }.items()):
         parser.error('Explicit disposable database opt-ins and schema version 13 are required.')

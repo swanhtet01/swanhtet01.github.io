@@ -101,6 +101,17 @@ const appConfig = {
     // Published HTML supplies a per-response nonce policy. Do not replace it
     // with the SPA policy, which deliberately forbids inline application JS.
     { src: '/sites/(.*)', dest: '/api/app.py' },
+    // Customer hosts serve the approved Sites artifact at / and its page
+    // paths. The runtime still resolves the original Host against an active,
+    // unexpired tenant binding; this route alone grants no publishing access.
+    // Keep /api for domain inquiry/media endpoints and /sites platform-only.
+    {
+      src: '/((?!(?:api|sites)(?:/|$))(.*))',
+      methods: ['GET', 'HEAD'],
+      missing: [{ type: 'host', value: '^(?:[A-Za-z0-9-]+\\.)*(?:supermega\\.dev|vercel\\.app)$' }],
+      transforms: [{ type: 'request.path', op: 'set', args: '/__site-domain/$1' }],
+      dest: '/api/app.py',
+    },
     // The app holds a client's catalog, orders, and evidence in browser storage,
     // so it is served with the same header floor the kernel already had. Legacy
     // `routes` cannot coexist with a top-level `headers` block, so the headers

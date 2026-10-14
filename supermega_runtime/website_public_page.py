@@ -65,7 +65,7 @@ form.addEventListener('submit', async (event) => {
 """
 
 
-def render_website_inquiry_page(record: dict, page_path: str = '/') -> HTMLResponse | None:
+def render_website_inquiry_page(record: dict, page_path: str = '/', *, custom_domain: bool = False) -> HTMLResponse | None:
     artifact = record['artifact']
     # Only retained, approved artifact pages are routable. Never consult the
     # mutable draft here or accept a visitor-selected inquiry source page.
@@ -74,13 +74,13 @@ def render_website_inquiry_page(record: dict, page_path: str = '/') -> HTMLRespo
     if page is None:
         return None
     contact_page = next(page for page in pages.values() if page['id'] == record['pageId'])
-    base = f"/sites/{quote(str(record['channelId']), safe='')}"
+    base = '/' if custom_domain else f"/sites/{quote(str(record['channelId']), safe='')}"
 
     def text(value):
         return escape(str(value), quote=True)
 
     def page_url(slug):
-        return base if slug == '/' else base + quote(slug, safe='/')
+        return base if slug == '/' else (quote(slug, safe='/') if custom_domain else base + quote(slug, safe='/'))
 
     # The artifact has no locale field yet. Derive the document language from
     # readable, approved text so Myanmar customers get the right browser and
@@ -118,7 +118,8 @@ def render_website_inquiry_page(record: dict, page_path: str = '/') -> HTMLRespo
             return ''
         _validate_image_block({'image': item['image']}, 'Published image', frozenset())
         image = item['image']
-        source = (f"/api/public/sites/{quote(str(record['channelId']), safe='')}/media/{image['assetId']}"
+        source = ((f"/api/public/domain-media/{image['assetId']}" if custom_domain else
+                   f"/api/public/sites/{quote(str(record['channelId']), safe='')}/media/{image['assetId']}")
                   if 'assetId' in image else image['src'])
         loading = 'eager' if priority else 'lazy'
         return (f'<img class="content-image" src="{text(source)}" alt="{text(image["alt"])}"'
@@ -140,7 +141,8 @@ def render_website_inquiry_page(record: dict, page_path: str = '/') -> HTMLRespo
     form = ''
     script = ''
     if page['id'] == contact_page['id']:
-        form = f"""<section class="inquiry-section" id="inquiry-form"><h2>Get in touch</h2><form class="inquiry-form" method="post" action="/api/public/sites/{text(record['channelId'])}/inquiries"><fieldset><label>Name<input name="name" autocomplete="name" maxlength="80" required></label><label>Email or phone<input name="contact" autocomplete="email" maxlength="120" required></label><label>Message<textarea name="message" rows="4" maxlength="500" required></textarea></label><label class="consent"><input name="consent" type="checkbox" required><span>I agree to share these details with {text(artifact['siteName'])} so they can respond.</span></label></fieldset><button type="submit">Send message</button><p class="inquiry-status" id="status" role="status" aria-live="polite"></p><noscript>Enable JavaScript to send this form.</noscript></form></section>"""
+        action = '/api/public/domain-inquiries' if custom_domain else f"/api/public/sites/{text(record['channelId'])}/inquiries"
+        form = f"""<section class="inquiry-section" id="inquiry-form"><h2>Get in touch</h2><form class="inquiry-form" method="post" action="{action}"><fieldset><label>Name<input name="name" autocomplete="name" maxlength="80" required></label><label>Email or phone<input name="contact" autocomplete="email" maxlength="120" required></label><label>Message<textarea name="message" rows="4" maxlength="500" required></textarea></label><label class="consent"><input name="consent" type="checkbox" required><span>I agree to share these details with {text(artifact['siteName'])} so they can respond.</span></label></fieldset><button type="submit">Send message</button><p class="inquiry-status" id="status" role="status" aria-live="polite"></p><noscript>Enable JavaScript to send this form.</noscript></form></section>"""
         script = f'<script nonce="{nonce}">{_SCRIPT}</script>'
     hero_photo = image_html(page['hero'], priority=True)
     # The runtime validates this allowlisted identifier before retaining the artifact.

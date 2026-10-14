@@ -73,6 +73,7 @@ CURRENT_MIGRATIONS = (*MIGRATIONS,
     "20261010120857_website_inquiry_followup.sql",
     "20261014090000_website_channel_stable_update.sql",
 )
+DOMAIN_CANDIDATE_MIGRATION = "20261014103000_website_custom_domain_bindings.sql"
 RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
@@ -134,9 +135,11 @@ IMPLEMENTATION_PATHS = (
 IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "kernel/database-rehearsal-evidence.mjs",
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
+    f"supabase/migrations/{DOMAIN_CANDIDATE_MIGRATION}",
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
     "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
     "supermega_runtime/website_inquiry_api.py", "supermega_runtime/website_inquiry_store.py",
+    "supermega_runtime/website_domain.py", "tools/run_website_domain_renewal.py",
     "supermega_runtime/website_public_page.py", "supermega_runtime/website_published_media.py",
     "supermega_runtime/website_presentation.py",
     "supermega_runtime/website_publishing_schema.py", "supermega_runtime/website_publishing_routes.py",
@@ -147,6 +150,8 @@ IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "tests/test_website_media_references.py", "tests/test_website_media_postgres.py",
     "tests/test_website_published_media.py",
     "tests/test_website_inquiry_followup.py",
+    "tests/test_website_domain.py", "tests/test_website_domain_sql.py",
+    "tests/test_website_domain_worker.py",
     "supermega_runtime/website_acceptance_schema.py",
     "supermega_runtime/ecommerce_decision_schema.py",
     "supermega_runtime/website_runtime.py", "supermega_runtime/website_release_foundation.py",
@@ -214,7 +219,7 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
     if git("rev-parse", "HEAD") != expected_head:
         raise RehearsalFailure("source_head_mismatch")
     observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
-        if path.name != "20260711081300_public_legacy_baseline.sql"))
+        if path.name not in ("20260711081300_public_legacy_baseline.sql", DOMAIN_CANDIDATE_MIGRATION)))
     if observed != CURRENT_MIGRATIONS:
         raise RehearsalFailure("private_migration_inventory_mismatch")
     return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),

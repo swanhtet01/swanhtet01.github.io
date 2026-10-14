@@ -13,6 +13,7 @@ from .trial_store import PostgresTrialStore
 from .website_inquiry_api import create_website_inquiry_router
 from .website_inquiry_store import WebsiteInquiryStore
 from .website_media_storage import MediaStorageConfig, SupabasePrivateMediaStorage
+from .website_domain import VercelDomainProvider, WebsiteDomainStore
 
 
 def vercel_client_address(request):
@@ -31,9 +32,13 @@ def mount_website_publishing_routes(app, *, store, resolve_principal):
     key = os.getenv('SUPERMEGA_WEBSITE_INQUIRY_HMAC_KEY', '')
     abuse_key = bytes.fromhex(key) if re.fullmatch(r'[0-9a-fA-F]{64}', key) else b''
     media = MediaStorageConfig.from_environment()
-    adapter = WebsiteInquiryStore(store, media_storage=SupabasePrivateMediaStorage(media) if media.ready else None)
+    media_adapter = SupabasePrivateMediaStorage(media) if media.ready else None
+    adapter = WebsiteInquiryStore(store, media_storage=media_adapter)
+    domain_provider = VercelDomainProvider.from_environment() if enabled else None
+    domains = WebsiteDomainStore(store, media_storage=media_adapter, provider=domain_provider) if domain_provider else None
     app.include_router(create_website_inquiry_router(
         store=adapter, enabled=enabled, resolve_principal=resolve_principal,
         resolve_client_address=vercel_client_address,
         abuse_key=abuse_key, public_origin=os.getenv('SUPERMEGA_WEBSITE_PUBLIC_ORIGIN', ''),
+        domain_store=domains,
     ))

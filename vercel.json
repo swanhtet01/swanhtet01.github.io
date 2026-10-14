@@ -20,6 +20,27 @@
       "dest": "/api/app.py"
     },
     {
+      "src": "/((?!(?:api|sites)(?:/|$))(.*))",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "missing": [
+        {
+          "type": "host",
+          "value": "^(?:[A-Za-z0-9-]+\\.)*(?:supermega\\.dev|vercel\\.app)$"
+        }
+      ],
+      "transforms": [
+        {
+          "type": "request.path",
+          "op": "set",
+          "args": "/__site-domain/$1"
+        }
+      ],
+      "dest": "/api/app.py"
+    },
+    {
       "src": "/(.*)",
       "headers": {
         "Content-Security-Policy": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https://*.supabase.co; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests",

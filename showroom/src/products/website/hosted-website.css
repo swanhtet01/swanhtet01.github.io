@@ -16,6 +16,14 @@
 .website-hosted-address>a { width: fit-content; max-width: 100%; color: #4338ca; font-size: 16px; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .website-hosted-address>a:hover { color: #312e81; }
 .website-hosted-address>small { color: #697188; font-size: 12px; }
+.website-domain-form { display: grid; gap: 8px; margin-top: 4px; }
+.website-domain-form label { font-size: 12px; }
+.website-domain-form input { min-height: 44px; padding: 10px 12px; border-radius: 9px; font-size: 14px; }
+.website-domain-confirm { flex-basis: 100%; }
+.website-domain-steps dl>div { padding: 10px; border: 1px solid #e3e5ef; border-radius: 9px; margin-top: 8px; }
+.website-domain-steps dd { display: grid; gap: 3px; margin: 4px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+.website-domain-steps code { font-size: 12px; user-select: all; }
+.website-hosted-address .website-domain-pending { margin: 8px 0 0; color: #8a651a; }
 .website-hosted-card .website-hosted-error { color: #a53641; }
 .website-hosted-hint { padding: 14px; border-radius: 8px; background: #f7f7fc; }
 .website-hosted-withdraw { margin-top: 24px; padding-top: 18px; border-top: 1px solid #eceef4; }

@@ -47,11 +47,23 @@ const expectedMigrationNames = [
   '20261010120857_website_inquiry_followup.sql',
   '20261014090000_website_channel_stable_update.sql',
 ]
+// This source-only domain candidate is not part of the reviewed v13 rehearsal
+// chain. The packet must continue to bind the exact canonical inventory, and
+// every other unexpected SQL file must still fail closed.
+const dormantCandidateName = '20261014103000_website_custom_domain_bindings.sql'
 
 export function validateRehearsalMigrationNames(names) {
   if (JSON.stringify(names) !== JSON.stringify(expectedMigrationNames)) {
     fail('supabase_rehearsal_full_migration_inventory_mismatch')
   }
+}
+export function reviewedRehearsalMigrationNames(names) {
+  if (names.filter((name) => name === dormantCandidateName).length > 1) {
+    fail('supabase_rehearsal_full_migration_inventory_mismatch')
+  }
+  const reviewed = names.filter((name) => name !== dormantCandidateName)
+  validateRehearsalMigrationNames(reviewed)
+  return reviewed
 }
 const browserQuarantinePath = 'supabase/rehearsal/20260804_public_browser_quarantine.sql'
 const securityAuditPath = 'hq/readiness/supabase-security-advisor-audit.json'
@@ -73,8 +85,7 @@ async function migrationInventory(repositoryRoot) {
   const entries = await readdir(directory, { withFileTypes: true })
   const sqlEntries = entries.filter((entry) => /\.sql$/i.test(entry.name))
   if (sqlEntries.some((entry) => !entry.isFile())) fail('supabase_rehearsal_migration_not_regular_file')
-  const names = sqlEntries.map((entry) => entry.name).sort()
-  validateRehearsalMigrationNames(names)
+  const names = reviewedRehearsalMigrationNames(sqlEntries.map((entry) => entry.name).sort())
   return Promise.all(names.map(async (name) => ({
     name,
     sha256: sha256(await readFile(resolve(directory, name))),

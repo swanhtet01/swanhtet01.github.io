@@ -88,8 +88,10 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "20261010120857_website_inquiry_followup.sql",
             "20261014090000_website_channel_stable_update.sql"))
         observed = tuple(sorted(path.name for path in (ROOT / "supabase/migrations").glob("*.sql")
-                                if path.name != "20260711081300_public_legacy_baseline.sql"))
+                                if path.name not in ("20260711081300_public_legacy_baseline.sql",
+                                                     module.DOMAIN_CANDIDATE_MIGRATION)))
         self.assertEqual(module.CURRENT_MIGRATIONS, observed)
+        self.assertTrue((ROOT / "supabase/migrations" / module.DOMAIN_CANDIDATE_MIGRATION).is_file())
 
     def test_account_restore_inventory_includes_website_review_history(self) -> None:
         from tools import rehearse_self_serve_v13 as account
