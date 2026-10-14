@@ -55,11 +55,11 @@
   },
   "migrationPlan": {
     "schemaVersion": 13,
-    "migrationCount": 27,
-    "privateMigrationCount": 26,
+    "migrationCount": 28,
+    "privateMigrationCount": 27,
     "publicBaseline": "20260711081300_public_legacy_baseline.sql",
-    "finalMigration": "20261010120857_website_inquiry_followup.sql",
-    "chainDigest": "sha256:8d4ffa4d901849ea406861fcc63f78a9600d524e0898606327139c38394ae59c",
+    "finalMigration": "20261014090000_website_channel_stable_update.sql",
+    "chainDigest": "sha256:8792fefdcaf49d7e36960fb5ed2b470cb739a9449184011a86ba424e7cf18286",
     "migrations": [
       {
         "name": "20260711081300_public_legacy_baseline.sql",
@@ -195,6 +195,11 @@
         "name": "20261010120857_website_inquiry_followup.sql",
         "path": "supabase/migrations/20261010120857_website_inquiry_followup.sql",
         "digest": "sha256:b794decd2456c16c2ce81f18b9a631562cc54d5f5032bec2ad5c2b0b1d674203"
+      },
+      {
+        "name": "20261014090000_website_channel_stable_update.sql",
+        "path": "supabase/migrations/20261014090000_website_channel_stable_update.sql",
+        "digest": "sha256:9ed6dc61a3ebc832db5ad54e4d7c91ad18e48d3a4f577ffb9a093baa52b3612a"
       }
     ],
     "browserQuarantine": {
@@ -288,7 +293,7 @@
     "customerContactAllowed": false,
     "paymentOrStockActionAllowed": false
   },
-  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:8d4ffa4d901849ea406861fcc63f78a9600d524e0898606327139c38394ae59c on a clean empty maximum-24-hour non-production preview branch only, after separate approval and proof that production migration history can replay the public baseline before its first RLS migration, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
+  "ownerApprovalTemplate": "I approve one Supabase preview rehearsal setup for swanhtet01/swanhtet01.github.io using migration chain sha256:8792fefdcaf49d7e36960fb5ed2b470cb739a9449184011a86ba424e7cf18286 on a clean empty maximum-24-hour non-production preview branch only, after separate approval and proof that production migration history can replay the public baseline before its first RLS migration, with deletion after evidence. I do not approve production refs, production data, production writes, managed activation, credential change, Vercel deploy, GitHub push or PR or merge, customer contact, payment, stock, domain, hosted-write, or scheduler activation.",
   "sourceReceipts": [
     {
       "path": "package.json",
@@ -296,15 +301,15 @@
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:acaf8b1d9a140c2b1f91d12d6343ef676d5bfbe58ca038493a00192c2ea1638d"
+      "digest": "sha256:22a060b59318f50b8b9e189a18eb0dd4594db9f4c4f8792291dfa7672e96182a"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
-      "digest": "sha256:218fc160482b6587e1a00acf1a7bb5d39ea8013c3a19eac8142ee134e97066df"
+      "digest": "sha256:c1c16bb60646f5fd9d7de3ca152e9f5aa2fcec890d3e0e59b3b78ac8d880c593"
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:ee8a6d1db7c02437975af65fcb8e25b929a52cb4a869da388d017e699e29c211"
+      "digest": "sha256:dd8be8b7e40d244971eabd469529de206a4ef3e376fc4efb99d4caefc28f2861"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -316,7 +321,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:537d6af6454cf7e6126b2caf72f692f6e96a8c7152a28aae0a33150d554c0d51"
+      "digest": "sha256:95fb09fb9fbda328a385d0a7d80657a362dc8406f01696d72707933d073f7210"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
@@ -327,5 +332,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:be5f1cffcdb3e13da5490e8a4258654abb629522fb965385381ee290559c93a5"
+  "digest": "sha256:063066e0c983bcf848f35da73e76fc593304ee621552e7b4b0f89dcc52dd5ee3"
 }

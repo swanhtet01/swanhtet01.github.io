@@ -383,7 +383,7 @@ requireContract('actual app entrypoint imports from isolated source with pinned 
   appRuntimeBundle.status === 0 && appRuntimeEvidence?.ok === true
   && appRuntimeEvidence.evidence === 'isolated_source_cold_import'
   && appRuntimeEvidence.requiredRoutes === 10 && appRuntimeEvidence.dependencyPins === 10
-  && appRuntimeEvidence.publishingRoutes === 10
+  && appRuntimeEvidence.publishingRoutes === 11
   && appRuntimeEvidence.providerPackage === false && appRuntimeEvidence.hostedAcceptance === false)
 if (appRuntimeBundle.status !== 0) console.error('Isolated app runtime probe failed; run tools/test_app_runtime_bundle.py for details.')
 

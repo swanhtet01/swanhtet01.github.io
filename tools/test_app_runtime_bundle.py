@@ -54,6 +54,7 @@ startup_count = len(modules)
 assert 'get' in schema['paths']['/api/public/sites/{channel_id}/media/{asset_id}']
 assert 'post' in schema['paths']['/api/public/sites/{channel_id}/inquiries']
 assert 'post' in schema['paths']['/api/trial/v1/website-inbox/{channel_id}/{request_id}/actions']
+assert 'post' in schema['paths']['/api/trial/v1/website-inquiry-channels/{channel_id}/replace']
 optional_modules = modules
 candidate_paths = {path for path in schema['paths'] if path.startswith('/sites/') or path.startswith('/api/public/sites/') or path in ('/api/trial/v1/website-publications', '/api/trial/v1/website-inbox') or path.startswith('/api/trial/v1/website-inquiry-channels') or path.startswith('/api/trial/v1/website-inbox/')}
 for module in optional_modules:
