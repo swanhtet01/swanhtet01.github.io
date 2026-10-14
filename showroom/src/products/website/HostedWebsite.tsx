@@ -65,16 +65,23 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
     <p>{live ? `Published ${date(live.publishedAt)}. Open the address below to check the site before sharing it.` : 'Publish your reviewed pages to get a website address you can share.'}</p>
     {issue ? <p role="alert" className="website-hosted-error">{issue}</p> : null}
     {status && !ready && !current ? <p className="website-hosted-hint">Review your pages and save an approved site version below before publishing.</p> : null}
-    {siteUrl ? <div className="website-hosted-address">
-      <span>Your website address</span>
-      <a href={siteUrl} target="_blank" rel="noreferrer">{siteUrl}</a>
-      <small>Check the site here before sharing this address with customers.</small>
-    </div> : null}
+    <div aria-label="Website addresses" className="website-hosted-addresses">
+      <div className="website-hosted-address">
+        <span>Included website address</span>
+        {siteUrl ? <a href={siteUrl} target="_blank" rel="noreferrer">{siteUrl}</a> : <strong>{status ? 'Available after publishing' : 'Waiting for hosting status'}</strong>}
+        <small>{siteUrl ? 'Check before sharing. Publishing an update currently creates a new address.' : 'SuperMega provides this address when your reviewed site is published.'}</small>
+      </div>
+      <div className="website-hosted-address is-unavailable">
+        <span>Your own domain</span>
+        <strong>Not connected</strong>
+        <small>Custom domain setup is not available in this workspace.</small>
+      </div>
+    </div>
+    {live && !current ? <p className="website-hosted-hint" role="note">Publishing this update replaces the website address above. Existing links will stop working; check and share the new address afterward.</p> : null}
     <div className="website-hosted-actions">
       {!current ? <button className={`website-button ${live ? 'is-secondary' : 'is-primary'}`} disabled={busy || !ready || !canWrite} onClick={() => void change()} type="button">{live ? 'Publish update' : 'Publish website'}</button> : null}
       {issue ? <button className="website-button is-secondary" disabled={busy} onClick={() => { setBusy(true); setIssue(''); void refresh() }} type="button">Try again</button> : null}
     </div>
-    {live ? <p className="website-hosted-domain-note">Your own domain is not connected. Keep using the website address above until domain setup is available.</p> : null}
     {live && canWrite ? <div className="website-hosted-withdraw">
       {withdrawArmed ? <><p>Take this website offline? Visitors will no longer be able to open its pages or send a request.</p><div className="website-hosted-actions"><button className="website-button is-secondary" disabled={busy} onClick={() => setWithdrawArmed(false)} type="button">Keep online</button><button className="website-button is-secondary" disabled={busy} onClick={() => void change(true)} type="button">Take offline</button></div></>
         : <button disabled={busy} onClick={() => setWithdrawArmed(true)} type="button">Take website offline</button>}

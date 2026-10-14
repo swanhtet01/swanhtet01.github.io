@@ -96,7 +96,7 @@ export function WebsiteStarterSetup({
         <div>
           <span className="website-eyebrow">Sites</span>
           <h2 id="website-starter-title">Start your website</h2>
-          <p>Choose a starting point. Add pages, services and products whenever you need them.</p>
+          <p>Choose an editable starting layout. It creates three pages; you can add one more.</p>
         </div>
         <span className="website-status is-draft">Not published</span>
       </header>
@@ -147,16 +147,17 @@ export function WebsiteStarterSetup({
         </div>
 
         <label className="website-starter-contact">
-          <span>How can customers reach you? <small>Optional</small></span>
+          <span>Contact link <small>Optional</small></span>
           <input
             aria-describedby={contactIssue ? 'website-starter-error-contact' : undefined}
             aria-invalid={Boolean(contactIssue)}
             autoComplete="url"
             maxLength={160}
             onChange={(event) => updateBrief('contactHref', event.target.value)}
-            placeholder="https://facebook.com/yourpage or https://example.com/contact"
+            placeholder="https://facebook.com/yourbusiness"
             value={brief.contactHref}
           />
+          <small>For example, your Facebook Page or another link customers already use.</small>
           {contactIssue ? <small className="website-field-error" id="website-starter-error-contact">{contactIssue.message}</small> : null}
         </label>
 

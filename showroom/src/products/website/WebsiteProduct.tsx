@@ -1542,7 +1542,7 @@ export function WebsiteProduct() {
                   </>
                 ) : storageMode === 'managed' ? canReview && !portalViewOnly ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
-                    Prepare file
+                    Review &amp; publish
                   </button>
                 ) : null : null}
                 </div>

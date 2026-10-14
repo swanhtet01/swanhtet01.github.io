@@ -8,12 +8,14 @@
 .website-hosted-status.is-published { background: #e8f8ef; color: #16734c; }
 .website-hosted-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .website-hosted-actions .website-button { min-height: 44px; }
-.website-hosted-address { display: grid; gap: 7px; padding: 17px 19px; border: 1px solid #dfe3ef; border-radius: 12px; background: #f8f9ff; }
+.website-hosted-addresses { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.website-hosted-address { display: grid; align-content: start; gap: 7px; padding: 17px 19px; border: 1px solid #dfe3ef; border-radius: 12px; background: #f8f9ff; min-width: 0; }
 .website-hosted-address>span { color: #626c81; font-size: 13px; font-weight: 600; }
+.website-hosted-address>strong { color: #13172a; font-size: 16px; }
+.website-hosted-address.is-unavailable { background: #fbfbfd; }
 .website-hosted-address>a { width: fit-content; max-width: 100%; color: #4338ca; font-size: 16px; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .website-hosted-address>a:hover { color: #312e81; }
 .website-hosted-address>small { color: #697188; font-size: 12px; }
-.website-hosted-card .website-hosted-domain-note { margin: 18px 0 0; color: #71798c; font-size: 13px; line-height: 1.5; }
 .website-hosted-card .website-hosted-error { color: #a53641; }
 .website-hosted-hint { padding: 14px; border-radius: 8px; background: #f7f7fc; }
 .website-hosted-withdraw { margin-top: 24px; padding-top: 18px; border-top: 1px solid #eceef4; }
@@ -57,6 +59,7 @@
 .website-inquiry-updated { color: #778095; font-size: 12px; margin: 0 0 18px; }
 .website-hosted-inbox :is(button,summary,textarea):focus-visible { outline: 3px solid #8a7be9; outline-offset: 3px; }
 @media(max-width:700px) {
+  .website-hosted-addresses { grid-template-columns: minmax(0, 1fr); }
   .website-hosted-inbox-grid { grid-template-columns: minmax(0,1fr); }
   .website-hosted-requests { max-height: none; }
   .is-list-view .website-hosted-request,.is-request-view .website-hosted-requests { display: none; }
