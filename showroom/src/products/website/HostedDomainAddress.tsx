@@ -72,7 +72,7 @@ export function HostedDomainAddress({ client, channelId, canWrite }: {
     <span>Your own domain</span>
     {domain ? <>
       {connected ? <a href={`https://${domain.hostname}/`} target="_blank" rel="noreferrer">{domain.hostname}</a> : <strong>{domain.hostname}</strong>}
-      <small>{connected ? 'Connected and ready to share.' : domain.issue === 'provider_cleanup_pending' ? 'Removal is still pending.' : domain.state === 'active' ? 'Connected. Publish the website to make it visible here.' : 'Waiting for domain verification.'}</small>
+      <small>{connected ? 'DNS connected. Open this address to confirm HTTPS and the contact form before sharing.' : domain.issue === 'provider_cleanup_pending' ? 'Removal is still pending.' : domain.state === 'active' ? 'Connected. Publish the website to make it visible here.' : 'Waiting for domain verification.'}</small>
       {domain.issue === 'provider_cleanup_pending' ? <p className="website-domain-pending">{connectionIssue(domain.issue)}</p> : domain.state === 'pending' ? <div className="website-domain-steps" aria-label="Domain setup records">
         <p>Add these records where you manage the domain, then check the connection.</p>
         <dl><div><dt>Ownership · TXT</dt><dd><span>{domain.verification.name}</span><code>{domain.verification.value}</code></dd></div>
