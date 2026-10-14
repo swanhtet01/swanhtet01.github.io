@@ -1263,20 +1263,20 @@
   grid-column: 1 / -1;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px 16px;
-  scroll-margin-top: 24px;
-  border-color: rgba(67, 56, 202, .28);
-  padding: 20px;
-  background: #f2f1ff;
+  gap: var(--space-3) var(--space-4);
+  scroll-margin-top: var(--space-6);
+  border-color: color-mix(in srgb, var(--core-green) 28%, transparent);
+  padding: var(--space-5);
+  background: color-mix(in srgb, var(--core-panel) 92%, var(--core-green) 8%);
 }
 
-.ecommerce-quote-receipt:focus { outline: 3px solid #5745ee; outline-offset: 3px; }
+.ecommerce-quote-receipt:focus { outline: .1875rem solid var(--core-green); outline-offset: .1875rem; }
 
 .ecommerce-quote-receipt > h3 {
   grid-column: 1 / -1;
   grid-row: 2;
   margin: 0;
-  color: #17164b;
+  color: var(--core-ink);
   font-size: 1.25rem;
   line-height: 1.25;
 }
@@ -1296,13 +1296,13 @@
 
 .ecommerce-request-receipt.ecommerce-quote-receipt > p {
   grid-column: 1 / -1;
-  color: #353653;
+  color: var(--core-ink);
   font-size: .875rem;
   line-height: 1.5;
 }
 
 .ecommerce-request-receipt.ecommerce-quote-receipt > small {
-  color: #535875;
+  color: var(--core-muted);
   font-size: .75rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -1325,10 +1325,10 @@
   position: relative;
   min-width: 0;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 2px 8px;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  gap: .125rem var(--space-2);
   align-content: center;
-  padding: 10px;
+  padding: .625rem;
   color: #66746b;
 }
 
@@ -1339,8 +1339,8 @@
 .ecommerce-order-progress li > span {
   grid-row: 1 / 3;
   align-self: center;
-  width: 24px;
-  height: 24px;
+  width: 1.5rem;
+  height: 1.5rem;
   display: grid;
   place-items: center;
   border: 1px solid rgba(37, 48, 74, .18);
@@ -1940,14 +1940,14 @@
 .ecommerce-buying-workspace > summary small,
 .ecommerce-buying-workspace > summary b { font-size: .75rem; }
 
-@media (max-width: 600px) {
+@media (max-width: 37.5rem) {
   .ecommerce-order-progress { grid-template-columns: 1fr; }
-  .ecommerce-order-progress li { min-height: 52px; }
+  .ecommerce-order-progress li { min-height: 3.25rem; }
   .ecommerce-order-progress li + li {
     border-inline-start: 0;
-    border-top: 1px solid rgba(37, 48, 74, .1);
+    border-top: .0625rem solid var(--core-line);
   }
-  .ecommerce-request-receipt.ecommerce-quote-receipt { scroll-margin-top: 80px; }
+  .ecommerce-request-receipt.ecommerce-quote-receipt { scroll-margin-top: 5rem; }
 }
 
 .ecommerce-cart-sticky-bar {
