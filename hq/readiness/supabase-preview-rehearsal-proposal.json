@@ -293,7 +293,7 @@
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:ee8a6d1db7c02437975af65fcb8e25b929a52cb4a869da388d017e699e29c211"
+      "digest": "sha256:fbd5c1eb97f2bc9d52c62a067dec461befb7728ade3ea54bcbadd2ce760800ce"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -316,5 +316,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:7097a3edd7f4baf55d5c461b982f97fd8ffa3555462dad8444bc322c3c58c929"
+  "digest": "sha256:d4abb595c96921660a9016981d1e1c7655206fc5dcbcfd6479bc88a86021b561"
 }

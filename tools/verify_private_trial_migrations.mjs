@@ -894,6 +894,21 @@ await verifyWebsiteReviewMigrationCatalog(database, requireCheck)
 await verifyCatalogEntitlementMutations(database, requireCheck)
 await verifyCatalogStorageMutations(database, requireCheck)
 await applyMigrations(database, expectedMigrations.slice(websitePublishingStart))
+
+// Emit the same private-surface fingerprint used for hosted read-only parity checks.
+// This proves only the app_private surface; public schema and migration-history parity
+// still require separate evidence from the exact hosted target.
+const privateSurfaceQuery = await readFile(
+  resolve(root, 'tools', 'supabase_private_surface_digest.sql'),
+  'utf8',
+)
+const privateSurfaceDigest = (
+  await database.query(privateSurfaceQuery)
+).rows[0]?.surface_digest
+requireCheck(
+  'private surface digest contract',
+  privateSurfaceDigest?.contract === 'supermega.supabase-private-surface-digest.v1',
+)
 await verifyWebsitePublishingMigrationCatalog(database, requireCheck)
 
 const unsafeRoleDatabase = new PGlite()
@@ -977,6 +992,8 @@ console.log(
       engine: 'PGlite PostgreSQL 18.3 compatibility runtime',
       migrations: expectedMigrations.length,
       checks: checks.length,
+      private_surface_scope: 'app_private only; not full hosted schema or migration-history parity',
+      private_surface_digest: privateSurfaceDigest,
       hosted_postgres_17_proof_required: true,
     },
     null,
