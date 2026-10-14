@@ -1110,27 +1110,23 @@ export function WebsiteProduct() {
   const hostingNext = hostedCurrent
     ? {
         job: 'Check published website',
-        reason: 'Hosting reports this reviewed version as published. Open its address and check the pages and contact form before sharing.',
-        action: 'Open hosting',
+        reason: 'Published. Check the site before sharing.',
       }
     : hostedLive
       ? {
           job: 'Publish your update',
-          reason: 'An earlier version is published. This reviewed website file still needs to be published as an update.',
-          action: 'Open hosting',
+          reason: 'An earlier version is published. Publish this update.',
         }
       : hostingState === 'confirmed'
         ? {
             job: 'Publish website online',
-            reason: 'Your reviewed website file is ready, but no website address is published yet.',
-            action: 'Open hosting',
+            reason: 'File ready. Publish for an address.',
           }
         : {
             job: 'Check website hosting',
             reason: hostingState === 'unavailable'
-              ? 'Your reviewed website file is ready. Hosting status could not be confirmed, so check it before sharing an address.'
-              : 'Your reviewed website file is ready. Checking whether a website address has been published.',
-            action: 'Open hosting',
+              ? 'Status unavailable. Check hosting before sharing.'
+              : 'File ready. Checking hosting status.',
           }
   const websiteTodayStep = storageIssue || canRepairLocalStorage
     ? 'recover'
@@ -1218,7 +1214,7 @@ export function WebsiteProduct() {
             : releaseRecordRequired && !publishIsCurrent
               ? 'Create site file'
               : releaseRecordRequired
-                ? hostingNext.action
+                ? 'Open hosting'
                 : 'Download website'
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'
@@ -1280,11 +1276,11 @@ export function WebsiteProduct() {
     ...(releaseRecordRequired ? [{
       id: 'hosting',
       label: 'Publish online',
-      detail: !publishIsCurrent ? 'After website file'
+      detail: !publishIsCurrent ? 'After file'
         : hostedCurrent ? 'Published · verify address'
-          : hostedLive ? 'Update not published'
+          : hostedLive ? 'Update pending'
             : hostingState === 'confirmed' ? 'Not published'
-              : hostingState === 'unavailable' ? 'Status unavailable' : 'Checking status',
+              : hostingState === 'unavailable' ? 'Unavailable' : 'Checking',
       state: !publishIsCurrent ? 'waiting' : hostedCurrent ? 'complete' : 'current',
     }] : []),
   ] as const
