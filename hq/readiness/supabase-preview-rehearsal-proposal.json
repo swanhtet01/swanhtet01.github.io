@@ -15,8 +15,8 @@
     "asOf": "2026-08-20T17:02:04.312+06:30",
     "postgresMajor": 17,
     "projectStatus": "ACTIVE_HEALTHY",
-    "liveSchemaVersion": 11,
-    "localTargetVersion": 11,
+    "schemaVersionAtAudit": 11,
+    "localTargetVersionAtAudit": 11,
     "versionDrift": 0,
     "browserRolesDenied": true,
     "publicBrowserQuarantinePresent": true,
@@ -209,8 +209,9 @@
       "path": "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     },
-    "liveProductionSchemaVersion": 11,
-    "sourceAheadOfLiveProduction": true,
+    "historicalAuditSchemaVersion": 11,
+    "sourceAheadOfHistoricalAudit": true,
+    "currentProductionSchemaVersionVerified": false,
     "productionApplyAllowed": false,
     "branchApplyStrategy": "verify_inherited_schema_then_review_unapplied_delta",
     "fullChainReplayAllowed": false,
@@ -307,7 +308,7 @@
     },
     {
       "path": "tools/prepare_supabase_preview_rehearsal_proposal.mjs",
-      "digest": "sha256:ae7dd2b19ba3f3d7f129b0131a06cd596970fca1be62c35e4019898168d98313"
+      "digest": "sha256:367aff3d5ed14ead427f9fd498be66f1c849d0c857f0912b8c169f51ab590260"
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
@@ -338,5 +339,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:bf3d97bb07bd478e8ebdbba95b04d7fbf7dea8094bdc7c638cea92944316cd3f"
+  "digest": "sha256:a943e6ec7945eb14f62cb08a77e75177e87a28b021b67943f9f5c62e97782b14"
 }

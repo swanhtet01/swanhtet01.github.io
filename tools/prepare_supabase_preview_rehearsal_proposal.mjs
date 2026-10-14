@@ -150,8 +150,8 @@ function currentSecurityBaseline(securityAudit) {
     asOf: securityAudit.asOf,
     postgresMajor: securityAudit.postgres?.major,
     projectStatus: securityAudit.postgres?.status,
-    liveSchemaVersion: securityAudit.managedBackend.liveSchemaVersion,
-    localTargetVersion: securityAudit.managedBackend.localTargetVersion,
+    schemaVersionAtAudit: securityAudit.managedBackend.liveSchemaVersion,
+    localTargetVersionAtAudit: securityAudit.managedBackend.localTargetVersion,
     versionDrift: securityAudit.managedBackend.versionDrift,
     browserRolesDenied: true,
     publicBrowserQuarantinePresent: true,
@@ -208,6 +208,13 @@ function validateProposalShape(packet) {
     || packet.migrationPlan?.fullChainReplayAllowed !== false
     || packet.migrationPlan?.currentLiveHistoryReconciled !== false) {
     fail('supabase_preview_rehearsal_proposal_branch_strategy_invalid')
+  }
+  if (!Number.isInteger(packet.productionBaseline?.schemaVersionAtAudit)
+    || packet.productionBaseline.schemaVersionAtAudit !== packet.productionBaseline.localTargetVersionAtAudit
+    || packet.migrationPlan?.historicalAuditSchemaVersion !== packet.productionBaseline.schemaVersionAtAudit
+    || packet.migrationPlan?.sourceAheadOfHistoricalAudit !== (EXPECTED_SOURCE_TARGET_SCHEMA_VERSION > packet.productionBaseline.schemaVersionAtAudit)
+    || packet.migrationPlan?.currentProductionSchemaVersionVerified !== false) {
+    fail('supabase_preview_rehearsal_proposal_historical_schema_invalid')
   }
   if (!Array.isArray(packet.migrationPlan?.migrations) || packet.migrationPlan.migrations.length !== EXPECTED_MIGRATION_COUNT) fail('supabase_preview_rehearsal_proposal_migrations_invalid')
   validatePreviewMigrationEntries(packet.migrationPlan.migrations)
@@ -333,8 +340,9 @@ export async function buildSupabasePreviewRehearsalProposal({
         path: 'supabase/rehearsal/20260804_public_browser_quarantine.sql',
         digest: digest(browserQuarantineSql),
       },
-      liveProductionSchemaVersion: productionBaseline.liveSchemaVersion,
-      sourceAheadOfLiveProduction: migrationPlan.schemaVersion > productionBaseline.liveSchemaVersion,
+      historicalAuditSchemaVersion: productionBaseline.schemaVersionAtAudit,
+      sourceAheadOfHistoricalAudit: migrationPlan.schemaVersion > productionBaseline.schemaVersionAtAudit,
+      currentProductionSchemaVersionVerified: false,
       productionApplyAllowed: false,
       branchApplyStrategy: 'verify_inherited_schema_then_review_unapplied_delta',
       fullChainReplayAllowed: false,

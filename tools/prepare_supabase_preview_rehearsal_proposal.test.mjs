@@ -73,7 +73,10 @@ test('builds a data-less inherited-schema Supabase preview rehearsal proposal', 
   assert.equal(built.migrationPlan.schemaVersion, 13)
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
   assert.equal(built.migrationPlan.finalMigration, '20261014090000_website_channel_stable_update.sql')
-  assert.equal(built.migrationPlan.sourceAheadOfLiveProduction, true)
+  assert.equal(built.productionBaseline.schemaVersionAtAudit, 11)
+  assert.equal(built.migrationPlan.historicalAuditSchemaVersion, 11)
+  assert.equal(built.migrationPlan.sourceAheadOfHistoricalAudit, true)
+  assert.equal(built.migrationPlan.currentProductionSchemaVersionVerified, false)
   assert.equal(built.migrationPlan.branchApplyStrategy, 'verify_inherited_schema_then_review_unapplied_delta')
   assert.equal(built.migrationPlan.fullChainReplayAllowed, false)
   assert.equal(built.migrationPlan.currentLiveHistoryReconciled, false)
@@ -136,6 +139,8 @@ test('rehashing cannot hide omitted budget or Website evidence or turn historica
   for (const mutate of [p => { p.migrationPlan.migrations.at(-1).digest = `sha256:${'1'.repeat(64)}` },
     p => { p.productionBaseline.currentCandidateProven = true },
     p => { p.productionBaseline.currentStateRevalidated = true },
+    p => { p.migrationPlan.currentProductionSchemaVersionVerified = true },
+    p => { p.migrationPlan.historicalAuditSchemaVersion = 13 },
     p => { p.requiredEvidence = p.requiredEvidence.filter(e => !e.startsWith('durable-attempt-budget-')) },
     p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'website-review-recipient-isolation-entitlement-and-session-revocation') },
     p => { p.requiredEvidence = p.requiredEvidence.filter(e => e !== 'website-review-and-feedback-nonempty-backup-restore') },
@@ -145,7 +150,7 @@ test('rehashing cannot hide omitted budget or Website evidence or turn historica
     mutate(altered)
     const { digest: ignored, ...body } = altered
     altered.digest = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`
-    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(migration_digest_invalid|production_baseline_invalid|evidence_missing)/)
+    await assert.rejects(validateSupabasePreviewRehearsalProposal(altered), /supabase_preview_rehearsal_proposal_(migration_digest_invalid|production_baseline_invalid|historical_schema_invalid|evidence_missing)/)
   }
 })
 
