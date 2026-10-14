@@ -3,6 +3,22 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import './shop_action_feedback.test.mjs'
 import './shop_sale_focus.test.mjs'
+import { shopOrderLink, shopOrderTargetId } from '../showroom/src/core/shop-order-target.ts'
+
+const today = readFileSync(new URL('../showroom/src/core/ShopToday.tsx', import.meta.url), 'utf8')
+const app = readFileSync(new URL('../showroom/src/core/CoreApp.tsx', import.meta.url), 'utf8')
+
+test('Today order rows link to focusable order targets in the Orders tab', () => {
+  const orderId = 'order_123-abc'
+  const targetId = 'shop-order-order_123-abc'
+
+  assert.equal(shopOrderTargetId(orderId), targetId)
+  assert.equal(shopOrderLink(orderId), `/shop/?tab=orders#${targetId}`)
+  assert.match(today, /activeOrders\.map\(\(order\) => <Link key=\{order\.id\} to=\{shopOrderLink\(order\.id\)\}>/)
+  assert.match(app, /const targetId = shopOrderTargetId\(order\.id\)/)
+  assert.match(app, /id=\{targetId\} key=\{order\.id\} tabIndex=\{-1\}/)
+  assert.match(app, /if \(tab === 'orders' && commerceLocation\.hash\.startsWith\('#shop-order-'\)\)[\s\S]*?target\?\.scrollIntoView\([\s\S]*?target\?\.focus\(\{ preventScroll: true \}\)/)
+})
 
 test('base counter quantity controls support tablet touch without a phone breakpoint', () => {
   const css = readFileSync(new URL('../showroom/src/core/core-app.css', import.meta.url), 'utf8')
