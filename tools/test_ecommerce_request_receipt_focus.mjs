@@ -8,17 +8,28 @@ import './ecommerce_request_feedback.test.mjs'
 const source = await readFile(new URL('../showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', import.meta.url), 'utf8')
 
 test('a submitted request waits for the rendered receipt before moving focus', () => {
-  assert.match(source, /const focusRequestReceipt = useCallback\(\(receipt: HTMLElement \| null\) =>/)
-  assert.match(source, /if \(!receipt\) return/)
+  assert.match(source, /const focusRequestReceiptOnNextMount = useRef\(false\)/)
+  assert.match(source, /const receiptElementRef = useRef<HTMLElement \| null>\(null\)/)
+  assert.match(source, /useEffect\(\(\) => \{\s*if \(!freshQuoteId \|\| !focusRequestReceiptOnNextMount\.current\) return/)
+  assert.match(source, /const receipt = receiptElementRef\.current\s+if \(!receipt\) return/)
   assert.match(source, /receipt\.querySelector\('p'\)\?\.scrollIntoView\(\{ block: 'center' \}\)/)
   assert.match(source, /receipt\.focus\(\{ preventScroll: true \}\)/)
-  assert.match(source, /ref=\{focusRequestReceipt\} tabIndex=\{-1\}/)
+  assert.match(source, /\}, \[freshQuoteId\]\)/)
+  assert.match(source, /focusRequestReceiptOnNextMount\.current = true\s+setFreshQuoteId\(request\.id\)/)
+  assert.match(source, /ref=\{receiptElementRef\} tabIndex=\{-1\}/)
+})
+
+test('restored requests do not steal focus; only a new submission arms receipt focus', () => {
+  assert.match(source, /focusRequestReceiptOnNextMount\.current = false/)
+  assert.match(source, /if \(!receipt\.isConnected\) return/)
+  assert.match(source, /!freshQuoteId \|\| !focusRequestReceiptOnNextMount\.current/)
+  assert.equal([...source.matchAll(/focusRequestReceiptOnNextMount\.current = true/g)].length, 1)
 })
 
 test('the browser-local truth boundary is the element brought into view', () => {
   assert.match(source, /<p>\{managedDeliveryConfirmed/)
-  assert.match(source, /Request saved locally for Shop review\./)
-  assert.match(source, /Shop still confirms stock, promise, payment, and delivery\./)
+  assert.match(source, /Shop review is next\. This is not a confirmed order; Shop still checks stock, delivery, and payment\./)
+  assert.match(source, /Shop delivery is not verified\. Open Shop operator review to continue\. No order or payment was confirmed\./)
   assert.doesNotMatch(source, /requestReceiptRef/)
 })
 
@@ -56,9 +67,8 @@ test('expired and changed requests retain a read-only receipt with honest delive
 })
 
 test('the current receipt focus stays within the buying workspace', () => {
-  assert.match(source, /const focusRequestReceipt = useCallback\(\(receipt: HTMLElement \| null\) =>/)
-  assert.match(source, /receipt\.querySelector\('p'\)\?\.scrollIntoView\(\{ block: 'center' \}\)/)
-  assert.match(source, /receipt\.focus\(\{ preventScroll: true \}\)/)
+  assert.match(source, /<article aria-labelledby="ecommerce-request-confirmation-heading" className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref=\{receiptElementRef\} tabIndex=\{-1\}>/)
+  assert.match(source, /<h3 id="ecommerce-request-confirmation-heading">\{managedDeliveryConfirmed/)
 })
 
 test('retained receipts use a wrapping single column and readable evidence text', async () => {

@@ -226,6 +226,7 @@ export function EcommerceBuyingWorkspace({
   const [managedConfirmation, setManagedConfirmation] = useState('')
   const [quoteClock, setQuoteClock] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
+  const focusRequestReceiptOnNextMount = useRef(false)
   const [cartDrafts, setCartDrafts] = useState<Record<string, string>>({})
   const [returnDraft, setReturnDraft] = useState<{
     orderId: string
@@ -271,13 +272,18 @@ export function EcommerceBuyingWorkspace({
   const [amendmentBusy, setAmendmentBusy] = useState(false)
   const [rescheduleDraft, setRescheduleDraft] = useState<{ orderId: string; requestedPromisedAt: string; reason: string } | null>(null)
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
-  const focusRequestReceipt = useCallback((receipt: HTMLElement | null) => {
+  const receiptElementRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!freshQuoteId || !focusRequestReceiptOnNextMount.current) return
+    const receipt = receiptElementRef.current
     if (!receipt) return
+    focusRequestReceiptOnNextMount.current = false
     requestAnimationFrame(() => {
-      receipt.scrollIntoView({ block: 'start' })
+      if (!receipt.isConnected) return
+      receipt.querySelector('p')?.scrollIntoView({ block: 'center' })
       receipt.focus({ preventScroll: true })
     })
-  }, [])
+  }, [freshQuoteId])
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
   const activeBuyingState = buyingState.scope === scope
     ? {
@@ -1258,6 +1264,7 @@ export function EcommerceBuyingWorkspace({
       } catch {
         // Optional behavior recording cannot invalidate a retained request.
       }
+      focusRequestReceiptOnNextMount.current = true
       setFreshQuoteId(request.id)
       setQuoteClock(quotedAt.getTime())
       setNotice(onRecordManagedRequest
@@ -1424,7 +1431,7 @@ export function EcommerceBuyingWorkspace({
               <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
             </article>
           ) : receiptCurrent ? (
-            <article aria-labelledby="ecommerce-request-confirmation-heading" className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={focusRequestReceipt} tabIndex={-1}>
+            <article aria-labelledby="ecommerce-request-confirmation-heading" className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={receiptElementRef} tabIndex={-1}>
               <span className="status-pill ready">{managedDeliveryConfirmed ? 'Request sent to Shop' : 'Request saved locally'}</span>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
               <h3 id="ecommerce-request-confirmation-heading">{managedDeliveryConfirmed ? 'Shop received your request' : 'Request saved on this device'}</h3>
