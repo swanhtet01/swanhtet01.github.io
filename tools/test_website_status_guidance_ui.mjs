@@ -60,7 +60,7 @@ test('local file readiness waits for actual page checks and keeps one visible pr
   assert.match(source, /content:\s*{\s*title: 'Edit page'/)
   assert.doesNotMatch(source, /website-heading-publish-action/)
   assert.ok(source.includes("localPreviewReady ? 'Ready to download' : 'After review'"))
-  assert.ok(source.includes('need attention before the website file is ready.'))
+  assert.ok(source.includes('Page checks need attention.'))
   assert.match(css, /\.website-today \{\s*order: 1;/)
   assert.match(css, /\.website-action-bar \{\s*order: 3;/)
   assert.match(css, /\.website-workspace-grid,\s*\.website-workspace-grid\.view-publish \{\s*order: 4;/)
@@ -109,14 +109,16 @@ test('a reviewed file is not guided as published until hosting confirms that exa
     { name: 'no published version', state: 'confirmed', publication: status([]), expectedCurrent: false, job: 'Publish website online', step: 'hosting' },
     { name: 'hosting check unavailable with stale prior data', state: 'unavailable', publication: status([currentPublication]), expectedCurrent: false, job: 'Check website hosting', step: 'hosting' },
     { name: 'new scope with stale prior data', state: 'confirmed', scope: 'previous', publication: status([currentPublication]), expectedCurrent: false, job: 'Check website hosting', step: 'hosting' },
+    { name: 'view-only user cannot confirm hosting', state: 'confirmed', viewOnly: true, publication: status([currentPublication]), expectedCurrent: false, job: 'Ask owner to check hosting', step: 'hosting' },
   ]
   for (const item of cases) {
     const hosting = runInNewContext(`${hostingSource};\n({ hostingState, hostedStatus, hostedLive, hostedCurrent })`, {
       hostingRead: { scope: item.scope ?? 'current', state: item.state, status: item.publication },
       hostingScope: 'current', publish: { id: 'reviewed-v2' }, inquiryPageId: 'contact',
+      portalViewOnly: item.viewOnly ?? false,
     })
     assert.equal(hosting.hostedCurrent, item.expectedCurrent, item.name)
-    const next = runInNewContext(`${nextSource};\nhostingNext`, hosting)
+    const next = runInNewContext(`${nextSource};\nhostingNext`, { ...hosting, portalViewOnly: item.viewOnly ?? false })
     assert.equal(next.job, item.job, `${item.name}: next action`)
     const step = runInNewContext(`${todaySource};\nwebsiteTodayStep`, {
       storageIssue: false, canRepairLocalStorage: false, pendingRestoredDraft: false,
@@ -128,7 +130,24 @@ test('a reviewed file is not guided as published until hosting confirms that exa
     assert.equal(step, item.step, `${item.name}: guided step`)
   }
   assert.match(source, /label: 'Publish online'/)
+  assert.match(source, /if \(view !== 'content' \|\| portalViewOnly \|\| !hostingScope/)
+  assert.match(source, /portalViewOnly \? 'Owner check'/)
   assert.match(css, /\.website-workflow-rail > li:nth-child\(5\) \{ grid-column: 1 \/ -1;/)
+})
+
+test('a published managed site keeps one visible verification path and a truthful review action', () => {
+  const start = source.indexOf('  const editingRoutineStatus =')
+  const end = source.indexOf('  const websiteTodayOwner =', start)
+  assert.ok(start >= 0 && end > start)
+  const routineSource = source.slice(start, end)
+  const routine = (releaseRecordRequired) => runInNewContext(`${routineSource};\neditingRoutineStatus`, {
+    view: 'content', surface: 'work', websiteTodayState: 'ready', releaseRecordRequired,
+    pendingRestoredDraft: null, storageIssue: false, canRepairLocalStorage: false,
+  })
+  assert.equal(routine(true), false, 'managed published status remains visible')
+  assert.equal(routine(false), true, 'routine local editing stays compact')
+  assert.ok(source.includes("hostedCurrent ? 'Published · verify address' : `Next: ${websiteAgentJob} · ${readinessSummary}`"))
+  assert.ok(source.includes("hostedCurrent ? 'View publication' : 'Review & publish'"))
 })
 
 test('saved failures render actual check details in an initially collapsed disclosure', () => {

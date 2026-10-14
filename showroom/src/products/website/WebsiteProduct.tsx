@@ -382,7 +382,7 @@ export function WebsiteProduct() {
     : ''
   const [hostingRead, setHostingRead] = useState<WebsiteHostingRead>({ scope: '', state: 'checking', status: null })
   useEffect(() => {
-    if (view !== 'content' || !hostingScope || !managedWorkspaceId || !managedActorId) {
+    if (view !== 'content' || portalViewOnly || !hostingScope || !managedWorkspaceId || !managedActorId) {
       const reset = window.setTimeout(() => setHostingRead({ scope: '', state: 'checking', status: null }), 0)
       return () => window.clearTimeout(reset)
     }
@@ -407,8 +407,8 @@ export function WebsiteProduct() {
     const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { operation?.abort(); document.removeEventListener('visibilitychange', onVisible) }
-  }, [hostingScope, managedActorId, managedWorkspaceId, view])
-  const hostingState = hostingRead.scope === hostingScope ? hostingRead.state : 'checking'
+  }, [hostingScope, managedActorId, managedWorkspaceId, portalViewOnly, view])
+  const hostingState = portalViewOnly ? 'restricted' : hostingRead.scope === hostingScope ? hostingRead.state : 'checking'
   const hostedStatus = hostingState === 'confirmed' ? hostingRead.status : null
   const hostedLive = hostedStatus?.publications.find((entry) => entry.enabled)
   const hostedCurrent = Boolean(hostedLive && publish && inquiryPageId
@@ -1107,26 +1107,31 @@ export function WebsiteProduct() {
   const showEditorInsights = showPageChecks || showInquirySummary
   const releaseRecordRequired = storageMode === 'managed'
   const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges && contentChecksPass
-  const hostingNext = hostedCurrent
+  const hostingNext = portalViewOnly
+    ? {
+        job: 'Ask owner to check hosting',
+        reason: 'Ask an operator to verify the live site.',
+      }
+    : hostedCurrent
     ? {
         job: 'Check published website',
-        reason: 'Published. Check the site before sharing.',
+        reason: 'Check the site before sharing.',
       }
     : hostedLive
       ? {
           job: 'Publish your update',
-          reason: 'An earlier version is published. Publish this update.',
+          reason: 'An earlier version is online. Publish this update.',
         }
       : hostingState === 'confirmed'
         ? {
             job: 'Publish website online',
-            reason: 'File ready. Publish for an address.',
+            reason: 'Publish to get an address.',
           }
         : {
             job: 'Check website hosting',
             reason: hostingState === 'unavailable'
-              ? 'Status unavailable. Check hosting before sharing.'
-              : 'File ready. Checking hosting status.',
+              ? 'Hosting status unavailable.'
+              : 'Checking hosting status.',
           }
   const websiteTodayStep = storageIssue || canRepairLocalStorage
     ? 'recover'
@@ -1173,25 +1178,25 @@ export function WebsiteProduct() {
                     ? hostingNext.job
                     : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
-    ? 'Saving or recovery needs attention before Website work can be trusted.'
+    ? 'Recover Website data before editing.'
     : pendingRestoredDraft
-      ? `This tab has an unsaved ${pendingRestoredDraft.session.workspace.siteName} draft, while the current Website is ${workspace.siteName}. Choose one before editing.`
+      ? 'Choose the saved Website or unsaved draft.'
     : starterSetupActive
-      ? 'Answer a short brief to prepare client-specific pages.'
+      ? 'Add a few details to start.'
       : starterAvailable
       ? 'Name and offer first; details later.'
         : hasUnsavedChanges
-          ? 'Save the draft or discard it before review.'
+          ? 'Save or discard the draft.'
           : leadCounts.new
-            ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
+            ? `${leadCounts.new} new ${leadCounts.new === 1 ? 'inquiry' : 'inquiries'} to review.`
             : failingContentChecks.length
-              ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before the website file is ready.`
+              ? 'Page checks need attention.'
               : localPreviewReady
                 ? 'Download an HTML file of your saved site. This does not publish it.'
               : releaseRecordRequired && !approvalIsCurrent
-                ? 'Final review is required before a website file is saved.'
+                ? 'Review before saving the file.'
                 : releaseRecordRequired && !publishIsCurrent
-                  ? 'Save a static release file for the approved website.'
+                  ? 'Save the reviewed website file.'
                 : releaseRecordRequired
                   ? hostingNext.reason
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
@@ -1277,6 +1282,7 @@ export function WebsiteProduct() {
       id: 'hosting',
       label: 'Publish online',
       detail: !publishIsCurrent ? 'After file'
+        : portalViewOnly ? 'Owner check'
         : hostedCurrent ? 'Published · verify address'
           : hostedLive ? 'Update pending'
             : hostingState === 'confirmed' ? 'Not published'
@@ -1290,7 +1296,7 @@ export function WebsiteProduct() {
       ? 'Saved on this device'
       : 'Available in this browser session'
   const editingRoutineStatus = view === 'content' && surface === 'work'
-    && websiteTodayState === 'ready' && !pendingRestoredDraft
+    && websiteTodayState === 'ready' && !releaseRecordRequired && !pendingRestoredDraft
     && !storageIssue && !canRepairLocalStorage
   const websiteTodayOwner = portalViewOnly ? 'Company owner' : 'Website operator'
   const websiteTodayContext = `${workingSampleTemplate
@@ -1635,7 +1641,7 @@ export function WebsiteProduct() {
                   </>
                 ) : storageMode === 'managed' ? canReview && !portalViewOnly ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
-                    Review &amp; publish
+                    {hostedCurrent ? 'View publication' : 'Review & publish'}
                   </button>
                 ) : null : null}
                 </div>
@@ -1835,7 +1841,7 @@ export function WebsiteProduct() {
           </div> : null}
 
           {view === 'content' && !starterSetupActive && !editingRoutineStatus ? <details className="website-status-disclosure">
-            <summary>Next: {websiteAgentJob} · {readinessSummary}</summary>
+            <summary>{hostedCurrent ? 'Published · verify address' : `Next: ${websiteAgentJob} · ${readinessSummary}`}</summary>
             <section aria-label="Website status" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
               <span className="core-eyebrow">Next action</span>
