@@ -36,7 +36,8 @@ test('binds the complete candidate chain without granting baseline or migration 
   assert.equal(packet.release.schemaVersion, 13)
   assert.equal(packet.release.migrationCount, 28)
   for (const candidate of ['20261014103000_website_custom_domain_bindings.sql',
-    '20261014122400_website_domain_attempt_fencing.sql']) {
+    '20261014122400_website_domain_attempt_fencing.sql',
+    '20261014164000_shop_product_media.sql']) {
     assert.ok(!packet.release.migrations.some(({ name }) => name === candidate))
   }
   assert.deepEqual(packet.release.review, releaseReview)
@@ -77,7 +78,8 @@ test('rejects every omitted migration, unknown SQL, duplicate and reordered inve
   const names = packet.release.migrations.map(({ name }) => name)
   validateRehearsalMigrationNames(names)
   const dormant = ['20261014103000_website_custom_domain_bindings.sql',
-    '20261014122400_website_domain_attempt_fencing.sql']
+    '20261014122400_website_domain_attempt_fencing.sql',
+    '20261014164000_shop_product_media.sql']
   assert.deepEqual(reviewedRehearsalMigrationNames([...names, ...dormant]), names)
   for (const candidate of dormant) {
     assert.throws(() => validateRehearsalMigrationNames([...names, candidate]), /full_migration_inventory_mismatch/)
