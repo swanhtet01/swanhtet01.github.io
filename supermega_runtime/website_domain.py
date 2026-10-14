@@ -140,7 +140,7 @@ class VercelDomainProvider:
 
     def _url(self, route: str, *, config: bool = False) -> str:
         return f'https://api.vercel.com{route}?' + urlencode({'teamId': self.team_id,
-            **({'projectId': self.project_id} if config else {})})
+            **({'projectIdOrName': self.project_id} if config else {})})
 
     def add(self, hostname: str) -> dict:
         route = f'/v10/projects/{quote(self.project_id)}/domains'
@@ -191,21 +191,63 @@ def recommended_dns(hostname: str, provider_domain: Mapping[str, Any], config: M
     candidates = config.get(field)
     if not isinstance(candidates, list):
         return None
-    for item in candidates:
+    for item in sorted(candidates, key=lambda entry: entry.get('rank', 2**31)
+                       if isinstance(entry, dict) and type(entry.get('rank')) is int else 2**31):
         value = item.get('value') if isinstance(item, dict) else item
-        if not isinstance(value, str):
-            continue
         if kind == 'A':
-            try:
-                value = str(ipaddress.IPv4Address(value))
-            except ipaddress.AddressValueError:
+            addresses = value if isinstance(value, list) else [value]
+            value = next((str(ipaddress.IPv4Address(address)) for address in addresses
+                          if isinstance(address, str) and _valid_ipv4(address)), None)
+            if value is None:
                 continue
         else:
+            if not isinstance(value, str):
+                continue
             value = value.lower().removesuffix('.')
             labels = value.split('.')
             if len(value) > 253 or len(labels) < 2 or any(not _HOST_LABEL.fullmatch(label) for label in labels):
                 continue
         return {'type': kind, 'name': hostname, 'value': value}
+    return None
+
+
+def _valid_ipv4(value: str) -> bool:
+    try:
+        ipaddress.IPv4Address(value)
+        return True
+    except ipaddress.AddressValueError:
+        return False
+
+
+def provider_txt_challenge(hostname: str, provider_domain: Mapping[str, Any]) -> dict | None:
+    """Return one bounded Vercel TXT challenge for this hostname or its apex."""
+    apex = provider_domain.get('apexName')
+    if not isinstance(apex, str):
+        return None
+    try:
+        apex = normalize_hostname(apex)
+    except TrialValidationError:
+        return None
+    if hostname != apex and not hostname.endswith('.' + apex):
+        return None
+    records = provider_domain.get('verification')
+    if not isinstance(records, list):
+        return None
+    for record in records[:8]:
+        if not isinstance(record, dict) or record.get('type') != 'TXT':
+            continue
+        name, value = record.get('domain'), record.get('value')
+        if not isinstance(name, str) or not isinstance(value, str):
+            continue
+        name = name.lower().removesuffix('.')
+        labels = name.split('.')
+        if (len(name) > 253 or len(labels) < 2
+                or any(not re.fullmatch(r'[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?', label) for label in labels)
+                or not (name == hostname or name.endswith('.' + hostname)
+                        or name == apex or name.endswith('.' + apex))
+                or not 1 <= len(value) <= 512 or any(not 32 <= ord(char) <= 126 for char in value)):
+            continue
+        return {'type': 'TXT', 'name': name, 'value': value}
     return None
 
 
@@ -290,15 +332,21 @@ class WebsiteDomainStore:
                 # tenant has proved the fresh per-claim DNS challenge.
                 domain = self.provider.add(hostname)
             if not domain['verified']:
-                domain = self.provider.verify(hostname)
-            config = self.provider.config(hostname)
-            dns = recommended_dns(hostname, domain, config)
-            if domain['verified'] and config['misconfigured'] is False:
-                verified, issue = True, ''
-            elif not domain['verified']:
+                try:
+                    domain = self.provider.verify(hostname)
+                except ProviderUnavailable as exc:
+                    if str(exc) != 'provider_conflict' or provider_txt_challenge(hostname, domain) is None:
+                        raise
+            if not domain['verified']:
+                dns = provider_txt_challenge(hostname, domain)
                 issue = 'provider_verification_pending'
             else:
-                issue = 'dns_pending'
+                config = self.provider.config(hostname)
+                dns = recommended_dns(hostname, domain, config)
+                if config['misconfigured'] is False:
+                    verified, issue = True, ''
+                else:
+                    issue = 'dns_pending'
         except ProviderUnavailable as exc:
             issue = str(exc)
         self._record(principal, str(row['binding_id']), hostname,

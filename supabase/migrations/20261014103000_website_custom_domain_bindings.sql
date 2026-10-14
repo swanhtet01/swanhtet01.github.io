@@ -102,9 +102,9 @@ begin
     or app_private.workspace_is_active(workspace) is distinct from true
     or p_issue is null or p_issue !~ '^[a-z_]{0,40}$'
     or (p_dns is not null and (jsonb_typeof(p_dns)<>'object'
-      or coalesce(p_dns->>'type','') not in ('A','CNAME')
+      or coalesce(p_dns->>'type','') not in ('A','CNAME','TXT')
       or p_dns->>'name' is null or length(p_dns->>'name') not between 4 and 253
-      or p_dns->>'value' is null or length(p_dns->>'value') not between 1 and 253)) then
+      or p_dns->>'value' is null or length(p_dns->>'value') not between 1 and 512)) then
     raise exception 'website_domain_invalid' using errcode='22023';
   end if;
   perform pg_advisory_xact_lock(hashtextextended('website-inquiry:' || workspace,0));

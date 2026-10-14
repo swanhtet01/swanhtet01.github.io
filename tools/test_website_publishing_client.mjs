@@ -38,10 +38,12 @@ try {
   assert.deepEqual(api.parseWebsiteDomainStatus({ enabled: false, domain: null }), { enabled: false, domain: null }); count++
   for (const malformed of [{ enabled: false, domain }, { enabled: true, domain: { ...domain, hostname: '../other' } },
     { enabled: true, domain: { ...domain, state: 'released' } },
-    { enabled: true, domain: { ...domain, dns: { ...domain.dns, type: 'TXT' } } },
+    { enabled: true, domain: { ...domain, dns: { ...domain.dns, type: 'MX' } } },
     { enabled: true, domain: { ...domain, verification: { ...domain.verification, type: 'CNAME' } } }]) {
     assert.throws(() => api.parseWebsiteDomainStatus(malformed)); count++
   }
+  const providerProof = { ...domainStatus, domain: { ...domain, dns: { type: 'TXT', name: '_vercel.example.test', value: 'vc-domain-verify=example.test,synthetic' } } }
+  assert.deepEqual(api.parseWebsiteDomainStatus(providerProof), providerProof); count++
   for (const malformed of [{ ...inbox, nextBefore: ['bad'] }, { ...inbox, inquiries: Array(51).fill(inbox.inquiries[0]) },
     { ...inbox, inquiries: [{ ...inbox.inquiries[0], receivedAt: 'invalid' }] }]) {
     assert.throws(() => api.parseInboxPage(malformed)); count++

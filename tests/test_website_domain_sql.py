@@ -47,9 +47,13 @@ class SyntheticVercel:
         if self.missing:
             raise ProviderUnavailable('provider_missing')
         return {'name': hostname, 'projectId': 'prj_synthetic', 'verified': self.verified,
-                'apexName': 'customer-example.org'}
+                'apexName': 'customer-example.org',
+                'verification': [] if self.verified else [{'type': 'TXT',
+                    'domain': '_vercel.customer-example.org', 'value': 'vc-domain-verify=customer-example.org,synthetic'}]}
 
     def verify(self, hostname):
+        if not self.verified:
+            raise ProviderUnavailable('provider_conflict')
         return self.get(hostname)
 
     def config(self, hostname):
@@ -230,6 +234,23 @@ class WebsiteDomainSqlTests(unittest.TestCase):
             self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['issue'], 'provider_unavailable')
             self.assertEqual(self.domains.check(FIRST, hostname=HOST)['domain']['state'], 'active')
         self.assertIsNotNone(self.domains.public_page(HOST))
+
+    def test_provider_txt_is_shown_after_own_txt_until_vercel_verifies(self):
+        channel = self.channel(FIRST)
+        self.domains.claim(FIRST, hostname=HOST, channel_id=channel)
+        self.provider.verified = False
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            pending = self.domains.check(FIRST, hostname=HOST)
+        self.assertEqual(pending['domain']['state'], 'pending')
+        self.assertEqual(pending['domain']['issue'], 'provider_verification_pending')
+        self.assertEqual(pending['domain']['dns'], {'type': 'TXT',
+            'name': '_vercel.customer-example.org', 'value': 'vc-domain-verify=customer-example.org,synthetic'})
+        self.assertIsNone(self.domains.public_page(HOST))
+        self.provider.verified = True
+        with patch('supermega_runtime.website_domain.tenant_txt_proven', return_value=True):
+            ready = self.domains.check(FIRST, hostname=HOST)
+        self.assertEqual(ready['domain']['state'], 'active')
+        self.assertEqual(ready['domain']['dns']['type'], 'CNAME')
 
     def test_cross_tenant_claim_rejected_then_release_keeps_original_inbox(self):
         first_channel, second_channel = self.channel(FIRST), self.channel(SECOND)

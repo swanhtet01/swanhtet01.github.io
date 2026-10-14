@@ -4,7 +4,7 @@ export type Publication = { channelId: string; pageId: string; sourceVersion: nu
 export type PublishSource = { version: number; snapshotId: string; artifactDigest: string }
 export type PublicationStatus = { publicOrigin: string; source: PublishSource | null; publications: Publication[] }
 export type WebsiteDomain = { hostname: string; channelId: string; state: 'pending' | 'active';
-  verification: { type: 'TXT'; name: string; value: string }; dns: { type: 'A' | 'CNAME'; name: string; value: string } | null; issue?: string }
+  verification: { type: 'TXT'; name: string; value: string }; dns: { type: 'A' | 'CNAME' | 'TXT'; name: string; value: string } | null; issue?: string }
 export type WebsiteDomainStatus = { enabled: boolean; domain: WebsiteDomain | null }
 export type InquiryOperation = 'claim' | 'release' | 'complete' | 'reopen' | 'note'
 export type InquiryWorkflow = { status: 'new' | 'in_progress' | 'done'; revision: number; assignedTo: string | null; updatedBy: string | null; updatedAt: string | null }
@@ -60,10 +60,10 @@ export function parseWebsiteDomainStatus(value: unknown): WebsiteDomainStatus {
   if (verification.type !== 'TXT') throw invalid()
   const txt = { type: 'TXT' as const, name: text(verification.name, 253), value: text(verification.value, 512) }
   const dns = domain.dns === null ? null : record(domain.dns)
-  if (dns && dns.type !== 'A' && dns.type !== 'CNAME') throw invalid()
+  if (dns && dns.type !== 'A' && dns.type !== 'CNAME' && dns.type !== 'TXT') throw invalid()
   const issue = domain.issue === undefined ? undefined : text(domain.issue, 160)
   return { enabled: true, domain: { hostname, channelId, state: domain.state, verification: txt,
-    dns: dns ? { type: dns.type as 'A' | 'CNAME', name: text(dns.name, 253), value: text(dns.value, 253) } : null,
+    dns: dns ? { type: dns.type as 'A' | 'CNAME' | 'TXT', name: text(dns.name, 253), value: text(dns.value, dns.type === 'TXT' ? 512 : 253) } : null,
     ...(issue ? { issue } : {}) } }
 }
 export function parseInboxPage(value: unknown): InboxPage {

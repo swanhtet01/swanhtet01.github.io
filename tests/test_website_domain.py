@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 
 from supermega_runtime.trial_store import TrialPrincipal, TrialValidationError
 from supermega_runtime.website_domain import (
-    ProviderUnavailable, VercelDomainProvider, normalize_hostname, recommended_dns, tenant_txt_proven,
+    ProviderUnavailable, VercelDomainProvider, normalize_hostname, provider_txt_challenge,
+    recommended_dns, tenant_txt_proven,
 )
 from supermega_runtime.website_inquiry_api import create_website_inquiry_router
 from supermega_runtime.website_public_page import render_website_inquiry_page
@@ -57,18 +58,35 @@ class HostnameTests(unittest.TestCase):
         with patch('supermega_runtime.website_domain._read_json', return_value={}):
             with self.assertRaisesRegex(ProviderUnavailable, 'provider_missing'):
                 provider.get(HOST)
-        with patch('supermega_runtime.website_domain._read_json', return_value={'misconfigured': False, 'recommendedCNAME': [{'value':'target.vercel-dns.com'}]}):
+        with patch('supermega_runtime.website_domain._read_json', return_value={'misconfigured': False, 'recommendedCNAME': [{'value':'target.vercel-dns.com'}]}) as read:
             config = provider.config(HOST)
             self.assertIs(config['misconfigured'], False)
+            self.assertIn('projectIdOrName=prj_test', read.call_args.args[0])
             self.assertEqual(recommended_dns(HOST, domain, config),
                              {'type': 'CNAME', 'name': HOST, 'value': 'target.vercel-dns.com'})
             self.assertIsNone(recommended_dns(HOST, {**domain, 'apexName': HOST}, config))
             self.assertEqual(recommended_dns(HOST, {**domain, 'apexName': HOST},
                              {'recommendedIPv4':[{'value':'192.0.2.80'}]}),
                              {'type': 'A', 'name': HOST, 'value': '192.0.2.80'})
+            self.assertEqual(recommended_dns(HOST, {**domain, 'apexName': HOST},
+                             {'recommendedIPv4':[{'rank': 2, 'value': ['192.0.2.81']},
+                                                 {'rank': 1, 'value': ['192.0.2.80']}]}),
+                             {'type': 'A', 'name': HOST, 'value': '192.0.2.80'})
         with patch('supermega_runtime.website_domain._read_json', return_value={'misconfigured': 'false'}):
             with self.assertRaises(ProviderUnavailable):
                 provider.config(HOST)
+
+    def test_provider_txt_challenge_is_scoped_to_the_claimed_domain_apex(self):
+        challenge = {'type': 'TXT', 'domain': '_vercel.customer-example.org',
+                     'value': 'vc-domain-verify=customer-example.org,synthetic'}
+        domain = {'apexName': 'customer-example.org', 'verification': [challenge]}
+        self.assertEqual(provider_txt_challenge(HOST, domain),
+                         {'type': 'TXT', 'name': challenge['domain'], 'value': challenge['value']})
+        for changed in ({**domain, 'apexName': 'other.org'},
+                        {**domain, 'verification': [{**challenge, 'domain': '_vercel.other.org'}]},
+                        {**domain, 'verification': [{**challenge, 'value': 'bad\nvalue'}]},
+                        {**domain, 'verification': [{**challenge, 'type': 'CNAME'}]}):
+            self.assertIsNone(provider_txt_challenge(HOST, changed))
 
     def test_environment_defaults_closed(self):
         with patch.dict(os.environ, {}, clear=True):

@@ -18,7 +18,7 @@ function connectionIssue(code: string | undefined): string {
   if (code === 'verification_expired') return 'The connection needs a fresh check. Check again to restore this address.'
   if (code === 'channel_unpublished') return 'Publish your website to make this address visible.'
   if (code === 'provider_cleanup_pending') return 'Removal is still pending. Retry removal.'
-  if (code === 'provider_verification_pending') return 'Hosting verification is still in progress. Check again shortly.'
+  if (code === 'provider_verification_pending') return 'Add the Vercel TXT record below, then check again.'
   if (code === 'provider_missing') return 'Hosting is not attached yet. Keep the TXT record in place, then check again.'
   if (code === 'provider_unavailable') return 'Domain checks are temporarily unavailable. Try again shortly.'
   return 'The domain is not connected yet. Check the DNS records and try again.'
@@ -74,9 +74,9 @@ export function HostedDomainAddress({ client, channelId, canWrite }: {
       {connected ? <a href={`https://${domain.hostname}/`} target="_blank" rel="noreferrer">{domain.hostname}</a> : <strong>{domain.hostname}</strong>}
       <small>{connected ? 'DNS connected. Open this address to confirm HTTPS and the contact form before sharing.' : domain.issue === 'provider_cleanup_pending' ? 'Removal is still pending.' : domain.state === 'active' ? 'Connected. Publish the website to make it visible here.' : 'Waiting for domain verification.'}</small>
       {domain.issue === 'provider_cleanup_pending' ? <p className="website-domain-pending">{connectionIssue(domain.issue)}</p> : domain.state === 'pending' ? <div className="website-domain-steps" aria-label="Domain setup records">
-        <p>First add the TXT record. Then check to see the hosting record.</p>
+        <p>Add the records shown, then check the connection.</p>
         <dl><div><dt>Ownership · TXT</dt><dd><span>{domain.verification.name}</span><code>{domain.verification.value}</code></dd></div>
-          {domain.dns ? <div><dt>Hosting · {domain.dns.type}</dt><dd><span>{domain.dns.name}</span><code>{domain.dns.value}</code></dd></div> : null}</dl>
+          {domain.dns ? <div><dt>{domain.dns.type === 'TXT' ? 'Vercel proof' : 'Hosting'} · {domain.dns.type}</dt><dd><span>{domain.dns.name}</span><code>{domain.dns.value}</code></dd></div> : null}</dl>
         {domain.issue ? <p className="website-domain-pending">{connectionIssue(domain.issue)}</p> : null}
       </div> : null}
       {canWrite ? <div className="website-hosted-actions">
