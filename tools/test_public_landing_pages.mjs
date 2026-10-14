@@ -345,8 +345,8 @@ for (const id of activeIds) {
 
 const ecommerceLanding = readStatic('ecommerce/index.html')
 for (const token of [
-  'Your team confirms each order and payment.',
-  'Arrange delivery with your customer.',
+  'Your team reviews each request, payment and delivery step.',
+  'Review customer requests in Shop before recording an order or payment.',
 ]) {
   check(ecommerceLanding.includes(token), `ecommerce_delivery_boundary:${token}`)
 }
