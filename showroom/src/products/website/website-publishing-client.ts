@@ -3,6 +3,9 @@ import { sessionForRequest, type ManagedIdentity } from '../../core/managed-tria
 export type Publication = { channelId: string; pageId: string; sourceVersion: number; enabled: boolean; artifactDigest: string; snapshotId: string; publishedAt: string }
 export type PublishSource = { version: number; snapshotId: string; artifactDigest: string }
 export type PublicationStatus = { publicOrigin: string; source: PublishSource | null; publications: Publication[] }
+export type WebsiteDomain = { hostname: string; channelId: string; state: 'pending' | 'active';
+  verification: { type: 'TXT'; name: string; value: string }; dns: { type: 'A' | 'CNAME'; name: string; value: string } | null; issue?: string }
+export type WebsiteDomainStatus = { enabled: boolean; domain: WebsiteDomain | null }
 export type InquiryOperation = 'claim' | 'release' | 'complete' | 'reopen' | 'note'
 export type InquiryWorkflow = { status: 'new' | 'in_progress' | 'done'; revision: number; assignedTo: string | null; updatedBy: string | null; updatedAt: string | null }
 export type CustomerInquiry = InquiryWorkflow & { channelId: string; requestId: string; name: string; contact: string; message: string; siteName: string; sourcePage: string; receivedAt: string; note: string }
@@ -10,6 +13,7 @@ export type InboxPage = { inquiries: CustomerInquiry[]; nextBefore: [string, str
 export type PublishingClient = ReturnType<typeof createPublishingClient>
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const digest = /^sha256:[0-9a-f]{64}$/
+const hostnamePattern = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 const invalid = () => new Error('The website response could not be verified. Refresh and try again.')
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid()
@@ -42,6 +46,25 @@ export function parsePublicationStatus(value: unknown): PublicationStatus {
       return { channelId: text(entry.channelId, 36, uuid), pageId: text(entry.pageId, 80), sourceVersion: version(entry.sourceVersion),
         enabled: entry.enabled, artifactDigest: text(entry.artifactDigest, 71, digest), snapshotId: text(entry.snapshotId, 160), publishedAt: timestamp(entry.publishedAt) }
     }) }
+}
+export function parseWebsiteDomainStatus(value: unknown): WebsiteDomainStatus {
+  const body = record(value)
+  if (typeof body.enabled !== 'boolean') throw invalid()
+  if (body.domain === null) return { enabled: body.enabled, domain: null }
+  if (!body.enabled) throw invalid()
+  const domain = record(body.domain)
+  const hostname = text(domain.hostname, 253, hostnamePattern)
+  const channelId = text(domain.channelId, 36, uuid)
+  if (domain.state !== 'pending' && domain.state !== 'active') throw invalid()
+  const verification = record(domain.verification)
+  if (verification.type !== 'TXT') throw invalid()
+  const txt = { type: 'TXT' as const, name: text(verification.name, 253), value: text(verification.value, 512) }
+  const dns = domain.dns === null ? null : record(domain.dns)
+  if (dns && dns.type !== 'A' && dns.type !== 'CNAME') throw invalid()
+  const issue = domain.issue === undefined ? undefined : text(domain.issue, 160)
+  return { enabled: true, domain: { hostname, channelId, state: domain.state, verification: txt,
+    dns: dns ? { type: dns.type as 'A' | 'CNAME', name: text(dns.name, 253), value: text(dns.value, 253) } : null,
+    ...(issue ? { issue } : {}) } }
 }
 export function parseInboxPage(value: unknown): InboxPage {
   const body = record(value)
@@ -92,7 +115,9 @@ export function createPublishingClient(identity: ManagedIdentity) {
         await response.body?.cancel()
         throw new Error(response.status === 401 || response.status === 403 ? 'Sign in to this workspace to continue.'
           : response.status === 503 ? 'Website hosting is not available for this workspace yet.'
-          : response.status === 409 ? path.startsWith('website-inbox') ? 'This inquiry changed. Refresh to see the latest update before trying again.' : 'Your saved website changed. Refresh before publishing.'
+          : response.status === 409 ? path.startsWith('website-inbox') ? 'This inquiry changed. Refresh to see the latest update before trying again.'
+            : path.startsWith('website-domains') ? 'This domain is already connected or its status changed. Refresh and check the address.'
+            : 'Your saved website changed. Refresh before publishing.'
           : 'This could not be completed. Refresh to check the latest status before trying again.')
       }
       if (!response.body || !response.headers.get('content-type')?.startsWith('application/json')) {
@@ -118,6 +143,19 @@ export function createPublishingClient(identity: ManagedIdentity) {
   }
   return {
     async status(signal: AbortSignal) { return parsePublicationStatus(await request('website-publications', signal)) },
+    async domainStatus(signal: AbortSignal) { return parseWebsiteDomainStatus(await request('website-domains', signal)) },
+    async claimDomain(hostname: string, channelId: string, signal: AbortSignal) {
+      text(hostname, 253, hostnamePattern); text(channelId, 36, uuid)
+      return parseWebsiteDomainStatus(await request('website-domains', signal, { hostname, channelId }))
+    },
+    async checkDomain(hostname: string, signal: AbortSignal) {
+      text(hostname, 253, hostnamePattern)
+      return parseWebsiteDomainStatus(await request('website-domains/check', signal, { hostname }))
+    },
+    async releaseDomain(hostname: string, signal: AbortSignal) {
+      text(hostname, 253, hostnamePattern)
+      return parseWebsiteDomainStatus(await request('website-domains/release', signal, { hostname }))
+    },
     async inbox(signal: AbortSignal, before: InboxPage['nextBefore'] = null, view: 'open' | 'done' = 'open') {
       const params = new URLSearchParams(view === 'done' ? { view } : {})
       if (before) { params.set('beforeTime', before[0]); params.set('beforeChannel', before[1]); params.set('beforeRequest', before[2]) }

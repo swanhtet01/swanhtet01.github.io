@@ -20,6 +20,10 @@ const channelId = '11111111-1111-4111-8111-111111111111'
 const source = { version: 4, snapshotId: 'snapshot-qa', artifactDigest: 'sha256:' + 'a'.repeat(64) }
 const publication = { channelId, pageId: 'home', sourceVersion: 4, enabled: true, artifactDigest: source.artifactDigest, snapshotId: source.snapshotId, publishedAt: '2026-10-10T09:00:00Z' }
 const status = { publicOrigin: 'https://sites.example.test', source, publications: [publication] }
+const domain = { hostname: 'shop.example.test', channelId, state: 'pending',
+  verification: { type: 'TXT', name: '_supermega.shop.example.test', value: 'sm-verify-synthetic' },
+  dns: { type: 'CNAME', name: 'shop.example.test', value: 'target.example.test' } }
+const domainStatus = { enabled: true, domain }
 const inbox = { inquiries: [{ channelId, requestId: channelId, name: 'Daw Su', contact: 'qa@example.test', message: 'ဈေးနှုန်း သိချင်ပါတယ်။', siteName: 'Synthetic café', sourcePage: '/', receivedAt: publication.publishedAt, status: 'new', revision: 1, assignedTo: null, updatedBy: null, updatedAt: null, note: '' }], nextBefore: null, counts: { open: 1, done: 0 } }
 const signal = () => new AbortController().signal
 const original = globalThis.fetch
@@ -29,6 +33,14 @@ try {
     { ...status, publicOrigin: 'https://sites.example.test/path' }, { ...status, source: { ...source, version: 1.5 } },
     { ...status, publications: [{ ...publication, channelId: '../escape' }] }, { ...status, publications: [{ ...publication, enabled: 'true' }] }]) {
     assert.throws(() => api.parsePublicationStatus(malformed)); count++
+  }
+  assert.deepEqual(api.parseWebsiteDomainStatus(domainStatus), domainStatus); count++
+  assert.deepEqual(api.parseWebsiteDomainStatus({ enabled: false, domain: null }), { enabled: false, domain: null }); count++
+  for (const malformed of [{ enabled: false, domain }, { enabled: true, domain: { ...domain, hostname: '../other' } },
+    { enabled: true, domain: { ...domain, state: 'released' } },
+    { enabled: true, domain: { ...domain, dns: { ...domain.dns, type: 'TXT' } } },
+    { enabled: true, domain: { ...domain, verification: { ...domain.verification, type: 'CNAME' } } }]) {
+    assert.throws(() => api.parseWebsiteDomainStatus(malformed)); count++
   }
   for (const malformed of [{ ...inbox, nextBefore: ['bad'] }, { ...inbox, inquiries: Array(51).fill(inbox.inquiries[0]) },
     { ...inbox, inquiries: [{ ...inbox.inquiries[0], receivedAt: 'invalid' }] }]) {
@@ -42,6 +54,24 @@ try {
     return Response.json(status)
   }
   assert.deepEqual(await client.status(signal()), status); count++
+  const domainCalls = []
+  globalThis.fetch = async (path, init) => {
+    domainCalls.push({ path, method: init.method, body: init.body ? JSON.parse(init.body) : null,
+      authorization: init.headers.authorization, workspace: init.headers['x-supermega-workspace-id'] })
+    return Response.json(domainStatus)
+  }
+  assert.deepEqual(await client.domainStatus(signal()), domainStatus)
+  await client.claimDomain(domain.hostname, channelId, signal())
+  await client.checkDomain(domain.hostname, signal())
+  await client.releaseDomain(domain.hostname, signal())
+  assert.deepEqual(domainCalls.map(call => [call.path, call.method, call.body]), [
+    ['/api/trial/v1/website-domains', 'GET', null],
+    ['/api/trial/v1/website-domains', 'POST', { hostname: domain.hostname, channelId }],
+    ['/api/trial/v1/website-domains/check', 'POST', { hostname: domain.hostname }],
+    ['/api/trial/v1/website-domains/release', 'POST', { hostname: domain.hostname }],
+  ])
+  assert.ok(domainCalls.every(call => call.authorization === 'Bearer synthetic-token' && call.workspace === identity.workspaceId)); count++
+  await assert.rejects(client.claimDomain('https://evil.test/path', channelId, signal())); count++
   const calls = []
   globalThis.fetch = async (path, init) => {
     calls.push({ path, body: JSON.parse(init.body), method: init.method })

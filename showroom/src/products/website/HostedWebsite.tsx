@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPublishingClient, type PublicationStatus, type PublishingClient } from './website-publishing-client'
 import { HostedInquiryInbox } from './HostedInquiryInbox'
+import { HostedDomainAddress } from './HostedDomainAddress'
 export { HostedInquiryInbox } from './HostedInquiryInbox'
 import './hosted-website.css'
 
@@ -76,11 +77,7 @@ export function HostedSitePanel({ client, snapshotId, pageId, canWrite }: {
         {siteUrl ? <a href={siteUrl} target="_blank" rel="noreferrer">{siteUrl}</a> : <strong>{status ? 'Available after publishing' : 'Waiting for hosting status'}</strong>}
         <small>{siteUrl ? 'Check before sharing. This address stays the same when you publish an update.' : 'SuperMega provides this address when your reviewed site is published.'}</small>
       </div>
-      <div className="website-hosted-address is-unavailable">
-        <span>Your own domain</span>
-        <strong>Not connected</strong>
-        <small>Custom domain setup is not available in this workspace.</small>
-      </div>
+      <HostedDomainAddress client={client} channelId={live?.channelId ?? null} canWrite={canWrite} />
     </div>
     <div className="website-hosted-actions">
       {!current && ready ? <button className={`website-button ${live ? 'is-secondary' : 'is-primary'}`} disabled={busy || uncertain || !canWrite} onClick={() => void change()} type="button">{live ? 'Publish update' : 'Publish website'}</button> : null}
