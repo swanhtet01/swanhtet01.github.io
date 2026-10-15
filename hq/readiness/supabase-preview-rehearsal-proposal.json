@@ -317,11 +317,11 @@
     },
     {
       "path": "tools/prepare_supabase_rehearsal_packet.mjs",
-      "digest": "sha256:31002bab4d340b4c2f976318e7ff840ff49665d0c6ca2e5413a16c32a1dc57d1"
+      "digest": "sha256:014804a14be661d441cba701553efa6a4750345945688d4b25e29bd5daba6a67"
     },
     {
       "path": "tools/verify_private_trial_migrations.mjs",
-      "digest": "sha256:601301f494025f4d72f245f4a33ce30f4498f1d811bb4ac4a50b6f9535d60269"
+      "digest": "sha256:ed31705daef9af7fc00bf45bf283c6a2c9778fc8db730a13172b0dc836f99a26"
     },
     {
       "path": "tools/verify_public_browser_quarantine.mjs",
@@ -333,7 +333,7 @@
     },
     {
       "path": "hq/readiness/managed-pilot-readiness.json",
-      "digest": "sha256:5642ad0e704ef2d4021a33d15e6d7320641eb4c83ffe9b968b444ad8c6ca2f76"
+      "digest": "sha256:fc988864eff6488a74b3fe0435a12d2ea59bcd41650e99e26da208a56b70d193"
     },
     {
       "path": "hq/readiness/github-main-protection-proposal.json",
@@ -344,5 +344,5 @@
       "digest": "sha256:5c1e1c1e220467b0731911a5a7ed7bbca18023c7f62f040393f9868ea79a2981"
     }
   ],
-  "digest": "sha256:1e451db773db0ddc3ffff4438c8d0df61993870f8201c32b3affb448b7caa283"
+  "digest": "sha256:204dbbf30b76e572f9aa9fdd7a9b483f15265dcdd213adda67f2a40169b84523"
 }
