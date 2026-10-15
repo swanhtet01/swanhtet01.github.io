@@ -44,26 +44,26 @@ function fixture(overrides = {}) {
   return { element, nodes, submitted, draft: () => draft, markup: () => renderToStaticMarkup(element) }
 }
 
-test('one form expression serves both protected unprovisioned setup paths', () => {
+test('managed first-product setup keeps one form inside the unprovisioned boundary', () => {
   assert.equal((source.match(/const catalogForm =/g) || []).length, 1)
   assert.ok(source.includes('if (unprovisioned) {\n      const catalogForm') || source.includes('if (unprovisioned) {\r\n      const catalogForm'))
-  assert.ok(source.includes('<summary>Start with one item instead</summary>'))
-  assert.match(source, /\{catalogForm\}\s*<\/details> : catalogForm\}/)
-  assert.equal((source.match(/<form className="core-form compact-form" onSubmit=\{\(formEvent\) => void initializeManagedCatalog\(formEvent\)\}/g) || []).length, 1)
+  assert.ok(source.includes('<h2>Add your first product</h2>'))
+  assert.match(source, /\{catalogForm\}\s*\{managedTemplate \? <details/)
+  assert.equal((source.match(/<form className="core-form compact-form shop-first-product-form" onSubmit=\{\(formEvent\) => void initializeManagedCatalog\(formEvent\)\}/g) || []).length, 1)
 })
 
-test('all seven required fields, exact updates, barcode and submit are retained', () => {
+test('first-product setup requires only core fields and preserves exact updates and barcode scanning', () => {
   const f = fixture()
   const inputs = f.nodes.filter(node => node.type === 'input')
   assert.equal(inputs.length, 7)
-  assert.ok(inputs.every(node => node.props.required))
-  const fields = ['sku', 'name', 'onHand', 'reorderAt', 'price', 'reason', 'evidenceReference']
+  assert.deepEqual(inputs.map(node => Boolean(node.props.required)), [false, true, true, true, false, false, false])
+  const fields = ['sku', 'name', 'price', 'onHand', 'reorderAt', 'reason', 'evidenceReference']
   inputs.forEach((node, index) => node.props.onChange({ target: { value: `changed-${index}` } }))
   fields.forEach((key, index) => assert.equal(f.draft()[key], `changed-${index}`))
   assert.equal(inputs[0].props.maxLength, 80)
-  assert.equal(inputs[2].props.min, '0')
+  assert.equal(inputs[2].props.min, '1')
   assert.equal(inputs[3].props.min, '0')
-  assert.equal(inputs[4].props.min, '1')
+  assert.equal(inputs[4].props.min, '0')
   assert.ok(inputs.slice(2, 5).every(node => node.props.step === '1' && node.props.type === 'number'))
   f.nodes.find(node => node.props.onDetected).props.onDetected('SCANNED')
   assert.equal(f.draft().sku, 'SCANNED')
@@ -73,12 +73,12 @@ test('all seven required fields, exact updates, barcode and submit are retained'
   assert.match(f.markup(), /Workspace settings/)
 })
 
-test('busy state and error precedence stay visible without changing authority', () => {
+test('busy state and error precedence stay visible', () => {
   const busy = fixture({ catalogBusy: true, catalogError: 'Review failed', commerceStorageError: 'Storage failed' })
   assert.equal(busy.nodes.find(node => node.props.type === 'submit').props.disabled, true)
-  assert.match(busy.markup(), /Creating…/)
+  assert.match(busy.markup(), /Saving…/)
   assert.match(busy.markup(), /Review failed/)
   assert.doesNotMatch(busy.markup(), /Storage failed/)
   assert.match(fixture({ commerceStorageError: 'Storage failed' }).markup(), /Storage failed/)
-  assert.match(fixture().markup(), /The company account records this setup/)
+  assert.match(fixture().markup(), /Blank notes are recorded as owner-entered and not independently verified/)
 })
