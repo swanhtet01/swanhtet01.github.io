@@ -57,6 +57,7 @@ function argValue(name, fallback = '') {
 const outFile = argValue('--out')
 const screenshotDir = argValue('--screenshot-dir')
 const expectedHead = argValue('--expected-head')
+const authOnly = args.includes('--auth-only')
 const shopOnly = args.includes('--shop-only')
 const shopAccountingOnly = args.includes('--shop-accounting-only')
 const shopOfflineOnly = args.includes('--shop-offline-only')
@@ -65,7 +66,8 @@ const storeToShopOnly = args.includes('--store-to-shop-only')
 const sitesOnly = args.includes('--sites-only')
 const explicitChromium = argValue('--chromium', process.env.CHROMIUM_BIN || '')
 const verifierPath = fileURLToPath(import.meta.url)
-const proofScope = shopOnly ? 'shop-counter'
+const proofScope = authOnly ? 'auth-entry'
+  : shopOnly ? 'shop-counter'
   : shopAccountingOnly ? 'shop-accounting-export'
     : shopOfflineOnly ? 'shop-offline-restore'
       : ecommerceClaimOnly ? 'ecommerce-claim'
@@ -721,19 +723,16 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
   let state = null
   while (Date.now() < deadline) {
     state = await evalInPage(cdp, sessionId, `(() => {
-      const recommendation = document.querySelector('section[aria-label="Recommended next"]');
-      const action = recommendation?.querySelector('a.shop-decision-action');
-      const guidance = [...(recommendation?.querySelectorAll('.shop-next-focus-guidance > div') || [])].map((entry) => ({
-        label: entry.querySelector('span')?.textContent?.trim() || '',
-        value: entry.querySelector('p')?.textContent?.trim() || '',
-      }));
+      const recommendation = document.querySelector('section[aria-label="Quick tasks"]');
+      const action = recommendation?.querySelector('.shop-task-list > a');
+      const taskDetail = action?.querySelector('small')?.textContent?.trim() || '';
+      const ownerDescription = action?.getAttribute('aria-description')?.trim() || '';
       const operatingView = document.querySelector('section[aria-label="Shop operating view"]');
       const rail = operatingView?.querySelector('.shop-operations-rail');
-      const priorities = [...(rail?.querySelectorAll('a[data-priority-id]') || [])].map((entry) => ({
-        id: entry.getAttribute('data-priority-id') || '',
+      const tasks = [...(rail?.querySelectorAll('.shop-task-list > a') || [])].map((entry) => ({
         target: entry.getAttribute('href') || '',
         named: Boolean(entry.textContent?.trim()),
-        hasNext: [...entry.querySelectorAll('small')].some((small) => small.textContent?.trim().startsWith('Next:')),
+        hasAction: Boolean(entry.querySelector('b')?.textContent?.trim()),
       }));
       const queues = [...(operatingView?.querySelectorAll('article[aria-label="Order queue"],article[aria-label="Product list"]') || [])].map((entry) => ({
         name: entry.querySelector('header strong')?.textContent?.trim() || '',
@@ -756,14 +755,15 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
         .filter((text) => /Local Batch review stays off|Open a demo|Start trial|Working sample/i.test(text));
       return {
         ariaLabel: recommendation?.getAttribute('aria-label') || '',
-        track: recommendation?.getAttribute('data-track') || '',
-        recommendation: recommendation?.querySelector('h3')?.textContent?.trim() || '',
+        track: operatingView?.getAttribute('data-track') || '',
+        recommendation: action?.querySelector('strong')?.textContent?.trim() || '',
         action: action ? { label: action.textContent?.trim() || '', target: action.getAttribute('href') || '' } : null,
-        guidance,
-        priorities,
+        taskDetail,
+        ownerDescription,
+        tasks,
         railPresent: Boolean(rail),
         queues,
-        advanced: advanced ? { present: true, open: advanced.open, label: advanced.querySelector('summary strong')?.textContent?.trim() || '' } : null,
+        advanced: advanced ? { present: true, open: advanced.open, label: advanced.querySelector('summary strong')?.textContent?.trim() || '', status: advanced.querySelector('summary b')?.textContent?.trim() || '' } : null,
         visibleForbidden,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
@@ -784,15 +784,17 @@ async function exerciseShopDecisionDesk(cdp, sessionId, mobile, sourceControlled
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
   const checks = {
-    deskPresent: state?.ariaLabel === 'Recommended next',
+    deskPresent: state?.ariaLabel === 'Quick tasks',
     recommendationPresent: Boolean(state?.recommendation),
     primaryActionPresent: Boolean(state?.action?.label && state?.action?.target),
-    reasonPresent: state?.guidance?.some((entry) => entry.label === 'Why now' && entry.value),
-    ownerCheckPresent: state?.guidance?.some((entry) => entry.label === 'Owner check' && entry.value),
+    reasonPresent: Boolean(state?.taskDetail),
+    ownerCheckPresent: Boolean(state?.ownerDescription),
     attentionRailPresent: state?.railPresent === true,
-    priorityEvidenceComplete: !state?.priorities?.length || state.priorities.every((entry) => entry.id && entry.target && entry.named && entry.hasNext),
+    quickTasksComplete: Boolean(state?.tasks?.length) && state.tasks.every((entry) => entry.target && entry.named && entry.hasAction),
+    advancedStatusVisible: Boolean(state?.advanced?.present && state.advanced.label),
     twoQueuesPresent: state?.queues?.length === 2 && state.queues.every((entry) => entry.name && entry.target && entry.status),
     advancedClosedByDefault: state?.advanced?.present === true && state?.advanced?.open === false && state?.advanced?.label === 'Advanced controls',
+    advancedStatusVisible: Boolean(state?.advanced?.status),
     retiredCopyAbsent: state?.visibleForbidden?.length === 0,
     accessible: state?.accessibility?.ok === true,
     noHorizontalOverflow: Number(state?.documentScrollWidth || 0) <= Number(state?.viewportWidth || 0) + 1,
@@ -848,8 +850,8 @@ async function exerciseShopAccountingExport(cdp, sessionId, browserContextId) {
       return {
         visible,
         label,
-        businessDate: panel.querySelector('strong')?.textContent?.replace(/^Daily close · /, '').trim() || '',
-        mappingReviewed: panel.textContent?.includes('Mapping reviewed') || false,
+        businessDate: panel.textContent?.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || '',
+        mappingReviewed: panel.textContent?.includes('Mapped') || false,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
         documentScrollWidth: document.documentElement?.scrollWidth || 0,
@@ -876,7 +878,7 @@ async function exerciseShopAccountingExport(cdp, sessionId, browserContextId) {
     const file = relative(screenshotDir, downloadPath).replaceAll('\\', '/')
     const checks = {
       controlVisible: control.visible === true,
-      controlNamed: control.label === 'Download accountant CSV',
+      controlNamed: control.label === 'Export',
       mappingReviewed: control.mappingReviewed === true,
       filenameBounded: filename.startsWith(`supermega-shop-accounting-${control.businessDate}-`),
       bomPresent: payload.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])),
@@ -2084,7 +2086,7 @@ const tests = [
     ...viewport,
     expectedPath: '/shop/?tab=today',
     // innerText reflects the visual text-transform contract for these operator labels.
-    expectedText: ['Today', 'QUICK TASK', 'Products', 'Order queue', 'Advanced controls'],
+    expectedText: ['Today', 'Quick tasks', 'Products', 'Order queue', 'Advanced controls'],
     absentText: ['Local Batch review stays off', 'Open a demo', 'Start trial'],
     exerciseShopDecisionDesk: true,
     isolatedBrowserContext: true,
@@ -2099,7 +2101,7 @@ const tests = [
     width: 1280,
     height: 900,
     expectedPath: '/shop/?tab=today',
-    expectedText: ['Today', 'Download accountant CSV', 'Daily close', 'MAPPING REVIEWED'],
+    expectedText: ['Today', 'Export', 'Accountant CSV', 'UNMAPPED'],
     absentText: ['Open a demo', 'Start trial'],
     exerciseShopAccountingExport: true,
     isolatedBrowserContext: true,
@@ -2285,13 +2287,18 @@ export function unauthenticatedEntryContract(testCase, index = 1) {
     initialExpectedPath: expectedPath,
     expectedText: ['Login', 'Login is currently unavailable.'],
     initialExpectedText: ['Login', 'Login is currently unavailable.'],
+    requireLauncherProducts: true,
+    expectedLauncherProducts: [],
     absentText: [...new Set([...(testCase.absentText || []), ...protectedCopy])],
     seed: testCase.seed,
   }
 }
 
 async function main() {
-  if ([shopOnly, shopAccountingOnly, shopOfflineOnly, ecommerceClaimOnly, storeToShopOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
+  if ([authOnly, shopOnly, shopAccountingOnly, shopOfflineOnly, ecommerceClaimOnly, storeToShopOnly, sitesOnly].filter(Boolean).length > 1) throw new Error('app_entry_rendered_scope_conflict')
+  // Product routes require an authenticated, isolated workspace. A login redirect
+  // is useful access-gate evidence, but it cannot stand in for product captures.
+  if (!authOnly) throw new Error('app_entry_rendered_product_capture_requires_authenticated_context')
   if (!existsSync(join(distDir, 'index.html'))) throw new Error(`Missing build at ${distDir}; run npm run app:build first.`)
   if (!outFile || !screenshotDir) throw new Error('app_entry_rendered_evidence_paths_required')
   const evidence = buildEvidenceDescriptor({ evidenceDir: screenshotDir, outputPath: outFile })

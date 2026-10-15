@@ -35,6 +35,29 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+const publicGalleryProvenance = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
+const publicGalleryAssetNames = [
+  'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
+  'actual-sites-editor.png', 'actual-sites-inquiries.png',
+  'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
+]
+assert(publicGalleryProvenance.schemaVersion === 'supermega.public-gallery-provenance.v1', 'public_gallery_provenance_schema_unsupported')
+assert(publicGalleryProvenance.status === 'illustrative_only' && publicGalleryProvenance.records === 'synthetic', 'public_gallery_provenance_status_invalid')
+assert(publicGalleryProvenance.captureSourceCommit === null && publicGalleryProvenance.captureSourceTree === null
+  && publicGalleryProvenance.capturedAt === null, 'illustrative_public_gallery_must_not_claim_capture_provenance')
+assert(publicGalleryProvenance.assets?.map(asset => asset.file).join(',') === publicGalleryAssetNames.join(','), 'public_gallery_asset_set_changed')
+const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.assets.map(async ({ file, width, height, sha256 }) => {
+  const bytes = await readFile(resolve(root, 'tools', 'public-assets', file))
+  assert(bytes.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), `public_gallery_asset_not_png:${file}`)
+  assert(Number.isInteger(width) && Number.isInteger(height) && width >= 1000 && height >= 700,
+    `public_gallery_asset_dimensions_invalid:${file}`)
+  assert(bytes.readUInt32BE(16) === width && bytes.readUInt32BE(20) === height,
+    `public_gallery_asset_dimensions_mismatch:${file}`)
+  assert(/^[0-9a-f]{64}$/.test(sha256) && createHash('sha256').update(bytes).digest('hex') === sha256,
+    `public_gallery_asset_digest_mismatch:${file}`)
+  return { file, width, height, sha256 }
+}))
+
 assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
 assert(manifest.brand?.version && manifest.contextVersion && manifest.catalogVersion, 'site_manifest_versions_missing')
 assert(manifest.customerProducts?.map((product) => product.id).join(',') === 'shop,plant,website,ecommerce', 'site_manifest_customer_product_order_changed')
@@ -101,6 +124,15 @@ const release = {
   contextVersion: manifest.contextVersion,
   catalogVersion: manifest.catalogVersion,
   generatedAt: new Date().toISOString(),
+  publicGalleryEvidence: {
+    schemaVersion: publicGalleryProvenance.schemaVersion,
+    status: publicGalleryProvenance.status,
+    records: publicGalleryProvenance.records,
+    captureSourceCommit: publicGalleryProvenance.captureSourceCommit,
+    captureSourceTree: publicGalleryProvenance.captureSourceTree,
+    capturedAt: publicGalleryProvenance.capturedAt,
+    assets: publicGalleryAssetEvidence,
+  },
 }
 
 const previewAppBinding = parsePreviewAppBinding(
@@ -253,8 +285,9 @@ const sharedStyle = `
   .contact-page .contact-layout { display: block; }
   .contact-page .contact-form { width:100%; padding: 30px; gap: 22px; border-color: #e1dfed; border-radius: 22px; box-shadow: 0 24px 70px rgba(28,26,48,.07); }
   .contact-page .field-grid { gap: 22px 16px; }
-  .contact-page .field-grid label { gap: 9px; color: var(--ink); font-size: 13px; font-weight: 650; }
-  .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { min-height: 52px; border-color: #dedce9; border-radius: 12px; background: #fff; font-size: 15px; }
+  .contact-page .field-grid label { display: block; color: var(--ink); font-size: 13px; font-weight: 650; }
+  .contact-page .field-grid label span[lang="my"] { color: var(--muted); font-weight: 500; }
+  .contact-page .field-grid input, .contact-page .field-grid select, .contact-page .field-grid textarea { display: block; margin-top: 9px; min-height: 52px; border-color: #dedce9; border-radius: 12px; background: #fff; font-size: 15px; }
   .contact-page .field-grid textarea { min-height: 136px; line-height: 1.55; }
   .contact-page .contact-form .button { min-height: 52px; justify-self: start; padding-inline: 26px; }
   .contact-page .contact-copy summary { cursor: pointer; min-height: 44px; align-content: center; color: var(--muted); }
@@ -453,7 +486,6 @@ const sharedStyle = `
   .story-link:hover, .story-link:focus-visible {text-decoration:underline;text-underline-offset:4px}
   .story-link span {font-size:14px;transition:transform .18s ease}
   .story-link:hover span, .story-link:focus-visible span {transform:translateX(3px)}
-  .platform-image img[width="940"] {max-width:940px}
   .platform-note {padding:36px 0 80px;max-width:700px;font-size:24px;line-height:1.5;letter-spacing:-.025em}
   .product-cards {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:0 0 76px}
   .product-card-compact {min-width:0;display:flex;flex-direction:column;padding:14px;border:1px solid var(--line-strong);border-radius:24px;background:var(--panel-solid);box-shadow:0 18px 60px rgba(28,26,48,.06)}
@@ -577,7 +609,7 @@ assert(typeof homePage.title === 'string' && homePage.title.includes('SuperMega'
 assert(typeof homePage.description === 'string' && homePage.description.length >= 40, 'home_page_description_invalid')
 
 const stories = {
- shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['actual-shop-today.png','Shop operating view showing fulfilment priorities, stock alerts and money awaiting collection','Today and priorities'],['actual-shop-sell.png','Shop counter showing product search, a live sale and local payment choices','Counter and payment'],['actual-shop-orders.png','Shop order queue showing payment handoff, the next action and queue health','Orders and fulfilment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
+ shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['actual-shop-today.png','Shop operating view showing fulfilment priorities, stock alerts and money awaiting collection','Today and priorities'],['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale','Counter catalog and sale setup'],['actual-shop-orders.png','Shop order queue showing payment handoff, the next action and queue health','Orders and fulfilment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
  website: {title:'Publish clearly. Capture every inquiry.', body:'Manage pages, readiness checks and customer inquiries without assembling a separate toolchain.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and publish'],['Result','Qualified inquiries in one inbox']]},
  ecommerce: {title:'Take the order through delivery.', body:'Connect the catalog, customer request, payment review and fulfilment follow-through. Your team confirms each order and payment. Arrange delivery with your customer.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Customer request and Shop review',1280,900]], proof:[['Record','Catalog, customer and order'],['Action','Confirm, pack and dispatch'],['Result','One traceable fulfilment flow']]},
 }
@@ -598,31 +630,21 @@ const productOutcomes = {
   ['Handle the next exception', 'See which request needs attention first. Review payment issues, expiring quotes and refunds from the same workflow.'],
  ],
 }
-const interfaceCaptureDates = {
- 'actual-shop-today.png': '2 Oct 2026',
- 'actual-shop-sell.png': '2 Oct 2026',
- 'actual-shop-orders.png': '2 Oct 2026',
- 'actual-shop-stock.png': '2 Oct 2026',
- 'actual-sites-editor.png': '4 Oct 2026',
- 'actual-sites-inquiries.png': '4 Oct 2026',
- 'actual-sites-pages.png': '2 Oct 2026',
- 'actual-sites-setup.png': '2 Oct 2026',
- 'actual-commerce-catalog.png': '2 Oct 2026',
- 'actual-commerce-order-request.png': '4 Oct 2026',
-}
 function interfaceDisclosure(image) {
- const capturedAt=interfaceCaptureDates[image]
- assert(typeof capturedAt === 'string', `interface_capture_date_missing:${image}`)
- return `App capture · synthetic example records · captured ${capturedAt}`
+ assert(publicGalleryAssetNames.includes(image), `interface_gallery_asset_unverified:${image}`)
+ return 'Illustrative app view · synthetic example records'
+}
+function productGallery(id,label,eagerFirst=false) {
+ const item=stories[id]
+ const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${eagerFirst && index === 0 ? 'eager' : 'lazy'}"${eagerFirst && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
+ if (item.screens.length === 1) return `<div class="platform-gallery" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
+ return `<div class="platform-gallery" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
 }
 function productStory(id, standalone = false) {
  const item=stories[id], label=publicProducts.find(product=>product.id===id).name
  const route=manifest.pages.find(page=>page.productId===id)?.route
  assert(typeof route === 'string' && /^\/[a-z]+\/$/.test(route), `public_product_route_missing:${id}`)
- const gallery=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${standalone && index === 0 ? 'eager' : 'lazy'}"${standalone && index === 0 ? ' fetchpriority="high"' : ''} /><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
- const galleryHtml=item.screens.length === 1
-  ? `<div class="platform-gallery" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${gallery}</div></div>`
-  : `<div class="platform-gallery" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${gallery}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
+ const galleryHtml=productGallery(id,label,standalone)
   return `<section class="product-story" id="${id}">${standalone ? '' : `<div class="story-heading"><div><a class="eyebrow story-link" href="${escapeHtml(route)}">${label}<span aria-hidden="true">&rarr;</span></a><h2>${item.title}</h2></div><p>${item.body}</p></div>`}${galleryHtml}<ol class="product-proof" aria-label="${label} operating flow">${item.proof.map(([stage, value])=>`<li><span>${escapeHtml(stage)}</span><strong>${escapeHtml(value)}</strong></li>`).join('')}</ol><ul class="feature-line">${productOutcomes[id].map(([title, description])=>`<li><${standalone ? 'h2' : 'h3'}>${escapeHtml(title)}</${standalone ? 'h2' : 'h3'}><p>${escapeHtml(description)}</p></li>`).join('')}</ul></section>`
 }
 function productCard(id) {
@@ -637,17 +659,22 @@ const homeHtml = documentHtml({route:'/',title:homePage.title,description:homePa
  content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega platform</span><h1>Run the business.<br>Without the busywork.</h1><p class="lede">Run in-store sales, your website and online orders from one clear platform.</p></section><div class="product-cards" id="products">${['shop','website','ecommerce'].map(id => productCard(id)).join('')}</div><section class="home-contact" aria-labelledby="home-contact-title"><div><h2 id="home-contact-title">Not sure where to start?</h2><p>Tell us how your business works today. We’ll help you choose the right product.</p></div><a class="button" href="/contact/">Contact SuperMega</a></section></main>`,
 })
 
+function productAction(product) {
+ if (product.status !== 'available-in-app') return ''
+ return `<section class="home-contact product-action" aria-labelledby="product-action-title"><div><h2 id="product-action-title">Need help with ${escapeHtml(product.name)}?</h2><p>Tell us what your business needs.</p></div><a class="button" href="/contact/?product=${escapeHtml(product.id)}">Contact SuperMega</a></section>`
+}
+
 function productLandingHtml(product,page) {
  const description=page.description||product.description
  const storyBody=escapeHtml(stories[product.id].body)
  return documentHtml({route:page.route,title:page.title,description,shareImage:`/og-card-${product.id}.png`,
  schema:{'@type':'Product',name:product.name,description,url:canonical(page.route)},
- content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}<p class="platform-note">Part of the SuperMega platform.</p></main>${stories[product.id].screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`})
+ content:`<main class="frame" id="content"><section class="editorial-hero"><span class="eyebrow">SuperMega / ${escapeHtml(product.name)}</span><h1>${stories[product.id].title}</h1><p class="lede">${storyBody}</p></section>${productStory(product.id, true)}${productAction(product)}<p class="platform-note">Part of the SuperMega platform.</p></main>${stories[product.id].screens.length > 1 ? '<script src="/platform-carousel.js" defer></script>' : ''}`})
 }
 
 const contactScript = `<script>(function(){
   var form=document.querySelector('[data-contact-form]');if(!form)return;
-  var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),copyHeading=document.querySelector('[data-contact-copy-heading]'),copy=document.querySelector('[data-contact-copy]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]'),proofSummary=document.querySelector('[data-trial-proof]');
+  var query=new URLSearchParams(location.search),handoff=new URLSearchParams(location.hash.slice(1)),status=form.querySelector('[data-form-status]'),submit=form.querySelector('button[type="submit"]'),product=form.querySelector('[name="product"]'),template=form.querySelector('[name="template"]'),company=form.querySelector('[name="company"]'),goal=form.querySelector('[name="goal"]'),heading=document.querySelector('[data-contact-heading]'),lede=document.querySelector('[data-contact-lede]'),requestKey=form.querySelector('[name="idempotency_key"]'),source=form.querySelector('[name="source_url"]'),referrer=form.querySelector('[name="referrer"]'),proofSummary=document.querySelector('[data-trial-proof]');
   var contextProofNames=['proof_context_contract','proof_context_digest','proof_context_outcome_digest','proof_context_approved','proof_context_raw_records'],proofNames=['proof_contract','proof_version','proof_digest','proof_product','proof_template','proof_readiness','proof_sources','proof_behavior','proof_decisions','proof_outcome','proof_outcome_digest','proof_outcome_accepted','proof_raw_records'].concat(contextProofNames);
   function newKey(){if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();var bytes=new Uint8Array(24);crypto.getRandomValues(bytes);return Array.from(bytes,function(value){return value.toString(16).padStart(2,'0')}).join('')}
   function boundedInteger(value,max){return /^(?:0|[1-9][0-9]{0,6})$/.test(value)&&Number(value)<=max}
@@ -676,47 +703,37 @@ const contactScript = `<script>(function(){
     if(!proof)return;
     if(proof.proof_product===(product&&product.value||'')&&proof.proof_template===(template&&template.value.trim().toLowerCase()||''))return;
     proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;
-    if(copyHeading)copyHeading.textContent='Your brief is ready to review.';if(copy)copy.textContent='Only the company and goal remain attached. The attached summary was removed because the product or template changed.';status.textContent='Attached summary removed. Review the updated request before sending.';
+    status.textContent='Attached context removed because the product changed.';
   }
-  function updateBriefHint(){
-    if(!goal)return;
-    var hints={
-      website:'Tell us about your business and what you want visitors to do.',
-      ecommerce:'What do you sell, and how should customers place orders?',
-      shop:'What do you sell, and what should run more smoothly each day?',
-      guide:'Tell us what your business does and what you need help with.'
-    };
-    goal.placeholder=hints[product&&product.value]||hints.guide;
+  function updateServiceSummary(){
+    if(!heading)return;
+    var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];
+    heading.textContent=serviceName?'Ask us about '+serviceName+'.':'Tell us what you need.';
   }
-   function updateServiceSummary(){var serviceName=product&&({website:'Sites',ecommerce:'Commerce',shop:'Shop'})[product.value];if(heading&&handoff.toString())heading.textContent='Finish your '+(serviceName||'contact')+' request.';}
-   updateServiceSummary();
-   updateBriefHint();
-   if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateBriefHint();updateServiceSummary()});
+  updateServiceSummary();
+  if(product)product.addEventListener('change',function(){if(template)template.value='';detachProofIfChanged();updateServiceSummary()});
   if(template)template.addEventListener('input',detachProofIfChanged);
   if(handoff.toString()){
-    var productName=product&&({guide:'contact',shop:'Shop',website:'Sites',ecommerce:'Commerce'})[product.value]||'contact';
-    if(heading)heading.textContent='Finish your '+productName+' request.';
-    if(lede)lede.textContent='Add your contact details, review your brief, and send.';
-    if(copyHeading)copyHeading.textContent=proof?'Your request summary is attached.':'Your brief is ready to review.';
-    if(copy)copy.textContent=proof?'An aggregate summary is attached. Raw business records and account details are not included.':'Your brief will be sent with your contact details.';
-    status.textContent=proof?'Request summary attached for review. Nothing has been sent.':proofResult.attempted?'Your brief is ready. The attachment did not match this request and was left out.':'Your brief is ready. Nothing has been sent.';
+    if(lede)lede.textContent='Tell us about your business or question. English and Burmese are both welcome.';
+    if(proof)status.textContent='Helpful context attached. Nothing has been sent.';
+    else if(proofResult.attempted)status.textContent='Attached context could not be verified and was left out.';
     history.replaceState(null,'',location.pathname+location.search);
   }
   var unconfirmedPayload=null,submittedFields=null;
   function warnUnconfirmedNavigation(event){if(unconfirmedPayload){event.preventDefault();event.returnValue=true;}}
   form.addEventListener('submit',async function(event){
-    event.preventDefault();if(submit.disabled)return;if(heading&&heading.textContent==='Request received.'){heading.textContent='Send another request.';if(lede)lede.textContent='Previous request — '+lede.textContent;submit.textContent='Request setup';}status.textContent='Sending...';submit.disabled=true;var deadline;
+    event.preventDefault();if(submit.disabled)return;if(heading&&heading.textContent==='Message sent.'){heading.textContent='Send another message.';if(lede)lede.textContent='Previous message — '+lede.textContent;submit.textContent='Send message';}status.textContent='Sending...';submit.disabled=true;var deadline;
     try{
       if(!requestKey.value)requestKey.value=newKey();source.value=location.href;referrer.value=document.referrer||'';
       if(!unconfirmedPayload){submittedFields=JSON.stringify(Object.fromEntries(new FormData(form).entries()));unconfirmedPayload=submittedFields;}
       var payload=unconfirmedPayload;
       window.addEventListener('beforeunload',warnUnconfirmedNavigation);
-      status.textContent='Sending... Keep this page open until receipt is confirmed.';
+      status.textContent='Sending... ';
       var controller=new AbortController();
       var pending=fetch('/api/contact-submissions',{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-idempotency-key':requestKey.value},body:payload,signal:controller.signal}).then(async function(response){return {response:response,body:await response.json().catch(function(){return null})}});
       var result=await Promise.race([pending,new Promise(function(resolve,reject){deadline=setTimeout(function(){reject(new Error('receipt_unconfirmed'));controller.abort()},20000)})]);
-var response=result.response,body=result.body;if(!response.ok){if(response.status===400&&body&&body.status==='error'&&['invalid_request','required_fields_missing','product_not_supported','trial_proof_invalid','idempotency_key_required'].includes(body.reason)){unconfirmedPayload=null;submittedFields=null;requestKey.value='';status.textContent=body.reason==='trial_proof_invalid'?'The attached request summary is invalid. Your brief is still here. Reopen the request from SuperMega without the invalid summary.':'This brief was rejected before delivery. Your details are still here. Check the required fields and product, then submit your corrected brief.';return;}throw new Error(body&&body.reason||'send_failed');}if(!body||body.status!=='ready'||typeof body.request_id!=='string'||!/^LEAD-[0-9A-F]{16}$/.test(body.request_id)||typeof body.proof_bound!=='boolean')throw new Error('receipt_unconfirmed');var edited=JSON.stringify(Object.fromEntries(new FormData(form).entries()))!==submittedFields;if(!edited){form.reset();proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;updateBriefHint();updateServiceSummary();if(heading)heading.textContent='Request received.';if(lede)lede.textContent='Reference: '+body.request_id+'. Keep this for follow-up.';if(copyHeading)copyHeading.textContent='What to include';if(copy)copy.textContent='Include your products or services, location and contact details.';submit.textContent='Send another request';}requestKey.value='';unconfirmedPayload=null;submittedFields=null;status.textContent='Request received: '+body.request_id+'. Keep this reference. Next: review of scope, price and timing.'+(edited?' Your later edits are still here and have not been sent. Submit them separately if needed.':'');
-    }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'The attached request summary changed or does not match this request. Open the request again from SuperMega.':'We could not confirm receipt. Your details are still here. Please try again; the same request reference will be reused.';if(unconfirmedPayload)status.textContent+=' Retry sends the original brief, not later edits. Later edits stay here until the original receipt is confirmed. Keep this page open and retry here; reloading or closing it loses this retry state.';}finally{clearTimeout(deadline);if(!unconfirmedPayload)window.removeEventListener('beforeunload',warnUnconfirmedNavigation);submit.disabled=false;}
+var response=result.response,body=result.body;if(!response.ok){if(response.status===400&&body&&body.status==='error'&&['invalid_request','required_fields_missing','product_not_supported','trial_proof_invalid','idempotency_key_required'].includes(body.reason)){unconfirmedPayload=null;submittedFields=null;requestKey.value='';status.textContent=body.reason==='trial_proof_invalid'?'Attached context could not be verified. Reopen this request from SuperMega.':'Please check the form fields and try again.';return;}throw new Error(body&&body.reason||'send_failed');}if(!body||body.status!=='ready'||typeof body.request_id!=='string'||!/^LEAD-[0-9A-F]{16}$/.test(body.request_id)||typeof body.proof_bound!=='boolean')throw new Error('receipt_unconfirmed');var edited=JSON.stringify(Object.fromEntries(new FormData(form).entries()))!==submittedFields;if(!edited){form.reset();proof=null;proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(input)input.value=''});if(proofSummary)proofSummary.hidden=true;updateServiceSummary();if(heading)heading.textContent='Message sent.';if(lede)lede.textContent='Reference: '+body.request_id+'. Keep it for follow-up.';submit.textContent='Send another message';}requestKey.value='';unconfirmedPayload=null;submittedFields=null;status.textContent='Message received: '+body.request_id+'. Keep this reference if you need to follow up.'+(edited?' Later edits remain unsent. Send them separately when ready.':'');
+    }catch(error){status.textContent=error&&error.message==='rate_limited'?'Too many requests from this connection. Please wait ten minutes and try again.':error&&error.message==='trial_proof_invalid'?'Attached context could not be verified. Reopen this request from SuperMega.':'We couldn’t confirm that your message was received. Your details are still here; retry safely.';if(unconfirmedPayload)status.textContent+=' Retry checks the original message first. New edits remain unsent.';}finally{clearTimeout(deadline);if(!unconfirmedPayload)window.removeEventListener('beforeunload',warnUnconfirmedNavigation);submit.disabled=false;}
   });
 })();</script>`
 
@@ -735,7 +752,7 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what your business needs.</h1><p class="lede" data-contact-lede>A useful tool, a custom workflow, or a question. We’ll reply with a clear next step.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional)<input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">How can we help?<textarea name="goal" required maxlength="4000" placeholder="Tell us what your business does and what you would like to improve."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-note">We’ll reply by email.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame contact-page" id="content"><section class="page-hero"><span class="eyebrow">Contact SuperMega</span><h1 data-contact-heading>Tell us what you need.</h1><p class="lede" data-contact-lede>Tell us about your business or question. English and Burmese are both welcome.</p></section><section class="contact-layout"><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><div class="field-grid"><label>Name / <span lang="my">အမည်</span><input name="name" autocomplete="name" required maxlength="120" /></label><label>Email / <span lang="my">အီးမေးလ်</span><input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company (optional) / <span lang="my">လုပ်ငန်းအမည်</span><input name="company" autocomplete="organization" maxlength="180" /></label><input type="hidden" name="product" value="guide" /><input type="hidden" name="template" maxlength="120" /><label class="wide">Message / <span lang="my">မက်ဆေ့ချ်</span><textarea name="goal" required maxlength="4000" placeholder="Share a few details about your request."></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="trial_claim_code" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send message</button><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({

@@ -37,6 +37,8 @@ schema = app.openapi()
 required = {
     '/api/trial/v1/bootstrap': 'get',
     '/api/trial/v1/commands': 'post',
+    '/api/trial/v1/website-media': 'post',
+    '/api/trial/v1/website-media/{asset_id}': 'get',
     '/api/trial/v1/website-reviews/{review_id}': 'get',
     '/api/trial/v1/website-reviews/{review_id}/acceptance': 'post',
     '/api/trial/v1/ecommerce-reviews/{review_id}': 'get',
@@ -47,9 +49,17 @@ required = {
 for path, method in required.items():
     assert method in schema['paths'][path], path
 modules = [m for name, m in sys.modules.items() if name == 'supermega_runtime' or name.startswith('supermega_runtime.')]
-for module in modules:
+startup_count = len(modules)
+# Publishing routes are present but unavailable without explicit trusted hosting configuration.
+assert 'get' in schema['paths']['/api/public/sites/{channel_id}/media/{asset_id}']
+assert 'post' in schema['paths']['/api/public/sites/{channel_id}/inquiries']
+assert 'post' in schema['paths']['/api/trial/v1/website-inbox/{channel_id}/{request_id}/actions']
+optional_modules = modules
+candidate_paths = {path for path in schema['paths'] if path.startswith('/sites/') or path.startswith('/api/public/sites/') or path in ('/api/trial/v1/website-publications', '/api/trial/v1/website-inbox') or path.startswith('/api/trial/v1/website-inquiry-channels') or path.startswith('/api/trial/v1/website-inbox/')}
+for module in optional_modules:
     assert pathlib.Path(module.__file__).resolve().is_relative_to(bundle)
-print(json.dumps({'ok': True, 'evidence': 'isolated_source_cold_import', 'runtimeModules': len(modules),
+print(json.dumps({'ok': True, 'evidence': 'isolated_source_cold_import', 'runtimeModules': startup_count,
+                  'optionalRuntimeModules': len(optional_modules) - startup_count, 'publishingRoutes': len(candidate_paths),
                   'requiredRoutes': len(required), 'dependencyPins': len(pins), 'hostedAcceptance': False, 'providerPackage': False}))
 """
 

@@ -2953,7 +2953,7 @@ async function parseError(response: Response) {
   return new ManagedTrialError(`${message}${blockers}`, { status: response.status, code })
 }
 
-async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
+export async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
   const supabase = await authClient()
   if (!supabase) throw errorAuthNotConfigured('Managed sign-in is not configured.')
   const workspaceId = normalizeWorkspaceId(currentManagedWorkspace())
@@ -2977,7 +2977,7 @@ async function sessionForRequest(expectedIdentity?: ManagedIdentity) {
   return { session: data.session, workspaceId }
 }
 
-async function authorizedRequest<T>(
+export async function authorizedRequest<T>(
   path: string,
   init: RequestInit = {},
   retry = true,

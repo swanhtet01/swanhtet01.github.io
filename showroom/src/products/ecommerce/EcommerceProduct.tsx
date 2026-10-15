@@ -33,6 +33,15 @@ import {
   type ManagedIdentity,
   type ManagedStateRecord,
 } from '../../core/managed-trial'
+import {
+  claimManagedCommercePublicRequest,
+  loadManagedCommercePublicInbox,
+  loadManagedCommercePublications,
+  publishManagedCommerceStorefront,
+  revokeManagedCommerceStorefront,
+  type ManagedCommercePublicPublication,
+  type ManagedCommercePublicRequest,
+} from './managed-commerce-public'
 import { ProductPhoto } from '../../core/ProductPhoto'
 import { productImageScopeForWorkspace } from '../../core/product-image-store'
 import { CommerceOrderDesk, type CommerceOrderDeskFilter } from './CommerceOrderDesk'
@@ -194,17 +203,8 @@ function deliveryAreaFromCustomerReference(value: string) {
   return candidate || 'Customer area'
 }
 
-function storefrontArtworkKind(sku: string) {
-  return Array.from(sku).reduce((total, character) => total + character.charCodeAt(0), 0) % 5
-}
-
-function StorefrontProductArtwork({ sku }: { sku: string }) {
-  const kind = storefrontArtworkKind(sku)
-  if (kind === 1) return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="7" width="18" x="20" y="34" /><rect className="art-main" height="58" rx="7" width="18" x="41" y="24" /><rect className="art-main" height="44" rx="7" width="18" x="62" y="38" /><path className="art-highlight" d="M24 42h10M45 33h10M66 46h10" /></svg>
-  if (kind === 2) return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-main" d="M27 23h46l7 58H20z" /><path className="art-highlight" d="M32 39h36M39 57h22" /><circle className="art-detail" cx="50" cy="69" r="6" /></svg>
-  if (kind === 3) return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="9" width="28" x="22" y="35" /><rect className="art-main" height="55" rx="9" width="26" x="55" y="28" /><path className="art-highlight" d="M29 28h15v8M62 20h13v9M30 54h12M62 49h12" /></svg>
-  if (kind === 4) return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="58" rx="10" width="62" x="19" y="23" /><path className="art-detail" d="M50 67 34 53c-9-9 4-21 16-8 12-13 25-1 16 8z" /><path className="art-highlight" d="M27 32h46" /></svg>
-  return <svg aria-hidden="true" className="storefront-product-art" data-art={kind} focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
+function StorefrontProductArtwork() {
+  return <svg aria-hidden="true" className="storefront-product-art" focusable="false" viewBox="0 0 100 100"><rect width="100" height="100" rx="12" fill="#f1f2f7" /><path d="m30 39 20-11 20 11v24L50 75 30 63Zm0 0 20 12 20-12M50 51v24M40 34l20 12" fill="none" stroke="#8b8ea4" strokeWidth="2.5" strokeLinejoin="round" /></svg>
 }
 
 function savedLocalDraft(draft: StorefrontDraft | LegacyStorefrontDraft | null): SavedStorefrontState | null {
@@ -325,6 +325,17 @@ export function EcommerceProduct() {
   const [managedCanWrite, setManagedCanWrite] = useState(false)
   const [managedCanDeliverReviews, setManagedCanDeliverReviews] = useState(false)
   const [managedInbox, setManagedInbox] = useState<ManagedInboxContext | null>(null)
+  const [publicPublication, setPublicPublication] = useState<ManagedCommercePublicPublication | null>(null)
+  const [publicRequests, setPublicRequests] = useState<ManagedCommercePublicRequest[]>([])
+  const [publicNextCursor, setPublicNextCursor] = useState<string | null | undefined>(undefined)
+  const [publicVisibleCount, setPublicVisibleCount] = useState(5)
+  const [publicPageBusy, setPublicPageBusy] = useState(false)
+  const [publicStatus, setPublicStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  const [publicDataIdentity, setPublicDataIdentity] = useState('')
+  const publicDataIdentityRef = useRef('')
+  const [publicBusy, setPublicBusy] = useState(false)
+  const [publicNotice, setPublicNotice] = useState('')
+  const [publicReviewId, setPublicReviewId] = useState('')
   const [savedDraft, setSavedDraft] = useState<SavedStorefrontState | null>(null)
   const [draftReadStatus, setDraftReadStatus] = useState<StorefrontDraftReadResult['status']>('empty')
   const [draftIssue, setDraftIssue] = useState('')
@@ -345,6 +356,119 @@ export function EcommerceProduct() {
     return () => viewport.removeEventListener('change', syncDevice)
   }, [])
   const workspaceView = ecommerceWorkspaceView(location.search, Boolean(savedDraft))
+  const publicIdentityKey = managedIdentity ? `${managedIdentity.workspaceId}:${managedIdentity.userId}` : ''
+  useEffect(() => {
+    if (!managedIdentity || !managedCanWrite) return
+    const identity = managedIdentity
+    const identityKey = `${identity.workspaceId}:${identity.userId}`
+    let active = true
+    let inFlight = false
+    async function refresh() {
+      if (inFlight || document.visibilityState === 'hidden') return
+      inFlight = true
+      try {
+        const publications = await loadManagedCommercePublications(identity)
+        const inbox = await loadManagedCommercePublicInbox(identity)
+        if (!active) return
+        const sameIdentity = publicDataIdentityRef.current === identityKey
+        setPublicPublication(publications.publications.find((item) => item.enabled) ?? null)
+        setPublicRequests((current) => {
+          const byId = new Map((sameIdentity ? current : []).map((item) => [`${item.handle}:${item.requestId}`, item]))
+          for (const item of inbox.requests) byId.set(`${item.handle}:${item.requestId}`, item)
+          return [...byId.values()].sort((left, right) => right.receivedAt.localeCompare(left.receivedAt))
+        })
+        setPublicNextCursor((current) => !sameIdentity || current === undefined ? inbox.nextCursor : current)
+        if (!sameIdentity) setPublicVisibleCount(5)
+        publicDataIdentityRef.current = identityKey
+        setPublicDataIdentity(identityKey)
+        setPublicStatus('ready')
+      } catch {
+        if (active) setPublicStatus('unavailable')
+      } finally {
+        inFlight = false
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => { if (workspaceView === 'orders') void refresh() }, 20_000)
+    const onFocus = () => { void refresh() }
+    window.addEventListener('focus', onFocus)
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', onFocus) }
+  }, [managedIdentity, managedCanWrite, workspaceView])
+
+  async function publishPublicStore() {
+    if (!managedIdentity || !managedInbox || publicBusy || !buyingReady) return
+    setPublicBusy(true)
+    setPublicNotice('')
+    try {
+      const result = await publishManagedCommerceStorefront(managedIdentity, managedInbox.version)
+      if (!result.enabled || !result.handle || !result.previewDigest) throw new Error('The store was not published.')
+      const publications = await loadManagedCommercePublications(managedIdentity)
+      setPublicPublication(publications.publications.find((item) => item.enabled) ?? null)
+      setPublicStatus('ready')
+      setPublicNotice('Your customer store is ready to share.')
+    } catch (error) {
+      setPublicNotice(error instanceof Error ? error.message : 'The store could not be published. Nothing changed.')
+    } finally { setPublicBusy(false) }
+  }
+
+  async function revokePublicStore() {
+    if (!managedIdentity || !publicPublication || publicBusy) return
+    setPublicBusy(true)
+    setPublicNotice('')
+    try {
+      await revokeManagedCommerceStorefront(managedIdentity, publicPublication.handle, publicPublication.previewDigest)
+      setPublicPublication(null)
+      setPublicNotice('The customer store is closed to new requests.')
+    } catch (error) {
+      setPublicNotice(error instanceof Error ? error.message : 'The store could not be closed.')
+    } finally { setPublicBusy(false) }
+  }
+
+  async function bringPublicRequestToShop(entry: ManagedCommercePublicRequest) {
+    if (!managedIdentity || publicBusy) return
+    setPublicBusy(true)
+    setPublicNotice('')
+    setPublicReviewId('')
+    try {
+      const result = await claimManagedCommercePublicRequest(managedIdentity, entry.handle, entry.requestId)
+      if (result.status !== 'in_shop' || !result.shopRequestId) throw new Error('Shop did not confirm this request.')
+      setPublicRequests((current) => current.map((item) => item.requestId === entry.requestId && item.handle === entry.handle
+        ? { ...item, status: 'in_shop', shopRequestId: result.shopRequestId } : item))
+      const bootstrap = await loadManagedBootstrap(managedIdentity)
+      const view = resolveManagedStorefront(managedIdentity, requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'))
+      if (view) setManagedInbox(view.inbox)
+      if (result.priceChanged) {
+        setPublicReviewId(result.shopRequestId)
+        setPublicNotice('The current Shop price differs from the customer request. Confirm the new total with the customer before completing the order.')
+      } else {
+        navigate(`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(result.shopRequestId)}`)
+      }
+    } catch (error) {
+      setPublicNotice(error instanceof Error ? error.message : 'Shop did not receive this request. Try again.')
+    } finally { setPublicBusy(false) }
+  }
+
+  async function showMorePublicRequests() {
+    const loadedNew = publicRequests.filter((item) => item.status === 'new').length
+    if (loadedNew > publicVisibleCount) {
+      setPublicVisibleCount((count) => count + 20)
+      return
+    }
+    if (!managedIdentity || !publicNextCursor || publicPageBusy) return
+    setPublicPageBusy(true)
+    try {
+      const page = await loadManagedCommercePublicInbox(managedIdentity, publicNextCursor)
+      setPublicRequests((current) => {
+        const byId = new Map(current.map((item) => [`${item.handle}:${item.requestId}`, item]))
+        for (const item of page.requests) byId.set(`${item.handle}:${item.requestId}`, item)
+        return [...byId.values()].sort((left, right) => right.receivedAt.localeCompare(left.receivedAt))
+      })
+      setPublicNextCursor(page.nextCursor)
+      setPublicVisibleCount((count) => count + 20)
+    } catch (error) {
+      setPublicNotice(error instanceof Error ? error.message : 'Older requests could not be loaded.')
+    } finally { setPublicPageBusy(false) }
+  }
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
     source: '',
@@ -775,14 +899,8 @@ export function EcommerceProduct() {
       setOrderImportReview(buildOrderImportReview(orderImportText))
       setOrderImportNotice('Order import batch reviewed locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.')
     } catch (error) {
-      setOrderImportReview({
-        status: 'blocked',
-        totalRows: 0,
-        readyRows: 0,
-        blockedRows: 0,
-        summary: error instanceof Error ? error.message : 'Order CSV could not be reviewed locally.',
-      })
-      setOrderImportNotice('Order import batch rejected locally. No Shop or customer action ran.')
+      setOrderImportReview(null)
+      setOrderImportNotice(`Order import batch rejected locally: ${error instanceof Error ? error.message : 'Order CSV could not be reviewed locally.'} No Shop or customer action ran.`)
     }
   }
 
@@ -816,14 +934,8 @@ export function EcommerceProduct() {
       setOrderImportNotice(`Uploaded ${file.name} and reviewed it locally. No order import, customer message, payment, delivery booking, stock move, refund, or Shop write ran.`)
     } catch (error) {
       setOrderImportText('')
-      setOrderImportReview({
-        status: 'blocked',
-        totalRows: 0,
-        readyRows: 0,
-        blockedRows: 0,
-        summary: error instanceof Error ? error.message : 'Uploaded order CSV could not be reviewed locally.',
-      })
-      setOrderImportNotice('Uploaded order CSV was rejected locally. No Shop or customer action ran.')
+      setOrderImportReview(null)
+      setOrderImportNotice(`Uploaded order CSV was rejected locally: ${error instanceof Error ? error.message : 'Uploaded order CSV could not be reviewed locally.'} No Shop or customer action ran.`)
     }
   }
 
@@ -1087,7 +1199,7 @@ export function EcommerceProduct() {
       workspace?.scrollIntoView({ block: 'start' })
       workspace?.focus({ preventScroll: true })
     })
-  }, [buyingReady, buyingCart, cartSessionReady])
+  }, [buyingReady, buyingCart, cartSessionReady, setBuyingCart])
 
   function prepareQuoteRecovery(event: ReactMouseEvent<HTMLButtonElement>) {
     const actionNow = Math.round(globalThis.performance.timeOrigin + event.timeStamp)
@@ -2061,11 +2173,13 @@ export function EcommerceProduct() {
           ? 'Review customer requests and resolve exceptions. Shop confirms orders, stock, delivery and payment.'
           : 'Review customer requests on this device. Requests stay on this device until Shop review.',
       }
-    : { title: 'Online store', copy: 'Choose the products customers can order, then review the store they will use.' }
+    : { title: 'Online store', copy: workspaceView === 'setup' ? 'Choose your products. See your store take shape.' : 'Your products, with the prices and stock from Shop.' }
   const catalogSearchTerm = catalogSearch.trim().toLowerCase()
   const visibleCatalogItems = catalogSearchTerm
     ? catalog.items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLowerCase().includes(catalogSearchTerm))
     : catalog.items
+  const newPublicRequests = publicRequests.filter((entry) => entry.status === 'new')
+  const publicStoreIsCurrent = Boolean(publicPublication?.enabled && publicPublication.previewDigest === digest)
 
   if (!catalogHydrating && sampleCatalogPreview) {
     return (
@@ -2108,10 +2222,10 @@ export function EcommerceProduct() {
       {cartSessionUnavailable ? <p role="status">This browser cannot keep your cart after a refresh.</p> : null}
       <header className="ecommerce-heading">
         <div>
-          <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Online store'}</span>
           <h1 ref={workspaceHeadingRef} tabIndex={-1}>{workspaceCopy.title}</h1>
           <p>{workspaceCopy.copy}</p>
         </div>
+        {workspaceView === 'preview' ? <button className="core-button secondary" onClick={() => showWorkspace('setup')} type="button">Edit store</button> : null}
       </header>
 
       <nav aria-label="Commerce workspace" className="ecommerce-mode-nav" id="ecommerce-workspace-nav">
@@ -2144,6 +2258,21 @@ export function EcommerceProduct() {
         summary={ecommerceTodaySummary}
       />
 
+      {publicStatus === 'ready' && managedCanWrite && publicDataIdentity === publicIdentityKey ? <section aria-label="Incoming online requests" className="ecommerce-public-intake">
+        <div className="ecommerce-public-intake-head">
+          <div><h2>Incoming online requests</h2><p>Requests from your customer store arrive here automatically.</p></div>
+          <strong>{newPublicRequests.length} new in loaded requests</strong>
+        </div>
+        {newPublicRequests.length ? <div className="ecommerce-public-intake-list">
+          {newPublicRequests.slice(0, publicVisibleCount).map((entry) => <div className="ecommerce-public-intake-row" key={`${entry.handle}:${entry.requestId}`}>
+            <div><strong>{entry.request.customerReference}</strong><small>{entry.request.lines.map((line) => `${line.quantity} × ${line.name}`).join(' · ')}</small><small>{entry.request.fulfilment === 'delivery' ? 'Delivery' : 'Pick up'} · {formatMmk(entry.request.totalMmk)} · {new Date(entry.receivedAt).toLocaleString()}</small><small>Phone: {entry.request.customerProfile?.phone || 'Not available'}</small></div>
+            <button className="core-button secondary" disabled={publicBusy} onClick={() => void bringPublicRequestToShop(entry)} type="button">Review in Shop</button>
+          </div>)}
+        </div> : <p className="ecommerce-public-intake-empty">{publicNextCursor ? 'No new requests in the latest page. Check older requests below.' : 'New requests will appear here after a customer sends one.'}</p>}
+        {newPublicRequests.length > publicVisibleCount || publicNextCursor ? <button className="text-link ecommerce-public-more" disabled={publicPageBusy} onClick={() => void showMorePublicRequests()} type="button">{publicPageBusy ? 'Loading…' : 'Show more requests'}</button> : null}
+        {publicNotice ? <p aria-live="polite" className="ecommerce-public-notice">{publicNotice} {publicReviewId ? <Link to={`/shop/?tab=orders&source=ecommerce-inbox&request=${encodeURIComponent(publicReviewId)}`}>Open in Shop</Link> : null}</p> : null}
+      </section> : null}
+
       <details className="ecommerce-business-controls">
         <summary><span><strong>Extra order tools</strong></span></summary>
         <p>Prepare and review here. Confirm orders in Shop; send customer messages separately.</p>
@@ -2157,7 +2286,7 @@ export function EcommerceProduct() {
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
           </div>
-          <details className="ecommerce-order-import-workspace" open={orderImportText || orderImportReview ? true : undefined}>
+          <details className="ecommerce-order-import-workspace" open={orderImportText || orderImportReview || orderImportNotice ? true : undefined}>
             <summary><span>Review an order batch</span><small>Upload CSV or paste channel orders only when needed.</small></summary>
             <div aria-label="Order batch review workspace" className="ecommerce-order-import-workspace-body">
               <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">
@@ -2348,8 +2477,7 @@ export function EcommerceProduct() {
       {workspaceView !== 'orders' ? <div className="ecommerce-workspace" data-view={workspaceView}>
         <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
           <div className="panel-head">
-            <div><span className="core-eyebrow">1 · Storefront</span><h2 id="ecommerce-setup-title">Choose products</h2></div>
-            <span className="status-pill bounded">{selectedSkus.length}/8</span>
+            <div><h2 id="ecommerce-setup-title">Store details</h2></div>
           </div>
 
           {merchandising ? (
@@ -2367,9 +2495,28 @@ export function EcommerceProduct() {
             </p>
           ) : null}
 
+          <div className="ecommerce-copy-fields">
+            <label><span>Store name</span><input disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} /></label>
+            <label>
+              <span>Description (required)</span>
+              <textarea
+                aria-describedby="ecommerce-store-summary-help"
+                aria-invalid={Boolean(summaryValidationMessage)}
+                disabled={portalViewOnly || catalogHydrating || draftBusy}
+                maxLength={180}
+                onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }}
+                required
+                rows={3}
+                value={summary}
+              />
+              <small className="ecommerce-summary-help" data-invalid={Boolean(summaryValidationMessage)} id="ecommerce-store-summary-help">
+                {summaryValidationMessage || 'Shown below your store name in the customer preview.'}
+              </small>
+            </label>
+          </div>
           <div className="ecommerce-catalog-head">
-            <strong>Shop products</strong>
-            <small>Up to 8. Prices and stock in Shop.</small>
+            <strong>Products</strong>
+            <small>{selectedSkus.length} selected · up to 8</small>
           </div>
           {catalog.items.length > 8 ? <label>
             <span className="sr-only">Search Shop products</span>
@@ -2395,33 +2542,6 @@ export function EcommerceProduct() {
                 </button>
               )
             }) : <p className="form-notice" role="status">No matches.</p>}
-          </div>
-
-          <div className="ecommerce-copy-fields">
-            <label>
-              <span>Store name</span>
-              <input disabled={portalViewOnly || catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} />
-            </label>
-            <label>
-              <span>Description (required)</span>
-              <textarea
-                aria-describedby="ecommerce-store-summary-help"
-                aria-invalid={Boolean(summaryValidationMessage)}
-                disabled={portalViewOnly || catalogHydrating || draftBusy}
-                maxLength={180}
-                required
-                onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }}
-                rows={3}
-                value={summary}
-              />
-              <small
-                className="ecommerce-summary-help"
-                data-invalid={Boolean(summaryValidationMessage)}
-                id="ecommerce-store-summary-help"
-              >
-                {summaryValidationMessage || 'Shown below your store name in the customer preview.'}
-              </small>
-            </label>
           </div>
 
           <div
@@ -2455,8 +2575,8 @@ export function EcommerceProduct() {
                 ? 'Shop catalog changed'
                 : savedDraftIsCurrent
                 ? managedIdentity
-                ? `Saved to company · revision ${savedDraft?.revision}`
-                  : `Saved on this device · revision ${savedDraft?.revision}`
+                ? 'Saved to your company'
+                  : 'Saved on this device'
                 : savedDraft ? 'Unsaved changes' : 'Not saved yet'}</strong>
               <small>{portalViewOnly
                 ? 'Ask a company owner to assign Ecommerce operator access.'
@@ -2506,10 +2626,10 @@ export function EcommerceProduct() {
 
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
-            <div><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Your store</h2></div>
+            <div><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>{workspaceView === 'setup' ? 'Customer view' : 'Your store'}</h2>{workspaceView === 'setup' ? <p>Updates as you edit. Save to keep your changes.</p> : null}</div>
           </div>
 
-          {!buyingReady && !catalogHydrating ? (
+          {workspaceView !== 'setup' && !buyingReady && !catalogHydrating ? (
             <div className="ecommerce-preview-gate">
               <span>
                 <strong>{sampleCatalogPreview ? 'Sample storefront is preview-only' : 'Store not saved'}</strong>
@@ -2534,6 +2654,19 @@ export function EcommerceProduct() {
           ) : null}
           {draftNotice ? <p className="ecommerce-save-notice" role="status">{draftNotice}</p> : null}
 
+          {workspaceView !== 'setup' && managedIdentity && managedCanWrite && publicStatus === 'ready' && publicDataIdentity === publicIdentityKey ? <div className="ecommerce-public-sharing">
+            <div>
+              <h3>{publicStoreIsCurrent ? 'Your customer store is live' : publicPublication ? 'Store changes are not live yet' : 'Share your store with customers'}</h3>
+              <p>{publicStoreIsCurrent ? 'Customers can browse and send requests from this link.' : 'Publish the saved store when you are ready to receive customer requests.'}</p>
+              {publicPublication ? <a href={`/store/${encodeURIComponent(publicPublication.handle)}`} rel="noopener noreferrer" target="_blank">Open customer store ↗</a> : null}
+            </div>
+            <div className="ecommerce-public-sharing-actions">
+              {!publicStoreIsCurrent ? <button className="core-button primary" disabled={!buyingReady || publicBusy || !managedInbox} onClick={() => void publishPublicStore()} type="button">{publicBusy ? 'Working…' : publicPublication ? 'Publish changes' : 'Publish store'}</button> : null}
+              {publicPublication ? <button className="core-button secondary" disabled={publicBusy} onClick={() => void revokePublicStore()} type="button">Close store</button> : null}
+            </div>
+            {publicNotice ? <p aria-live="polite" className="ecommerce-public-notice">{publicNotice}</p> : null}
+          </div> : null}
+
           <div className={`ecommerce-preview-frame is-${device}`}>
             {previewResult.preview ? (
               <div className="storefront-preview">
@@ -2557,12 +2690,12 @@ export function EcommerceProduct() {
                       data-requested={buyingCart.some((line) => line.sku === item.sku) ? 'true' : 'false'}
                       key={item.sku}
                     >
-                      <ProductPhoto className="storefront-product-art storefront-product-photo" fallback={<StorefrontProductArtwork sku={item.sku} />} scope={productImageScope} sku={item.sku} />
+                      <ProductPhoto className="storefront-product-art storefront-product-photo" fallback={<StorefrontProductArtwork />} scope={productImageScope} sku={item.sku} />
                       <small>{item.merchandising ? `${item.merchandising.featured ? 'Featured · ' : ''}${item.merchandising.collection}` : item.variant || item.sku}</small>
                       <strong>{displayName}</strong>
                       <span>{formatMmk(item.unitPriceMmk)}</span>
                       <b>{available ? 'Available' : 'Sold out'}</b>
-                      {available && buyingReady && cartSessionReady ? (
+                      {workspaceView !== 'setup' && available && buyingReady && cartSessionReady ? (
                         <button
                           aria-controls="ecommerce-buying-workspace"
                           aria-label={`${buyingCart.some((line) => line.sku === item.sku) ? 'View' : 'Add'} ${displayName} ${buyingCart.some((line) => line.sku === item.sku) ? 'in cart' : 'to cart'}`}
@@ -2588,7 +2721,7 @@ export function EcommerceProduct() {
             )}
           </div>
 
-          {buyingReady && cartSessionReady && previewResult.preview && digest && activeCommerceState ? (
+          {workspaceView !== 'setup' && buyingReady && cartSessionReady && previewResult.preview && digest && activeCommerceState ? (
             <EcommerceBuyingWorkspace
               key={cartScope}
               cart={buyingCart}

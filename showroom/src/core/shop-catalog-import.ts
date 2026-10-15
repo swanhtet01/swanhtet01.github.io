@@ -44,6 +44,23 @@ export type ShopCatalogImportRow = {
   issues: ShopCatalogImportIssue[]
 }
 
+export type ShopCatalogImportReviewKind = 'new' | 'possible_match' | 'conflict' | 'unchanged' | 'capacity'
+
+export function summarizeShopCatalogImportReview(
+  readyRows: number,
+  reviewRows: readonly { kind: ShopCatalogImportReviewKind }[],
+) {
+  const blockingRowCount = reviewRows.filter((row) => row.kind === 'conflict' || row.kind === 'capacity').length
+  const unchangedRowCount = reviewRows.filter((row) => row.kind === 'unchanged').length
+  const readyRowCount = Math.max(0, readyRows - blockingRowCount - unchangedRowCount)
+  return {
+    readyRowCount,
+    unchangedRowCount,
+    blockingRowCount,
+    unchangedOnly: readyRows > 0 && readyRowCount === 0 && unchangedRowCount > 0 && blockingRowCount === 0,
+  }
+}
+
 export type ShopCatalogImportPreview = {
   schema: typeof SHOP_CATALOG_IMPORT_SCHEMA
   sourceName: string
@@ -351,6 +368,21 @@ function classifyAgainstCatalog(rows: ShopCatalogImportRow[], existingCatalog: C
     row.status = 'invalid'
     row.issues.push({ code: 'catalog_capacity', field: 'row', message: `The Shop catalog supports at most ${SHOP_CATALOG_IMPORT_MAX_ROWS} attributable item baselines.` })
   }
+}
+
+export function classifyShopCatalogImportRows(
+  preview: ClientImportPreview,
+  existingCatalog: CommerceItem[],
+): ShopCatalogImportRow[] {
+  const rows: ShopCatalogImportRow[] = preview.rows.map((row) => ({
+    rowNumber: row.rowNumber,
+    status: row.status,
+    source: row.source,
+    item: row.status === 'invalid' ? null : itemFromValues(row.values),
+    issues: row.issues.map(shopIssue),
+  }))
+  classifyAgainstCatalog(rows, existingCatalog)
+  return rows
 }
 
 function totalsFor(rows: ShopCatalogImportRow[]) {

@@ -72,7 +72,7 @@ export const appContentSecurityPolicy = [
   // React sets inline style attributes in eleven places; scripts need no such
   // exception, so 'unsafe-inline' stays off script-src where it would matter.
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https:",
   "font-src 'self'",
   // Same-origin /api plus the managed-trial Supabase project. Nothing else.
   "connect-src 'self' https://*.supabase.co",
@@ -98,6 +98,9 @@ const appConfig = {
   buildCommand: 'npm run app:build',
   outputDirectory: 'showroom/dist',
   routes: [
+    // Published HTML supplies a per-response nonce policy. Do not replace it
+    // with the SPA policy, which deliberately forbids inline application JS.
+    { src: '/sites/(.*)', dest: '/api/app.py' },
     // The app holds a client's catalog, orders, and evidence in browser storage,
     // so it is served with the same header floor the kernel already had. Legacy
     // `routes` cannot coexist with a top-level `headers` block, so the headers

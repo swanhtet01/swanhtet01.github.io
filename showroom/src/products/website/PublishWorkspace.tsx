@@ -1,640 +1,69 @@
-import { lazy, Suspense, type FormEvent, useRef, useState } from 'react'
-
-import {
-  evidenceRequirements,
-  formatTimestamp,
-  type EvidenceKind,
-  type ReadinessCheck,
-  type WebsiteWorkspace,
-} from './website-model'
+import { lazy, Suspense, useRef, useState } from 'react'
+import { SitePreview } from './SitePreview'
+import { formatTimestamp, previewDevices, type PreviewDevice, type ReadinessCheck, type WebsiteWorkspace } from './website-model'
+import { reviewStatements, saveReviewedWebsite, type ReviewCallbacks } from './website-review'
 import type { WebsiteReleaseState } from './website-release-foundation'
 import './publish-workspace.css'
-
 const WebsiteReleaseFoundation = lazy(() => import('./WebsiteReleaseFoundation'))
-
-type EvidenceInput = {
-  kind: EvidenceKind
-  finding: string
-  reference: string
-  verifiedBy: string
-}
-
-type ApprovalInput = {
-  reviewer: string
-  note: string
-}
-
-type PublishWorkspaceProps = {
-  approvalIsCurrent: boolean
-  checks: ReadinessCheck[]
-  fingerprint: string
-  managedActorId: string
-  managedReleaseRecords?: WebsiteReleaseState[]
-  currentPublishId: string
-  publishIsCurrent: boolean
-  workspace: WebsiteWorkspace
-  onAddEvidence: (input: EvidenceInput) => Promise<boolean>
-  onApprove: (input: ApprovalInput) => Promise<boolean>
-  onDownloadPublish: (recordId: string) => void
-  onRecordPublish: () => Promise<void>
+type Props = ReviewCallbacks & {
+  approvalIsCurrent: boolean; canWrite: boolean; checks: ReadinessCheck[]; fingerprint: string; managedActorId: string
+  managedReleaseRecords?: WebsiteReleaseState[]; currentPublishId: string; publishIsCurrent: boolean
+  workspace: WebsiteWorkspace; onEdit: () => void; onDownloadPublish: (recordId: string) => void
   onSaveManagedRelease?: (state: WebsiteReleaseState) => Promise<{ ok: true } | { ok: false; error: string }>
 }
-
-type PublishStep = 'checks' | 'evidence' | 'approval' | 'snapshot'
-
-const GO_LIVE_CONTACT_URL = 'https://supermega.dev/contact/?product=website&source=go-live&utm_source=app&utm_medium=product_workspace'
-
-const publishSteps: Array<{ id: PublishStep; label: string }> = [
-  { id: 'checks', label: 'Checks' },
-  { id: 'evidence', label: 'Evidence' },
-  { id: 'approval', label: 'Review' },
-  { id: 'snapshot', label: 'Site file' },
-]
-
-function localEvidenceSuggestion(kind: EvidenceKind, workspace: WebsiteWorkspace) {
-  const revision = workspace.contentRevision
-  if (kind === 'responsive') return {
-    finding: `Desktop, tablet, and mobile layouts reviewed for ${workspace.siteName}.`,
-    reference: `Website responsive review r${revision}`,
-  }
-  if (kind === 'links') return {
-    finding: `Navigation and call-to-action destinations reviewed for ${workspace.siteName}.`,
-    reference: `Website destination check r${revision}`,
-  }
-  return {
-    finding: `Ready-page copy and contact details reviewed for ${workspace.siteName}.`,
-    reference: `Website content r${revision}`,
-  }
-}
-
-export function PublishWorkspace({
-  approvalIsCurrent,
-  checks,
-  fingerprint,
-  managedActorId,
-  managedReleaseRecords,
-  currentPublishId,
-  publishIsCurrent,
-  workspace,
-  onAddEvidence,
-  onApprove,
-  onDownloadPublish,
-  onRecordPublish,
-  onSaveManagedRelease,
-}: PublishWorkspaceProps) {
-  const firstMissingEvidenceKind = evidenceRequirements.find((requirement) => !workspace.evidence.some((entry) => (
-    entry.kind === requirement.id
-    && entry.fingerprint === fingerprint
-    && entry.source.contentRevision === workspace.contentRevision
-  )))?.id ?? 'content'
-  const firstEvidenceSuggestion = localEvidenceSuggestion(firstMissingEvidenceKind, workspace)
-  const [evidenceKind, setEvidenceKind] = useState<EvidenceKind>(firstMissingEvidenceKind)
-  const [evidenceFinding, setEvidenceFinding] = useState(managedActorId ? '' : firstEvidenceSuggestion.finding)
-  const [evidenceReference, setEvidenceReference] = useState(managedActorId ? '' : firstEvidenceSuggestion.reference)
-  const [evidenceVerifier, setEvidenceVerifier] = useState(managedActorId ? '' : 'Website owner')
-  const [reviewer, setReviewer] = useState(managedActorId ? '' : 'Website owner')
-  const [approvalNote, setApprovalNote] = useState(managedActorId ? '' : `Content, responsive layouts, and destinations reviewed for ${workspace.siteName}.`)
-  const [confirmedApprovalKey, setConfirmedApprovalKey] = useState('')
-  const approvalKey = JSON.stringify([fingerprint, workspace.contentRevision, managedActorId || reviewer.trim(), approvalNote.trim(), workspace.evidence.map((entry) => entry.id)])
-  const approvalConfirmed = confirmedApprovalKey === approvalKey
-  const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | ''>('')
+export function PublishWorkspace(props: Props) {
+  const { checks, fingerprint, managedActorId, managedReleaseRecords, currentPublishId, publishIsCurrent, workspace, onEdit, onDownloadPublish, onSaveManagedRelease } = props
+  const pages = workspace.pages.filter(page => page.stage === 'ready')
+  const [pageId, setPageId] = useState(pages[0]?.id ?? '')
+  const [device, setDevice] = useState<PreviewDevice>('desktop')
+  const [confirmed, setConfirmed] = useState<Record<string, string>>({})
+  const [reviewer, setReviewer] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [saveIssue, setSaveIssue] = useState('')
+  const [releaseSettingsOpen, setReleaseSettingsOpen] = useState(false)
   const saveInFlight = useRef(false)
-  const bodyRef = useRef<HTMLDivElement>(null)
-  const passedCount = checks.filter((check) => check.passed).length
-  const allChecksPass = passedCount === checks.length
-  const latestApproval = workspace.approvals[0]
-  const staleEvidenceCount = workspace.evidence.filter((entry) => (
-    entry.fingerprint !== fingerprint || entry.source.contentRevision !== workspace.contentRevision
-  )).length
-  const currentEvidenceByKind = new Map(
-    evidenceRequirements.map((requirement) => [
-      requirement.id,
-      workspace.evidence.find((entry) => (
-        entry.kind === requirement.id
-        && entry.fingerprint === fingerprint
-        && entry.source.contentRevision === workspace.contentRevision
-      )),
-    ]),
-  )
-  const currentEvidenceCount = [...currentEvidenceByKind.values()].filter(Boolean).length
-  const contentChecks = checks.filter((check) => !check.id.startsWith('evidence-'))
-  const passedContentCheckCount = contentChecks.filter((check) => check.passed).length
-  const contentChecksPass = passedContentCheckCount === contentChecks.length
-  const evidenceIsCurrent = currentEvidenceCount === evidenceRequirements.length
-  const initialStep: PublishStep = !contentChecksPass
-    ? 'checks'
-    : !evidenceIsCurrent
-      ? 'evidence'
-      : !approvalIsCurrent
-        ? 'approval'
-        : 'snapshot'
-  const [activeStep, setActiveStep] = useState<PublishStep>(initialStep)
-  const workflowStatus = publishIsCurrent
-    ? 'Site file ready'
-    : approvalIsCurrent
-      ? 'Ready to record'
-      : evidenceIsCurrent && contentChecksPass
-        ? 'Needs review'
-        : contentChecksPass
-          ? 'Needs evidence'
-          : 'Needs fixes'
-  const stepStatus: Record<PublishStep, string> = {
-    checks: `${passedContentCheckCount}/${contentChecks.length}`,
-    evidence: `${currentEvidenceCount}/${evidenceRequirements.length}`,
-    approval: approvalIsCurrent ? 'Approved' : 'Required',
-    snapshot: publishIsCurrent ? 'Ready' : 'Not ready',
-  }
-
-  function chooseEvidenceKind(kind: EvidenceKind) {
-    setEvidenceKind(kind)
-    const suggestion = localEvidenceSuggestion(kind, workspace)
-    setEvidenceFinding(managedActorId ? '' : suggestion.finding)
-    setEvidenceReference(managedActorId ? '' : suggestion.reference)
-  }
-
-  async function submitEvidence(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (saveInFlight.current) return
+  const page = pages.find(candidate => candidate.id === pageId) ?? pages[0]
+  const actor = managedActorId || reviewer.trim()
+  const approvalKey = JSON.stringify([fingerprint, workspace.contentRevision, actor, workspace.evidence.map(entry => entry.id)])
+  const allConfirmed = reviewStatements.every(statement => confirmed[statement.kind] === approvalKey)
+  const failures = checks.filter(check => !check.id.startsWith('evidence-') && !check.passed)
+  const canSave = props.canWrite && pages.length > 0 && failures.length === 0 && allConfirmed && Boolean(actor) && !publishIsCurrent && !submitting
+  async function saveReview() {
+    if (!canSave || saveInFlight.current) return
     saveInFlight.current = true
+    setSubmitting(true)
     setSaveIssue('')
-    setSubmitting('evidence')
     try {
-      const saved = await onAddEvidence({
-        kind: evidenceKind,
-        finding: evidenceFinding.trim(),
-        reference: evidenceReference.trim(),
-        verifiedBy: managedActorId || evidenceVerifier.trim(),
-      })
-      if (saved) {
-        const nextRequirement = evidenceRequirements.find((requirement) => (
-          requirement.id !== evidenceKind && !currentEvidenceByKind.get(requirement.id)
-        ))
-        if (nextRequirement) chooseEvidenceKind(nextRequirement.id)
-        else {
-          setEvidenceFinding('')
-          setEvidenceReference('')
-          setActiveStep('approval')
-        }
-      }
+      await saveReviewedWebsite({ source: { digest: fingerprint, contentRevision: workspace.contentRevision }, reviewer: actor, confirmed: allConfirmed, callbacks: props })
     } catch {
-      setSaveIssue('Could not confirm the save. Your entries are still here. Check the saved history before trying again.')
+      setSaveIssue('We could not confirm the save. Check your connection and try again. Completed review steps stay in history.')
     } finally {
       saveInFlight.current = false
-      setSubmitting('')
+      setSubmitting(false)
     }
   }
-
-  async function submitApproval(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!allChecksPass || !approvalConfirmed) return
-    if (saveInFlight.current) return
-    saveInFlight.current = true
-    setSaveIssue('')
-    setSubmitting('approval')
-    try {
-      const saved = await onApprove({ reviewer: managedActorId || reviewer.trim(), note: approvalNote.trim() })
-      if (saved) {
-        setConfirmedApprovalKey('')
-        setActiveStep('snapshot')
-      }
-    } catch {
-      setSaveIssue('Could not confirm the save. Your entries are still here. Check the saved history before trying again.')
-    } finally {
-      saveInFlight.current = false
-      setSubmitting('')
-    }
-  }
-
-  async function recordSnapshot() {
-    if (saveInFlight.current) return
-    saveInFlight.current = true
-    setSaveIssue('')
-    setSubmitting('snapshot')
-    try {
-      await onRecordPublish()
-    } catch {
-      setSaveIssue('Could not confirm the save. Check the saved site files before trying again.')
-    } finally {
-      saveInFlight.current = false
-      setSubmitting('')
-    }
-  }
-
-  function selectStep(step: PublishStep) {
-    if (bodyRef.current) bodyRef.current.scrollTop = 0
-    setActiveStep(step)
-  }
-
-  return (
-    <section
-      className="website-editor-panel website-publish-panel website-publish-workspace"
-      aria-labelledby="publish-editor-title"
-    >
-      <header className="website-panel-head publish-flow-header">
-        <div>
-          <span className="website-eyebrow">Website file checklist</span>
-          <h2 id="publish-editor-title">Check and download the site</h2>
-          <p>Fix the pages, add review notes, then create one website file.</p>
-        </div>
-        <span className={'website-status ' + (publishIsCurrent ? 'is-ready' : 'is-pending')}>
-          {workflowStatus}
-        </span>
-      </header>
-
-      <nav className="publish-flow-nav" aria-label="Publish steps">
-        <ol>
-          {publishSteps.map((step, index) => (
-            <li key={step.id}>
-              <button
-                aria-current={activeStep === step.id ? 'step' : undefined}
-                onClick={() => selectStep(step.id)}
-                type="button"
-              >
-                <span className="publish-flow-step-number" aria-hidden="true">{index + 1}</span>
-                <span className="publish-flow-step-label">
-                  <strong>{step.label}</strong>
-                  <small>{stepStatus[step.id]}</small>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ol>
-      </nav>
-
-      <div className="publish-flow-boundary" role="note">
-        <strong>{managedActorId ? 'Company account record' : 'This device only'}</strong>
-        <span>{managedActorId
-          ? 'Saved in the company history. No deployment, domain, payment, stock, message, or order change happens here.'
-          : 'Stored in this browser. No deployment, domain, payment, stock, message, or order change happens here.'}</span>
-      </div>
-
-      <div className="website-editor-scroll publish-flow-body" ref={bodyRef}>
-        {saveIssue ? <p role="alert">{saveIssue}</p> : null}
-        {activeStep === 'checks' ? (
-          <section
-            className="website-publish-section publish-flow-card"
-            id="publish-step-checks"
-            aria-labelledby="readiness-title"
-          >
-            <header>
-              <div>
-                <span className="website-step" aria-hidden="true">1</span>
-                <div>
-                  <h3 id="readiness-title">Check the website</h3>
-                  <p>These checks come from the current content and navigation.</p>
-                </div>
-              </div>
-              <span className={'website-status ' + (contentChecksPass ? 'is-ready' : 'is-pending')}>
-                {passedContentCheckCount}/{contentChecks.length} passed
-              </span>
-            </header>
-
-            <div className="publish-flow-revision">
-              <span>Current revision</span>
-              <code>{fingerprint}</code>
-            </div>
-
-            <div className="website-check-list">
-              {contentChecks.map((check) => (
-                <article className={check.passed ? 'is-passed' : 'is-blocked'} key={check.id}>
-                  <span className="publish-flow-check-state">{check.passed ? 'Pass' : 'Fix'}</span>
-                  <div>
-                    <strong>{check.label}</strong>
-                    <p>{check.detail}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            <footer className="publish-flow-actions">
-              <p>{contentChecksPass
-                ? 'Website checks are clear. Add the three review records next.'
-                : 'Fix blocked items in Content or Navigation, then return here.'}</p>
-              <button className="website-button is-primary" onClick={() => selectStep('evidence')} type="button">
-                Review evidence
-              </button>
-            </footer>
-          </section>
-        ) : null}
-
-        {activeStep === 'evidence' ? (
-          <section
-            className="website-publish-section publish-flow-card"
-            id="publish-step-evidence"
-            aria-labelledby="evidence-title"
-          >
-            <header>
-              <div>
-                <span className="website-step" aria-hidden="true">2</span>
-                <div>
-                  <h3 id="evidence-title">Add review notes</h3>
-                  <p>Save proof for this exact version of the website.</p>
-                </div>
-              </div>
-              <span className={'website-status ' + (evidenceIsCurrent ? 'is-ready' : 'is-pending')}>
-                {currentEvidenceCount}/{evidenceRequirements.length} current
-              </span>
-            </header>
-
-            {staleEvidenceCount ? (
-              <p className="publish-flow-stale-note">
-                {staleEvidenceCount} older record{staleEvidenceCount === 1 ? '' : 's'} remain in history but do not approve this revision.
-              </p>
-            ) : null}
-
-            <div className="website-evidence-status">
-              {evidenceRequirements.map((requirement) => {
-                const evidence = currentEvidenceByKind.get(requirement.id)
-                return (
-                  <article className={evidence ? 'is-current' : ''} key={requirement.id}>
-                    <span>{evidence ? 'Verified' : 'Required'}</span>
-                    <strong>{requirement.label}</strong>
-                    {evidence ? (
-                      <>
-                        <p>{evidence.finding}</p>
-                        <small>{evidence.reference} · {evidence.verifiedBy} · {formatTimestamp(evidence.verifiedAt)}</small>
-                      </>
-                    ) : (
-                      <p>{requirement.detail}</p>
-                    )}
-                  </article>
-                )
-              })}
-            </div>
-
-            <form className="website-evidence-form" onSubmit={submitEvidence}>
-              <label>
-                <span>Requirement</span>
-                <select value={evidenceKind} onChange={(event) => chooseEvidenceKind(event.target.value as EvidenceKind)}>
-                  {evidenceRequirements.map((requirement) => (
-                    <option key={requirement.id} value={requirement.id}>{requirement.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Finding</span>
-                <input
-                  maxLength={180}
-                  onChange={(event) => setEvidenceFinding(event.target.value)}
-                  placeholder="What the review established"
-                  required
-                  value={evidenceFinding}
-                />
-              </label>
-              <label>
-                <span>Source or reference</span>
-                <input
-                  maxLength={220}
-                  onChange={(event) => setEvidenceReference(event.target.value)}
-                  placeholder="File, test result, URL, or review record"
-                  required
-                  value={evidenceReference}
-                />
-              </label>
-              <label>
-                <span>{managedActorId ? 'Signed in as' : 'Checked by'}</span>
-                <input
-                  disabled={Boolean(managedActorId)}
-                  maxLength={80}
-                  onChange={(event) => setEvidenceVerifier(event.target.value)}
-                  placeholder={managedActorId ? 'Signed-in account' : 'Name or role'}
-                  required
-                  value={managedActorId || evidenceVerifier}
-                />
-              </label>
-              <button className="website-button is-secondary" disabled={Boolean(submitting)} type="submit">
-                {submitting === 'evidence' ? 'Saving…' : 'Save review note'}
-              </button>
-            </form>
-
-            <footer className="publish-flow-actions">
-              <button className="website-button is-secondary" onClick={() => selectStep('checks')} type="button">
-                Back to checks
-              </button>
-              <button className="website-button is-primary" onClick={() => selectStep('approval')} type="button">
-                Final review
-              </button>
-            </footer>
-          </section>
-        ) : null}
-
-        {activeStep === 'approval' ? (
-          <section
-            className="website-publish-section publish-flow-card"
-            id="publish-step-approval"
-            aria-labelledby="approval-title"
-          >
-            <header>
-              <div>
-                <span className="website-step" aria-hidden="true">3</span>
-                <div>
-                  <h3 id="approval-title">Final review</h3>
-                  <p>This confirms the current pages and review notes.</p>
-                </div>
-              </div>
-              <span className={'website-status ' + (approvalIsCurrent ? 'is-ready' : 'is-pending')}>
-                {approvalIsCurrent ? 'Approved' : latestApproval ? 'Stale' : 'Required'}
-              </span>
-            </header>
-
-            {!allChecksPass ? (
-              <div className="publish-flow-gate-note" role="status">
-                <strong>Review is locked</strong>
-                <p>{passedCount}/{checks.length} readiness checks pass. Complete the blocked website checks and evidence first.</p>
-              </div>
-            ) : null}
-
-            {latestApproval ? (
-              <div className={'website-approval-record ' + (approvalIsCurrent ? 'is-current' : 'is-stale')}>
-                <strong>{approvalIsCurrent ? 'Current review' : latestApproval.migratedFromV1 ? 'Historical review' : 'Superseded by workspace changes'}</strong>
-                <p>{latestApproval.note}</p>
-                <small>{latestApproval.reviewer} · {formatTimestamp(latestApproval.approvedAt)} · content r{latestApproval.source.contentRevision}</small>
-              </div>
-            ) : null}
-
-            <form className="website-approval-form" onSubmit={submitApproval}>
-              <div className="website-form-grid two-columns">
-                <label>
-                  <span>Reviewer</span>
-                  <input
-                    disabled={Boolean(managedActorId) || !allChecksPass || approvalIsCurrent}
-                    maxLength={80}
-                    onChange={(event) => setReviewer(event.target.value)}
-                    placeholder={managedActorId ? 'Signed-in account' : 'Name or role'}
-                    required
-                    value={managedActorId || reviewer}
-                  />
-                </label>
-                <label>
-                  <span>Decision note</span>
-                  <input
-                    disabled={!allChecksPass || approvalIsCurrent}
-                    maxLength={240}
-                    onChange={(event) => setApprovalNote(event.target.value)}
-                    placeholder="Why this revision is approved"
-                    required
-                    value={approvalNote}
-                  />
-                </label>
-              </div>
-              <label className="website-confirmation">
-                <input
-                  checked={approvalConfirmed}
-                  disabled={!allChecksPass || approvalIsCurrent}
-                  onChange={(event) => setConfirmedApprovalKey(event.target.checked ? approvalKey : '')}
-                  type="checkbox"
-                />
-                <span>I reviewed this exact website version and accept the saved notes.</span>
-              </label>
-              <div className="website-gate-actions">
-                <small>{approvalIsCurrent
-                  ? 'This exact website version is already reviewed.'
-                  : allChecksPass ? 'Ready for a named reviewer.' : 'Complete all checks before final review.'}</small>
-                <button
-                  className="website-button is-primary"
-                  disabled={!allChecksPass || !approvalConfirmed || approvalIsCurrent || Boolean(submitting)}
-                  type="submit"
-                >
-                  {approvalIsCurrent ? 'Website reviewed' : submitting === 'approval' ? 'Saving…' : 'Save final review'}
-                </button>
-              </div>
-            </form>
-
-            <footer className="publish-flow-actions">
-              <button className="website-button is-secondary" onClick={() => selectStep('evidence')} type="button">
-                Back to evidence
-              </button>
-              <button className="website-button is-primary" onClick={() => selectStep('snapshot')} type="button">
-                Create site file
-              </button>
-            </footer>
-          </section>
-        ) : null}
-
-        {activeStep === 'snapshot' ? (
-          <section
-            className="website-publish-section website-local-publish publish-flow-card"
-            id="publish-step-snapshot"
-            aria-labelledby="local-publish-title"
-          >
-            <header>
-              <div>
-                <span className="website-step" aria-hidden="true">4</span>
-                <div>
-                  <h3 id="local-publish-title">Save the approved site</h3>
-                  <p>Create one portable site file. Deployment and domains remain separate.</p>
-                </div>
-              </div>
-              <span className={'website-status ' + (publishIsCurrent ? 'is-ready' : 'is-local')}>
-                {publishIsCurrent ? 'File ready' : 'Not ready'}
-              </span>
-            </header>
-
-            <div className="website-local-publish-action">
-              <div>
-                <strong>{publishIsCurrent
-                  ? 'The approved site is retained and ready to download.'
-                  : approvalIsCurrent
-                    ? 'Review matches. Create the site file.'
-                    : 'A current review is required.'}</strong>
-                <p>The file contains only ready pages and public site content. It does not deploy or change a domain.</p>
-              </div>
-              <div className="website-local-publish-controls">
-                {!publishIsCurrent ? (
-                  <button
-                    className="website-button is-primary"
-                    disabled={!approvalIsCurrent || Boolean(submitting)}
-                    onClick={recordSnapshot}
-                    type="button"
-                  >
-                    {submitting === 'snapshot' ? 'Creating…' : 'Create site file'}
-                  </button>
-                ) : null}
-                <button
-                  className="website-button is-primary"
-                  disabled={!publishIsCurrent || !currentPublishId || Boolean(submitting)}
-                  onClick={() => onDownloadPublish(currentPublishId)}
-                  type="button"
-                >
-                  Download site
-                </button>
-              </div>
-            </div>
-
-            {publishIsCurrent ? (
-              <section className="website-go-live" aria-labelledby="go-live-title">
-                <header>
-                  <span className="website-eyebrow">Next step</span>
-                  <h4 id="go-live-title">Get this live</h4>
-                  <p>Ask SuperMega to prepare hosting and your domain. We confirm the details before publishing.</p>
-                </header>
-                <a className="website-button is-primary" href={GO_LIVE_CONTACT_URL} rel="noopener noreferrer" target="_blank">Request website setup</a>
-                <details className="website-go-live-option">
-                  <summary>Host it yourself</summary>
-                  <ol>
-                    <li>Download the site file above.</li>
-                    <li>If your host expects a home page named <code>index.html</code>, rename the file to match.</li>
-                    <li>Upload the file to the public folder of any static file host you already use.</li>
-                    <li>Open your site address and check every page and link once.</li>
-                  </ol>
-                  <p>Any host that serves plain HTML files works. The upload happens outside this app.</p>
-                </details>
-              </section>
-            ) : null}
-
-            <details className="website-go-live-option">
-              <summary>Release controls</summary>
-            <Suspense fallback={<div className="website-release-loading">Loading client release controls...</div>}>
-              <WebsiteReleaseFoundation
-                managedActorId={managedActorId}
-                managedRecords={managedReleaseRecords}
-                onSaveManagedState={onSaveManagedRelease}
-                publishIsCurrent={publishIsCurrent}
-                workspace={workspace}
-              />
-            </Suspense>
-            </details>
-
-            {workspace.localPublishes.length ? (
-              <details className="website-publish-history-disclosure">
-                <summary>Site file history ({workspace.localPublishes.length})</summary>
-                <div className="website-publish-history">
-                  {workspace.localPublishes.slice(0, 3).map((record) => (
-                    <article key={record.id}>
-                      <span aria-hidden="true">&gt;_</span>
-                      <div>
-                        <strong>{record.id}</strong>
-                        <small>{record.readyPageIds.length} page{record.readyPageIds.length === 1 ? '' : 's'} · {record.recordedBy} · {formatTimestamp(record.recordedAt)}</small>
-                      </div>
-                      {record.artifact ? (
-                        <button
-                          className="website-button is-secondary is-compact website-history-download"
-                          onClick={() => onDownloadPublish(record.id)}
-                          type="button"
-                        >
-                          Download
-                        </button>
-                      ) : <code>File unavailable</code>}
-                    </article>
-                  ))}
-                </div>
-              </details>
-            ) : (
-              <div className="website-empty compact">
-                <span aria-hidden="true">&gt;_</span>
-                <p>No approved site files yet.</p>
-              </div>
-            )}
-
-            <footer className="publish-flow-actions">
-              <button className="website-button is-secondary" onClick={() => selectStep('approval')} type="button">
-                Back to review
-              </button>
-            </footer>
-          </section>
-        ) : null}
-      </div>
-    </section>
-  )
+  return <section className="website-review" aria-labelledby="site-review-title">
+    <header className="website-review-heading"><div><h2 id="site-review-title">Review your website</h2><p>Take one last look before publishing.</p></div><button className="website-button is-secondary" disabled={submitting} onClick={onEdit} type="button">Edit pages</button></header>
+    {publishIsCurrent ? <div className="website-review-success" role="status"><span aria-hidden="true">✓</span><div><strong>This version is ready to publish</strong><p>Use Publish website above to put these reviewed pages online.</p></div><button className="website-button is-secondary" type="button" onClick={() => onDownloadPublish(currentPublishId)}>Download copy</button></div> : null}
+    <div className="website-review-layout"><div className="website-review-canvas">
+      <div className="website-review-toolbar"><nav aria-label="Pages to review">{pages.map(candidate => <button type="button" key={candidate.id} aria-current={candidate.id === page?.id ? 'page' : undefined} onClick={() => setPageId(candidate.id)}>{candidate.navigation.label || candidate.internalName}</button>)}</nav>
+      <div role="group" aria-label="Preview size">{previewDevices.map(size => <button type="button" aria-pressed={device === size.id} key={size.id} onClick={() => setDevice(size.id)}>{size.label}</button>)}</div></div>
+      {page ? <SitePreview device={device} page={page} pages={pages} siteName={workspace.siteName} onSelectPage={setPageId} /> : <div className="website-review-empty"><h3>No pages ready yet</h3><p>Finish a page and mark it ready to include it in your website.</p><button className="website-button is-primary" type="button" onClick={onEdit}>Finish your pages</button></div>}
+      <p className="website-review-caption">Preview of your saved content. Check the live website after publishing.</p>
+    </div><aside className="website-review-checks" aria-label="Website review">
+      <h3>Ready for your customers?</h3><div className={'website-review-check-result ' + (failures.length ? 'needs-fixes' : '')}><span aria-hidden="true">{failures.length ? '!' : '✓'}</span><div><strong>{failures.length ? failures.length + ' things to fix' : 'Page checks passed'}</strong><p>{pages.length} page{pages.length === 1 ? '' : 's'} included</p></div></div>
+      {failures.length ? <ul className="website-review-fixes">{failures.map(check => <li key={check.id}><strong>{check.label}</strong><p>{check.detail}</p></li>)}</ul> : null}
+      {!publishIsCurrent ? <><p>Look through each page, then confirm:</p>
+        {!managedActorId ? <label className="website-review-name">Your name<input autoComplete="name" maxLength={80} value={reviewer} onChange={event => setReviewer(event.target.value)} /></label> : null}
+        <fieldset disabled={submitting || failures.length > 0 || !props.canWrite}><legend className="sr-only">Confirm your review</legend>{reviewStatements.map(statement => <label className="website-review-confirm" key={statement.kind}><input type="checkbox" checked={submitting || confirmed[statement.kind] === approvalKey} onChange={event => setConfirmed(current => ({ ...current, [statement.kind]: event.target.checked ? approvalKey : '' }))} /><span>{statement.label}</span></label>)}</fieldset>
+        {!props.canWrite ? <p>View only. Ask a workspace owner for permission to review and publish.</p> : null}
+        {saveIssue ? <p className="website-review-error" role="alert">{saveIssue}</p> : null}
+        <button className="website-button is-primary website-review-save" disabled={!canSave} onClick={saveReview} type="button">{submitting ? 'Saving reviewed version…' : 'Save reviewed version'}</button><p className="website-review-caption">Saves your review and a website version. Your live site stays as it is until you publish.</p>
+      </> : <p>Your review is saved with this version. Editing a page starts a new review.</p>}
+    </aside></div>
+    <details className="website-review-history"><summary>Version history and advanced settings</summary>
+      <div className="website-review-history-list">{workspace.localPublishes.slice(0, 5).map(record => <article key={record.id}><div><strong>{record.readyPageIds.length} pages · {formatTimestamp(record.recordedAt)}</strong><small>Revision {record.source.contentRevision}</small></div>{record.artifact ? <button className="website-button is-secondary" type="button" onClick={() => onDownloadPublish(record.id)}>Download</button> : <span>Copy unavailable</span>}</article>)}</div>
+      <details onToggle={event => setReleaseSettingsOpen(event.currentTarget.open)}><summary>Advanced release settings</summary>{releaseSettingsOpen ? <Suspense fallback={<p>Loading release settings…</p>}><WebsiteReleaseFoundation managedActorId={managedActorId} managedRecords={managedReleaseRecords} onSaveManagedState={onSaveManagedRelease} publishIsCurrent={publishIsCurrent} workspace={workspace} /></Suspense> : null}</details>
+    </details>
+  </section>
 }

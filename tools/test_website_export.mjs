@@ -100,7 +100,7 @@ check(
   'Burmese exports include installed Myanmar font fallbacks without remote font requests',
 )
 check(
-  /:lang\(my\) h1, :lang\(my\) h2\s*\{\s*line-height:\s*1\.4;\s*letter-spacing:\s*0;\s*\}/.test(burmeseHtml),
+  /:lang\(my\) :is\(h1, h2\)\s*\{\s*line-height:\s*1\.[45];\s*letter-spacing:\s*0;\s*\}/.test(burmeseHtml),
   'Burmese headings retain room for stacked marks and avoid Latin negative tracking',
 )
 check(
@@ -186,6 +186,22 @@ for (const slugs of [
   check(buildWebsiteHtml(artifact) === html, 'anchor allocation is deterministic')
   check(!html.includes('href="#content"'), 'skip navigation never clears the selected page')
   check(html.includes('body:not(:has(.site-page:target)) .skip-link[data-home="true"] { display: block; }'), 'home skip link is available without a selected page')
+}
+
+// The offline copy must show the form on the same page chosen by the managed
+// publisher, including custom contact slugs and a non-home first-page fallback.
+for (const slugs of [['/', '/contact-us'], ['/services', '/'], ['/', '/office/contact']]) {
+  const artifact = { ...englishArtifact, pages: slugs.map((slug, index) => ({
+    ...englishArtifact.pages[0], id: `contact-check-${index}`, slug,
+    hero: { ...englishArtifact.pages[0].hero, ctaHref: '/' },
+  })) }
+  const html = buildWebsiteHtml(artifact)
+  const articles = [...html.matchAll(/<article\b[^>]*>([\s\S]*?)<\/article>/g)]
+  const expected = slugs.findIndex(slug => /contact/i.test(slug))
+  articles.forEach((article, index) => check(
+    article[1].includes('aria-label="Offline contact form"') === (index === (expected < 0 ? 0 : expected)),
+    `contact form matches managed publication for ${slugs.join(', ')} page ${index}`,
+  ))
 }
 
 console.log(`website export contract: ${checks} checks passed`)

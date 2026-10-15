@@ -453,7 +453,7 @@ const objects: Record<ClientSolutionId, ClientImportObject> = {
       { id: 'sku', label: 'SKU', required: true, kind: 'sku', aliases: ['sku', 'item_sku', 'product_sku', 'stock_code', 'item_code', 'product_code', 'ပစ္စည်းကုဒ်'], maximum: 80 },
       { id: 'name', label: 'Item name', required: true, kind: 'text', aliases: ['item_name', 'name', 'product_name', 'item', 'menu_item', 'title', 'description', 'ပစ္စည်းအမည်'], maximum: 180 },
       { id: 'onHand', label: 'Opening stock', required: true, kind: 'integer', aliases: ['opening_stock', 'on_hand', 'stock_on_hand', 'available_stock', 'stock', 'quantity', 'qty', 'opening_quantity', 'လက်ကျန်'], minimum: 0 },
-      { id: 'reorderAt', label: 'Reorder at', required: true, kind: 'integer', aliases: ['reorder_at', 'reorder_level', 'reorder_point', 'low_stock_at', 'minimum_stock', 'min_stock'], minimum: 0 },
+      { id: 'reorderAt', label: 'Reorder at', required: true, kind: 'integer', aliases: ['reorder_at', 'reorder_level', 'reorder_point', 'low_stock_at', 'minimum_stock', 'min_stock', 'အနည်းဆုံးလက်ကျန်', 'ပြန်မှာယူရန်အဆင့်'], minimum: 0 },
       { id: 'price', label: 'Price (MMK)', required: true, kind: 'integer', aliases: ['price_mmk', 'price', 'unit_price', 'selling_price', 'unit_price_mmk', 'selling_price_mmk', 'mmk_price', 'စျေးနှုန်း'], minimum: 1 },
     ],
   },
@@ -780,6 +780,13 @@ function byteLength(value: string) {
   return new TextEncoder().encode(value).byteLength
 }
 
+function containsUtf8ReplacementCharacter(value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) === 0xfffd) return true
+  }
+  return false
+}
+
 async function sha256(value: string) {
   if (!globalThis.crypto?.subtle) throw new Error('Secure import fingerprinting is unavailable in this browser.')
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
@@ -788,6 +795,7 @@ async function sha256(value: string) {
 
 function parseCsv(input: string) {
   if (byteLength(input) > CLIENT_IMPORT_MAX_BYTES) throw new Error(`Choose a CSV smaller than ${CLIENT_IMPORT_MAX_BYTES / 1024} KB.`)
+  if (containsUtf8ReplacementCharacter(input)) throw new Error('The CSV contains text that could not be decoded as UTF-8. Save it as a UTF-8 CSV and upload it again; no rows were imported.')
   if (input.includes('\0')) throw new Error('The CSV contains a null byte and was rejected.')
   const source = input.startsWith('\uFEFF') ? input.slice(1) : input
   if (!source.trim()) throw new Error('The CSV is empty.')

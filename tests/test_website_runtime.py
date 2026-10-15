@@ -132,8 +132,8 @@ def _record_evidence(current: dict[str, object], kind: str) -> dict[str, object]
     return dict(reduce_website_state("website.evidence.recorded", current, payload))
 
 
-def _published_state() -> dict[str, object]:
-    current = _state()
+def _published_state(state: dict[str, object] | None = None) -> dict[str, object]:
+    current = deepcopy(state) if state is not None else _state()
     current["revision"] = 1
     current["contentRevision"] = 1
     for kind in ("content", "responsive", "links"):
@@ -182,7 +182,7 @@ def _published_state() -> dict[str, object]:
         "recordedAt": STAMP,
         "recordedBy": "actor-human",
         "fingerprint": source["digest"],
-        "readyPageIds": ["page-home"],
+        "readyPageIds": [page['id'] for page in current['pages'] if page['stage'] == 'ready'],
         "approvalId": approval["id"],
         "evidenceIds": evidence_ids,
         "source": source,

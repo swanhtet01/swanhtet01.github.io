@@ -1,0 +1,61 @@
+.website-hosted-card,.website-hosted-request,.website-hosted-requests,.website-hosted-empty { background: white; border: 1px solid #e5e7ef; border-radius: 14px; }
+.website-hosted-card { padding: 28px; margin-bottom: 24px; }
+.website-hosted-card>header,.website-hosted-inbox>header,.website-hosted-request>header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.website-hosted-card h2,.website-hosted-inbox h2 { margin: 7px 0 8px; font-size: clamp(23px,2vw,28px); letter-spacing: -.025em; color: #13172a; }
+.website-hosted-card p,.website-hosted-inbox>header p { margin: 8px 0 20px; color: #697188; line-height: 1.6; font-size: 15px; }
+.website-hosted-eyebrow { font-size: 12px; font-weight: 600; line-height: 1.4; color: #6653df; }
+.website-hosted-status { padding: 7px 11px; border-radius: 20px; background: #f1f2f7; color: #626a80; font-size: 12px; white-space: nowrap; }
+.website-hosted-status.is-live { background: #e8f8ef; color: #16734c; }
+.website-hosted-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.website-hosted-actions .website-button { min-height: 44px; }
+.website-hosted-card .website-hosted-error { color: #a53641; }
+.website-hosted-hint { padding: 14px; border-radius: 8px; background: #f7f7fc; }
+.website-hosted-withdraw { margin-top: 24px; padding-top: 18px; border-top: 1px solid #eceef4; }
+.website-hosted-withdraw>button { padding: 10px 0; border: 0; background: transparent; color: #737b8f; font: inherit; font-size: 13px; cursor: pointer; }
+.website-hosted-inbox { display: grid; gap: 24px; margin: 0 0 28px; }
+.website-hosted-inbox-grid { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(0,1.4fr); gap: 20px; align-items: start; }
+.website-hosted-requests { max-height: 610px; overflow: auto; padding: 7px; }
+.website-hosted-requests>button { display: flex; gap: 13px; width: 100%; padding: 17px 13px; border: 0; border-radius: 9px; text-align: left; background: white; color: #171b30; font: inherit; cursor: pointer; }
+.website-hosted-requests>button[aria-pressed="true"] { background: #f2f0ff; }
+.website-hosted-requests>button>span:last-child { display: grid; gap: 7px; min-width: 0; }
+.website-hosted-requests strong { font-size: 15px; }
+.website-hosted-requests small { color: #747b91; font-size: 12px; }
+.website-hosted-requests>button>span>span { color: #70778b; font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.website-hosted-avatar { display: grid; place-items: center; flex: 0 0 38px; height: 38px; border-radius: 50%; background: #e5e0ff; color: #5844c9; font-size: 14px; }
+.website-hosted-request { padding: 28px; min-width: 0; }
+.website-inquiry-back.website-button { display: none; }
+.website-hosted-request h3 { margin: 0 0 7px; font-size: 21px; }
+.website-hosted-request header p { margin: 0; color: #646f86; overflow-wrap: anywhere; }
+.website-hosted-request time,.website-hosted-request footer>span { color: #7d8599; font-size: 12px; }
+.website-hosted-message { margin: 30px 0; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; color: #30384e; }
+.website-hosted-request footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 20px; border-top: 1px solid #eceef4; }
+.website-hosted-empty { padding: 52px 28px; text-align: center; }
+.website-hosted-empty>span { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; margin: 0 auto 18px; background: #eeebff; color: #5d48d9; font-size: 24px; }
+.website-hosted-empty h3 { font-size: 21px; color: #21263b; }
+.website-hosted-empty p { max-width: 420px; margin: 0 auto; color: #778095; line-height: 1.65; }
+.website-inquiry-views { display: flex; gap: 6px; padding: 5px; width: fit-content; border: 1px solid #e7e9f1; border-radius: 12px; background: white; }
+.website-inquiry-views button { display: flex; align-items: center; gap: 10px; border: 0; border-radius: 8px; background: transparent; color: #586278; font: inherit; padding: 10px 15px; min-height: 44px; cursor: pointer; }
+.website-inquiry-views button[aria-pressed=true] { background: #eeebff; color: #5142c6; font-weight: 600; }
+.website-inquiry-views button span { min-width: 22px; padding: 1px 5px; border-radius: 10px; background: #f0f1f8; font-size: 12px; }
+.website-inquiry-followup { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; padding: 18px 0; border-top: 1px solid #eceef4; }
+.website-inquiry-followup p { margin: 10px 0 0; font-size: 13px; color: #697386; }
+.website-inquiry-followup .website-hosted-actions { margin: 0; }
+.website-hosted-status.is-in_progress { background: #eeebff; color: #5142c6; }
+.website-hosted-status.is-done { background: #e8f8ef; color: #16734c; }
+.website-inquiry-note { border-top: 1px solid #eceef4; margin: 0 0 18px; }
+.website-inquiry-note summary { padding: 15px 0; min-height: 48px; cursor: pointer; font-size: 14px; color: #596377; }
+.website-inquiry-note label { display: block; font-size: 13px; color: #697386; margin: 0 0 8px; }
+.website-inquiry-note textarea { width: 100%; resize: vertical; min-height: 100px; padding: 12px; border: 1px solid #d5d9e4; border-radius: 9px; font: inherit; line-height: 1.7; color: #182030; background: white; }
+.website-inquiry-error { border: 1px solid #ead8db; border-radius: 9px; background: #fff6f7; color: #9c3545; padding: 13px 16px; line-height: 1.6; overflow-wrap: anywhere; }
+.website-inquiry-notice { color: #16734c; margin: 0; font-size: 14px; }
+.website-inquiry-updated { color: #778095; font-size: 12px; margin: 0 0 18px; }
+.website-hosted-inbox :is(button,summary,textarea):focus-visible { outline: 3px solid #8a7be9; outline-offset: 3px; }
+@media(max-width:700px) {
+  .website-hosted-inbox-grid { grid-template-columns: minmax(0,1fr); }
+  .website-hosted-requests { max-height: none; }
+  .is-list-view .website-hosted-request,.is-request-view .website-hosted-requests { display: none; }
+  .website-inquiry-back.website-button { display: inline-flex; margin-bottom: 24px; min-height: 44px; }
+  .website-hosted-card,.website-hosted-request { padding: 20px; }
+  .website-hosted-request>header { flex-direction: column; gap: 12px; }
+  .website-hosted-card>header { flex-wrap: wrap; }
+}

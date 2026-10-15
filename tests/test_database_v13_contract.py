@@ -60,7 +60,7 @@ class V13CatalogTests(unittest.TestCase):
         return audit.evaluate_snapshot(snapshot, schema_profile=current.PROFILE)
 
     def test_referencing_foreign_key_does_not_duplicate_owned_index(self):
-        indexes = [r for r in self.good['indexes'] if r['table_name'].startswith('website_')]
+        indexes = [r for r in self.good['indexes'] if r['table_name'] in {'website_customer_acceptances', 'website_customer_feedback', 'website_customer_reviews'}]
         expected = {
             'website_customer_acceptances_pkey': 'p',
             'website_customer_acceptances_workspace_id_review_id_key': 'u',
@@ -238,6 +238,20 @@ class V13CatalogTests(unittest.TestCase):
     def test_actual_database_privilege_and_rls_drift_is_rejected_and_restored(self):
         pg = proof.pg
         cases = (
+            ("alter table app_private.website_inbox no force row level security",
+             "alter table app_private.website_inbox force row level security"),
+            ("alter table app_private.website_inquiry_actions no force row level security",
+             "alter table app_private.website_inquiry_actions force row level security"),
+            ("grant update on app_private.website_inbox to supermega_trial_backend",
+             "revoke update on app_private.website_inbox from supermega_trial_backend"),
+            ("grant select on app_private.website_inquiry_actions to authenticated",
+             "revoke select on app_private.website_inquiry_actions from authenticated"),
+            ("alter function app_private.change_website_inquiry(uuid,uuid,uuid,bigint,text,text) security invoker",
+             "alter function app_private.change_website_inquiry(uuid,uuid,uuid,bigint,text,text) security definer"),
+            ("alter function app_private.read_website_published_media(uuid,text,text) set search_path to public",
+             "alter function app_private.read_website_published_media(uuid,text,text) set search_path to pg_catalog, app_private"),
+            ("alter policy website_inbox_read on app_private.website_inbox using (true)",
+             "alter policy website_inbox_read on app_private.website_inbox using (workspace_id=current_setting('app.workspace_id',true) and app_private.website_review_can('website.write'))"),
             ("alter table app_private.ecommerce_customer_reviews no force row level security",
              "alter table app_private.ecommerce_customer_reviews force row level security"),
             ("grant delete on app_private.ecommerce_customer_reviews to supermega_trial_backend",

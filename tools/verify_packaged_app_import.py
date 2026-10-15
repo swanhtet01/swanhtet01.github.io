@@ -9,6 +9,18 @@ import sys
 ROUTES = {
     '/api/trial/v1/bootstrap': 'get',
     '/api/trial/v1/commands': 'post',
+    '/api/trial/v1/website-media': 'post',
+    '/api/trial/v1/website-media/{asset_id}': 'get',
+    '/api/trial/v1/website-publications': 'get',
+    '/api/trial/v1/website-inbox': 'get',
+    '/api/trial/v1/website-inbox/{channel_id}/{request_id}/actions': 'post',
+    '/api/trial/v1/website-inquiry-channels': 'post',
+    '/api/trial/v1/website-inquiry-channels/{channel_id}/publish': 'post',
+    '/api/trial/v1/website-inquiry-channels/{channel_id}/unpublish': 'post',
+    '/api/public/sites/{channel_id}/media/{asset_id}': 'get',
+    '/api/public/sites/{channel_id}/inquiries': 'post',
+    '/sites/{channel_id}': 'get',
+    '/sites/{channel_id}/{page_path:path}': 'get',
     '/api/trial/v1/website-reviews/{review_id}': 'get',
     '/api/trial/v1/website-reviews/{review_id}/acceptance': 'post',
     '/api/trial/v1/ecommerce-reviews/{review_id}': 'get',
@@ -28,7 +40,7 @@ SAFE_FAILURE_CODES = frozenset({
     'runtime_modules_missing', 'Linux_required_for_package_acceptance',
     'packaged_import_failed', 'invalid_probe_result',
     'package_metadata_missing', 'package_launcher_missing', 'package_vendor_missing',
-    'package_entrypoint_missing', 'standalone_function_required',
+    'package_entrypoint_missing', 'standalone_function_required', 'packaged_photo_codec_failed',
 })
 PROBE_PHASES = frozenset({'layout', 'dependencies', 'native_imports', 'application_import', 'routes', 'module_origins'})
 ERROR_TYPES = frozenset({'ValueError', 'RuntimeError', 'ImportError', 'ModuleNotFoundError', 'FileNotFoundError', 'KeyError', 'TypeError', 'OSError', 'Exception'})
@@ -144,7 +156,8 @@ def probe(bundle):
     from importlib import import_module
     native_imports = []
     for pin, module_name in [('psycopg-binary', 'psycopg_binary'),
-                             ('opentelemetry-exporter-otlp-proto-grpc', 'grpc')]:
+                             ('opentelemetry-exporter-otlp-proto-grpc', 'grpc'),
+                             ('Pillow', 'PIL._imaging')]:
         if pin in pins:
             if module_name == 'psycopg_binary':
                 psycopg = import_module('psycopg')
@@ -152,12 +165,29 @@ def probe(bundle):
                     raise ValueError('packaged_psycopg_binary_not_loaded')
             import_module(module_name)
             native_imports.append(module_name)
+    photo_codecs = []
+    if any(normalize(pin) == 'pillow' for pin in pins):
+        from io import BytesIO
+        from PIL import Image
+        try:
+            # Importing Pillow alone cannot prove the deployed photo codecs work.
+            for image_format in ('JPEG', 'PNG', 'WEBP'):
+                output = BytesIO()
+                with Image.new('RGB', (2, 2), (40, 80, 120)) as source:
+                    source.save(output, format=image_format)
+                with Image.open(BytesIO(output.getvalue())) as decoded:
+                    decoded.load()
+                    if decoded.size != (2, 2) or decoded.format != image_format:
+                        raise ValueError('packaged_photo_codec_failed')
+                photo_codecs.append(image_format)
+        except Exception:
+            raise ValueError('packaged_photo_codec_failed') from None
     _probe_phase = 'application_import'
     from api.app import app
     _probe_phase = 'routes'
     schema = app.openapi()
     for route, method in ROUTES.items():
-        if method not in schema['paths'][route]:
+        if method not in schema.get('paths', {}).get(route, {}):
             raise ValueError('required_route_missing')
     _probe_phase = 'module_origins'
     runtime_count = 0
@@ -180,7 +210,7 @@ def probe(bundle):
         raise ValueError('runtime_modules_missing')
     return {'ok': True, 'evidence': 'packaged_application_import', 'runtimeModules': runtime_count,
             'dependencyPins': len(pins), 'requiredRoutes': len(ROUTES), 'nativeImports': native_imports,
-            'providerBootstrap': 'NOT RUN', 'hostedAcceptance': 'NOT RUN'}
+            'photoCodecs': photo_codecs, 'providerBootstrap': 'NOT RUN', 'hostedAcceptance': 'NOT RUN'}
 
 
 def run_probe(bundle):

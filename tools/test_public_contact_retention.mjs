@@ -3,7 +3,13 @@ import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 
 const require = createRequire(import.meta.url)
-const path = require.resolve(resolve('.vercel/output/functions/api/contact-submissions.js.func/index.js'))
+const isolatedOutputId = process.env.SUPERMEGA_PUBLIC_OUTPUT_ID || ''
+if (isolatedOutputId && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(isolatedOutputId)) throw new Error('public_output_id_invalid')
+const outputDir = isolatedOutputId
+  ? resolve('.tmp', 'supermega-public-output-' + isolatedOutputId)
+  : resolve('.vercel', 'output')
+const handlerPath = resolve(outputDir, 'functions', 'api', 'contact-submissions.js.func', 'index.js')
+const path = require.resolve(handlerPath)
 const fresh = () => { delete require.cache[path]; return require(path) }
 const names = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'RESEND_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'SUPERMEGA_LEAD_WEBHOOK_URL']
 const saved = Object.fromEntries(names.map(name => [name, process.env[name]]))

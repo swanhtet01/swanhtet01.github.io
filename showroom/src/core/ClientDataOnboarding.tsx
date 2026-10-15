@@ -15,7 +15,12 @@ import {
 } from './client-onboarding'
 import { activateLocalStagingPackage } from './local-client-import'
 import { readCommerceWorkspace } from './commerce-workspace'
-import { addShopVariantColumnToClientImportPreview, commerceCatalogImportReview } from './shop-catalog-import'
+import {
+  classifyShopCatalogImportRows,
+  SHOP_CATALOG_IMPORT_MAX_ROWS,
+  summarizeShopCatalogImportReview,
+  addShopVariantColumnToClientImportPreview,
+} from './shop-catalog-import'
 import {
   ManagedTrialError,
   applyManagedClientImport,
@@ -86,11 +91,20 @@ type LocalAppliedImport = {
   alreadyPresent: number
 }
 
+type CatalogReview = {
+  kind: 'conflict' | 'unchanged' | 'capacity'
+  message: string
+}
+
+function catalogReviewBlocksImport(review?: CatalogReview) {
+  return review?.kind === 'conflict' || review?.kind === 'capacity'
+}
+
 type ImportState = {
   sourceName: string
   sourceText: string
   preview: ClientImportPreview | null
-  catalogReview: Record<number, { conflict: boolean; message: string }>
+  catalogReview: Record<number, CatalogReview>
   busy: boolean
   validating: boolean
   preflighting: boolean
@@ -256,8 +270,8 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   const localOpenLabel = product === 'commerce' ? 'Open Shop counter' : `Open ${productName}`
   const importReviewRows = state.preview
     ? [
-        ...state.preview.rows.filter((row) => row.status !== 'ready' || state.catalogReview[row.rowNumber]?.conflict),
-        ...state.preview.rows.filter((row) => row.status === 'ready' && !state.catalogReview[row.rowNumber]?.conflict),
+        ...state.preview.rows.filter((row) => row.status !== 'ready' || catalogReviewBlocksImport(state.catalogReview[row.rowNumber])),
+        ...state.preview.rows.filter((row) => row.status === 'ready' && !catalogReviewBlocksImport(state.catalogReview[row.rowNumber])),
       ]
     : []
   const visibleRows = showAllRows ? importReviewRows : importReviewRows.slice(0, 12)
@@ -339,15 +353,32 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     && !state.applying
     && !appliedIsCurrent,
   )
+  const catalogHasConflicts = !managedIdentity && Object.values(state.catalogReview).some((row) => row.kind === 'conflict')
+  const catalogHasCapacityIssues = !managedIdentity && Object.values(state.catalogReview).some((row) => row.kind === 'capacity')
+  const catalogHasBlockingIssues = catalogHasConflicts || catalogHasCapacityIssues
   const catalogConflictCount = !managedIdentity
-    ? Object.values(state.catalogReview).filter((row) => row.conflict).length
+    ? Object.values(state.catalogReview).filter((row) => row.kind === 'conflict').length
     : 0
-  const catalogHasConflicts = catalogConflictCount > 0
-  const catalogReadyRowCount = state.preview?.rows.filter((row) => row.status === 'ready' && !state.catalogReview[row.rowNumber]?.conflict).length ?? 0
+  const catalogReviewSummary = summarizeShopCatalogImportReview(
+    state.preview?.totals.ready ?? 0,
+    !managedIdentity && product === 'commerce' ? Object.values(state.catalogReview) : [],
+  )
+  const catalogBlockingRowCount = catalogReviewSummary.blockingRowCount
+  const catalogUnchangedRowCount = catalogReviewSummary.unchangedRowCount
+  const catalogReadyRowCount = catalogReviewSummary.readyRowCount
+  const catalogAlreadyCurrentOnly = Boolean(
+    !managedIdentity
+    && product === 'commerce'
+    && state.preview?.readyForStaging
+    && catalogReviewSummary.unchangedOnly
+    && !catalogHasBlockingIssues,
+  )
+  const catalogIssueRowCount = (state.preview?.totals.issueRows ?? 0) + catalogBlockingRowCount
+  const targetImportReady = Boolean(state.preview?.readyForStaging && !catalogHasBlockingIssues)
   const canApplyLocalImport = Boolean(
     localActivationAvailable
-    && !catalogHasConflicts
-    && state.preview?.readyForStaging
+    && targetImportReady
+    && catalogReadyRowCount > 0
     && importContextReady
     && state.applyConfirmed
     && allRowsVisible
@@ -360,6 +391,10 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     ? `${productName} import is confirmed for this company.`
     : catalogHasConflicts
     ? 'Resolve the existing SKU conflicts below before importing.'
+    : catalogHasCapacityIssues
+    ? `Remove excess new rows to fit the ${SHOP_CATALOG_IMPORT_MAX_ROWS}-item Shop catalog limit.`
+    : catalogAlreadyCurrentOnly
+    ? 'Everything in this file already matches your Shop catalog.'
     : state.preview
       ? mappingNeedsReview
         ? variantMappingNeedsReview
@@ -379,11 +414,16 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         ['Missing columns', missingRequiredColumns ? `${missingRequiredColumns} fix` : 'Clear'],
         ['Row fixes', state.preview.totals.issueRows ? `${state.preview.totals.issueRows} rows` : 'None'],
         ['Duplicate keys', state.preview.totals.duplicates ? `${state.preview.totals.duplicates} found` : 'None'],
-        ['Ready rows', `${state.preview.totals.ready}/${state.preview.totals.rows}`],
+        ['Ready rows', `${catalogReadyRowCount}/${state.preview.totals.rows}`],
+        ...(product === 'commerce' && !managedIdentity ? [['Shop capacity', catalogHasCapacityIssues ? 'Reduce new rows' : 'Clear'] as const] : []),
       ] as const
     : []
   const importRepairMessage = state.preview
-    ? state.preview.readyForStaging
+    ? catalogHasConflicts
+      ? 'Update existing products separately or remove conflicting SKUs from the CSV.'
+      : catalogHasCapacityIssues
+        ? `Reduce new products to fit the ${SHOP_CATALOG_IMPORT_MAX_ROWS}-item Shop catalog limit; existing items are never replaced.`
+    : state.preview.readyForStaging
       ? 'Clean enough to prepare. SuperMega will still ask before anything is written.'
       : variantMappingNeedsReview && missingRequiredColumns
         ? 'Choose or omit the Shop variant column and match the missing required columns.'
@@ -399,7 +439,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     ? 'applied'
     : validationIsCurrent
       ? 'workspace_checked'
-      : state.preview?.readyForStaging
+      : targetImportReady
         ? 'data_ready'
         : state.preview
           ? 'needs_fix'
@@ -410,11 +450,11 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       product,
       status: progressStatus,
       rows: state.preview?.totals.rows ?? 0,
-      readyRows: state.preview?.totals.ready ?? 0,
-      issueRows: state.preview?.totals.issueRows ?? 0,
+      readyRows: catalogReadyRowCount,
+      issueRows: catalogIssueRowCount,
       updatedAt: null,
     })
-  }, [product, progressStatus, state.preview?.totals.issueRows, state.preview?.totals.ready, state.preview?.totals.rows])
+  }, [catalogIssueRowCount, catalogReadyRowCount, product, progressStatus, state.preview?.totals.rows])
   const importCoachAction = appliedIsCurrent
     ? 'Ready to use'
     : state.preflighting
@@ -438,7 +478,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                         ? 'Add company and owner'
                         : managedIdentity
                           ? 'Check with company'
-                          : catalogHasConflicts ? 'Resolve SKU conflicts' : 'Prepare import file'
+                          : catalogHasConflicts ? 'Resolve SKU conflicts' : catalogHasCapacityIssues ? 'Reduce Shop import rows' : 'Prepare import file'
                 : 'Upload your CSV'
   const importCoachReason = appliedIsCurrent
     ? 'The company import is confirmed and ready to use.'
@@ -449,7 +489,9 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         : validationIsCurrent
           ? 'The file passed the company check. Review is still required before records change.'
           : state.preview
-            ? state.preview.readyForStaging
+            ? catalogHasBlockingIssues
+              ? importRepairMessage
+              : state.preview.readyForStaging
               ? 'The file is clean; the next step is a company check or setup file.'
               : importRepairMessage
             : 'Choose your CSV to match columns and check your data.'
@@ -464,6 +506,10 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       ? 'Import is ready'
       : validationIsCurrent
         ? 'Review required'
+          : catalogHasConflicts
+            ? 'Resolve SKU conflicts'
+            : catalogHasCapacityIssues
+              ? 'Reduce Shop import rows'
         : state.preview?.readyForStaging
           ? managedIdentity
             ? 'Run company check'
@@ -477,6 +523,8 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       ? 'The file is checked, the product is ready, and the review box is selected.'
       : validationIsCurrent
         ? 'Company check passed with zero records written; review the import before going live.'
+          : catalogHasBlockingIssues
+            ? importRepairMessage
         : state.preview?.readyForStaging
           ? managedIdentity
             ? 'The clean file can be checked against the company account before anything changes.'
@@ -485,10 +533,10 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           ? 'Setup stays locked until required columns, any Shop variant choice, row issues, and duplicate keys are clear.'
             : 'Choose your CSV to prepare your import.'
   const activationHandoffRows = [
-    ['Package', state.preview ? `${state.preview.totals.ready}/${state.preview.totals.rows} ready` : 'Waiting'],
+    ['Package', state.preview ? `${catalogReadyRowCount}/${state.preview.totals.rows} ready` : 'Waiting'],
     ['Company', importContextReady ? workspace.trim() : 'Missing'],
     ['Owner', importContextReady ? owner.trim() : 'Missing'],
-    ['Review', appliedIsCurrent ? 'Receipt ready' : canApplyManagedImport ? 'Approved' : validationIsCurrent ? 'Approve' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
+    ['Review', appliedIsCurrent ? 'Receipt ready' : canApplyManagedImport ? 'Approved' : validationIsCurrent ? 'Approve' : catalogHasBlockingIssues ? 'Fix rows' : state.preview?.readyForStaging ? 'Prepare' : 'Locked'],
   ] as const
   const provisioningPlan = validationIsCurrent ? state.validation?.provisioningPlan : null
   const provisioningPlanRows = provisioningPlan
@@ -501,6 +549,40 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         ['Controls', `${provisioningPlan.required_controls.length}`],
       ] as const
     : []
+  const importFooterTitle = localAppliedIsCurrent && state.localApplied
+    ? `${state.localApplied.created} ${localRecordLabel} added; ${state.localApplied.alreadyPresent} already current.`
+    : appliedIsCurrent && state.applied
+      ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.`
+      : validationIsCurrent
+        ? 'Validated for this company.'
+        : catalogHasConflicts
+          ? 'Resolve existing SKU conflicts first.'
+          : catalogHasCapacityIssues
+            ? 'Reduce new products to fit the Shop catalog limit.'
+            : state.preview?.readyForStaging && !importContextReady
+              ? 'Add company and owner above.'
+              : state.preview?.readyForStaging
+                ? localActivationAvailable ? `Ready to add to your local ${productName} workspace.` : 'Data check passed.'
+                : 'Fix the highlighted rows first.'
+  const importFooterHint = localAppliedIsCurrent
+    ? `Open ${productName} to use the imported ${localUseLabel}.`
+    : appliedIsCurrent && state.applied
+      ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.${state.applied.shopPack ? ` ${state.applied.shopPack.id} pack revision ${state.applied.shopPack.version} is ready.` : ''}${state.applied.plantPack ? ` ${state.applied.plantPack.id} Plant setup is ready.` : ''}`
+      : validationIsCurrent
+        ? state.validation?.preflight ? 'Company record check passed. The reviewed import remains bound to this exact receipt.' : 'Checked successfully. Review and confirm above; SuperMega runs one final company record check before writing.'
+        : catalogHasConflicts
+          ? 'Update the existing products separately, or remove conflicting rows from the CSV.'
+          : catalogHasCapacityIssues
+            ? `Remove excess new rows and upload the file again. Existing catalog items stay unchanged; the limit is ${SHOP_CATALOG_IMPORT_MAX_ROWS} items.`
+            : mappingNeedsReview
+              ? 'Choose the required columns above.'
+              : !state.preview?.readyForStaging
+                ? 'Correct the CSV and upload it again.'
+                : !importContextReady
+                  ? 'Add your business details to continue.'
+                  : managedIdentity
+                    ? 'Ready to check with your company account.'
+                    : 'Ready to prepare your import.'
 
   useEffect(() => {
     requestRef.current += 1
@@ -561,18 +643,16 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
       if (expectedProduct === 'commerce' && !managedIdentityRef.current) {
         const catalog = readCommerceWorkspace()
         if (catalog.error) throw new Error(catalog.error)
-        for (const row of preview.rows) {
-          if (row.status !== 'ready') continue
-          const existing = catalog.state.items.find((item) => item.sku === row.values.sku)
-          if (!existing) continue
-          catalogReview[row.rowNumber] = commerceCatalogImportReview(existing, {
-            sku: row.values.sku,
-            name: row.values.name,
-            variant: row.values.variant,
-            onHand: Number(row.values.onHand),
-            reorderAt: Number(row.values.reorderAt),
-            price: Number(row.values.price),
-          })
+        const shopRows = classifyShopCatalogImportRows(preview, catalog.state.items)
+        for (const row of shopRows) {
+          if (row.status === 'conflict') {
+            catalogReview[row.rowNumber] = { kind: 'conflict', message: row.issues.map((issue) => issue.message).join(' ') }
+          } else if (row.status === 'already_exists') {
+            catalogReview[row.rowNumber] = { kind: 'unchanged', message: row.issues.map((issue) => issue.message).join(' ') }
+          } else if (row.status === 'invalid') {
+            const capacityIssue = row.issues.find((issue) => issue.code === 'catalog_capacity')
+            if (capacityIssue) catalogReview[row.rowNumber] = { kind: 'capacity', message: capacityIssue.message }
+          }
         }
       }
       setState({ ...emptyImportState(), sourceName, sourceText, preview, catalogReview })
@@ -971,13 +1051,16 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <p>Choose your CSV, check the matched columns, and review any corrections.</p>
           </div>
           <div className="catalog-import-file-actions">
-            <label htmlFor={`client-import-${product}`}>Choose your CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
+            <div className="catalog-import-template-actions">
+              <label htmlFor={`client-import-${product}`}>Choose your CSV<input accept=".csv,text/csv" disabled={state.busy} id={`client-import-${product}`} onChange={(event) => { const file = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = ''; void chooseFile(file) }} type="file" /></label>
+              <button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download CSV template</button>
+            </div>
           </div>
         </div>
         <details className="catalog-import-help">
-          <summary><span>Need a template?</span><small>Download the CSV and field guide</small></summary>
+          <summary><span>Field list</span><small>View required columns and examples</small></summary>
           <div className="catalog-import-help-body">
-            <div className="catalog-import-template-actions"><button className="core-button" disabled={state.busy} onClick={downloadTemplate} type="button">Download CSV template</button><button className="core-button" disabled={state.busy} onClick={downloadChecklist} type="button">Download field guide</button></div>
+            <div className="catalog-import-template-actions"><button className="core-button" disabled={state.busy} onClick={downloadChecklist} type="button">Download field guide</button></div>
             <div aria-label={`${productName} data checklist`} className="catalog-import-checklist">
               <div><strong>{object.label}</strong><small>Up to {object.maximumRows} rows per reviewed import. {object.activationBoundary}</small></div>
               <div className="catalog-import-checklist-grid">
@@ -1028,11 +1111,11 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         {state.preview ? <div className="catalog-import-preview" ref={previewRef} tabIndex={-1}>
           <div className="catalog-import-source">
             <div><strong>{state.preview.sourceName}</strong><small>{state.preview.totals.rows} rows found, {matchedFieldCount} of {state.preview.fields.length} columns matched</small></div>
-            <span className={`status-pill ${appliedIsCurrent || localAppliedIsCurrent || validationIsCurrent || (state.preview.readyForStaging && !catalogHasConflicts) ? 'approved' : 'pending'}`}>{appliedIsCurrent || localAppliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Server checked' : state.preview.readyForStaging && !catalogHasConflicts ? 'Ready to prepare' : 'Review needed'}</span>
+            <span className={`status-pill ${appliedIsCurrent || localAppliedIsCurrent || validationIsCurrent || targetImportReady ? 'approved' : 'pending'}`}>{appliedIsCurrent || localAppliedIsCurrent ? 'Applied' : validationIsCurrent ? 'Server checked' : targetImportReady ? 'Ready to prepare' : 'Review needed'}</span>
           </div>
           {product === 'commerce' && state.preview.mapping.variant ? <p className="form-notice">Detected “{state.preview.mapping.variant}” as the Shop variant column. Review each row before importing.</p> : null}
-          {!state.preview.readyForStaging ? <div aria-label={`${productName} import repair queue`} className="catalog-import-repair">
-            <div><span className="core-eyebrow">Repair queue</span><strong>{state.preview.readyForStaging ? 'No blocking fixes' : 'Clean this file'}</strong><small>{importRepairMessage}</small></div>
+          {!targetImportReady ? <div aria-label={`${productName} import repair queue`} className="catalog-import-repair">
+            <div><span className="core-eyebrow">Repair queue</span><strong>{state.preview.readyForStaging ? 'Check Shop catalog' : 'Clean this file'}</strong><small>{importRepairMessage}</small></div>
             <div className="catalog-import-repair-list">
               {importRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
             </div>
@@ -1052,21 +1135,24 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           </details>
 
           {state.preview.fileIssues.length ? <ul className="catalog-import-file-issues">{state.preview.fileIssues.map((issue) => <li key={`${issue.code}-${issue.field}`}>{issue.message}</li>)}</ul> : null}
-          {catalogHasConflicts ? <p className="form-error" role="alert">{catalogConflictCount} existing SKU conflict{catalogConflictCount === 1 ? '' : 's'} block this import. {catalogReadyRowCount > 0 ? `${catalogReadyRowCount} other row${catalogReadyRowCount === 1 ? '' : 's'} passed checks, but ` : ''}No products will be imported until the conflicts are resolved.</p> : null}
-          <details className="catalog-import-row-review" open={state.preview.rows.length > 12 || state.preview.totals.issueRows > 0 || catalogHasConflicts || undefined}>
-            <summary><span>Review rows</span><small>{catalogHasConflicts ? 'Existing products need review' : state.preview.totals.issueRows ? `${state.preview.totals.issueRows} need attention` : 'All rows passed'}</small></summary>
+          {catalogConflictCount > 0 ? <p className="form-error" role="alert">{catalogConflictCount} existing SKU conflict{catalogConflictCount === 1 ? '' : 's'} block this import. {catalogReadyRowCount > 0 ? `${catalogReadyRowCount} other row${catalogReadyRowCount === 1 ? '' : 's'} passed checks, but ` : ''}No products will be imported until the conflicts are resolved.</p> : null}
+          {catalogHasCapacityIssues ? <p className="form-error" role="alert">The Shop catalog is limited to {SHOP_CATALOG_IMPORT_MAX_ROWS} items. No products will be imported until the new rows fit the remaining capacity.</p> : null}
+          <details className="catalog-import-row-review" open={state.preview.rows.length > 12 || state.preview.totals.issueRows > 0 || catalogHasBlockingIssues || undefined}>
+            <summary><span>Review rows</span><small>{catalogHasConflicts ? 'Existing products need review' : catalogHasCapacityIssues ? 'Shop catalog limit needs review' : state.preview.totals.issueRows ? `${state.preview.totals.issueRows} need attention` : 'All rows passed'}</small></summary>
             <div className="catalog-import-table" id={importRowsId} role="table" aria-label={`${object.label} import preview`}>
               <div className="catalog-import-row catalog-import-head" role="row"><span role="columnheader">Row</span><span role="columnheader">Key</span><span role="columnheader">Status</span><span role="columnheader">{variantHeader ? 'Imported values, variant, and checks' : 'Imported values and checks'}</span></div>
               {visibleRows.map((row) => {
+                const catalogRow = state.catalogReview[row.rowNumber]
+                const statusLabel = catalogRow?.kind === 'conflict' ? 'Conflict' : catalogRow?.kind === 'capacity' ? 'Capacity' : catalogRow?.kind === 'unchanged' ? 'Unchanged' : rowStatusLabels[row.status] ?? row.status
                 const importedValues = state.preview!.fields
                   .filter((field) => Boolean(state.preview!.mapping[field.id]) && field.id !== 'variant')
                   .map((field) => `${field.label}: ${row.values[field.id] ?? '—'}`)
                 if (variantHeader) importedValues.push(`Variant: ${row.values.variant || '(blank)'}`)
                 const rowNotes = [
                   ...row.issues.map((issue) => issue.message),
-                  state.catalogReview[row.rowNumber]?.message ?? '',
+                  catalogRow?.message ?? '',
                 ].filter(Boolean)
-                return <div className="catalog-import-row" data-result={row.status} key={row.rowNumber} role="row"><span role="cell">{row.rowNumber}</span><strong role="cell">{row.key || '-'}</strong><span role="cell">{state.catalogReview[row.rowNumber]?.conflict ? 'Conflict' : state.catalogReview[row.rowNumber] ? 'Unchanged' : rowStatusLabels[row.status] ?? row.status}</span><small role="cell">{[...importedValues, ...rowNotes].join(' · ') || 'Mapped and checked'}</small></div>
+                return <div className="catalog-import-row" data-result={catalogRow?.kind ?? row.status} key={row.rowNumber} role="row"><span role="cell">{row.rowNumber}</span><strong role="cell">{row.key || '-'}</strong><span role="cell">{statusLabel}</span><small role="cell">{[...importedValues, ...rowNotes].join(' · ') || 'Mapped and checked'}</small></div>
               })}
             </div>
             {state.preview.rows.length > 12 ? <>
@@ -1079,30 +1165,14 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.preflighting || state.applying || !allRowsVisible} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.validation.stagingPackage.rows.length} {managedActivation.reviewLabel} and approve this import.</span></label>
             <div className="form-actions"><button className="core-button primary" disabled={!canApplyManagedImport} onClick={() => void activateManagedImport()} type="button">{state.preflighting ? 'Running final check...' : state.applying ? managedActivation.busyLabel : `Import ${state.validation.stagingPackage.rows.length} ${managedActivation.reviewLabel}`}</button></div>
           </> : null}
-          {localActivationAvailable && !catalogHasConflicts && importContextReady && state.preview.readyForStaging && !localAppliedIsCurrent ? <>
-            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying || !allRowsVisible} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>I reviewed all {state.preview.totals.ready} {localRecordLabel} and approve adding them to my local {productName} workspace in this browser.</span></label>
-            <div className="form-actions"><button className="core-button primary" disabled={!canApplyLocalImport} onClick={() => void activateLocalImport()} type="button">{state.applying ? `Adding ${productName.toLowerCase()} records...` : `Add ${state.preview.totals.ready} ${localActionLabel}`}</button></div>
+          {localActivationAvailable && !catalogHasBlockingIssues && catalogReadyRowCount > 0 && importContextReady && targetImportReady && !localAppliedIsCurrent ? <>
+            <label className="website-intake-confirm"><input checked={state.applyConfirmed} disabled={state.applying || !allRowsVisible} onChange={(event) => setState((current) => ({ ...current, applyConfirmed: event.target.checked, error: '' }))} type="checkbox" /><span>{catalogUnchangedRowCount
+              ? `I reviewed ${catalogReadyRowCount} new ${localRecordLabel}; ${catalogUnchangedRowCount} exact matches will stay unchanged. Approve adding only the new items to my local ${productName} workspace in this browser.`
+              : `I reviewed all ${catalogReadyRowCount} ${localRecordLabel} and approve adding them to my local ${productName} workspace in this browser.`}</span></label>
+            <div className="form-actions"><button className="core-button primary" disabled={!canApplyLocalImport} onClick={() => void activateLocalImport()} type="button">{state.applying ? `Adding ${productName.toLowerCase()} records...` : `Add ${catalogReadyRowCount} ${localActionLabel}`}</button></div>
           </> : null}
           <div className="catalog-import-footer">
-            <div><strong>{localAppliedIsCurrent && state.localApplied ? `${state.localApplied.created} ${localRecordLabel} added; ${state.localApplied.alreadyPresent} already current.` : appliedIsCurrent && state.applied ? `${state.applied.receipt.activation.row_count} ${managedActivation?.completedLabel ?? 'records'} ${managedActivation?.resultVerb ?? 'created'} in revision ${state.applied.receipt.result.version}.` : validationIsCurrent ? 'Validated for this company.' : state.preview.readyForStaging && !importContextReady ? 'Add company and owner above.' : catalogHasConflicts ? 'Resolve existing SKU conflicts first.' : state.preview.readyForStaging ? localActivationAvailable ? `Ready to add to your local ${productName} workspace.` : 'Data check passed.' : variantMappingNeedsReview ? 'Review the Shop variant choice first.' : mappingNeedsReview ? 'Choose the missing required columns first.' : 'Fix the highlighted rows first.'}</strong><small>{localAppliedIsCurrent
-              ? `Open ${productName} to use the imported ${localUseLabel}.`
-              : appliedIsCurrent && state.applied
-              ? `The ${managedActivation?.productLabel ?? 'product'} import is confirmed.${state.applied.shopPack ? ` ${state.applied.shopPack.id} pack revision ${state.applied.shopPack.version} is ready.` : ''}${state.applied.plantPack ? ` ${state.applied.plantPack.id} Plant setup is ready.` : ''}`
-              : validationIsCurrent
-              ? state.validation?.preflight ? 'Company record check passed. The reviewed import remains bound to this exact receipt.' : 'Checked successfully. Review and confirm above; SuperMega runs one final company record check before writing.'
-              : catalogHasConflicts
-                ? 'Update the existing products separately, or remove conflicting rows from the CSV.'
-              : mappingNeedsReview
-                ? variantMappingNeedsReview
-                  ? 'Choose one Shop variant column or explicitly choose “Do not import” above.'
-                  : 'Choose the required columns above.'
-              : !state.preview.readyForStaging
-                ? 'Correct the CSV and upload it again.'
-              : !importContextReady
-                ? 'Add your business details to continue.'
-              : managedIdentity
-                ? 'Ready to check with your company account.'
-                : 'Ready to prepare your import.'}</small>
+            <div><strong>{importFooterTitle}</strong><small>{importFooterHint}</small>
               {appliedIsCurrent && state.applied ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} / revision {state.applied.receipt.result.version} / idempotent command confirmed</p></details> : validationIsCurrent && state.validation ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} / {state.validation.preflight ? 'company check retained' : 'zero records written'} / {object.activationBoundary}</p></details> : null}
             </div>
             <div className="form-actions"><button className="core-button" disabled={state.preflighting || state.applying} onClick={clearPreview} type="button">Clear</button>{localAppliedIsCurrent || appliedIsCurrent ? <Link className="core-button primary" onClick={appliedIsCurrent && managedIdentity ? onOpenAppliedManagedImport : undefined} to={localOpenPath}>{localOpenLabel}</Link> : !localActivationAvailable && !(validationIsCurrent && state.validation?.receipt.activation.atomic_adapter_ready && managedActivation) ? <button className="core-button" disabled={!canPrepareImport} onClick={() => void validateOrDownloadStagingPackage()} type="button">{state.validating ? 'Checking...' : !importContextReady ? 'Add company and owner' : validationIsCurrent ? 'Download checked file' : managedIdentity ? 'Check with company' : 'Download prepared file'}</button> : null}</div>

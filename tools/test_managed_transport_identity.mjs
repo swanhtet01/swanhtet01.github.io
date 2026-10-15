@@ -10,6 +10,9 @@ import './test_production_entry.mjs'
 const { transformSync } = createRequire(resolve('showroom/package.json'))('esbuild')
 const source = readFileSync('showroom/src/core/managed-trial.ts', 'utf8')
 const start = source.indexOf('async function authorizedRequest<T>(')
+const declarationLineStart = source.lastIndexOf('\n', start) + 1
+const requestPrefix = source.slice(declarationLineStart, start)
+const sessionEnd = requestPrefix.endsWith('export ') ? declarationLineStart : start
 const end = source.indexOf('\nexport async function validateManagedClientImport(', start)
 assert.ok(start >= 0 && end > start)
 const code = transformSync(source.slice(start, end), { loader: 'ts', format: 'cjs' }).code
@@ -74,8 +77,8 @@ test('account switched during caller preparation prevents the initial request', 
 
 
 const sessionStart = source.indexOf('async function sessionForRequest(')
-assert.ok(sessionStart >= 0 && sessionStart < start)
-const sessionCode = transformSync(source.slice(sessionStart, start), { loader: 'ts', format: 'cjs' }).code
+assert.ok(sessionStart >= 0 && sessionStart < sessionEnd && sessionEnd <= start)
+const sessionCode = transformSync(source.slice(sessionStart, sessionEnd), { loader: 'ts', format: 'cjs' }).code
 
 test('real session resolver rejects workspace and user changes across awaited authentication', async () => {
   for (const stage of ['get', 'refresh']) {

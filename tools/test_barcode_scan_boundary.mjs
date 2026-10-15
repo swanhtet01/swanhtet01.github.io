@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const componentPath = resolve(root, 'showroom', 'src', 'core', 'BarcodeScanButton.tsx')
+const scannerDialogPath = resolve(root, 'showroom', 'src', 'core', 'BarcodeScannerDialog.tsx')
 const coreAppPath = resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx')
 const labelsPath = resolve(root, 'showroom', 'src', 'core', 'ShopBarcodeLabels.tsx')
 const cssPath = resolve(root, 'showroom', 'src', 'core', 'core-app.css')
@@ -13,6 +14,7 @@ const vercelPath = resolve(root, 'vercel.json')
 const packagePath = resolve(root, 'showroom', 'package.json')
 
 const component = readFileSync(componentPath, 'utf8')
+const scannerDialog = readFileSync(scannerDialogPath, 'utf8')
 const coreApp = readFileSync(coreAppPath, 'utf8')
 const labels = readFileSync(labelsPath, 'utf8')
 const css = readFileSync(cssPath, 'utf8')
@@ -58,23 +60,33 @@ function importLines(source) {
 }
 
 const componentImports = importLines(component)
-check(componentImports.length === 1 && componentImports[0] === "import { useEffect, useRef, useState } from 'react'", 'barcode_component_dependency_boundary_changed')
-check(component.includes('interface Window { BarcodeDetector?: BarcodeDetectorConstructor }'), 'barcode_detector_window_contract_missing')
-check(component.includes('const DETECT_INTERVAL_MS = 400'), 'barcode_detect_interval_changed')
+check(componentImports.length === 1 && componentImports[0] === "import { Component, lazy, Suspense, useState, type ReactNode } from 'react'", 'barcode_component_dependency_boundary_changed')
+check(scannerDialog.includes("import { useEffect, useRef, useState } from 'react'"), 'barcode_scanner_dialog_dependency_boundary_changed')
+check(component.includes("lazy(() => import('./BarcodeScannerDialog')"), 'barcode_scanner_must_split_into_on_demand_chunk')
+check(component.includes('{open ? <BarcodeScannerErrorBoundary') && component.includes('onClick={() => setOpen(true)}')
+  && component.includes('<Suspense fallback='), 'barcode_scanner_chunk_must_load_after_user_action')
+check(component.includes('class BarcodeScannerErrorBoundary extends Component')
+  && component.includes('static getDerivedStateFromError()')
+  && component.includes('Camera scanner could not load. Type the code manually.'), 'barcode_lazy_chunk_failure_must_preserve_manual_entry')
+check(component.includes('Opening camera scanner…') && component.includes('role="status"'), 'barcode_lazy_load_status_missing')
+check(component.includes('onClose={() => setOpen(false)}'), 'barcode_dialog_must_close_its_lazy_boundary')
+check(scannerDialog.includes('interface Window { BarcodeDetector?: BarcodeDetectorConstructor }'), 'barcode_detector_window_contract_missing')
+check(scannerDialog.includes('const DETECT_INTERVAL_MS = 400'), 'barcode_detect_interval_changed')
 check(component.includes("typeof window === 'undefined' || typeof window.BarcodeDetector !== 'function') return null"), 'barcode_unsupported_browser_must_render_nothing')
-check(component.includes("!navigator.mediaDevices?.getUserMedia"), 'barcode_get_user_media_feature_detect_missing')
-check(component.includes("getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' } } })"), 'barcode_camera_constraints_changed')
+check(scannerDialog.includes("!navigator.mediaDevices?.getUserMedia"), 'barcode_get_user_media_feature_detect_missing')
+check(scannerDialog.includes("getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' } } })"), 'barcode_camera_constraints_changed')
+check(scannerDialog.includes('async function start(activeVideo: HTMLVideoElement)') && scannerDialog.includes('void start(video)'), 'barcode_camera_element_must_be_non_null_before_async_start')
 const permissionsPolicy = vercel.routes?.find((route) => route.src === '/(.*)')?.headers?.['Permissions-Policy'] ?? ''
 check(permissionsPolicy === 'camera=(self), geolocation=(), microphone=(), payment=(), usb=()', 'barcode_camera_blocked_by_deployment_policy')
-check(component.includes('if (detecting || cancelled || video.readyState < 2) return'), 'barcode_in_flight_or_not_ready_guard_missing')
-check(component.includes('barcodes.map((barcode) => barcode.rawValue.trim()).find(Boolean)'), 'barcode_raw_value_trim_missing')
-check(component.includes('onDetectedRef.current(value)') && component.includes('setOpen(false)'), 'barcode_detected_value_must_close_dialog')
-check(component.includes('stream?.getTracks().forEach((track) => track.stop())'), 'barcode_stream_cleanup_missing')
-check(component.includes('if (timer !== undefined) window.clearInterval(timer)'), 'barcode_interval_cleanup_missing')
-check(component.includes('video.srcObject = null'), 'barcode_video_detach_missing')
-check(component.includes('if (dialog.open) dialog.close()'), 'barcode_dialog_cleanup_missing')
+check(scannerDialog.includes('if (detecting || cancelled || activeVideo.readyState < 2) return'), 'barcode_in_flight_or_not_ready_guard_missing')
+check(scannerDialog.includes('barcodes.map((barcode) => barcode.rawValue.trim()).find(Boolean)'), 'barcode_raw_value_trim_missing')
+check(scannerDialog.includes('onDetectedRef.current(value)') && scannerDialog.includes('onCloseRef.current()'), 'barcode_detected_value_must_close_dialog')
+check(scannerDialog.includes('stream?.getTracks().forEach((track) => track.stop())'), 'barcode_stream_cleanup_missing')
+check(scannerDialog.includes('if (timer !== undefined) window.clearInterval(timer)'), 'barcode_interval_cleanup_missing')
+check(scannerDialog.includes('video.srcObject = null'), 'barcode_video_detach_missing')
+check(scannerDialog.includes('if (dialog.open) dialog.close()'), 'barcode_dialog_cleanup_missing')
 for (const forbidden of ['fetch(', 'XMLHttpRequest', 'sendBeacon', 'localStorage', 'sessionStorage', 'indexedDB', 'mutateCommerce', 'mutateProduction', 'queueAction(']) {
-  check(!component.includes(forbidden), `barcode_component_external_or_domain_write_boundary_changed:${forbidden}`)
+  check(!component.includes(forbidden) && !scannerDialog.includes(forbidden), `barcode_component_external_or_domain_write_boundary_changed:${forbidden}`)
 }
 
 check(coreApp.includes("import { BarcodeScanButton } from './BarcodeScanButton'"), 'core_app_barcode_import_missing')
@@ -94,12 +106,66 @@ check(count(coreApp, '{catalogForm}') === 1
 check(coreApp.includes('placeholder="Search or scan SKU"'), 'shop_counter_keyboard_wedge_placeholder_missing')
 check(coreApp.includes('onKeyDown={addSearchMatch}'), 'shop_counter_keyboard_wedge_handler_missing')
 check(coreApp.includes('label="Scan a barcode with the camera" onDetected={addCameraScan}'), 'shop_counter_camera_handler_missing')
-check(count(coreApp, 'label="Scan the product barcode into the SKU field"') === 2, 'shop_catalog_sku_scan_site_count_changed')
+check(count(coreApp, 'label="Scan the product barcode into the SKU field" onDetected=') === 1
+  && count(coreApp, 'label="Scan a product code into the SKU field" onDetected=') === 1,
+  'shop_catalog_sku_scan_controls_missing_or_duplicated')
+check(coreApp.includes('label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))}'), 'shop_managed_catalog_scan_must_only_fill_sku')
+check(coreApp.includes('label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))}'), 'shop_first_product_scan_must_only_fill_sku')
 check(coreApp.includes('label="Scan the job card to choose this job" onDetected={selectScannedJob}'), 'plant_job_scan_handler_missing')
 check(coreApp.includes('label="Scan the material label into the material field" onDetected={applyScannedMaterialRef}'), 'plant_material_scan_handler_missing')
 
 const addSearchMatch = functionBody(coreApp, 'addSearchMatch')
 const addCameraScan = functionBody(coreApp, 'addCameraScan')
+const addScannedValue = new Function('items', 'addItem', 'setQuery', 'setScanFeedback', 'value', functionBody(coreApp, 'addScannedValue'))
+const addCounterItem = new Function('tickets', 'setCart', 'setScanFeedback', 'item', functionBody(coreApp, 'addItem'))
+check(functionBody(coreApp, 'updateBasket').includes('return tickets.dispatch(')
+  && functionBody(coreApp, 'setCart').includes('return updateBasket('), 'counter_save_rejection_must_reach_scan_handler')
+function runCounterScan(items, value) {
+  const added = []
+  const queries = []
+  const feedback = []
+  const matched = addScannedValue(items, (item) => { added.push(item.sku); feedback.push(''); return true }, (query) => queries.push(query), (message) => feedback.push(message), value)
+  return { matched, added, queries, feedback }
+}
+const counterItems = [
+  { sku: 'MUG-10', name: 'Ceramic Mug', onHand: 4 },
+  { sku: 'LAMP-02', name: 'Desk Lamp', onHand: 0 },
+]
+const exactCounterScan = runCounterScan(counterItems, ' mug-10 ')
+check(exactCounterScan.matched && exactCounterScan.added.join() === 'MUG-10' && exactCounterScan.queries.join() === '' && exactCounterScan.feedback.join() === '', 'exact_case_insensitive_counter_scan_must_add_one_item_and_clear_search')
+for (const value of ['MUG', 'UG-10', 'Ceramic Mug', 'MUG-1', 'UNKNOWN']) {
+  const miss = runCounterScan(counterItems, value)
+  check(!miss.matched && miss.added.length === 0 && miss.queries.length === 0 && miss.feedback[0]?.includes('exact SKU'), `counter_scan_must_not_auto_add_fuzzy_or_unknown_match:${value}`)
+}
+const outOfStockCounterScan = runCounterScan(counterItems, 'LAMP-02')
+check(!outOfStockCounterScan.matched && outOfStockCounterScan.added.length === 0, 'out_of_stock_counter_scan_must_not_add_item')
+const ambiguousCounterScan = runCounterScan([{ sku: 'MUG-10', onHand: 4 }, { sku: 'mug-10', onHand: 4 }], 'MUG-10')
+check(!ambiguousCounterScan.matched && ambiguousCounterScan.added.length === 0, 'duplicate_counter_skus_must_fail_closed')
+function runRealCounterScan(initialQuantity, saveAccepted = true) {
+  let cart = initialQuantity ? { 'MUG-10': initialQuantity } : {}
+  const queries = []
+  const feedback = []
+  const tickets = { getSnapshot: () => ({ state: { cart } }) }
+  const setCart = (value) => {
+    if (!saveAccepted) return false
+    cart = typeof value === 'function' ? value(cart) : value
+    return true
+  }
+  const scan = (value) => addScannedValue(counterItems,
+    (item) => addCounterItem(tickets, setCart, (message) => feedback.push(message), item),
+    (query) => queries.push(query), (message) => feedback.push(message), value)
+  return { scan, cart: () => cart, queries, feedback }
+}
+const cappedCounter = runRealCounterScan(3)
+check(cappedCounter.scan('MUG-10') && cappedCounter.cart()['MUG-10'] === 4, 'scan_must_add_last_available_item')
+check(!cappedCounter.scan('MUG-10') && cappedCounter.cart()['MUG-10'] === 4
+  && cappedCounter.queries.length === 1 && cappedCounter.feedback.at(-1)?.includes('Stock limit'),
+  'scan_at_stock_cap_must_not_clear_code_or_report_success')
+const refusedCounter = runRealCounterScan(0, false)
+check(!refusedCounter.scan('MUG-10') && !refusedCounter.cart()['MUG-10']
+  && refusedCounter.queries.length === 0 && refusedCounter.feedback.at(-1)?.includes('saving paused'),
+  'rejected_counter_save_must_not_look_like_added_item')
+check(coreApp.includes('disabled={item.onHand < 1 || quantity >= item.onHand}'), 'product_tile_must_disable_at_sale_stock_cap')
 const selectScannedJob = functionBody(coreApp, 'selectScannedJob')
 const applyScannedMaterialRef = functionBody(coreApp, 'applyScannedMaterialRef')
 const selectStockCountBarcode = functionBody(coreApp, 'selectStockCountBarcode')

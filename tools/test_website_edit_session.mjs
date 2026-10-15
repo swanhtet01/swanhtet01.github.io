@@ -22,7 +22,7 @@ const bundle = await build({
     contents: `export {
       createInitialWorkspace, createWebsiteEditSession, updateWebsiteEditSession,
       websiteEditSessionMatches, commitWebsiteEditSession, restoreWebsiteEditSession,
-      workspaceFingerprint,
+      websiteEditSessionScope, websiteEditSessionStorageKey, workspaceFingerprint,
     } from './website-model.ts'`,
     resolveDir: 'showroom/src/products/website',
     sourcefile: 'showroom/src/products/website/session-test-entry.ts',
@@ -38,7 +38,7 @@ const bundle = await build({
 const {
   createInitialWorkspace, createWebsiteEditSession, updateWebsiteEditSession,
   websiteEditSessionMatches, commitWebsiteEditSession, restoreWebsiteEditSession,
-  workspaceFingerprint,
+  websiteEditSessionScope, websiteEditSessionStorageKey, workspaceFingerprint,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -134,5 +134,31 @@ check(Boolean(restored), 'a session survives a JSON round trip')
 check(restored.baseFingerprint === edited.session.baseFingerprint, 'and keeps the fingerprint it was opened with')
 check(restoreWebsiteEditSession('not json') === null, 'a corrupt stored session restores as null rather than throwing')
 check(restoreWebsiteEditSession(JSON.stringify({ nope: true })) === null, 'a structurally wrong session restores as null')
+
+// --- managed drafts are isolated by company workspace ------------------------
+// Both new companies begin with the same revision and content. The existing content guard
+// cannot distinguish them; the session key has to do that before an edit is restored.
+const otherCompany = createInitialWorkspace()
+check(websiteEditSessionMatches(edited.session, otherCompany), 'two untouched companies have the same draft base')
+const actor = 'owner-1'
+const scopeA = websiteEditSessionScope('managed', actor, 'company-A')
+const scopeB = websiteEditSessionScope('managed', actor, 'company-B')
+const keyA = websiteEditSessionStorageKey(scopeA)
+const keyB = websiteEditSessionStorageKey(scopeB)
+check(keyA !== keyB, 'one owner gets separate draft keys for separate companies')
+check(keyA !== websiteEditSessionStorageKey(`managed:${actor}`), 'actor-only legacy drafts are not silently rebound')
+check(websiteEditSessionScope('managed', actor, '') === '', 'managed editing fails closed without a workspace ID')
+check(websiteEditSessionScope('managed', '', 'company-A') === '', 'managed editing fails closed without an actor ID')
+check(websiteEditSessionScope('browser-local', '', '') === 'browser-local', 'device-local draft scope stays unchanged')
+
+const tabDrafts = new Map([[keyA, JSON.stringify(edited.session)]])
+check(tabDrafts.get(keyB) === undefined, 'opening company B cannot restore company A draft')
+const companyBSession = createWebsiteEditSession(otherCompany)
+const companyBEdit = updateWebsiteEditSession(companyBSession, renameTo('Mandalay Books'))
+check(companyBEdit.ok && companyBEdit.changed, 'company B can create its own edit session')
+tabDrafts.set(keyB, JSON.stringify(companyBEdit.session))
+const companyBSaved = commitWebsiteEditSession(otherCompany, restoreWebsiteEditSession(tabDrafts.get(keyB)))
+check(companyBSaved.siteName === 'Mandalay Books', 'saving B applies only its own draft')
+check(restoreWebsiteEditSession(tabDrafts.get(keyA)).workspace.siteName === 'Yangon Tyre', 'A draft remains recoverable after saving B')
 
 console.log(`website edit session contract: ${checks} checks passed`)

@@ -14,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20261010063000_website_publishing_and_inquiries.sql": "adc3cca04a41f5048366d10ab2f5a1ae6b313683a5cf6d049bcd766cd43cd8b2",
+    "20261010070000_website_published_hero_media.sql": "1f7d75e040574ac394a6d1cdc82118f21fabfdc5d91ea6f011c584dffcc6a026",
+    "20261010120857_website_inquiry_followup.sql": "b794decd2456c16c2ce81f18b9a631562cc54d5f5032bec2ad5c2b0b1d674203",
     "20260930010000_app_rls_initplan_optimization.sql": "eda938f781a7e854c9d83567600ad912bd07cadc27f4479b1bf7ee410d451a57",
     "20260929171000_ecommerce_decision_review_fk_index.sql": "6ad14b664f4b9ad560a7cbaf37c6d4dcf8c26d3709e5bb44d40ea2f4029785c3",
     "20260924231714_ecommerce_customer_decisions.sql": "c14f514daddca921f1c1ea2dbad3c7504d2142bc8b0bbbef0da48eb7104069c7",
@@ -26,9 +29,15 @@ MIGRATION_PINS = {
     "20260915191528_website_review_entitlement_proof.sql": "75755426b58dfe01b6efde4bd3480e2defdf5556c3e9d1352bc96c48587adf62",
     "20260918011500_website_customer_acceptance.sql": "2ffe0304564175d9682af8525873c348d1a3638c87671d16c682e5414a2347b1",
 }
-TABLES = frozenset({"ecommerce_customer_decisions", "ecommerce_customer_reviews", "billing_invoices", "billing_events", "billing_entitlements",
+TABLES = frozenset({'website_inquiry_channels', 'website_inbox', 'website_inquiry_actions', "ecommerce_customer_decisions", "ecommerce_customer_reviews", "billing_invoices", "billing_events", "billing_entitlements",
                     "self_serve_attempt_budgets", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances"})
 WEBSITE_FUNCTIONS = {
+    'change_website_inquiry': ('p_channel uuid, p_request uuid, p_action uuid, p_revision bigint, p_operation text, p_note text', 'jsonb'),
+    'publish_website_inquiry_channel': ('p_channel uuid, p_version bigint, p_snapshot text, p_digest text, p_origin text', 'jsonb'),
+    'read_website_inquiry_page': ('p_channel uuid, p_origin text', 'jsonb'),
+    'read_website_published_media': ('p_channel uuid, p_origin text, p_asset text', 'jsonb'),
+    'receive_website_inquiry': ('p_channel uuid, p_request uuid, p_origin text, p_name text, p_contact text, p_message text, p_consent boolean, p_client_key text', 'jsonb'),
+    'unpublish_website_inquiry_channel': ('p_channel uuid, p_digest text', 'jsonb'),
     "guard_ecommerce_decision": ("", "trigger"),
     "ecommerce_review_text_length": ("value text", "bigint"),
     "ecommerce_review_projection": ("source jsonb", "jsonb"),
@@ -58,6 +67,10 @@ FUNCTIONS = {
     "mark_self_serve_claim_conflict": ("admitted_at timestamp with time zone", "boolean"),
 }
 WEBSITE_POLICIES = {
+    'website_inbox_read': ('website_inbox', 'SELECT', '67b3bc6f31d708f4fbae90df69ca85692ce1ab11959fa4598169fb1811bcb8e6', None),
+    'website_inquiry_actions_read': ('website_inquiry_actions', 'SELECT', '67b3bc6f31d708f4fbae90df69ca85692ce1ab11959fa4598169fb1811bcb8e6', None),
+    'website_inquiry_channel_create': ('website_inquiry_channels', 'INSERT', None, '85a4834fb043b710825c80f56b44ce17b82956c06d5d7b87237204e12a86700b'),
+    'website_inquiry_channel_read': ('website_inquiry_channels', 'SELECT', '67b3bc6f31d708f4fbae90df69ca85692ce1ab11959fa4598169fb1811bcb8e6', None),
     "ecommerce_decisions_read": ("ecommerce_customer_decisions", "SELECT", "fa6ebfe157157ad6d5daf331058d4b8092da94f072e2758641d1c596776c9bdb", None),
     "ecommerce_decisions_insert": ("ecommerce_customer_decisions", "INSERT", None, "d452ac0c7fcc944fc931f4ae2b2a3533ff9bb63882af8dee7ef7b43b2419bc8c"),
     "ecommerce_reviews_read": ("ecommerce_customer_reviews", "SELECT", "e8b03e62dc2319a3798b075015f4b7e6ee20d6e78bd545941de0554befcd4423", None),
@@ -76,10 +89,10 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 # Exact PostgreSQL 17 output from the pinned migrations, with all row keys retained.
 # Source-derived, synthetic catalog evidence only. Unknown/extra/missing rows fail.
 CATALOG_PINS = {
-    "extension_columns_exact": "263730f2611d82cffec18b53d2c15a692d3613830e0707f434c5df2d9024d05c",
-    "extension_constraints_exact": "6480dfb4c310398fefb446aaa59187990a976bde623d25364a8ea25d7577e3b1",
-    "extension_functions_exact": "97562ea0ea0fa18f9cdac35e309b92b588d17909e9967df7005e66ee92bd4619",
-    "extension_policies_exact": "cdfa8c8e52aeb1f00dca92a4bfc532c8de01c767afa49462f668ac005a391341",
+    "extension_columns_exact": "533c2f79353d013486899db3e93e0ce8a04c49390e2b7ea6e255dc481c6785d6",
+    "extension_constraints_exact": "0931c294b0bf34d515cce0751e5f5dc86b43cb9227be210e25f4d751f975bdf6",
+    "extension_functions_exact": "ed8304bf4366017691d8df8fe8dbd625183637184f0fe2abf20c0b8dd8c1ed27",
+    "extension_policies_exact": "9ebb7163b5e86d70fdddec40768d71fc3fff2284a4e2072a2d1a8a6d0ce76de5",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",
                "self_serve_attempt_budget_actor_only": "75f43c59c93c94637dad16ee262f552380b037c4d94c987c1ddeffc446d7875a"}
@@ -200,6 +213,19 @@ def extend_contract(base):
     ):
         base["EXPECTED_INDEX_CONTRACT"][name] = dict(table=table, keys=keys, options=options,
                                                    unique=unique, primary=primary, constraint=constraint)
+    # Publishing indexes from the pinned source migrations; extra/missing indexes fail.
+    base["EXPECTED_INDEX_CONTRACT"]['website_inbox_channel_received_idx'] = {'table': 'website_inbox', 'keys': ('channel_id', 'received_at'), 'options': (0, 0), 'unique': False, 'primary': False, 'constraint': None}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inbox_client_received_idx'] = {'table': 'website_inbox', 'keys': ('workspace_id', 'client_key', 'received_at'), 'options': (0, 0, 0), 'unique': False, 'primary': False, 'constraint': None}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inbox_pkey'] = {'table': 'website_inbox', 'keys': ('channel_id', 'request_id'), 'options': (0, 0), 'unique': True, 'primary': True, 'constraint': 'p'}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inbox_status_received_idx'] = {'table': 'website_inbox', 'keys': ('workspace_id', 'status', 'received_at', 'channel_id', 'request_id'), 'options': (0, 0, 3, 0, 0), 'unique': False, 'primary': False, 'constraint': None}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inbox_workspace_received_idx'] = {'table': 'website_inbox', 'keys': ('workspace_id', 'received_at', 'channel_id', 'request_id'), 'options': (0, 3, 0, 0), 'unique': False, 'primary': False, 'constraint': None}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inbox_workspace_request'] = {'table': 'website_inbox', 'keys': ('workspace_id', 'channel_id', 'request_id'), 'options': (0, 0, 0), 'unique': True, 'primary': False, 'constraint': 'u'}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inquiry_actions_pkey'] = {'table': 'website_inquiry_actions', 'keys': ('workspace_id', 'action_id'), 'options': (0, 0), 'unique': True, 'primary': True, 'constraint': 'p'}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inquiry_actions_request_idx'] = {'table': 'website_inquiry_actions', 'keys': ('workspace_id', 'channel_id', 'request_id', 'created_at'), 'options': (0, 0, 0, 0), 'unique': False, 'primary': False, 'constraint': None}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inquiry_channels_active_origin_idx'] = {'table': 'website_inquiry_channels', 'keys': ('workspace_id', 'allowed_origin'), 'options': (0, 0), 'unique': True, 'primary': False, 'constraint': None, 'predicate_expression': 'enabled'}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inquiry_channels_pkey'] = {'table': 'website_inquiry_channels', 'keys': ('channel_id',), 'options': (0,), 'unique': True, 'primary': True, 'constraint': 'p'}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inquiry_channels_workspace_id_channel_id_key'] = {'table': 'website_inquiry_channels', 'keys': ('workspace_id', 'channel_id'), 'options': (0, 0), 'unique': True, 'primary': False, 'constraint': 'u'}
+    base["EXPECTED_INDEX_CONTRACT"]['website_inquiry_channels_workspace_idx'] = {'table': 'website_inquiry_channels', 'keys': ('workspace_id', 'created_at', 'channel_id'), 'options': (0, 0, 0), 'unique': False, 'primary': False, 'constraint': None}
     base["EXPECTED_INDEXES"] = frozenset(base["EXPECTED_INDEX_CONTRACT"])
     for name, table, command in (
         ("billing_entitlements_self_read", "billing_entitlements", "SELECT"),
@@ -282,13 +308,13 @@ def extend_contract(base):
     base["EXPECTED_NON_OWNER_ACL"] |= frozenset(
         [("function", name, role, "EXECUTE", False) for name in WEBSITE_FUNCTIONS]
         + [("table", table, role, privilege, False)
-           for table, privileges in (("ecommerce_customer_decisions", ("SELECT", "INSERT")), ("ecommerce_customer_reviews", ("SELECT", "INSERT", "UPDATE")), ("website_customer_reviews", ("SELECT", "INSERT", "UPDATE")),
+           for table, privileges in (("website_inquiry_channels", ("SELECT", "INSERT")), ("website_inbox", ("SELECT",)), ("website_inquiry_actions", ("SELECT",)), ("ecommerce_customer_decisions", ("SELECT", "INSERT")), ("ecommerce_customer_reviews", ("SELECT", "INSERT", "UPDATE")), ("website_customer_reviews", ("SELECT", "INSERT", "UPDATE")),
                                      ("website_customer_feedback", ("SELECT", "INSERT")),
                                      ("website_customer_acceptances", ("SELECT", "INSERT")))
            for privilege in privileges])
     base["EXPECTED_BACKEND_ACL_DEPENDENCIES"] |= frozenset(
         [("function", f"app_private.{name}({signature[0]})", 0) for name, signature in WEBSITE_FUNCTIONS.items()]
         + [("relation", f"app_private.{table}", 0)
-           for table in ("ecommerce_customer_decisions", "ecommerce_customer_reviews", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances")])
+           for table in ("website_inquiry_channels", "website_inbox", "website_inquiry_actions", "ecommerce_customer_decisions", "ecommerce_customer_reviews", "website_customer_reviews", "website_customer_feedback", "website_customer_acceptances")])
     base.update(collect_extensions=collect_extensions, extension_checks=extension_checks)
     return base

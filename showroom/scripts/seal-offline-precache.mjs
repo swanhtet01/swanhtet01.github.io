@@ -55,10 +55,7 @@ const swPath = resolve(distDir, 'sw.js')
 // pins that same name as the operations route artifact. Both are resolved against the manifest and
 // a miss is fatal, so a rename cannot quietly drop a route out of the offline set.
 const OFFLINE_ENTRY_KEYS = ['index.html']
-const OFFLINE_CHUNK_NAMES = [
-  'core-app',
-  'shop-batch-profit-control-first-use',
-]
+const OFFLINE_CHUNK_NAMES = ['core-app', 'ShopTodayAdvanced']
 
 // Surfaces that are NOT worth the install-time bytes: either they need a network to do anything,
 // or they are one-time setup a shop does once, on connectivity, and never again during a shift.

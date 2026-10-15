@@ -6,6 +6,8 @@
 // tied the two files together, so adding a table to one and not the other stayed invisible
 // until the packet aborted on an isolated hosted target, mid-rehearsal, with a paid preview
 // branch running.
+// The same check binds the migration's constraint short-circuit to the full constraint
+// inventory. A single existing primary key is not proof that every key and reference exists.
 //
 // This is a static check on purpose. The baseline needs pgvector and a real Postgres to
 // execute, which PGlite cannot provide, so verify_private_trial_migrations deliberately
@@ -32,6 +34,11 @@ const [baseline, quarantine] = await Promise.all([
 const baselineTables = sorted(
   [...baseline.matchAll(/create table if not exists public\.("?[a-z_]+"?)/gi)].map((match) => unquote(match[1])),
 )
+const baselineConstraints = [...baseline.matchAll(/alter table public\.([a-z_]+) add constraint ([a-z_]+)/gi)]
+  .map((match) => `${match[1]}:${match[2]}`)
+const constraintGuard = baseline.match(/do \$constraints\$(.*?)\$constraints\$/is)?.[1] || ''
+const guardedConstraints = [...constraintGuard.matchAll(/\('([a-z_]+)',\s*'([a-z_]+)'\)/gi)]
+  .map((match) => `${match[1]}:${match[2]}`)
 const baselineSequences = sorted(
   [...baseline.matchAll(/create sequence if not exists public\.("?[a-z_]+"?)/gi)].map((match) => unquote(match[1])),
 )
@@ -58,6 +65,16 @@ if (expectedTables && JSON.stringify(baselineTables) !== JSON.stringify(expected
 if (expectedSequences && JSON.stringify(baselineSequences) !== JSON.stringify(expectedSequences)) {
   fail(`sequence_inventory_drift baseline=[${baselineSequences}] quarantine=[${expectedSequences}]`)
 }
+if (JSON.stringify(guardedConstraints) !== JSON.stringify(baselineConstraints)) {
+  fail('baseline_constraint_guard_inventory_drift')
+}
+if (!new RegExp(`constraint_count\\s*=\\s*${baselineConstraints.length}\\s+then\\s+return`, 'i').test(constraintGuard)
+  || !/if constraint_count > 0 then[\s\S]*?constraint inventory is partial/i.test(constraintGuard)
+  || !/constraint_record\.conrelid = table_record\.oid/i.test(constraintGuard)
+  || !/constraint_record\.conname = expected\.constraint_name/i.test(constraintGuard)
+  || !/table_record\.relnamespace = schema_record\.oid/i.test(constraintGuard)) {
+  fail('baseline_constraint_guard_not_fail_closed')
+}
 
 // The baseline is the only place RLS gets enabled on these tables — the migration that does it
 // in production was never committed here. Without this the whole legacy catalog comes back
@@ -82,7 +99,10 @@ const result = {
   contract: 'supermega.public-legacy-baseline.v1',
   tables: baselineTables.length,
   sequences: baselineSequences.length,
+  constraints: baselineConstraints.length,
   inventoryMatchesQuarantine: failures.length === 0,
+  constraintGuardMatchesBaseline: guardedConstraints.length === baselineConstraints.length
+    && JSON.stringify(guardedConstraints) === JSON.stringify(baselineConstraints),
   ...(failures.length ? { failures } : {}),
 }
 console.log(JSON.stringify(result, null, 2))

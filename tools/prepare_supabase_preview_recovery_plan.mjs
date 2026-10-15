@@ -4,6 +4,10 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { validateRehearsalMigrationNames } from './prepare_supabase_rehearsal_packet.mjs'
+
+// Replay the recorded October 1-2 recovery evidence against its original chain.
+// Later Sites migrations belong to the full candidate packet, not this receipt.
 
 export const RECOVERY_PLAN_CONTRACT = 'supermega.supabase-preview-recovery-plan.v1'
 export const PROVIDER_READBACK_CONTRACT = 'supermega.supabase-provider-readback.v1'
@@ -54,10 +58,10 @@ function isRecord(value) {
 }
 
 async function sourceMigrationChain() {
-  const names = (await readdir(migrationDirectory))
+  const candidateNames = (await readdir(migrationDirectory))
     .filter((name) => /^\d{14}_.+\.sql$/.test(name))
     .sort()
-  if (names.length !== expectedMigrationCount) fail('supabase_preview_recovery_source_migration_count')
+  const names = historicalRecoveryMigrationNames(candidateNames)
   if (names[0] !== publicBaseline) fail('supabase_preview_recovery_public_baseline')
   const migrations = []
   for (const name of names) {
@@ -76,6 +80,15 @@ async function sourceMigrationChain() {
     migrations,
     privateMigrations: migrations.slice(1),
   }
+}
+
+export function historicalRecoveryMigrationNames(candidateNames) {
+  validateRehearsalMigrationNames(candidateNames)
+  const names = candidateNames.slice(0, expectedMigrationCount)
+  if (names.at(-1) !== '20260930010000_app_rls_initplan_optimization.sql') {
+    fail('supabase_preview_recovery_historical_boundary')
+  }
+  return names
 }
 
 function validateProviderReadback(readback) {
@@ -436,6 +449,8 @@ async function main() {
       authorized: plan.execution.authorized,
       receiptContract: receipt.contract,
       receiptState: receipt.state,
+      evidenceScope: 'recorded-20261002-recovery-only',
+      currentCandidateAcceptance: 'NOT RUN',
     }))
     return
   }

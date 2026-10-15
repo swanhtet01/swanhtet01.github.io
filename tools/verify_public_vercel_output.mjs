@@ -13,6 +13,7 @@ const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 const configPath = resolve(outputDir, 'config.json')
 const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
+const publicGalleryProvenance = JSON.parse(readFileSync(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
 
 function fail(code, detail = {}) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_public_output', code, ...detail }, null, 2))
@@ -331,12 +332,26 @@ if (home.includes('Commerce and Production carry real records and actions.')) fa
 // each product and one closing Contact action.
 for (const [route, html] of [['/', home], ...publicProducts.map(product => [`/${product.id}/`, pages.get(`/${product.id}/`).html])]) {
   const body = html.slice(html.indexOf('<body'))
-  const expectedLinks = route === '/' ? 7 + publicProducts.length : 6
+  const routeProduct = publicProducts.find(product => route === `/${product.id}/`) || null
+  const contactActionTarget = routeProduct?.status === 'available-in-app'
+    ? `/contact/?product=${routeProduct.id}`
+    : null
+  const expectedLinks = route === '/' ? 7 + publicProducts.length : 6 + Number(Boolean(contactActionTarget))
   if ((body.match(/<a\b/g) || []).length !== expectedLinks) fail('marketing_link_surface_drift', { route, expectedLinks })
   if (countOccurrences(body, 'href="https://app.supermega.dev/login"') !== 1) fail('single_login_missing', { route })
   if (!body.includes('class="platform-image"') || !(route === '/' ? body.includes('class="product-card-flow"') : body.includes('class="feature-line"'))) fail('product_visual_missing', { route })
-  for (const token of ['Request assisted setup', 'Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
+  const directAppTargets = [...body.matchAll(/href="(https:\/\/app\.supermega\.dev\/[^\"]+)"/g)]
+    .map(match => match[1])
+    .filter(target => target !== 'https://app.supermega.dev/login')
+  if (directAppTargets.length !== 0) fail('product_action_release_state_drift', { route, expected: 0, actual: directAppTargets.length })
+  if (contactActionTarget && !body.includes(`href="${contactActionTarget}">Contact SuperMega</a>`)) fail('product_action_destination_drift', { route, expected: contactActionTarget })
+  for (const token of ['Request assisted setup', 'Open Ecommerce', 'Open Website', 'Choose shop type', 'theme-toggle', 'Start guided trial']) {
     if (body.includes(token)) fail('retired_acquisition_surface', { route, token })
+  }
+  const legacyActionLabels = new Set(['Open Shop', 'Open Ecommerce', 'Open Website', 'Profit Control'])
+  for (const match of body.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)) {
+    const label = match[1].replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, '').trim()
+    if (legacyActionLabels.has(label)) fail('retired_acquisition_action', { route, label })
   }
 }
 for (const product of publicProducts) {
@@ -357,9 +372,10 @@ for (const token of [
   'data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"',
   'name="company"', 'name="product"', 'value="guide"', 'name="template"', 'name="goal"',
   'name="idempotency_key"', 'name="proof_contract"', 'name="proof_digest"', 'class="contact-honeypot"',
-  'x-idempotency-key', 'Tell us what your business needs.', 'How can we help?', 'Company (optional)',
-  'Tell us what your business does and what you would like to improve.', '>Send message</button>',
-  'We’ll reply by email.', "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",
+  'x-idempotency-key', 'Tell us what you need.', 'English and Burmese are both welcome.',
+  'placeholder="Share a few details about your request."', 'Company (optional)', '>Send message</button>',
+  'Message received:', 'Keep this reference if you need to follow up.',
+  "shop:'Shop'", "website:'Sites'", "ecommerce:'Commerce'",
 ]) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
@@ -409,6 +425,33 @@ for (const [key, value] of Object.entries({
 }
 if (!/^(?:[0-9a-f]{40}|preview-[a-z0-9-]{8,64}|unknown)$/.test(release.commit)) fail('release_commit_invalid', { commit: release.commit })
 if (!/^\d{4}-\d{2}-\d{2}T/.test(release.generatedAt)) fail('release_timestamp_invalid')
+const publicGalleryEvidence = release.publicGalleryEvidence
+const publicGalleryFiles = [
+  'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
+  'actual-sites-editor.png', 'actual-sites-inquiries.png',
+  'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
+]
+if (publicGalleryEvidence?.schemaVersion !== 'supermega.public-gallery-provenance.v1'
+  || publicGalleryEvidence.status !== 'illustrative_only'
+  || publicGalleryEvidence.records !== 'synthetic'
+  || publicGalleryEvidence.captureSourceCommit !== null
+  || publicGalleryEvidence.captureSourceTree !== null
+  || publicGalleryEvidence.capturedAt !== null
+  || publicGalleryEvidence.assets?.map((asset) => asset.file).join(',') !== publicGalleryFiles.join(',')
+  || JSON.stringify(publicGalleryEvidence) !== JSON.stringify(publicGalleryProvenance)) {
+  fail('public_gallery_provenance_drift')
+}
+for (const asset of publicGalleryEvidence.assets) {
+  const path = resolve(staticDir, 'images', asset.file)
+  requireFile(path, `images/${asset.file}`)
+  const bytes = readFileSync(path)
+  const actualSha256 = createHash('sha256').update(bytes).digest('hex')
+  if (!/^[0-9a-f]{64}$/.test(asset.sha256) || actualSha256 !== asset.sha256
+    || !bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    || bytes.readUInt32BE(16) !== asset.width || bytes.readUInt32BE(20) !== asset.height) {
+    fail('public_gallery_asset_mismatch', { file: asset.file })
+  }
+}
 
 const sitemap = readStatic('sitemap.xml')
 for (const page of manifest.pages) {

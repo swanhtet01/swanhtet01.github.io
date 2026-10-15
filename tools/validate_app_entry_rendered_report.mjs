@@ -16,7 +16,7 @@ export const APP_ENTRY_RENDERED_VALIDATION_CONTRACT = 'supermega.app-entry-rende
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
-const ALLOWED_SCOPES = new Set(['full', 'shop-counter', 'shop-accounting-export', 'shop-offline-restore', 'ecommerce-claim', 'store-to-shop', 'sites-workspace'])
+const ALLOWED_SCOPES = new Set(['auth-entry', 'full', 'shop-counter', 'shop-accounting-export', 'shop-offline-restore', 'ecommerce-claim', 'store-to-shop', 'sites-workspace'])
 const MAX_REPORT_BYTES = 10 * 1024 * 1024
 const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024
 const MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024
@@ -152,7 +152,30 @@ const FULL_CASE_MATRIX = Object.freeze([
   },
 ])
 
+const AUTH_PRODUCT_ALIASES = Object.freeze({
+  shop: 'shop', commerce: 'shop', retail: 'shop',
+  plant: 'plant', production: 'plant',
+  website: 'website', ecommerce: 'ecommerce',
+})
+const AUTH_CASE_MATRIX = Object.freeze(FULL_CASE_MATRIX.map((entry, index) => {
+  const route = new URL(entry.route, 'https://supermega.invalid')
+  const segment = route.pathname.split('/').filter(Boolean)[0] || ''
+  const product = AUTH_PRODUCT_ALIASES[segment]
+    || AUTH_PRODUCT_ALIASES[route.searchParams.get('product')?.toLowerCase() || '']
+  return {
+    name: `unauthenticated app entry ${index + 1} requires login`,
+    route: entry.route,
+    viewport: entry.viewport,
+    width: entry.width,
+    height: entry.height,
+    path: product ? `/login?product=${product}` : '/login',
+    screenshot: null,
+    semantics: 'auth-entry',
+  }
+}))
+
 const CASE_MATRIX_BY_SCOPE = Object.freeze({
+  'auth-entry': AUTH_CASE_MATRIX,
   full: FULL_CASE_MATRIX,
   'shop-counter': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-counter'),
   'shop-accounting-export': FULL_CASE_MATRIX.filter((entry) => entry.semantics === 'shop-accounting-export'),
@@ -281,6 +304,14 @@ export function assertCaseSemantics(testCase, expected) {
     || !Number.isFinite(rendered.documentScrollWidth) || rendered.documentScrollWidth < 1
     || rendered.documentScrollWidth > rendered.viewportWidth + 1
     || rendered.noHorizontalOverflow !== true) fail('app_entry_rendered_viewport_or_overflow_invalid')
+
+  if (expected.semantics === 'auth-entry') {
+    assertLauncherProductLinks(rendered.launcherLinks, [])
+    for (const key of ['layout', 'decisionDesk', 'accountingExport', 'offlineRestore',
+      'claimBoundary', 'storeToShop', 'sitesWorkspace', 'briefControls']) {
+      if (testCase[key] !== null) fail('app_entry_rendered_auth_product_evidence_invalid')
+    }
+  }
 
   if (expected.name === 'desktop root presents login despite remembered product'
     || expected.name === 'desktop choose query presents login'

@@ -50,7 +50,12 @@ type ManagedTransition = {
   evidence: Omit<ManagedCommandEvidence, 'actor'>
 }
 
-function loadInitialWorkspace(): InitialWorkspace {
+export function loadInitialWorkspace(managedConfigured = managedTrialAuthConfigured()): InitialWorkspace {
+  // A signed-in host must not render a device-local site even for one frame while its
+  // company workspace is loading. Keep the initial managed screen empty and read-only.
+  if (managedConfigured) {
+    return { workspace: createInitialWorkspace(), storageMode: 'managed', storageIssue: '', invalidCandidate: null }
+  }
   if (typeof window === 'undefined') {
     return { workspace: createInitialWorkspace(), storageMode: 'session-only', storageIssue: '', invalidCandidate: null }
   }
@@ -261,7 +266,7 @@ export function useWebsiteWorkspace(): {
   const [storageIssue, setStorageIssue] = useState(initialWorkspace.storageIssue)
   const [managedActorId, setManagedActorId] = useState('')
   const [managedWorkspaceId, setManagedWorkspaceId] = useState('')
-  const [canWrite, setCanWrite] = useState(true)
+  const [canWrite, setCanWrite] = useState(initialWorkspace.storageMode !== 'managed')
   const [repairAvailable, setRepairAvailable] = useState(Boolean(initialWorkspace.invalidCandidate))
   const [repairCandidateRevision, setRepairCandidateRevision] = useState(initialWorkspace.invalidCandidate ? 1 : 0)
   const invalidCandidateRef = useRef<WebsiteInvalidLocalCandidate | null>(initialWorkspace.invalidCandidate)
@@ -270,7 +275,7 @@ export function useWebsiteWorkspace(): {
   const storageModeRef = useRef(initialWorkspace.storageMode)
   const managedVersionRef = useRef(0)
   const managedIdentityRef = useRef<ManagedIdentity | null>(null)
-  const managedCanWriteRef = useRef(true)
+  const managedCanWriteRef = useRef(initialWorkspace.storageMode !== 'managed')
   const hydratedRef = useRef(false)
   const queueRef = useRef<Promise<void>>(Promise.resolve())
   const updateRepairCandidate = useCallback((candidate: WebsiteInvalidLocalCandidate | null) => {
@@ -367,8 +372,8 @@ export function useWebsiteWorkspace(): {
         setStorageIssue('')
       } catch (error) {
         if (!active) return
-        storageModeRef.current = 'session-only'
-        setStorageMode('session-only')
+        storageModeRef.current = 'managed'
+        setStorageMode('managed')
         managedCanWriteRef.current = false
         setCanWrite(false)
         if (error instanceof ManagedTrialError && error.code === 'trial_capability_required') {
@@ -383,7 +388,7 @@ export function useWebsiteWorkspace(): {
           setStorageIssue(`${managedFailure(error)} Browser-local Website content is hidden while this managed account is connected.`)
           return
         }
-        setStorageIssue(`Managed Website could not be loaded; the current screen is preserved and durable writes are paused: ${managedFailure(error)}`)
+        setStorageIssue(`Company website could not be loaded. No changes can be saved; reload after checking account access. ${managedFailure(error)}`)
       } finally {
         hydratedRef.current = true
       }

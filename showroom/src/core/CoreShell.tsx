@@ -1,6 +1,7 @@
 import { createContext, lazy, Suspense, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 import { productionEntryDecision } from './production-entry'
+import { managedAccountPath } from './account-routes'
 
 import './core-app.css'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
@@ -199,8 +200,7 @@ function setupProductFromQuery(value: string | null) {
 }
 
 function managedLoginPath(product: string | null) {
-  const slug = product === 'commerce' ? 'shop' : product === 'production' ? 'plant' : product === 'website' || product === 'ecommerce' ? product : null
-  return slug ? `/login?product=${slug}` : '/login'
+  return managedAccountPath('/login', product)
 }
 
 type ManagedPortalAccess =

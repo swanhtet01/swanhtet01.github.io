@@ -290,6 +290,46 @@ def _safe_https_destination(value: str) -> bool:
     )
 
 
+def _validate_image_block(value: Mapping[str, Any], field: str, fields: frozenset[str]) -> None:
+    # Optional for existing v2 records; bytes and device-local IDs never enter state.
+    _exact(value, field, fields | ({"image"} if "image" in value else set()))
+    if "image" not in value:
+        return
+    image = _object(value["image"], f"{field}.image")
+    private = "assetId" in image
+    _exact(image, f"{field}.image", frozenset({"assetId" if private else "src", "alt", "decorative"}))
+    if private:
+        asset_id = _text(image["assetId"], f"{field}.image.assetId", maximum=69)
+        if not re.fullmatch(r"[a-f0-9]{64}\.webp", asset_id):
+            raise TrialValidationError(f"{field}.image.assetId is invalid.")
+    else:
+        _validate_image_url(image["src"], field)
+    alt = _text(image["alt"], f"{field}.image.alt", maximum=200, allow_blank=True)
+    if len(alt.encode("utf-16-le")) // 2 > 200 or not isinstance(image["decorative"], bool) or (image["decorative"] and alt != "") or (not image["decorative"] and not _js_trim(alt)):
+        raise TrialValidationError(f"{field}.image requires a description or an explicit decorative choice.")
+
+
+def _validate_image_url(value: object, field: str) -> None:
+    src = _text(value, f"{field}.image.src", maximum=2048)
+    try:
+        url = urlsplit(src)
+        hostname = (url.hostname or "").rstrip(".")
+        safe = (
+            re.match(r"^https://[a-z0-9.-]+/", src, re.IGNORECASE)
+            and not re.search(r'[\s\\<>"\x00-\x1f\x7f]', src)
+            and url.scheme == "https" and url.username is None and url.password is None
+            and url.port is None and not url.fragment and "." in hostname
+            and not re.fullmatch(r"[0-9.]+", hostname)
+            and not hostname.rsplit(".", 1)[-1].isdigit()
+            and len(src.encode("utf-16-le")) // 2 <= 2048
+            and not re.search(r"(?:^|\.)(?:localhost|local|internal|test|invalid)$", hostname)
+        )
+    except ValueError:
+        safe = False
+    if not safe:
+        raise TrialValidationError(f"{field}.image.src must be a public HTTPS image URL.")
+
+
 def _validate_page(value: object, field: str) -> dict[str, Any]:
     page = _object(value, field)
     _exact(page, field, _PAGE_FIELDS)
@@ -306,7 +346,7 @@ def _validate_page(value: object, field: str) -> dict[str, Any]:
         raise TrialValidationError(f"{field}.navigation.visible must be boolean.")
 
     hero = _object(page["hero"], f"{field}.hero")
-    _exact(hero, f"{field}.hero", _HERO_FIELDS)
+    _validate_image_block(hero, f"{field}.hero", _HERO_FIELDS)
     for name, maximum in (("eyebrow", 80), ("headline", 140), ("summary", 280), ("ctaLabel", 40), ("ctaHref", 160)):
         _text(hero[name], f"{field}.hero.{name}", maximum=maximum, allow_blank=True)
 
@@ -316,7 +356,7 @@ def _validate_page(value: object, field: str) -> dict[str, Any]:
     section_ids: list[str] = []
     for index, candidate in enumerate(sections):
         section = _object(candidate, f"{field}.sections[{index}]")
-        _exact(section, f"{field}.sections[{index}]", _SECTION_FIELDS)
+        _validate_image_block(section, f"{field}.sections[{index}]", _SECTION_FIELDS)
         section_ids.append(_text(section["id"], f"{field}.sections[{index}].id", maximum=80))
         _text(section["eyebrow"], f"{field}.sections[{index}].eyebrow", maximum=60, allow_blank=True)
         _text(section["title"], f"{field}.sections[{index}].title", maximum=120, allow_blank=True)
@@ -385,7 +425,7 @@ def _validate_artifact_page(value: object, field: str) -> dict[str, Any]:
         raise TrialValidationError(f"{field}.navigation.visible must be boolean.")
 
     hero = _object(page["hero"], f"{field}.hero")
-    _exact(hero, f"{field}.hero", _HERO_FIELDS)
+    _validate_image_block(hero, f"{field}.hero", _HERO_FIELDS)
     _text(hero["eyebrow"], f"{field}.hero.eyebrow", maximum=80, allow_blank=True)
     _text(hero["headline"], f"{field}.hero.headline", maximum=140)
     _text(hero["summary"], f"{field}.hero.summary", maximum=280)
@@ -400,7 +440,7 @@ def _validate_artifact_page(value: object, field: str) -> dict[str, Any]:
     section_ids: list[str] = []
     for index, candidate in enumerate(sections):
         section = _object(candidate, f"{field}.sections[{index}]")
-        _exact(section, f"{field}.sections[{index}]", _SECTION_FIELDS)
+        _validate_image_block(section, f"{field}.sections[{index}]", _SECTION_FIELDS)
         section_ids.append(_text(section["id"], f"{field}.sections[{index}].id", maximum=80))
         _text(section["eyebrow"], f"{field}.sections[{index}].eyebrow", maximum=60, allow_blank=True)
         _text(section["title"], f"{field}.sections[{index}].title", maximum=120)

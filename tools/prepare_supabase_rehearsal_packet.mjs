@@ -42,6 +42,9 @@ const expectedMigrationNames = [
   '20260924231714_ecommerce_customer_decisions.sql',
   '20260929171000_ecommerce_decision_review_fk_index.sql',
   '20260930010000_app_rls_initplan_optimization.sql',
+  '20261010063000_website_publishing_and_inquiries.sql',
+  '20261010070000_website_published_hero_media.sql',
+  '20261010120857_website_inquiry_followup.sql',
 ]
 
 export function validateRehearsalMigrationNames(names) {

@@ -38,7 +38,7 @@
     "tools:syntax:verify": "node tools/verify_tool_syntax.mjs && npm run client:error:verify",
     "template:manifest:verify": "node tools/test_template_manifest.mjs",
     "demo:playbooks:verify": "node tools/test_demo_playbooks.mjs && npm run shop:android-smoke:self-test",
-    "website:export:verify": "node tools/test_website_export.mjs",
+    "website:export:verify": "node tools/test_website_export.mjs && node tools/test_website_section_images.mjs && node tools/test_website_private_media.mjs",
     "website:load:verify": "node tools/test_website_workspace_load.mjs",
     "website:session:verify": "node tools/test_website_edit_session.mjs",
     "website:publish:verify": "node tools/test_website_publish_gate.mjs && node --test tools/website_approval_confirmation.test.mjs",

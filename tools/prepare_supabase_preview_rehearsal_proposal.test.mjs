@@ -65,11 +65,11 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
-  assert.equal(built.migrationPlan.migrationCount, 24)
-  assert.equal(built.migrationPlan.privateMigrationCount, 23)
+  assert.equal(built.migrationPlan.migrationCount, 27)
+  assert.equal(built.migrationPlan.privateMigrationCount, 26)
   assert.equal(built.migrationPlan.schemaVersion, 13)
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
-  assert.equal(built.migrationPlan.finalMigration, '20260930010000_app_rls_initplan_optimization.sql')
+  assert.equal(built.migrationPlan.finalMigration, '20261010120857_website_inquiry_followup.sql')
   assert.equal(built.migrationPlan.sourceAheadOfLiveProduction, true)
   assert.equal(built.productionBaseline.evidenceClassification, 'historical-audit-only')
   assert.equal(built.productionBaseline.currentStateRevalidated, false)
@@ -86,10 +86,10 @@ test('builds a clean empty Supabase preview rehearsal proposal', async () => {
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
 })
 
-test('binds exact ordered public baseline and twenty-three private migrations through RLS optimization', async () => {
+test('binds exact ordered public baseline and twenty-six private migrations through Website follow-up', async () => {
   const built = await proposal()
   const entries = built.migrationPlan.migrations
-  assert.deepEqual(entries.slice(-9).map(entry => entry.name), [
+  assert.deepEqual(entries.slice(-12).map(entry => entry.name), [
     '20260907024457_self_serve_durable_attempt_budget.sql',
     '20260915184728_website_customer_review_storage.sql',
     '20260915191528_website_review_entitlement_proof.sql',
@@ -99,11 +99,14 @@ test('binds exact ordered public baseline and twenty-three private migrations th
     '20260924231714_ecommerce_customer_decisions.sql',
     '20260929171000_ecommerce_decision_review_fk_index.sql',
     '20260930010000_app_rls_initplan_optimization.sql',
+    '20261010063000_website_publishing_and_inquiries.sql',
+    '20261010070000_website_published_hero_media.sql',
+    '20261010120857_website_inquiry_followup.sql',
   ])
   assert.equal(validatePreviewMigrationEntries(entries), entries)
   for (const mutate of [list => list.pop(), list => list.push({ ...list.at(-1) }),
     list => { list[1] = { ...list[0] } }, list => { [list[1], list[2]] = [list[2], list[1]] },
-    list => { list.at(-1).name = '20260907024457_unreviewed.sql' },
+    list => { list.at(-1).name = '20261010120857_unreviewed.sql' },
     list => { list.at(-1).path = '../unreviewed.sql' },
     list => { list.at(-1).digest = '' }, list => { list.at(-1).execute = true }]) {
     const altered = structuredClone(entries)

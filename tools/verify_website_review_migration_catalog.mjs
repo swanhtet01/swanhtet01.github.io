@@ -68,6 +68,25 @@ export async function websiteReviewCatalogDigests(database) {
   return digests
 }
 
+// Derived from the complete pinned repository migrations on disposable PGlite.
+// Keep the earlier-stage pins above: publishing must not erase their checks.
+const publishingExpected = {
+  relations: '11216fe242c85cb8831f82eb9f04e257883d6afa0375e46c086b599ce0528fa1',
+  columns: '43eb3c447e09cecca7c9a40904fbd165310a2102708b2b6c46d4cf88543dd41f',
+  policies: 'b8c9375ca212785b8fee14b1bf0d614afef7da2221b32054387fb24e88b0bd83',
+  functions: '72ea954f5c239bd366a998ccda8deb698c9bf5c64b3574f5c169b5d5615577e8',
+  triggers: '8f423ef55794c3a5b8062011d8696064aff095f3f2c0093992f10c804bf8a707',
+  constraints: 'dff5841b341235528f07c1908dcb7838b1df4ec51f10bb3d625311eb5214b8c3',
+  indexes: '659bcab90bf3b9f35ef383481081049aaa97e018d2782e5f3107927620cb7984',
+}
+
+export async function verifyWebsitePublishingMigrationCatalog(database, requireCheck) {
+  const actual = await websiteReviewCatalogDigests(database)
+  for (const [name, digest] of Object.entries(publishingExpected)) {
+    requireCheck(`Website review complete private catalog with publishing: ${name}`, actual[name] === digest)
+  }
+}
+
 export async function verifyWebsiteReviewMigrationCatalog(database, requireCheck) {
   const actual = await websiteReviewCatalogDigests(database)
   for (const [name, digest] of Object.entries(expected)) {

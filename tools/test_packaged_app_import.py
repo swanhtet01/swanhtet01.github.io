@@ -66,7 +66,7 @@ class PackagedImportTests(unittest.TestCase):
         result = run_probe(self.bundle)
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
-        self.assertEqual(report['requiredRoutes'], 8)
+        self.assertEqual(report['requiredRoutes'], len(ROUTES))
         self.assertEqual(report['providerBootstrap'], 'NOT RUN')
 
     def test_sanitized_environment_and_ignored_pythonpath(self):
@@ -104,6 +104,27 @@ class PackagedImportTests(unittest.TestCase):
     def test_missing_route(self):
         self.write('api/app.py', self.source + '\napp.openapi = lambda: {"paths": {}}\n')
         self.assertNotEqual(run_probe(self.bundle).returncode, 0)
+
+    def test_every_sites_route_is_required_in_the_packaged_app(self):
+        paths = {p: {m: {}} for p, m in ROUTES.items()}
+        sites_routes = [p for p in paths if 'website-' in p or p.startswith(('/sites/', '/api/public/sites/'))]
+        self.assertGreaterEqual(len(sites_routes), 12)
+        for missing in sites_routes:
+            with self.subTest(missing=missing):
+                incomplete = {p: value for p, value in paths.items() if p != missing}
+                self.write('api/app.py', self.source + f'\napp.openapi = lambda: {repr({"paths": incomplete})}\n')
+                result = run_probe(self.bundle)
+                self.assertEqual(child_failure_report(result.stderr)['reason'], 'required_route_missing')
+
+    def test_pillow_metadata_does_not_replace_a_working_codec(self):
+        self.write('requirements.txt', 'fixture-dependency==1.0\nPillow==12.3.0\n')
+        self.write('_vendor/pillow-12.3.0.dist-info/METADATA', 'Metadata-Version: 2.1\nName: Pillow\nVersion: 12.3.0\n')
+        self.write('_vendor/PIL/__init__.py', '')
+        self.write('_vendor/PIL/_imaging.py', '')
+        self.write('_vendor/PIL/Image.py', 'def new(*args): raise RuntimeError("PRIVATE_SENTINEL")\n')
+        result = run_probe(self.bundle)
+        self.assertEqual(child_failure_report(result.stderr)['reason'], 'packaged_photo_codec_failed')
+        self.assertNotIn('PRIVATE_SENTINEL', result.stderr)
 
     def test_rejects_vendor_escape_without_executing_launcher(self):
         self.write('vc__handler__python.py', "_vendor_rel = '..'\n")

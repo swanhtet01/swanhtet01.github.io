@@ -20,7 +20,8 @@ const bundle = await build({
     contents: `export {
       loadWebsiteWorkspace, createInitialWorkspace,
       WEBSITE_STORAGE_KEY, LEGACY_WEBSITE_STORAGE_KEY,
-    } from './website-model.ts'; export { savedWebsiteEntry } from '../../core/saved-website-entry.ts'`,
+    } from './website-model.ts'; export { savedWebsiteEntry } from '../../core/saved-website-entry.ts';
+    export { loadInitialWorkspace } from './useWebsiteWorkspace.ts'`,
     resolveDir: 'showroom/src/products/website',
     sourcefile: 'showroom/src/products/website/load-test-entry.ts',
     loader: 'ts',
@@ -32,7 +33,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { savedWebsiteEntry, loadWebsiteWorkspace, createInitialWorkspace, WEBSITE_STORAGE_KEY, LEGACY_WEBSITE_STORAGE_KEY } =
+const { savedWebsiteEntry, loadWebsiteWorkspace, loadInitialWorkspace, createInitialWorkspace, WEBSITE_STORAGE_KEY, LEGACY_WEBSITE_STORAGE_KEY } =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -118,9 +119,33 @@ check(
   'and the message names storage as the cause',
 )
 
-console.log(`website workspace load contract: ${checks} checks passed`)
-
 assert.equal(savedWebsiteEntry(emptyStore), null, 'fresh starter is not a saved launcher entry')
 assert.equal(savedWebsiteEntry(validStore), saved.siteName, 'saved Website needs no setup registration')
 assert.equal(savedWebsiteEntry(storageWith({ [WEBSITE_STORAGE_KEY]: '{bad' })), 'Website recovery', 'unreadable saved work remains reachable')
 assert.equal(validStore.writes.length, 0, 'launcher discovery never writes setup or workspace')
+
+// A managed host previously loaded this browser's saved site for its first render, then
+// replaced it only after the account request completed. It must not even read that store.
+const originalWindow = globalThis.window
+const deviceSite = { ...createInitialWorkspace(), siteName: 'Other business on this device' }
+const deviceStore = storageWith({ [WEBSITE_STORAGE_KEY]: JSON.stringify(deviceSite) })
+let deviceAccesses = 0
+try {
+  globalThis.window = {
+    get localStorage() { deviceAccesses += 1; return deviceStore },
+  }
+  const managedInitial = loadInitialWorkspace(true)
+  check(managedInitial.storageMode === 'managed', 'configured managed Sites starts in managed mode')
+  check(managedInitial.workspace.siteName !== deviceSite.siteName, 'managed first render never displays a local business')
+  check(managedInitial.invalidCandidate === null, 'managed first render does not surface another business repair candidate')
+  check(deviceAccesses === 0 && deviceStore.writes.length === 0, 'managed first render performs zero device-store access')
+
+  const localInitial = loadInitialWorkspace(false)
+  check(localInitial.storageMode === 'browser-local', 'local Sites still starts from browser storage')
+  check(localInitial.workspace.siteName === deviceSite.siteName, 'local Sites restores its own saved business')
+} finally {
+  if (originalWindow === undefined) delete globalThis.window
+  else globalThis.window = originalWindow
+}
+
+console.log(`website workspace load contract: ${checks} checks passed`)

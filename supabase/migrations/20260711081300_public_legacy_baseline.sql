@@ -80,9 +80,80 @@ alter sequence public.supermega_sales_runs_id_seq owned by public.supermega_sale
 -- Keys and references are added after every table exists so the cross-table
 -- foreign keys do not depend on creation order.
 do $constraints$
+declare
+  constraint_count integer;
 begin
-  if exists (select 1 from pg_constraint where conname = 'assets_pkey') then
+  select count(*) into constraint_count
+  from (values
+    ('assets', 'assets_pkey'),
+    ('enterprise_agent_runs', 'enterprise_agent_runs_pkey'),
+    ('enterprise_audit_events', 'enterprise_audit_events_pkey'),
+    ('enterprise_connector_events', 'enterprise_connector_events_pkey'),
+    ('enterprise_knowledge_chunks', 'enterprise_knowledge_chunks_pkey'),
+    ('enterprise_knowledge_embeddings', 'enterprise_knowledge_embeddings_pkey'),
+    ('enterprise_lead_activities', 'enterprise_lead_activities_pkey'),
+    ('enterprise_lead_hunt_profiles', 'enterprise_lead_hunt_profiles_pkey'),
+    ('enterprise_leads', 'enterprise_leads_pkey'),
+    ('enterprise_memberships', 'enterprise_memberships_pkey'),
+    ('enterprise_metric_records', 'enterprise_metric_records_pkey'),
+    ('enterprise_module_definitions', 'enterprise_module_definitions_pkey'),
+    ('enterprise_sessions', 'enterprise_sessions_pkey'),
+    ('enterprise_source_change_events', 'enterprise_source_change_events_pkey'),
+    ('enterprise_source_records', 'enterprise_source_records_pkey'),
+    ('enterprise_users', 'enterprise_users_pkey'),
+    ('enterprise_workspace_domains', 'enterprise_workspace_domains_pkey'),
+    ('enterprise_workspace_modules', 'enterprise_workspace_modules_pkey'),
+    ('enterprise_workspace_profiles', 'enterprise_workspace_profiles_pkey'),
+    ('enterprise_workspace_tasks', 'enterprise_workspace_tasks_pkey'),
+    ('enterprise_workspaces', 'enterprise_workspaces_pkey'),
+    ('iot_telemetry', 'iot_telemetry_pkey'),
+    ('production_ledger', 'production_ledger_pkey'),
+    ('supermega_campaign_clicks', 'supermega_campaign_clicks_pkey'),
+    ('supermega_leads', 'supermega_leads_pkey'),
+    ('supermega_sales_runs', 'supermega_sales_runs_pkey'),
+    ('wcm_incidents', 'wcm_incidents_pkey'),
+    ('supermega_leads', 'supermega_leads_lead_id_key'),
+    ('supermega_sales_runs', 'supermega_sales_runs_run_id_key'),
+    ('enterprise_agent_runs', 'enterprise_agent_runs_workspace_id_fkey'),
+    ('enterprise_audit_events', 'enterprise_audit_events_workspace_id_fkey'),
+    ('enterprise_connector_events', 'enterprise_connector_events_workspace_id_fkey'),
+    ('enterprise_knowledge_chunks', 'enterprise_knowledge_chunks_workspace_id_fkey'),
+    ('enterprise_knowledge_embeddings', 'enterprise_knowledge_embeddings_chunk_id_fkey'),
+    ('enterprise_lead_activities', 'enterprise_lead_activities_lead_id_fkey'),
+    ('enterprise_lead_activities', 'enterprise_lead_activities_workspace_id_fkey'),
+    ('enterprise_lead_hunt_profiles', 'enterprise_lead_hunt_profiles_workspace_id_fkey'),
+    ('enterprise_leads', 'enterprise_leads_workspace_id_fkey'),
+    ('enterprise_memberships', 'enterprise_memberships_username_fkey'),
+    ('enterprise_memberships', 'enterprise_memberships_workspace_id_fkey'),
+    ('enterprise_metric_records', 'enterprise_metric_records_workspace_id_fkey'),
+    ('enterprise_sessions', 'enterprise_sessions_username_fkey'),
+    ('enterprise_sessions', 'enterprise_sessions_workspace_id_fkey'),
+    ('enterprise_source_change_events', 'enterprise_source_change_events_workspace_id_fkey'),
+    ('enterprise_source_records', 'enterprise_source_records_workspace_id_fkey'),
+    ('enterprise_workspace_domains', 'enterprise_workspace_domains_workspace_id_fkey'),
+    ('enterprise_workspace_modules', 'enterprise_workspace_modules_module_id_fkey'),
+    ('enterprise_workspace_modules', 'enterprise_workspace_modules_workspace_id_fkey'),
+    ('enterprise_workspace_profiles', 'enterprise_workspace_profiles_workspace_id_fkey'),
+    ('enterprise_workspace_tasks', 'enterprise_workspace_tasks_workspace_id_fkey'),
+    ('iot_telemetry', 'iot_telemetry_asset_id_fkey'),
+    ('production_ledger', 'production_ledger_asset_id_fkey'),
+    ('wcm_incidents', 'wcm_incidents_asset_id_fkey')
+  ) expected(table_name, constraint_name)
+  join pg_namespace schema_record on schema_record.nspname = 'public'
+  join pg_class table_record
+    on table_record.relnamespace = schema_record.oid
+    and table_record.relname = expected.table_name
+  join pg_constraint constraint_record
+    on constraint_record.conrelid = table_record.oid
+    and constraint_record.conname = expected.constraint_name;
+
+  if constraint_count = 53 then
     return;
+  end if;
+  if constraint_count > 0 then
+    raise exception using
+      errcode = '55000',
+      message = 'public legacy baseline constraint inventory is partial; inspect catalog before replay';
   end if;
 
   alter table public.assets add constraint assets_pkey PRIMARY KEY (id);

@@ -30,3 +30,5 @@ api-static-staging-*/
 tmp-*.html
 tmp-*.png
 .vercel
+# Supabase CLI version/link cache; not source or release configuration.
+supabase/.temp/

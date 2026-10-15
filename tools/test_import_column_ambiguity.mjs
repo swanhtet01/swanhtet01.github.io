@@ -1,6 +1,23 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createClientImportPreview } from '../showroom/src/core/client-onboarding.ts'
+import { classifyShopCatalogImportRows, SHOP_CATALOG_IMPORT_MAX_ROWS } from '../showroom/src/core/shop-catalog-import.ts'
+
+test('CSV preview blocks text that decoded as a replacement character and keeps Burmese UTF-8 intact', async () => {
+  const prefix = new TextEncoder().encode('sku,name,stock,reorder_at,price\nTEST-1,')
+  const suffix = new TextEncoder().encode(',5,1,1000')
+  const bytes = new Uint8Array(prefix.length + 1 + suffix.length)
+  bytes.set(prefix)
+  bytes[prefix.length] = 0xff
+  bytes.set(suffix, prefix.length + 1)
+  const incorrectlyDecoded = new TextDecoder('utf-8').decode(bytes)
+  assert.ok(incorrectlyDecoded.includes('\uFFFD'))
+  await assert.rejects(createClientImportPreview(incorrectlyDecoded, 'commerce'), /could not be decoded as UTF-8/)
+
+  const burmese = await createClientImportPreview('sku,name,stock,reorder_at,price\nTEA-1,လက်ဖက်ရည်,5,1,1000', 'commerce')
+  assert.equal(burmese.rows[0].status, 'ready')
+  assert.equal(burmese.rows[0].values.name, 'လက်ဖက်ရည်')
+})
 
 test('competing stock aliases cannot silently choose a business quantity', async () => {
   const csv = 'sku,name,stock,quantity,reorder_at,price\nTEST-1,Synthetic item,5,50,1,1000'
@@ -17,6 +34,31 @@ test('one stock alias still maps automatically', async () => {
   const preview = await createClientImportPreview('sku,name,stock,reorder_at,price\nTEST-1,Synthetic item,5,1,1000', 'commerce')
   assert.equal(preview.mapping.onHand, 'stock')
   assert.equal(preview.rows[0].status, 'ready')
+})
+
+test('local Shop import preview blocks rows beyond the catalog capacity', async () => {
+  const preview = await createClientImportPreview(
+    'sku,name,stock,reorder_at,price\nNEW-1,New tea,1,0,1000\nNEW-2,New coffee,2,1,2000',
+    'commerce',
+  )
+  const fullCatalog = Array.from({ length: SHOP_CATALOG_IMPORT_MAX_ROWS }, (_, index) => ({
+    sku: `EXISTING-${index + 1}`,
+    name: `Existing item ${index + 1}`,
+    onHand: 1,
+    reorderAt: 0,
+    price: 100,
+  }))
+  const rows = classifyShopCatalogImportRows(preview, fullCatalog)
+
+  assert.equal(rows.length, 2)
+  assert.ok(rows.every(row => row.status === 'invalid'))
+  assert.ok(rows.every(row => row.issues.some(issue => issue.code === 'catalog_capacity')))
+
+  const { readFile } = await import('node:fs/promises')
+  const source = await readFile(new URL('../showroom/src/core/ClientDataOnboarding.tsx', import.meta.url), 'utf8')
+  assert.match(source, /classifyShopCatalogImportRows\(preview, catalog\.state\.items\)/)
+  assert.match(source, /localActivationAvailable && !catalogHasBlockingIssues && catalogReadyRowCount > 0 && importContextReady && targetImportReady && !localAppliedIsCurrent/)
+  assert.match(source, /Remove excess new rows and upload the file again/)
 })
 
 test('canonical field wins over aliases regardless of column order', async () => {
@@ -36,6 +78,32 @@ test('catalog comparison names changed fields without changing either item', asy
     assert.deepEqual(commerceCatalogImportDifferences(existing, Object.freeze({ ...existing, [field]: value })), [field])
   }
   assert.deepEqual(commerceCatalogImportDifferences(existing, { ...existing, price: 1200, onHand: 6 }), ['onHand', 'price'])
+})
+
+test('reviewed Shop import flags stale stock and duplicate SKUs before any write', async () => {
+  const { commerceCatalogImportDifferences, createEmptyCommerce, importCommerceCatalog } = await import('../showroom/src/core/commerce-workspace.ts')
+  const existing = { sku: 'CHECK-1', name: 'Existing item', onHand: 5, reorderAt: 1, price: 1000 }
+  const stale = await createClientImportPreview(
+    'sku,item_name,opening_stock,reorder_at,price_mmk\nCHECK-1,Existing item,4,1,1000\n',
+    'commerce',
+  )
+  const staleItem = { sku: stale.rows[0].values.sku, name: stale.rows[0].values.name, onHand: Number(stale.rows[0].values.onHand), reorderAt: Number(stale.rows[0].values.reorderAt), price: Number(stale.rows[0].values.price) }
+  assert.deepEqual(commerceCatalogImportDifferences(existing, staleItem), ['onHand'])
+
+  const duplicates = await createClientImportPreview(
+    'sku,item_name,opening_stock,reorder_at,price_mmk\nDUP-1,First,1,0,100\nDUP-1,Second,2,1,200\n',
+    'commerce',
+  )
+  assert.equal(duplicates.totals.duplicates, 2)
+  assert.equal(duplicates.readyForStaging, false)
+  assert.ok(duplicates.rows.every(row => row.status === 'duplicate'))
+
+  const context = { sourceDigest: `sha256:${'b'.repeat(64)}`, capturedAt: '2026-09-27T00:00:00.000Z', actor: 'Synthetic tester' }
+  const seeded = importCommerceCatalog(createEmptyCommerce(), { ...context, items: [existing] })
+  assert.ok(seeded)
+  const before = JSON.stringify(seeded.state)
+  assert.equal(importCommerceCatalog(seeded.state, { ...context, items: [{ ...existing, onHand: 4 }] }), null)
+  assert.equal(JSON.stringify(seeded.state), before)
 })
 
 test('catalog import rejects a mixed conflicting batch without mutating existing state', async () => {

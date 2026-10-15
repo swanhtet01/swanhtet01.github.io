@@ -1,0 +1,2 @@
+-- Promoted to ../migrations/20261010063000_website_publishing_and_inquiries.sql
+-- Apply through the canonical migration chain only.

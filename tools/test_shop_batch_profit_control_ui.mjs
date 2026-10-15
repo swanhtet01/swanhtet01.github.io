@@ -10,7 +10,7 @@ import {
 } from '../showroom/src/core/shop-batch-profit-control.ts'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const today = readFileSync(`${root}/showroom/src/core/ShopToday.tsx`, 'utf8').replace(/\r\n?/g, '\n')
+const today = readFileSync(`${root}/showroom/src/core/ShopTodayAdvanced.tsx`, 'utf8').replace(/\r\n?/g, '\n')
 const coreApp = readFileSync(`${root}/showroom/src/core/CoreApp.tsx`, 'utf8').replace(/\r\n?/g, '\n')
 const css = readFileSync(`${root}/showroom/src/core/core-app.css`, 'utf8')
 const firstUseSource = readFileSync(`${root}/showroom/src/core/shop-batch-profit-control-first-use.tsx`, 'utf8')
@@ -18,7 +18,7 @@ const workspaceCapabilitySource = readFileSync(`${root}/showroom/src/core/shop-b
 const packageJson = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'))
 const panelStart = today.indexOf('export function ShopBatchProfitControlPanel')
 const start = today.indexOf('return <section aria-label={panelAriaLabel}', panelStart)
-const end = today.indexOf('export function ShopToday', start)
+const end = today.indexOf('export function ShopTodayAdvanced', start)
 
 let checks = 0
 const check = (condition, message) => {
@@ -26,7 +26,7 @@ const check = (condition, message) => {
   assert.ok(condition, message)
 }
 
-check(start >= 0 && end > start, 'Batch Profit Control must be a bounded Shop Today section')
+check(start >= 0 && end > start, 'Batch Profit Control must be a bounded lazy Shop Today advanced section')
 const section = today.slice(start, end)
 const noBatch = projectNoBatchProfitControl()
 
@@ -107,7 +107,7 @@ check(!today.includes('Optional Shop walkthroughs') && !today.includes('Syntheti
 
 check(today.includes("await import('./shop-batch-profit-control-first-use')"), 'real local Batch workflow is loaded only after the explicit action')
 check(!today.includes("import { ShopBatchProfitControlFirstUse } from './shop-batch-profit-control-first-use'"), 'real local Batch workflow has no eager value import')
-check(today.includes('setLocalBatchProjection(null)\n    setBatchFirstUse({ status: \'loading\' })'), 'reopening the local workflow clears any prior projection before asynchronous validation')
+check(/setLocalBatchProjection\(null\)\s+setBatchFirstUse\(\{ status: 'loading' \}\)/.test(today), 'reopening the local workflow clears any prior projection before asynchronous validation')
 check(today.includes('Existing Batch records and the current Shop workspace are never overwritten.'), 'launcher states the no-overwrite boundary')
 check(today.includes('Not pilot, customer, commercial, or accounting proof.'), 'launcher permanently excludes commercial evidence claims')
 check(coreApp.includes('localBatchFirstUseAllowed={confirmedLocalShop}'), 'the local Batch workflow must use the settled local-workspace identity gate')
@@ -171,7 +171,7 @@ const vite = await createServer({
 let firstUseStorageEvidence = null
 
 try {
-  const { ShopBatchProfitControlPanel } = await vite.ssrLoadModule('/src/core/ShopToday.tsx')
+  const { ShopBatchProfitControlPanel } = await vite.ssrLoadModule('/src/core/ShopTodayAdvanced.tsx')
   const firstUse = await vite.ssrLoadModule('/src/core/shop-batch-profit-control-first-use.tsx')
   const commerceModel = await vite.ssrLoadModule('/src/core/commerce-workspace.ts')
   const workspaceCapabilities = await vite.ssrLoadModule('/src/core/shop-batch-first-use-workspace-capability.ts')

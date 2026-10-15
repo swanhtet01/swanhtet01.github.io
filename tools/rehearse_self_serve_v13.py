@@ -36,13 +36,16 @@ EXTRAS = (
     "20260924231714_ecommerce_customer_decisions.sql",
     "20260929171000_ecommerce_decision_review_fk_index.sql",
     "20260930010000_app_rls_initplan_optimization.sql",
+    "20261010063000_website_publishing_and_inquiries.sql",
+    "20261010070000_website_published_hero_media.sql",
+    "20261010120857_website_inquiry_followup.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
 PRODUCTS = ("commerce", "production", "website", "ecommerce")
 TABLES = (
     "approval_requests", "billing_entitlements", "billing_events", "billing_invoices",
     "ecommerce_customer_decisions", "ecommerce_customer_reviews", "self_serve_attempt_budgets", "trial_schema_meta",
-    "website_customer_acceptances", "website_customer_feedback", "website_customer_reviews", "workspace_access_controls",
+    "website_customer_acceptances", "website_customer_feedback", "website_customer_reviews", "website_inbox", "website_inquiry_actions", "website_inquiry_channels", "workspace_access_controls",
     "workspace_events", "workspace_memberships", "workspace_state",
 )
 CHECKS = (

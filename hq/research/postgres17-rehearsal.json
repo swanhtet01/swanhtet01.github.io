@@ -1,13 +1,13 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v3",
-  "recordedAt": "2026-10-13T06:08:36.203Z",
+  "recordedAt": "2026-10-14T06:38:47.907Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "d482e0d37f75e1584a2d425e9e77b39766450f15",
-  "implementationTree": "8ab8849a254a32ebcf4bdfe27e7d82c99089cc59",
+  "implementationCommit": "1cb29de9cb0c9d0c59acc67ef08c051c16b9db7b",
+  "implementationTree": "2df1f171b4e5ffe627cf59f0b103fe977bc7cf26",
   "sourceCleanBeforeAndAfter": true,
-  "rawReportDigest": "sha256:b33343b7d6bb286a2937d00dedf9e5e20b0349484bee5db97e48d658bc1a77c8",
+  "rawReportDigest": "sha256:75def93054f587bd19d2bedb042af44e8aecac87e364fbe6cdab3fc41cce7057",
   "implementation": {
-    "digest": "sha256:1adcc5a25cec50958800012118b608d188b8dcf91e370ea6830a69154651208f",
+    "digest": "sha256:6779f46de1ee0d2462d6a7f484e1f8b9a77303e840961c2d7737ad04d3820891",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -33,6 +33,9 @@
       "supabase/migrations/20260924231714_ecommerce_customer_decisions.sql",
       "supabase/migrations/20260929171000_ecommerce_decision_review_fk_index.sql",
       "supabase/migrations/20260930010000_app_rls_initplan_optimization.sql",
+      "supabase/migrations/20261010063000_website_publishing_and_inquiries.sql",
+      "supabase/migrations/20261010070000_website_published_hero_media.sql",
+      "supabase/migrations/20261010120857_website_inquiry_followup.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -45,10 +48,29 @@
       "supermega_runtime/website_acceptance_schema.py",
       "supermega_runtime/website_customer_review.py",
       "supermega_runtime/website_customer_review_store.py",
+      "supermega_runtime/website_inquiry_api.py",
+      "supermega_runtime/website_inquiry_store.py",
+      "supermega_runtime/website_media.py",
+      "supermega_runtime/website_media_references.py",
+      "supermega_runtime/website_media_routes.py",
+      "supermega_runtime/website_media_storage.py",
+      "supermega_runtime/website_media_store.py",
+      "supermega_runtime/website_presentation.py",
+      "supermega_runtime/website_public_page.py",
+      "supermega_runtime/website_published_media.py",
+      "supermega_runtime/website_publishing_routes.py",
+      "supermega_runtime/website_publishing_schema.py",
       "supermega_runtime/website_release_foundation.py",
       "supermega_runtime/website_runtime.py",
       "tests/test_billing_rail.py",
       "tests/test_postgres17_rehearsal_contract.py",
+      "tests/test_website_inquiry_followup.py",
+      "tests/test_website_inquiry_sql.py",
+      "tests/test_website_media.py",
+      "tests/test_website_media_postgres.py",
+      "tests/test_website_media_references.py",
+      "tests/test_website_published_media.py",
+      "tests/test_website_publishing_routes.py",
       "tests/test_website_runtime.py",
       "tools/activate_supermega_database.ps1",
       "tools/private_trial_v13_contract.py",
@@ -62,8 +84,8 @@
       "tools/verify_public_browser_quarantine.mjs"
     ]
   },
-  "implementationDigest": "sha256:1adcc5a25cec50958800012118b608d188b8dcf91e370ea6830a69154651208f",
-  "implementationFileCount": 51,
+  "implementationDigest": "sha256:6779f46de1ee0d2462d6a7f484e1f8b9a77303e840961c2d7737ad04d3820891",
+  "implementationFileCount": 73,
   "localVerification": {
     "command": "npm run database:postgres17:record",
     "conclusion": "success",
@@ -89,7 +111,7 @@
     "startMode": "pg_ctl_restricted_token"
   },
   "migration": {
-    "count": 23,
+    "count": 26,
     "schemaVersion": 13,
     "names": [
       "20260722004500_private_trial_backend_role_preflight.sql",
@@ -114,7 +136,10 @@
       "20260924194557_ecommerce_customer_review_storage.sql",
       "20260924231714_ecommerce_customer_decisions.sql",
       "20260929171000_ecommerce_decision_review_fk_index.sql",
-      "20260930010000_app_rls_initplan_optimization.sql"
+      "20260930010000_app_rls_initplan_optimization.sql",
+      "20261010063000_website_publishing_and_inquiries.sql",
+      "20261010070000_website_published_hero_media.sql",
+      "20261010120857_website_inquiry_followup.sql"
     ],
     "schemaProfile": "v13-self-serve",
     "catalogContract": "supermega_private_trial_database_v13_self_serve_v1",
@@ -280,8 +305,8 @@
     "backupNonempty": true,
     "format": "pg_dump_custom",
     "restoredSchemaVersion": 13,
-    "privateSnapshotBefore": "sha256:1aa108383b4f1240bf154799936dcc9370dbef2ab98f86f410b72961ae4a7253",
-    "privateSnapshotAfter": "sha256:1aa108383b4f1240bf154799936dcc9370dbef2ab98f86f410b72961ae4a7253"
+    "privateSnapshotBefore": "sha256:c02b971635d1fa6bc19e5b654a7f8ececb4bcf186329b9dd2d3e9ee5bb25952e",
+    "privateSnapshotAfter": "sha256:c02b971635d1fa6bc19e5b654a7f8ececb4bcf186329b9dd2d3e9ee5bb25952e"
   },
   "storage": {
     "catalogMode": "local_private_fixture",
@@ -305,5 +330,5 @@
     "Prove real Auth signup, verified email, account recovery, admin MFA and revocation on the hosted target.",
     "Keep production writes disabled until founder approval."
   ],
-  "receiptDigest": "sha256:d06467a8cd40a1d6fa0cef7c1e842214a366014664df65010a911a97ca8eed56"
+  "receiptDigest": "sha256:7d826d9b098e45d5913ce49ea30c43acea36d6fdd21ab34711fd8499be31f166"
 }

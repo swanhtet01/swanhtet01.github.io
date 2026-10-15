@@ -11,6 +11,19 @@ import {
 } from './website-model.ts'
 import { readStoredWebsiteLeads, websiteInboxLeads } from './website-leads.ts'
 import { createTemplateManifestRegistry, templateManifestKey, validateTemplateManifest, type TemplateManifest } from '../../core/template-manifest.ts'
+import { readLocalSetupBusinessName, readLocalShopBusinessTemplateId } from '../../core/product-onboarding-runtime.ts'
+
+/** Only a browser-local Sites workspace may reuse this device's Shop setup. */
+export function readWebsiteStarterShopContext(
+  storageMode: 'managed' | 'browser-local' | 'session-only',
+  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
+) {
+  if (storageMode !== 'browser-local') return { tradeId: null, businessName: null }
+  return {
+    tradeId: readLocalShopBusinessTemplateId(storage),
+    businessName: readLocalSetupBusinessName(storage),
+  }
+}
 
 export const websiteStarterTemplates = [
   { id: 'business-presence', label: 'Business presence', detail: 'Home, About, and Contact for a clear company website.' },
