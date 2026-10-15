@@ -5,6 +5,7 @@ SUPERMEGA_TRIAL_SCHEMA_VERSION=13. It never accepts a hosted database URL.
 """
 
 from copy import deepcopy
+from contextlib import contextmanager
 from hashlib import sha256
 import hmac
 import os
@@ -25,7 +26,7 @@ from supermega_runtime.commerce_runtime import (
 )
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.trial_store import (
-    PostgresTrialStore, TrialPrincipal, TrialValidationError,
+    PostgresTrialStore, TrialPermissionDenied, TrialPrincipal, TrialValidationError,
 )
 from tests.test_commerce_runtime import catalog_state, storefront_configuration
 
@@ -43,6 +44,31 @@ def _body(request_id=None):
 
 
 class CommercePublicBoundaryTests(unittest.TestCase):
+    def test_shop_only_cannot_read_or_change_internal_publications(self):
+        principal = TrialPrincipal('shop-only-workspace', 'merchant-owner', 'human')
+        cursor = Mock()
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            yield cursor, frozenset({'commerce.write'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce',)
+        adapter = CommercePublicStorefront(store)
+        actions = (
+            lambda: adapter.publish(principal, expected_version=1),
+            lambda: adapter.publications(principal),
+            lambda: adapter.revoke(principal, handle=str(uuid4()),
+                                   preview_digest='sha256:' + '0' * 64),
+        )
+        for action in actions:
+            with self.subTest(action=action), self.assertRaises(TrialPermissionDenied) as denied:
+                action()
+            self.assertEqual(denied.exception.required_capability, 'product.ecommerce')
+        self.assertEqual(store._product_entitlements.call_count, len(actions))
+        cursor.execute.assert_not_called()
+
     def test_page_cursor_is_canonical_and_shop_queue_releases_only_converted_requests(self):
         from datetime import datetime, timezone
         row = {'received_at': datetime.now(timezone.utc), 'handle': str(uuid4()),
@@ -197,7 +223,8 @@ class CommercePublicSqlTests(unittest.TestCase):
         ], environment={**cls.environment, 'PGPASSWORD': password},
             failure_code='commerce_public_rehearsal_migration_failed', timeout=120)
         pg._provision_runtime(cls.admin_url, runtime_password)
-        pg._seed_rehearsal_data(cls.admin_url)
+        pg._seed_rehearsal_data(
+            cls.admin_url, product_workspace_products=('shop', 'website', 'ecommerce'))
         cls.workspace_id = 'rehearsal-product'
         cls.owner = TrialPrincipal(cls.workspace_id, 'owner-product', 'human')
         with pg._connect(cls.admin_url) as connection:
@@ -227,6 +254,22 @@ class CommercePublicSqlTests(unittest.TestCase):
                 (self.workspace_id, self.json.dumps(_state()), self.owner.actor_id))
         self.adapter = CommercePublicStorefront(PostgresTrialStore(
             self.runtime_url, reducer=reduce_trial_state, write_enabled=True))
+
+    def test_shop_only_member_cannot_manage_internal_publications(self):
+        publication = self.adapter.publish(self.owner, expected_version=1)
+        shop_only = TrialPrincipal('rehearsal-a', 'owner-a', 'human')
+        actions = (
+            lambda: self.adapter.publish(shop_only, expected_version=1),
+            lambda: self.adapter.publications(shop_only),
+            lambda: self.adapter.revoke(
+                shop_only, handle=publication['handle'],
+                preview_digest=publication['previewDigest']),
+        )
+        for action in actions:
+            with self.subTest(action=action), self.assertRaises(TrialPermissionDenied) as denied:
+                action()
+            self.assertEqual(denied.exception.required_capability, 'product.ecommerce')
+        self.assertTrue(self.adapter.publications(self.owner)['publications'][0]['enabled'])
 
     def test_buyer_request_arrives_once_in_private_operator_inbox_and_revocation_closes_it(self):
         publication = self.adapter.publish(self.owner, expected_version=1)

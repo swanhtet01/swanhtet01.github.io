@@ -962,7 +962,9 @@ def _create_backend_group_for_restore(admin_database_url: str) -> None:
         )
 
 
-def _seed_rehearsal_data(admin_database_url: str) -> None:
+def _seed_rehearsal_data(
+    admin_database_url: str, *, product_workspace_products: tuple[str, ...] = ('shop', 'website')
+) -> None:
     with _connect(admin_database_url, autocommit=True) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -1038,9 +1040,10 @@ def _seed_rehearsal_data(admin_database_url: str) -> None:
                 from (values
                   ('rehearsal-a', 'owner-a', array['shop']::text[]),
                   ('rehearsal-b', 'owner-b', array['plant']::text[]),
-                  ('rehearsal-product', 'owner-product', array['shop', 'website']::text[])
+                  ('rehearsal-product', 'owner-product', %s::text[])
                 ) as fixture(workspace_id, owner_actor_id, products)
-                """
+                """,
+                (list(product_workspace_products),),
             )
 
 

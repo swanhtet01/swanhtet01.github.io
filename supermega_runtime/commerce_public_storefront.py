@@ -232,10 +232,16 @@ class CommercePublicStorefront:
     def __init__(self, store: PostgresTrialStore):
         self.store = store
 
+    def _require_ecommerce_entitlement(self, cursor: Any, principal: TrialPrincipal) -> None:
+        # Shop and Commerce share commerce.write; publication remains internal.
+        if 'ecommerce' not in self.store._product_entitlements(cursor, principal.workspace_id):
+            raise TrialPermissionDenied('product.ecommerce')
+
     def publish(self, principal: TrialPrincipal, *, expected_version: int) -> dict[str, Any]:
         if principal.actor_kind != 'human' or type(expected_version) is not int or expected_version < 1:
             raise TrialValidationError('commerce_public_invalid')
         with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
+            self._require_ecommerce_entitlement(cursor, principal)
             _require_public_schema(cursor)
             cursor.execute("select version,state_json from app_private.workspace_state where workspace_id=%s and surface='commerce' for share",
                            (principal.workspace_id,))
@@ -268,6 +274,7 @@ class CommercePublicStorefront:
 
     def publications(self, principal: TrialPrincipal) -> dict[str, Any]:
         with self.store._guarded_cursor(principal, write=False, capability='commerce.write') as (cursor, _):
+            self._require_ecommerce_entitlement(cursor, principal)
             _require_public_schema(cursor)
             cursor.execute('select handle,enabled,source_revision,preview_digest,published_at from app_private.commerce_public_storefronts where workspace_id=%s order by published_at desc limit 10',
                            (principal.workspace_id,))
@@ -282,6 +289,7 @@ class CommercePublicStorefront:
             raise TrialValidationError('commerce_public_invalid')
         handle = _uuid(handle)
         with self.store._guarded_cursor(principal, write=True, capability='commerce.write') as (cursor, _):
+            self._require_ecommerce_entitlement(cursor, principal)
             _require_public_schema(cursor)
             cursor.execute("""update app_private.commerce_public_storefronts
                 set enabled=false,revoked_at=clock_timestamp()
