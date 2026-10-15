@@ -32,7 +32,7 @@ const ClosedOrderHistory = lazy(() => import('./ShopOrderHistory').then((module)
 const ShopProductPhotoControl = lazy(() => import('./ShopProductPhotoControl').then((module) => ({ default: module.ShopProductPhotoControl })))
 const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
 const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
-import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
+import { Empty, PageHeading, useEcommerceShopHandoffAccess, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
 import { bi, confirmedBurmese } from './i18n-actions'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
@@ -1009,6 +1009,7 @@ function ActionHistory({ actions, domain }: { actions: AccountableAction[]; doma
 
 export function OperationsPage({ product }: { product: ProductId }) {
   const runtime = useOutletContext<RuntimeHealth>()
+  const allowEcommerceShopHandoff = useEcommerceShopHandoffAccess()
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -1080,7 +1081,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{view === 'commerce' ? bi(tab.label) : tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage allowEcommerceShopHandoff={allowEcommerceShopHandoff} confirmedLocalShop={confirmedLocalShop} key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff]) : confirmedLocalShop ? 'local' : 'checking'} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedShopTemplate={requestedShopTemplate} requestedSource={requestedSource} shopCounterClientId={shopCounterClientId} shopCounterCustomer={shopCounterCustomer} shopCounterSearch={shopCounterSearch} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -1536,7 +1537,8 @@ function buildCommerceOrderRecoveryInput(
   }
 }
 
-function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
+function CommercePage({ allowEcommerceShopHandoff, confirmedLocalShop, managedIdentity, requestedRequestId, requestedShopTemplate, requestedSource, shopCounterClientId, shopCounterCustomer, shopCounterSearch, tab }: {
+  allowEcommerceShopHandoff: boolean
   confirmedLocalShop: boolean
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
@@ -1550,8 +1552,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const navigate = useNavigate()
   const commerceLocation = useLocation()
   const requestedEcommerceIntent = useMemo(
-    () => ecommerceShopIntentReference(new URLSearchParams(commerceLocation.search)),
-    [commerceLocation.search],
+    () => allowEcommerceShopHandoff ? ecommerceShopIntentReference(new URLSearchParams(commerceLocation.search)) : null,
+    [allowEcommerceShopHandoff, commerceLocation.search],
   )
   const purchaseOrderClock = useMinuteClock()
   const counterDraftContext = shopCounterDraftContext(confirmedLocalShop, managedIdentity)
@@ -1702,6 +1704,11 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
   const [recoveredEcommerceIntent, setRecoveredEcommerceIntent] = useState<{ scope: string; id: string; intents: EcommerceShopNavigationIntents } | null>(null)
+  useEffect(() => {
+    if (allowEcommerceShopHandoff || new URLSearchParams(commerceLocation.search).get('source') !== 'ecommerce-handoff') return
+    navigate('/shop/?tab=orders', { replace: true, state: null })
+    setNotice('This request is not available in your Shop workspace.')
+  }, [allowEcommerceShopHandoff, commerceLocation.search, navigate])
   useEffect(() => {
     if (!requestedEcommerceIntent || !confirmedLocalShop && (!managedIdentity || workspaceMode !== 'managed-ready')) return
     let current = true

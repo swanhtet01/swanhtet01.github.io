@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  ecommerceShopHandoffVisible,
   managedProductIsVisible,
   managedProductPath,
   productSwitcherVisible,
@@ -54,6 +55,16 @@ test('the managed launcher shows only assigned products', () => {
     assigned,
   )
   assert.equal(managedProductIsVisible(['commerce'], 'ecommerce'), false)
+})
+
+test('private Ecommerce-to-Shop handoffs require both managed assignments', () => {
+  assert.equal(ecommerceShopHandoffVisible('ready', ['commerce']), false)
+  assert.equal(ecommerceShopHandoffVisible('ready', ['ecommerce']), false)
+  assert.equal(ecommerceShopHandoffVisible('ready', ['commerce', 'website']), false)
+  assert.equal(ecommerceShopHandoffVisible('ready', ['commerce', 'ecommerce']), true)
+  assert.equal(ecommerceShopHandoffVisible('checking', ['commerce', 'ecommerce']), false)
+  assert.equal(ecommerceShopHandoffVisible('reauthenticate', ['commerce', 'ecommerce']), false)
+  assert.equal(ecommerceShopHandoffVisible('local', []), true)
 })
 
 test('the product switcher appears only when there is somewhere authorized to switch', () => {

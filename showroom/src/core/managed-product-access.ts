@@ -27,6 +27,15 @@ export function managedProductIsVisible(
   return assignedProducts.includes(product)
 }
 
+export function ecommerceShopHandoffVisible(
+  status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
+  assignedProducts: readonly ClientSolutionId[],
+) {
+  return status === 'local' || status === 'ready'
+    && managedProductIsVisible(assignedProducts, 'commerce')
+    && managedProductIsVisible(assignedProducts, 'ecommerce')
+}
+
 export function productSwitcherVisible(
   status: 'checking' | 'local' | 'ready' | 'reauthenticate' | 'error',
   assignedProducts: readonly ClientSolutionId[],

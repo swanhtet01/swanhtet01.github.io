@@ -10,6 +10,7 @@ import { recordBehaviorSignal } from './behavior-trail'
 import { activeCommerceTab, commerceTabs } from './commerce-tabs'
 import type { ClientSolutionId } from './client-onboarding'
 import {
+  ecommerceShopHandoffVisible,
   managedProductIsVisible,
   productSwitcherVisible,
   resolveManagedProductHome,
@@ -219,6 +220,11 @@ type ManagedPortalAccess =
 
 const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
 const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
+
+export function useEcommerceShopHandoffAccess() {
+  const access = useContext(ManagedPortalAccessContext)
+  return ecommerceShopHandoffVisible(access.status, access.products)
+}
 
 function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
   const accessKey = enabled && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
