@@ -46,7 +46,7 @@ assert(publicGalleryProvenance.status === 'illustrative_only' && publicGalleryPr
 assert(publicGalleryProvenance.captureSourceCommit === null && publicGalleryProvenance.captureSourceTree === null
   && publicGalleryProvenance.capturedAt === null, 'illustrative_public_gallery_must_not_claim_capture_provenance')
 assert(publicGalleryProvenance.assets?.map(asset => asset.file).join(',') === publicGalleryAssetNames.join(','), 'public_gallery_asset_set_changed')
-const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.assets.map(async ({ file, width, height, sha256 }) => {
+const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.assets.map(async ({ file, width, height, sha256, capture }) => {
   const bytes = await readFile(resolve(root, 'tools', 'public-assets', file))
   assert(bytes.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), `public_gallery_asset_not_png:${file}`)
   assert(Number.isInteger(width) && Number.isInteger(height) && width >= 1000 && height >= 700,
@@ -55,7 +55,15 @@ const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     `public_gallery_asset_dimensions_mismatch:${file}`)
   assert(/^[0-9a-f]{64}$/.test(sha256) && createHash('sha256').update(bytes).digest('hex') === sha256,
     `public_gallery_asset_digest_mismatch:${file}`)
-  return { file, width, height, sha256 }
+  if (capture) assert(file === 'actual-shop-today.png'
+    && capture.classification === 'local_real_component_synthetic'
+    && capture.publicationReady === false && /^[0-9a-f]{40}$/.test(capture.sourceCommit)
+    && /^[0-9a-f]{40}$/.test(capture.showroomTree)
+    && capture.captureTool === 'tools/capture_public_gallery.mjs'
+    && capture.fixturePath === '/shop/' && capture.routeState === 'today'
+    && capture.visibleSelector === '.shop-today-module' && capture.deniedExternal === 0,
+    `public_gallery_capture_receipt_invalid:${file}`)
+  return { file, width, height, sha256, ...(capture ? { capture } : {}) }
 }))
 
 assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
@@ -646,7 +654,8 @@ const productOutcomes = {
 }
 function interfaceDisclosure(image) {
  assert(publicGalleryAssetNames.includes(image), `interface_gallery_asset_unverified:${image}`)
- return 'Illustrative app view · synthetic example records'
+ return publicGalleryProvenance.assets.find(asset => asset.file === image)?.capture
+   ? 'Real Shop UI · synthetic local demo data' : 'Illustrative app view · synthetic example records'
 }
 function productGallery(id,label,eagerFirst=false) {
  const item=stories[id]

@@ -102,9 +102,11 @@ const productScreens = {
   website: ['actual-sites-editor.png', 'actual-sites-inquiries.png'],
   ecommerce: ['actual-commerce-catalog.png', 'actual-commerce-order-request.png'],
 }
-const interfaceDisclosure = (image) => publicGalleryProvenance.assets.some(asset => asset.file === image)
-  ? 'Illustrative app view · synthetic example records'
-  : null
+const interfaceDisclosure = (image) => {
+  const asset = publicGalleryProvenance.assets.find(entry => entry.file === image)
+  return asset?.capture ? 'Real Shop UI · synthetic local demo data'
+    : asset ? 'Illustrative app view · synthetic example records' : null
+}
 check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {
   const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
@@ -304,8 +306,9 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
   check(!body.includes('Current Shop') && !body.includes('Current Sites') && !body.includes('Current Commerce'), `capture_not_claimed_current:${route}`)
   check(!body.includes('Illustrative interface and records.'), `illustrative_mockups_absent:${route}`)
+  const bodyWithoutCaptureDisclosure = body.replace('Real Shop UI · synthetic local demo data', '')
   for (const forbidden of ['Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
-    check(!body.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
+    check(!bodyWithoutCaptureDisclosure.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
   }
   const routeManifestProduct = routeProduct ? manifest.customerProducts.find(product => product.id === routeProduct) : null
   const expectedContactTarget = routeManifestProduct?.status === 'available-in-app'
