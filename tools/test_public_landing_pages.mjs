@@ -160,6 +160,11 @@ for (const page of landingPages) {
   )
   check(countOccurrences(html, 'data-gallery-previous') === Number(carousel) && countOccurrences(html, 'data-gallery-next') === Number(carousel), `landing_gallery_navigation:${page.route}`)
   check(html.includes('role="group" aria-roledescription="slide"'), `landing_gallery_accessible_slides:${page.route}`)
+  check(countOccurrences(html, 'class="platform-image-open"') === productScreens[page.productId].length
+    && countOccurrences(html, 'aria-label="Open full-size') === productScreens[page.productId].length
+    && !html.includes('target="_blank"'),
+  `landing_full_size_gallery_views:${page.route}`)
+  check(html.includes('class="product-story product-story-standalone"') && html.includes('.product-story-standalone {padding:0 0 58px;border-top:0}'), `landing_gallery_above_fold_spacing:${page.route}`)
   check(carousel === html.includes('<script src="/platform-carousel.js" defer></script>'), `landing_gallery_script:${page.route}`)
   check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
@@ -292,9 +297,10 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   check(countOccurrences(body, 'href="https://app.supermega.dev/login"') === 1, `one_login:${route}`)
   const marketingButtons = (body.match(/<button\b/g) || []).length
   const routeProduct = route === '/' ? null : route.slice(1, -1)
-  check(marketingButtons === ((productScreens[routeProduct]?.length || 0) > 1 ? 2 : 0), `marketing_only_gallery_controls:${route}`)
+  const carouselCount = route === '/' ? Object.values(productScreens).filter(screens => screens.length > 1).length : Number((productScreens[routeProduct]?.length || 0) > 1)
+  check(marketingButtons === carouselCount * 2, `marketing_only_gallery_controls:${route}`)
   check(interfaceFigureCount > 0, `interface_figures_present:${route}`)
-  const expectedCaptureScreens = route === '/' ? Object.values(productScreens).map((screens) => screens[0]) : productScreens[route.slice(1, -1)] || []
+  const expectedCaptureScreens = route === '/' ? Object.values(productScreens).flat() : productScreens[route.slice(1, -1)] || []
   for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
   check(!body.includes('Current Shop') && !body.includes('Current Sites') && !body.includes('Current Commerce'), `capture_not_claimed_current:${route}`)
   check(!body.includes('Illustrative interface and records.'), `illustrative_mockups_absent:${route}`)
@@ -316,7 +322,56 @@ for (const id of activeIds) {
   const route = manifest.pages.find((page) => page.productId === id)?.route
   check(typeof route === 'string' && countOccurrences(home, `class="story-link" href="${route}"`) === 1, `home_product_story_link:${id}`)
 }
-check(countOccurrences(home, '<figure class="platform-image') === activeIds.length, 'home_one_view_per_active_product')
+check(countOccurrences(home, '<figure class="platform-image') === Object.values(productScreens).flat().length, 'home_all_views_for_active_products')
+check(countOccurrences(home, 'data-product-panel') === activeIds.length && countOccurrences(home, 'data-platform-carousel') === activeIds.length, 'home_three_switchable_product_galleries')
+check(countOccurrences(home, 'class="platform-image-open"') === Object.values(productScreens).flat().length, 'home_full_size_image_access')
+check(home.includes('data-product-showcase') && home.includes('data-product-tabs') && home.includes('<script src="/platform-carousel.js" defer></script>'), 'home_progressive_product_tabs')
+check(publicCarouselSource.includes("event.key==='Home'") && publicCarouselSource.includes("event.key==='End'") && publicCarouselSource.includes("event.key==='ArrowRight'"), 'home_product_tab_keyboard_navigation')
+for (const id of ['shop', 'website', 'ecommerce']) check(home.includes(`id="${id}" data-product-panel data-product-name=`), `home_no_script_product_available:${id}`)
+function showcaseNode(id = '', name = '') {
+  const attributes = new Map()
+  const listeners = new Map()
+  return {
+    id, hidden: false, children: [], tabIndex: 0,
+    setAttribute: (key, value) => attributes.set(key, value),
+    getAttribute: (key) => key === 'data-product-name' ? name : attributes.get(key),
+    addEventListener: (key, handler) => listeners.set(key, handler),
+    emit: (key, event = {}) => listeners.get(key)?.(event),
+    appendChild(child) { this.children.push(child) },
+    querySelectorAll: () => [],
+    focus() { showcaseDocument.activeElement = this },
+  }
+}
+const showcasePanels = ['shop', 'website', 'ecommerce'].map((id, index) => showcaseNode(id, ['Shop', 'Sites', 'Commerce'][index]))
+const showcaseTabs = showcaseNode()
+const showcaseRoot = {
+  querySelector: selector => selector === '[data-product-tabs]' ? showcaseTabs : null,
+  querySelectorAll: selector => selector === '[data-product-panel]' ? showcasePanels : [],
+}
+const showcaseDocument = {
+  activeElement: null,
+  querySelector: selector => selector === '[data-product-showcase]' ? showcaseRoot : null,
+  querySelectorAll: () => [],
+  createElement: () => showcaseNode(),
+}
+const showcaseWindowHandlers = new Map()
+const showcaseWindow = { addEventListener: (key, handler) => showcaseWindowHandlers.set(key, handler) }
+const showcaseLocation = { hash: '' }
+runInNewContext(publicCarouselSource, { document: showcaseDocument, window: showcaseWindow, location: showcaseLocation })
+check(showcaseTabs.children.length === 3 && showcaseTabs.getAttribute('role') === 'tablist', 'home_runtime_builds_three_product_tabs')
+check(showcasePanels.filter(panel => !panel.hidden).map(panel => panel.id).join() === 'shop', 'home_runtime_one_initial_panel')
+showcaseTabs.children[1].emit('click')
+check(showcasePanels.filter(panel => !panel.hidden).map(panel => panel.id).join() === 'website'
+  && showcaseTabs.children[1].getAttribute('aria-selected') === 'true', 'home_runtime_switches_to_sites')
+showcaseTabs.children[1].focus()
+showcaseTabs.emit('keydown', { key: 'ArrowRight', preventDefault() {} })
+check(showcasePanels.filter(panel => !panel.hidden).map(panel => panel.id).join() === 'ecommerce'
+  && showcaseDocument.activeElement === showcaseTabs.children[2], 'home_runtime_keyboard_selects_commerce')
+showcaseTabs.emit('keydown', { key: 'Home', preventDefault() {} })
+check(showcaseDocument.activeElement === showcaseTabs.children[0] && showcasePanels[0].hidden === false, 'home_runtime_keyboard_home')
+showcaseLocation.hash = '#website'
+showcaseWindowHandlers.get('hashchange')()
+check(showcasePanels[1].hidden === false && showcasePanels[0].hidden === true, 'home_runtime_deep_link_selects_product')
 check(countOccurrences(home, 'class="product-card-flow"') === activeIds.length, 'home_compact_product_flows')
 check(home.includes('href="/contact/">Contact SuperMega</a>'), 'home_clear_contact_action')
 const screenshotHashes = new Set()

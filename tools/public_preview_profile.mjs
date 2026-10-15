@@ -38,6 +38,13 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     })
   })
   const appPaths = new Set(['/login'])
+  // Full-size gallery links are static, local PNGs. Keep this exact allowlist
+  // separate from page routes so previews cannot turn an image into an escape.
+  const galleryPaths = new Set([
+    '/images/actual-shop-today.png', '/images/actual-shop-sell.png', '/images/actual-shop-orders.png',
+    '/images/actual-sites-editor.png', '/images/actual-sites-inquiries.png',
+    '/images/actual-commerce-catalog.png', '/images/actual-commerce-order-request.png',
+  ])
   const publicOrigin = options.publicOrigin || 'https://supermega.dev'
   for (const href of hrefs) {
     if (!href || /[\s\\]|%|&(?:#|[a-z]+;)/i.test(href) || href.startsWith('//')) throw new Error('public_preview_href_unsafe')
@@ -48,7 +55,8 @@ export function validatePreviewLinks(html, policy, products, options = {}) {
     if (url.origin === origin) {
       if (!appPaths.has(url.pathname + url.search + url.hash)) throw new Error('public_preview_app_route_invalid')
     } else if (url.origin !== publicOrigin) throw new Error('public_preview_production_escape')
-    else if (!['/', '/shop/', '/website/', '/ecommerce/', '/contact/', '/privacy/'].includes(url.pathname)) throw new Error('public_preview_public_route_invalid')
+    else if (!['/', '/shop/', '/website/', '/ecommerce/', '/contact/', '/privacy/'].includes(url.pathname)
+      && !(galleryPaths.has(url.pathname) && !url.search && !url.hash)) throw new Error('public_preview_public_route_invalid')
   }
   if (options.requireActions !== false && hrefs.filter(href => href === `${origin}/login`).length !== 1) {
     throw new Error('public_preview_action_missing:single_login')
