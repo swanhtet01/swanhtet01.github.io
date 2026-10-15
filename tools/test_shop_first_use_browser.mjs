@@ -215,7 +215,7 @@ async function verifyViewport(cdp, origin, viewport) {
       const route = document.querySelector('#qa-route');
       const details = document.querySelector('#shop-catalog-create');
       const input = details?.querySelector('input[name="product-name"]');
-      const back = [...document.querySelectorAll('a')].some((node) => node.textContent.trim() === 'Back to Commerce');
+      const back = [...document.querySelectorAll('a')].some((node) => node.textContent.trim() === 'Back');
       return route?.dataset.path === '/shop/?tab=inventory#shop-catalog-create' && route.dataset.return === 'true'
         && details?.open === true && input === document.activeElement && back
         ? { focused: true, back, width: document.documentElement.scrollWidth, viewport: innerWidth }
@@ -225,7 +225,7 @@ async function verifyViewport(cdp, origin, viewport) {
     assert.equal(product.back, true, 'first-product setup should offer a return to Commerce')
     assert.ok(product.width <= product.viewport, `first-product form overflows at ${viewport.width}px`)
 
-    await evaluate(cdp, sessionId, `([...document.querySelectorAll('a')].find((node) => node.textContent.trim() === 'Back to Commerce')).click()`)
+    await evaluate(cdp, sessionId, `([...document.querySelectorAll('a')].find((node) => node.textContent.trim() === 'Back')).click()`)
     await waitFor(cdp, sessionId, `(() => document.querySelector('#qa-route')?.dataset.path === '/ecommerce/'
       && [...document.querySelectorAll('a')].some((node) => node.textContent.trim() === 'Add first product')
       && [...document.querySelectorAll('a')].some((node) => node.textContent.includes('Import a CSV')))()`, 'return to Commerce with setup choices')
@@ -249,7 +249,7 @@ async function verifyViewport(cdp, origin, viewport) {
       const route = document.querySelector('#qa-route');
       const details = document.querySelector('#shop-catalog-create');
       const input = details?.querySelector('input[name="product-name"]');
-      const back = [...document.querySelectorAll('a')].some((node) => node.textContent.trim() === 'Back to Commerce');
+      const back = [...document.querySelectorAll('a')].some((node) => node.textContent.trim() === 'Back');
       return route?.dataset.path === '/shop/?tab=inventory#shop-catalog-create' && route.dataset.return === 'true'
         && details?.open === true && input === document.activeElement && back
         ? { returnStatePreserved: true, back }
@@ -258,11 +258,63 @@ async function verifyViewport(cdp, origin, viewport) {
     assert.equal(manualAfterImport.returnStatePreserved, true, 'switching to manual setup should retain Commerce return state')
     assert.equal(manualAfterImport.back, true, 'manual setup after CSV import should still offer a return to Commerce')
 
+    await evaluate(cdp, sessionId, `(() => {
+      const form = document.querySelector('#shop-catalog-create form');
+      const setValue = (input, value) => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (!input || !setter) throw new Error('Synthetic first-product input was unavailable');
+        setter.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      if (!form) throw new Error('First-product form was unavailable');
+      setValue(form.querySelector('input[name="product-name"]'), 'Synthetic tea');
+      const numbers = form.querySelectorAll('input[type="number"]');
+      setValue(numbers[0], '2500');
+      setValue(numbers[1], '12');
+      setValue(numbers[2], '0');
+      form.requestSubmit();
+      return true;
+    })()`)
+    const review = await waitFor(cdp, sessionId, `(() => {
+      const dialog = document.querySelector('dialog.accountable-action-gate');
+      const heading = dialog?.querySelector('#action-confirm-title');
+      return dialog?.open && heading?.textContent.includes('Add SM-')
+        ? { open: true, summary: heading.textContent.trim() }
+        : null;
+    })()`, 'review gate for first product')
+    assert.equal(review.open, true, 'first product must wait for explicit review')
+    await evaluate(cdp, sessionId, `(() => {
+      const form = document.querySelector('dialog.accountable-action-gate form');
+      const inputs = form?.querySelectorAll('input');
+      if (!form || !inputs || inputs.length < 3) throw new Error('First-product review fields were unavailable');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      if (!setter) throw new Error('Synthetic review input setter was unavailable');
+      ['Synthetic owner', 'Counted synthetic opening stock', 'Synthetic browser evidence'].forEach((value, index) => {
+        setter.call(inputs[index], value);
+        inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+        inputs[index].dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      form.requestSubmit();
+      return true;
+    })()`)
+    const returned = await waitFor(cdp, sessionId, `(() => {
+      const route = document.querySelector('#qa-route');
+      const state = JSON.parse(localStorage.getItem(window.__qaCommerceKey));
+      return route?.dataset.path === '/ecommerce/' && state?.items?.length === 1
+        && state.items[0].name === 'Synthetic tea'
+        ? { path: route.dataset.path, products: state.items.length, productName: state.items[0].name }
+        : null;
+    })()`, 'return to Commerce after reviewed first-product creation')
+    assert.equal(returned.path, '/ecommerce/', 'Commerce setup should resume after the first product is confirmed')
+    assert.equal(returned.products, 1, 'the synthetic owner-reviewed item should be saved exactly once')
+    assert.equal(returned.productName, 'Synthetic tea')
+
     const fixtureState = await evaluate(cdp, sessionId, `({ fetchAttempts: window.__qaFetchAttempts.length,
       identityProbes: window.__qaIdentityProbes,
       products: JSON.parse(localStorage.getItem(window.__qaCommerceKey)).items.length })`)
     assert.equal(fixtureState.fetchAttempts, 0, 'fixture should make no fetch or provider requests')
-    assert.equal(fixtureState.products, 0, 'navigation and preview should not create a product')
+    assert.equal(fixtureState.products, 1, 'the reviewed synthetic setup should create exactly one product')
     assert.deepEqual([...externalOrigins], [], 'fixture should make no external HTTP requests')
     assert.deepEqual(errors, [], 'fixture should have no browser runtime errors')
 
@@ -273,6 +325,8 @@ async function verifyViewport(cdp, origin, viewport) {
       csvImporterExpanded: importer.expanded,
       csvInputAvailable: importer.acceptsCsv,
       manualSetupAfterImportRetainsReturn: manualAfterImport.returnStatePreserved,
+      reviewedProductReturnsToCommerce: returned.path === '/ecommerce/',
+      syntheticProductCreated: returned.products === 1,
       overflow: false,
       externalRequests: externalOrigins.size,
       providerFetches: fixtureState.fetchAttempts,

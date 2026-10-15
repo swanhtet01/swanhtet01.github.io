@@ -3426,15 +3426,16 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const catalogIsEmpty = commerce.items.length === 0
   const catalogImportRequested = commerceLocation.hash === '#shop-catalog-import'
   const catalogImportVisible = catalogImportOpen || catalogImportRequested
+  const commerceReturnPath = '/ecommerce/'
   const commerceReturnRequested = commerceLocation.state === true
   function toggleCatalogImport() {
     if (catalogImportRequested) navigate('/shop/?tab=inventory', { replace: true, state: commerceLocation.state })
     setCatalogImportOpen((open) => catalogImportRequested ? false : !open)
   }
   const shopCatalogOnboarding = <section aria-label="Shop catalog setup" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
-    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Add one product or import a list' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Start with one item and its current stock. Import a spreadsheet when you are ready.' : 'Review a CSV before adding products in bulk.'}</p></div>
+    <div><span className="core-eyebrow">{catalogIsEmpty ? 'First sale' : 'Catalog import'}</span><strong>{catalogIsEmpty ? 'Add one product or import a list' : 'Add products from a CSV'}</strong><p>{catalogIsEmpty ? 'Add an item and its stock, or import a CSV.' : 'Review a CSV before adding products in bulk.'}</p></div>
     {catalogIsEmpty ? <div className="form-actions">
-      <Link className="core-button primary" state={commerceReturnRequested || undefined} to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
+      <Link className="core-button primary" state={commerceReturnRequested} to="/shop/?tab=inventory#shop-catalog-create">Add first product</Link>
       <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>
     </div> : <button aria-controls="shop-catalog-import-panel" aria-expanded={catalogImportVisible} className="core-button" disabled={commerceControlsDisabled} onClick={toggleCatalogImport} type="button">{catalogImportVisible ? 'Close import' : 'Import a CSV'}</button>}
     {catalogImportVisible ? <div id="shop-catalog-import-panel"><Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed={!confirmedLocalShop} product="commerce" /></Suspense></div> : null}
@@ -3742,7 +3743,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         await mutateCommerce('commerce.item.created', action.commandId, proof, (current) => registerCommerceItem(current, item, proof))
         setItemDraft({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
         setSku(item.sku)
-        if (isFirstProduct) navigate('/shop/?tab=counter')
+        if (isFirstProduct) navigate(commerceReturnRequested ? commerceReturnPath : '/shop/?tab=counter')
       },
     })
   }
@@ -7105,7 +7106,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     </div>
   }
 
-  const commerceReturnLink = commerceReturnRequested ? <Link className="text-link" to="/ecommerce/">Back to Commerce</Link> : null
+  const commerceReturnLink = commerceReturnRequested ? <Link className="text-link" to={commerceReturnPath}>Back</Link> : null
   const catalogCreatePanel = <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => {
     const target = event.currentTarget
     const open = target.open

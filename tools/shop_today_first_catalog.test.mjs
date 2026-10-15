@@ -103,12 +103,12 @@ test('catalog import keeps unchanged items out of the write and disables a no-op
   assert.match(onboarding, /exact matches will stay unchanged\. Approve adding only the new items/)
 })
 
-test('first product setup keeps required data minimal and continues to Counter after review', () => {
+test('first product setup preserves Commerce intent and keeps Shop-first setup on Counter', () => {
   assert.match(core, /name="product-name"[\s\S]*?required value=\{itemDraft\.name\}/)
   assert.match(core, /Current stock[\s\S]*?required step="1" type="number" value=\{itemDraft\.onHand\}/)
   assert.match(core, /Price \(MMK\)[\s\S]*?required step="1" type="number" value=\{itemDraft\.price\}/)
   assert.match(core, /const itemSku = suppliedSku \|\| `SM-\$\{commandUuid\(\)\.slice\(0, 8\)/)
-  assert.match(core, /if \(isFirstProduct\) navigate\('\/shop\/\?tab=counter'\)/)
+  assert.match(core, /const commerceReturnPath = '\/ecommerce\/'[\s\S]*?state=\{commerceReturnRequested\}[\s\S]*?if \(isFirstProduct\) navigate\(commerceReturnRequested \? commerceReturnPath : '\/shop\/\?tab=counter'\)/)
   assert.doesNotMatch(core, /name="product-code"[^>]*required/)
   assert.match(core, /id="shop-catalog-import"/)
   assert.match(core, /Import a CSV/)
