@@ -221,11 +221,6 @@ type ManagedPortalAccess =
 const localPortalAccess: ManagedPortalAccess = { status: 'local', products: [], workspaceId: '' }
 const ManagedPortalAccessContext = createContext<ManagedPortalAccess>(localPortalAccess)
 
-export function useEcommerceShopHandoffAccess() {
-  const access = useContext(ManagedPortalAccessContext)
-  return ecommerceShopHandoffVisible(access.status, access.products)
-}
-
 function useManagedPortalAccess(enabled: boolean, selectedWorkspace: string, refreshKey: string): ManagedPortalAccess {
   const accessKey = enabled && selectedWorkspace ? `${selectedWorkspace}:${refreshKey}` : 'local'
   const [resolved, setResolved] = useState<{ key: string; access: ManagedPortalAccess }>({ key: 'local', access: localPortalAccess })
@@ -579,7 +574,7 @@ export function CoreLayout() {
                         ? managedRouteDecision.kind === 'redirect'
                           ? <Navigate replace to={managedRouteDecision.path} />
                       : <PortalAccessPanel action={<a className="core-button primary" href="https://supermega.dev/contact/?product=guide&amp;source=company-no-products" target="_blank" rel="noopener noreferrer">Contact support</a>} copy="Your company has no active products yet. SuperMega can help you get started." title="No products yet" />
-                        : <Outlet context={runtime} />}
+                        : <Outlet context={{ ...runtime, ecommerceShopHandoffAllowed: ecommerceShopHandoffVisible(portalAccess.status, portalAccess.products) }} />}
               </RouteErrorBoundary>
             </ManagedPortalAccessContext.Provider>
           </div>

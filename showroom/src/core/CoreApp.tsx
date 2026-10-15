@@ -32,7 +32,7 @@ const ClosedOrderHistory = lazy(() => import('./ShopOrderHistory').then((module)
 const ShopProductPhotoControl = lazy(() => import('./ShopProductPhotoControl').then((module) => ({ default: module.ShopProductPhotoControl })))
 const ShopStocktakeDraftRecovery = lazy(() => import('./ShopStocktakeDraftRecovery').then((module) => ({ default: module.ShopStocktakeDraftRecovery })))
 const ShopBarcodeLabels = lazy(() => import('./ShopBarcodeLabels').then((module) => ({ default: module.ShopBarcodeLabels })))
-import { Empty, PageHeading, useEcommerceShopHandoffAccess, type RuntimeHealth } from './CoreShell'
+import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { activeCommerceTab, commerceTabs, type CommerceTab } from './commerce-tabs'
 import { bi, confirmedBurmese } from './i18n-actions'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
@@ -1008,8 +1008,8 @@ function ActionHistory({ actions, domain }: { actions: AccountableAction[]; doma
 }
 
 export function OperationsPage({ product }: { product: ProductId }) {
-  const runtime = useOutletContext<RuntimeHealth>()
-  const allowEcommerceShopHandoff = useEcommerceShopHandoffAccess()
+  const runtime = useOutletContext<RuntimeHealth & { ecommerceShopHandoffAllowed: boolean }>()
+  const allowEcommerceShopHandoff = runtime.ecommerceShopHandoffAllowed
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
