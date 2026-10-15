@@ -411,6 +411,7 @@ export function WebsiteProduct() {
   const hostingState = portalViewOnly ? 'restricted' : hostingRead.scope === hostingScope ? hostingRead.state : 'checking'
   const hostedStatus = hostingState === 'confirmed' ? hostingRead.status : null
   const hostedLive = hostedStatus?.publications.find((entry) => entry.enabled)
+  const hostedSiteUrl = hostedStatus && hostedLive ? `${hostedStatus.publicOrigin}/sites/${hostedLive.channelId}` : ''
   const hostedCurrent = Boolean(hostedLive && publish && inquiryPageId
     && hostedLive.snapshotId === publish.id && hostedLive.pageId === inquiryPageId
     && hostedLive.sourceVersion === hostedStatus?.source?.version)
@@ -422,10 +423,11 @@ export function WebsiteProduct() {
   const canvasPage = canvasWorkspace.pages.find((page) => page.id === selectedPageId)
     ?? canvasWorkspace.pages.find((page) => page.id === canvasWorkspace.selectedPageId)
     ?? canvasWorkspace.pages[0]
+  const editingCopy = 'Edit pages, then review.'
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
         title: 'Pages',
-        copy: 'Edit your pages and download your website.',
+        copy: editingCopy,
       }
     : starterSetupActive
     ? {
@@ -439,7 +441,7 @@ export function WebsiteProduct() {
           ? 'Your changes are not saved. Return to edit to save or discard them.'
           : selectedPage.stage === 'draft'
             ? 'This page is saved as a draft. Select Edit website to update it and mark it ready.'
-            : 'Edit your pages, review inquiries and download your site.',
+            : editingCopy,
       }
     : view === 'inquiries'
       ? viewCopy.inquiries
@@ -1517,6 +1519,7 @@ export function WebsiteProduct() {
               aria-label="Website actions"
               className="website-action-bar"
               data-editing={hasUnsavedChanges ? 'true' : 'false'}
+              data-managed={storageMode === 'managed'}
               data-starter={starterSetupActive ? 'true' : 'false'}
               data-surface={surface}
             >
@@ -1527,8 +1530,10 @@ export function WebsiteProduct() {
                 </div>
               ) : (
                 <div className="website-action-context">
-                  <strong>{selectedPage.internalName || 'Untitled page'}</strong>
-                  <span>{selectedPage.slug || 'No path'} · {selectedPage.stage}</span>
+                  <strong>{storageMode === 'managed' ? 'Website address' : selectedPage.internalName || 'Untitled page'}</strong>
+                  <span>{storageMode === 'managed'
+                    ? hostedSiteUrl ? <a href={hostedSiteUrl} rel="noreferrer" target="_blank">{hostedSiteUrl}</a> : canReview ? 'Review to publish' : 'Finish page checks'
+                    : `${selectedPage.slug || 'No path'} · ${selectedPage.stage}`}</span>
                 </div>
               )}
               <span
