@@ -24,11 +24,11 @@ class FullChainProofContractTests(unittest.TestCase):
 
     def test_exact_current_private_migration_chain(self):
         actual = sorted(p.name for p in (proof.ROOT / "supabase/migrations").glob("*.sql")
-                        if p.name not in ("20260711081300_public_legacy_baseline.sql",
-                                          *proof.pg.DOMAIN_CANDIDATE_MIGRATIONS))
+                        if p.name != "20260711081300_public_legacy_baseline.sql")
         self.assertEqual(list(proof.MIGRATIONS), actual)
         for candidate in proof.pg.DOMAIN_CANDIDATE_MIGRATIONS:
-            self.assertTrue((proof.ROOT / "supabase/migrations" / candidate).is_file())
+            self.assertTrue((proof.ROOT / "supabase/candidate-migrations" / candidate).is_file())
+            self.assertFalse((proof.ROOT / "supabase/migrations" / candidate).exists())
             self.assertNotIn(candidate, proof.MIGRATIONS)
         self.assertEqual(len(proof.MIGRATIONS), 27)
         self.assertEqual(proof.MIGRATIONS[-12:], (

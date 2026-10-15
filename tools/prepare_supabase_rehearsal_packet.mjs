@@ -47,25 +47,14 @@ const expectedMigrationNames = [
   '20261010120857_website_inquiry_followup.sql',
   '20261014090000_website_channel_stable_update.sql',
 ]
-// These source-only dependent domain candidates are not part of the reviewed
-// v13 rehearsal chain. Every other unexpected SQL file still fails closed.
-const dormantCandidateNames = new Set([
-  '20261014103000_website_custom_domain_bindings.sql',
-  '20261014122400_website_domain_attempt_fencing.sql',
-])
-
 export function validateRehearsalMigrationNames(names) {
   if (JSON.stringify(names) !== JSON.stringify(expectedMigrationNames)) {
     fail('supabase_rehearsal_full_migration_inventory_mismatch')
   }
 }
 export function reviewedRehearsalMigrationNames(names) {
-  if ([...dormantCandidateNames].some((candidate) => names.filter((name) => name === candidate).length > 1)) {
-    fail('supabase_rehearsal_full_migration_inventory_mismatch')
-  }
-  const reviewed = names.filter((name) => !dormantCandidateNames.has(name))
-  validateRehearsalMigrationNames(reviewed)
-  return reviewed
+  validateRehearsalMigrationNames(names)
+  return names
 }
 const browserQuarantinePath = 'supabase/rehearsal/20260804_public_browser_quarantine.sql'
 const securityAuditPath = 'hq/readiness/supabase-security-advisor-audit.json'

@@ -76,12 +76,12 @@ test('rejects every omitted migration, unknown SQL, duplicate and reordered inve
   const packet = await buildSupabaseRehearsalPacket({ repositoryRoot, targetProjectRef, releaseCommit, releaseReview, generatedAt })
   const names = packet.release.migrations.map(({ name }) => name)
   validateRehearsalMigrationNames(names)
-  const dormant = ['20261014103000_website_custom_domain_bindings.sql',
+  const quarantined = ['20261014103000_website_custom_domain_bindings.sql',
     '20261014122400_website_domain_attempt_fencing.sql']
-  assert.deepEqual(reviewedRehearsalMigrationNames([...names, ...dormant]), names)
-  for (const candidate of dormant) {
+  assert.deepEqual(reviewedRehearsalMigrationNames(names), names)
+  for (const candidate of quarantined) {
     assert.throws(() => validateRehearsalMigrationNames([...names, candidate]), /full_migration_inventory_mismatch/)
-    assert.throws(() => reviewedRehearsalMigrationNames([...names, candidate, candidate]), /full_migration_inventory_mismatch/)
+    assert.throws(() => reviewedRehearsalMigrationNames([...names, candidate]), /full_migration_inventory_mismatch/)
   }
   for (let i = 0; i < names.length; i++) {
     assert.throws(() => validateRehearsalMigrationNames(names.filter((_, j) => i !== j)), /full_migration_inventory_mismatch/)

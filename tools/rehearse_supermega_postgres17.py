@@ -32,6 +32,7 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_DIRECTORY = ROOT / "supabase" / "migrations"
+CANDIDATE_MIGRATION_DIRECTORY = ROOT / "supabase" / "candidate-migrations"
 PUBLIC_BROWSER_QUARANTINE = (
     ROOT / "supabase" / "rehearsal" / "20260804_public_browser_quarantine.sql"
 )
@@ -138,7 +139,7 @@ IMPLEMENTATION_PATHS = (
 IMPLEMENTATION_PATHS = tuple(sorted(set((*IMPLEMENTATION_PATHS,
     "kernel/database-rehearsal-evidence.mjs",
     *(f"supabase/migrations/{name}" for name in CURRENT_MIGRATIONS),
-    *(f"supabase/migrations/{name}" for name in DOMAIN_CANDIDATE_MIGRATIONS),
+    *(f"supabase/candidate-migrations/{name}" for name in DOMAIN_CANDIDATE_MIGRATIONS),
     "supermega_runtime/billing_rail.py", "tests/test_billing_rail.py",
     "supermega_runtime/website_customer_review.py", "supermega_runtime/website_customer_review_store.py",
     "supermega_runtime/website_inquiry_api.py", "supermega_runtime/website_inquiry_store.py",
@@ -222,7 +223,7 @@ def _source_identity(expected_head: str | None) -> dict[str, str]:
     if git("rev-parse", "HEAD") != expected_head:
         raise RehearsalFailure("source_head_mismatch")
     observed = tuple(sorted(path.name for path in MIGRATION_DIRECTORY.glob("*.sql")
-        if path.name not in ("20260711081300_public_legacy_baseline.sql", *DOMAIN_CANDIDATE_MIGRATIONS)))
+        if path.name != "20260711081300_public_legacy_baseline.sql"))
     if observed != CURRENT_MIGRATIONS:
         raise RehearsalFailure("private_migration_inventory_mismatch")
     return {"head": expected_head, "tree": git("rev-parse", "HEAD^{tree}"),
@@ -791,7 +792,9 @@ def _apply_migrations(
     migration_environment = dict(environment)
     migration_environment["PGPASSWORD"] = admin_password
     for position, migration in enumerate(migrations):
-        migration_path = MIGRATION_DIRECTORY / migration
+        migration_directory = (CANDIDATE_MIGRATION_DIRECTORY
+            if migration in DOMAIN_CANDIDATE_MIGRATIONS else MIGRATION_DIRECTORY)
+        migration_path = migration_directory / migration
         if not migration_path.is_file():
             raise RehearsalFailure("migration_inventory_incomplete")
         result = _run(
