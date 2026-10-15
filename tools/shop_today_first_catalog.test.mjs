@@ -49,6 +49,19 @@ test('empty Commerce first-product copy stays aligned with its rendered-page con
   }
 })
 
+test('the empty Shop inventory keeps its first-product and CSV import targets mounted', () => {
+  const inventoryStart = core.indexOf("if (tab === 'inventory') return")
+  const inventoryEnd = core.indexOf('  return null', inventoryStart)
+  const inventoryBranch = core.slice(inventoryStart, inventoryEnd)
+  assert.ok(inventoryStart >= 0 && inventoryEnd > inventoryStart)
+  assert.ok(inventoryBranch.includes('{shopCatalogOnboarding}'))
+  assert.ok(inventoryBranch.includes('{commerceReturnLink}'))
+  assert.ok(inventoryBranch.includes('{catalogCreatePanel}'))
+  assert.equal(inventoryBranch.split('{shopCatalogOnboarding}').length - 1, 1)
+  assert.ok(core.includes('catalogImportVisible ? <div id="shop-catalog-import-panel">'))
+  assert.match(core, /if \(tab !== 'inventory' \|\| commerceLocation\.hash !== '#shop-catalog-create' \|\| !catalogCreateOpen\) return[\s\S]*?input\[name="product-name"\][\s\S]*?\[catalogCreateOpen, commerceLocation\.hash, tab\]/)
+})
+
 test('approved Burmese Shop empty-state copy renders beside the English labels', () => {
   const approved = new Map([
     ['No products to sell yet', 'ရောင်းရန်ပစ္စည်း မရှိသေးပါ'],

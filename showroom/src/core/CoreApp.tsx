@@ -2447,7 +2447,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         setCatalogCreateOpen(true)
         const target = document.getElementById('shop-catalog-create')
         target?.scrollIntoView({ block: 'center' })
-        window.requestAnimationFrame(() => target?.querySelector<HTMLInputElement>('input[name="product-name"]')?.focus({ preventScroll: true }))
         return
       }
       if (commerceLocation.hash === '#shop-catalog-import') {
@@ -2458,6 +2457,16 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     })
     return () => window.cancelAnimationFrame(frame)
   }, [commerce.orders.length, commerceLocation.hash, tab])
+
+  useEffect(() => {
+    if (tab !== 'inventory' || commerceLocation.hash !== '#shop-catalog-create' || !catalogCreateOpen) return
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('shop-catalog-create')
+        ?.querySelector<HTMLInputElement>('input[name="product-name"]')
+        ?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [catalogCreateOpen, commerceLocation.hash, tab])
 
   useEffect(() => {
     let current = true
@@ -7106,6 +7115,18 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     </div>
   }
 
+  const commerceReturnLink = commerceReturnRequested ? <Link className="text-link" to="/ecommerce/">Back to Commerce</Link> : null
+  const catalogCreatePanel = <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
+    <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
+    <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
+      <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
+      <div className="form-row"><label>Current stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Low-stock alert (optional)<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} step="1" type="number" value={itemDraft.reorderAt} /></label></div>
+      <label>Product code or barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} name="product-code" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Scan or type if you have one" value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label>
+      <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review and add product</button></div>
+      <p className="panel-copy">Leave the code blank and Shop will create one. You can change the stock alert later.</p>
+    </form>
+  </details>
+
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {operatingBoundary}
     {shopOperatingEligible && (shopShiftRequired || Boolean(activeShift) || openShiftSessions.length > 1)
@@ -7642,7 +7663,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
 
   if (tab === 'inventory') return <div className="operation-module shop-stock-module">
     {commerceBoundary}
-    {!commerce.items.length ? shopCatalogOnboarding : null}
+    {shopCatalogOnboarding}
     <section aria-label="Shop stock workspace" className="core-panel inventory-panel shop-stock-workspace">
       <Suspense fallback={null}><ShopStocktakeDraftRecovery active={Boolean(stockCountDraft)} current={stockCountDraft} key={scheduleScopeKey} lines={stockCountBatchDrafts} onReady={setStocktakeRecoveryReadyScope} scopeKey={scheduleScopeKey} setCurrent={setStockCountDraft} setLines={setStockCountBatchDrafts} /></Suspense>
       <header className="shop-stock-heading"><div><h2>Count. Receive. Reorder.</h2></div><button aria-expanded={Boolean(stockCountDraft && stocktakeScopeReady)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></header>
@@ -7856,18 +7877,8 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
-      {commerce.items.length ? shopCatalogOnboarding : null}
-      {commerceReturnRequested ? <Link className="text-link" to="/ecommerce/">Back to Commerce</Link> : null}
-      <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
-        <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
-        <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
-          <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
-          <div className="form-row"><label>Current stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Low-stock alert (optional)<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} step="1" type="number" value={itemDraft.reorderAt} /></label></div>
-          <label>Product code or barcode (optional)<span className="sku-scan-row"><input disabled={commerceControlsDisabled} maxLength={80} name="product-code" onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="Scan or type if you have one" value={itemDraft.sku} /><BarcodeScanButton disabled={commerceControlsDisabled} label="Scan a product code into the SKU field" onDetected={(value) => setItemDraft((current) => ({ ...current, sku: value }))} /></span></label>
-          <div className="form-actions"><button className={coreUi.q} disabled={commerceControlsDisabled} type="submit">Review and add product</button></div>
-          <p className="panel-copy">Leave the code blank and Shop will create one. You can change the stock alert later.</p>
-        </form>
-      </details>
+      {commerceReturnLink}
+      {catalogCreatePanel}
       <p className="form-notice" aria-live="polite">{commerceStorageError || 'Catalog values, counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.'}</p>
     </section>
     <StockMovementHistory actionHistory={actionHistory} movements={commerce.movements} />
