@@ -162,7 +162,7 @@
     "version": "17.10"
   },
   "implementation": {
-    "digest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
+    "digest": "sha256:0bbaa1bb23ded18c71d770c0fcc41dc07b1c7981f5a48e57615dfc2fe610cfc1",
     "paths": [
       "kernel/database-rehearsal-evidence.mjs",
       "supabase/migrations/20260722004500_private_trial_backend_role_preflight.sql",
@@ -194,6 +194,7 @@
       "supabase/migrations/20261014090000_website_channel_stable_update.sql",
       "supabase/migrations/20261014103000_website_custom_domain_bindings.sql",
       "supabase/migrations/20261014122400_website_domain_attempt_fencing.sql",
+      "supabase/migrations/20261015091500_website_six_page_reviews.sql",
       "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "supermega_runtime/billing_rail.py",
       "supermega_runtime/core_security_catalog.py",
@@ -251,7 +252,7 @@
   },
   "migrations": {
     "catalog_contract": "supermega_private_trial_database_v13_self_serve_v1",
-    "count": 27,
+    "count": 28,
     "names": [
       "20260722004500_private_trial_backend_role_preflight.sql",
       "20260722005134_private_trial_backend_foundation.sql",
@@ -279,7 +280,8 @@
       "20261010063000_website_publishing_and_inquiries.sql",
       "20261010070000_website_published_hero_media.sql",
       "20261010120857_website_inquiry_followup.sql",
-      "20261014090000_website_channel_stable_update.sql"
+      "20261014090000_website_channel_stable_update.sql",
+      "20261015091500_website_six_page_reviews.sql"
     ],
     "production_validator_ready": true,
     "schema_profile": "v13-self-serve",
@@ -291,15 +293,15 @@
   "recovery": {
     "backup_nonempty": true,
     "format": "pg_dump_custom",
-    "private_snapshot_after": "sha256:8a94e071e69a3cc0b79dec19d4dc5663049cc17412b6e26565dcb714e3789895",
-    "private_snapshot_before": "sha256:8a94e071e69a3cc0b79dec19d4dc5663049cc17412b6e26565dcb714e3789895",
+    "private_snapshot_after": "sha256:43cdc478d0aa645cbbe6df9ddda81ccd970f17488ac2d8d7c72c8aed903e88f5",
+    "private_snapshot_before": "sha256:43cdc478d0aa645cbbe6df9ddda81ccd970f17488ac2d8d7c72c8aed903e88f5",
     "restored_schema_version": 13
   },
   "secret_values_exposed": false,
   "source": {
-    "head": "774ce768dc8c34ecaf3b4046e804c0f3bf072a4f",
-    "implementation_digest": "sha256:a2dbd85602fe806e1c4ef1992690760ae5104e03474d4dbba081e857d5967eff",
-    "tree": "a6b366f21b1800daf6a6b3049a541550df3a5cf5"
+    "head": "a722edf7abe7a70abb4f899838b2cc05cee5f324",
+    "implementation_digest": "sha256:0bbaa1bb23ded18c71d770c0fcc41dc07b1c7981f5a48e57615dfc2fe610cfc1",
+    "tree": "92e07b03aef99cb79983f69df71bcf0f21f66cca"
   },
   "status": "rehearsed",
   "storage": {

@@ -30,8 +30,8 @@ class FullChainProofContractTests(unittest.TestCase):
         for candidate in proof.pg.DOMAIN_CANDIDATE_MIGRATIONS:
             self.assertTrue((proof.ROOT / "supabase/migrations" / candidate).is_file())
             self.assertNotIn(candidate, proof.MIGRATIONS)
-        self.assertEqual(len(proof.MIGRATIONS), 27)
-        self.assertEqual(proof.MIGRATIONS[-12:], (
+        self.assertEqual(len(proof.MIGRATIONS), 28)
+        self.assertEqual(proof.MIGRATIONS[-13:], (
             "20260915184728_website_customer_review_storage.sql",
             "20260915191528_website_review_entitlement_proof.sql",
             "20260918011500_website_customer_acceptance.sql",
@@ -44,6 +44,7 @@ class FullChainProofContractTests(unittest.TestCase):
             "20261010070000_website_published_hero_media.sql",
             "20261010120857_website_inquiry_followup.sql",
             "20261014090000_website_channel_stable_update.sql",
+            "20261015091500_website_six_page_reviews.sql",
         ))
 
     def test_matrix_has_exact_unique_behavior_checks(self):

@@ -42,7 +42,8 @@ DIGEST = "sha256:" + "a" * 64
 class WebsiteReviewSqlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if pg.CURRENT_MIGRATIONS[-len(REVIEW_MIGRATIONS):] != REVIEW_MIGRATIONS:
+        start = pg.CURRENT_MIGRATIONS.index(REVIEW_MIGRATIONS[0])
+        if pg.CURRENT_MIGRATIONS[start:start + len(REVIEW_MIGRATIONS)] != REVIEW_MIGRATIONS:
             raise RuntimeError("website_review_complete_migration_chain_required")
         import psycopg
         cls.db_error = psycopg.Error
@@ -1182,6 +1183,55 @@ class WebsiteReviewSqlTests(unittest.TestCase):
             self.assertEqual(connection.execute("select actor_id from app_private.workspace_memberships").fetchall(), [(RECIPIENT,)])
             self.feedback(connection, review)
             self.assertEqual(connection.execute("select count(*) from app_private.website_customer_feedback where review_id=%s", (review[0],)).fetchone()[0], 1)
+
+    def test_six_ready_pages_are_reviewable_and_seven_are_rejected(self):
+        def state_with_pages(count):
+            state = _state()
+            pages = []
+            for index in range(count):
+                page = deepcopy(state["pages"][0])
+                page["id"] = "page-home" if index == 0 else f"page-{index}"
+                page["slug"] = "/" if index == 0 else f"/page-{index}"
+                page["navigation"]["label"] = f"စာမျက်နှာ {index + 1}"
+                page["sections"][0]["id"] = f"section-{index}"
+                if count == 6:
+                    page["sections"] = [
+                        {"id": f"section-{index}-{section_index}", "eyebrow": "လုပ်ငန်း",
+                         "title": f"ဝန်ဆောင်မှု {section_index}", "body": "က" * 360,
+                         "image": {"src": "https://example.com/" + "က" * 2028,
+                                   "alt": "မြန်မာ", "decorative": False}}
+                        for section_index in range(12)
+                    ]
+                pages.append(page)
+            state["pages"] = pages
+            return state
+
+        for count in (4, 6):
+            with self.transaction() as connection:
+                state = state_with_pages(count)
+                connection.execute("update app_private.workspace_state set version=version+1, state_json=%s::jsonb where workspace_id=%s and surface='website'", (json.dumps(state), WORKSPACE))
+                review_id, _, _ = self.prepare(connection)
+                preview = connection.execute("select preview from app_private.website_customer_reviews where review_id=%s", (review_id,)).fetchone()[0]
+                self.assertEqual(len(preview["pages"]), count)
+                if count == 6:
+                    bytes_count = len(json.dumps(preview, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+                    self.assertGreater(bytes_count, 512 * 1024)
+                    self.assertLess(bytes_count, 1024 * 1024)
+
+        with self.transaction() as connection:
+            state = state_with_pages(7)
+            connection.execute("update app_private.workspace_state set version=version+1, state_json=%s::jsonb where workspace_id=%s and surface='website'", (json.dumps(state), WORKSPACE))
+            version = connection.execute("select version from app_private.workspace_state where workspace_id=%s and surface='website'", (WORKSPACE,)).fetchone()[0]
+            preview = {"siteName": state["siteName"], "pages": [
+                {key: page[key] for key in ("id", "slug", "navigation", "hero", "sections", "seo")}
+                for page in state["pages"]
+            ]}
+            digest = "sha256:" + sha256(json.dumps(preview, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+            with self.assertRaises(self.db_error) as rejected:
+                connection.execute("insert into app_private.website_customer_reviews(review_id,workspace_id,recipient_actor_id,prepared_by,source_version,preview,preview_digest,expires_at) values (%s,%s,%s,%s,%s,%s::jsonb,%s,clock_timestamp()+interval '1 day')",
+                                   (uuid4(), WORKSPACE, RECIPIENT, OWNER, version, json.dumps(preview), digest))
+            self.assertEqual(rejected.exception.sqlstate, "23514")
+            self.assertEqual(rejected.exception.diag.constraint_name, "website_customer_reviews_preview_check")
 
     def test_forged_preview_digest_is_rejected_by_database(self):
         with self.transaction() as connection, self.assertRaises(self.db_error):
