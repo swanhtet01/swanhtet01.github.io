@@ -34,14 +34,14 @@ test('binds the complete candidate chain without granting baseline or migration 
   assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v3')
   assert.equal(packet.state, 'prepared-not-executed')
   assert.equal(packet.release.schemaVersion, 13)
-  assert.equal(packet.release.migrationCount, 28)
+  assert.equal(packet.release.migrationCount, 29)
   for (const candidate of ['20261014103000_website_custom_domain_bindings.sql',
     '20261014122400_website_domain_attempt_fencing.sql']) {
     assert.ok(!packet.release.migrations.some(({ name }) => name === candidate))
   }
   assert.deepEqual(packet.release.review, releaseReview)
   assert.equal(packet.release.migrations[0].name, '20260711081300_public_legacy_baseline.sql')
-  assert.equal(packet.release.migrations.at(-1).name, '20261014090000_website_channel_stable_update.sql')
+  assert.equal(packet.release.migrations.at(-1).name, '20261015091500_website_six_page_reviews.sql')
   assert.equal(packet.release.schemaVersionScope, 'private-core-v13-plus-explicit-post-v13-extensions')
   assert.equal(packet.preflight.baselinePrerequisite.applyAutomatically, false)
   assert.equal(packet.preflight.baselinePrerequisite.freshTargetOnly, true)
