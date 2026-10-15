@@ -63,6 +63,14 @@ async function waitFor(cdp, sessionId, text) {
   throw new Error(`visible_state_missing:${text}`)
 }
 
+async function waitForSelector(cdp, sessionId, selector) {
+  for (let i = 0; i < 50; i += 1) {
+    if (await evaluate(cdp, sessionId, `document.querySelector(${JSON.stringify(selector)}) !== null`)) return
+    await new Promise(resolveWait => setTimeout(resolveWait, 200))
+  }
+  throw new Error(`visible_selector_missing:${selector}`)
+}
+
 async function waitForPaidOrderRecord(cdp, sessionId) {
   let seen = null
   for (let i = 0; i < 50; i += 1) {
@@ -241,6 +249,7 @@ async function main() {
     await clickText(cdp, sessionId, 'Show Counter')
     await waitFor(cdp, sessionId, 'Set up customer receipt')
     await clickText(cdp, sessionId, 'Set up customer receipt')
+    await waitForSelector(cdp, sessionId, '.receipt-profile-form input[autocomplete="organization"]')
     await typeInto(cdp, sessionId, '.receipt-profile-form input[autocomplete="organization"]', 'Example Corner Shop')
     await clickText(cdp, sessionId, 'Save details')
     await waitFor(cdp, sessionId, 'Receipt details')
