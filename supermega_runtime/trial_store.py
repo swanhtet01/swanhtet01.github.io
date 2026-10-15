@@ -402,9 +402,10 @@ def require_ecommerce_management_authority(
         return
     if "ecommerce" not in product_entitlements:
         raise TrialPermissionDenied("product.ecommerce")
-    # The founder owner can manage the internal product. Staff need an explicit
-    # Ecommerce grant; commerce.write alone is also used by Shop cashiers.
-    if not frozenset(capabilities).intersection({"ecommerce.manage", "company.write"}):
+    # Company ownership is also held by self-serve Shop customers. It cannot
+    # stand in for an internal Ecommerce operator grant when both products are
+    # activated in the same workspace.
+    if "ecommerce.manage" not in capabilities:
         raise TrialPermissionDenied("ecommerce.manage")
 
 

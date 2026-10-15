@@ -68,8 +68,10 @@ class CommercePublicBoundaryTests(unittest.TestCase):
         cursor.execute.assert_not_called()
         adapter._require_ecommerce_entitlement(
             cursor, principal, frozenset({'commerce.write', 'ecommerce.manage'}))
-        adapter._require_ecommerce_entitlement(
-            cursor, principal, frozenset({'commerce.write', 'company.write'}))
+        with self.assertRaises(TrialPermissionDenied) as company_owner_only:
+            adapter._require_ecommerce_entitlement(
+                cursor, principal, frozenset({'commerce.write', 'company.write'}))
+        self.assertEqual(company_owner_only.exception.required_capability, 'ecommerce.manage')
 
     def test_shop_only_cannot_read_or_change_internal_publications(self):
         principal = TrialPrincipal('shop-only-workspace', 'merchant-owner', 'human')
@@ -256,10 +258,10 @@ class CommercePublicSqlTests(unittest.TestCase):
         cls.owner = TrialPrincipal(cls.workspace_id, 'owner-product', 'human')
         with pg._connect(cls.admin_url) as connection:
             # The shared rehearsal seed predates Ecommerce actor grants. Give
-            # this disposable fixture the owner authority used by managed
-            # workspaces; Shop-only fixtures retain their narrower grants.
+            # this disposable fixture the explicit internal operator grant;
+            # Shop-only fixtures retain their narrower grants.
             updated = connection.execute("""update app_private.workspace_memberships
-                set capabilities = array_append(capabilities, 'company.write')
+                set capabilities = array_append(capabilities, 'ecommerce.manage')
                 where workspace_id = %s and actor_id = %s""",
                 (cls.workspace_id, cls.owner.actor_id)).rowcount
             if updated != 1:

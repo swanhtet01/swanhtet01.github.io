@@ -2352,8 +2352,7 @@ export function managedProductsFromBootstrap(
     return explicit.filter((product) => {
       if (product === 'commerce') return Boolean(verified.states.commerce)
       if (product === 'ecommerce') return Boolean(verified.states.commerce)
-        && (managedBootstrapHasCapability(verified, expectedIdentity, 'ecommerce.manage')
-          || managedBootstrapHasCapability(verified, expectedIdentity, 'company.write'))
+        && managedBootstrapHasCapability(verified, expectedIdentity, 'ecommerce.manage')
       if (product === 'production') return Boolean(verified.states.production)
       return Boolean(verified.states.website)
     })
@@ -2907,6 +2906,9 @@ export async function requestSelfServeWorkspace(
   businessName: string,
   product: ClientSolutionId = 'commerce',
 ): Promise<ManagedSelfServeWorkspace> {
+  if (product !== 'commerce') {
+    throw errorSelfServeWorkspaceInvalid('Shop is the only customer-managed product at launch.')
+  }
   const claim = normalizeSelfServeClaimCode(claimCode)
   const name = normalizeSelfServeBusinessName(businessName)
   const response = await fetch('/api/trial/v1/workspaces', {

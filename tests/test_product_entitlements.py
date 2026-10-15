@@ -177,17 +177,20 @@ class ActivationProductEntitlementTests(unittest.TestCase):
             "commerce.storefront.configuration.saved", ("ecommerce",),
             ("commerce.write", "ecommerce.manage"),
         )
-        require_command_product_entitlement(
-            "commerce.storefront.merchandising.imported", ("ecommerce",),
-            ("commerce.write", "company.write"),
-        )
+        with self.assertRaises(TrialPermissionDenied) as company_owner_only:
+            require_command_product_entitlement(
+                "commerce.storefront.merchandising.imported", ("commerce", "ecommerce"),
+                ("commerce.write", "company.write"),
+            )
+        self.assertEqual(company_owner_only.exception.required_capability, "ecommerce.manage")
 
-    def test_ecommerce_activation_does_not_make_a_shop_operator_a_storefront_editor(self) -> None:
+    def test_ecommerce_activation_does_not_make_a_shop_owner_a_storefront_editor(self) -> None:
         store = InMemoryTrialStore(reducer=lambda _surface, _event, current, _payload: current)
-        principal = TrialPrincipal("internal-workspace", "shop-operator", "human")
+        principal = TrialPrincipal("internal-workspace", "shop-owner", "human")
         store.provision_membership(
             workspace_id=principal.workspace_id, actor_id=principal.actor_id,
-            actor_kind=principal.actor_kind, capabilities=("commerce.read", "commerce.write"),
+            actor_kind=principal.actor_kind,
+            capabilities=("commerce.read", "commerce.write", "company.write"),
         )
         store.provision_product_entitlements(
             workspace_id=principal.workspace_id, products=("commerce", "ecommerce"),

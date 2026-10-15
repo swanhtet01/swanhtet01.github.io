@@ -120,15 +120,18 @@ test('maps a replayed activation to created: false', async () => {
   }
 })
 
-test('carries a non-Shop product into the durable activation request', async () => {
-  const response = activationResponse({
-    workspace: { workspace_id: WORKSPACE_ID, label: BUSINESS_NAME, access: 'owner', product: 'website' },
+test('rejects non-Shop customer activation before any request', async () => {
+  const { calls, restore } = mockFetch(() => {
+    throw new Error('fetch must not be called')
   })
-  const { calls, restore } = mockFetch(() => jsonResponse(response))
   try {
-    const workspace = await requestSelfServeWorkspace(session, CLAIM_CODE, BUSINESS_NAME, 'website')
-    assert.equal(JSON.parse(calls[0].init.body).product, 'website')
-    assert.equal(workspace.product, 'website')
+    for (const product of ['website', 'ecommerce', 'production']) {
+      await assert.rejects(
+        requestSelfServeWorkspace(session, CLAIM_CODE, BUSINESS_NAME, product),
+        (error) => error instanceof ManagedTrialError && error.code === 'self_serve_workspace_invalid',
+      )
+    }
+    assert.equal(calls.length, 0)
   } finally {
     restore()
   }
@@ -258,7 +261,7 @@ test('managed product access requires explicit activation-derived entitlements f
     managedProductsFromBootstrap({ ...bootstrap, readiness: {
       productEntitlements: ['ecommerce'], capabilities: ['company.write'],
     } }, identity),
-    ['ecommerce'],
+    [],
   )
   assert.deepEqual(
     managedProductsFromBootstrap({ ...bootstrap, readiness: {

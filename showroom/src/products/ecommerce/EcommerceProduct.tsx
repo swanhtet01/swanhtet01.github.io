@@ -279,7 +279,7 @@ function initialEcommerceState() {
 }
 
 function canDeliverCatalogReviews(bootstrap: Parameters<typeof managedBootstrapHasCapability>[0], identity: ManagedIdentity) {
-  return (['commerce.write', 'company.write', 'approvals.decide'] as const).every(capability => managedBootstrapHasCapability(bootstrap, identity, capability))
+  return (['commerce.write', 'ecommerce.manage', 'approvals.decide'] as const).every(capability => managedBootstrapHasCapability(bootstrap, identity, capability))
 }
 
 function StatusRows({ rows }: { rows: readonly (readonly string[])[] }) {
@@ -598,8 +598,7 @@ export function EcommerceProduct() {
           throw new Error('The company account changed while loading. Reload to open the current company.')
         }
         setManagedCanWrite(managedBootstrapHasCapability(bootstrap, identity, 'commerce.write')
-          && (managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage')
-            || managedBootstrapHasCapability(bootstrap, identity, 'company.write')))
+          && managedBootstrapHasCapability(bootstrap, identity, 'ecommerce.manage'))
         setManagedCanDeliverReviews(canDeliverCatalogReviews(bootstrap, identity))
         const view = resolveManagedStorefront(
           identity,
