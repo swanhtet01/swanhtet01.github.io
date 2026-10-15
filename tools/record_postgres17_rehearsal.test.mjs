@@ -81,7 +81,10 @@ test('receipt inventory matches the actual PostgreSQL runner including Website a
   const runner = JSON.parse(result.stdout)
   assert.deepEqual(implementation.paths, runner.paths)
   assert.deepEqual(migrationNames, runner.migrations)
-  for (const candidate of domainCandidates) assert.ok(runner.paths.includes(`supabase/migrations/${candidate}`))
+  for (const candidate of domainCandidates) {
+    assert.ok(runner.paths.includes(`supabase/candidate-migrations/${candidate}`))
+    assert.ok(!runner.paths.includes(`supabase/migrations/${candidate}`))
+  }
   assert.ok(runner.paths.includes('supermega_runtime/website_domain.py'))
   assert.ok(runner.paths.includes('supermega_runtime/website_acceptance_schema.py'))
   assert.ok(runner.paths.includes('supermega_runtime/ecommerce_decision_schema.py'))
