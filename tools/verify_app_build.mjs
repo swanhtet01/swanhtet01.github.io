@@ -3829,7 +3829,7 @@ if (addToCartStart < 0
   || !coreSource.includes("!confirmedLocalShop && (!managedIdentity || workspaceMode !== 'managed-ready')")
   || !coreSource.includes('setRecoveredEcommerceIntent({ scope: ecommerceBuyingScope, id: requestedEcommerceIntent.id, intents })')
   || !coreSource.includes('recoveredEcommerceIntent?.scope === ecommerceBuyingScope')
-  || !coreSource.includes("key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId]) : confirmedLocalShop ? 'local' : 'checking'}")
+  || !coreSource.includes("key={managedIdentity ? JSON.stringify([managedIdentity.workspaceId, managedIdentity.userId, allowEcommerceShopHandoff]) : confirmedLocalShop ? 'local' : 'checking'}")
   || !pendingHandoffReviewPreservesRoute
   || coreSource.includes('ecommerceReturnIntent?: EcommerceReturnIntent')
   || coreSource.includes('ecommerceShopDraft?: EcommerceShopDraft')
