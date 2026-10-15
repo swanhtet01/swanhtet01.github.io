@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
@@ -400,6 +401,49 @@ test('lead intake returns a bounded retryable response when durable storage fail
     json: { ok: false, reason: 'lead_store_unavailable' },
   })
   assert.doesNotMatch(JSON.stringify(result), /Private customer|private@example|database host|credential/i)
+})
+
+test('authenticated lead intake route hides durable-store details from the response', () => {
+  const apiUrl = new URL('./console/api.mjs', import.meta.url).href
+  const script = `
+    let requests = 0
+    globalThis.fetch = async () => {
+      requests += 1
+      return { ok: false, status: 503, text: async () => 'database host and service credential details' }
+    }
+    const { handle } = await import(${JSON.stringify(apiUrl)})
+    const result = await handle({
+      method: 'POST',
+      path: '/api/leads',
+      headers: { 'x-ops-key': ${JSON.stringify(CONFORMING_KEY)} },
+      body: { name: 'Private customer name', contact: 'private@example.invalid', message: 'private customer request' },
+    })
+    process.stdout.write('__RESULT__' + JSON.stringify({ result, requests }))
+  `
+  const env = {
+    PATH: process.env.PATH || '',
+    SystemRoot: process.env.SystemRoot || '',
+    windir: process.env.windir || process.env.SystemRoot || '',
+    TEMP: process.env.TEMP || '',
+    TMP: process.env.TMP || '',
+    SUPERMEGA_OPS_KEY: CONFORMING_KEY,
+    SUPABASE_URL: 'https://fixture.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-key',
+  }
+
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: import.meta.dirname,
+    env,
+    encoding: 'utf8',
+    timeout: 10_000,
+  })
+  assert.equal(child.status, 0, child.stderr || child.error?.message)
+  const resultStart = child.stdout.lastIndexOf('__RESULT__')
+  assert.notEqual(resultStart, -1, child.stderr)
+  const { result, requests } = JSON.parse(child.stdout.slice(resultStart + '__RESULT__'.length))
+  assert.deepEqual(result, { status: 503, json: { ok: false, reason: 'lead_store_unavailable' } })
+  assert.equal(requests, 1)
+  assert.doesNotMatch(child.stdout + child.stderr, /Private customer name|private@example|database host|credential/i)
 })
 
 test('lead intake rejects invalid timestamps before storage and preserves valid RFC 3339 timestamps', async () => {
