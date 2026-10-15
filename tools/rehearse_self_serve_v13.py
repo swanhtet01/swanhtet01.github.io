@@ -41,6 +41,7 @@ EXTRAS = (
     "20261010120857_website_inquiry_followup.sql",
     "20261014090000_website_channel_stable_update.sql",
     "20261015091500_website_six_page_reviews.sql",
+    "20261015202629_ecommerce_operator_review_grant.sql",
 )
 MIGRATIONS = (*pg.MIGRATIONS, *EXTRAS)
 PRODUCTS = ("commerce", "production", "website", "ecommerce")

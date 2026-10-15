@@ -48,6 +48,28 @@ class CatalogReviewManagementBoundaryTests(unittest.TestCase):
             with adapter._transaction(principal, capability='commerce.write') as (_, actor):
                 self.assertEqual(actor, principal)
 
+    def test_revoked_management_grant_is_denied_after_review_lock(self):
+        principal = TrialPrincipal('internal-workspace', 'ecommerce-operator', 'human')
+        cursor = Mock()
+        cursor.fetchone.return_value = {'isolation': 'read committed'}
+        store = Mock()
+
+        @contextmanager
+        def guarded_cursor(*_args, **_kwargs):
+            # The grant was valid before the transaction contested the lock.
+            yield cursor, frozenset({'commerce.write', 'ecommerce.manage'})
+
+        store._guarded_cursor.side_effect = guarded_cursor
+        store._product_entitlements.return_value = ('commerce', 'ecommerce')
+        store._load_membership.return_value = frozenset({'commerce.write'})
+        adapter = EcommerceCustomerReviewStore(store)
+        with patch('supermega_runtime.ecommerce_customer_review_store._assert_storage'):
+            with self.assertRaises(TrialPermissionDenied) as denied:
+                with adapter._transaction(principal, capability='commerce.write'):
+                    self.fail('A revoked Ecommerce operator entered the review transaction.')
+        self.assertEqual(denied.exception.required_capability, 'ecommerce.manage')
+        store._load_membership.assert_called_once_with(cursor, principal)
+
 class CatalogReviewTests(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2026,9,25,tzinfo=timezone.utc)

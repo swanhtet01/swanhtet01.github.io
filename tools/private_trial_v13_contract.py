@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE = "v13-self-serve"
 CONTRACT = "supermega_private_trial_database_v13_self_serve_v1"
 MIGRATION_PINS = {
+    "20261015202629_ecommerce_operator_review_grant.sql": "c37a78902bae3d04fcc38d2cf044f36da06fa636ac49be6fa4e98564679f45ee",
     "20261015091500_website_six_page_reviews.sql": "65472d2a57a787b1135bb362875e527caf84bbc83bfd00549c4191e3b4bb1e6e",
     "20261014090000_website_channel_stable_update.sql": "9ed6dc61a3ebc832db5ad54e4d7c91ad18e48d3a4f577ffb9a093baa52b3612a",
     "20261010063000_website_publishing_and_inquiries.sql": "adc3cca04a41f5048366d10ab2f5a1ae6b313683a5cf6d049bcd766cd43cd8b2",
@@ -94,7 +95,7 @@ POLICIES = frozenset({"billing_entitlements_self_read", "self_serve_attempt_budg
 CATALOG_PINS = {
     "extension_columns_exact": "a4ff9d29472484ce891adb75e177e24887daafad3a7171f6a24c67ac9cfc0fd4",
     "extension_constraints_exact": "f003f0fc410fe3b14d0d1b77427a67ea7d2f5b7e381009312a8df437acdb0b94",
-    "extension_functions_exact": "451bfe0aa47ec9713ca0a28ef11c6f0e99dd8a55b98d88b60fa8bce9d750446d",
+    "extension_functions_exact": "cca7bcd67f295f60576c4519c550e224780f8655bcc13f4c135c99f2e88815d1",
     "extension_policies_exact": "9ebb7163b5e86d70fdddec40768d71fc3fff2284a4e2072a2d1a8a6d0ce76de5",
 }
 POLICY_PINS = {"billing_entitlements_self_read": "28369fc95fa5a46002daf06b67038c4c9c8695d9defe59a69014c7c40a44d5b5",

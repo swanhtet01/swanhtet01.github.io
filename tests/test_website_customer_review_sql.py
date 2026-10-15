@@ -968,6 +968,10 @@ class WebsiteReviewSqlTests(unittest.TestCase):
         with pg._connect(self.admin_url) as connection:
             try:
                 connection.execute("update app_private.workspace_memberships set capabilities=array['ecommerce.review'] where workspace_id=%s and actor_id=%s",(WORKSPACE,RECIPIENT))
+                connection.execute(
+                    "update app_private.workspace_memberships "
+                    "set capabilities=array_append(capabilities,'ecommerce.manage') "
+                    "where workspace_id=%s and actor_id=%s", (WORKSPACE, OWNER))
                 connection.execute("""insert into app_private.workspace_events
                     (event_id,workspace_id,command_id,command_fingerprint,surface,event_type,actor_id,actor_kind,payload_json,result_json)
                     values (%s,%s,%s,%s,'company','company.workspace.activated',%s,'human','{"products":["ecommerce"]}'::jsonb,'{}'::jsonb)""",(uuid4(),WORKSPACE,uuid4(),'a'*64,OWNER))
