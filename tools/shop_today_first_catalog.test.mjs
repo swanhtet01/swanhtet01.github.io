@@ -31,6 +31,22 @@ test('an empty Shop dashboard offers a direct first-product path and a separate 
   assert.match(core, /commerceLocation\.hash === '#shop-catalog-create'[\s\S]*?setCatalogCreateOpen\(true\)/)
 })
 
+test('managed-unprovisioned Shop CSV deep links open and focus the import disclosure', () => {
+  const managedReturn = core.indexOf('if (managedCommerceBoundary) return managedCommerceBoundary')
+  const managedBoundary = core.slice(core.indexOf('const managedCommerceBoundary'), managedReturn)
+  assert.ok(managedReturn >= 0)
+  assert.match(managedBoundary, /id="shop-catalog-import"[\s\S]*?open=\{catalogImportOpen \|\| commerceLocation\.hash === '#shop-catalog-import'\}/)
+  assert.match(managedBoundary, /id="shop-catalog-import"[^>]*tabIndex=\{-1\}/)
+  assert.match(managedBoundary, /if \(!open && commerceLocation\.hash === '#shop-catalog-import'\) navigate\('\/shop\/\?tab=inventory', \{ replace: true \}\)/)
+})
+
+test('managed-unprovisioned Shop first-product deep link focuses the product name', () => {
+  const managedReturn = core.indexOf('if (managedCommerceBoundary) return managedCommerceBoundary')
+  const managedBoundary = core.slice(core.indexOf('const managedCommerceBoundary'), managedReturn)
+  assert.match(managedBoundary, /return <section className="core-panel managed-commerce-boundary" id="shop-catalog-create" tabIndex=\{-1\}>/)
+  assert.match(managedBoundary, /const catalogForm = <form[\s\S]*?name="product-name"/)
+})
+
 test('approved Burmese Shop empty-state copy renders beside the English labels', () => {
   const approved = new Map([
     ['No products to sell yet', 'ရောင်းရန်ပစ္စည်း မရှိသေးပါ'],

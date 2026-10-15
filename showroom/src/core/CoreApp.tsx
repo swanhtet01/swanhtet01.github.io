@@ -1744,6 +1744,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   const [managedTemplateDraft, setManagedTemplateDraft] = useState({ reviewed: false, reason: '', evidenceReference: '' })
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '0', price: '' })
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
+  const [catalogImportOpen, setCatalogImportOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
   const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
   const [supplierSourcingDraft, setSupplierSourcingDraft] = useState<SupplierSourcingDraft | null>(null)
@@ -3135,7 +3136,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     if (unprovisioned) {
       const catalogForm = <form className="core-form compact-form shop-first-product-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
         <fieldset><legend>Product</legend>
-        <div className="form-row"><label>Barcode or product code (optional)<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="Leave blank for an assigned code" value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Product name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label></div>
+        <div className="form-row"><label>Barcode or product code (optional)<span className="sku-scan-row"><input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="Leave blank for an assigned code" value={catalogDraft.sku} /><BarcodeScanButton label="Scan the product barcode into the SKU field" onDetected={(value) => setCatalogDraft((current) => ({ ...current, sku: value }))} /></span></label><label>Product name<input maxLength={180} name="product-name" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Product name" required value={catalogDraft.name} /></label></div>
         <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
         </fieldset>
         <fieldset><legend>Opening stock</legend>
@@ -3147,10 +3148,14 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Saving…' : 'Add product'}</button></div>
         <p className="form-notice" role="status">{catalogError || commerceStorageError || ''}</p>
       </form>
-      return <section className="core-panel managed-commerce-boundary">
+      return <section className="core-panel managed-commerce-boundary" id="shop-catalog-create" tabIndex={-1}>
       <div className="panel-head"><div><span className="core-eyebrow">Shop</span><h2>Add your first product</h2></div></div>
       {catalogForm}
-      <details className="secondary-setup-path"><summary>Import existing CSV</summary>
+      <details className="secondary-setup-path" id="shop-catalog-import" onToggle={(event) => {
+        const open = event.currentTarget.open
+        setCatalogImportOpen(open)
+        if (!open && commerceLocation.hash === '#shop-catalog-import') navigate('/shop/?tab=inventory', { replace: true })
+      }} open={catalogImportOpen || commerceLocation.hash === '#shop-catalog-import'} tabIndex={-1}><summary>Import existing CSV</summary>
         <Suspense fallback={<p role="status">Loading import...</p>}><ProductDataImport managed managedIdentityOverride={managedIdentity} onOpenAppliedManagedImport={retryManagedCommerceLoad} product="commerce" /></Suspense>
       </details>
       {managedTemplate ? <details className="secondary-setup-path"><summary>Use a business catalog</summary><form className="core-form compact-form managed-template-catalog-form" onSubmit={(formEvent) => void initializeManagedTemplateCatalog(formEvent)}>
@@ -3434,7 +3439,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     ['Memory', 'Saves helpful patterns'],
     ['Safety', 'Review first'],
   ] as const
-  const [catalogImportOpen, setCatalogImportOpen] = useState(false)
   const catalogIsEmpty = commerce.items.length === 0
   const catalogImportRequested = commerceLocation.hash === '#shop-catalog-import'
   const catalogImportVisible = catalogImportOpen || catalogImportRequested
