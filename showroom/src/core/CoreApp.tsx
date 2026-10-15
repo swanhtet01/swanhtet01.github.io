@@ -2447,7 +2447,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         setCatalogCreateOpen(true)
         const target = document.getElementById('shop-catalog-create')
         target?.scrollIntoView({ block: 'center' })
-        window.requestAnimationFrame(() => target?.querySelector<HTMLInputElement>('input[name="product-name"]')?.focus({ preventScroll: true }))
         return
       }
       if (commerceLocation.hash === '#shop-catalog-import') {
@@ -7107,7 +7106,12 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
   }
 
   const commerceReturnLink = commerceReturnRequested ? <Link className="text-link" to="/ecommerce/">Back to Commerce</Link> : null
-  const catalogCreatePanel = <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
+  const catalogCreatePanel = <details className="compact-disclosure catalog-disclosure" id="shop-catalog-create" onToggle={(event) => {
+    const target = event.currentTarget
+    const open = target.open
+    setCatalogCreateOpen(open)
+    if (open && commerceLocation.hash === '#shop-catalog-create') window.setTimeout(() => target.querySelector<HTMLInputElement>('input[name="product-name"]')?.focus({ preventScroll: true }), 50)
+  }} open={catalogCreateOpen}>
     <summary>{commerce.items.length ? 'Add product' : 'Add your first product'}</summary>
     <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
       <div className="form-row"><label>Product name<input disabled={commerceControlsDisabled} maxLength={180} name="product-name" onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Drinking water" required value={itemDraft.name} /></label><label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label></div>
