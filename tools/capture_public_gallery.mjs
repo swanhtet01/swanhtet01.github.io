@@ -153,6 +153,20 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
     fixturePath: view.fixturePath, routeState: lastState.route || lastState.tab, visibleSelector: view.selector, loadedImages }
 }
 
+async function assertShopMobileFits(cdp, sessionId, selector) {
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId)
+  try {
+    const layout = await evaluate(cdp, sessionId, `(() => {
+      const bounds=document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();
+      return {viewport:innerWidth,page:document.documentElement.scrollWidth,left:bounds?.left,right:bounds?.right};
+    })()`)
+    if (!layout || layout.page > layout.viewport + 1 || layout.left < -1 || layout.right > layout.viewport + 1)
+      throw new Error(`shop_mobile_horizontal_overflow:${selector}:${JSON.stringify(layout)}`)
+  } finally {
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
+  }
+}
+
 async function main() {
   const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true })
   const showroomTree = spawnSync('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })
@@ -207,6 +221,23 @@ async function main() {
     await cdp.send('Page.navigate', { url: `${origin}/shop/` }, sessionId)
     await waitFor(cdp, sessionId, 'Today')
     await evaluate(cdp, sessionId, `(() => { const s=document.createElement('style');s.textContent='#root > p,#root > button,#root > output{display:none!important}body{margin:0!important}';document.head.append(s) })()`)
+    const stockedShop = await evaluate(cdp, sessionId, "localStorage.getItem('supermega.commerce.workspace.v2')")
+    if (!stockedShop) throw new Error('synthetic_shop_seed_missing')
+    await evaluate(cdp, sessionId, `(() => {
+      const key='supermega.commerce.workspace.v2';
+      const empty={schema:JSON.parse(${JSON.stringify(stockedShop)}).schema,items:[],orders:[],movements:[],closes:[],catalogBaselines:[],catalogChanges:[],promotionPolicies:[],shippingPolicies:[],paymentPolicies:[],websiteIntakes:[],storefrontRequests:[],purchaseBudgetEnvelopes:[],supplierSourcingDecisions:[],purchaseOrders:[]};
+      localStorage.setItem(key,JSON.stringify(empty));
+    })()`)
+    await clickText(cdp, sessionId, 'Reopen synthetic Shop')
+    await waitFor(cdp, sessionId, 'No products to sell yet')
+    const emptyShopFocused = await evaluate(cdp, sessionId, `Boolean(document.querySelector('.shop-first-product-card')) && !Boolean(document.querySelector('.shop-operations-board'))`)
+    if (!emptyShopFocused) throw new Error('empty_shop_operations_not_simplified')
+    captures.push(await capture(cdp, sessionId, output, 'actual-shop-first-run', ['Add first product', 'Import a CSV'],
+      { fixturePath: '/shop/', tab: 'today', selector: '.shop-first-product-card' }))
+    await assertShopMobileFits(cdp, sessionId, '.shop-first-product-card')
+    await evaluate(cdp, sessionId, `localStorage.setItem('supermega.commerce.workspace.v2',${JSON.stringify(stockedShop)})`)
+    await clickText(cdp, sessionId, 'Reopen synthetic Shop')
+    await waitFor(cdp, sessionId, 'Order queue')
     await clickText(cdp, sessionId, 'Show Counter')
     await waitFor(cdp, sessionId, 'Set up customer receipt')
     await clickText(cdp, sessionId, 'Set up customer receipt')
@@ -236,6 +267,7 @@ async function main() {
     await clickText(cdp, sessionId, 'Show Today')
     captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
+    await assertShopMobileFits(cdp, sessionId, '.shop-operations-board')
     await clickText(cdp, sessionId, 'Show Orders')
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-orders', ['Orders to finish', 'Payment pending'],
       { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
