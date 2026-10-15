@@ -2,8 +2,8 @@
   "ok": true,
   "classification": "candidate_only_local_real_component_synthetic",
   "publicationReady": false,
-  "sourceCommit": "1dc5ac93a68c92a1b9dff2e49ce099b702abe33f",
-  "showroomTree": "625faa5c8ee6821b30c3a0c5932978b5f9406579",
+  "sourceCommit": "d858137b900252ae32bd05c2edf62c0869045a4a",
+  "showroomTree": "940a3cf82ca6e4073ab0155549cbc13385e5097b",
   "deniedExternal": 0,
   "fulfilledSyntheticMedia": 3,
   "sampleMediaDigests": [
@@ -38,13 +38,13 @@
       "loadedImages": 0
     },
     {
-      "file": "actual-shop-today-mobile.png",
-      "width": 390,
-      "height": 844,
-      "sha256": "9393687bc488719490b10337f73e5fb22e62f403b3133a2994b5e40c9fa2b439",
+      "file": "actual-shop-first-run.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "dace4df3647e55143be66e4b40cf76144ed8250e993fa4ca453aca4e773664ad",
       "fixturePath": "/shop/",
       "routeState": "today",
-      "visibleSelector": ".shop-today-module",
+      "visibleSelector": ".shop-first-product-card",
       "loadedImages": 0
     },
     {
@@ -65,6 +65,27 @@
       "fixturePath": "/shop/",
       "routeState": "counter",
       "visibleSelector": ".shop-current-sale",
+      "loadedImages": 0
+    },
+    {
+      "file": "actual-shop-order-record.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "3a7603d5f7a456490bb2bac0b6ead37258b1ffef77c07939c057b166ff9ebb3f",
+      "fixturePath": "/shop/",
+      "routeState": "counter",
+      "visibleSelector": "dialog.receipt-dialog[open]",
+      "loadedImages": 0,
+      "recordKind": "paid_order_record_not_customer_receipt"
+    },
+    {
+      "file": "actual-shop-today-mobile.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "9393687bc488719490b10337f73e5fb22e62f403b3133a2994b5e40c9fa2b439",
+      "fixturePath": "/shop/",
+      "routeState": "today",
+      "visibleSelector": ".shop-today-module",
       "loadedImages": 0
     },
     {
@@ -151,7 +172,7 @@
       "file": "actual-commerce-order-request.png",
       "width": 1440,
       "height": 900,
-      "sha256": "8140454845d615383db7401aab41a31002d836a562e73bb0f0dc3f2dd01409ef",
+      "sha256": "9042bdd673d8bf888e70e85266dd31bda1a2adfd0275cd6fe669762d76ed6eb8",
       "fixturePath": "/workspaces/",
       "routeState": "/ecommerce/?view=preview&workspace=1",
       "visibleSelector": ".ecommerce-quote-receipt[data-current=\"true\"]",
@@ -161,7 +182,7 @@
       "file": "actual-commerce-order-request-mobile.png",
       "width": 390,
       "height": 844,
-      "sha256": "ca664b83f04d5a1e8ae1a61251817501b7c6288f8dcf21a36dc044542cff7d9e",
+      "sha256": "cf8a6313f675660bb278350d3c7fe28db86d8bc2adc20af0e284e3073b1cdcf2",
       "fixturePath": "/workspaces/",
       "routeState": "/ecommerce/?view=preview&workspace=1",
       "visibleSelector": ".ecommerce-quote-receipt[data-current=\"true\"]",
