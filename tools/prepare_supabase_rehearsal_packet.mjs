@@ -46,6 +46,7 @@ const expectedMigrationNames = [
   '20261010070000_website_published_hero_media.sql',
   '20261010120857_website_inquiry_followup.sql',
   '20261014090000_website_channel_stable_update.sql',
+  '20261015091500_website_six_page_reviews.sql',
 ]
 // These source-only dependent domain candidates are not part of the reviewed
 // v13 rehearsal chain. Every other unexpected SQL file still fails closed.

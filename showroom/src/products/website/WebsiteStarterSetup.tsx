@@ -101,7 +101,7 @@ export function WebsiteStarterSetup({
         <div>
           <span className="website-eyebrow">Sites</span>
           <h2 id="website-starter-title">Start your website</h2>
-          <p>Choose a starting point. See your pages update as you type. Add a fourth page later.</p>
+          <p>Choose a starting point. See your pages update as you type. Add more pages later.</p>
         </div>
         <span className="website-status is-draft">Not published</span>
       </header>

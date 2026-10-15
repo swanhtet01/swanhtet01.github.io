@@ -69,11 +69,11 @@ test('builds a data-less preview proposal with branch mode and schema unverified
   assert.equal(built.previewBranch.productionRefsAllowed, false)
   assert.equal(built.previewBranch.privilegedRuntimeCredentialsAllowed, false)
   assert.equal(built.previewBranch.deleteAfterEvidence, true)
-  assert.equal(built.migrationPlan.migrationCount, 28)
-  assert.equal(built.migrationPlan.privateMigrationCount, 27)
+  assert.equal(built.migrationPlan.migrationCount, 29)
+  assert.equal(built.migrationPlan.privateMigrationCount, 28)
   assert.equal(built.migrationPlan.schemaVersion, 13)
   assert.equal(built.migrationPlan.publicBaseline, '20260711081300_public_legacy_baseline.sql')
-  assert.equal(built.migrationPlan.finalMigration, '20261014090000_website_channel_stable_update.sql')
+  assert.equal(built.migrationPlan.finalMigration, '20261015091500_website_six_page_reviews.sql')
   assert.ok(!built.migrationPlan.migrations.some(entry => entry.name === '20261014103000_website_custom_domain_bindings.sql'))
   assert.equal(built.productionBaseline.schemaVersionAtAudit, 11)
   assert.equal(built.migrationPlan.historicalAuditSchemaVersion, 11)
@@ -110,10 +110,10 @@ test('builds a data-less preview proposal with branch mode and schema unverified
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
 })
 
-test('binds exact ordered public baseline and twenty-seven private migrations through stable Sites updates', async () => {
+test('binds exact ordered public baseline and twenty-eight private migrations through six-page Sites reviews', async () => {
   const built = await proposal()
   const entries = built.migrationPlan.migrations
-  assert.deepEqual(entries.slice(-13).map(entry => entry.name), [
+  assert.deepEqual(entries.slice(-14).map(entry => entry.name), [
     '20260907024457_self_serve_durable_attempt_budget.sql',
     '20260915184728_website_customer_review_storage.sql',
     '20260915191528_website_review_entitlement_proof.sql',
@@ -127,6 +127,7 @@ test('binds exact ordered public baseline and twenty-seven private migrations th
     '20261010070000_website_published_hero_media.sql',
     '20261010120857_website_inquiry_followup.sql',
     '20261014090000_website_channel_stable_update.sql',
+    '20261015091500_website_six_page_reviews.sql',
   ])
   assert.equal(validatePreviewMigrationEntries(entries), entries)
   for (const mutate of [list => list.pop(), list => list.push({ ...list.at(-1) }),

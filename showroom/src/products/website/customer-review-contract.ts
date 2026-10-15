@@ -85,7 +85,7 @@ export async function verifyWebsitePreviewContent(value: unknown, expectedDigest
     for (const section of page.sections) contentBlock(section, ['id', 'eyebrow', 'title', 'body'])
   }
   const encoded = new TextEncoder().encode(canonical(preview))
-  if (encoded.length > 512 * 1024) invalid()
+  if (encoded.length > 1024 * 1024) invalid()
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', encoded))
   const digest = `sha256:${Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')}`
   if (digest !== expectedDigest) invalid()
