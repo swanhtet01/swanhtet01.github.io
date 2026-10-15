@@ -300,3 +300,94 @@ export function captureOrderIntakeCorrection(
   }
   return entry
 }
+
+/**
+ * Section 9's correction-effort metric, the `ai-assistance` nextGate's quality bar.
+ *
+ * The research doc (hq/research/order-intake-agent-evaluation-2026-08.md section 9) defines it
+ * per fixture as `fields_corrected / total_extracted_fields`, then says "the correction effort
+ * is averaged across all 20 fixtures". That is a MEAN OF PER-FIXTURE RATIOS, not a pooled
+ * `sum(corrected) / sum(extracted)` — the two differ whenever fixtures populate different
+ * numbers of fields, and the pooled figure quietly weights a draft with eight populated fields
+ * four times as heavily as one with two. `pooledEffort` is reported alongside precisely so the
+ * divergence is visible rather than argued about; `averageEffort` is the one the gate reads.
+ *
+ * A draft where the model populated NOTHING has no defined effort — the denominator is zero.
+ * Those are excluded from the mean and counted in `undefinedCount`, which matters more than it
+ * looks: scoring them as 0 would let a model that extracts nothing at all post a perfect
+ * correction effort and clear the bar by refusing to do the job. Excluding them means such a
+ * run instead fails on `measuredCount`, which is the honest failure.
+ *
+ * **This deliberately does NOT render the gate's pass/fail verdict, and an earlier revision of
+ * this function was wrong to.** Codex found two reasons on #568, both confirmed against source,
+ * and both live in the CAPTURE layer rather than here:
+ *
+ *   1. **The denominator undercounts.** The managed draft extracts six fields
+ *      (`customer_reference`, `channel`, `sku`, `quantity`, `payment`, `fulfilment` —
+ *      `channel-order-intake.ts` `ManagedOrderField`, and the `expected.values` shape in
+ *      `tests/fixtures/order_intake_v1.json`). `channelOrderFields`, which
+ *      `countExtractedChannelOrderFields` walks, is four: `channel` and `fulfilment` are neither
+ *      counted nor diffed. A draft populating all six with one correction records 1/4, not 1/6,
+ *      and a correction to either omitted field is invisible.
+ *   2. **"Extracted nothing" is sometimes the RIGHT answer.** `en-prompt-injection-no-order-17`
+ *      and `en-retracted-order-19` are `scope: "not_an_order"` with all six values null, so a
+ *      CORRECT golden-set run has at most 18 non-zero denominators. Gating on 20 measured
+ *      ratios made a correct run impossible to pass — a verdict that reports failure on success
+ *      is worse than no verdict. Separating a correct non-order from a failed extraction needs
+ *      the record to carry the reviewer's outcome, which it does not yet.
+ *
+ * So this returns descriptive statistics and names what is still missing in `gateBlockedBy`.
+ * The numbers below are real and useful for watching a model over time; they are not the gate.
+ */
+export const ORDER_INTAKE_CORRECTION_EFFORT_THRESHOLD = 0.2
+export const ORDER_INTAKE_CORRECTION_EFFORT_SAMPLE = 20
+
+
+export type OrderIntakeCorrectionEffort = {
+  sampleSize: number
+  measuredCount: number
+  undefinedCount: number
+  averageEffort: number | null
+  pooledEffort: number | null
+  threshold: typeof ORDER_INTAKE_CORRECTION_EFFORT_THRESHOLD
+  requiredSample: number
+  /**
+   * Empty would mean the gate verdict is computable from these records. It is not yet, and each
+   * entry names a capture-layer prerequisite. Callers must not infer a pass from a low
+   * `averageEffort` while this is non-empty.
+   */
+  gateBlockedBy: readonly string[]
+}
+
+/** The capture-layer gaps that stop these records from answering the section 9 gate. */
+export const ORDER_INTAKE_EFFORT_GATE_BLOCKERS = [
+  'denominator_counts_four_of_six_managed_fields',
+  'non_order_outcomes_indistinguishable_from_failed_extraction',
+] as const
+
+export function summarizeOrderIntakeCorrectionEffort(
+  records: readonly OrderIntakeEvidenceRecord[],
+  options: { requiredSample?: number } = {},
+): OrderIntakeCorrectionEffort {
+  const requiredSample = Number.isSafeInteger(options.requiredSample) && (options.requiredSample as number) >= 0
+    ? (options.requiredSample as number)
+    : ORDER_INTAKE_CORRECTION_EFFORT_SAMPLE
+  const measured = records.filter((entry) => entry.totalExtractedFields > 0)
+  const ratioSum = measured.reduce(
+    (total, entry) => total + entry.correctionCount / entry.totalExtractedFields,
+    0,
+  )
+  const correctedSum = measured.reduce((total, entry) => total + entry.correctionCount, 0)
+  const extractedSum = measured.reduce((total, entry) => total + entry.totalExtractedFields, 0)
+  const averageEffort = measured.length ? ratioSum / measured.length : null
+  return {
+    sampleSize: records.length,
+    measuredCount: measured.length,
+    undefinedCount: records.length - measured.length,
+    averageEffort,
+    pooledEffort: extractedSum ? correctedSum / extractedSum : null,
+    threshold: ORDER_INTAKE_CORRECTION_EFFORT_THRESHOLD,
+    requiredSample,
+    gateBlockedBy: ORDER_INTAKE_EFFORT_GATE_BLOCKERS,
+  }
+}
