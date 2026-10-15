@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
@@ -380,4 +381,102 @@ test('console error handling contract records safe metadata and never request bo
   assert.match(source, /console\.activity_log_failed/)
   assert.match(source, /console\.deal_graduation_failed/)
   assert.match(source, /console\.project_shipped_graduation_failed/)
+})
+
+test('lead intake returns a bounded retryable response when durable storage fails', async () => {
+  const { createLead } = await import(`./console/api.mjs?lead-store-unavailable=${Date.now()}-${Math.random()}`)
+  const submitted = {
+    name: 'Private customer name',
+    contact: 'private@example.invalid',
+    message: 'private customer request',
+  }
+  const result = await createLead(submitted, {
+    insertLead: async () => {
+      throw new Error('database host and credential details must not escape')
+    },
+  })
+
+  assert.deepEqual(result, {
+    status: 503,
+    json: { ok: false, reason: 'lead_store_unavailable' },
+  })
+  assert.doesNotMatch(JSON.stringify(result), /Private customer|private@example|database host|credential/i)
+})
+
+test('authenticated lead intake route hides durable-store details from the response', () => {
+  const apiUrl = new URL('./console/api.mjs', import.meta.url).href
+  const script = `
+    let requests = 0
+    globalThis.fetch = async () => {
+      requests += 1
+      return { ok: false, status: 503, text: async () => 'database host and service credential details' }
+    }
+    const { handle } = await import(${JSON.stringify(apiUrl)})
+    const result = await handle({
+      method: 'POST',
+      path: '/api/leads',
+      headers: { 'x-ops-key': ${JSON.stringify(CONFORMING_KEY)} },
+      body: { name: 'Private customer name', contact: 'private@example.invalid', message: 'private customer request' },
+    })
+    process.stdout.write('__RESULT__' + JSON.stringify({ result, requests }))
+  `
+  const env = {
+    PATH: process.env.PATH || '',
+    SystemRoot: process.env.SystemRoot || '',
+    windir: process.env.windir || process.env.SystemRoot || '',
+    TEMP: process.env.TEMP || '',
+    TMP: process.env.TMP || '',
+    SUPERMEGA_OPS_KEY: CONFORMING_KEY,
+    SUPABASE_URL: 'https://fixture.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'synthetic-service-key',
+  }
+
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: import.meta.dirname,
+    env,
+    encoding: 'utf8',
+    timeout: 10_000,
+  })
+  assert.equal(child.status, 0, child.stderr || child.error?.message)
+  const resultStart = child.stdout.lastIndexOf('__RESULT__')
+  assert.notEqual(resultStart, -1, child.stderr)
+  const { result, requests } = JSON.parse(child.stdout.slice(resultStart + '__RESULT__'.length))
+  assert.deepEqual(result, { status: 503, json: { ok: false, reason: 'lead_store_unavailable' } })
+  assert.equal(requests, 1)
+  assert.doesNotMatch(child.stdout + child.stderr, /Private customer name|private@example|database host|credential/i)
+})
+
+test('lead intake rejects invalid timestamps before storage and preserves valid RFC 3339 timestamps', async () => {
+  const { createLead } = await import(`./console/api.mjs?lead-created-at-validation=${Date.now()}-${Math.random()}`)
+  for (const created_at of [
+    'not-a-timestamp',
+    '2026-02-31T00:00:00.000Z',
+    '2026-01-01T00:00:00+99:99',
+    0,
+    false,
+  ]) {
+    let insertCalled = false
+    const result = await createLead({ created_at }, {
+      insertLead: async () => {
+        insertCalled = true
+        return { created_at }
+      },
+    })
+    assert.deepEqual(result, {
+      status: 400,
+      json: { ok: false, reason: 'invalid_created_at' },
+    })
+    assert.equal(insertCalled, false)
+  }
+
+  const created_at = '2026-08-02T00:00:00.000Z'
+  let insertedLead
+  const result = await createLead({ created_at }, {
+    insertLead: async (lead) => {
+      insertedLead = lead
+      return lead
+    },
+  })
+  assert.equal(result.status, 200)
+  assert.equal(insertedLead.created_at, created_at)
 })
