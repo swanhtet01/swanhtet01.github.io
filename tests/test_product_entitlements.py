@@ -140,8 +140,6 @@ class ActivationProductEntitlementTests(unittest.TestCase):
         for event_type in (
             "commerce.storefront.configuration.saved",
             "commerce.storefront.merchandising.imported",
-            "commerce.storefront_request.received",
-            "commerce.storefront_request.closed",
         ):
             with self.subTest(event_type=event_type):
                 with self.assertRaises(TrialPermissionDenied) as denied:
@@ -157,6 +155,8 @@ class ActivationProductEntitlementTests(unittest.TestCase):
         self.assertEqual(store.get_state(principal, "commerce").version, 0)
         self.assertEqual(store._events, {})
         require_command_product_entitlement("commerce.order.created", ("commerce",))
+        require_command_product_entitlement("commerce.storefront_request.received", ("commerce",))
+        require_command_product_entitlement("commerce.storefront_request.closed", ("commerce",))
         require_command_product_entitlement("commerce.storefront.configuration.saved", ("ecommerce",))
 
     def test_postgres_store_denies_shop_storefront_command_before_state_or_event_write(self) -> None:

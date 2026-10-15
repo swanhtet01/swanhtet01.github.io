@@ -399,7 +399,9 @@ def require_command_product_entitlement(
 
     if product_entitlements is None:
         return
-    if event_type.startswith(("commerce.storefront.", "commerce.storefront_request.")):
+    # Receiving or closing a public request is Shop fulfilment work. Only
+    # storefront setup and merchandising belong to internally managed Commerce.
+    if event_type.startswith("commerce.storefront."):
         if "ecommerce" not in product_entitlements:
             raise TrialPermissionDenied("product.ecommerce")
 
