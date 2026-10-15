@@ -327,6 +327,39 @@ check(countOccurrences(home, 'data-product-panel') === activeIds.length && count
 check(countOccurrences(home, 'class="platform-image-open"') === Object.values(productScreens).flat().length, 'home_full_size_image_access')
 check(home.includes('data-product-showcase') && home.includes('data-product-tabs') && home.includes('<script src="/platform-carousel.js" defer></script>'), 'home_progressive_product_tabs')
 check(publicCarouselSource.includes("event.key==='Home'") && publicCarouselSource.includes("event.key==='End'") && publicCarouselSource.includes("event.key==='ArrowRight'"), 'home_product_tab_keyboard_navigation')
+let galleryScrolls = 0
+let galleryPrevented = 0
+const galleryHandlers = new Map()
+const gallerySlides = [0, 1].map(index => ({
+  getBoundingClientRect: () => ({ left: index * 200 }),
+  scrollIntoView() { galleryScrolls++ },
+}))
+const galleryTrack = {
+  querySelectorAll: () => gallerySlides,
+  getBoundingClientRect: () => ({ left: 0 }),
+  addEventListener: (key, handler) => galleryHandlers.set(key, handler),
+}
+const galleryButton = { addEventListener() {}, disabled: false }
+const galleryStatus = { textContent: '' }
+const gallery = {
+  querySelector: selector => ({
+    '.platform-slides': galleryTrack,
+    '[data-gallery-previous]': galleryButton,
+    '[data-gallery-next]': galleryButton,
+    '[data-gallery-status]': galleryStatus,
+  })[selector],
+}
+runInNewContext(publicCarouselSource, {
+  document: {
+    querySelectorAll: selector => selector === '[data-platform-carousel]' ? [gallery] : [],
+    querySelector: () => null,
+  },
+  window: { addEventListener() {}, matchMedia: () => ({ matches: true }) },
+})
+galleryHandlers.get('keydown')({ target: {}, key: 'ArrowRight', preventDefault() { galleryPrevented++ } })
+check(galleryScrolls === 0 && galleryPrevented === 0, 'gallery_link_arrow_does_not_move_slide')
+galleryHandlers.get('keydown')({ target: galleryTrack, key: 'ArrowRight', preventDefault() { galleryPrevented++ } })
+check(galleryScrolls === 1 && galleryPrevented === 1, 'gallery_track_arrow_moves_slide')
 for (const id of ['shop', 'website', 'ecommerce']) check(home.includes(`id="${id}" data-product-panel data-product-name=`), `home_no_script_product_available:${id}`)
 function showcaseNode(id = '', name = '') {
   const attributes = new Map()
