@@ -63,7 +63,7 @@ for (const route of ['/website/', '/ecommerce/']) {
   check(!/\b(preview|trial|demo)\b/i.test(description), `manifest_description_no_preview_funnel:${route}`)
 }
 check(publicCarouselSource.includes('data-gallery-previous') && publicCarouselSource.includes('data-gallery-next') && publicCarouselSource.includes('prefers-reduced-motion'), 'public_carousel_runtime_controls_and_motion')
-check(publicCarouselSource.includes('data-mobile-href') && publicCarouselSource.includes("mobileMedia.addEventListener('change',updateFullSizeLinks)"), 'public_carousel_full_size_link_matches_viewport')
+check(publicCarouselSource.includes('data-mobile-image') && publicCarouselSource.includes("mobileMedia.addEventListener('change',updateFullSizeLinks)"), 'public_carousel_full_size_link_matches_viewport')
 const captureSourceGuard = publicGalleryCaptureSource.indexOf("spawnSync('git', ['status', '--porcelain', '--', 'showroom'")
 const captureFixtureBuild = publicGalleryCaptureSource.indexOf("buildFixture('build_shop_browser_fixture.mjs'")
 const captureGuard = publicGalleryCaptureSource.slice(captureSourceGuard, captureFixtureBuild)
@@ -164,7 +164,7 @@ for (const page of landingPages) {
   check(html.includes('role="group" aria-roledescription="slide"'), `landing_gallery_accessible_slides:${page.route}`)
   check(countOccurrences(html, 'class="platform-image-open"') === productScreens[page.productId].length
     && countOccurrences(html, 'aria-label="Open full-size') === productScreens[page.productId].length
-    && countOccurrences(html, 'data-mobile-href="/images/') === productScreens[page.productId].length
+    && countOccurrences(html, 'data-mobile-image="/images/') === productScreens[page.productId].length
     && !html.includes('target="_blank"'),
   `landing_full_size_gallery_views:${page.route}`)
   check(html.includes('class="product-story product-story-standalone"') && html.includes('.product-story-standalone {padding:0 0 58px;border-top:0}'), `landing_gallery_above_fold_spacing:${page.route}`)
@@ -360,13 +360,21 @@ const gallery = {
     '[data-gallery-status]': galleryStatus,
   })[selector],
 }
+let phoneGallery = true
+let phoneMediaChanged
+const phoneMedia = { get matches() { return phoneGallery }, addEventListener: (event, handler) => { if (event === 'change') phoneMediaChanged = handler } }
+const fullSizeLink = { dataset: { mobileImage: '/images/actual-shop-today-mobile.png', desktopImage: '/images/actual-shop-today.png' }, href: '' }
 runInNewContext(publicCarouselSource, {
   document: {
-    querySelectorAll: selector => selector === '[data-platform-carousel]' ? [gallery] : [],
+    querySelectorAll: selector => selector === '[data-platform-carousel]' ? [gallery] : selector === '[data-mobile-image]' ? [fullSizeLink] : [],
     querySelector: () => null,
   },
-  window: { addEventListener() {}, matchMedia: () => ({ matches: true }) },
+  window: { addEventListener() {}, matchMedia: query => query === '(max-width: 760px)' ? phoneMedia : { matches: true } },
 })
+check(fullSizeLink.href === '/images/actual-shop-today-mobile.png', 'gallery_phone_opens_phone_capture')
+phoneGallery = false
+phoneMediaChanged()
+check(fullSizeLink.href === '/images/actual-shop-today.png', 'gallery_desktop_opens_desktop_capture')
 galleryHandlers.get('keydown')({ target: {}, key: 'ArrowRight', preventDefault() { galleryPrevented++ } })
 check(galleryScrolls === 0 && galleryPrevented === 0, 'gallery_link_arrow_does_not_move_slide')
 galleryHandlers.get('keydown')({ target: galleryTrack, key: 'ArrowRight', preventDefault() { galleryPrevented++ } })
@@ -399,7 +407,7 @@ const showcaseDocument = {
   createElement: () => showcaseNode(),
 }
 const showcaseWindowHandlers = new Map()
-const showcaseWindow = { addEventListener: (key, handler) => showcaseWindowHandlers.set(key, handler) }
+const showcaseWindow = { addEventListener: (key, handler) => showcaseWindowHandlers.set(key, handler), matchMedia: () => ({ matches: false, addEventListener() {} }) }
 const showcaseLocation = { hash: '' }
 runInNewContext(publicCarouselSource, { document: showcaseDocument, window: showcaseWindow, location: showcaseLocation })
 check(showcaseTabs.children.length === 3 && showcaseTabs.getAttribute('role') === 'tablist', 'home_runtime_builds_three_product_tabs')

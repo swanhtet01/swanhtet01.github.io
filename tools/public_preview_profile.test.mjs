@@ -63,7 +63,9 @@ test('all-page mode permits informational tombstone but not a retired tool actio
 
 test('full-size gallery links stay on exact static public PNGs', () => {
   const options = { publicOrigin: 'https://public-preview.example' }
-  for (const path of ['/images/actual-shop-today.png', '/images/actual-sites-inquiries.png', '/images/actual-commerce-order-request.png']) {
+  for (const path of ['/images/actual-shop-today.png', '/images/actual-shop-today-mobile.png',
+    '/images/actual-sites-inquiries.png', '/images/actual-sites-inquiries-mobile.png',
+    '/images/actual-commerce-order-request.png', '/images/actual-commerce-order-request-mobile.png']) {
     assert.equal(validatePreviewLinks(html + `<a href="${path}">View full size</a>`, policy, products, options).pairedOrigin, app.origin)
   }
   for (const path of ['/images/actual-shop-today.svg', '/images/actual-shop-today.png?download=1',
