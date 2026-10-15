@@ -2,7 +2,6 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { proofDigest } from './database-rehearsal-evidence.mjs'
-import { syntheticDatabaseRehearsalFixture } from './test-database-rehearsal-fixture.mjs'
 
 import { buildManagedPilotReadiness, readinessDigest, validateManagedPilotReadiness } from './managed-pilot-readiness.mjs'
 
@@ -20,7 +19,7 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
   },
 }))
 const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((path) => ({ path, digest: readinessDigest(path) }))
-const databaseFixture = syntheticDatabaseRehearsalFixture()
+const databaseFixture = JSON.parse(readFileSync(new URL('../hq/research/postgres17-rehearsal.json', import.meta.url), 'utf8'))
 // Unit-only time fixture; never written as operational evidence.
 databaseFixture.recordedAt = '2026-07-31T10:00:00.000Z'
 databaseFixture.receiptDigest = proofDigest(databaseFixture)
