@@ -139,6 +139,7 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
 
   const isNewShop = !commerce.items.length && !commerce.orders.length && !commerce.movements.length
     && !commerce.closes.length && !commerce.websiteIntakes?.length && !commerce.storefrontRequests?.length
+  const setupBlocked = recordStatus.badge === 'Paused' || recordStatus.badge === 'Checking'
 
   if (isNewShop) return <section aria-labelledby="shop-first-product-title" className="shop-today shop-today-first-run">
     <div className="shop-first-product-card">
@@ -148,10 +149,11 @@ export function ShopToday({ accountingExport = null, batchProfitControl, catalog
         <h2 id="shop-first-product-title">{bi('No products to sell yet')}</h2>
         <p>{bi('Add one item to start, or import a catalog.')}</p>
       </div>
-      <div className="shop-first-product-actions">
+      {setupBlocked ? <p className="shop-first-product-note" role="status">{recordStatus.detail}</p> : <div className="shop-first-product-actions">
         <Link className="core-button primary" to="/shop/?tab=inventory#shop-catalog-create">{bi('Add first product')}</Link>
         <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">{bi('Import a CSV')} <span aria-hidden="true">→</span></Link>
-      </div>
+      </div>}
+      {setupBlocked && recordStatus.target && recordStatus.actionLabel ? <Link className="core-button" to={recordStatus.target}>{recordStatus.actionLabel}</Link> : null}
     </div>
   </section>
 
