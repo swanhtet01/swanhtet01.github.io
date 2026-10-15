@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
+import { isUtf8 } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -37,6 +38,35 @@ function assert(condition, message) {
 
 const publicGalleryProvenance = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
 const publicGalleryCapture = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-capture.json'), 'utf8'))
+// Hash the checked-out source as a Git tree so a source archive is checked as
+// strictly as a Git worktree. Installed packages and build output are not part
+// of the committed showroom tree.
+async function checkedOutShowroomTree(directory, atRoot = true) {
+  const entries = (await readdir(directory, { withFileTypes: true }))
+    .filter(entry => !atRoot || !['node_modules', 'dist'].includes(entry.name))
+    .sort((left, right) => Buffer.compare(
+      Buffer.from(left.name + (left.isDirectory() ? '/' : '')),
+      Buffer.from(right.name + (right.isDirectory() ? '/' : '')),
+    ))
+  const body = []
+  for (const entry of entries) {
+    assert(entry.isFile() || entry.isDirectory(), `public_gallery_source_entry_invalid:${entry.name}`)
+    const bytes = entry.isDirectory()
+      ? await checkedOutShowroomTree(resolve(directory, entry.name), false)
+      : await readFile(resolve(directory, entry.name))
+    // A Windows zip extraction may restore text as CRLF even when the Git
+    // blob is LF. Normalize only UTF-8 text; binary captures stay byte-exact.
+    const canonical = !entry.isDirectory() && !bytes.includes(0) && isUtf8(bytes)
+      ? Buffer.from(bytes.toString('utf8').replaceAll('\r\n', '\n'))
+      : bytes
+    const oid = entry.isDirectory()
+      ? bytes
+      : createHash('sha1').update(`blob ${canonical.length}\0`).update(canonical).digest()
+    body.push(Buffer.from(`${entry.isDirectory() ? '40000' : '100644'} ${entry.name}\0`), oid)
+  }
+  const tree = Buffer.concat(body)
+  return createHash('sha1').update(`tree ${tree.length}\0`).update(tree).digest()
+}
 const publicGalleryAssetNames = [
   'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
   'actual-sites-editor.png', 'actual-sites-inquiries.png',
@@ -52,8 +82,16 @@ assert(publicGalleryProvenance.captureSourceCommit === publicGalleryCapture.sour
   && publicGalleryProvenance.captureSourceTree === publicGalleryCapture.showroomTree
   && /^[0-9a-f]{40}$/.test(publicGalleryCapture.sourceCommit)
   && /^[0-9a-f]{40}$/.test(publicGalleryCapture.showroomTree), 'public_gallery_capture_source_invalid')
-const currentShowroomTree = (await run('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, windowsHide: true })).stdout.trim()
-assert(currentShowroomTree === publicGalleryCapture.showroomTree, 'public_gallery_capture_source_tree_drift')
+let currentShowroomTree
+try {
+  currentShowroomTree = (await run('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, windowsHide: true })).stdout.trim()
+} catch {
+  // Git archives contain canonical blob bytes; an ordinary Windows worktree
+  // may have CRLF checkout conversions, so prefer Git when it is available.
+  currentShowroomTree = (await checkedOutShowroomTree(resolve(root, 'showroom'))).toString('hex')
+}
+assert(currentShowroomTree === publicGalleryCapture.showroomTree,
+  `public_gallery_capture_source_tree_drift:${currentShowroomTree}:${publicGalleryCapture.showroomTree}`)
 assert(publicGalleryProvenance.assets?.map(asset => asset.file).join(',') === publicGalleryAssetNames.join(','), 'public_gallery_asset_set_changed')
 const galleryCaptureByFile = new Map(publicGalleryCapture.captures?.map(capture => [capture.file, capture]))
 assert(galleryCaptureByFile.size === publicGalleryCapture.captures?.length, 'public_gallery_capture_files_not_unique')
