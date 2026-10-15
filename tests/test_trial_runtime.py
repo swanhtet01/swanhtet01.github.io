@@ -290,6 +290,56 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(cross_tenant.status_code, 404)
         self.assertEqual(cross_tenant.json()["detail"]["code"], "trial_not_found")
 
+    def test_ecommerce_acceptance_needs_internal_grant_in_shared_shop_workspace(self) -> None:
+        self.store.provision_product_entitlements(
+            workspace_id="workspace-a", products=("commerce", "ecommerce"),
+        )
+        internal_operator = TrialPrincipal("workspace-a", "actor-ecommerce-operator", "human")
+        self.store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id=internal_operator.actor_id,
+            actor_kind="human",
+            capabilities=("commerce.read", "commerce.write", "ecommerce.manage"),
+        )
+        self.sessions["internal-commerce-session"] = internal_operator
+        probe_id = str(uuid4())
+        body = {
+            "probe_id": probe_id,
+            "owner_approval_id": str(uuid4()),
+            "product": "ecommerce",
+            "release_commit": "a" * 40,
+            "confirmation": "RECORD HOSTED PRODUCT ACCEPTANCE",
+        }
+
+        denied = self.client.post(
+            "/api/trial/v1/product-acceptance", headers=self._headers(), json=body,
+        )
+        self.assertEqual(denied.status_code, 403)
+        recorded = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers("internal-commerce-session"),
+            json=body,
+        )
+        self.assertEqual(recorded.status_code, 200)
+        self.assertEqual(recorded.json()["acceptance"]["product"], "ecommerce")
+
+        shop_read = self.client.get(
+            f"/api/trial/v1/product-acceptance/{probe_id}", headers=self._headers(),
+        )
+        self.assertEqual(shop_read.status_code, 403)
+        internal_read = self.client.get(
+            f"/api/trial/v1/product-acceptance/{probe_id}",
+            headers=self._headers("internal-commerce-session"),
+        )
+        self.assertEqual(internal_read.status_code, 200)
+
+        shop_acceptance = self.client.post(
+            "/api/trial/v1/product-acceptance",
+            headers=self._headers(),
+            json={**body, "probe_id": str(uuid4()), "product": "commerce"},
+        )
+        self.assertEqual(shop_acceptance.status_code, 200)
+
     def test_activation_entitlements_override_mismatched_product_capabilities(self) -> None:
         store = InMemoryTrialStore(reducer=self.reducer)
         store.provision_membership(

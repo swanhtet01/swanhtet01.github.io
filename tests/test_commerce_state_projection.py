@@ -13,6 +13,7 @@ from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
     InMemoryTrialStore,
     PostgresTrialStore,
+    ProductAcceptanceRecord,
     TrialPermissionDenied,
     TrialPrincipal,
     TrialState,
@@ -156,6 +157,40 @@ class CommerceStateProjectionTests(unittest.TestCase):
         commerce = response.json()["states"]["commerce"]["state"]
         self.assertEqual(commerce["storefrontRequests"], self.full_state["storefrontRequests"])
         self.assertNotIn("storefrontConfiguration", commerce)
+
+    def test_postgres_internal_acceptance_read_needs_management_grant(self) -> None:
+        store = PostgresTrialStore("", reducer=self.replace_state)
+        probe_id = str(uuid4())
+        result = ProductAcceptanceRecord(
+            probe_id=probe_id,
+            owner_approval_id=str(uuid4()),
+            product="ecommerce",
+            surface="commerce",
+            release_commit="a" * 40,
+            state_version=2,
+            state_digest="sha256:" + "b" * 64,
+            recorded_at="2026-10-16T00:00:00Z",
+        ).to_dict()
+
+        @contextmanager
+        def guarded_cursor(principal, *, write=False, capability=None):
+            self.assertFalse(write)
+            self.assertIsNone(capability)
+            cursor = Mock()
+            cursor.fetchone.return_value = {"surface": "commerce", "result_json": result}
+            capabilities = {"commerce.read"}
+            if principal.actor_id == self.internal_actor.actor_id:
+                capabilities.add("ecommerce.manage")
+            yield cursor, frozenset(capabilities)
+
+        with (
+            patch.object(store, "_guarded_cursor", side_effect=guarded_cursor),
+            patch.object(store, "_product_entitlements", return_value=("commerce", "ecommerce")),
+        ):
+            with self.assertRaises(TrialPermissionDenied):
+                store.get_product_acceptance(self.shop_actor, probe_id=probe_id)
+            accepted = store.get_product_acceptance(self.internal_actor, probe_id=probe_id)
+        self.assertEqual(accepted.product, "ecommerce")
 
 
 if __name__ == "__main__":

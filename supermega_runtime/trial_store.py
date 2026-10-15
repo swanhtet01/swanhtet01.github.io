@@ -5177,12 +5177,12 @@ class PostgresTrialStore:
             normalized,
             write=True,
             capability=_required_surface_capability(surface),
-        ) as (cursor, _capabilities):
-            if product_value not in self._product_entitlements(
-                cursor,
-                normalized.workspace_id,
-            ):
+        ) as (cursor, capabilities):
+            product_entitlements = self._product_entitlements(cursor, normalized.workspace_id)
+            if product_value not in product_entitlements:
                 raise TrialPermissionDenied(f"product.{product_value}")
+            if product_value == "ecommerce":
+                require_ecommerce_management_authority(product_entitlements, capabilities)
             self._lock(cursor, f"{normalized.workspace_id}:acceptance:{probe_id_value}")
             replay = self._load_event_replay(
                 cursor,
@@ -5303,7 +5303,12 @@ class PostgresTrialStore:
             result = row.get("result_json") or {}
             if isinstance(result, str):
                 result = json.loads(result)
-            return _product_acceptance_record(result)
+            record = _product_acceptance_record(result)
+            if record.product == "ecommerce":
+                require_ecommerce_management_authority(
+                    self._product_entitlements(cursor, normalized.workspace_id), capabilities,
+                )
+            return record
 
     def create_approval(
         self,
@@ -6050,6 +6055,10 @@ class InMemoryTrialStore:
                 or product_value not in _readiness.product_entitlements
             ):
                 raise TrialPermissionDenied(f"product.{product_value}")
+            if product_value == "ecommerce":
+                require_ecommerce_management_authority(
+                    _readiness.product_entitlements, _readiness.capabilities,
+                )
             replay = self._replay(
                 normalized.workspace_id,
                 normalized.actor_id,
@@ -6101,6 +6110,10 @@ class InMemoryTrialStore:
                 raise TrialNotFound()
             record = _product_acceptance_record(row[3])
             _require_surface_read_capability(readiness.capabilities, record.surface)
+            if record.product == "ecommerce":
+                require_ecommerce_management_authority(
+                    readiness.product_entitlements, readiness.capabilities,
+                )
             return record
 
     def create_approval(
