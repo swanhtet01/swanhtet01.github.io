@@ -435,10 +435,10 @@ const publicGalleryFiles = [
   'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
 ]
 if (publicGalleryEvidence?.schemaVersion !== 'supermega.public-gallery-provenance.v1'
-  || publicGalleryEvidence.status !== 'illustrative_only'
+  || publicGalleryEvidence.status !== 'local_component_capture'
   || publicGalleryEvidence.records !== 'synthetic'
-  || publicGalleryEvidence.captureSourceCommit !== null
-  || publicGalleryEvidence.captureSourceTree !== null
+  || !/^[0-9a-f]{40}$/.test(publicGalleryEvidence.captureSourceCommit)
+  || !/^[0-9a-f]{40}$/.test(publicGalleryEvidence.captureSourceTree)
   || publicGalleryEvidence.capturedAt !== null
   || publicGalleryEvidence.assets?.map((asset) => asset.file).join(',') !== publicGalleryFiles.join(',')
   || JSON.stringify(publicGalleryEvidence) !== JSON.stringify(publicGalleryProvenance)) {

@@ -104,8 +104,7 @@ const productScreens = {
 }
 const interfaceDisclosure = (image) => {
   const asset = publicGalleryProvenance.assets.find(entry => entry.file === image)
-  return asset?.capture ? 'Real Shop UI · synthetic local demo data'
-    : asset ? 'Illustrative app view · synthetic example records' : null
+  return asset?.capture ? 'Product UI capture · synthetic local records' : null
 }
 check(!publicGeneratorSource.includes('compatibilityScreens') && !publicGeneratorSource.includes('data-legacy-interface-assets'), 'landing_legacy_interface_compatibility_removed')
 for (const page of landingPages) {
@@ -179,8 +178,7 @@ for (const page of landingPages) {
     check(html.includes('alt="Commerce catalog showing available products, local pricing and customer ordering"'), 'landing_commerce_catalog_capture_description')
     check(html.includes(`Commerce &middot; Store catalog and availability &middot; ${interfaceDisclosure('actual-commerce-catalog.png')}`), 'landing_commerce_catalog_capture_scope_truthful')
     check(html.includes('alt="Commerce Store showing a locally saved customer request awaiting Shop confirmation"'), 'landing_commerce_capture_matches_store_flow')
-    check(html.includes('width="1280" height="900"'), 'landing_commerce_capture_dimensions_exact')
-    check(html.includes(`Commerce &middot; Customer request and Shop review &middot; ${interfaceDisclosure('actual-commerce-order-request.png')}`), 'landing_commerce_request_capture_scope_truthful')
+    check(html.includes(`Commerce &middot; Request saved locally &middot; ${interfaceDisclosure('actual-commerce-order-request.png')}`), 'landing_commerce_request_capture_scope_truthful')
   }
   if (page.productId === 'website') {
     check(html.includes('alt="Sites editor showing page navigation, focused content editing and readiness checks"'), 'landing_sites_editor_capture_description')
@@ -306,7 +304,7 @@ for (const [route, html] of [['/', home], ...activeIds.map(id => [`/${id}/`, rea
   for (const screen of expectedCaptureScreens) check(body.includes(interfaceDisclosure(screen)), `interface_disclosure_per_image:${route}:${screen}`)
   check(!body.includes('Current Shop') && !body.includes('Current Sites') && !body.includes('Current Commerce'), `capture_not_claimed_current:${route}`)
   check(!body.includes('Illustrative interface and records.'), `illustrative_mockups_absent:${route}`)
-  const bodyWithoutCaptureDisclosure = body.replace('Real Shop UI · synthetic local demo data', '')
+  const bodyWithoutCaptureDisclosure = body.replaceAll('Product UI capture · synthetic local records', '')
   for (const forbidden of ['Choose shop type', 'Request assisted setup', 'trial', 'preview', 'demo', 'theme-toggle', 'dark mode']) {
     check(!bodyWithoutCaptureDisclosure.toLowerCase().includes(forbidden.toLowerCase()), `no_clutter:${route}:${forbidden}`)
   }
@@ -411,10 +409,9 @@ check(showcasePanels[1].hidden === false && showcasePanels[0].hidden === true, '
 check(countOccurrences(home, 'class="product-card-flow"') === activeIds.length, 'home_compact_product_flows')
 check(home.includes('href="/contact/">Contact SuperMega</a>'), 'home_clear_contact_action')
 const screenshotHashes = new Set()
-const screenshotDimensions = { 'actual-commerce-order-request.png': [1280, 900] }
 for (const filename of Object.values(productScreens).flat()) {
   const image = readFileSync(resolve(staticDir, 'images', filename))
-  const [expectedWidth, expectedHeight] = screenshotDimensions[filename] ?? [1440, 900]
+  const [expectedWidth, expectedHeight] = [1440, 900]
   check(image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])), `screenshot_png:${filename}`)
   check(image.readUInt32BE(16) === expectedWidth && image.readUInt32BE(20) === expectedHeight, `screenshot_full_render:${filename}`)
   check(image.length > 10000, `screenshot_not_empty:${filename}`)

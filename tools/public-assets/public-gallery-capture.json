@@ -1,0 +1,122 @@
+{
+  "ok": true,
+  "classification": "candidate_only_local_real_component_synthetic",
+  "publicationReady": false,
+  "sourceCommit": "0e5f1375f166c8e97184a2f9357e5ad06d40f017",
+  "showroomTree": "35e31bf7b0020e8bdf9b5fbeb6de25395c857b60",
+  "deniedExternal": 0,
+  "fulfilledSyntheticMedia": 3,
+  "sampleMediaDigests": [
+    {
+      "file": "sites-studio-sample.jpg",
+      "sha256": "3d6f0be7d5c4bbcdcf923fd423206b653c61058c46264aa1b7fba456efb005da",
+      "evidence": "synthetic_sample_photo"
+    },
+    {
+      "file": "sites-studio-materials.jpg",
+      "sha256": "ddc0a8ed18dd7a04e400751baf639eb1818a052a154789156ae1b40173c6b7b6",
+      "evidence": "synthetic_sample_photo"
+    },
+    {
+      "file": "sites-studio-entrance.jpg",
+      "sha256": "e384cc946a67d28411fc389cfade5c6c75f3fcf0691082126b616dece1c63425",
+      "evidence": "synthetic_sample_photo"
+    }
+  ],
+  "completedSale": true,
+  "customerReceiptVisible": false,
+  "output": "/home/runner/work/swanhtet01.github.io/swanhtet01.github.io/.tmp/gallery-candidate-g5Upsm",
+  "captures": [
+    {
+      "file": "actual-shop-today.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "718a047a949014560b134273eb3f4232831929304fdfd46e8a43c021824bf738",
+      "fixturePath": "/shop/",
+      "routeState": "today",
+      "visibleSelector": ".shop-today-module",
+      "loadedImages": 0
+    },
+    {
+      "file": "actual-shop-first-run.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "703563e45739fdc023e7762ce6d255d243aa3be1853699dc771261c7073327d7",
+      "fixturePath": "/shop/",
+      "routeState": "today",
+      "visibleSelector": ".shop-first-product-card",
+      "loadedImages": 0
+    },
+    {
+      "file": "actual-shop-sell.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "6b6fb2a911ac726cfb320a81ff1401dacbf9b9e09a5cbf4641f0a83e97efe7c4",
+      "fixturePath": "/shop/",
+      "routeState": "counter",
+      "visibleSelector": ".shop-current-sale",
+      "loadedImages": 0
+    },
+    {
+      "file": "actual-shop-order-record.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "6e2aba1fd007af330d33d20bea5111fb88f46c44b340b1d2ca25bca997dcc3eb",
+      "fixturePath": "/shop/",
+      "routeState": "counter",
+      "visibleSelector": "dialog.receipt-dialog[open]",
+      "loadedImages": 0,
+      "recordKind": "paid_order_record_not_customer_receipt"
+    },
+    {
+      "file": "actual-shop-orders.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "19246e2d9ec9e696e03c20a24c943244afb0a7c9f1f59fadcae009024b0d9a44",
+      "fixturePath": "/shop/",
+      "routeState": "orders",
+      "visibleSelector": ".orders-module",
+      "loadedImages": 0
+    },
+    {
+      "file": "actual-sites-editor.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "6766ebe03d9d958f81c1c3bd8e0ad2eaae67b7c77f012142f81c4b203c918470",
+      "fixturePath": "/workspaces/",
+      "routeState": "/website/",
+      "visibleSelector": "[data-content-section=\"hero\"]",
+      "loadedImages": 3
+    },
+    {
+      "file": "actual-sites-inquiries.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "c6a05fe054405fca916f76ffab1932e9fdc19e87061e45c4c9f23e259dc4abc7",
+      "fixturePath": "/workspaces/",
+      "routeState": "/website/?view=inquiries",
+      "visibleSelector": ".website-inquiry-detail",
+      "loadedImages": 0
+    },
+    {
+      "file": "actual-commerce-catalog.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "438270f4c8b707d4ea91fcdcf6582076b974b6bafdd368a427e7f5332c8fe1ff",
+      "fixturePath": "/workspaces/",
+      "routeState": "/ecommerce/?view=preview&workspace=1",
+      "visibleSelector": ".storefront-grid",
+      "loadedImages": 3
+    },
+    {
+      "file": "actual-commerce-order-request.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "d819a9925e0ccb5b25d4b231207ce703f35a8c2f4e30267b7ff09b8831630e31",
+      "fixturePath": "/workspaces/",
+      "routeState": "/ecommerce/?view=preview&workspace=1",
+      "visibleSelector": ".ecommerce-quote-receipt[data-current=\"true\"]",
+      "loadedImages": 0
+    }
+  ]
+}

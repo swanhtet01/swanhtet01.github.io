@@ -36,17 +36,31 @@ function assert(condition, message) {
 }
 
 const publicGalleryProvenance = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-provenance.json'), 'utf8'))
+const publicGalleryCapture = JSON.parse(await readFile(resolve(root, 'tools', 'public-assets', 'public-gallery-capture.json'), 'utf8'))
 const publicGalleryAssetNames = [
   'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
   'actual-sites-editor.png', 'actual-sites-inquiries.png',
   'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
 ]
 assert(publicGalleryProvenance.schemaVersion === 'supermega.public-gallery-provenance.v1', 'public_gallery_provenance_schema_unsupported')
-assert(publicGalleryProvenance.status === 'illustrative_only' && publicGalleryProvenance.records === 'synthetic', 'public_gallery_provenance_status_invalid')
-assert(publicGalleryProvenance.captureSourceCommit === null && publicGalleryProvenance.captureSourceTree === null
-  && publicGalleryProvenance.capturedAt === null, 'illustrative_public_gallery_must_not_claim_capture_provenance')
+assert(publicGalleryProvenance.status === 'local_component_capture' && publicGalleryProvenance.records === 'synthetic'
+  && publicGalleryProvenance.capturedAt === null, 'public_gallery_provenance_status_invalid')
+assert(publicGalleryCapture.ok === true && publicGalleryCapture.classification === 'candidate_only_local_real_component_synthetic'
+  && publicGalleryCapture.publicationReady === false && publicGalleryCapture.deniedExternal === 0,
+  'public_gallery_capture_report_invalid')
+assert(publicGalleryProvenance.captureSourceCommit === publicGalleryCapture.sourceCommit
+  && publicGalleryProvenance.captureSourceTree === publicGalleryCapture.showroomTree
+  && /^[0-9a-f]{40}$/.test(publicGalleryCapture.sourceCommit)
+  && /^[0-9a-f]{40}$/.test(publicGalleryCapture.showroomTree), 'public_gallery_capture_source_invalid')
+const currentShowroomTree = (await run('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, windowsHide: true })).stdout.trim()
+assert(currentShowroomTree === publicGalleryCapture.showroomTree, 'public_gallery_capture_source_tree_drift')
 assert(publicGalleryProvenance.assets?.map(asset => asset.file).join(',') === publicGalleryAssetNames.join(','), 'public_gallery_asset_set_changed')
+const galleryCaptureByFile = new Map(publicGalleryCapture.captures?.map(capture => [capture.file, capture]))
+assert(galleryCaptureByFile.size === publicGalleryCapture.captures?.length, 'public_gallery_capture_files_not_unique')
 const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.assets.map(async ({ file, width, height, sha256, capture }) => {
+  const reportCapture = galleryCaptureByFile.get(file)
+  assert(reportCapture && reportCapture.width === width && reportCapture.height === height
+    && reportCapture.sha256 === sha256, `public_gallery_capture_report_asset_mismatch:${file}`)
   const bytes = await readFile(resolve(root, 'tools', 'public-assets', file))
   assert(bytes.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), `public_gallery_asset_not_png:${file}`)
   assert(Number.isInteger(width) && Number.isInteger(height) && width >= 1000 && height >= 700,
@@ -55,15 +69,19 @@ const publicGalleryAssetEvidence = await Promise.all(publicGalleryProvenance.ass
     `public_gallery_asset_dimensions_mismatch:${file}`)
   assert(/^[0-9a-f]{64}$/.test(sha256) && createHash('sha256').update(bytes).digest('hex') === sha256,
     `public_gallery_asset_digest_mismatch:${file}`)
-  if (capture) assert(file === 'actual-shop-today.png'
-    && capture.classification === 'local_real_component_synthetic'
+  assert(capture && capture.classification === 'local_real_component_synthetic'
     && capture.publicationReady === false && /^[0-9a-f]{40}$/.test(capture.sourceCommit)
     && /^[0-9a-f]{40}$/.test(capture.showroomTree)
+    && capture.sourceCommit === publicGalleryCapture.sourceCommit
+    && capture.showroomTree === publicGalleryCapture.showroomTree
     && capture.captureTool === 'tools/capture_public_gallery.mjs'
-    && capture.fixturePath === '/shop/' && capture.routeState === 'today'
-    && capture.visibleSelector === '.shop-today-module' && capture.deniedExternal === 0,
+    && capture.fixturePath === reportCapture.fixturePath
+    && capture.routeState === reportCapture.routeState
+    && capture.visibleSelector === reportCapture.visibleSelector
+    && capture.loadedImages === reportCapture.loadedImages
+    && capture.deniedExternal === publicGalleryCapture.deniedExternal,
     `public_gallery_capture_receipt_invalid:${file}`)
-  return { file, width, height, sha256, ...(capture ? { capture } : {}) }
+  return { file, width, height, sha256, capture }
 }))
 
 assert(manifest.schemaVersion === 'supermega.site-context.v2', 'unsupported_site_manifest')
@@ -633,7 +651,7 @@ assert(typeof homePage.description === 'string' && homePage.description.length >
 const stories = {
  shop: {title:'Know what sold. Know what happens next.', body:'Run the counter, orders, stock and daily close from one operating view.', screens:[['actual-shop-today.png','Shop operating view showing fulfilment priorities, stock alerts and money awaiting collection','Today and priorities'],['actual-shop-sell.png','Shop counter with searchable products, visible stock levels, and Add controls for a new sale','Counter catalog and sale setup'],['actual-shop-orders.png','Shop order queue showing payment handoff, the next action and queue health','Orders and fulfilment']], proof:[['Record','Sale, payment and receipt'],['Action','Reorder, fulfil or follow up'],['Result','A close your team can explain']]},
  website: {title:'Build clear pages. Review inquiries in one place.', body:'Manage pages, readiness checks and customer inquiries without assembling a separate toolchain.', screens:[['actual-sites-editor.png','Sites editor showing page navigation, focused content editing and readiness checks','Page workspace and readiness'],['actual-sites-inquiries.png','Sites inquiry workspace showing a synthetic customer request, ownership and decision controls','Inquiry review and ownership']], proof:[['Record','Pages, services and metadata'],['Action','Edit, check and prepare to publish'],['Result','Qualified inquiries in one inbox']]},
- ecommerce: {title:'Show your catalog. Review each request.', body:'See your catalog and customer order requests. Your team reviews each request, payment and delivery step.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Customer request and Shop review',1280,900]], proof:[['Record','Catalog, customer and order'],['Action','Review, confirm and prepare fulfilment'],['Result','One traceable fulfilment flow']]},
+ ecommerce: {title:'Show your catalog. Review each request.', body:'See your catalog and customer order requests. Your team reviews each request, payment and delivery step.', screens:[['actual-commerce-catalog.png','Commerce catalog showing available products, local pricing and customer ordering','Store catalog and availability'],['actual-commerce-order-request.png','Commerce Store showing a locally saved customer request awaiting Shop confirmation','Request saved locally']], proof:[['Record','Catalog, customer and request'],['Action','Review before an order is confirmed'],['Result','A clear next step for fulfilment']]},
 }
 const productOutcomes = {
  shop: [
@@ -654,12 +672,11 @@ const productOutcomes = {
 }
 function interfaceDisclosure(image) {
  assert(publicGalleryAssetNames.includes(image), `interface_gallery_asset_unverified:${image}`)
- return publicGalleryProvenance.assets.find(asset => asset.file === image)?.capture
-   ? 'Real Shop UI · synthetic local demo data' : 'Illustrative app view · synthetic example records'
+ return 'Product UI capture · synthetic local records'
 }
 function productGallery(id,label,eagerFirst=false) {
  const item=stories[id]
- const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><a class="platform-image-open" href="/images/${image}" aria-label="Open full-size ${escapeHtml(label)} ${escapeHtml(caption)} illustrative view"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${eagerFirst && index === 0 ? 'eager' : 'lazy'}"${eagerFirst && index === 0 ? ' fetchpriority="high"' : ''} /><span aria-hidden="true">View full size &rarr;</span></a><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
+ const slides=item.screens.map(([image,alt,caption,width=1440,height=900],index)=>`<figure class="platform-image" role="group" aria-roledescription="slide" aria-label="${index+1} of ${item.screens.length}: ${escapeHtml(caption)}"><a class="platform-image-open" href="/images/${image}" aria-label="Open full-size ${escapeHtml(label)} ${escapeHtml(caption)} local product view"><img src="/images/${image}" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="${eagerFirst && index === 0 ? 'eager' : 'lazy'}"${eagerFirst && index === 0 ? ' fetchpriority="high"' : ''} /><span aria-hidden="true">View full size &rarr;</span></a><figcaption>${label} &middot; ${escapeHtml(caption)} &middot; ${interfaceDisclosure(image)}</figcaption></figure>`).join('')
  if (item.screens.length === 1) return `<div class="platform-gallery" data-single role="region" aria-roledescription="carousel" aria-label="${label} interface view"><div class="platform-slides">${slides}</div></div>`
  return `<div class="platform-gallery" data-platform-carousel role="region" aria-roledescription="carousel" aria-label="${label} interface views"><div class="platform-slides" tabindex="0">${slides}</div><div class="platform-gallery-controls"><button type="button" data-gallery-previous aria-label="Previous ${label} screenshot" disabled>&lsaquo;</button><span class="platform-gallery-status" data-gallery-status aria-live="polite">1 of ${item.screens.length}</span><button type="button" data-gallery-next aria-label="Next ${label} screenshot">&rsaquo;</button></div></div>`
 }

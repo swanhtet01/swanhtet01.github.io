@@ -1,17 +1,136 @@
 {
   "schemaVersion": "supermega.public-gallery-provenance.v1",
-  "status": "illustrative_only",
+  "status": "local_component_capture",
   "records": "synthetic",
-  "captureSourceCommit": null,
-  "captureSourceTree": null,
+  "captureSourceCommit": "0e5f1375f166c8e97184a2f9357e5ad06d40f017",
+  "captureSourceTree": "35e31bf7b0020e8bdf9b5fbeb6de25395c857b60",
   "capturedAt": null,
   "assets": [
-    { "file": "actual-shop-today.png", "width": 1440, "height": 900, "sha256": "e3a344bba380c72a37d4e25bae8dfcf38ce0d0207e9e0b282e3f727cfefdee76", "capture": { "classification": "local_real_component_synthetic", "publicationReady": false, "sourceCommit": "7529ada44515efe83aa4fdda40b47f69fb61fc15", "showroomTree": "a483214aac10b4fc5d95d2fa6c22572993a66a94", "captureTool": "tools/capture_public_gallery.mjs", "fixturePath": "/shop/", "routeState": "today", "visibleSelector": ".shop-today-module", "deniedExternal": 0 } },
-    { "file": "actual-shop-sell.png", "width": 1440, "height": 900, "sha256": "93f48f0cfacb49b5df2221e89700b6031b91fe9ad07d35ff08ef6b4957923ff6" },
-    { "file": "actual-shop-orders.png", "width": 1440, "height": 900, "sha256": "b55cce8aa5eb52ab22bf35789bb3d1fbed692b5cf15301bc381af5ebcf729db8" },
-    { "file": "actual-sites-editor.png", "width": 1440, "height": 900, "sha256": "ac24c911c9079a4b39aaac70ff77f6c6b846102a6c611ddab409b31d9a1b36c0" },
-    { "file": "actual-sites-inquiries.png", "width": 1440, "height": 900, "sha256": "f815dd1d4807b4ff91c962295686015c170d91734129e4de834a557934527c8a" },
-    { "file": "actual-commerce-catalog.png", "width": 1440, "height": 900, "sha256": "02486fe39d44c50f7916878ddd0faf9c8840f7eb4acff5d8ffb9420345e9d720" },
-    { "file": "actual-commerce-order-request.png", "width": 1280, "height": 900, "sha256": "f5644c2b728faf6f42847a873eaddb77e60e5dac7aa8ab206f34828c37e0cf09" }
+    {
+      "file": "actual-shop-today.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "718a047a949014560b134273eb3f4232831929304fdfd46e8a43c021824bf738",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "0e5f1375f166c8e97184a2f9357e5ad06d40f017",
+        "showroomTree": "35e31bf7b0020e8bdf9b5fbeb6de25395c857b60",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "today",
+        "visibleSelector": ".shop-today-module",
+        "loadedImages": 0,
+        "deniedExternal": 0
+      }
+    },
+    {
+      "file": "actual-shop-sell.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "6b6fb2a911ac726cfb320a81ff1401dacbf9b9e09a5cbf4641f0a83e97efe7c4",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "0e5f1375f166c8e97184a2f9357e5ad06d40f017",
+        "showroomTree": "35e31bf7b0020e8bdf9b5fbeb6de25395c857b60",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "counter",
+        "visibleSelector": ".shop-current-sale",
+        "loadedImages": 0,
+        "deniedExternal": 0
+      }
+    },
+    {
+      "file": "actual-shop-orders.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "19246e2d9ec9e696e03c20a24c943244afb0a7c9f1f59fadcae009024b0d9a44",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "0e5f1375f166c8e97184a2f9357e5ad06d40f017",
+        "showroomTree": "35e31bf7b0020e8bdf9b5fbeb6de25395c857b60",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/shop/",
+        "routeState": "orders",
+        "visibleSelector": ".orders-module",
+        "loadedImages": 0,
+        "deniedExternal": 0
+      }
+    },
+    {
+      "file": "actual-sites-editor.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "6766ebe03d9d958f81c1c3bd8e0ad2eaae67b7c77f012142f81c4b203c918470",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "0e5f1375f166c8e97184a2f9357e5ad06d40f017",
+        "showroomTree": "35e31bf7b0020e8bdf9b5fbeb6de25395c857b60",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/workspaces/",
+        "routeState": "/website/",
+        "visibleSelector": "[data-content-section=\"hero\"]",
+        "loadedImages": 3,
+        "deniedExternal": 0
+      }
+    },
+    {
+      "file": "actual-sites-inquiries.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "c6a05fe054405fca916f76ffab1932e9fdc19e87061e45c4c9f23e259dc4abc7",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "0e5f1375f166c8e97184a2f9357e5ad06d40f017",
+        "showroomTree": "35e31bf7b0020e8bdf9b5fbeb6de25395c857b60",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/workspaces/",
+        "routeState": "/website/?view=inquiries",
+        "visibleSelector": ".website-inquiry-detail",
+        "loadedImages": 0,
+        "deniedExternal": 0
+      }
+    },
+    {
+      "file": "actual-commerce-catalog.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "438270f4c8b707d4ea91fcdcf6582076b974b6bafdd368a427e7f5332c8fe1ff",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "0e5f1375f166c8e97184a2f9357e5ad06d40f017",
+        "showroomTree": "35e31bf7b0020e8bdf9b5fbeb6de25395c857b60",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/workspaces/",
+        "routeState": "/ecommerce/?view=preview&workspace=1",
+        "visibleSelector": ".storefront-grid",
+        "loadedImages": 3,
+        "deniedExternal": 0
+      }
+    },
+    {
+      "file": "actual-commerce-order-request.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "d819a9925e0ccb5b25d4b231207ce703f35a8c2f4e30267b7ff09b8831630e31",
+      "capture": {
+        "classification": "local_real_component_synthetic",
+        "publicationReady": false,
+        "sourceCommit": "0e5f1375f166c8e97184a2f9357e5ad06d40f017",
+        "showroomTree": "35e31bf7b0020e8bdf9b5fbeb6de25395c857b60",
+        "captureTool": "tools/capture_public_gallery.mjs",
+        "fixturePath": "/workspaces/",
+        "routeState": "/ecommerce/?view=preview&workspace=1",
+        "visibleSelector": ".ecommerce-quote-receipt[data-current=\"true\"]",
+        "loadedImages": 0,
+        "deniedExternal": 0
+      }
+    }
   ]
 }
