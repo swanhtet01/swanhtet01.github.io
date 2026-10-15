@@ -157,8 +157,11 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
   if (visibleQaChrome) throw new Error(`qa_fixture_controls_visible:${name}`)
   let previous = null
   let bytes = null
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  // Mobile layout can settle a few frames after the viewport or scroll changes.
+  // Require identical consecutive captures, but give it a bounded settle window.
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     await evaluate(cdp, sessionId, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+    await new Promise(resolveWait => setTimeout(resolveWait, 100))
     const raw = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false }, sessionId)
     const current = Buffer.from(raw.data, 'base64')
     if (previous?.equals(current)) { bytes = current; break }
