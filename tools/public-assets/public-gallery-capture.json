@@ -2,7 +2,7 @@
   "ok": true,
   "classification": "candidate_only_local_real_component_synthetic",
   "publicationReady": false,
-  "sourceCommit": "dc26c8a74ff28707ffe773af8cf0a44df8f4ff30",
+  "sourceCommit": "06eabeca76aa981698fa5f756cbc19913adecbcb",
   "showroomTree": "fead76b9dfba1c4fa5d446f49c5cd3a4e2274bc2",
   "deniedExternal": 0,
   "fulfilledSyntheticMedia": 3,
@@ -31,20 +31,10 @@
       "file": "actual-shop-today.png",
       "width": 1440,
       "height": 900,
-      "sha256": "774d35cd3b6a72d63d7dd5d827fb52864abd98a9c9d0c3b068b939c777702291",
+      "sha256": "d5943d3576a999be6018e8f5a0db77ff5169c3d68efd15ee928d0f6ae904ebb9",
       "fixturePath": "/shop/",
       "routeState": "today",
       "visibleSelector": ".shop-today-module",
-      "loadedImages": 0
-    },
-    {
-      "file": "actual-shop-first-run.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "dace4df3647e55143be66e4b40cf76144ed8250e993fa4ca453aca4e773664ad",
-      "fixturePath": "/shop/",
-      "routeState": "today",
-      "visibleSelector": ".shop-first-product-card",
       "loadedImages": 0
     },
     {
@@ -56,17 +46,6 @@
       "routeState": "counter",
       "visibleSelector": ".shop-current-sale",
       "loadedImages": 0
-    },
-    {
-      "file": "actual-shop-order-record.png",
-      "width": 1440,
-      "height": 900,
-      "sha256": "05c7f76268ca655548ddc77b1ff2e5f23e84155cc36c7e25ace824a446d9ff3e",
-      "fixturePath": "/shop/",
-      "routeState": "counter",
-      "visibleSelector": "dialog.receipt-dialog[open]",
-      "loadedImages": 0,
-      "recordKind": "paid_order_record_not_customer_receipt"
     },
     {
       "file": "actual-shop-orders.png",
@@ -82,7 +61,7 @@
       "file": "actual-sites-editor.png",
       "width": 1440,
       "height": 900,
-      "sha256": "14f5f9ed2a51e298c60fc75687656a27077f57a99334890c13c5c2385cec30ec",
+      "sha256": "ab6ba8e1a3d307e7521c30b06566d472e2e1ac3bf0a9fbf907a3697170d2c2c9",
       "fixturePath": "/workspaces/",
       "routeState": "/website/",
       "visibleSelector": "[data-content-section=\"hero\"]",
@@ -112,7 +91,7 @@
       "file": "actual-commerce-order-request.png",
       "width": 1440,
       "height": 900,
-      "sha256": "09a0764fa9d5c9fa09ed90b96ba5bebcd83a735d50c70fd9d9f13625c3a53044",
+      "sha256": "c2531bd0854a59702a49213a4074258984d2670a535890cfc41d85ff2f616595",
       "fixturePath": "/workspaces/",
       "routeState": "/ecommerce/?view=preview&workspace=1",
       "visibleSelector": ".ecommerce-quote-receipt[data-current=\"true\"]",
