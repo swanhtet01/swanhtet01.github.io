@@ -25,7 +25,7 @@ function fixture() {
     setBusy: value => busyStates.push(value), setPassword: value => passwords.push(value), setNoticeTone: noop, setNotice: noop,
     setActivating: noop, setDirectory: noop, setWorkspaceId: noop, setExistingIdentity: noop, setEmail: noop,
     setClaimCodeFieldError: noop, window: { localStorage: {} }, readTrialSignup: () => null, savedTrial: () => null,
-    trialSignupProductChoice: () => ({ id: 'shop' }), productIntent: 'shop', claimCode: 'synthetic', businessName: 'Synthetic',
+    trialSignupProductChoice: () => ({ id: 'commerce' }), productIntent: 'shop', claimCode: 'synthetic', businessName: 'Synthetic',
     managedPortalEntryPath: value => value === 'commerce' ? '/shop/' : `/${value}/`,
     openWorkspace: async () => {}, alternateManagedWorkspaceId: () => null,
   } }
@@ -436,31 +436,39 @@ test('directory timeout releases sign-in for a deliberate retry while retaining 
   }
 })
 
-test('activation uses saved product only for the entered saved claim', async () => {
-  for (const [enteredClaim, saved, expected] of [
-    ['SM-ABCD-2345', { claimCode: 'SM-ABCD-2345', product: 'commerce' }, 'commerce'],
-    ['SM-WXYZ-7890', { claimCode: 'SM-ABCD-2345', product: 'commerce' }, 'ecommerce'],
-    ['SM-WXYZ-7890', null, 'ecommerce'],
+test('activation admits Shop only and uses a saved product only for its claim', async () => {
+  for (const [enteredClaim, saved, intent, expected] of [
+    ['SM-ABCD-2345', { claimCode: 'SM-ABCD-2345', product: 'commerce' }, 'shop', 'commerce'],
+    ['SM-WXYZ-7890', { claimCode: 'SM-ABCD-2345', product: 'commerce' }, 'ecommerce', null],
+    ['SM-WXYZ-7890', null, 'ecommerce', null],
+    ['SM-ABCD-2345', { claimCode: 'SM-ABCD-2345', product: 'ecommerce' }, 'shop', null],
   ]) {
     const { context } = fixture()
     const calls = []
     const destinations = []
-    context.portalEntryPath = '/ecommerce/'
+    const notices = []
+    context.portalEntryPath = expected ? '/shop/' : '/ecommerce/'
     context.completeManagedWorkspaceSignIn = async () => ({ workspaceId: 'new' })
     context.loadManagedBootstrap = async () => ({})
     context.navigate = path => destinations.push(path)
     context.openWorkspace = handler('openWorkspace', context)
     context.claimCode = enteredClaim
-    context.productIntent = 'ecommerce'
+    context.productIntent = intent
     context.savedTrial = () => saved
-    context.trialSignupProductChoice = value => ({ id: value })
+    context.trialSignupProductChoice = value => ({ id: value === 'shop' ? 'commerce' : value })
+    context.setNotice = value => notices.push(value)
     context.createSelfServeWorkspace = async (...args) => { calls.push(args); return { created: true, label: 'Synthetic', workspaceId: 'new' } }
     context.discoverManagedWorkspacesForCurrentSession = async () => ({ workspaces: [] })
     await handler('activate', context)(event)
-    assert.equal(calls.length, 1)
-    assert.equal(calls[0][0], enteredClaim)
-    assert.equal(calls[0][2], expected)
-    assert.deepEqual(destinations, [expected === 'commerce' ? '/shop/' : '/ecommerce/'])
+    assert.equal(calls.length, expected ? 1 : 0)
+    if (expected) {
+      assert.equal(calls[0][0], enteredClaim)
+      assert.equal(calls[0][2], expected)
+      assert.deepEqual(destinations, ['/shop/'])
+    } else {
+      assert.deepEqual(destinations, [])
+      assert.match(notices.at(-1), /Shop is the only customer-managed product/)
+    }
   }
 })
 

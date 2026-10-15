@@ -385,6 +385,25 @@ def capabilities_for_product_entitlements(
         if capability not in product_capabilities or capability in allowed_capabilities
     )
 
+
+def require_command_product_entitlement(
+    event_type: str,
+    product_entitlements: Sequence[str] | None,
+) -> None:
+    """Do not treat Shop's shared commerce surface as Commerce authority.
+
+    A ``None`` proof is reserved for legacy non-managed test stores. Hosted
+    Postgres always supplies an activation-derived tuple, including an empty
+    tuple when no valid proof exists.
+    """
+
+    if product_entitlements is None:
+        return
+    if event_type.startswith(("commerce.storefront.", "commerce.storefront_request.")):
+        if "ecommerce" not in product_entitlements:
+            raise TrialPermissionDenied("product.ecommerce")
+
+
 _PRIVATE_HARDENING_TRIGGER_CONTRACT: dict[tuple[str, str], dict[str, Any]] = {
     ("workspace_access_controls", "workspace_access_control_guard"): {
         "event_mask": 31,
@@ -4872,6 +4891,10 @@ class PostgresTrialStore:
             cursor,
             capabilities,
         ):
+            require_command_product_entitlement(
+                event_type_value,
+                self._product_entitlements(cursor, normalized.workspace_id),
+            )
             for related_surface in related_surface_values:
                 _require_surface_read_capability(capabilities, related_surface)
             self._lock(cursor, f"{normalized.workspace_id}:command:{command_id_value}")
@@ -5784,6 +5807,9 @@ class InMemoryTrialStore:
                 principal,
                 write=True,
                 capability=_required_surface_capability(surface_value),
+            )
+            require_command_product_entitlement(
+                event_type_value, readiness.product_entitlements
             )
             for related_surface in related_surface_values:
                 _require_surface_read_capability(readiness.capabilities, related_surface)

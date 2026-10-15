@@ -37,6 +37,7 @@ export function ManagedLoginPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const productIntent = new URLSearchParams(location.search).get('product')
+  const shopActivationIntent = trialSignupProductChoice(productIntent).id === 'commerce'
   const reviewReturnPath = managedLoginReviewPath(location.search)
   const portalEntryPath = reviewReturnPath ?? managedPortalEntryPath(productIntent)
   const [email, setEmail] = useState('')
@@ -212,6 +213,11 @@ export function ManagedLoginPage() {
       const selectedProduct = localTrial?.claimCode === claimCode.trim()
         ? localTrial.product
         : trialSignupProductChoice(productIntent).id
+      if (selectedProduct !== 'commerce') {
+        setNoticeTone('error')
+        setNotice('Shop is the only customer-managed product at launch. Ask SuperMega to set up other products for your business.')
+        return
+      }
       const workspace = await createSelfServeWorkspace(claimCode, businessName, selectedProduct)
       setNotice(workspace.created
         ? `${workspace.label} is ready. Opening your company...`
@@ -319,6 +325,13 @@ export function ManagedLoginPage() {
         <div className="managed-login-actions">
           <a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Contact support</a>
           <button className="account-inline-link account-link-button" disabled={busy} onClick={() => void signOut()} type="button">Sign out</button>
+        </div>
+      </section> : managedReady && activating && !reviewReturnPath && !shopActivationIntent ? <section className="managed-login-panel" aria-label="Managed product setup">
+        <h2>We set up this product with you.</h2>
+        <p>Shop is the customer-managed workspace at launch. SuperMega sets up the other products with you.</p>
+        <div className="managed-login-actions">
+          <a className="core-button primary" href={managedAccountRequestUrl(productIntent)}>Request setup</a>
+          <button className="account-inline-link account-link-button" onClick={() => setActivating(false)} type="button">Back to sign in</button>
         </div>
       </section> : managedReady && activating && !reviewReturnPath ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
         <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Enter your claim code to connect your company to this account.</p></div>
