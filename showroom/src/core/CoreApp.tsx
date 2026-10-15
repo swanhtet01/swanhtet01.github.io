@@ -2447,6 +2447,7 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
         setCatalogCreateOpen(true)
         const target = document.getElementById('shop-catalog-create')
         target?.scrollIntoView({ block: 'center' })
+        window.requestAnimationFrame(() => target?.querySelector<HTMLInputElement>('input[name="product-name"]')?.focus({ preventScroll: true }))
         return
       }
       if (commerceLocation.hash === '#shop-catalog-import') {
@@ -2457,16 +2458,6 @@ function CommercePage({ confirmedLocalShop, managedIdentity, requestedRequestId,
     })
     return () => window.cancelAnimationFrame(frame)
   }, [commerce.orders.length, commerceLocation.hash, tab])
-
-  useEffect(() => {
-    if (tab !== 'inventory' || commerceLocation.hash !== '#shop-catalog-create' || !catalogCreateOpen) return
-    const frame = window.requestAnimationFrame(() => {
-      document.getElementById('shop-catalog-create')
-        ?.querySelector<HTMLInputElement>('input[name="product-name"]')
-        ?.focus({ preventScroll: true })
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [catalogCreateOpen, commerceLocation.hash, tab])
 
   useEffect(() => {
     let current = true

@@ -59,7 +59,7 @@ test('the empty Shop inventory keeps its first-product and CSV import targets mo
   assert.ok(inventoryBranch.includes('{catalogCreatePanel}'))
   assert.equal(inventoryBranch.split('{shopCatalogOnboarding}').length - 1, 1)
   assert.ok(core.includes('catalogImportVisible ? <div id="shop-catalog-import-panel">'))
-  assert.match(core, /if \(tab !== 'inventory' \|\| commerceLocation\.hash !== '#shop-catalog-create' \|\| !catalogCreateOpen\) return[\s\S]*?input\[name="product-name"\][\s\S]*?\[catalogCreateOpen, commerceLocation\.hash, tab\]/)
+  assert.match(core, /commerceLocation\.hash === '#shop-catalog-create'[\s\S]*?setCatalogCreateOpen\(true\)[\s\S]*?requestAnimationFrame\(\(\) => target\?\.querySelector<HTMLInputElement>\('input\[name="product-name"\]'\)\?\.focus\(\{ preventScroll: true \}\)\)/)
 })
 
 test('approved Burmese Shop empty-state copy renders beside the English labels', () => {

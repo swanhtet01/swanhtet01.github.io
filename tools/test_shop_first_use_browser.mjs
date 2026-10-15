@@ -182,6 +182,7 @@ async function verifyViewport(cdp, origin, viewport) {
 
   try {
     await cdp.send('Page.enable', {}, sessionId)
+    await cdp.send('Page.bringToFront', {}, sessionId)
     await cdp.send('Runtime.enable', {}, sessionId)
     await cdp.send('Network.enable', {}, sessionId)
     await cdp.send('Network.setBypassServiceWorker', { bypass: true }, sessionId)
@@ -225,7 +226,9 @@ async function verifyViewport(cdp, origin, viewport) {
     assert.ok(product.width <= product.viewport, `first-product form overflows at ${viewport.width}px`)
 
     await evaluate(cdp, sessionId, `([...document.querySelectorAll('a')].find((node) => node.textContent.trim() === 'Back to Commerce')).click()`)
-    await waitFor(cdp, sessionId, `document.querySelector('#qa-route')?.dataset.path === '/ecommerce/'`, 'return to Commerce')
+    await waitFor(cdp, sessionId, `(() => document.querySelector('#qa-route')?.dataset.path === '/ecommerce/'
+      && [...document.querySelectorAll('a')].some((node) => node.textContent.trim() === 'Add first product')
+      && [...document.querySelectorAll('a')].some((node) => node.textContent.includes('Import a CSV')))()`, 'return to Commerce with setup choices')
     await evaluate(cdp, sessionId, `([...document.querySelectorAll('a')].find((node) => node.textContent.includes('Import a CSV'))).click()`)
     const importer = await waitFor(cdp, sessionId, `(() => {
       const route = document.querySelector('#qa-route');
