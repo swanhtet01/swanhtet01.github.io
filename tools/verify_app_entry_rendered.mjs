@@ -2208,7 +2208,7 @@ const tests = [
     route: '/ecommerce/?workspace=1',
     ...viewport,
     expectedPath: '/ecommerce/?workspace=1',
-    expectedText: ['Add your products', 'Your online store uses the same products and prices as Shop.', 'Add products'],
+    expectedText: ['Add your first product', 'Shop and Commerce share one catalog. Start with one item, or import a CSV if you already have a list.', 'Add first product', 'Import a CSV'],
     isolatedBrowserContext: true,
     noHorizontalOverflow: true,
     screenshotName: `ecommerce-empty-catalog-${viewport.width}`,

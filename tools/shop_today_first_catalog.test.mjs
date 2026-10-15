@@ -15,10 +15,12 @@ import {
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const root = resolve(import.meta.dirname, '..')
-const [core, today, onboarding] = await Promise.all([
+const [core, today, onboarding, ecommerce, renderedBrowser] = await Promise.all([
   readFile(resolve(root, 'showroom', 'src', 'core', 'CoreApp.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'ShopToday.tsx'), 'utf8'),
   readFile(resolve(root, 'showroom', 'src', 'core', 'ClientDataOnboarding.tsx'), 'utf8'),
+  readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceProduct.tsx'), 'utf8'),
+  readFile(resolve(root, 'tools', 'verify_app_entry_rendered.mjs'), 'utf8'),
 ])
 
 test('an empty Shop dashboard offers a direct first-product path and a separate CSV import', () => {
@@ -29,6 +31,22 @@ test('an empty Shop dashboard offers a direct first-product path and a separate 
   assert.match(today, /to="\/shop\/\?tab=inventory#shop-catalog-create"[\s\S]*?to="\/shop\/\?tab=inventory#shop-catalog-import"/)
   assert.match(core, /id="shop-catalog-create"/)
   assert.match(core, /commerceLocation\.hash === '#shop-catalog-create'[\s\S]*?setCatalogCreateOpen\(true\)/)
+})
+
+test('empty Commerce first-product copy stays aligned with its rendered-page contract', () => {
+  const phrases = [
+    'Add your first product',
+    'Shop and Commerce share one catalog. Start with one item, or import a CSV if you already have a list.',
+    'Add first product',
+    'Import a CSV',
+  ]
+  assert.ok(ecommerce.includes('<h1>Add your first product</h1>'))
+  assert.ok(ecommerce.includes('to="/shop/?tab=inventory#shop-catalog-create"'))
+  assert.ok(ecommerce.includes('to="/shop/?tab=inventory#shop-catalog-import"'))
+  for (const phrase of phrases) {
+    assert.ok(ecommerce.includes(phrase), `Ecommerce source omits: ${phrase}`)
+    assert.ok(renderedBrowser.includes(`'${phrase}'`), `Rendered browser contract omits: ${phrase}`)
+  }
 })
 
 test('approved Burmese Shop empty-state copy renders beside the English labels', () => {
