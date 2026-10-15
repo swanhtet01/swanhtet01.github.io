@@ -63,6 +63,7 @@ for (const route of ['/website/', '/ecommerce/']) {
   check(!/\b(preview|trial|demo)\b/i.test(description), `manifest_description_no_preview_funnel:${route}`)
 }
 check(publicCarouselSource.includes('data-gallery-previous') && publicCarouselSource.includes('data-gallery-next') && publicCarouselSource.includes('prefers-reduced-motion'), 'public_carousel_runtime_controls_and_motion')
+check(publicCarouselSource.includes('data-mobile-href') && publicCarouselSource.includes("mobileMedia.addEventListener('change',updateFullSizeLinks)"), 'public_carousel_full_size_link_matches_viewport')
 const captureSourceGuard = publicGalleryCaptureSource.indexOf("spawnSync('git', ['status', '--porcelain', '--', 'showroom'")
 const captureFixtureBuild = publicGalleryCaptureSource.indexOf("buildFixture('build_shop_browser_fixture.mjs'")
 const captureGuard = publicGalleryCaptureSource.slice(captureSourceGuard, captureFixtureBuild)
@@ -163,12 +164,18 @@ for (const page of landingPages) {
   check(html.includes('role="group" aria-roledescription="slide"'), `landing_gallery_accessible_slides:${page.route}`)
   check(countOccurrences(html, 'class="platform-image-open"') === productScreens[page.productId].length
     && countOccurrences(html, 'aria-label="Open full-size') === productScreens[page.productId].length
+    && countOccurrences(html, 'data-mobile-href="/images/') === productScreens[page.productId].length
     && !html.includes('target="_blank"'),
   `landing_full_size_gallery_views:${page.route}`)
   check(html.includes('class="product-story product-story-standalone"') && html.includes('.product-story-standalone {padding:0 0 58px;border-top:0}'), `landing_gallery_above_fold_spacing:${page.route}`)
   check(carousel === html.includes('<script src="/platform-carousel.js" defer></script>'), `landing_gallery_script:${page.route}`)
   check(!html.includes('data-legacy-interface-assets'), `landing_legacy_interface_assets_absent:${page.route}`)
   for (const screen of productScreens[page.productId] || []) check(html.includes(`/images/${screen}`), `landing_product_view:${page.route}:${screen}`)
+  for (const screen of productScreens[page.productId] || []) {
+    const mobile = screen.replace(/\.png$/, '-mobile.png')
+    check(html.includes(`<source media="(max-width: 760px)" srcset="/images/${mobile}" />`), `landing_mobile_product_view:${page.route}:${mobile}`)
+  }
+  check(html.includes('height:clamp(300px,112vw,500px);object-fit:cover'), `landing_compact_mobile_gallery:${page.route}`)
   if (page.productId === 'shop') {
     check(html.includes('alt="Shop counter with searchable products, visible stock levels, and Add controls for a new sale"'), 'landing_shop_counter_capture_matches_sale_ready_state')
     check(html.includes(`Shop &middot; Counter catalog and sale setup &middot; ${interfaceDisclosure('actual-shop-sell.png')}`), 'landing_shop_counter_sample_disclosure')

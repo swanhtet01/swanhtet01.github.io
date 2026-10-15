@@ -167,10 +167,38 @@ async function capture(cdp, sessionId, output, name, expectedTexts, view) {
   if (!bytes) throw new Error(`capture_pixels_unstable:${name}`)
   const width = bytes.readUInt32BE(16)
   const height = bytes.readUInt32BE(20)
-  if (width !== 1440 || height !== 900) throw new Error(`capture_dimensions_invalid:${name}:${width}x${height}`)
+  if (width !== (view.width || 1440) || height !== (view.height || 900)) throw new Error(`capture_dimensions_invalid:${name}:${width}x${height}`)
   await writeFile(resolve(output, `${name}.png`), bytes, { flag: 'wx' })
   return { file: `${name}.png`, width, height, sha256: createHash('sha256').update(bytes).digest('hex'),
     fixturePath: view.fixturePath, routeState: lastState.route || lastState.tab, visibleSelector: view.selector, loadedImages }
+}
+
+async function captureMobile(cdp, sessionId, output, name, expectedTexts, view) {
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId)
+  try {
+    if (name === 'actual-commerce-catalog-mobile' || name === 'actual-commerce-order-request-mobile') {
+      let phonePreview = false
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        phonePreview = await evaluate(cdp, sessionId, "document.querySelector('.ecommerce-preview-frame')?.classList.contains('is-phone') ?? false")
+        if (phonePreview) break
+        await new Promise(resolveWait => setTimeout(resolveWait, 100))
+      }
+      if (!phonePreview) throw new Error(`commerce_phone_preview_state_not_updated:${name}`)
+    }
+    if (name === 'actual-shop-sell-mobile') await clickSelector(cdp, sessionId, '.shop-mobile-cart')
+    const mobileLayout = await evaluate(cdp, sessionId, `(() => {
+      const node = document.querySelector(${JSON.stringify(view.selector)});
+      const top = node?.getBoundingClientRect().top ?? 0;
+      window.scrollTo({top:window.scrollY + top - 94, behavior:'instant'});
+      return { viewport: innerWidth, page: document.documentElement.scrollWidth };
+    })()`)
+    if (mobileLayout.page > mobileLayout.viewport + 1) throw new Error(`mobile_capture_horizontal_overflow:${name}:${JSON.stringify(mobileLayout)}`)
+    return await capture(cdp, sessionId, output, name, expectedTexts, { ...view, width: 390, height: 844 })
+  } finally {
+    if (name === 'actual-shop-sell-mobile') await clickSelector(cdp, sessionId, '.shop-cart-close')
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId)
+    await evaluate(cdp, sessionId, 'window.scrollTo(0,0)')
+  }
 }
 
 async function assertShopMobileFits(cdp, sessionId, selector) {
@@ -269,6 +297,8 @@ async function main() {
     if (!saleItemAdded) throw new Error('counter_product_tile_missing')
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-sell', ['Products', 'Current sale', 'Daily essentials basket'],
       { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-sell-mobile', ['Products', 'Current sale', 'Daily essentials basket'],
+      { fixturePath: '/shop/', tab: 'counter', selector: '.shop-current-sale' }))
     await clickSelector(cdp, sessionId, '.shop-review-sale')
     await waitFor(cdp, sessionId, 'Review counter sale')
     await typeInto(cdp, sessionId, '.accountable-action-gate input', 'Synthetic cashier')
@@ -288,9 +318,13 @@ async function main() {
     await clickText(cdp, sessionId, 'Show Today')
     captures.unshift(await capture(cdp, sessionId, output, 'actual-shop-today', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
       { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-today-mobile', ['Today', 'Quick tasks', 'Order queue', '1 completed'],
+      { fixturePath: '/shop/', tab: 'today', selector: '.shop-today-module' }))
     await assertShopMobileFits(cdp, sessionId, '.shop-operations-board')
     await clickText(cdp, sessionId, 'Show Orders')
     captures.push(await capture(cdp, sessionId, output, 'actual-shop-orders', ['Orders to finish', 'Payment pending'],
+      { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-shop-orders-mobile', ['Orders to finish', 'Payment pending'],
       { fixturePath: '/shop/', tab: 'orders', selector: '.orders-module' }))
     await clickText(cdp, sessionId, 'Clean synthetic databases')
 
@@ -300,8 +334,12 @@ async function main() {
     await clickText(cdp, sessionId, 'Pages')
     captures.push(await capture(cdp, sessionId, output, 'actual-sites-editor', ['Edit page', 'Business details', 'Page checks'],
       { fixturePath: '/workspaces/', route: '/website/', selector: '[data-content-section="hero"]', imageSelector: '.website-page-card img', images: 3 }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-sites-editor-mobile', ['Edit page', 'Business details', 'Page checks'],
+      { fixturePath: '/workspaces/', route: '/website/', selector: '[data-content-section="hero"]', imageSelector: '.website-page-card img', images: 3 }))
     await clickText(cdp, sessionId, 'Inquiries')
     captures.push(await capture(cdp, sessionId, output, 'actual-sites-inquiries', ['12 requests need review', 'Ko Min'],
+      { fixturePath: '/workspaces/', route: '/website/?view=inquiries', selector: '.website-inquiry-detail' }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-sites-inquiries-mobile', ['12 requests need review', 'Ko Min'],
       { fixturePath: '/workspaces/', route: '/website/?view=inquiries', selector: '.website-inquiry-detail' }))
     await clickText(cdp, sessionId, 'Store editor')
     await waitFor(cdp, sessionId, 'Store details')
@@ -311,6 +349,8 @@ async function main() {
     await clickText(cdp, sessionId, 'Save store')
     await waitFor(cdp, sessionId, 'Storefront saved on this device')
     captures.push(await capture(cdp, sessionId, output, 'actual-commerce-catalog', ['Example Studio', '3 products', 'Add to cart'],
+      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.storefront-grid', imageSelector: '.storefront-grid img.storefront-product-photo', images: 3 }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-commerce-catalog-mobile', ['Example Studio', '3 products', 'Add to cart'],
       { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.storefront-grid', imageSelector: '.storefront-grid img.storefront-product-photo', images: 3 }))
     const addedToCart = await evaluate(cdp, sessionId, "(() => { const item=document.querySelector('button.storefront-request-button'); if (!item) return false; item.click(); return true })()")
     if (!addedToCart) throw new Error('customer_store_product_not_orderable')
@@ -330,6 +370,9 @@ async function main() {
     })()`)
     if (!requestPanelShown) throw new Error('commerce_request_panel_missing')
     captures.push(await capture(cdp, sessionId, output, 'actual-commerce-order-request',
+      ['Request saved on this device', 'No order or payment was confirmed.'],
+      { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.ecommerce-quote-receipt[data-current="true"]' }))
+    captures.push(await captureMobile(cdp, sessionId, output, 'actual-commerce-order-request-mobile',
       ['Request saved on this device', 'No order or payment was confirmed.'],
       { fixturePath: '/workspaces/', route: '/ecommerce/?view=preview', selector: '.ecommerce-quote-receipt[data-current="true"]' }))
     const sourceTreeAfter = spawnSync('git', ['rev-parse', 'HEAD:showroom'], { cwd: root, encoding: 'utf8', windowsHide: true })

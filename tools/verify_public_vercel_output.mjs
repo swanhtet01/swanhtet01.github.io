@@ -100,12 +100,19 @@ const expectedStaticFiles = new Set([
   'vercel-insights.js',
   'platform-carousel.js',
   'images/actual-shop-today.png',
+  'images/actual-shop-today-mobile.png',
   'images/actual-shop-sell.png',
+  'images/actual-shop-sell-mobile.png',
   'images/actual-shop-orders.png',
+  'images/actual-shop-orders-mobile.png',
   'images/actual-sites-editor.png',
+  'images/actual-sites-editor-mobile.png',
   'images/actual-sites-inquiries.png',
+  'images/actual-sites-inquiries-mobile.png',
   'images/actual-commerce-catalog.png',
+  'images/actual-commerce-catalog-mobile.png',
   'images/actual-commerce-order-request.png',
+  'images/actual-commerce-order-request-mobile.png',
   'og-card.png',
   ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
@@ -431,9 +438,13 @@ if (!/^(?:[0-9a-f]{40}|preview-[a-z0-9-]{8,64}|unknown)$/.test(release.commit)) 
 if (!/^\d{4}-\d{2}-\d{2}T/.test(release.generatedAt)) fail('release_timestamp_invalid')
 const publicGalleryEvidence = release.publicGalleryEvidence
 const publicGalleryFiles = [
-  'actual-shop-today.png', 'actual-shop-sell.png', 'actual-shop-orders.png',
-  'actual-sites-editor.png', 'actual-sites-inquiries.png',
-  'actual-commerce-catalog.png', 'actual-commerce-order-request.png',
+  'actual-shop-today.png', 'actual-shop-today-mobile.png',
+  'actual-shop-sell.png', 'actual-shop-sell-mobile.png',
+  'actual-shop-orders.png', 'actual-shop-orders-mobile.png',
+  'actual-sites-editor.png', 'actual-sites-editor-mobile.png',
+  'actual-sites-inquiries.png', 'actual-sites-inquiries-mobile.png',
+  'actual-commerce-catalog.png', 'actual-commerce-catalog-mobile.png',
+  'actual-commerce-order-request.png', 'actual-commerce-order-request-mobile.png',
 ]
 if (publicGalleryEvidence?.schemaVersion !== 'supermega.public-gallery-provenance.v1'
   || publicGalleryEvidence.status !== 'local_component_capture'
