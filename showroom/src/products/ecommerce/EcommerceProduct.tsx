@@ -555,8 +555,9 @@ export function EcommerceProduct() {
     if (catalogHydrating || (!sampleCatalogPreview && !managedIdentity)) return
     const params = new URLSearchParams(location.search)
     if (sampleCatalogPreview) {
-      if (params.get('view') === 'preview' && params.get('setup') !== '1') return
+      if (params.get('view') === 'preview' && params.get('setup') !== '1' && !params.has('workspace')) return
       params.set('view', 'preview')
+      params.delete('workspace')
     } else {
       if (params.get('workspace') === '1' && params.get('setup') !== '1') return
       params.set('workspace', '1')
