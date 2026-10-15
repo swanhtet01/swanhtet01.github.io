@@ -48,7 +48,6 @@ const EXPECTED_MIGRATIONS = Object.freeze([
 ])
 const EXPECTED_SOURCE_TARGET_SCHEMA_VERSION = 13
 const MAX_PREVIEW_LIFETIME_HOURS = 24
-const PROPOSAL_GENERATED_AT = '2026-10-14T00:00:00.000Z'
 const PRODUCTION_REPLAY_GATE = Object.freeze({
   status: 'blocked',
   evidenceClassification: 'historical-provider-observation',
@@ -190,6 +189,11 @@ function validateProposalShape(packet) {
   if (packet.repository !== REPOSITORY) fail('supabase_preview_rehearsal_proposal_repository_invalid')
   if (packet.mode !== 'owner_approval_required') fail('supabase_preview_rehearsal_proposal_mode_invalid')
   if (packet.state !== 'prepared-not-executed') fail('supabase_preview_rehearsal_proposal_state_invalid')
+  if (typeof packet.generatedAt !== 'string' || !Number.isFinite(Date.parse(packet.generatedAt))
+    || new Date(packet.generatedAt).toISOString() !== packet.generatedAt
+    || packet.generatedAt.slice(0, 10).replaceAll('-', '') < EXPECTED_FINAL_MIGRATION.slice(0, 8)) {
+    fail('supabase_preview_rehearsal_proposal_timestamp_invalid')
+  }
   if (packet.previewBranch?.kind !== 'data_less_ephemeral_preview_schema_unverified'
     || packet.previewBranch?.creationMode !== 'unselected'
     || packet.previewBranch?.branchSchemaVerified !== false) fail('supabase_preview_rehearsal_proposal_branch_kind_invalid')
@@ -305,7 +309,7 @@ function validateProposalShape(packet) {
 
 export async function buildSupabasePreviewRehearsalProposal({
   sourceReceipts = [],
-  generatedAt = PROPOSAL_GENERATED_AT,
+  generatedAt = new Date().toISOString(),
   securityAudit,
   readiness,
 } = {}) {
@@ -455,7 +459,7 @@ async function currentSourceReceipts() {
   return receipts
 }
 
-async function currentProposal(generatedAt = PROPOSAL_GENERATED_AT) {
+async function currentProposal(generatedAt = new Date().toISOString()) {
   return buildSupabasePreviewRehearsalProposal({
     sourceReceipts: await currentSourceReceipts(),
     generatedAt,

@@ -49,7 +49,7 @@ async function proposal(overrides = {}) {
     sourceReceipts,
     securityAudit,
     readiness,
-    generatedAt: '2026-08-25T00:00:00.000Z',
+    generatedAt: '2026-10-15T00:00:00.000Z',
     ...overrides,
   })
 }
@@ -108,6 +108,16 @@ test('builds a data-less preview proposal with branch mode and schema unverified
   assert.match(built.ownerApprovalTemplate, /branch creation mode and automatic migration replay are reviewed/)
   assert.match(built.ownerApprovalTemplate, /separately confirm the quoted branch cost/)
   assert.match(built.digest, /^sha256:[0-9a-f]{64}$/)
+})
+
+test('records generation time and rejects malformed or backdated source packets', async () => {
+  const before = Date.now()
+  const built = await proposal({ generatedAt: undefined })
+  assert.ok(Date.parse(built.generatedAt) >= before && Date.parse(built.generatedAt) <= Date.now())
+  for (const generatedAt of ['2026-10-14T00:00:00.000Z', 'invalid', '2026-10-15']) {
+    await assert.rejects(proposal({ generatedAt }), /supabase_preview_rehearsal_proposal_timestamp_invalid/)
+    await assert.rejects(validateSupabasePreviewRehearsalProposal({ ...built, generatedAt }), /supabase_preview_rehearsal_proposal_timestamp_invalid/)
+  }
 })
 
 test('binds exact ordered public baseline and twenty-eight private migrations through six-page Sites reviews', async () => {
